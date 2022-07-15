@@ -103,12 +103,12 @@ conda activate ml
 
 An example of using the [`phase_retrieval.py`](src/phase_retrieval.py) script:
 ```
-~/anaconda3/envs/ml/bin/python src/phase_retrieval.py pretrained_models/fourier_space/i64/z60_modes/x150-y150-z600/opticaltransformer examples/PSF_z7_p01_1.tif  examples/Zernike_Korra_Bax273.csv --state examples/DM_z7_p01_1.csv
+~/anaconda3/envs/ml/bin/python src/phase_retrieval.py pretrained_models/fourier_space/i64/z60_modes/x150-y150-z600/opticaltransformer examples/PSF_z7_p01_1.tif examples/Zernike_Korra_Bax273.csv --state examples/DM_z7_p01_1.csv --plot
 ```
 
 For ***Windows*** (started in the \opticalabberations folder)
 ```
-python.exe .\src\phase_retrieval.py .\pretrained_models\fourier_space\i64\z60_modes\x150-y150-z600\opticaltransformer .\examples\PSF_z7_p01_1.tif .\examples\Zernike_Korra_Bax273.csv --state .\examples\DM_z7_p01_1.csv
+python.exe .\src\phase_retrieval.py .\pretrained_models\fourier_space\i64\z60_modes\x150-y150-z600\opticaltransformer .\examples\PSF_z7_p01_1.tif .\examples\Zernike_Korra_Bax273.csv --state .\examples\DM_z7_p01_1.csv --plot
 ```
 
 
@@ -117,7 +117,7 @@ python.exe .\src\phase_retrieval.py .\pretrained_models\fourier_space\i64\z60_mo
 
 An example of running the script without a DM state input is also provided below. 
 ```
-~/anaconda3/envs/ml/bin/python src/phase_retrieval.py pretrained_models/fourier_space/i64/z60_modes/x150-y150-z600/opticaltransformer examples/PSF_blank.tif examples/Zernike_Korra_Bax273.csv
+~/anaconda3/envs/ml/bin/python src/phase_retrieval.py pretrained_models/fourier_space/i64/z60_modes/x150-y150-z600/opticaltransformer examples/PSF_blank.tif examples/Zernike_Korra_Bax273.csv --plot
 ```
 
 ![example](examples/PSF_blank_pred.png)

@@ -33,14 +33,12 @@ python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 
 --taskname p32-p16-p8-p4 \
 --name new/embeddings/transformers
 
-
 ## PhaseNet
-#python manager.py slurm train.py --partition abc --constraint titan --mem '125GB' --gpus 1 --cpus 5 \
-#--task "--network phasenet --fixedlr --input_shape $SHAPE --batch_size 16 --dist uniform --max_amplitude .075 --modes $MODES --min_psnr $mSNR --max_psnr $xSNR --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL " \
-#--taskname "bs-16" \
-#--name new/phasenets/uniform-p075
-#
-#python manager.py slurm train.py --partition abc --constraint titan --mem '125GB' --gpus 1 --cpus 5 \
-#--task "--network phasenet --fixedlr --input_shape $SHAPE --batch_size 16 --dist uniform --max_amplitude .15 --modes $MODES --min_psnr $mSNR --max_psnr $xSNR --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL " \
-#--taskname "bs-16" \
-#--name new/phasenets/uniform-p15
+#python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
+#--task "--network phasenet --fixedlr --input_shape $SHAPE --batch_size 32 --dist uniform --max_amplitude .075 --modes $MODES --min_psnr $mSNR --max_psnr $xSNR --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL " \
+#--taskname "uniform-p075" \
+#--task "--network phasenet --fixedlr --input_shape $SHAPE --batch_size 32 --dist uniform --max_amplitude .15 --modes $MODES --min_psnr $mSNR --max_psnr $xSNR --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL " \
+#--taskname "uniform-p15" \
+#--task "--network phasenet --fixedlr --input_shape $SHAPE --batch_size 32 --dist dirichlet --max_amplitude .2 --modes $MODES --min_psnr $mSNR --max_psnr $xSNR --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL " \
+#--taskname "dirichlet-p2" \
+#--name new/phasenets
