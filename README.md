@@ -80,15 +80,19 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   --state STATE         optional path to current DM state .csv file (Default: `blank mirror`)
-  --lateral_voxel_size LATERAL_VOXEL_SIZE
-                        lateral voxel size in microns for XY (Default: `0.108`)
-  --axial_voxel_size AXIAL_VOXEL_SIZE
-                        axial voxel size in microns for Z (Default: `0.1`)
+  --x_voxel_size X_VOXEL_SIZE
+                        lateral voxel size in microns for X (Default: `0.15`)
+  --y_voxel_size Y_VOXEL_SIZE
+                        lateral voxel size in microns for Y (Default: `0.15`)
+  --z_voxel_size Z_VOXEL_SIZE
+                        axial voxel size in microns for Z (Default: `0.6`)
   --wavelength WAVELENGTH
                         wavelength in microns (Default: `0.605`)
   --scalar SCALAR       scale DM actuators by an arbitrary multiplier (Default: `1`)
   --threshold THRESHOLD
-                        set predictions below threshold to zero (microns) (Default: `1e-5`)
+                        set predictions below threshold to zero (microns) (Default: `1e-05`)
+  --plot                a toggle for plotting predictions
+  --verbose             a toggle for a progress bar
 ```
 
 > **Note:** Make sure to activate your conda `env` before running the script, or use the full filepath to your `python` environment.
