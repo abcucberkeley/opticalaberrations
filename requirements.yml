@@ -1,0 +1,21 @@
+name: ml
+channels:
+  - esri
+  - anaconda
+  - defaults
+dependencies:
+  - tensorflow-gpu=2.5
+  - tensorflow-addons=0.13
+  - cudatoolkit=11.3
+  - cudnn=8.1
+  - numpy
+  - scikit-image
+  - scikit-learn
+  - pandas
+  - pillow
+  - imageio
+  - matplotlib
+  - seaborn
+  - tqdm
+  - ujson
+  - tifffile
