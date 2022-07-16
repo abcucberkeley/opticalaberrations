@@ -182,17 +182,9 @@ def train(
             model = Baseline(
                 name='Baseline',
                 modes=pmodes,
-                na_det=1.0,
-                refractive_index=1.33,
-                lambda_det=wavelength,
-                x_voxel_size=x_voxel_size,
-                y_voxel_size=y_voxel_size,
-                z_voxel_size=z_voxel_size,
                 depth_scalar=depth_scalar,
                 width_scalar=width_scalar,
-                mask_shape=input_shape,
                 activation=activation,
-                mul=mul
             )
         elif network == 'phasenet':
             model = PhaseNet(
@@ -216,7 +208,11 @@ def train(
             opt = Adam(learning_rate=lr)
             loss = 'mse'
         else:
-            inputs = (6, input_shape, input_shape, 1)
+            if network == 'baseline':
+                inputs = (input_shape, input_shape, input_shape, 1)
+            else:
+                inputs = (6, input_shape, input_shape, 1)
+
             loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
 
             """
