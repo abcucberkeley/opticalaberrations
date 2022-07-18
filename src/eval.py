@@ -1248,3 +1248,17 @@ def iterheatmap(
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     return fig
+
+
+def evalsample(
+    modelpath: Path,
+    datadir: Path,
+    reference: Path,
+    psnr: tuple = (21, 30),
+    niter: int = 10,
+    distribution: str = '/',
+    samplelimit: Any = None,
+    max_amplitude: float = .25,
+    na: float = 1.0,
+):
+    pass

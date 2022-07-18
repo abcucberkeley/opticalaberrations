@@ -26,6 +26,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--reference", default=None, type=Path, help='path to a reference sample'
+    )
+
+    parser.add_argument(
         "--outdir", default="../models", type=Path, help='path to save eval'
     )
 
@@ -91,7 +95,17 @@ def main(args=None):
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
-    if args.target == 'evalheatmap':
+    if args.target == 'sample':
+        eval.evalsample(
+            modelpath=args.model,
+            datadir=args.datadir,
+            reference=args.reference,
+            distribution=args.dist,
+            samplelimit=args.n_samples,
+            max_amplitude=args.max_amplitude,
+            na=args.na,
+        )
+    elif args.target == 'evalheatmap':
         eval.evalheatmap(
             modelpath=args.model,
             datadir=args.datadir,

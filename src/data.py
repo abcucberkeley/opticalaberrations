@@ -5,6 +5,7 @@ from pathlib import Path
 
 import cli
 import experimental
+import shapes
 import vis
 
 logging.basicConfig(
@@ -31,6 +32,7 @@ def parse_args(args):
     subparsers.add_parser("relratio")
     subparsers.add_parser("gaussian")
     subparsers.add_parser("simulation")
+    subparsers.add_parser("shapes")
 
     data_parser = subparsers.add_parser("parse")
     data_parser.add_argument("dataset", type=Path, help="path to raw PSF directory")
@@ -45,7 +47,10 @@ def main(args=None):
     timeit = time.time()
     args = parse_args(args)
 
-    if args.dtype == "inputs":
+    if args.dtype == "shapes":
+        shapes.simobjects()
+
+    elif args.dtype == "inputs":
         vis.plot_inputs()
 
     elif args.dtype == "dist":
