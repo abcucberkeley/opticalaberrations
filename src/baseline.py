@@ -5,6 +5,7 @@ from abc import ABC
 import tensorflow as tf
 from tensorflow.keras import layers
 from depthwiseconv import DepthwiseConv3D
+from tensorflow_addons.layers import GroupNormalization
 from base import Base
 
 logging.basicConfig(
@@ -36,9 +37,8 @@ class Baseline(Base, ABC):
         return int(tf.math.ceil(depth_scalar * repeats))
 
     def _stem(self, inputs, filters):
-        x = layers.LayerNormalization(axis=-1, epsilon=1e-6)(inputs)
-        dwc3 = DepthwiseConv3D(kernel_size=(3, 3, 3), depth_multiplier=filters//2, padding='same')(x)
-        dwc7 = DepthwiseConv3D(kernel_size=(7, 7, 7), depth_multiplier=filters//2, padding='same')(x)
+        dwc3 = DepthwiseConv3D(kernel_size=(3, 3, 3), depth_multiplier=filters//2, padding='same')(inputs)
+        dwc7 = DepthwiseConv3D(kernel_size=(7, 7, 7), depth_multiplier=filters//2, padding='same')(inputs)
         return layers.concatenate([dwc3, dwc7])
 
     def _attention(self, inputs, filters, ratio=.25):
@@ -48,7 +48,7 @@ class Baseline(Base, ABC):
         return layers.multiply([inputs, att])
 
     def _cab(self, inputs, filters, kernel_size, expansion=4):
-        x = layers.LayerNormalization(axis=-1, epsilon=1e-6)(inputs)
+        x = GroupNormalization(groups=16, axis=-1, epsilon=1e-6)(inputs)
         x = self._attention(x, filters=filters, ratio=.25)
         x = DepthwiseConv3D(kernel_size=kernel_size, depth_multiplier=1, padding='same')(x)
         x = layers.Conv3D(filters=filters*expansion, kernel_size=1, padding='same', activation=self.activation)(x)

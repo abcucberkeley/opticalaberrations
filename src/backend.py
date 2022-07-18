@@ -889,11 +889,11 @@ def featuremaps(
         psnr: int,
 ):
     plt.rcParams.update({
-        'font.size': 40,
-        'axes.titlesize': 40,
-        'xtick.labelsize': 30,
-        'ytick.labelsize': 30,
-        'legend.fontsize': 30,
+        'font.size': 25,
+        'axes.titlesize': 30,
+        'xtick.labelsize': 20,
+        'ytick.labelsize': 20,
+        'legend.fontsize': 20,
     })
 
     logger.info(f"Models: {modelpath}")
@@ -945,7 +945,7 @@ def featuremaps(
     maps = model.predict(inputs)[1:25]
     nrows = sum([1 for fmap in maps if len(fmap.shape[1:]) >= 3])
 
-    fig = plt.figure(figsize=(150, 600) if input_shape[0] > 1 else (150, 200))
+    fig = plt.figure(figsize=(150, 600))
     gs = fig.add_gridspec((nrows * input_shape[0]) + 1, 8)
 
     i = 0
@@ -964,7 +964,7 @@ def featuremaps(
             fmap = np.reshape(fmap, (fmap.shape[0], fmap_size, fmap_size, features))
 
         if len(fmap.shape) == 4:
-            if fmap.shape[0] == input_shape[0]:
+            if input_shape[0] == 3 or input_shape[0] == 6:
 
                 i += 1
                 features = fmap.shape[-1]
@@ -1021,7 +1021,7 @@ def featuremaps(
                     ax = fig.add_subplot(gs[i, :])
 
                     if j == 0:
-                        ax.set_title(f"{name.upper()} {fmap.shape}", fontsize=100)
+                        ax.set_title(f"{name.upper()} {fmap.shape}")
 
                     ax.imshow(grid, cmap='hot', vmin=0, vmax=1)
                     ax.set_aspect('equal')
