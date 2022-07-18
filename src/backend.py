@@ -527,6 +527,8 @@ def bootstrap_predict(
 
     if model.input_shape[1] != inputs.shape[1]:
         model_inputs = np.stack([psfgen.embedding(psf=i) for i in inputs], axis=0)
+    else:
+        model_inputs = inputs
 
     preds = None
     total = n_samples * (len(model_inputs) // batch_size)
