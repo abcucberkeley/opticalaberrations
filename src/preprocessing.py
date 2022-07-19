@@ -36,13 +36,13 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: tuple, **kwargs):
     return np.pad(psf[slicer], pad, **kwargs)
 
 
-def resize(vol, voxel_size: tuple, crop_shape: tuple, microscope_voxel_size: tuple = (.1, .1, .1), debug=False):
+def resize(vol, voxel_size: tuple, crop_shape: tuple, reference_voxel_size: tuple = (.1, .1, .1), debug=False):
     resampled_vol = transform.rescale(
         vol,
         (
-            microscope_voxel_size[0]/voxel_size[0],
-            microscope_voxel_size[1]/voxel_size[1],
-            microscope_voxel_size[2]/voxel_size[2],
+            reference_voxel_size[0]/voxel_size[0],
+            reference_voxel_size[1]/voxel_size[1],
+            reference_voxel_size[2]/voxel_size[2],
         ),
         order=3
     )

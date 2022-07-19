@@ -11,7 +11,9 @@ import pandas as pd
 from tqdm import tqdm
 from tifffile import imread
 import tensorflow as tf
-from scipy.signal import fftconvolve
+from scipy.signal import oaconvolve, fftconvolve, convolve
+from skimage.transform import resize
+from tifffile import imsave
 
 import utils
 import vis
@@ -1116,43 +1118,57 @@ def iter_eval_bin(datapath, modelpath, niter, psnr, samples, na):
 
 
 def iter_eval_bin_with_reference(datapath, modelpath, reference, niter, psnr, samples, na):
-    reference = np.expand_dims(imread(reference), axis=-1)
+    import shapes
+
+    reference = imread(reference).astype(np.float)
+    reference /= np.max(reference)
+    reference = np.expand_dims(reference, axis=-1)
+    print(np.count_nonzero(reference))
+    print(reference.shape)
+    imsave('reference.tif', reference)
+
+    img = np.squeeze(reference)
+    shapes.plot_3d_object(img, title='Reference')
 
     model = backend.load(modelpath)
     gen = SyntheticPSF(
         n_modes=60,
         lam_detection=.605,
         amplitude_ranges=(-.25, .25),
-        psf_shape=(64, 64, 64),
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        psf_shape=(128, 128, 128),
+        x_voxel_size=.0375,
+        y_voxel_size=.0375,
+        z_voxel_size=.15,
         batch_size=100,
         snr=psnr,
         max_jitter=0,
         cpu_workers=-1,
     )
 
-    val = data_utils.load_dataset(datapath, samplelimit=samples)
-    val = val.map(lambda x: tf.py_function(data_utils.get_sample, [x], [tf.float32, tf.float32]))
-    val = np.array(list(val.take(-1)))
-
-    inputs = np.array([fftconvolve(reference, i.numpy(), mode='same') for i in val[:, 0]])
-    ys = np.array([i.numpy() for i in val[:, 1]])
-
-    y_pred = pd.DataFrame.from_dict({
-        'id': np.arange(inputs.shape[0], dtype=int),
-        'niter': np.zeros(samples, dtype=int),
-        'residuals': np.zeros(samples, dtype=float)
-    })
-
-    y_true = pd.DataFrame.from_dict({
-        'id': np.arange(inputs.shape[0], dtype=int),
-        'niter': np.zeros(samples, dtype=int),
-        'residuals': [utils.peak_aberration(i, na=na) for i in ys]
-    })
+    ys = np.zeros(60)
+    ys[10] = .2
+    inputs = gen.single_psf(
+        phi=Wavefront(ys),
+        zplanes=0,
+        normed=True,
+        noise=False,
+        augmentation=True,
+        meta=False
+    )
+    inputs = np.expand_dims(inputs, axis=-1)
 
     for k in range(1, niter+1):
+        imsave('kernel.tif', inputs)
+        print(img.shape)
+
+        inputs = fftconvolve(inputs, reference, mode='same')
+        imsave('convolved.tif', inputs)
+        print(img.shape)
+
+        inputs = resize(inputs, output_shape=(64, 64, 64), order=3, anti_aliasing=True)
+        imsave('input.tif', inputs)
+        print(img.shape)
+
         preds, stdev = backend.bootstrap_predict(
             model,
             inputs,
@@ -1162,52 +1178,30 @@ def iter_eval_bin_with_reference(datapath, modelpath, reference, niter, psnr, sa
             desc=f"Predictions for ({datapath})"
         )
 
-        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['residuals'])
-        p['niter'] = k
-        p['id'] = np.arange(inputs.shape[0], dtype=int)
-        y_pred = y_pred.append(p, ignore_index=True)
-
-        y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys], columns=['residuals'])
-        y['niter'] = k
-        y['id'] = np.arange(inputs.shape[0], dtype=int)
-        y_true = y_true.append(y, ignore_index=True)
+        plt.show()
 
         # setup next iter
         res = ys - preds
-        if model.name == 'PhaseNet':
-            g = partial(
-                gen.single_psf,
-                zplanes=0,
-                normed=True,
-                noise=True,
-                augmentation=True,
-                meta=False
-            )
-        else:
-            g = partial(
-                gen.single_otf,
-                zplanes=0,
-                normed=True,
-                noise=True,
-                augmentation=True,
-                meta=False,
-                na_mask=True,
-                ratio=True,
-                padsize=None
-            )
+        cc = partial(
+            gen.single_psf,
+            zplanes=0,
+            normed=True,
+            noise=True,
+            augmentation=True,
+            meta=False
+        )
 
-        inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
-        inputs = np.array([fftconvolve(reference, i, mode='same') for i in inputs])
+        inputs = np.expand_dims(np.stack(gen.batch(cc, res), axis=0), -1)
         ys = res
 
-    return (y_pred, y_true)
+    return
 
 
 def iterheatmap(
     modelpath: Path,
     datadir: Path,
     reference: Path = None,
-    psnr: tuple = (21, 30),
+    psnr: tuple = (91, 100),
     niter: int = 10,
     distribution: str = '/',
     samplelimit: Any = None,
@@ -1264,7 +1258,7 @@ def iterheatmap(
             na=na
         )
 
-    preds, ys = zip(*utils.multiprocess(job, classes))
+    preds, ys = zip(*utils.multiprocess(job, classes, cores=1))
     y_true = pd.DataFrame([], columns=['niter', 'residuals']).append(ys, ignore_index=True)
     y_pred = pd.DataFrame([], columns=['niter', 'residuals']).append(preds, ignore_index=True)
 

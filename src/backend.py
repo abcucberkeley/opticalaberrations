@@ -502,7 +502,7 @@ def bootstrap_predict(
     threshold: float = 1e-4,
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
-    plot: bool = False
+    plot: bool = True
 ):
     """
     Average predictions and compute stdev
@@ -560,13 +560,14 @@ def bootstrap_predict(
                     fig, axes = plt.subplots(3, 3)
 
                     mid_plane = input_img.shape[0] // 2
+
                     m = axes[0, 0].imshow(input_img[mid_plane, :, :], cmap='hot', vmin=0, vmax=1)
                     axes[0, 1].imshow(input_img[:, mid_plane, :], cmap='hot', vmin=0, vmax=1)
                     axes[0, 2].imshow(input_img[:, :, mid_plane], cmap='hot', vmin=0, vmax=1)
-
                     cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
+                    cax.set_ylabel('Input')
 
                     m = axes[1, 0].imshow(img[0], cmap=cmap, vmin=vmin, vmax=vmax)
                     axes[1, 1].imshow(img[1], cmap=cmap, vmin=vmin, vmax=vmax)
@@ -574,6 +575,7 @@ def bootstrap_predict(
                     cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
+                    cax.set_ylabel(r'Embedding ($\alpha$)')
 
                     m = axes[2, 0].imshow(img[3], cmap='coolwarm', vmin=-1, vmax=1)
                     axes[2, 1].imshow(img[4], cmap='coolwarm', vmin=-1, vmax=1)
@@ -581,6 +583,7 @@ def bootstrap_predict(
                     cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
+                    cax.set_ylabel(r'Embedding ($\varphi$)')
 
                     for ax in axes.flatten():
                         ax.axis('off')
@@ -599,7 +602,7 @@ def bootstrap_predict(
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
 
-                plt.show()
+                # plt.show()
 
             p = model(batch, training=True).numpy()
             p[:, [0, 1, 2, 4]] = 0.

@@ -1,3 +1,5 @@
+
+import numpy as np
 import raster_geometry as rg
 from skimage import measure
 import matplotlib.pyplot as plt
@@ -7,88 +9,138 @@ import logging
 logger = logging.getLogger('')
 
 
-def test(image_size=(64, 64, 64)):
-    point = rg.sphere(shape=image_size, radius=1, position=.5)
-    sphere1 = rg.sphere(shape=image_size, radius=3, position=[.25, .2, .3])
-    sphere2 = rg.sphere(shape=image_size, radius=10, position=[.75, .8, .8])
-    cube = rg.cuboid(shape=image_size, semisides=[1, 5, 5], position=[.4, .5, .8])
-    cuboid = rg.cuboid(shape=image_size, semisides=[2, 4, 4], position=[.1, .2, .5])
-    rhomboid = rg.rhomboid(shape=image_size, semidiagonals=[20, 1, 10], position=[.7, .8, .2])
-    cylinder = rg.cylinder(shape=image_size, height=10, radius=2, position=[.9, .1, .1])
-    return point + sphere1 + sphere2 + cube + cuboid + rhomboid + cylinder
-
-
 def single_point(image_size=(64, 64, 64)):
-    return rg.sphere(shape=image_size, radius=1, position=.5)
+    img = np.zeros(image_size)
+    img[64, 64, 64] = 1.
+    return img.astype(np.float)
 
 
 def two_points(image_size=(64, 64, 64)):
-    p1 = rg.sphere(shape=image_size, radius=1, position=.2)
-    p2 = rg.sphere(shape=image_size, radius=1, position=.8)
-    return p1 + p2
+    img = np.zeros(image_size)
+    img[12, 12, 12] = 1.
+    img[52, 52, 52] = 1.
+    return img.astype(np.float)
 
 
 def several_points(image_size=(64, 64, 64)):
-    center = rg.sphere(shape=image_size, radius=1, position=.5)
-    c1 = rg.sphere(shape=image_size, radius=1, position=.25)
-    c2 = rg.sphere(shape=image_size, radius=1, position=[.25, .25, .75])
-    c3 = rg.sphere(shape=image_size, radius=1, position=.75)
-    c4 = rg.sphere(shape=image_size, radius=1, position=[.75, .75, .25])
-    return center + c1 + c2 + c3 + c4
+    img = np.zeros(image_size)
+    img[16, 16, 16] = 1.
+    img[32, 32, 32] = 1.
+    img[48, 48, 48] = 1.
+    img[16, 16, 48] = 1.
+    img[48, 48, 16] = 1.
+    return img.astype(np.float)
+
+
+def line(image_size=(64, 64, 64)):
+    img = np.zeros(image_size)
+    img[20:50, 32, 32] = 1.
+    return img.astype(np.float)
+
+
+def sphere(image_size=(64, 64, 64)):
+    img = rg.sphere(shape=image_size, radius=.5, position=.5)
+    return img.astype(np.float)
 
 
 def sheet(image_size=(64, 64, 64)):
-    return rg.rhomboid(shape=image_size, semidiagonals=[40, 1, 40], position=[.4, .5, .4])
-
-
-def cube(image_size=(64, 64, 64)):
-    return rg.cuboid(shape=image_size, semisides=[5, 5, 5], position=[.4, .5, .8])
+    img = rg.rhomboid(shape=image_size, semidiagonals=[40, 1, 40], position=[.4, .5, .4])
+    return img.astype(np.float)
 
 
 def cylinder(image_size=(64, 64, 64)):
-    return rg.cylinder(shape=image_size, height=60, radius=2, position=[.9, .1, .1])
+    img = rg.cylinder(shape=image_size, height=60, radius=2, position=[.9, .1, .1])
+    return img.astype(np.float)
+
+
+def point_and_line(image_size=(64, 64, 64)):
+    img = np.zeros(image_size)
+    img[48, 48, 48] = 1.
+    img[24, 20:50, 24] = 1.
+    return img.astype(np.float)
 
 
 def point_and_sheet(image_size=(64, 64, 64)):
-    p = rg.sphere(shape=image_size, radius=1, position=.75)
-    sheet = rg.cuboid(shape=image_size, semisides=[15, 5, 1], position=[.4, .5, .4])
-    return p + sheet
+    p = np.zeros(image_size)
+    p[48, 48, 48] = 1.
+    sh = rg.cuboid(shape=image_size, semisides=[15, 5, 1], position=[.4, .5, .4]).astype(np.float)
+    return p + sh
 
 
 def point_and_cylinder(image_size=(64, 64, 64)):
-    p = rg.sphere(shape=image_size, radius=1, position=[.75, .75, .25])
-    cylinder = rg.cylinder(shape=image_size, height=30, radius=2, position=[.2, .5, .6])
-    return p + cylinder
+    p = np.zeros(image_size)
+    p[48, 48, 16] = 1.
+    cc = rg.cylinder(shape=image_size, height=30, radius=2, position=[.2, .5, .6]).astype(np.float)
+    return p + cc
+
+
+def several_points_and_line(image_size=(64, 64, 64)):
+    img = np.zeros(image_size)
+    img[12, 12, 12] = 1.
+    img[48, 48, 12] = 1.
+    img[48, 48, 48] = 1.
+    img[32, 32, 20:50] = 1.
+    return img.astype(np.float)
 
 
 def several_points_and_sheet(image_size=(64, 64, 64)):
-    c1 = rg.sphere(shape=image_size, radius=1, position=[.3, .1, .7])
-    c2 = rg.sphere(shape=image_size, radius=1, position=.75)
-    c3 = rg.sphere(shape=image_size, radius=1, position=[.2, .6, .9])
-    sheet = rg.rhomboid(shape=image_size, semidiagonals=[1, 10, 20], position=[.4, .5, .4])
-    return c1 + c2 + c3 + sheet
+    ps = np.zeros(image_size)
+    ps[20, 5, 40] = 1.
+    ps[48, 48, 48] = 1.
+    ps[12, 40, 60] = 1.
+    sh = rg.rhomboid(shape=image_size, semidiagonals=[1, 10, 20], position=[.4, .5, .4]).astype(np.float)
+    return ps + sh
 
 
 def several_points_and_cylinder(image_size=(64, 64, 64)):
-    c1 = rg.sphere(shape=image_size, radius=1, position=.2)
-    c2 = rg.sphere(shape=image_size, radius=1, position=[.7, .8, .6])
-    c3 = rg.sphere(shape=image_size, radius=1, position=[.6, .4, .2])
-    cylinder = rg.cylinder(shape=image_size, height=10, radius=2, position=[.4, .5, .6])
-    return c1 + c2 + c3 + cylinder
+    ps = np.zeros(image_size)
+    ps[12, 12, 12] = 1.
+    ps[45, 50, 40] = 1.
+    ps[40, 25, 12] = 1.
+    cc = rg.cylinder(shape=image_size, height=10, radius=2, position=[.4, .5, .6]).astype(np.float)
+    return ps + cc
 
 
-def simobjects(codename=None, image_size=(64, 64, 64), plot=False):
+def plot_3d_object(img, title=''):
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1, projection='3d')
+
+    try:
+        verts, faces, normals, values = measure.marching_cubes(img)
+        ax.plot_trisurf(
+            verts[:, 0], verts[:, 1], faces, verts[:, 2],
+            cmap='nipy_spectral',
+            antialiased=False,
+            linewidth=0.0
+        )
+        ax.set_xlim(0, img.shape[0])
+        ax.set_xlabel('X')
+        ax.set_ylim(0, img.shape[1])
+        ax.set_ylabel('Y')
+        ax.set_zlim(0, img.shape[2])
+        ax.set_zlabel('Z')
+        ax.set_title(title)
+        plt.tight_layout()
+        # plt.show()
+
+    except RuntimeError:
+        pass
+
+
+def simobjects(codename=None, image_size=(256, 256, 256), plot=False):
 
     hashtbl = {
-        'test': test,
         'single_point': single_point,
         'two_points': two_points,
         'several_points': several_points,
-        'cube': cube,
+        'line': line,
         'sheet': sheet,
+        'sphere': sphere,
         'cylinder': cylinder,
+        'point_and_line': point_and_line,
         'point_and_sheet': point_and_sheet,
         'point_and_cylinder': point_and_cylinder,
+        'several_points_and_line': several_points_and_line,
         'several_points_and_sheet': several_points_and_sheet,
         'several_points_and_cylinder': several_points_and_cylinder,
     }
@@ -98,6 +150,9 @@ def simobjects(codename=None, image_size=(64, 64, 64), plot=False):
             obj = func(image_size=image_size)
             imsave(f"../data/shapes/{s}.tif", obj)
             logger.info(f"../data/shapes/{s}.tif")
+
+            if plot:
+                plot_3d_object(obj, title=s)
     else:
         try:
             func = hashtbl[codename]
@@ -107,26 +162,4 @@ def simobjects(codename=None, image_size=(64, 64, 64), plot=False):
         img = func(image_size=image_size)
 
         if plot:
-            plot_3d_object(img)
-
-
-def plot_3d_object(img):
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1, projection='3d')
-
-    verts, faces, normals, values = measure.marching_cubes(img)
-
-    ax.plot_trisurf(
-        verts[:, 0], verts[:, 1], faces, verts[:, 2],
-        cmap='nipy_spectral',
-        antialiased=False,
-        linewidth=0.0
-    )
-
-    ax.set_xlim(0, img.shape[0])
-    ax.set_xlabel('X')
-    ax.set_ylim(0, img.shape[1])
-    ax.set_ylabel('Y')
-    ax.set_zlim(0, img.shape[2])
-    ax.set_zlabel('Z')
-    plt.show()
+            plot_3d_object(img, title=codename)
