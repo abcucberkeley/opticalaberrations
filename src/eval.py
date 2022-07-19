@@ -17,7 +17,6 @@ import utils
 import vis
 import data_utils
 import backend
-import shapes
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront

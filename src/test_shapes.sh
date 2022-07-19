@@ -23,7 +23,7 @@ do
       python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0 \
       --task "$MODEL --datadir $DATA/i$SHAPE --na $NA --n_samples 20 --max_amplitude $MAXAMP --reference ../data/shapes/$REF.tif iterheatmap" \
       --taskname $NA \
-      --name $MODEL/iterheatmaps
+      --name $MODEL/shapes
     done
   done
 done
