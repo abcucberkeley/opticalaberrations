@@ -9,14 +9,15 @@ import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-
+from tifffile import imread
 import tensorflow as tf
+from scipy.signal import fftconvolve
 
 import utils
 import vis
 import data_utils
-import preprocessing
 import backend
+import shapes
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
@@ -1115,9 +1116,98 @@ def iter_eval_bin(datapath, modelpath, niter, psnr, samples, na):
     return (y_pred, y_true)
 
 
+def iter_eval_bin_with_reference(datapath, modelpath, reference, niter, psnr, samples, na):
+    reference = np.expand_dims(imread(reference), axis=-1)
+
+    model = backend.load(modelpath)
+    gen = SyntheticPSF(
+        n_modes=60,
+        lam_detection=.605,
+        amplitude_ranges=(-.25, .25),
+        psf_shape=(64, 64, 64),
+        x_voxel_size=.15,
+        y_voxel_size=.15,
+        z_voxel_size=.6,
+        batch_size=100,
+        snr=psnr,
+        max_jitter=0,
+        cpu_workers=-1,
+    )
+
+    val = data_utils.load_dataset(datapath, samplelimit=samples)
+    val = val.map(lambda x: tf.py_function(data_utils.get_sample, [x], [tf.float32, tf.float32]))
+    val = np.array(list(val.take(-1)))
+
+    inputs = np.array([fftconvolve(reference, i.numpy(), mode='same') for i in val[:, 0]])
+    ys = np.array([i.numpy() for i in val[:, 1]])
+
+    y_pred = pd.DataFrame.from_dict({
+        'id': np.arange(inputs.shape[0], dtype=int),
+        'niter': np.zeros(samples, dtype=int),
+        'residuals': np.zeros(samples, dtype=float)
+    })
+
+    y_true = pd.DataFrame.from_dict({
+        'id': np.arange(inputs.shape[0], dtype=int),
+        'niter': np.zeros(samples, dtype=int),
+        'residuals': [utils.peak_aberration(i, na=na) for i in ys]
+    })
+
+    for k in range(1, niter+1):
+        preds, stdev = backend.bootstrap_predict(
+            model,
+            inputs,
+            psfgen=gen,
+            batch_size=samples,
+            n_samples=1,
+            desc=f"Predictions for ({datapath})"
+        )
+
+        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['residuals'])
+        p['niter'] = k
+        p['id'] = np.arange(inputs.shape[0], dtype=int)
+        y_pred = y_pred.append(p, ignore_index=True)
+
+        y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys], columns=['residuals'])
+        y['niter'] = k
+        y['id'] = np.arange(inputs.shape[0], dtype=int)
+        y_true = y_true.append(y, ignore_index=True)
+
+        # setup next iter
+        res = ys - preds
+        if model.name == 'PhaseNet':
+            g = partial(
+                gen.single_psf,
+                zplanes=0,
+                normed=True,
+                noise=True,
+                augmentation=True,
+                meta=False
+            )
+        else:
+            g = partial(
+                gen.single_otf,
+                zplanes=0,
+                normed=True,
+                noise=True,
+                augmentation=True,
+                meta=False,
+                na_mask=True,
+                ratio=True,
+                padsize=None
+            )
+
+        inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
+        inputs = np.array([fftconvolve(reference, i, mode='same') for i in inputs])
+        ys = res
+
+    return (y_pred, y_true)
+
+
 def iterheatmap(
     modelpath: Path,
     datadir: Path,
+    reference: Path = None,
     psnr: tuple = (21, 30),
     niter: int = 10,
     distribution: str = '/',
@@ -1125,7 +1215,11 @@ def iterheatmap(
     max_amplitude: float = .25,
     na: float = 1.0,
 ):
-    savepath = modelpath / 'iterheatmaps'
+    if reference is None:
+        savepath = modelpath / 'iterheatmap'
+    else:
+        savepath = modelpath / f'{reference.stem}_iterheatmap'
+
     savepath.mkdir(parents=True, exist_ok=True)
     if distribution != '/':
         savepath = f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}'
@@ -1151,7 +1245,26 @@ def iterheatmap(
            and float(str(c.name.split('-')[-1].replace('p', '.'))) <= max_amplitude
     ])
 
-    job = partial(iter_eval_bin, modelpath=modelpath, niter=niter, psnr=psnr, samples=samplelimit, na=na)
+    if reference is None:
+        job = partial(
+            iter_eval_bin,
+            modelpath=modelpath,
+            niter=niter,
+            psnr=psnr,
+            samples=samplelimit,
+            na=na
+        )
+    else:
+        job = partial(
+            iter_eval_bin_with_reference,
+            modelpath=modelpath,
+            reference=reference,
+            niter=niter,
+            psnr=psnr,
+            samples=samplelimit,
+            na=na
+        )
+
     preds, ys = zip(*utils.multiprocess(job, classes))
     y_true = pd.DataFrame([], columns=['niter', 'residuals']).append(ys, ignore_index=True)
     y_pred = pd.DataFrame([], columns=['niter', 'residuals']).append(preds, ignore_index=True)
@@ -1248,17 +1361,3 @@ def iterheatmap(
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     return fig
-
-
-def evalsample(
-    modelpath: Path,
-    datadir: Path,
-    reference: Path,
-    psnr: tuple = (21, 30),
-    niter: int = 10,
-    distribution: str = '/',
-    samplelimit: Any = None,
-    max_amplitude: float = .25,
-    na: float = 1.0,
-):
-    pass
