@@ -1382,10 +1382,7 @@ def evalsample(
         'xtick.major.pad': 10
     })
 
-    if reference is None:
-        savepath = modelpath / 'iterheatmap'
-    else:
-        savepath = modelpath / f'{reference.stem}_iterheatmap'
+    savepath = modelpath / f'{reference.stem}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     model = backend.load(modelpath)
@@ -1393,7 +1390,6 @@ def evalsample(
     reference = imread(reference).astype(np.float)
     reference /= np.max(reference)
     reference = np.expand_dims(reference, axis=-1)
-    print(reference.shape, np.count_nonzero(reference))
 
     gen = SyntheticPSF(
         n_modes=60,
@@ -1407,7 +1403,7 @@ def evalsample(
     )
 
     ys = np.zeros(60)
-    ys[10] = .15
+    ys[10] = .2
     kernel = gen.single_psf(
         phi=Wavefront(ys),
         zplanes=0,
@@ -1417,16 +1413,34 @@ def evalsample(
         meta=False
     )
     kernel = kernel[:, :, :, np.newaxis]
-    imsave('kernel.tif', kernel)
+    imsave(savepath/f'kernel.tif', kernel)
 
     y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
     y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
 
     for k in range(1, niter+1):
-        kernel = signal.fftconvolve(reference, kernel, mode='same')
-        kernel = kernel[1:129, 1:129, 1:129]
-        imsave('conv.tif', kernel)
-        print(kernel.shape)
+        backend.bootstrap_predict(
+            model,
+            kernel[np.newaxis, :],
+            psfgen=SyntheticPSF(
+                n_modes=60,
+                lam_detection=.605,
+                psf_shape=(64, 64, 64),
+                x_voxel_size=.15,
+                y_voxel_size=.15,
+                z_voxel_size=.6,
+                snr=psnr,
+                max_jitter=0,
+            ),
+            batch_size=1,
+            n_samples=1,
+            desc=f'Iter[{k}]',
+            plot=savepath/f'embeddings_iter_{k}',
+        )
+
+        conv = signal.fftconvolve(reference, kernel, mode='same')
+        kernel = conv[1:kernel.shape[0]+1, 1:kernel.shape[1]+1, 1:kernel.shape[2]+1]
+        imsave(savepath/f'convolved_iter_{k}.tif', kernel)
 
         preds, stdev = backend.bootstrap_predict(
             model,
@@ -1443,7 +1457,8 @@ def evalsample(
             ),
             batch_size=1,
             n_samples=1,
-            desc=f'Iter[{k}]'
+            desc=f'Iter[{k}]',
+            plot=savepath/f'embeddings_convolved_iter_{k}',
         )
 
         p = pd.DataFrame({'residuals': [utils.peak_aberration(preds, na=na)], 'niter': k})
@@ -1464,10 +1479,6 @@ def evalsample(
         )
         kernel = np.expand_dims(kernel, -1)
         ys = res
-
-        imsave('res.tif', kernel)
-        print(kernel.shape)
-
 
     error = np.abs(y_true['residuals'] - y_pred['residuals'])
     error = pd.DataFrame(error, columns=['residuals'])
@@ -1494,7 +1505,7 @@ def evalsample(
     means = means.sort_index().interpolate()
 
     logger.info(means)
-    means.to_csv(f'{savepath}.csv')
+    means.to_csv(savepath/f'results_{str(na).replace("0.", "p")}.csv')
 
     fig, ax = plt.subplots(figsize=(8, 6))
     levels = [
@@ -1559,6 +1570,6 @@ def evalsample(
     ax.spines['left'].set_visible(False)
     plt.tight_layout()
 
-    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     return fig

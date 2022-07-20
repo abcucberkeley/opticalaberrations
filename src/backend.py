@@ -4,6 +4,7 @@ import typing
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
+from typing import Any
 
 import imageio
 import matplotlib.pyplot as plt
@@ -11,7 +12,6 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 from tqdm import trange, tqdm
-from skimage import transform
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -503,7 +503,7 @@ def bootstrap_predict(
     threshold: float = 1e-4,
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
-    plot: bool = False
+    plot: Any = None
 ):
     """
     Average predictions and compute stdev
@@ -551,7 +551,7 @@ def bootstrap_predict(
             gen = batch_generator(model_inputs, s=batch_size)
 
         for batch in gen:
-            if plot:
+            if plot is not None:
                 img = np.squeeze(batch[0])
                 input_img = np.squeeze(inputs[0])
 
@@ -609,7 +609,10 @@ def bootstrap_predict(
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
 
-                plt.show()
+                if plot == True:
+                    plt.show()
+                else:
+                    plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
             p = model(batch, training=True).numpy()
             p[:, [0, 1, 2, 4]] = 0.
@@ -670,7 +673,6 @@ def predict(
                         range(10),
                         gen.generator(debug=True, otf=False if model.name == 'PhaseNet' else True)
                 ):
-
                     p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1, n_samples=1)
 
                     p = Wavefront(p)
