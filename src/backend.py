@@ -11,6 +11,7 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 from tqdm import trange, tqdm
+from skimage import transform
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -525,9 +526,12 @@ def bootstrap_predict(
         for k in range(0, len(arr), s):
             yield arr[k:k + s]
 
+    # check dim for the z-axis
     if model.input_shape[1] != inputs.shape[1]:
+        # compute embeddings
         model_inputs = np.stack([psfgen.embedding(psf=i) for i in inputs], axis=0)
     else:
+        # pass raw PSFs to the model
         model_inputs = inputs
 
     preds = None
@@ -602,7 +606,7 @@ def bootstrap_predict(
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
 
-                # plt.show()
+                plt.show()
 
             p = model(batch, training=True).numpy()
             p[:, [0, 1, 2, 4]] = 0.

@@ -121,7 +121,7 @@ def plot_3d_object(img, title=''):
         ax.set_zlabel('Z')
         ax.set_title(title)
         plt.tight_layout()
-        # plt.show()
+        plt.show()
 
     except RuntimeError:
         pass

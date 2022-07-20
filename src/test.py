@@ -22,7 +22,7 @@ def parse_args(args):
     parser.add_argument("target", type=str, help="target of interest to evaluate")
 
     parser.add_argument(
-        "--datadir", help='path to eval dataset'
+        "--datadir", help='path to eval dataset', type=Path
     )
 
     parser.add_argument(
@@ -112,6 +112,12 @@ def main(args=None):
             distribution=args.dist,
             samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,
+            na=args.na,
+        )
+    elif args.target == 'evalsample':
+        eval.evalsample(
+            modelpath=args.model,
+            reference=args.reference,
             na=args.na,
         )
     else:
