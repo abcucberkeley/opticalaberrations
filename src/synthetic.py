@@ -251,12 +251,20 @@ class SyntheticPSF:
         na_mask: bool = True,
         ratio: bool = True,
         padsize: Any = None,
+        resize: Any = None,
     ):
-
         if psf.ndim == 4:
-            amp, phase = self.fft(np.squeeze(psf), padsize=padsize)
-        else:
-            amp, phase = self.fft(psf, padsize=padsize)
+            psf = np.squeeze(psf)
+
+        if resize is not None:
+            psf = transform.resize(
+                psf,
+                output_shape=resize,
+                order=3,
+                anti_aliasing=True
+            )
+
+        amp, phase = self.fft(psf, padsize=padsize)
 
         if ratio:
             amp /= self.iotf

@@ -12,6 +12,7 @@ from tqdm import tqdm
 from tifffile import imread
 import tensorflow as tf
 from scipy import signal
+from scipy import ndimage
 from skimage import transform
 from tifffile import imsave
 
@@ -1389,26 +1390,25 @@ def evalsample(
 
     model = backend.load(modelpath)
 
+    reference = imread(reference).astype(np.float)
+    reference /= np.max(reference)
+    reference = np.expand_dims(reference, axis=-1)
+    print(reference.shape, np.count_nonzero(reference))
+
     gen = SyntheticPSF(
         n_modes=60,
         lam_detection=.605,
-        amplitude_ranges=(-.25, .25),
-        # psf_shape=(128, 128, 128),
-        # x_voxel_size=.0375,
-        # y_voxel_size=.0375,
-        # z_voxel_size=.15,
-        psf_shape=(64, 64, 64),
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        psf_shape=(128, 128, 128),
+        x_voxel_size=.075,
+        y_voxel_size=.075,
+        z_voxel_size=.3,
         snr=psnr,
         max_jitter=0,
-        cpu_workers=-1,
     )
 
     ys = np.zeros(60)
-    ys[10] = .2
-    inputs = gen.single_psf(
+    ys[10] = .15
+    kernel = gen.single_psf(
         phi=Wavefront(ys),
         zplanes=0,
         normed=True,
@@ -1416,31 +1416,31 @@ def evalsample(
         augmentation=True,
         meta=False
     )
-    inputs = inputs[:, :, :, np.newaxis]
+    kernel = kernel[:, :, :, np.newaxis]
+    imsave('kernel.tif', kernel)
 
     y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
     y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
 
-    reference = imread(reference).astype(np.float)
-    reference /= np.max(reference)
-    reference = np.expand_dims(reference, axis=-1)
-    print(reference.shape, np.count_nonzero(reference))
-
     for k in range(1, niter+1):
-        print(inputs.shape)
-        inputs = transform.resize(
-            signal.fftconvolve(inputs, reference, mode='same'),
-            # inputs,
-            output_shape=(64, 64, 64),
-            order=3,
-            anti_aliasing=True
-        )
-        print(inputs.shape)
+        kernel = signal.fftconvolve(reference, kernel, mode='same')
+        kernel = kernel[1:129, 1:129, 1:129]
+        imsave('conv.tif', kernel)
+        print(kernel.shape)
 
         preds, stdev = backend.bootstrap_predict(
             model,
-            inputs[np.newaxis, :],
-            psfgen=gen,
+            kernel[np.newaxis, :],
+            psfgen=SyntheticPSF(
+                n_modes=60,
+                lam_detection=.605,
+                psf_shape=(64, 64, 64),
+                x_voxel_size=.15,
+                y_voxel_size=.15,
+                z_voxel_size=.6,
+                snr=psnr,
+                max_jitter=0,
+            ),
             batch_size=1,
             n_samples=1,
             desc=f'Iter[{k}]'
@@ -1454,7 +1454,7 @@ def evalsample(
 
         # setup next iter
         res = ys - preds
-        inputs = gen.single_psf(
+        kernel = gen.single_psf(
             phi=Wavefront(res),
             zplanes=0,
             normed=True,
@@ -1462,8 +1462,12 @@ def evalsample(
             augmentation=True,
             meta=False
         )
-        inputs = np.expand_dims(inputs, -1)
+        kernel = np.expand_dims(kernel, -1)
         ys = res
+
+        imsave('res.tif', kernel)
+        print(kernel.shape)
+
 
     error = np.abs(y_true['residuals'] - y_pred['residuals'])
     error = pd.DataFrame(error, columns=['residuals'])

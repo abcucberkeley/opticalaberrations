@@ -503,7 +503,7 @@ def bootstrap_predict(
     threshold: float = 1e-4,
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
-    plot: bool = True
+    plot: bool = False
 ):
     """
     Average predictions and compute stdev
@@ -526,10 +526,13 @@ def bootstrap_predict(
         for k in range(0, len(arr), s):
             yield arr[k:k + s]
 
-    # check dim for the z-axis
+    # check z-axis to compute embeddings for fourier models
     if model.input_shape[1] != inputs.shape[1]:
-        # compute embeddings
-        model_inputs = np.stack([psfgen.embedding(psf=i) for i in inputs], axis=0)
+        # check x-axis to resize if needed
+        if model.input_shape[-2] != inputs.shape[-2]:
+            model_inputs = np.stack([psfgen.embedding(psf=i, resize=3*[model.input_shape[-2]]) for i in inputs], axis=0)
+        else:
+            model_inputs = np.stack([psfgen.embedding(psf=i) for i in inputs], axis=0)
     else:
         # pass raw PSFs to the model
         model_inputs = inputs
