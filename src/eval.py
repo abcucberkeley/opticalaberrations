@@ -1395,9 +1395,9 @@ def evalsample(
         n_modes=60,
         lam_detection=.605,
         psf_shape=(128, 128, 128),
-        x_voxel_size=.0375,
-        y_voxel_size=.0375,
-        z_voxel_size=.15,
+        x_voxel_size=.075,
+        y_voxel_size=.075,
+        z_voxel_size=.3,
         snr=psnr,
         max_jitter=0,
     )
@@ -1409,7 +1409,7 @@ def evalsample(
         zplanes=0,
         normed=True,
         noise=False,
-        augmentation=True,
+        augmentation=False,
         meta=False
     )
     kernel = kernel[:, :, :, np.newaxis]
@@ -1482,7 +1482,7 @@ def evalsample(
             zplanes=0,
             normed=True,
             noise=False,
-            augmentation=True,
+            augmentation=False,
             meta=False
         )
         kernel = np.expand_dims(kernel, -1)

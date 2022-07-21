@@ -1,3 +1,4 @@
+from functools import partial
 
 import numpy as np
 import raster_geometry as rg
@@ -33,9 +34,9 @@ def five_points(image_size):
     return img.astype(np.float)
 
 
-def several_points(image_size):
+def several_points(image_size, npoints=100):
     img = np.zeros(image_size)
-    for i in range(100):
+    for i in range(npoints):
         img[
             np.random.randint(image_size[0]//2.6, image_size[0]//1.3),
             np.random.randint(image_size[1]//2.6, image_size[1]//1.3),
@@ -153,23 +154,27 @@ def plot_3d_object(img, title=''):
         pass
 
 
-def simobjects(codename=None, image_size=(512, 512, 512), plot=True):
+def simobjects(codename=None, image_size=(512, 512, 512), plot=False):
 
     hashtbl = {
         'single_point': single_point,
         'two_points': two_points,
         'five_points': five_points,
-        'several_points': several_points,
-        'line': line,
-        'sheet': sheet,
-        'sphere': sphere,
-        'cylinder': cylinder,
-        'point_and_line': point_and_line,
-        'point_and_sheet': point_and_sheet,
-        'point_and_cylinder': point_and_cylinder,
-        'several_points_and_line': several_points_and_line,
-        'several_points_and_sheet': several_points_and_sheet,
-        'several_points_and_cylinder': several_points_and_cylinder,
+        '100_points': partial(several_points, npoints=100),
+        '75_points': partial(several_points, npoints=75),
+        '50_points': partial(several_points, npoints=50),
+        '25_points': partial(several_points, npoints=25),
+        '10_points': partial(several_points, npoints=10),
+        # 'line': line,
+        # 'sheet': sheet,
+        # 'sphere': sphere,
+        # 'cylinder': cylinder,
+        # 'point_and_line': point_and_line,
+        # 'point_and_sheet': point_and_sheet,
+        # 'point_and_cylinder': point_and_cylinder,
+        # 'several_points_and_line': several_points_and_line,
+        # 'several_points_and_sheet': several_points_and_sheet,
+        # 'several_points_and_cylinder': several_points_and_cylinder,
     }
 
     if codename is None:
