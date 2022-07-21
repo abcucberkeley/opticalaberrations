@@ -79,6 +79,7 @@ class SyntheticPSF:
         self.x_voxel_size = x_voxel_size
         self.y_voxel_size = y_voxel_size
         self.z_voxel_size = z_voxel_size
+        self.voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
         self.snr = snr
         self.cpu_workers = cpu_workers
         self.distribution = distribution
@@ -91,7 +92,7 @@ class SyntheticPSF:
 
         self.psfgen = PsfGenerator3D(
             psf_shape=self.theoretical_psf_shape,
-            units=(z_voxel_size, y_voxel_size, x_voxel_size),
+            units=self.voxel_size,
             lam_detection=self.lam_detection,
             n=self.refractive_index,
             na_detection=self.na_detection
@@ -251,18 +252,9 @@ class SyntheticPSF:
         na_mask: bool = True,
         ratio: bool = True,
         padsize: Any = None,
-        resize: Any = None,
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
-
-        if resize is not None:
-            psf = transform.resize(
-                psf,
-                output_shape=resize,
-                order=3,
-                anti_aliasing=True
-            )
 
         amp, phase = self.fft(psf, padsize=padsize)
 
@@ -398,28 +390,28 @@ class SyntheticPSF:
             axes[0, 0].set_ylabel('PSF')
             m = axes[0, 0].imshow(np.max(psf, axis=0), cmap='hot')
             axes[0, 1].imshow(np.max(psf, axis=1), cmap='hot')
-            axes[0, 2].imshow(np.max(psf, axis=2), cmap='hot')
+            axes[0, 2].imshow(np.max(psf, axis=2).T, cmap='hot')
             cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
 
             axes[1, 0].set_ylabel('Theoretical PSF')
             m = axes[1, 0].imshow(np.max(self.ipsf, axis=0), cmap='hot')
             axes[1, 1].imshow(np.max(self.ipsf, axis=1), cmap='hot')
-            axes[1, 2].imshow(np.max(self.ipsf, axis=2), cmap='hot')
+            axes[1, 2].imshow(np.max(self.ipsf, axis=2).T, cmap='hot')
             cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
 
             axes[2, 0].set_ylabel('Theoretical OTF')
             m = axes[2, 0].imshow(self.iotf[self.iotf.shape[0] // 2, :, :], cmap='jet')
             axes[2, 1].imshow(self.iotf[:, self.iotf.shape[1] // 2, :], cmap='jet')
-            axes[2, 2].imshow(self.iotf[:, :, self.iotf.shape[2] // 2], cmap='jet')
+            axes[2, 2].imshow(self.iotf[:, :, self.iotf.shape[2] // 2].T, cmap='jet')
             cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
 
             axes[-2, 0].set_ylabel(r'Embedding ($\alpha$)')
             m = axes[-2, 0].imshow(emb[0], cmap='Spectral_r')
             axes[-2, 1].imshow(emb[1], cmap='Spectral_r')
-            axes[-2, 2].imshow(emb[2], cmap='Spectral_r')
+            axes[-2, 2].imshow(emb[2].T, cmap='Spectral_r')
 
             cax = inset_axes(axes[-2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
@@ -428,7 +420,7 @@ class SyntheticPSF:
             axes[-1, 0].set_ylabel(r'Embedding ($\varphi$)')
             m = axes[-1, 0].imshow(emb[3], cmap='Spectral_r')
             axes[-1, 1].imshow(emb[4], cmap='Spectral_r')
-            axes[-1, 2].imshow(emb[5], cmap='Spectral_r')
+            axes[-1, 2].imshow(emb[5].T, cmap='Spectral_r')
 
             cax = inset_axes(axes[-1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)

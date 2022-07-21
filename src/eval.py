@@ -103,7 +103,7 @@ def iterative_eval(
     #     axes[i - 1, 0].bar(range(len(predictions[i][0])), height=predictions[i][0], color='dimgrey')
     #     m = axes[i - 1, 1].imshow(np.max(vol, axis=0) if vol.shape[0] > 3 else vol[0], cmap=psf_cmap)
     #     axes[i - 1, 2].imshow(np.max(vol, axis=1) if vol.shape[0] > 3 else vol[1], cmap=psf_cmap)
-    #     axes[i - 1, 3].imshow(np.max(vol, axis=2) if vol.shape[0] > 3 else vol[2], cmap=psf_cmap)
+    #     axes[i - 1, 3].imshow(np.max(vol, axis=2).T if vol.shape[0] > 3 else vol[2], cmap=psf_cmap)
     #     cax = inset_axes(axes[i - 1, 3], width="10%", height="100%", loc='center right', borderpad=-2)
     #     cb = plt.colorbar(m, cax=cax)
     #     cax.yaxis.set_label_position("right")
@@ -800,7 +800,7 @@ def eval_mode(phi, model, psfargs):
     # img = inputs
     # m = axes[0].imshow(np.max(img, axis=0), cmap='Spectral_r', vmin=0, vmax=1)
     # axes[1].imshow(np.max(img, axis=1), cmap='Spectral_r', vmin=0, vmax=1)
-    # axes[2].imshow(np.max(img, axis=2), cmap='Spectral_r', vmin=0, vmax=1)
+    # axes[2].imshow(np.max(img, axis=2).T, cmap='Spectral_r', vmin=0, vmax=1)
     # cax = inset_axes(axes[2], width="10%", height="100%", loc='center right', borderpad=-3)
     # cb = plt.colorbar(m, cax=cax)
     # cax.yaxis.set_label_position("right")
@@ -1395,9 +1395,9 @@ def evalsample(
         n_modes=60,
         lam_detection=.605,
         psf_shape=(128, 128, 128),
-        x_voxel_size=.075,
-        y_voxel_size=.075,
-        z_voxel_size=.3,
+        x_voxel_size=.0375,
+        y_voxel_size=.0375,
+        z_voxel_size=.15,
         snr=psnr,
         max_jitter=0,
     )
@@ -1408,7 +1408,7 @@ def evalsample(
         phi=Wavefront(ys),
         zplanes=0,
         normed=True,
-        noise=True,
+        noise=False,
         augmentation=True,
         meta=False
     )
@@ -1432,19 +1432,26 @@ def evalsample(
                 snr=psnr,
                 max_jitter=0,
             ),
+            resize=gen.voxel_size,
             batch_size=1,
             n_samples=1,
             desc=f'Iter[{k}]',
             plot=savepath/f'embeddings_iter_{k}',
         )
 
-        conv = signal.fftconvolve(reference, kernel, mode='same')
-        kernel = conv[1:kernel.shape[0]+1, 1:kernel.shape[1]+1, 1:kernel.shape[2]+1]
-        imsave(savepath/f'convolved_iter_{k}.tif', kernel)
+        conv = signal.fftconvolve(reference, kernel, mode='full')
+        width = [(i//2) for i in reference.shape]
+        center = [(i//2)+1 for i in conv.shape]
+        conv = conv[
+             center[0]-width[0]:center[0]+width[0],
+             center[1]-width[1]:center[1]+width[1],
+             center[2]-width[2]:center[2]+width[2],
+        ]
+        imsave(savepath/f'convolved_iter_{k}.tif', conv)
 
         preds, stdev = backend.bootstrap_predict(
             model,
-            kernel[np.newaxis, :],
+            conv[np.newaxis, :],
             psfgen=SyntheticPSF(
                 n_modes=60,
                 lam_detection=.605,
@@ -1455,6 +1462,7 @@ def evalsample(
                 snr=psnr,
                 max_jitter=0,
             ),
+            resize=gen.voxel_size,
             batch_size=1,
             n_samples=1,
             desc=f'Iter[{k}]',
@@ -1473,7 +1481,7 @@ def evalsample(
             phi=Wavefront(res),
             zplanes=0,
             normed=True,
-            noise=True,
+            noise=False,
             augmentation=True,
             meta=False
         )

@@ -48,25 +48,25 @@ def resize(vol, voxel_size: tuple, crop_shape: tuple, reference_voxel_size: tupl
     )
     resized_psf = resize_with_crop_or_pad(resampled_vol, crop_shape)
 
-    if debug:
+    if debug is not None:
         vol = vol ** .5
         vol = np.nan_to_num(vol)
 
         fig, axes = plt.subplots(3, 3, figsize=(8, 11))
 
-        axes[0, 1].set_title(str(vol.shape))
+        axes[0, 1].set_title(f"{str(vol.shape)} @ {reference_voxel_size}")
         m = axes[0, 0].imshow(vol[vol.shape[0]//2, :, :], cmap='hot', vmin=0, vmax=1)
         axes[0, 1].imshow(vol[:, vol.shape[1]//2, :], cmap='hot', vmin=0, vmax=1)
-        axes[0, 2].imshow(vol[:, :, vol.shape[2]//2], cmap='hot', vmin=0, vmax=1)
+        axes[0, 2].imshow(vol[:, :, vol.shape[2]//2].T, cmap='hot', vmin=0, vmax=1)
         cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-2)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
         axes[0, 0].set_ylabel('Input')
 
-        axes[1, 1].set_title(str(resampled_vol.shape))
+        axes[1, 1].set_title(f"{str(resampled_vol.shape)} @ {voxel_size}")
         m = axes[1, 0].imshow(resampled_vol[resampled_vol.shape[0]//2, :, :], cmap='hot', vmin=0, vmax=1)
         axes[1, 1].imshow(resampled_vol[:, resampled_vol.shape[1]//2, :], cmap='hot', vmin=0, vmax=1)
-        axes[1, 2].imshow(resampled_vol[:, :, resampled_vol.shape[2]//2], cmap='hot', vmin=0, vmax=1)
+        axes[1, 2].imshow(resampled_vol[:, :, resampled_vol.shape[2]//2].T, cmap='hot', vmin=0, vmax=1)
         cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-2)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
@@ -75,12 +75,16 @@ def resize(vol, voxel_size: tuple, crop_shape: tuple, reference_voxel_size: tupl
         axes[2, 1].set_title(str(resized_psf.shape))
         m = axes[2, 0].imshow(resized_psf[resized_psf.shape[0]//2, :, :], cmap='hot', vmin=0, vmax=1)
         axes[2, 1].imshow(resized_psf[:, resized_psf.shape[1]//2, :], cmap='hot', vmin=0, vmax=1)
-        axes[2, 2].imshow(resized_psf[:, :, resized_psf.shape[2]//2], cmap='hot', vmin=0, vmax=1)
+        axes[2, 2].imshow(resized_psf[:, :, resized_psf.shape[2]//2].T, cmap='hot', vmin=0, vmax=1)
         cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-2)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
         axes[2, 0].set_ylabel('Resized')
-        plt.show()
+
+        if debug == True:
+            plt.show()
+        else:
+            plt.savefig(f'{debug}_rescaling.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return resized_psf
 

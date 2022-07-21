@@ -716,7 +716,7 @@ def plot_signal(n_modes=60, wavelength=.605):
                 # axes[k, 0].bar(range(n_modes), height=w.amplitudes_ansi_waves)
                 # m = axes[k, 1].imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
                 # axes[k, 2].imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
-                # axes[k, 3].imshow(np.max(vol, axis=2), cmap=psf_cmap, vmin=0, vmax=1)
+                # axes[k, 3].imshow(np.max(vol, axis=2).T, cmap=psf_cmap, vmin=0, vmax=1)
 
         # plt.tight_layout()
         # plt.show()
@@ -877,12 +877,12 @@ def plot_psnr(psf_cmap='hot', gamma=.75):
 
         # m = xy.imshow(vol[mid_plane, :, :], cmap=psf_cmap, vmin=0, vmax=1)
         # zx.imshow(vol[:, mid_plane, :], cmap=psf_cmap, vmin=0, vmax=1)
-        # zy.imshow(vol[:, :, mid_plane], cmap=psf_cmap, vmin=0, vmax=1)
+        # zy.imshow(vol[:, :, mid_plane].T, cmap=psf_cmap, vmin=0, vmax=1)
 
         levels = np.arange(0, 1.01, .01)
         m = xy.contourf(vol[mid_plane, :, :], cmap=psf_cmap, levels=levels, vmin=0, vmax=1)
         zx.contourf(vol[:, mid_plane, :], cmap=psf_cmap, levels=levels, vmin=0, vmax=1)
-        zy.contourf(vol[:, :, mid_plane], cmap=psf_cmap, levels=levels, vmin=0, vmax=1)
+        zy.contourf(vol[:, :, mid_plane].T, cmap=psf_cmap, levels=levels, vmin=0, vmax=1)
 
         cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-2)
         cb = plt.colorbar(m, cax=cax)
@@ -973,11 +973,11 @@ def plot_dmodes(
         if vol.shape[0] == 3:
             m = xy.imshow(vol[0], cmap='Spectral_r', vmin=0, vmax=1)
             zx.imshow(vol[1], cmap='Spectral_r', vmin=0, vmax=1)
-            zy.imshow(vol[2], cmap='Spectral_r', vmin=0, vmax=1)
+            zy.imshow(vol[2].T, cmap='Spectral_r', vmin=0, vmax=1)
         else:
             m = xy.imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
             zx.imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
-            zy.imshow(np.max(vol, axis=2), cmap=psf_cmap, vmin=0, vmax=1)
+            zy.imshow(np.max(vol, axis=2).T, cmap=psf_cmap, vmin=0, vmax=1)
 
         cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
@@ -1187,13 +1187,13 @@ def diagnostic_assessment(
 
             inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=zy, wspace=0.1, hspace=0.1)
             ax = fig.add_subplot(inner[0])
-            m = ax.imshow(vol[2], cmap=cmap, vmin=vmin, vmax=vmax)
+            m = ax.imshow(vol[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
 
             ax = fig.add_subplot(inner[1])
-            ax.imshow(vol[5], cmap='coolwarm', vmin=-1, vmax=1)
+            ax.imshow(vol[5].T, cmap='coolwarm', vmin=-1, vmax=1)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_xlabel(r'$\varphi = \angle \tau$')
@@ -1207,14 +1207,14 @@ def diagnostic_assessment(
         elif vol.shape[0] == 3:
             m = xy.imshow(vol[0], cmap='Spectral_r', vmin=0, vmax=1)
             zx.imshow(vol[1], cmap='Spectral_r', vmin=0, vmax=1)
-            zy.imshow(vol[2], cmap='Spectral_r', vmin=0, vmax=1)
+            zy.imshow(vol[2].T, cmap='Spectral_r', vmin=0, vmax=1)
         else:
             vol = vol ** gamma
             vol = np.nan_to_num(vol)
 
             m = xy.imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
             zx.imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
-            zy.imshow(np.max(vol, axis=2), cmap=psf_cmap, vmin=0, vmax=1)
+            zy.imshow(np.max(vol, axis=2).T, cmap=psf_cmap, vmin=0, vmax=1)
 
             cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
@@ -1465,13 +1465,13 @@ def matlab_diagnostic_assessment(
 
             inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=zy, wspace=0.1, hspace=0.1)
             ax = fig.add_subplot(inner[0])
-            m = ax.imshow(vol[2], cmap=cmap, vmin=vmin, vmax=vmax)
+            m = ax.imshow(vol[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
 
             ax = fig.add_subplot(inner[1])
-            ax.imshow(vol[5], cmap='coolwarm', vmin=-1, vmax=1)
+            ax.imshow(vol[5].T, cmap='coolwarm', vmin=-1, vmax=1)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_xlabel(r'$\varphi = \angle \tau$')
@@ -1485,14 +1485,14 @@ def matlab_diagnostic_assessment(
         elif vol.shape[0] == 3:
             m = xy.imshow(vol[0], cmap='Spectral_r', vmin=0, vmax=1)
             zx.imshow(vol[1], cmap='Spectral_r', vmin=0, vmax=1)
-            zy.imshow(vol[2], cmap='Spectral_r', vmin=0, vmax=1)
+            zy.imshow(vol[2].T, cmap='Spectral_r', vmin=0, vmax=1)
         else:
             vol = vol ** gamma
             vol = np.nan_to_num(vol)
 
             m = xy.imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
             zx.imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
-            zy.imshow(np.max(vol, axis=2), cmap=psf_cmap, vmin=0, vmax=1)
+            zy.imshow(np.max(vol, axis=2).T, cmap=psf_cmap, vmin=0, vmax=1)
 
             cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
@@ -1905,12 +1905,12 @@ def prediction(
         if maxx:
             m = xy.imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
             zx.imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
-            zy.imshow(np.max(vol, axis=2), cmap=psf_cmap, vmin=0, vmax=1)
+            zy.imshow(np.max(vol, axis=2).T, cmap=psf_cmap, vmin=0, vmax=1)
         else:
             mid_plane = vol.shape[0] // 2
             m = xy.imshow(vol[mid_plane, :, :], cmap=psf_cmap, vmin=0, vmax=1)
             zx.imshow(vol[:, mid_plane, :], cmap=psf_cmap, vmin=0, vmax=1)
-            zy.imshow(vol[:, :, mid_plane], cmap=psf_cmap, vmin=0, vmax=1)
+            zy.imshow(vol[:, :, mid_plane].T, cmap=psf_cmap, vmin=0, vmax=1)
 
         cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)

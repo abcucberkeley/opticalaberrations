@@ -498,6 +498,7 @@ def bootstrap_predict(
     model: tf.keras.Model,
     inputs: np.array,
     psfgen: SyntheticPSF,
+    resize: Any = None,
     batch_size: int = 1,
     n_samples: int = 10,
     threshold: float = 1e-4,
@@ -512,6 +513,7 @@ def bootstrap_predict(
         model: pre-trained keras model
         inputs: encoded tokens to be processed
         psfgen: Synthetic PSF object
+        resize: optional resize voxel size
         n_samples: number of predictions of average
         batch_size: number of samples per batch
         threshold: set predictions below threshold to zero
@@ -526,13 +528,20 @@ def bootstrap_predict(
         for k in range(0, len(arr), s):
             yield arr[k:k + s]
 
+    if resize is not None:
+        inputs = np.stack([
+            np.expand_dims(preprocessing.resize(
+                np.squeeze(i),
+                crop_shape=psfgen.psf_shape,
+                voxel_size=psfgen.voxel_size,
+                reference_voxel_size=resize,
+                debug=plot,
+            ), axis=-1) for i in inputs
+        ], axis=0)
+
     # check z-axis to compute embeddings for fourier models
     if model.input_shape[1] != inputs.shape[1]:
-        # check x-axis to resize if needed
-        if model.input_shape[-2] != inputs.shape[-2]:
-            model_inputs = np.stack([psfgen.embedding(psf=i, resize=3*[model.input_shape[-2]]) for i in inputs], axis=0)
-        else:
-            model_inputs = np.stack([psfgen.embedding(psf=i) for i in inputs], axis=0)
+        model_inputs = np.stack([psfgen.embedding(psf=i) for i in inputs], axis=0)
     else:
         # pass raw PSFs to the model
         model_inputs = inputs
@@ -570,7 +579,7 @@ def bootstrap_predict(
 
                     m = axes[0, 0].imshow(input_img[mid_plane, :, :], cmap='hot', vmin=0, vmax=1)
                     axes[0, 1].imshow(input_img[:, mid_plane, :], cmap='hot', vmin=0, vmax=1)
-                    axes[0, 2].imshow(input_img[:, :, mid_plane], cmap='hot', vmin=0, vmax=1)
+                    axes[0, 2].imshow(input_img[:, :, mid_plane].T, cmap='hot', vmin=0, vmax=1)
                     cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
@@ -578,7 +587,7 @@ def bootstrap_predict(
 
                     m = axes[1, 0].imshow(img[0], cmap=cmap, vmin=vmin, vmax=vmax)
                     axes[1, 1].imshow(img[1], cmap=cmap, vmin=vmin, vmax=vmax)
-                    axes[1, 2].imshow(img[2], cmap=cmap, vmin=vmin, vmax=vmax)
+                    axes[1, 2].imshow(img[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
                     cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
@@ -586,7 +595,7 @@ def bootstrap_predict(
 
                     m = axes[2, 0].imshow(img[3], cmap='coolwarm', vmin=-1, vmax=1)
                     axes[2, 1].imshow(img[4], cmap='coolwarm', vmin=-1, vmax=1)
-                    axes[2, 2].imshow(img[5], cmap='coolwarm', vmin=-1, vmax=1)
+                    axes[2, 2].imshow(img[5].T, cmap='coolwarm', vmin=-1, vmax=1)
                     cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
@@ -600,7 +609,7 @@ def bootstrap_predict(
                     axes[1].set_title(str(img.shape))
                     m = axes[0].imshow(np.max(img, axis=0), cmap='Spectral_r')
                     axes[1].imshow(np.max(img, axis=1), cmap='Spectral_r')
-                    axes[2].imshow(np.max(img, axis=2), cmap='Spectral_r')
+                    axes[2].imshow(np.max(img, axis=2).T, cmap='Spectral_r')
 
                     for ax in axes.flatten():
                         ax.axis('off')

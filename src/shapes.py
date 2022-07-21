@@ -7,97 +7,123 @@ from tifffile import imread, imsave
 
 import logging
 logger = logging.getLogger('')
+np.random.seed(2022)
 
 
-def single_point(image_size=(64, 64, 64)):
+def single_point(image_size):
     img = np.zeros(image_size)
-    img[64, 64, 64] = 1.
+    img[image_size[0]//2, image_size[1]//2, image_size[2]//2] = 1.
     return img.astype(np.float)
 
 
-def two_points(image_size=(64, 64, 64)):
+def two_points(image_size):
     img = np.zeros(image_size)
-    img[12, 12, 12] = 1.
-    img[52, 52, 52] = 1.
+    img[image_size[0]//2, image_size[1]//2, image_size[2]//2] = 1.
+    img[image_size[0]//4, image_size[1]//4, image_size[2]//4] = 1.
     return img.astype(np.float)
 
 
-def several_points(image_size=(64, 64, 64)):
+def five_points(image_size):
     img = np.zeros(image_size)
-    img[16, 16, 16] = 1.
-    img[32, 32, 32] = 1.
-    img[48, 48, 48] = 1.
-    img[16, 16, 48] = 1.
-    img[48, 48, 16] = 1.
+    img[image_size[0]//2, image_size[1]//2, image_size[2]//2] = 1.
+    img[image_size[0]//4, image_size[1]//4, image_size[2]//4] = 1.
+    img[image_size[0]//3, int(image_size[1]//1.2), int(image_size[2]//1.2)] = 1.
+    img[image_size[0]//4, image_size[1]//4, int(image_size[2]//1.2)] = 1.
+    img[int(image_size[0]//1.2), int(image_size[1]//1.2), image_size[2]//4] = 1.
     return img.astype(np.float)
 
 
-def line(image_size=(64, 64, 64)):
+def several_points(image_size):
     img = np.zeros(image_size)
-    img[20:50, 32, 32] = 1.
+    for i in range(100):
+        img[
+            np.random.randint(image_size[0]//2.6, image_size[0]//1.3),
+            np.random.randint(image_size[1]//2.6, image_size[1]//1.3),
+            np.random.randint(image_size[2]//2.6, image_size[2]//1.3),
+        ] = 1.
+
     return img.astype(np.float)
 
 
-def sphere(image_size=(64, 64, 64)):
+def line(image_size):
+    img = np.zeros(image_size)
+    img[image_size[0]//3:image_size[0]//2, image_size[1]//2, image_size[2]//2] = 1.
+    return img.astype(np.float)
+
+
+def sphere(image_size):
     img = rg.sphere(shape=image_size, radius=.5, position=.5)
     return img.astype(np.float)
 
 
-def sheet(image_size=(64, 64, 64)):
-    img = rg.rhomboid(shape=image_size, semidiagonals=[40, 1, 40], position=[.4, .5, .4])
+def sheet(image_size):
+    img = rg.rhomboid(shape=image_size, semidiagonals=[int(.5*image_size[0]), 1, int(.5*image_size[2])], position=[.4, .5, .4])
     return img.astype(np.float)
 
 
-def cylinder(image_size=(64, 64, 64)):
-    img = rg.cylinder(shape=image_size, height=60, radius=2, position=[.9, .1, .1])
+def cylinder(image_size):
+    img = rg.cylinder(shape=image_size, height=int(.5*image_size[0]), radius=2, position=[.5, .5, .5])
     return img.astype(np.float)
 
 
-def point_and_line(image_size=(64, 64, 64)):
+def point_and_line(image_size):
     img = np.zeros(image_size)
-    img[48, 48, 48] = 1.
-    img[24, 20:50, 24] = 1.
+    img[image_size[0]//2, image_size[1]//2, image_size[2]//2] = 1.
+    img[image_size[0]//4, image_size[1]//6:image_size[1]//3, image_size[2]//4] = 1.
     return img.astype(np.float)
 
 
-def point_and_sheet(image_size=(64, 64, 64)):
+def point_and_sheet(image_size):
     p = np.zeros(image_size)
-    p[48, 48, 48] = 1.
-    sh = rg.cuboid(shape=image_size, semisides=[15, 5, 1], position=[.4, .5, .4]).astype(np.float)
+    p[int(image_size[0]//1.2), int(image_size[1]//1.2), int(image_size[2]//1.2)] = 1.
+    sh = rg.cuboid(shape=image_size, semisides=[int(.25*image_size[0]), int(.05*image_size[1]), 1], position=[.4, .5, .4]).astype(np.float)
     return p + sh
 
 
-def point_and_cylinder(image_size=(64, 64, 64)):
+def point_and_cylinder(image_size):
     p = np.zeros(image_size)
-    p[48, 48, 16] = 1.
-    cc = rg.cylinder(shape=image_size, height=30, radius=2, position=[.2, .5, .6]).astype(np.float)
+    p[int(image_size[0]//1.2), int(image_size[1]//1.2), image_size[2]//4] = 1.
+    cc = rg.cylinder(shape=image_size, height=int(.3*image_size[0]), radius=int(.1*image_size[0]), position=[.2, .5, .6]).astype(np.float)
     return p + cc
 
 
-def several_points_and_line(image_size=(64, 64, 64)):
+def several_points_and_line(image_size):
     img = np.zeros(image_size)
-    img[12, 12, 12] = 1.
-    img[48, 48, 12] = 1.
-    img[48, 48, 48] = 1.
-    img[32, 32, 20:50] = 1.
+
+    for i in range(50):
+        img[
+            np.random.randint(image_size[0] // 2.6, image_size[0] // 1.3),
+            np.random.randint(image_size[1] // 2.6, image_size[1] // 1.3),
+            np.random.randint(image_size[2] // 2.6, image_size[2] // 1.3),
+        ] = 1.
+
+    img[image_size[0]//2, image_size[1]//2, image_size[2]//6:image_size[2]//3] = 1.
     return img.astype(np.float)
 
 
-def several_points_and_sheet(image_size=(64, 64, 64)):
+def several_points_and_sheet(image_size):
     ps = np.zeros(image_size)
-    ps[20, 5, 40] = 1.
-    ps[48, 48, 48] = 1.
-    ps[12, 40, 60] = 1.
-    sh = rg.rhomboid(shape=image_size, semidiagonals=[1, 10, 20], position=[.4, .5, .4]).astype(np.float)
+    for i in range(50):
+        ps[
+            np.random.randint(image_size[0] // 2.6, image_size[0] // 1.3),
+            np.random.randint(image_size[1] // 2.6, image_size[1] // 1.3),
+            np.random.randint(image_size[2] // 2.6, image_size[2] // 1.3),
+        ] = 1.
+
+    sh = rg.rhomboid(shape=image_size, semidiagonals=[1, int(.1*image_size[1]), int(.2*image_size[2])], position=[.4, .5, .4]).astype(np.float)
     return ps + sh
 
 
-def several_points_and_cylinder(image_size=(64, 64, 64)):
+def several_points_and_cylinder(image_size):
     ps = np.zeros(image_size)
-    ps[12, 12, 12] = 1.
-    ps[45, 50, 40] = 1.
-    ps[40, 25, 12] = 1.
-    cc = rg.cylinder(shape=image_size, height=10, radius=2, position=[.4, .5, .6]).astype(np.float)
+    for i in range(50):
+        ps[
+            np.random.randint(image_size[0] // 2.6, image_size[0] // 1.3),
+            np.random.randint(image_size[1] // 2.6, image_size[1] // 1.3),
+            np.random.randint(image_size[2] // 2.6, image_size[2] // 1.3),
+        ] = 1.
+
+    cc = rg.cylinder(shape=image_size, height=int(.1*image_size[0]), radius=int(.05*image_size[0]), position=[.4, .5, .6]).astype(np.float)
     return ps + cc
 
 
@@ -127,11 +153,12 @@ def plot_3d_object(img, title=''):
         pass
 
 
-def simobjects(codename=None, image_size=(256, 256, 256), plot=False):
+def simobjects(codename=None, image_size=(512, 512, 512), plot=True):
 
     hashtbl = {
         'single_point': single_point,
         'two_points': two_points,
+        'five_points': five_points,
         'several_points': several_points,
         'line': line,
         'sheet': sheet,

@@ -163,7 +163,7 @@ def matlab_comparison(
         mid_plane = vol.shape[0] // 2
         m = xy.imshow(vol[mid_plane, :, :], cmap=psf_cmap)
         zx.imshow(vol[:, mid_plane, :], cmap=psf_cmap)
-        zy.imshow(vol[:, :, mid_plane], cmap=psf_cmap)
+        zy.imshow(vol[:, :, mid_plane].T, cmap=psf_cmap)
 
         xy.set_ylabel(label)
 
