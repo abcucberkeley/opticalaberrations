@@ -38,9 +38,9 @@ def several_points(image_size, npoints=100):
     img = np.zeros(image_size)
     for i in range(npoints):
         img[
-            np.random.randint(image_size[0]//2.6, image_size[0]//1.3),
-            np.random.randint(image_size[1]//2.6, image_size[1]//1.3),
-            np.random.randint(image_size[2]//2.6, image_size[2]//1.3),
+            np.random.randint(int(image_size[0]*.1), int(image_size[0]*.9)),
+            np.random.randint(int(image_size[1]*.1), int(image_size[1]*.9)),
+            np.random.randint(int(image_size[2]*.1), int(image_size[2]*.9))
         ] = 1.
 
     return img.astype(np.float)
@@ -48,7 +48,7 @@ def several_points(image_size, npoints=100):
 
 def line(image_size):
     img = np.zeros(image_size)
-    img[image_size[0]//3:image_size[0]//2, image_size[1]//2, image_size[2]//2] = 1.
+    img[int(image_size[0]*.25):int(image_size[0]*.75), image_size[1]//2, image_size[2]//2] = 1.
     return img.astype(np.float)
 
 
@@ -58,7 +58,10 @@ def sphere(image_size):
 
 
 def sheet(image_size):
-    img = rg.rhomboid(shape=image_size, semidiagonals=[int(.5*image_size[0]), 1, int(.5*image_size[2])], position=[.4, .5, .4])
+    img = rg.rhomboid(
+        shape=image_size,
+        semidiagonals=[int(.5*image_size[0]), 1, int(.5*image_size[2])],
+        position=[.4, .5, .4])
     return img.astype(np.float)
 
 
@@ -77,25 +80,33 @@ def point_and_line(image_size):
 def point_and_sheet(image_size):
     p = np.zeros(image_size)
     p[int(image_size[0]//1.2), int(image_size[1]//1.2), int(image_size[2]//1.2)] = 1.
-    sh = rg.cuboid(shape=image_size, semisides=[int(.25*image_size[0]), int(.05*image_size[1]), 1], position=[.4, .5, .4]).astype(np.float)
+    sh = rg.cuboid(
+        shape=image_size,
+        semisides=[int(.25*image_size[0]), int(.05*image_size[1]), 1],
+        position=[.4, .5, .4]
+    ).astype(np.float)
     return p + sh
 
 
 def point_and_cylinder(image_size):
     p = np.zeros(image_size)
     p[int(image_size[0]//1.2), int(image_size[1]//1.2), image_size[2]//4] = 1.
-    cc = rg.cylinder(shape=image_size, height=int(.3*image_size[0]), radius=int(.1*image_size[0]), position=[.2, .5, .6]).astype(np.float)
+    cc = rg.cylinder(
+        shape=image_size,
+        height=int(.3*image_size[0]),
+        radius=int(.1*image_size[0]),
+        position=[.2, .5, .6]
+    ).astype(np.float)
     return p + cc
 
 
 def several_points_and_line(image_size):
     img = np.zeros(image_size)
-
-    for i in range(50):
+    for i in range(25):
         img[
-            np.random.randint(image_size[0] // 2.6, image_size[0] // 1.3),
-            np.random.randint(image_size[1] // 2.6, image_size[1] // 1.3),
-            np.random.randint(image_size[2] // 2.6, image_size[2] // 1.3),
+            np.random.randint(int(image_size[0]*.1), int(image_size[0]*.9)),
+            np.random.randint(int(image_size[1]*.1), int(image_size[1]*.9)),
+            np.random.randint(int(image_size[2]*.1), int(image_size[2]*.9))
         ] = 1.
 
     img[image_size[0]//2, image_size[1]//2, image_size[2]//6:image_size[2]//3] = 1.
@@ -104,27 +115,36 @@ def several_points_and_line(image_size):
 
 def several_points_and_sheet(image_size):
     ps = np.zeros(image_size)
-    for i in range(50):
+    for i in range(25):
         ps[
-            np.random.randint(image_size[0] // 2.6, image_size[0] // 1.3),
-            np.random.randint(image_size[1] // 2.6, image_size[1] // 1.3),
-            np.random.randint(image_size[2] // 2.6, image_size[2] // 1.3),
+            np.random.randint(int(image_size[0]*.1), int(image_size[0]*.9)),
+            np.random.randint(int(image_size[1]*.1), int(image_size[1]*.9)),
+            np.random.randint(int(image_size[2]*.1), int(image_size[2]*.9))
         ] = 1.
 
-    sh = rg.rhomboid(shape=image_size, semidiagonals=[1, int(.1*image_size[1]), int(.2*image_size[2])], position=[.4, .5, .4]).astype(np.float)
+    sh = rg.rhomboid(
+        shape=image_size,
+        semidiagonals=[1, int(.1*image_size[1]), int(.2*image_size[2])],
+        position=[.4, .5, .4]
+    ).astype(np.float)
     return ps + sh
 
 
 def several_points_and_cylinder(image_size):
     ps = np.zeros(image_size)
-    for i in range(50):
+    for i in range(25):
         ps[
-            np.random.randint(image_size[0] // 2.6, image_size[0] // 1.3),
-            np.random.randint(image_size[1] // 2.6, image_size[1] // 1.3),
-            np.random.randint(image_size[2] // 2.6, image_size[2] // 1.3),
+            np.random.randint(int(image_size[0]*.1), int(image_size[0]*.9)),
+            np.random.randint(int(image_size[1]*.1), int(image_size[1]*.9)),
+            np.random.randint(int(image_size[2]*.1), int(image_size[2]*.9))
         ] = 1.
 
-    cc = rg.cylinder(shape=image_size, height=int(.1*image_size[0]), radius=int(.05*image_size[0]), position=[.4, .5, .6]).astype(np.float)
+    cc = rg.cylinder(
+        shape=image_size,
+        height=int(.1*image_size[0]),
+        radius=int(.05*image_size[0]),
+        position=[.4, .5, .6]
+    ).astype(np.float)
     return ps + cc
 
 
@@ -154,27 +174,27 @@ def plot_3d_object(img, title=''):
         pass
 
 
-def simobjects(codename=None, image_size=(512, 512, 512), plot=False):
+def simobjects(codename=None, image_size=(512, 512, 512), plot=True):
 
     hashtbl = {
         'single_point': single_point,
         'two_points': two_points,
         'five_points': five_points,
-        '100_points': partial(several_points, npoints=100),
-        '75_points': partial(several_points, npoints=75),
-        '50_points': partial(several_points, npoints=50),
-        '25_points': partial(several_points, npoints=25),
         '10_points': partial(several_points, npoints=10),
-        # 'line': line,
-        # 'sheet': sheet,
-        # 'sphere': sphere,
-        # 'cylinder': cylinder,
-        # 'point_and_line': point_and_line,
-        # 'point_and_sheet': point_and_sheet,
-        # 'point_and_cylinder': point_and_cylinder,
-        # 'several_points_and_line': several_points_and_line,
-        # 'several_points_and_sheet': several_points_and_sheet,
-        # 'several_points_and_cylinder': several_points_and_cylinder,
+        '25_points': partial(several_points, npoints=25),
+        '50_points': partial(several_points, npoints=50),
+        '75_points': partial(several_points, npoints=75),
+        '100_points': partial(several_points, npoints=100),
+        'line': line,
+        'sheet': sheet,
+        'sphere': sphere,
+        'cylinder': cylinder,
+        'point_and_line': point_and_line,
+        'point_and_sheet': point_and_sheet,
+        'point_and_cylinder': point_and_cylinder,
+        'several_points_and_line': several_points_and_line,
+        'several_points_and_sheet': several_points_and_sheet,
+        'several_points_and_cylinder': several_points_and_cylinder,
     }
 
     if codename is None:

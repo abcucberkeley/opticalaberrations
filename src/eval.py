@@ -12,8 +12,7 @@ from tqdm import tqdm
 from tifffile import imread
 import tensorflow as tf
 from scipy import signal
-from scipy import ndimage
-from skimage import transform
+from skimage import transform, filters
 from tifffile import imsave
 
 import utils
@@ -1414,7 +1413,7 @@ def evalsample(
     )
 
     ys = np.zeros(60)
-    ys[10] = .2
+    ys[10] = .1
     kernel = gen.single_psf(
         phi=Wavefront(ys),
         zplanes=0,
