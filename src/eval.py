@@ -1402,6 +1402,17 @@ def evalsample(
         max_jitter=0,
     )
 
+    modelgen = SyntheticPSF(
+        n_modes=60,
+        lam_detection=.605,
+        psf_shape=(64, 64, 64),
+        x_voxel_size=.15,
+        y_voxel_size=.15,
+        z_voxel_size=.6,
+        snr=psnr,
+        max_jitter=0,
+    )
+
     ys = np.zeros(60)
     ys[10] = .2
     kernel = gen.single_psf(
@@ -1419,26 +1430,6 @@ def evalsample(
     y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
 
     for k in range(1, niter+1):
-        backend.bootstrap_predict(
-            model,
-            kernel[np.newaxis, :],
-            psfgen=SyntheticPSF(
-                n_modes=60,
-                lam_detection=.605,
-                psf_shape=(64, 64, 64),
-                x_voxel_size=.15,
-                y_voxel_size=.15,
-                z_voxel_size=.6,
-                snr=psnr,
-                max_jitter=0,
-            ),
-            resize=gen.voxel_size,
-            batch_size=1,
-            n_samples=1,
-            desc=f'Iter[{k}]',
-            plot=savepath/f'embeddings_iter_{k}',
-        )
-
         conv = signal.fftconvolve(reference, kernel, mode='full')
         width = [(i//2) for i in reference.shape]
         center = [(i//2)+1 for i in conv.shape]
@@ -1452,21 +1443,34 @@ def evalsample(
         preds, stdev = backend.bootstrap_predict(
             model,
             conv[np.newaxis, :],
-            psfgen=SyntheticPSF(
-                n_modes=60,
-                lam_detection=.605,
-                psf_shape=(64, 64, 64),
-                x_voxel_size=.15,
-                y_voxel_size=.15,
-                z_voxel_size=.6,
-                snr=psnr,
-                max_jitter=0,
-            ),
+            psfgen=modelgen,
             resize=gen.voxel_size,
             batch_size=1,
             n_samples=1,
             desc=f'Iter[{k}]',
             plot=savepath/f'embeddings_convolved_iter_{k}',
+        )
+
+        p_wave = Wavefront(preds)
+        y_wave = Wavefront(ys.flatten())
+        diff_wave = Wavefront(ys - preds)
+
+        p_psf = modelgen.single_psf(p_wave, zplanes=0)
+        gt_psf = modelgen.single_psf(y_wave, zplanes=0)
+        corrected_psf = modelgen.single_psf(diff_wave, zplanes=0)
+        psf = np.squeeze(conv, axis=-1)
+        imsave(savepath / f'corrected_psf_iter_{k}.tif', corrected_psf)
+
+        vis.diagnostic_assessment(
+            psf=psf,
+            gt_psf=gt_psf,
+            predicted_psf=p_psf,
+            corrected_psf=corrected_psf,
+            psnr=psnr,
+            maxcounts=psnr,
+            y=y_wave,
+            pred=p_wave,
+            save_path=savepath/f'iter_{k}',
         )
 
         p = pd.DataFrame({'residuals': [utils.peak_aberration(preds, na=na)], 'niter': k})
@@ -1513,7 +1517,7 @@ def evalsample(
     means = means.sort_index().interpolate()
 
     logger.info(means)
-    means.to_csv(savepath/f'results_{str(na).replace("0.", "p")}.csv')
+    means.to_csv(savepath/f'results_na_{str(na).replace("0.", "p")}.csv')
 
     fig, ax = plt.subplots(figsize=(8, 6))
     levels = [

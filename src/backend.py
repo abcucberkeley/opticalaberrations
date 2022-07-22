@@ -6,12 +6,12 @@ from pathlib import Path
 from pprint import pprint
 from typing import Any
 
-import imageio
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 from tqdm import trange, tqdm
+from tifffile import imsave
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -705,8 +705,8 @@ def predict(
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
-                    imageio.mimwrite(save_path / f'psf_{i}.tif', psf)
-                    imageio.mimwrite(save_path / f'corrected_psf_{i}.tif', corrected_psf)
+                    imsave(save_path / f'psf_{i}.tif', psf)
+                    imsave(save_path / f'corrected_psf_{i}.tif', corrected_psf)
 
                     vis.diagnostic_assessment(
                         psf=psf,
@@ -790,9 +790,9 @@ def compare(
                 )
                 save_path.mkdir(exist_ok=True, parents=True)
 
-                imageio.mimwrite(save_path / f'input_{i}.tif', model_input)
-                imageio.mimwrite(save_path / f'input_psf_{i}.tif', psf)
-                imageio.mimwrite(save_path / f'corrected_psf_{i}.tif', corrected_psf)
+                imsave(save_path / f'input_{i}.tif', model_input)
+                imsave(save_path / f'input_psf_{i}.tif', psf)
+                imsave(save_path / f'corrected_psf_{i}.tif', corrected_psf)
 
                 logger.info('Matlab')
                 pred_matlab = np.zeros_like(p.amplitudes)
@@ -807,7 +807,7 @@ def compare(
                 pred_matlab = Wavefront(pred_matlab.flatten())
                 matlab_diff = Wavefront(y - pred_matlab)
                 matlab_corrected_psf = gen.single_psf(matlab_diff, zplanes=0)
-                imageio.mimwrite(save_path / f'matlab_corrected_psf_{i}.tif', matlab_corrected_psf)
+                imsave(save_path / f'matlab_corrected_psf_{i}.tif', matlab_corrected_psf)
                 pprint(pred_matlab.zernikes)
 
                 vis.matlab_diagnostic_assessment(
