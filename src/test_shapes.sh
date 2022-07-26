@@ -16,8 +16,8 @@ do
   for NA in 1 .95 .9 .85 .8
   do
     for REF in 'single_point' 'two_points' 'five_points' \
-    '10_points' '25_points' '50_points' '75_points' '100_points' \
-    'line' 'sheet' 'sphere' 'cylinder' \
+    '2_points' '5_points' '10_points' '25_points' '50_points' '75_points' '100_points' \
+    'line' 'sheet' 'cylinder' \
     'point_and_line' 'point_and_sheet' 'point_and_cylinder' \
     'several_points_and_line' 'several_points_and_sheet' 'several_points_and_cylinder'
     do

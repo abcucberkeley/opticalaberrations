@@ -534,7 +534,7 @@ def bootstrap_predict(
                 np.squeeze(i),
                 crop_shape=psfgen.psf_shape,
                 voxel_size=psfgen.voxel_size,
-                reference_voxel_size=resize,
+                sample_voxel_size=resize,
                 debug=plot,
             ), axis=-1) for i in inputs
         ], axis=0)
@@ -575,15 +575,13 @@ def bootstrap_predict(
 
                     fig, axes = plt.subplots(3, 3)
 
-                    mid_plane = input_img.shape[0] // 2
-
-                    m = axes[0, 0].imshow(input_img[mid_plane, :, :], cmap='hot', vmin=0, vmax=1)
-                    axes[0, 1].imshow(input_img[:, mid_plane, :], cmap='hot', vmin=0, vmax=1)
-                    axes[0, 2].imshow(input_img[:, :, mid_plane].T, cmap='hot', vmin=0, vmax=1)
+                    m = axes[0, 0].imshow(np.max(input_img, axis=0), cmap='hot', vmin=0, vmax=1)
+                    axes[0, 1].imshow(np.max(input_img, axis=1), cmap='hot', vmin=0, vmax=1)
+                    axes[0, 2].imshow(np.max(input_img, axis=2).T, cmap='hot', vmin=0, vmax=1)
                     cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
-                    cax.set_ylabel('Input')
+                    cax.set_ylabel('Input (maxproj)')
 
                     m = axes[1, 0].imshow(img[0], cmap=cmap, vmin=vmin, vmax=vmax)
                     axes[1, 1].imshow(img[1], cmap=cmap, vmin=vmin, vmax=vmax)

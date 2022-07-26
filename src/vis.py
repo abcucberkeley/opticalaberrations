@@ -7,7 +7,6 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import matplotlib.gridspec as gridspec
-import matplotlib.ticker as mtick
 import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
 from typing import Any
@@ -173,7 +172,7 @@ def plot_fov(n_modes=60, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
         'ytick.labelsize': 10,
         'legend.fontsize': 10,
     })
-    from utils import peak_aberration, center_crop
+    from utils import peak_aberration
 
     waves = np.round(np.arange(0, .5, step=.1), 2)
     res = [128, 64, 32]
@@ -668,7 +667,7 @@ def plot_signal(n_modes=60, wavelength=.605):
         'ytick.labelsize': 10,
         'legend.fontsize': 10,
     })
-    from preprocessing import center_crop
+    from preprocessing import resize_with_crop_or_pad
     from utils import peak_aberration
 
     waves = np.arange(0, .5, step=.05)
@@ -707,7 +706,7 @@ def plot_signal(n_modes=60, wavelength=.605):
             # fig, axes = plt.subplots(len(res), 4)
 
             for k, r in enumerate(res):
-                window = center_crop(psf, crop_shape=tuple(3*[r]))
+                window = resize_with_crop_or_pad(psf, crop_shape=tuple(3*[r]))
                 signal[i][abr][r] = np.sum(window)
 
                 # vol = window ** .5

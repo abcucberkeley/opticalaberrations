@@ -38,9 +38,9 @@ def several_points(image_size, npoints=100):
     img = np.zeros(image_size)
     for i in range(npoints):
         img[
-            np.random.randint(int(image_size[0]*.1), int(image_size[0]*.9)),
-            np.random.randint(int(image_size[1]*.1), int(image_size[1]*.9)),
-            np.random.randint(int(image_size[2]*.1), int(image_size[2]*.9))
+            np.random.randint(int(image_size[0]*.4), int(image_size[0]*.6)),
+            np.random.randint(int(image_size[1]*.4), int(image_size[1]*.6)),
+            np.random.randint(int(image_size[2]*.4), int(image_size[2]*.6))
         ] = 1.
 
     return img.astype(np.float)
@@ -48,7 +48,7 @@ def several_points(image_size, npoints=100):
 
 def line(image_size):
     img = np.zeros(image_size)
-    img[int(image_size[0]*.25):int(image_size[0]*.75), image_size[1]//2, image_size[2]//2] = 1.
+    img[int(image_size[0]*.4):int(image_size[0]*.6), image_size[1]//2, image_size[2]//2] = 1.
     return img.astype(np.float)
 
 
@@ -104,9 +104,9 @@ def several_points_and_line(image_size):
     img = np.zeros(image_size)
     for i in range(25):
         img[
-            np.random.randint(int(image_size[0]*.1), int(image_size[0]*.9)),
-            np.random.randint(int(image_size[1]*.1), int(image_size[1]*.9)),
-            np.random.randint(int(image_size[2]*.1), int(image_size[2]*.9))
+            np.random.randint(int(image_size[0]*.4), int(image_size[0]*.6)),
+            np.random.randint(int(image_size[1]*.4), int(image_size[1]*.6)),
+            np.random.randint(int(image_size[2]*.4), int(image_size[2]*.6))
         ] = 1.
 
     img[image_size[0]//2, image_size[1]//2, image_size[2]//6:image_size[2]//3] = 1.
@@ -117,9 +117,9 @@ def several_points_and_sheet(image_size):
     ps = np.zeros(image_size)
     for i in range(25):
         ps[
-            np.random.randint(int(image_size[0]*.1), int(image_size[0]*.9)),
-            np.random.randint(int(image_size[1]*.1), int(image_size[1]*.9)),
-            np.random.randint(int(image_size[2]*.1), int(image_size[2]*.9))
+            np.random.randint(int(image_size[0]*.4), int(image_size[0]*.6)),
+            np.random.randint(int(image_size[1]*.4), int(image_size[1]*.6)),
+            np.random.randint(int(image_size[2]*.4), int(image_size[2]*.6))
         ] = 1.
 
     sh = rg.rhomboid(
@@ -134,9 +134,9 @@ def several_points_and_cylinder(image_size):
     ps = np.zeros(image_size)
     for i in range(25):
         ps[
-            np.random.randint(int(image_size[0]*.1), int(image_size[0]*.9)),
-            np.random.randint(int(image_size[1]*.1), int(image_size[1]*.9)),
-            np.random.randint(int(image_size[2]*.1), int(image_size[2]*.9))
+            np.random.randint(int(image_size[0]*.4), int(image_size[0]*.6)),
+            np.random.randint(int(image_size[1]*.4), int(image_size[1]*.6)),
+            np.random.randint(int(image_size[2]*.4), int(image_size[2]*.6))
         ] = 1.
 
     cc = rg.cylinder(
@@ -180,6 +180,8 @@ def simobjects(codename=None, image_size=(512, 512, 512), plot=True):
         'single_point': single_point,
         'two_points': two_points,
         'five_points': five_points,
+        '2_points': partial(several_points, npoints=2),
+        '5_points': partial(several_points, npoints=5),
         '10_points': partial(several_points, npoints=10),
         '25_points': partial(several_points, npoints=25),
         '50_points': partial(several_points, npoints=50),
