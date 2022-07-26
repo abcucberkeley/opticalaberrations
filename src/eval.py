@@ -1413,9 +1413,9 @@ def evalsample(
             n_modes=60,
             lam_detection=.605,
             psf_shape=reference_shape,
-            x_voxel_size=reference_voxel_size[0],
+            z_voxel_size=reference_voxel_size[0],
             y_voxel_size=reference_voxel_size[1],
-            z_voxel_size=reference_voxel_size[2],
+            x_voxel_size=reference_voxel_size[2],
             snr=psnr,
             max_jitter=0,
         )

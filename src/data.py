@@ -33,6 +33,7 @@ def parse_args(args):
     subparsers.add_parser("gaussian")
     subparsers.add_parser("simulation")
     subparsers.add_parser("shapes")
+    subparsers.add_parser("similarity")
 
     data_parser = subparsers.add_parser("parse")
     data_parser.add_argument("dataset", type=Path, help="path to raw PSF directory")
@@ -76,6 +77,9 @@ def main(args=None):
 
     elif args.dtype == "psnr":
         vis.plot_psnr()
+
+    elif args.dtype == "similarity":
+        shapes.similarity()
 
     elif args.dtype == "parse":
         experimental.create_dataset(data_path=args.dataset)

@@ -2,13 +2,18 @@ from functools import partial
 
 import numpy as np
 import raster_geometry as rg
-from skimage import measure
+from skimage import measure, transform
 import matplotlib.pyplot as plt
 from tifffile import imread, imsave
+from scipy import signal
+from pathlib import Path
+
+import preprocessing
+from synthetic import SyntheticPSF
+from wavefront import Wavefront
 
 import logging
 logger = logging.getLogger('')
-np.random.seed(202207)
 
 
 def single_point(image_size):
@@ -158,6 +163,7 @@ def plot_3d_object(img, title=''):
 
 
 def simobjects(codename=None, image_size=(256, 256, 256), plot=False):
+    np.random.seed(202207)
 
     hashtbl = {
         'single_point': single_point,
@@ -211,3 +217,79 @@ def simobjects(codename=None, image_size=(256, 256, 256), plot=False):
 
         if plot:
             plot_3d_object(img, title=codename)
+
+
+def similarity(
+    image_size=(256, 256, 256),
+    reference_voxel_size=(.15, .0375, .0375),
+    radius=.5,
+    npoints=2
+):
+    savepath = Path(f'../data/similarity/{image_size[0]}/radius_{radius}_points_{npoints}')
+    savepath.mkdir(exist_ok=True, parents=True)
+
+    embeddings = []
+    gen = SyntheticPSF(
+        n_modes=60,
+        lam_detection=.605,
+        psf_shape=image_size,
+        z_voxel_size=reference_voxel_size[0],
+        y_voxel_size=reference_voxel_size[1],
+        x_voxel_size=reference_voxel_size[2],
+        snr=100,
+        max_jitter=0,
+    )
+
+    modelgen = SyntheticPSF(
+        n_modes=60,
+        lam_detection=.605,
+        psf_shape=(64, 64, 64),
+        x_voxel_size=.15,
+        y_voxel_size=.15,
+        z_voxel_size=.6,
+        snr=100,
+        max_jitter=0,
+    )
+
+    ys = np.zeros(60)
+    ys[10] = .1
+    kernel = gen.single_psf(
+        phi=Wavefront(ys),
+        zplanes=0,
+        normed=True,
+        noise=False,
+        augmentation=False,
+        meta=False
+    )
+    imsave(savepath / f'kernel.tif', kernel)
+
+    for i in range(25):
+        reference = several_points(image_size, npoints=npoints, radius=radius)
+        imsave(savepath / f'{i}_reference.tif', reference)
+
+        conv = signal.convolve(reference, kernel, mode='full')
+        width = [(i // 2) for i in reference.shape]
+        center = [(i // 2) + 1 for i in conv.shape]
+        conv = conv[
+           center[0] - width[0]:center[0] + width[0],
+           center[1] - width[1]:center[1] + width[1],
+           center[2] - width[2]:center[2] + width[2],
+        ]
+        imsave(savepath / f'{i}_convolved.tif', conv)
+
+        rescaled = preprocessing.resize(
+            conv,
+            crop_shape=modelgen.psf_shape,
+            voxel_size=modelgen.voxel_size,
+            sample_voxel_size=reference_voxel_size,
+            debug=savepath/f'{i}',
+        )
+
+        emb = modelgen.embedding(psf=rescaled, na_mask=True, ratio=True, padsize=None,)
+        imsave(savepath / f'embeddings_{i}.tif', rescaled)
+
+        embeddings.append(emb)
+
+    embeddings = np.stack(embeddings, axis=0)
+    embeddings = np.mean(embeddings, axis=0)
+    imsave(savepath / f'embeddings_average.tif', embeddings)
