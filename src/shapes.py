@@ -157,7 +157,7 @@ def plot_3d_object(img, title=''):
         pass
 
 
-def simobjects(codename=None, image_size=(128, 128, 128), plot=False):
+def simobjects(codename=None, image_size=(256, 256, 256), plot=False):
 
     hashtbl = {
         'single_point': single_point,

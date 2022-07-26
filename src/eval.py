@@ -1365,11 +1365,13 @@ def iterheatmap(
 
 def evalsample(
     model_path: Path,
-    psf_path: Path = None,
+    kernel_path: Path = None,
     reference_path: Path = None,
     psnr: tuple = (90, 100),
     niter: int = 5,
     na: float = 1.0,
+    reference_voxel_size: tuple = (.15, .0375, .0375),
+    reference_shape: tuple = (256, 256, 256)
 ):
 
     plt.rcParams.update({
@@ -1381,17 +1383,6 @@ def evalsample(
         'legend.fontsize': 10,
         'xtick.major.pad': 10
     })
-
-    gen = SyntheticPSF(
-        n_modes=60,
-        lam_detection=.605,
-        psf_shape=(128, 128, 128),
-        x_voxel_size=.075,
-        y_voxel_size=.075,
-        z_voxel_size=.3,
-        snr=psnr,
-        max_jitter=0,
-    )
 
     modelgen = SyntheticPSF(
         n_modes=60,
@@ -1415,9 +1406,20 @@ def evalsample(
     ys = np.zeros(60)
     ys[10] = .1
 
-    if psf_path is not None:
-        kernel = imread(psf_path)
+    if kernel_path is not None:
+        kernel = imread(kernel_path)
     else:
+        gen = SyntheticPSF(
+            n_modes=60,
+            lam_detection=.605,
+            psf_shape=reference_shape,
+            x_voxel_size=reference_voxel_size[0],
+            y_voxel_size=reference_voxel_size[1],
+            z_voxel_size=reference_voxel_size[2],
+            snr=psnr,
+            max_jitter=0,
+        )
+
         kernel = gen.single_psf(
             phi=Wavefront(ys),
             zplanes=0,
@@ -1447,7 +1449,7 @@ def evalsample(
             model,
             np.expand_dims(conv[np.newaxis, :], axis=-1),
             psfgen=modelgen,
-            resize=gen.voxel_size,
+            resize=reference_voxel_size,
             batch_size=1,
             n_samples=1,
             desc=f'Iter[{k}]',

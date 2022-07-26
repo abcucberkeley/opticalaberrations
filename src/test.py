@@ -26,7 +26,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--psf", default=None, type=Path, help='path to an aberrated PSF'
+        "--kernel", default=None, type=Path, help='path to an aberrated PSF'
     )
 
     parser.add_argument(
@@ -121,7 +121,7 @@ def main(args=None):
     elif args.target == 'evalsample':
         eval.evalsample(
             model_path=args.model,
-            psf_path=args.psf,
+            kernel_path=args.kernel,
             reference_path=args.reference,
             na=args.na,
         )
