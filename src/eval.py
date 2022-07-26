@@ -1364,8 +1364,9 @@ def iterheatmap(
 
 
 def evalsample(
-    modelpath: Path,
-    reference: Path = None,
+    model_path: Path,
+    psf_path: Path = None,
+    reference_path: Path = None,
     psnr: tuple = (90, 100),
     niter: int = 5,
     na: float = 1.0,
@@ -1380,15 +1381,6 @@ def evalsample(
         'legend.fontsize': 10,
         'xtick.major.pad': 10
     })
-
-    savepath = modelpath / f'{reference.stem}'
-    savepath.mkdir(parents=True, exist_ok=True)
-
-    model = backend.load(modelpath)
-
-    reference = imread(reference).astype(np.float)
-    reference /= np.max(reference)
-    reference = np.expand_dims(reference, axis=-1)
 
     gen = SyntheticPSF(
         n_modes=60,
@@ -1412,26 +1404,38 @@ def evalsample(
         max_jitter=0,
     )
 
+    savepath = model_path / f'{reference_path.stem}'
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    model = backend.load(model_path)
+
+    reference = imread(reference_path).astype(np.float)
+    reference /= np.max(reference)
+
     ys = np.zeros(60)
     ys[10] = .1
-    kernel = gen.single_psf(
-        phi=Wavefront(ys),
-        zplanes=0,
-        normed=True,
-        noise=False,
-        augmentation=False,
-        meta=False
-    )
-    kernel = kernel[:, :, :, np.newaxis]
+
+    if psf_path is not None:
+        kernel = imread(psf_path)
+    else:
+        kernel = gen.single_psf(
+            phi=Wavefront(ys),
+            zplanes=0,
+            normed=True,
+            noise=False,
+            augmentation=False,
+            meta=False
+        )
     imsave(savepath/f'kernel.tif', kernel)
 
     y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
     y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
 
     for k in range(1, niter+1):
-        conv = signal.fftconvolve(reference, kernel, mode='full')
+        conv = signal.convolve(reference, kernel, mode='full')
         width = [(i//2) for i in reference.shape]
         center = [(i//2)+1 for i in conv.shape]
+        # center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
         conv = conv[
              center[0]-width[0]:center[0]+width[0],
              center[1]-width[1]:center[1]+width[1],
@@ -1441,7 +1445,7 @@ def evalsample(
 
         preds, stdev = backend.bootstrap_predict(
             model,
-            conv[np.newaxis, :],
+            np.expand_dims(conv[np.newaxis, :], axis=-1),
             psfgen=modelgen,
             resize=gen.voxel_size,
             batch_size=1,
@@ -1457,11 +1461,10 @@ def evalsample(
         p_psf = modelgen.single_psf(p_wave, zplanes=0)
         gt_psf = modelgen.single_psf(y_wave, zplanes=0)
         corrected_psf = modelgen.single_psf(diff_wave, zplanes=0)
-        psf = np.squeeze(conv, axis=-1)
         imsave(savepath / f'corrected_psf_iter_{k}.tif', corrected_psf)
 
         vis.diagnostic_assessment(
-            psf=psf,
+            psf=conv,
             gt_psf=gt_psf,
             predicted_psf=p_psf,
             corrected_psf=corrected_psf,
@@ -1479,17 +1482,17 @@ def evalsample(
         y_true = y_true.append(y, ignore_index=True)
 
         # setup next iter
-        res = ys - preds
-        kernel = gen.single_psf(
-            phi=Wavefront(res),
-            zplanes=0,
-            normed=True,
-            noise=False,
-            augmentation=False,
-            meta=False
-        )
-        kernel = np.expand_dims(kernel, -1)
-        ys = res
+        if niter > 1:
+            res = ys - preds
+            kernel = gen.single_psf(
+                phi=Wavefront(res),
+                zplanes=0,
+                normed=True,
+                noise=False,
+                augmentation=False,
+                meta=False
+            )
+            ys = res
 
     error = np.abs(y_true['residuals'] - y_pred['residuals'])
     error = pd.DataFrame(error, columns=['residuals'])

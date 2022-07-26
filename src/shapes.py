@@ -8,7 +8,7 @@ from tifffile import imread, imsave
 
 import logging
 logger = logging.getLogger('')
-np.random.seed(2022)
+np.random.seed(202207)
 
 
 def single_point(image_size):
@@ -17,30 +17,13 @@ def single_point(image_size):
     return img.astype(np.float)
 
 
-def two_points(image_size):
-    img = np.zeros(image_size)
-    img[image_size[0]//2, image_size[1]//2, image_size[2]//2] = 1.
-    img[image_size[0]//4, image_size[1]//4, image_size[2]//4] = 1.
-    return img.astype(np.float)
-
-
-def five_points(image_size):
-    img = np.zeros(image_size)
-    img[image_size[0]//2, image_size[1]//2, image_size[2]//2] = 1.
-    img[image_size[0]//4, image_size[1]//4, image_size[2]//4] = 1.
-    img[image_size[0]//3, int(image_size[1]//1.2), int(image_size[2]//1.2)] = 1.
-    img[image_size[0]//4, image_size[1]//4, int(image_size[2]//1.2)] = 1.
-    img[int(image_size[0]//1.2), int(image_size[1]//1.2), image_size[2]//4] = 1.
-    return img.astype(np.float)
-
-
-def several_points(image_size, npoints=100):
+def several_points(image_size, npoints=100, radius=.2):
     img = np.zeros(image_size)
     for i in range(npoints):
         img[
-            np.random.randint(int(image_size[0]*.4), int(image_size[0]*.6)),
-            np.random.randint(int(image_size[1]*.4), int(image_size[1]*.6)),
-            np.random.randint(int(image_size[2]*.4), int(image_size[2]*.6))
+            np.random.randint(int(image_size[0]*(.5 - radius)), int(image_size[0]*(.5 + radius))),
+            np.random.randint(int(image_size[1]*(.5 - radius)), int(image_size[1]*(.5 + radius))),
+            np.random.randint(int(image_size[2]*(.5 - radius)), int(image_size[2]*(.5 + radius)))
         ] = 1.
 
     return img.astype(np.float)
@@ -48,7 +31,7 @@ def several_points(image_size, npoints=100):
 
 def line(image_size):
     img = np.zeros(image_size)
-    img[int(image_size[0]*.4):int(image_size[0]*.6), image_size[1]//2, image_size[2]//2] = 1.
+    img[int(image_size[0]*.3):int(image_size[0]*.7), image_size[1]//2, image_size[2]//2] = 1.
     return img.astype(np.float)
 
 
@@ -104,9 +87,9 @@ def several_points_and_line(image_size):
     img = np.zeros(image_size)
     for i in range(25):
         img[
-            np.random.randint(int(image_size[0]*.4), int(image_size[0]*.6)),
-            np.random.randint(int(image_size[1]*.4), int(image_size[1]*.6)),
-            np.random.randint(int(image_size[2]*.4), int(image_size[2]*.6))
+            np.random.randint(int(image_size[0]*.3), int(image_size[0]*.7)),
+            np.random.randint(int(image_size[1]*.3), int(image_size[1]*.7)),
+            np.random.randint(int(image_size[2]*.3), int(image_size[2]*.7))
         ] = 1.
 
     img[image_size[0]//2, image_size[1]//2, image_size[2]//6:image_size[2]//3] = 1.
@@ -117,9 +100,9 @@ def several_points_and_sheet(image_size):
     ps = np.zeros(image_size)
     for i in range(25):
         ps[
-            np.random.randint(int(image_size[0]*.4), int(image_size[0]*.6)),
-            np.random.randint(int(image_size[1]*.4), int(image_size[1]*.6)),
-            np.random.randint(int(image_size[2]*.4), int(image_size[2]*.6))
+            np.random.randint(int(image_size[0]*.3), int(image_size[0]*.7)),
+            np.random.randint(int(image_size[1]*.3), int(image_size[1]*.7)),
+            np.random.randint(int(image_size[2]*.3), int(image_size[2]*.7))
         ] = 1.
 
     sh = rg.rhomboid(
@@ -134,9 +117,9 @@ def several_points_and_cylinder(image_size):
     ps = np.zeros(image_size)
     for i in range(25):
         ps[
-            np.random.randint(int(image_size[0]*.4), int(image_size[0]*.6)),
-            np.random.randint(int(image_size[1]*.4), int(image_size[1]*.6)),
-            np.random.randint(int(image_size[2]*.4), int(image_size[2]*.6))
+            np.random.randint(int(image_size[0]*.3), int(image_size[0]*.7)),
+            np.random.randint(int(image_size[1]*.3), int(image_size[1]*.7)),
+            np.random.randint(int(image_size[2]*.3), int(image_size[2]*.7))
         ] = 1.
 
     cc = rg.cylinder(
@@ -174,19 +157,30 @@ def plot_3d_object(img, title=''):
         pass
 
 
-def simobjects(codename=None, image_size=(512, 512, 512), plot=True):
+def simobjects(codename=None, image_size=(128, 128, 128), plot=False):
 
     hashtbl = {
         'single_point': single_point,
-        'two_points': two_points,
-        'five_points': five_points,
-        '2_points': partial(several_points, npoints=2),
-        '5_points': partial(several_points, npoints=5),
-        '10_points': partial(several_points, npoints=10),
-        '25_points': partial(several_points, npoints=25),
-        '50_points': partial(several_points, npoints=50),
-        '75_points': partial(several_points, npoints=75),
-        '100_points': partial(several_points, npoints=100),
+        '2_points_10p_radius': partial(several_points, npoints=2, radius=.1),
+        '5_points_10p_radius': partial(several_points, npoints=5, radius=.1),
+        '10_points_10p_radius': partial(several_points, npoints=10, radius=.1),
+        '25_points_10p_radius': partial(several_points, npoints=25, radius=.1),
+        '50_points_10p_radius': partial(several_points, npoints=50, radius=.1),
+        '2_points_20p_radius': partial(several_points, npoints=2, radius=.2),
+        '5_points_20p_radius': partial(several_points, npoints=5, radius=.2),
+        '10_points_20p_radius': partial(several_points, npoints=10, radius=.2),
+        '25_points_20p_radius': partial(several_points, npoints=25, radius=.2),
+        '50_points_20p_radius': partial(several_points, npoints=50, radius=.2),
+        '2_points_30p_radius': partial(several_points, npoints=2, radius=.3),
+        '5_points_30p_radius': partial(several_points, npoints=5, radius=.3),
+        '10_points_30p_radius': partial(several_points, npoints=10, radius=.3),
+        '25_points_30p_radius': partial(several_points, npoints=25, radius=.3),
+        '50_points_30p_radius': partial(several_points, npoints=50, radius=.3),
+        '2_points_50p_radius': partial(several_points, npoints=2, radius=.5),
+        '5_points_50p_radius': partial(several_points, npoints=5, radius=.5),
+        '10_points_50p_radius': partial(several_points, npoints=10, radius=.5),
+        '25_points_50p_radius': partial(several_points, npoints=25, radius=.5),
+        '50_points_50p_radius': partial(several_points, npoints=50, radius=.5),
         'line': line,
         'sheet': sheet,
         'sphere': sphere,
