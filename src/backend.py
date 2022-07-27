@@ -504,7 +504,8 @@ def bootstrap_predict(
     threshold: float = 1e-4,
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
-    plot: Any = None
+    plot: Any = None,
+    return_embeddings: bool = False,
 ):
     """
     Average predictions and compute stdev
@@ -636,7 +637,11 @@ def bootstrap_predict(
 
     sigma = np.std(preds, axis=-1)
     sigma = sigma.flatten() if sigma.shape[0] == 1 else sigma
-    return mu, sigma
+
+    if return_embeddings:
+        return mu, sigma, model_inputs
+    else:
+        return mu, sigma
 
 
 def predict(
