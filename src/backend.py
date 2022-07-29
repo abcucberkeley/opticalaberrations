@@ -8,10 +8,13 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib import gridspec
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 from tqdm import trange, tqdm
 from tifffile import imsave
+from numpy.lib.stride_tricks import sliding_window_view
+from skimage import transform
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -506,6 +509,7 @@ def bootstrap_predict(
     desc: str = 'MiniBatch-probabilistic-predictions',
     plot: Any = None,
     return_embeddings: bool = False,
+    rolling_average_embedding: bool = False,
 ):
     """
     Average predictions and compute stdev
@@ -524,28 +528,55 @@ def bootstrap_predict(
     Returns:
         average prediction, stdev
     """
-
     def batch_generator(arr, s):
         for k in range(0, len(arr), s):
             yield arr[k:k + s]
 
-    if resize is not None:
-        inputs = np.stack([
-            np.expand_dims(preprocessing.resize(
-                np.squeeze(i),
-                crop_shape=psfgen.psf_shape,
-                voxel_size=psfgen.voxel_size,
-                sample_voxel_size=resize,
-                debug=plot,
-            ), axis=-1) for i in inputs
-        ], axis=0)
+    def average_embedding(psf):
+        psf = transform.rescale(
+            psf,
+            (
+                resize[0] / psfgen.voxel_size[0],
+                resize[1] / psfgen.voxel_size[1],
+                resize[2] / psfgen.voxel_size[2],
+            ),
+            order=3,
+            anti_aliasing=True,
+        )
+        windows = sliding_window_view(psf, window_shape=psfgen.psf_shape)[::4, ::4, ::4]
+        return np.mean(
+            [psfgen.embedding(psf=windows[w, w, w]) for w in range(windows.shape[0])],
+            axis=0
+        )
 
-    # check z-axis to compute embeddings for fourier models
-    if model.input_shape[1] != inputs.shape[1]:
-        model_inputs = np.stack([psfgen.embedding(psf=i) for i in inputs], axis=0)
+    if rolling_average_embedding:
+        model_inputs = np.stack([
+            np.expand_dims(
+                average_embedding(np.squeeze(i)),
+                axis=-1
+            ) for i in inputs
+        ], axis=0)
     else:
-        # pass raw PSFs to the model
-        model_inputs = inputs
+        if resize is not None:
+            inputs = np.stack([
+                np.expand_dims(
+                    preprocessing.resize(
+                        np.squeeze(i),
+                        crop_shape=psfgen.psf_shape,
+                        voxel_size=psfgen.voxel_size,
+                        sample_voxel_size=resize,
+                        debug=plot,
+                    ),
+                    axis=-1
+                ) for i in inputs
+            ], axis=0)
+
+        # check z-axis to compute embeddings for fourier models0
+        if (model.input_shape[1] != inputs.shape[1]):
+            model_inputs = np.stack([psfgen.embedding(psf=i) for i in inputs], axis=0)
+        else:
+            # pass raw PSFs to the model
+            model_inputs = inputs
 
     preds = None
     total = n_samples * (len(model_inputs) // batch_size)
@@ -576,13 +607,29 @@ def bootstrap_predict(
 
                     fig, axes = plt.subplots(3, 3)
 
-                    m = axes[0, 0].imshow(np.max(input_img, axis=0), cmap='hot', vmin=0, vmax=1)
-                    axes[0, 1].imshow(np.max(input_img, axis=1), cmap='hot', vmin=0, vmax=1)
-                    axes[0, 2].imshow(np.max(input_img, axis=2).T, cmap='hot', vmin=0, vmax=1)
-                    cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-                    cb = plt.colorbar(m, cax=cax)
-                    cax.yaxis.set_label_position("right")
-                    cax.set_ylabel('Input (maxproj)')
+                    if img.shape[0] == 6:
+                        for t in range(3):
+                            inner = gridspec.GridSpecFromSubplotSpec(
+                                1, 2, subplot_spec=axes[0, t], wspace=0.1, hspace=0.1
+                            )
+                            ax = fig.add_subplot(inner[0])
+                            m = ax.imshow(img[t].T if t == 2 else img[t], cmap=cmap, vmin=vmin, vmax=vmax)
+                            ax.set_xticks([])
+                            ax.set_yticks([])
+                            ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
+                            ax = fig.add_subplot(inner[1])
+                            ax.imshow(img[t+3].T if t == 2 else img[t+3], cmap='coolwarm', vmin=vmin, vmax=vmax)
+                            ax.set_xticks([])
+                            ax.set_yticks([])
+                            ax.set_xlabel(r'$\varphi = \angle \tau$')
+                    else:
+                        m = axes[0, 0].imshow(np.max(input_img, axis=0), cmap='hot', vmin=0, vmax=1)
+                        axes[0, 1].imshow(np.max(input_img, axis=1), cmap='hot', vmin=0, vmax=1)
+                        axes[0, 2].imshow(np.max(input_img, axis=2).T, cmap='hot', vmin=0, vmax=1)
+                        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+                        cb = plt.colorbar(m, cax=cax)
+                        cax.yaxis.set_label_position("right")
+                        cax.set_ylabel('Input (maxproj)')
 
                     m = axes[1, 0].imshow(img[0], cmap=cmap, vmin=vmin, vmax=vmax)
                     axes[1, 1].imshow(img[1], cmap=cmap, vmin=vmin, vmax=vmax)

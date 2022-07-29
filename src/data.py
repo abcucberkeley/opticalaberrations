@@ -2,6 +2,7 @@ import logging
 import sys
 import time
 from pathlib import Path
+import tensorflow as tf
 
 import cli
 import experimental
@@ -47,6 +48,10 @@ def parse_args(args):
 def main(args=None):
     timeit = time.time()
     args = parse_args(args)
+
+    physical_devices = tf.config.list_physical_devices('GPU')
+    for gpu_instance in physical_devices:
+        tf.config.experimental.set_memory_growth(gpu_instance, True)
 
     if args.dtype == "shapes":
         shapes.simobjects()

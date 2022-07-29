@@ -87,7 +87,7 @@ class SyntheticPSF:
         self.bimodal = bimodal
 
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
-        self.theoretical_psf_shape = (3 * psf_shape[0], 3 * psf_shape[1], 3 * psf_shape[2])
+        self.theoretical_psf_shape = (2 * psf_shape[0], 2 * psf_shape[1], 2 * psf_shape[2])
         self.amplitude_ranges = amplitude_ranges
 
         self.psfgen = PsfGenerator3D(

@@ -1371,7 +1371,7 @@ def evalsample(
     niter: int = 5,
     na: float = 1.0,
     reference_voxel_size: tuple = (.15, .0375, .0375),
-    reference_shape: tuple = (256, 256, 256)
+    embedding_average: bool = False
 ):
 
     plt.rcParams.update({
@@ -1412,7 +1412,7 @@ def evalsample(
         gen = SyntheticPSF(
             n_modes=60,
             lam_detection=.605,
-            psf_shape=reference_shape,
+            psf_shape=reference.shape,
             z_voxel_size=reference_voxel_size[0],
             y_voxel_size=reference_voxel_size[1],
             x_voxel_size=reference_voxel_size[2],
@@ -1450,6 +1450,7 @@ def evalsample(
             np.expand_dims(conv[np.newaxis, :], axis=-1),
             psfgen=modelgen,
             resize=reference_voxel_size,
+            rolling_average_embedding=embedding_average,
             batch_size=1,
             n_samples=1,
             desc=f'Iter[{k}]',
