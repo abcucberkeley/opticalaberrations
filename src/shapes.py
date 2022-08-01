@@ -41,6 +41,32 @@ def line(image_size):
     return img.astype(np.float)
 
 
+def several_lines(image_size, nlines=10, radius=.2):
+    img = np.zeros(image_size)
+    for i in range(nlines):
+        ax = np.random.choice(['x', 'y', 'z'])
+        if ax == 'x':
+            img[
+                np.random.randint(int(image_size[0] * (.5-radius)), int(image_size[0] * (.5+radius))),
+                np.random.randint(int(image_size[1]*(.5-radius)), int(image_size[1]*(.5+radius))),
+                np.random.randint(25, image_size[2]//2):np.random.randint(image_size[2]//2, image_size[0]-25),
+            ] = 1.
+        elif ax == 'y':
+            img[
+                np.random.randint(int(image_size[0] * (.5-radius)), int(image_size[0] * (.5+radius))),
+                np.random.randint(25, image_size[1]//2):np.random.randint(image_size[1]//2, image_size[0]-25),
+                np.random.randint(int(image_size[2] * (.5-radius)), int(image_size[2] * (.5+radius)))
+            ] = 1.
+        else:
+            img[
+                np.random.randint(25, image_size[0]//2):np.random.randint(image_size[0]//2, image_size[0]-25),
+                np.random.randint(int(image_size[1] * (.5-radius)), int(image_size[1] * (.5+radius))),
+                np.random.randint(int(image_size[2] * (.5-radius)), int(image_size[2] * (.5+radius)))
+            ] = 1.
+
+    return img.astype(np.float)
+
+
 def sphere(image_size):
     img = rg.sphere(shape=image_size, radius=.5, position=.5)
     return img.astype(np.float)
@@ -224,10 +250,11 @@ def similarity(
     image_size=(256, 256, 256),
     reference_voxel_size=(.15, .0375, .0375),
     radius=.1,
-    npoints=2
+    nobjects=1,
+    obj='lines',
 ):
     model = backend.load(Path(f'../models/new/embeddings/transformers/p32-p16-p8x2'))
-    savepath = Path(f'../data/similarity/{image_size[0]}/radius_{radius}_points_{npoints}')
+    savepath = Path(f'../data/similarity/{image_size[0]}/radius_{radius}_n{obj}_{nobjects}')
     savepath.mkdir(exist_ok=True, parents=True)
 
     modelgen = SyntheticPSF(
@@ -266,7 +293,11 @@ def similarity(
 
     embeddings = []
     for k in trange(25):
-        reference = several_points(image_size, npoints=npoints, radius=radius)
+        if obj == 'points':
+            reference = several_points(image_size, npoints=nobjects, radius=radius)
+        else:
+            reference = several_lines(image_size, nlines=nobjects, radius=radius)
+
         imsave(savepath / f'{k}_reference.tif', reference)
 
         conv = signal.convolve(reference, kernel, mode='same')

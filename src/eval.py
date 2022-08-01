@@ -1371,7 +1371,7 @@ def evalsample(
     niter: int = 5,
     na: float = 1.0,
     reference_voxel_size: tuple = (.15, .0375, .0375),
-    embedding_average: bool = False
+    embedding_average: bool = True
 ):
 
     plt.rcParams.update({
