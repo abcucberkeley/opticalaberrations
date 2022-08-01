@@ -543,7 +543,7 @@ def bootstrap_predict(
             order=3,
             anti_aliasing=True,
         )
-        windows = sliding_window_view(psf, window_shape=psfgen.psf_shape)[::4, ::4, ::4]
+        windows = sliding_window_view(psf, window_shape=psfgen.psf_shape)
         return np.mean(
             [psfgen.embedding(psf=windows[w, w, w]) for w in range(windows.shape[0])],
             axis=0

@@ -1368,10 +1368,10 @@ def evalsample(
     kernel_path: Path = None,
     reference_path: Path = None,
     psnr: tuple = (90, 100),
-    niter: int = 5,
+    niter: int = 1,
     na: float = 1.0,
-    reference_voxel_size: tuple = (.15, .0375, .0375),
-    embedding_average: bool = True
+    reference_voxel_size: tuple = (.002, .002, .002),
+    embedding_average: bool = False
 ):
 
     plt.rcParams.update({
@@ -1402,6 +1402,7 @@ def evalsample(
 
     reference = imread(reference_path).astype(np.float)
     reference /= np.max(reference)
+    logger.info(f"Reference: {reference.shape}")
 
     ys = np.zeros(60)
     ys[10] = .1
@@ -1429,6 +1430,7 @@ def evalsample(
             meta=False
         )
     imsave(savepath/f'kernel.tif', kernel)
+    logger.info(f"Kernel: {kernel.shape}")
 
     y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
     y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
