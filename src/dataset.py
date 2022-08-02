@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_synthetic_sample(savepath, inputs, amps, snr, zplanes, maxcounts):
+def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
 
     imsave(f"{savepath}.tif", inputs)
     # logger.info(f"Saved: {savepath}.tif")
@@ -31,7 +31,6 @@ def save_synthetic_sample(savepath, inputs, amps, snr, zplanes, maxcounts):
             snr=int(snr),
             shape=inputs.shape,
             maxcounts=int(maxcounts),
-            zplanes=int(zplanes),
             peak2peak=float(peak_aberration(amps))
         )
 
@@ -131,7 +130,7 @@ def create_synthetic_sample(
                     meta=True
                 )
 
-            save_synthetic_sample(savepath, inputs, amps, snr, zplanes, maxcounts)
+            save_synthetic_sample(savepath, inputs, amps, snr, maxcounts)
     else:
         savepath = outdir / f"z{modes}"
         savepath = savepath / f"psnr_{min_psnr}-{max_psnr}"
@@ -162,7 +161,7 @@ def create_synthetic_sample(
                 meta=True
             )
 
-        save_synthetic_sample(savepath, inputs, amps, snr, zplanes, maxcounts)
+        save_synthetic_sample(savepath, inputs, amps, snr, maxcounts)
 
 
 def parse_args(args):
@@ -299,7 +298,8 @@ def main(args=None):
         )
 
     if args.dist == 'single':
-        sample(k=1)
+        for i in trange(10):
+            sample(k=i)
     else:
         for i in trange(100):
             sample(k=i)

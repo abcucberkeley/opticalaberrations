@@ -17,7 +17,7 @@ amps1=($(seq 0 .025 .5))
 amps2=($(seq .025 .025 .5))
 mPSNR=($(seq 1 25 76))
 xPSNR=($(seq 25 25 100))
-SAMPLES=($(seq 1 100 100))
+SAMPLES=($(seq 1 10 10))
 
 for DIST in single
 do
