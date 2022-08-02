@@ -14,7 +14,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
-
+logger = logging.getLogger(__name__)
 
 def parse_args(args):
     parser = cli.argparser()
@@ -90,9 +90,9 @@ def main(args=None):
         experimental.create_dataset(data_path=args.dataset)
 
     else:
-        print("Error: unknown action!")
+        logger.error("Error: unknown action!")
 
-    print(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+    logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 
 if __name__ == "__main__":
