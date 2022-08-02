@@ -31,6 +31,7 @@ def save_synthetic_sample(savepath, inputs, amps, snr, zplanes, maxcounts):
             snr=int(snr),
             shape=inputs.shape,
             maxcounts=int(maxcounts),
+            zplanes=int(zplanes),
             peak2peak=float(peak_aberration(amps))
         )
 
@@ -50,6 +51,7 @@ def create_synthetic_sample(
     filename: str,
     outdir: Path,
     otf: bool,
+    noise: bool,
     max_jitter: float,
     input_shape: int,
     modes: int,
@@ -112,8 +114,8 @@ def create_synthetic_sample(
                     phi=phi,
                     zplanes=0,
                     normed=True,
-                    noise=True,
-                    augmentation=True,
+                    noise=noise,
+                    augmentation=noise,
                     meta=True,
                     na_mask=True,
                     ratio=True,
@@ -124,8 +126,8 @@ def create_synthetic_sample(
                     phi=phi,
                     zplanes=0,
                     normed=True,
-                    noise=True,
-                    augmentation=True,
+                    noise=noise,
+                    augmentation=noise,
                     meta=True
                 )
 
@@ -172,6 +174,11 @@ def parse_args(args):
     parser.add_argument(
         '--otf', action='store_true',
         help='toggle to convert input to frequency space (OTF)'
+    )
+
+    parser.add_argument(
+        '--noise', action='store_true',
+        help='toggle to add random background and shot noise to the generated PSFs'
     )
 
     parser.add_argument(
@@ -266,11 +273,12 @@ def main(args=None):
     timeit = time.time()
     args = parse_args(args)
 
-    for i in trange(100):
-        create_synthetic_sample(
-            filename=f"{int(args.filename)+i}",
+    def sample(k):
+        return create_synthetic_sample(
+            filename=f"{int(args.filename)+k}",
             outdir=args.outdir,
             otf=args.otf,
+            noise=args.noise,
             modes=args.modes,
             input_shape=args.input_shape,
             distribution=args.dist,
@@ -289,6 +297,12 @@ def main(args=None):
             na_detection=args.na_detection,
             cpu_workers=args.cpu_workers,
         )
+
+    if args.dist == 'single':
+        sample(k=1)
+    else:
+        for i in trange(100):
+            sample(k=i)
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
