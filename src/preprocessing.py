@@ -62,9 +62,12 @@ def resize(vol, voxel_size: tuple, crop_shape: tuple, sample_voxel_size: tuple =
                 ax.set_xlabel(r'$\varphi = \angle \tau$')
                 cls[i].axis('off')
         else:
-            m = cls[0].imshow(np.max(img, axis=0), cmap='hot', vmin=0, vmax=1)
-            cls[1].imshow(np.max(img, axis=1), cmap='hot', vmin=0, vmax=1)
-            cls[2].imshow(np.max(img, axis=2).T, cmap='hot', vmin=0, vmax=1)
+            # m = cls[0].imshow(np.max(img, axis=0), cmap='hot', vmin=0, vmax=1)
+            # cls[1].imshow(np.max(img, axis=1), cmap='hot', vmin=0, vmax=1)
+            # cls[2].imshow(np.max(img, axis=2).T, cmap='hot', vmin=0, vmax=1)
+            m = cls[0].imshow(img[img.shape[0] // 2, :, :], cmap='hot', vmin=0, vmax=1)
+            cls[1].imshow(img[:, img.shape[1] // 2, :], cmap='hot', vmin=0, vmax=1)
+            cls[2].imshow(img[:, :, img.shape[2] // 2].T, cmap='hot', vmin=0, vmax=1)
 
         cax = inset_axes(cls[2], width="10%", height="50%", loc='center right', borderpad=-2)
         cb = plt.colorbar(m, cax=cax)
@@ -86,16 +89,16 @@ def resize(vol, voxel_size: tuple, crop_shape: tuple, sample_voxel_size: tuple =
         fig, axes = plt.subplots(3, 3, figsize=(8, 11))
 
         axes[0, 1].set_title(f"{str(vol.shape)} @ {sample_voxel_size}")
-        axes[0, 0].set_ylabel('Input (maxproj)')
+        axes[0, 0].set_ylabel('Input (middle)')
         plot(axes[0, :], vol)
 
         axes[1, 1].set_title(f"{str(resampled_vol.shape)} @ {voxel_size}")
-        axes[1, 0].set_ylabel('Resampled (maxproj)')
+        axes[1, 0].set_ylabel('Resampled (middle)')
         plot(axes[1, :], resampled_vol)
         imsave(f'{debug}_resampled_psf.tif', resampled_vol)
 
         axes[2, 1].set_title(str(resized_psf.shape))
-        axes[2, 0].set_ylabel('Resized (maxproj)')
+        axes[2, 0].set_ylabel('Resized (middle)')
         plot(axes[2, :], resized_psf)
         imsave(f'{debug}_resized_psf.tif', resized_psf)
 

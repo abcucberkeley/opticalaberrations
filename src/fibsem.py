@@ -1,18 +1,24 @@
 import logging
 import sys
 import time
+import multiprocessing as mp
 from functools import partial
 from pathlib import Path
 import fibsem_tools.io as fibsem
 import numpy as np
 import xarray as xr
-from scipy import signal
+import cupy as cp
+from cupyx.scipy.signal import fftconvolve as cupyx_fftconvolve
+from scipy.signal import fftconvolve as scipy_fftconvolve
+from skimage.util import view_as_windows
+
 from tifffile import imsave, imread
 from tqdm import tqdm, trange
 
-
 import utils
 import cli
+import preprocessing
+from synthetic import SyntheticPSF
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -98,44 +104,104 @@ def download_data(savedir: Path, resolution: str, dtype: str = 'zarr'):
                 logger.warning(f'`{c}` not found for `{ds}`')
 
 
-def convolve(kernel, sample, save_path):
+def convolve(kernel, sample, sample_voxel_size, save_path, cuda=False):
+    modelgen = SyntheticPSF(
+        n_modes=60,
+        lam_detection=.605,
+        psf_shape=(64, 64, 64),
+        x_voxel_size=.15,
+        y_voxel_size=.15,
+        z_voxel_size=.6,
+        snr=100,
+        max_jitter=0,
+    )
+
     ker = imread(kernel)
-    conv = signal.convolve(sample, ker, mode='full')
+
+    if cuda:
+        conv = cupyx_fftconvolve(cp.array(sample), cp.array(ker), mode='full').get()
+    else:
+        ker = imread(kernel)
+        conv = scipy_fftconvolve(sample, ker, mode='full')
+
+    conv /= np.nanmax(conv)
+
     width = [(i // 2) for i in sample.shape]
-    center = [(i // 2) + 1 for i in conv.shape]
-    # center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
+    # center = [(i // 2) + 1 for i in conv.shape]
+    center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
     conv = conv[
        center[0] - width[0]:center[0] + width[0],
        center[1] - width[1]:center[1] + width[1],
        center[2] - width[2]:center[2] + width[2],
     ]
-    imsave(f'{save_path}_{"_".join(kernel.parts[-4:])}', conv)
+    save_path = f'{save_path}_{"_".join(kernel.parts[-4:])}'
+    imsave(save_path, conv)
+
+    conv = preprocessing.resize(
+        conv,
+        crop_shape=modelgen.psf_shape,
+        voxel_size=modelgen.voxel_size,
+        sample_voxel_size=sample_voxel_size,
+        debug=f'{save_path}_embeddings',
+    )
+
+    modelgen.embedding(psf=conv, plot=f'{save_path}_embeddings')
 
 
-def create_dataset(savedir: Path, kernels: Path, samples: Path, strides: int = 32):
+def create_dataset(
+    savedir: Path,
+    kernels: Path,
+    samples: Path,
+    sample_voxel_size: tuple = (.032, .032, .032),
+    conv_voxel_size: tuple = (.3, .075, .075),
+    psf_shape: tuple = (128, 128, 128)
+):
     save_path = Path(f'{savedir}/convolved')
     save_path.mkdir(exist_ok=True, parents=True)
 
     samples = xr.open_dataset(samples)
     logger.info(samples)
-    windows = np.lib.stride_tricks.sliding_window_view(
-        samples.data.compute(),
-        window_shape=(128, 128, 128),
-    )[::strides, ::strides, ::strides]
-    windows = np.vstack([windows[:, 0, 0], windows[0, :, 0], windows[0, 0, :]])
+
+    samples = np.array(samples.data.compute())
+    samples[samples > 1] = 1.
+    rescaled_shape = [round(samples.shape[i] * (sample_voxel_size[i]/conv_voxel_size[i])) for i in range(3)]
+    rescaled_shape = tuple(
+        rescaled_shape[i] if rescaled_shape[i] > psf_shape[i] else psf_shape[i]
+        for i in range(3)
+    )
+
+    samples = preprocessing.resize(
+        samples,
+        voxel_size=conv_voxel_size,
+        crop_shape=rescaled_shape,
+        sample_voxel_size=sample_voxel_size,
+    )
+    logger.info(f"Rescaled shape: {samples.shape}")
+
+    windows = view_as_windows(samples, window_shape=psf_shape)
     logger.info(windows.shape)
 
-    for w in trange(windows.shape[0]):
-        utils.multiprocess(
-            partial(convolve, sample=windows[w], save_path=save_path/str(w)),
-            jobs=list(kernels.rglob('*.tif')),
-            cores=-1
-        )
+    for i in range(0, windows.shape[0], psf_shape[0]//2):
+        for j in range(0, windows.shape[1], psf_shape[1]//2):
+            for k in range(0, windows.shape[2], psf_shape[2]//2):
+                utils.multiprocess(
+                    partial(
+                        convolve,
+                        sample=windows[i, j, k],
+                        sample_voxel_size=conv_voxel_size,
+                        save_path=save_path/f'{i}-{j}-{k}',
+                        cuda=True
+                    ),
+                    jobs=list(kernels.rglob('*.tif')),
+                    cores=-1
+                )
 
 
 def main(args=None):
     timeit = time.time()
     args = parse_args(args)
+
+    mp.set_start_method('spawn', force=True)
 
     if args.dtype == "dataset":
         create_dataset(savedir=args.savedir, kernels=args.kernels, samples=args.samples)
