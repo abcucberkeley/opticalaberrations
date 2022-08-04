@@ -728,13 +728,8 @@ def predict(
                 )
 
                 gen = SyntheticPSF(**psfargs)
-                for i, (psf, y, psnr, zplanes, maxcounts) in zip(
-                    range(10),
-                    gen.generator(
-                        debug=True,
-                        otf=False if (model.name == 'PhaseNet' or model.name == 'Baseline') else True
-                    )
-                ):
+                for i, (psf, y, psnr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True, otf=False)):
+
                     p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1, n_samples=1)
 
                     p = Wavefront(p)
