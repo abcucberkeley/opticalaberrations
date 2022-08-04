@@ -316,10 +316,10 @@ class SyntheticPSF:
             for ax in axes.flatten():
                 ax.axis('off')
 
-        if plot == True:
-            plt.show()
-        else:
-            plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            if plot == True:
+                plt.show()
+            else:
+                plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
         if psf.ndim == 4:
             return np.expand_dims(emb, axis=-1)
