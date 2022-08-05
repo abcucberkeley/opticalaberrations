@@ -63,10 +63,14 @@ def load(model_path: Path) -> Model:
         logger.error('Invalid path!')
     else:
         if Path(model_path / 'saved_model.pb').exists():
-            return load_model(model_path)
+            model_path = str(model_path)
         else:
-            model_path = list(model_path.rglob('*.pb'))[0].parent
+            model_path = str(list(model_path.rglob('*.pb'))[0].parent)
+
+        try:
             return load_model(model_path)
+        except OSError:
+            return tf.saved_model.load(model_path)
 
 
 def train(
