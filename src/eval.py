@@ -9,13 +9,15 @@ import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-
+from tifffile import imread
 import tensorflow as tf
+from scipy import signal
+from skimage import transform, filters
+from tifffile import imsave
 
 import utils
 import vis
 import data_utils
-import preprocessing
 import backend
 
 from synthetic import SyntheticPSF
@@ -100,7 +102,7 @@ def iterative_eval(
     #     axes[i - 1, 0].bar(range(len(predictions[i][0])), height=predictions[i][0], color='dimgrey')
     #     m = axes[i - 1, 1].imshow(np.max(vol, axis=0) if vol.shape[0] > 3 else vol[0], cmap=psf_cmap)
     #     axes[i - 1, 2].imshow(np.max(vol, axis=1) if vol.shape[0] > 3 else vol[1], cmap=psf_cmap)
-    #     axes[i - 1, 3].imshow(np.max(vol, axis=2) if vol.shape[0] > 3 else vol[2], cmap=psf_cmap)
+    #     axes[i - 1, 3].imshow(np.max(vol, axis=2).T if vol.shape[0] > 3 else vol[2], cmap=psf_cmap)
     #     cax = inset_axes(axes[i - 1, 3], width="10%", height="100%", loc='center right', borderpad=-2)
     #     cb = plt.colorbar(m, cax=cax)
     #     cax.yaxis.set_label_position("right")
@@ -797,7 +799,7 @@ def eval_mode(phi, model, psfargs):
     # img = inputs
     # m = axes[0].imshow(np.max(img, axis=0), cmap='Spectral_r', vmin=0, vmax=1)
     # axes[1].imshow(np.max(img, axis=1), cmap='Spectral_r', vmin=0, vmax=1)
-    # axes[2].imshow(np.max(img, axis=2), cmap='Spectral_r', vmin=0, vmax=1)
+    # axes[2].imshow(np.max(img, axis=2).T, cmap='Spectral_r', vmin=0, vmax=1)
     # cax = inset_axes(axes[2], width="10%", height="100%", loc='center right', borderpad=-3)
     # cb = plt.colorbar(m, cax=cax)
     # cax.yaxis.set_label_position("right")
@@ -1115,17 +1117,108 @@ def iter_eval_bin(datapath, modelpath, niter, psnr, samples, na):
     return (y_pred, y_true)
 
 
+def iter_eval_bin_with_reference(datapath, modelpath, reference, niter, psnr, samples, na):
+    reference = imread(reference).astype(np.float)
+    reference /= np.max(reference)
+    reference = np.expand_dims(reference, axis=-1)
+
+    model = backend.load(modelpath)
+    gen = SyntheticPSF(
+        n_modes=60,
+        lam_detection=.605,
+        amplitude_ranges=(-.25, .25),
+        psf_shape=(64, 64, 64),
+        x_voxel_size=.15,
+        y_voxel_size=.15,
+        z_voxel_size=.6,
+        batch_size=100,
+        snr=psnr,
+        max_jitter=0,
+        cpu_workers=-1,
+    )
+
+    val = data_utils.load_dataset(datapath, samplelimit=samples)
+    val = val.map(lambda x: tf.py_function(data_utils.get_sample, [x], [tf.float32, tf.float32]))
+    val = np.array(list(val.take(-1)))
+
+    inputs = np.array([i.numpy() for i in val[:, 0]])
+    ys = np.array([i.numpy() for i in val[:, 1]])
+
+    y_pred = pd.DataFrame.from_dict({
+        'id': np.arange(inputs.shape[0], dtype=int),
+        'niter': np.zeros(samples, dtype=int),
+        'residuals': np.zeros(samples, dtype=float)
+    })
+
+    y_true = pd.DataFrame.from_dict({
+        'id': np.arange(inputs.shape[0], dtype=int),
+        'niter': np.zeros(samples, dtype=int),
+        'residuals': [utils.peak_aberration(i, na=na) for i in ys]
+    })
+
+    for k in range(1, niter+1):
+        inputs = np.array([
+            transform.resize(
+                signal.fftconvolve(i, reference, mode='same'),
+                output_shape=(64, 64, 64),
+                order=3,
+                anti_aliasing=True
+            ) for i in inputs
+        ])
+
+        preds, stdev = backend.bootstrap_predict(
+            model,
+            inputs,
+            psfgen=gen,
+            batch_size=samples,
+            n_samples=1,
+            desc=f"Predictions for ({datapath})"
+        )
+
+        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['residuals'])
+
+        p['niter'] = k
+        p['id'] = np.arange(inputs.shape[0], dtype=int)
+        y_pred = y_pred.append(p, ignore_index=True)
+
+        y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys], columns=['residuals'])
+        y['niter'] = k
+        y['id'] = np.arange(inputs.shape[0], dtype=int)
+        y_true = y_true.append(y, ignore_index=True)
+
+        # setup next iter
+        res = ys - preds
+        g = partial(
+            gen.single_psf,
+            zplanes=0,
+            normed=True,
+            noise=True,
+            augmentation=True,
+            meta=False
+        )
+
+        inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
+        ys = res
+
+    return (y_pred, y_true)
+
+
 def iterheatmap(
     modelpath: Path,
     datadir: Path,
-    psnr: tuple = (21, 30),
+    reference: Path = None,
+    psnr: tuple = (91, 100),
     niter: int = 10,
     distribution: str = '/',
     samplelimit: Any = None,
     max_amplitude: float = .25,
     na: float = 1.0,
 ):
-    savepath = modelpath / 'iterheatmaps'
+    if reference is None:
+        savepath = modelpath / 'iterheatmap'
+    else:
+        savepath = modelpath / f'{reference.stem}_iterheatmap'
+
     savepath.mkdir(parents=True, exist_ok=True)
     if distribution != '/':
         savepath = f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}'
@@ -1151,7 +1244,26 @@ def iterheatmap(
            and float(str(c.name.split('-')[-1].replace('p', '.'))) <= max_amplitude
     ])
 
-    job = partial(iter_eval_bin, modelpath=modelpath, niter=niter, psnr=psnr, samples=samplelimit, na=na)
+    if reference is None:
+        job = partial(
+            iter_eval_bin,
+            modelpath=modelpath,
+            niter=niter,
+            psnr=psnr,
+            samples=samplelimit,
+            na=na
+        )
+    else:
+        job = partial(
+            iter_eval_bin_with_reference,
+            modelpath=modelpath,
+            reference=reference,
+            niter=niter,
+            psnr=psnr,
+            samples=samplelimit,
+            na=na
+        )
+
     preds, ys = zip(*utils.multiprocess(job, classes))
     y_true = pd.DataFrame([], columns=['niter', 'residuals']).append(ys, ignore_index=True)
     y_pred = pd.DataFrame([], columns=['niter', 'residuals']).append(preds, ignore_index=True)
@@ -1177,6 +1289,7 @@ def iterheatmap(
     means.index = pd.cut(means.index, bins, labels=bins[1:], include_lowest=True)
     means.index.name = 'bins'
     means = means.groupby("bins").agg("mean")
+    means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
     means = means.sort_index().interpolate()
 
     logger.info(means)
@@ -1247,4 +1360,235 @@ def iterheatmap(
 
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    return fig
+
+
+def evalsample(
+    model_path: Path,
+    kernel_path: Path = None,
+    reference_path: Path = None,
+    psnr: tuple = (90, 100),
+    niter: int = 1,
+    na: float = 1.0,
+    reference_voxel_size: tuple = (.002, .002, .002),
+    embedding_average: bool = False
+):
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    modelgen = SyntheticPSF(
+        n_modes=60,
+        lam_detection=.605,
+        psf_shape=(64, 64, 64),
+        x_voxel_size=.15,
+        y_voxel_size=.15,
+        z_voxel_size=.6,
+        snr=psnr,
+        max_jitter=0,
+    )
+
+    savepath = model_path / f'{reference_path.stem}'
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    model = backend.load(model_path)
+
+    reference = imread(reference_path).astype(np.float)
+    reference /= np.max(reference)
+    logger.info(f"Reference: {reference.shape}")
+
+    ys = np.zeros(60)
+    ys[10] = .1
+
+    if kernel_path is not None:
+        kernel = imread(kernel_path)
+    else:
+        gen = SyntheticPSF(
+            n_modes=60,
+            lam_detection=.605,
+            psf_shape=reference.shape,
+            z_voxel_size=reference_voxel_size[0],
+            y_voxel_size=reference_voxel_size[1],
+            x_voxel_size=reference_voxel_size[2],
+            snr=psnr,
+            max_jitter=0,
+        )
+
+        kernel = gen.single_psf(
+            phi=Wavefront(ys),
+            zplanes=0,
+            normed=True,
+            noise=False,
+            augmentation=False,
+            meta=False
+        )
+    imsave(savepath/f'kernel.tif', kernel)
+    logger.info(f"Kernel: {kernel.shape}")
+
+    y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
+    y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
+
+    for k in range(1, niter+1):
+        conv = signal.convolve(reference, kernel, mode='full')
+        width = [(i//2) for i in reference.shape]
+        center = [(i//2)+1 for i in conv.shape]
+        # center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
+        conv = conv[
+             center[0]-width[0]:center[0]+width[0],
+             center[1]-width[1]:center[1]+width[1],
+             center[2]-width[2]:center[2]+width[2],
+        ]
+        imsave(savepath/f'convolved_iter_{k}.tif', conv)
+
+        preds, stdev = backend.bootstrap_predict(
+            model,
+            np.expand_dims(conv[np.newaxis, :], axis=-1),
+            psfgen=modelgen,
+            resize=reference_voxel_size,
+            rolling_average_embedding=embedding_average,
+            batch_size=1,
+            n_samples=1,
+            desc=f'Iter[{k}]',
+            plot=savepath/f'embeddings_convolved_iter_{k}',
+        )
+
+        p_wave = Wavefront(preds)
+        y_wave = Wavefront(ys.flatten())
+        diff_wave = Wavefront(ys - preds)
+
+        p_psf = modelgen.single_psf(p_wave, zplanes=0)
+        gt_psf = modelgen.single_psf(y_wave, zplanes=0)
+        corrected_psf = modelgen.single_psf(diff_wave, zplanes=0)
+        imsave(savepath / f'corrected_psf_iter_{k}.tif', corrected_psf)
+
+        vis.diagnostic_assessment(
+            psf=conv,
+            gt_psf=gt_psf,
+            predicted_psf=p_psf,
+            corrected_psf=corrected_psf,
+            psnr=psnr,
+            maxcounts=psnr,
+            y=y_wave,
+            pred=p_wave,
+            save_path=savepath/f'iter_{k}',
+        )
+
+        p = pd.DataFrame({'residuals': [utils.peak_aberration(preds, na=na)], 'niter': k})
+        y_pred = y_pred.append(p, ignore_index=True)
+
+        y = pd.DataFrame({'residuals': [utils.peak_aberration(ys, na=na)], 'niter': k})
+        y_true = y_true.append(y, ignore_index=True)
+
+        # setup next iter
+        if niter > 1:
+            res = ys - preds
+            kernel = gen.single_psf(
+                phi=Wavefront(res),
+                zplanes=0,
+                normed=True,
+                noise=False,
+                augmentation=False,
+                meta=False
+            )
+            ys = res
+
+    error = np.abs(y_true['residuals'] - y_pred['residuals'])
+    error = pd.DataFrame(error, columns=['residuals'])
+
+    df = pd.DataFrame(
+        zip(y_true['residuals'], error['residuals'], y_true['niter']),
+        columns=['aberration', 'error', 'niter'],
+    )
+
+    means = pd.pivot_table(
+        df[df['niter'] == 0], values='error', index='aberration', columns='niter', aggfunc=np.mean
+    )
+    for i in range(1, niter+1):
+        means[i] = pd.pivot_table(
+            df[df['niter'] == i],
+            values='error', index=means.index, columns='niter', aggfunc=np.mean
+        )
+
+    bins = np.arange(0, 11, .25)
+    means.index = pd.cut(means.index, bins, labels=bins[1:], include_lowest=True)
+    means.index.name = 'bins'
+    means = means.groupby("bins").agg("mean")
+    means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
+    means = means.sort_index().interpolate()
+
+    logger.info(means)
+    means.to_csv(savepath/f'results_na_{str(na).replace("0.", "p")}.csv')
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    levels = [
+        0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
+        .5, .6, .7, .8, .9,
+        1, 1.25, 1.5, 1.75, 2., 2.5,
+        3., 4., 5.,
+    ]
+
+    vmin, vmax, vcenter, step = levels[0], levels[-1], .25, .05
+    highcmap = plt.get_cmap('magma_r', 256)
+    lowcmap = plt.get_cmap('GnBu_r', 256)
+    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+    cmap = mcolors.ListedColormap(cmap)
+
+    contours = ax.contourf(
+        means.columns.values,
+        means.index.values,
+        means.values,
+        cmap=cmap,
+        levels=levels,
+        extend='max',
+        linewidths=2,
+        linestyles='dashed',
+    )
+    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+
+    cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+    cbar = plt.colorbar(
+        contours,
+        cax=cax,
+        fraction=0.046,
+        pad=0.04,
+        extend='both',
+        spacing='proportional',
+        format=FormatStrFormatter("%.2f"),
+        ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
+    )
+
+    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 605~nm$)')
+    cbar.ax.set_title(r'$\lambda$')
+    cbar.ax.yaxis.set_ticks_position('right')
+    cbar.ax.yaxis.set_label_position('left')
+
+    ax.set_xlabel(f'Number of iterations')
+    ax.set_xlim(0, niter)
+    ax.set_xticks(range(niter+1))
+    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+    ax.set_ylabel(
+        'Average Peak-to-peak aberration $|P_{95} - P_{5}|$ '
+        rf'($\lambda = 605~nm$)'
+    )
+
+    ax.set_yticks(np.arange(0, 11, .5), minor=True)
+    ax.set_yticks(np.arange(0, 11, 1))
+    ax.set_ylim(.25, 10)
+
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    plt.tight_layout()
+
+    plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     return fig

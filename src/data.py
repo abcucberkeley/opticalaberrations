@@ -2,9 +2,11 @@ import logging
 import sys
 import time
 from pathlib import Path
+import tensorflow as tf
 
 import cli
 import experimental
+import shapes
 import vis
 
 logging.basicConfig(
@@ -12,7 +14,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
-
+logger = logging.getLogger(__name__)
 
 def parse_args(args):
     parser = cli.argparser()
@@ -31,6 +33,8 @@ def parse_args(args):
     subparsers.add_parser("relratio")
     subparsers.add_parser("gaussian")
     subparsers.add_parser("simulation")
+    subparsers.add_parser("shapes")
+    subparsers.add_parser("similarity")
 
     data_parser = subparsers.add_parser("parse")
     data_parser.add_argument("dataset", type=Path, help="path to raw PSF directory")
@@ -45,7 +49,14 @@ def main(args=None):
     timeit = time.time()
     args = parse_args(args)
 
-    if args.dtype == "inputs":
+    physical_devices = tf.config.list_physical_devices('GPU')
+    for gpu_instance in physical_devices:
+        tf.config.experimental.set_memory_growth(gpu_instance, True)
+
+    if args.dtype == "shapes":
+        shapes.simobjects()
+
+    elif args.dtype == "inputs":
         vis.plot_inputs()
 
     elif args.dtype == "dist":
@@ -72,13 +83,16 @@ def main(args=None):
     elif args.dtype == "psnr":
         vis.plot_psnr()
 
+    elif args.dtype == "similarity":
+        shapes.similarity()
+
     elif args.dtype == "parse":
         experimental.create_dataset(data_path=args.dataset)
 
     else:
-        print("Error: unknown action!")
+        logger.error("Error: unknown action!")
 
-    print(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+    logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 
 if __name__ == "__main__":

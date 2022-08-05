@@ -9,6 +9,7 @@ from functools import partial
 import multiprocessing as mp
 from typing import Iterable
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from psf import PsfGenerator3D
@@ -79,6 +80,7 @@ class SyntheticPSF:
         self.x_voxel_size = x_voxel_size
         self.y_voxel_size = y_voxel_size
         self.z_voxel_size = z_voxel_size
+        self.voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
         self.snr = snr
         self.cpu_workers = cpu_workers
         self.distribution = distribution
@@ -86,12 +88,12 @@ class SyntheticPSF:
         self.bimodal = bimodal
 
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
-        self.theoretical_psf_shape = (3 * psf_shape[0], 3 * psf_shape[1], 3 * psf_shape[2])
+        self.theoretical_psf_shape = (2 * psf_shape[0], 2 * psf_shape[1], 2 * psf_shape[2])
         self.amplitude_ranges = amplitude_ranges
 
         self.psfgen = PsfGenerator3D(
             psf_shape=self.theoretical_psf_shape,
-            units=(z_voxel_size, y_voxel_size, x_voxel_size),
+            units=self.voxel_size,
             lam_detection=self.lam_detection,
             n=self.refractive_index,
             na_detection=self.na_detection
@@ -251,12 +253,12 @@ class SyntheticPSF:
         na_mask: bool = True,
         ratio: bool = True,
         padsize: Any = None,
+        plot: Any = None
     ):
-
         if psf.ndim == 4:
-            amp, phase = self.fft(np.squeeze(psf), padsize=padsize)
-        else:
-            amp, phase = self.fft(psf, padsize=padsize)
+            psf = np.squeeze(psf)
+
+        amp, phase = self.fft(psf, padsize=padsize)
 
         if ratio:
             amp /= self.iotf
@@ -275,6 +277,49 @@ class SyntheticPSF:
             phase[:, phase.shape[1] // 2, :],
             phase[:, :, phase.shape[2] // 2],
         ], axis=0)
+
+        if plot is not None:
+            vmin, vmax, vcenter, step = 0, 2, 1, .1
+            highcmap = plt.get_cmap('YlOrRd', 256)
+            lowcmap = plt.get_cmap('YlGnBu_r', 256)
+            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+            cmap = mcolors.ListedColormap(cmap)
+
+            fig, axes = plt.subplots(3, 3)
+
+            m = axes[0, 0].imshow(psf[psf.shape[0] // 2, :, :], cmap='hot', vmin=0, vmax=1)
+            axes[0, 1].imshow(psf[:, psf.shape[1] // 2, :], cmap='hot', vmin=0, vmax=1)
+            axes[0, 2].imshow(psf[:, :, psf.shape[2] // 2].T, cmap='hot', vmin=0, vmax=1)
+            cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+            cb = plt.colorbar(m, cax=cax)
+            cax.yaxis.set_label_position("right")
+            cax.set_ylabel('Input (middle)')
+
+            m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
+            axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
+            axes[1, 2].imshow(emb[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
+            cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+            cb = plt.colorbar(m, cax=cax)
+            cax.yaxis.set_label_position("right")
+            cax.set_ylabel(r'Embedding ($\alpha$)')
+
+            m = axes[2, 0].imshow(emb[3], cmap='coolwarm', vmin=-1, vmax=1)
+            axes[2, 1].imshow(emb[4], cmap='coolwarm', vmin=-1, vmax=1)
+            axes[2, 2].imshow(emb[5].T, cmap='coolwarm', vmin=-1, vmax=1)
+            cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+            cb = plt.colorbar(m, cax=cax)
+            cax.yaxis.set_label_position("right")
+            cax.set_ylabel(r'Embedding ($\varphi$)')
+
+            for ax in axes.flatten():
+                ax.axis('off')
+
+            if plot == True:
+                plt.show()
+            else:
+                plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
         if psf.ndim == 4:
             return np.expand_dims(emb, axis=-1)
@@ -390,28 +435,28 @@ class SyntheticPSF:
             axes[0, 0].set_ylabel('PSF')
             m = axes[0, 0].imshow(np.max(psf, axis=0), cmap='hot')
             axes[0, 1].imshow(np.max(psf, axis=1), cmap='hot')
-            axes[0, 2].imshow(np.max(psf, axis=2), cmap='hot')
+            axes[0, 2].imshow(np.max(psf, axis=2).T, cmap='hot')
             cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
 
             axes[1, 0].set_ylabel('Theoretical PSF')
             m = axes[1, 0].imshow(np.max(self.ipsf, axis=0), cmap='hot')
             axes[1, 1].imshow(np.max(self.ipsf, axis=1), cmap='hot')
-            axes[1, 2].imshow(np.max(self.ipsf, axis=2), cmap='hot')
+            axes[1, 2].imshow(np.max(self.ipsf, axis=2).T, cmap='hot')
             cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
 
             axes[2, 0].set_ylabel('Theoretical OTF')
             m = axes[2, 0].imshow(self.iotf[self.iotf.shape[0] // 2, :, :], cmap='jet')
             axes[2, 1].imshow(self.iotf[:, self.iotf.shape[1] // 2, :], cmap='jet')
-            axes[2, 2].imshow(self.iotf[:, :, self.iotf.shape[2] // 2], cmap='jet')
+            axes[2, 2].imshow(self.iotf[:, :, self.iotf.shape[2] // 2].T, cmap='jet')
             cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
 
             axes[-2, 0].set_ylabel(r'Embedding ($\alpha$)')
             m = axes[-2, 0].imshow(emb[0], cmap='Spectral_r')
             axes[-2, 1].imshow(emb[1], cmap='Spectral_r')
-            axes[-2, 2].imshow(emb[2], cmap='Spectral_r')
+            axes[-2, 2].imshow(emb[2].T, cmap='Spectral_r')
 
             cax = inset_axes(axes[-2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
@@ -420,7 +465,7 @@ class SyntheticPSF:
             axes[-1, 0].set_ylabel(r'Embedding ($\varphi$)')
             m = axes[-1, 0].imshow(emb[3], cmap='Spectral_r')
             axes[-1, 1].imshow(emb[4], cmap='Spectral_r')
-            axes[-1, 2].imshow(emb[5], cmap='Spectral_r')
+            axes[-1, 2].imshow(emb[5].T, cmap='Spectral_r')
 
             cax = inset_axes(axes[-1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)

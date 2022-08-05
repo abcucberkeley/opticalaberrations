@@ -4,13 +4,17 @@ import typing
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
+from typing import Any
 
-import imageio
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib import gridspec
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 from tqdm import trange, tqdm
+from tifffile import imsave
+from numpy.lib.stride_tricks import sliding_window_view
+from skimage import transform
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -59,10 +63,14 @@ def load(model_path: Path) -> Model:
         logger.error('Invalid path!')
     else:
         if Path(model_path / 'saved_model.pb').exists():
-            return load_model(model_path)
+            model_path = str(model_path)
         else:
-            model_path = list(model_path.rglob('*.pb'))[0].parent
+            model_path = str(list(model_path.rglob('*.pb'))[0].parent)
+
+        try:
             return load_model(model_path)
+        except OSError:
+            return tf.saved_model.load(model_path)
 
 
 def train(
@@ -182,17 +190,9 @@ def train(
             model = Baseline(
                 name='Baseline',
                 modes=pmodes,
-                na_det=1.0,
-                refractive_index=1.33,
-                lambda_det=wavelength,
-                x_voxel_size=x_voxel_size,
-                y_voxel_size=y_voxel_size,
-                z_voxel_size=z_voxel_size,
                 depth_scalar=depth_scalar,
                 width_scalar=width_scalar,
-                mask_shape=input_shape,
                 activation=activation,
-                mul=mul
             )
         elif network == 'phasenet':
             model = PhaseNet(
@@ -216,7 +216,11 @@ def train(
             opt = Adam(learning_rate=lr)
             loss = 'mse'
         else:
-            inputs = (6, input_shape, input_shape, 1)
+            if network == 'baseline':
+                inputs = (input_shape, input_shape, input_shape, 1)
+            else:
+                inputs = (6, input_shape, input_shape, 1)
+
             loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
 
             """
@@ -501,12 +505,15 @@ def bootstrap_predict(
     model: tf.keras.Model,
     inputs: np.array,
     psfgen: SyntheticPSF,
+    resize: Any = None,
     batch_size: int = 1,
     n_samples: int = 10,
     threshold: float = 1e-4,
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
-    plot: bool = False
+    plot: Any = None,
+    return_embeddings: bool = False,
+    rolling_average_embedding: bool = False,
 ):
     """
     Average predictions and compute stdev
@@ -515,6 +522,7 @@ def bootstrap_predict(
         model: pre-trained keras model
         inputs: encoded tokens to be processed
         psfgen: Synthetic PSF object
+        resize: optional resize voxel size
         n_samples: number of predictions of average
         batch_size: number of samples per batch
         threshold: set predictions below threshold to zero
@@ -524,13 +532,55 @@ def bootstrap_predict(
     Returns:
         average prediction, stdev
     """
-
     def batch_generator(arr, s):
         for k in range(0, len(arr), s):
             yield arr[k:k + s]
 
-    if model.input_shape[1] != inputs.shape[1]:
-        model_inputs = np.stack([psfgen.embedding(psf=i) for i in inputs], axis=0)
+    def average_embedding(psf):
+        psf = transform.rescale(
+            psf,
+            (
+                resize[0] / psfgen.voxel_size[0],
+                resize[1] / psfgen.voxel_size[1],
+                resize[2] / psfgen.voxel_size[2],
+            ),
+            order=3,
+            anti_aliasing=True,
+        )
+        windows = sliding_window_view(psf, window_shape=psfgen.psf_shape)
+        return np.mean(
+            [psfgen.embedding(psf=windows[w, w, w]) for w in range(windows.shape[0])],
+            axis=0
+        )
+
+    if rolling_average_embedding:
+        model_inputs = np.stack([
+            np.expand_dims(
+                average_embedding(np.squeeze(i)),
+                axis=-1
+            ) for i in inputs
+        ], axis=0)
+    else:
+        if resize is not None:
+            inputs = np.stack([
+                np.expand_dims(
+                    preprocessing.resize(
+                        np.squeeze(i),
+                        crop_shape=psfgen.psf_shape,
+                        voxel_size=psfgen.voxel_size,
+                        sample_voxel_size=resize,
+                        debug=plot,
+                    ),
+                    axis=-1
+                ) for i in inputs
+            ], axis=0)
+
+        # check z-axis to compute embeddings for fourier models0
+        if (model.input_shape[1] != inputs.shape[1]):
+            model_inputs = np.stack([psfgen.embedding(psf=i) for i in inputs], axis=0)
+        else:
+            # pass raw PSFs to the model
+            model_inputs = inputs
 
     preds = None
     total = n_samples * (len(model_inputs) // batch_size)
@@ -546,7 +596,7 @@ def bootstrap_predict(
             gen = batch_generator(model_inputs, s=batch_size)
 
         for batch in gen:
-            if plot:
+            if plot is not None:
                 img = np.squeeze(batch[0])
                 input_img = np.squeeze(inputs[0])
 
@@ -561,28 +611,45 @@ def bootstrap_predict(
 
                     fig, axes = plt.subplots(3, 3)
 
-                    mid_plane = input_img.shape[0] // 2
-                    m = axes[0, 0].imshow(input_img[mid_plane, :, :], cmap='hot', vmin=0, vmax=1)
-                    axes[0, 1].imshow(input_img[:, mid_plane, :], cmap='hot', vmin=0, vmax=1)
-                    axes[0, 2].imshow(input_img[:, :, mid_plane], cmap='hot', vmin=0, vmax=1)
-
-                    cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-                    cb = plt.colorbar(m, cax=cax)
-                    cax.yaxis.set_label_position("right")
+                    if img.shape[0] == 6:
+                        for t in range(3):
+                            inner = gridspec.GridSpecFromSubplotSpec(
+                                1, 2, subplot_spec=axes[0, t], wspace=0.1, hspace=0.1
+                            )
+                            ax = fig.add_subplot(inner[0])
+                            m = ax.imshow(img[t].T if t == 2 else img[t], cmap=cmap, vmin=vmin, vmax=vmax)
+                            ax.set_xticks([])
+                            ax.set_yticks([])
+                            ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
+                            ax = fig.add_subplot(inner[1])
+                            ax.imshow(img[t+3].T if t == 2 else img[t+3], cmap='coolwarm', vmin=vmin, vmax=vmax)
+                            ax.set_xticks([])
+                            ax.set_yticks([])
+                            ax.set_xlabel(r'$\varphi = \angle \tau$')
+                    else:
+                        m = axes[0, 0].imshow(input_img[input_img.shape[0]//2, :, :], cmap='hot', vmin=0, vmax=1)
+                        axes[0, 1].imshow(input_img[:, input_img.shape[1]//2, :], cmap='hot', vmin=0, vmax=1)
+                        axes[0, 2].imshow(input_img[:, :, input_img.shape[2]//2].T, cmap='hot', vmin=0, vmax=1)
+                        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+                        cb = plt.colorbar(m, cax=cax)
+                        cax.yaxis.set_label_position("right")
+                        cax.set_ylabel('Input (middle)')
 
                     m = axes[1, 0].imshow(img[0], cmap=cmap, vmin=vmin, vmax=vmax)
                     axes[1, 1].imshow(img[1], cmap=cmap, vmin=vmin, vmax=vmax)
-                    axes[1, 2].imshow(img[2], cmap=cmap, vmin=vmin, vmax=vmax)
+                    axes[1, 2].imshow(img[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
                     cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
+                    cax.set_ylabel(r'Embedding ($\alpha$)')
 
                     m = axes[2, 0].imshow(img[3], cmap='coolwarm', vmin=-1, vmax=1)
                     axes[2, 1].imshow(img[4], cmap='coolwarm', vmin=-1, vmax=1)
-                    axes[2, 2].imshow(img[5], cmap='coolwarm', vmin=-1, vmax=1)
+                    axes[2, 2].imshow(img[5].T, cmap='coolwarm', vmin=-1, vmax=1)
                     cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
+                    cax.set_ylabel(r'Embedding ($\varphi$)')
 
                     for ax in axes.flatten():
                         ax.axis('off')
@@ -592,7 +659,7 @@ def bootstrap_predict(
                     axes[1].set_title(str(img.shape))
                     m = axes[0].imshow(np.max(img, axis=0), cmap='Spectral_r')
                     axes[1].imshow(np.max(img, axis=1), cmap='Spectral_r')
-                    axes[2].imshow(np.max(img, axis=2), cmap='Spectral_r')
+                    axes[2].imshow(np.max(img, axis=2).T, cmap='Spectral_r')
 
                     for ax in axes.flatten():
                         ax.axis('off')
@@ -601,7 +668,10 @@ def bootstrap_predict(
                     cb = plt.colorbar(m, cax=cax)
                     cax.yaxis.set_label_position("right")
 
-                plt.show()
+                if plot == True:
+                    plt.show()
+                else:
+                    plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
             p = model(batch, training=True).numpy()
             p[:, [0, 1, 2, 4]] = 0.
@@ -618,7 +688,11 @@ def bootstrap_predict(
 
     sigma = np.std(preds, axis=-1)
     sigma = sigma.flatten() if sigma.shape[0] == 1 else sigma
-    return mu, sigma
+
+    if return_embeddings:
+        return mu, sigma, model_inputs
+    else:
+        return mu, sigma
 
 
 def predict(
@@ -658,10 +732,7 @@ def predict(
                 )
 
                 gen = SyntheticPSF(**psfargs)
-                for i, (psf, y, psnr, zplanes, maxcounts) in zip(
-                        range(10),
-                        gen.generator(debug=True, otf=False if model.name == 'PhaseNet' else True)
-                ):
+                for i, (psf, y, psnr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True, otf=False)):
 
                     p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1, n_samples=1)
 
@@ -686,8 +757,8 @@ def predict(
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
-                    imageio.mimwrite(save_path / f'psf_{i}.tif', psf)
-                    imageio.mimwrite(save_path / f'corrected_psf_{i}.tif', corrected_psf)
+                    imsave(save_path / f'psf_{i}.tif', psf)
+                    imsave(save_path / f'corrected_psf_{i}.tif', corrected_psf)
 
                     vis.diagnostic_assessment(
                         psf=psf,
@@ -771,9 +842,9 @@ def compare(
                 )
                 save_path.mkdir(exist_ok=True, parents=True)
 
-                imageio.mimwrite(save_path / f'input_{i}.tif', model_input)
-                imageio.mimwrite(save_path / f'input_psf_{i}.tif', psf)
-                imageio.mimwrite(save_path / f'corrected_psf_{i}.tif', corrected_psf)
+                imsave(save_path / f'input_{i}.tif', model_input)
+                imsave(save_path / f'input_psf_{i}.tif', psf)
+                imsave(save_path / f'corrected_psf_{i}.tif', corrected_psf)
 
                 logger.info('Matlab')
                 pred_matlab = np.zeros_like(p.amplitudes)
@@ -788,7 +859,7 @@ def compare(
                 pred_matlab = Wavefront(pred_matlab.flatten())
                 matlab_diff = Wavefront(y - pred_matlab)
                 matlab_corrected_psf = gen.single_psf(matlab_diff, zplanes=0)
-                imageio.mimwrite(save_path / f'matlab_corrected_psf_{i}.tif', matlab_corrected_psf)
+                imsave(save_path / f'matlab_corrected_psf_{i}.tif', matlab_corrected_psf)
                 pprint(pred_matlab.zernikes)
 
                 vis.matlab_diagnostic_assessment(
@@ -893,11 +964,11 @@ def featuremaps(
         psnr: int,
 ):
     plt.rcParams.update({
-        'font.size': 40,
-        'axes.titlesize': 40,
-        'xtick.labelsize': 30,
-        'ytick.labelsize': 30,
-        'legend.fontsize': 30,
+        'font.size': 25,
+        'axes.titlesize': 30,
+        'xtick.labelsize': 20,
+        'ytick.labelsize': 20,
+        'legend.fontsize': 20,
     })
 
     logger.info(f"Models: {modelpath}")
@@ -949,7 +1020,7 @@ def featuremaps(
     maps = model.predict(inputs)[1:25]
     nrows = sum([1 for fmap in maps if len(fmap.shape[1:]) >= 3])
 
-    fig = plt.figure(figsize=(150, 600) if input_shape[0] > 1 else (150, 200))
+    fig = plt.figure(figsize=(150, 600))
     gs = fig.add_gridspec((nrows * input_shape[0]) + 1, 8)
 
     i = 0
@@ -968,7 +1039,7 @@ def featuremaps(
             fmap = np.reshape(fmap, (fmap.shape[0], fmap_size, fmap_size, features))
 
         if len(fmap.shape) == 4:
-            if fmap.shape[0] == input_shape[0]:
+            if input_shape[0] == 3 or input_shape[0] == 6:
 
                 i += 1
                 features = fmap.shape[-1]
@@ -1025,7 +1096,7 @@ def featuremaps(
                     ax = fig.add_subplot(gs[i, :])
 
                     if j == 0:
-                        ax.set_title(f"{name.upper()} {fmap.shape}", fontsize=100)
+                        ax.set_title(f"{name.upper()} {fmap.shape}")
 
                     ax.imshow(grid, cmap='hot', vmin=0, vmax=1)
                     ax.set_aspect('equal')

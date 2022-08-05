@@ -18,14 +18,14 @@ for MODEL in "${models[@]}"
 do
   for NA in 1 .95 .9 .85 .8
   do
-    #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --gpus 3 --cpus 16 \
+    #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
     #python manager.py slurm test.py --partition abc --constraint titan --mem '500GB' --gpus 4 --cpus 20 \
     python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0\
     --task "$MODEL --datadir $DATA/i$SHAPE --na $NA --n_samples 100 --max_amplitude $MAXAMP evalheatmap" \
     --taskname $NA \
     --name $MODEL/evalheatmaps
 
-    #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --gpus 3 --cpus 16 \
+    #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
     #python manager.py slurm test.py --partition abc --constraint titan --mem '500GB' --gpus 4 --cpus 20 \
     python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0 \
     --task "$MODEL --datadir $DATA/i$SHAPE --na $NA --n_samples 20 --max_amplitude $MAXAMP iterheatmap" \

@@ -3,39 +3,23 @@
 HANDLER=slurm
 ENV=~/anaconda3/envs/deep/bin/python
 
-OUTDIR='/clusterfs/nvme/thayer/dataset/embeddings'
+OUTDIR='/clusterfs/nvme/thayer/dataset/kernels'
 
-SHAPE=64
-xVOXEL=.15
-yVOXEL=.15
-zVOXEL=.6
+SHAPE=128
+xVOXEL=.032
+yVOXEL=.032
+zVOXEL=.032
 MODES=60
 GAMMA=.75
 
-TYPE='--otf'
-OUTDIR="${OUTDIR}/train"
-difractionlimit=($(seq 0 .01 .05))
-small=($(seq .055 .005 .1))
-large=($(seq .11 .01 .4))
-extreme=($(seq .45 .05 .65))
-amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
-echo ${amps[@]}
-echo ${#amps[@]}
-amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]:0:${#extreme[@]}-1}" )
-amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
-mPSNR=($(seq 1 20 81))
-xPSNR=($(seq 20 20 100))
-SAMPLES=($(seq 1 100 1000))
+TYPE=''
+amps1=($(seq 0 .025 .5))
+amps2=($(seq .025 .025 .5))
+mPSNR=($(seq 1 25 76))
+xPSNR=($(seq 25 25 100))
+SAMPLES=($(seq 1 10 10))
 
-#TYPE=''
-#OUTDIR="${OUTDIR}/test"
-#amps1=($(seq 0 .025 .5))
-#amps2=($(seq .025 .025 .5))
-#mPSNR=($(seq 1 10 91))
-#xPSNR=($(seq 10 10 100))
-#SAMPLES=($(seq 1 100 100))
-
-for DIST in powerlaw dirichlet
+for DIST in single
 do
   for SNR in `seq 1 ${#xPSNR[@]}`
   do
@@ -51,7 +35,6 @@ do
         j="${ENV} dataset.py ${TYPE}"
         j="${j} --dist ${DIST}"
         j="${j} --bimodal"
-        j="${j} --noise"
         j="${j} --gamma ${GAMMA}"
         j="${j} --outdir ${OUTDIR}"
         j="${j} --filename ${SAMPLES[$S-1]}"

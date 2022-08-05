@@ -52,16 +52,19 @@ class Wavefront:
         self.gamma = gamma
         self.bimodal = bimodal
 
+        self.distribution = np.random.choice(['powerlaw', 'dirichlet'], size=1)[0] \
+            if distribution == 'mixed' else distribution
+
         if np.isscalar(self.ranges) or isinstance(self.ranges, tuple):
             lims = (self.ranges-.001, self.ranges+.001) if np.isscalar(self.ranges) else self.ranges
 
-            if distribution == 'single':
+            if self.distribution == 'single':
                 amplitudes = self._single(lims)
 
-            elif distribution == 'powerlaw':
+            elif self.distribution == 'powerlaw':
                 amplitudes = self._powerlaw(lims)
 
-            elif distribution == 'dirichlet':
+            elif self.distribution == 'dirichlet':
                 amplitudes = self._dirichlet(lims)
 
             else:  # draw amplitude for each zernike mode from a uniform dist
