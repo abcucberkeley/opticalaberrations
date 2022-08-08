@@ -17,7 +17,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 from skimage import transform
 
 import tensorflow as tf
-from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model, save_model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.optimizers import SGD
 from tensorflow_addons.optimizers import AdamW
@@ -43,11 +43,15 @@ from wavefront import Wavefront
 from tensorflow.keras import Model
 from phasenet import PhaseNet
 
+from stem import Stem
+from activation import MaskedActivation
+from depthwiseconv import DepthwiseConv3D
+from spatial import SpatialAttention
+import opticalresnet
+import opticaltransformer
 from baseline import Baseline
 from widekernel import WideKernel
-from opticalresnet import OpticalResNet
-from opticaltransformer import OpticalTransformer
-from opticalhierarchicaltransformer import OpticalHierarchicalTransformer
+import opticalhierarchicaltransformer
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -59,18 +63,49 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 def load(model_path: Path) -> Model:
-    if model_path.is_file():
-        logger.error('Invalid path!')
-    else:
-        if Path(model_path / 'saved_model.pb').exists():
+    model_path = model_path.with_suffix('')
+
+    try:
+        if Path(f'{model_path}.h5').exists():
+            model_path = str(f'{model_path}.h5')
+
+        elif Path(model_path / 'saved_model.pb').exists():
             model_path = str(model_path)
+
         else:
             model_path = str(list(model_path.rglob('*.pb'))[0].parent)
 
+        if 'opticaltransformer' in model_path:
+            custom_objects = {
+                "Stem": opticaltransformer.Stem,
+                "Patchify": opticaltransformer.Patchify,
+                "Merge": opticaltransformer.Merge,
+                "PatchEncoder": opticaltransformer.PatchEncoder,
+                "MLP": opticaltransformer.MLP,
+                "Transformer": opticaltransformer.Transformer,
+            }
+
+        else:
+            custom_objects = {
+                "Stem": Stem,
+                "MaskedActivation": MaskedActivation,
+                "SpatialAttention": SpatialAttention,
+                "DepthwiseConv3D": DepthwiseConv3D,
+                "CAB": opticalresnet.CAB,
+                "TB": opticalresnet.TB,
+            }
+
+        logger.info(model_path)
         try:
+            '''.h5/hdf5 format'''
+            return load_model(model_path, custom_objects=custom_objects)
+        except TypeError:
+            '''.pb format'''
             return load_model(model_path)
-        except OSError:
-            return tf.saved_model.load(model_path)
+
+    except Exception as e:
+        logger.exception(e)
+        exit()
 
 
 def train(
@@ -121,7 +156,7 @@ def train(
 
     with strategy.scope():
         if network == 'opticaltransformer':
-            model = OpticalTransformer(
+            model = opticaltransformer.OpticalTransformer(
                 name='OpticalTransformer',
                 patches=patch_size,
                 modes=pmodes,
@@ -138,7 +173,7 @@ def train(
                 mul=mul
             )
         elif network == 'opticalhierarchicaltransformer':
-            model = OpticalHierarchicalTransformer(
+            model = opticalhierarchicaltransformer.OpticalHierarchicalTransformer(
                 name='OpticalHierarchicalTransformer',
                 patches=patch_size,
                 modes=pmodes,
@@ -155,7 +190,7 @@ def train(
                 mul=mul
             )
         elif network == 'opticalresnet':
-            model = OpticalResNet(
+            model = opticalresnet.OpticalResNet(
                 name='OpticalResNet',
                 modes=pmodes,
                 na_det=1.0,
