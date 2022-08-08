@@ -69,7 +69,7 @@ def load(model_path: Path) -> Model:
         if Path(f'{model_path}.h5').exists() or Path(model_path / 'saved_model.pb').exists():
             model_path = str(model_path)
         else:
-            model_path = str(list(model_path.rglob('*.pb'))[0].parent)
+            model_path = str(list(model_path.rglob('saved_model.pb'))[0].parent)
 
         if 'opticaltransformer' in model_path:
             custom_objects = {
