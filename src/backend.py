@@ -612,7 +612,7 @@ def bootstrap_predict(
 
         # check z-axis to compute embeddings for fourier models0
         if (model.input_shape[1] != inputs.shape[1]):
-            model_inputs = np.stack([psfgen.embedding(psf=i) for i in inputs], axis=0)
+            model_inputs = np.stack([psfgen.embedding(psf=i, plot=plot) for i in inputs], axis=0)
         else:
             # pass raw PSFs to the model
             model_inputs = inputs

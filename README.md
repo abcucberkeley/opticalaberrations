@@ -122,9 +122,3 @@ An example of running the script without a DM state input is also provided below
 
 ![example](examples/PSF_blank_pred.png)
 ![example](examples/PSF_blank_diagnosis.png)
-
-
-### Training 
-### Evaluations
-### Models
- 

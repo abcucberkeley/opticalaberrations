@@ -382,7 +382,8 @@ def predict(
         n_samples=1,
         threshold=threshold,
         verbose=False,
-        psfgen=psfgen
+        psfgen=psfgen,
+        plot=Path(f'{img.parent/img.stem}') if plot else None
     )
     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
     dm = zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar)
