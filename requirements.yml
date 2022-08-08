@@ -4,6 +4,7 @@ channels:
   - anaconda
   - defaults
 dependencies:
+  - h5py=3.7
   - tensorflow-gpu=2.5
   - tensorflow-addons=0.13
   - cudatoolkit=11.3

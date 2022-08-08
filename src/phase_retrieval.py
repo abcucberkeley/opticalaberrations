@@ -20,15 +20,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--x_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
     )
 
     parser.add_argument(
-        "--y_voxel_size", default=.15, type=float, help='lateral voxel size in microns for Y'
-    )
-
-    parser.add_argument(
-        "--z_voxel_size", default=.6, type=float, help='axial voxel size in microns for Z'
+        "--axial_voxel_size", default=.6, type=float, help='axial voxel size in microns for Z'
     )
 
     parser.add_argument(
@@ -84,9 +80,8 @@ def main(args=None):
             img=args.input,
             dm_pattern=args.pattern,
             dm_state=args.state,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
+            axial_voxel_size=args.axial_voxel_size,
+            lateral_voxel_size=args.lateral_voxel_size,
             wavelength=args.wavelength,
             scalar=args.scalar,
             threshold=args.threshold,
@@ -137,9 +132,8 @@ def main_function(
     myinput: str,
     mypattern: str,
     mystate: str,
-    myx_voxel_size: float,
-    myy_voxel_size: float,
-    myz_voxel_size: float,
+    axial_voxel_size: float,
+    lateral_voxel_size: float,
     mywavelength: float,
     myscalar: float = 1.,
     mythreshold: float = 0.,
@@ -185,9 +179,8 @@ def main_function(
                 img=myinput,
                 dm_pattern=mypattern,
                 dm_state=mystate,
-                x_voxel_size=myx_voxel_size,
-                y_voxel_size=myy_voxel_size,
-                z_voxel_size=myz_voxel_size,
+                axial_voxel_size=axial_voxel_size,
+                lateral_voxel_size=lateral_voxel_size,
                 wavelength=mywavelength,
                 scalar=myscalar,
                 threshold=mythreshold,
