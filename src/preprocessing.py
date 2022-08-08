@@ -37,7 +37,7 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: tuple, **kwargs):
     return np.pad(psf[slicer], pad, **kwargs)
 
 
-def resize(vol, voxel_size: tuple, crop_shape: tuple, sample_voxel_size: tuple = (.1, .1, .1), debug=False):
+def resize(vol, voxel_size: tuple, crop_shape: tuple, sample_voxel_size: tuple = (.1, .1, .1), debug: Any = None):
     def plot(cls, img):
         if img.shape[0] == 6:
             vmin, vmax, vcenter, step = 0, 2, 1, .1
