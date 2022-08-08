@@ -66,12 +66,8 @@ def load(model_path: Path) -> Model:
     model_path = model_path.with_suffix('')
 
     try:
-        if Path(f'{model_path}.h5').exists():
-            model_path = str(f'{model_path}.h5')
-
-        elif Path(model_path / 'saved_model.pb').exists():
+        if Path(f'{model_path}.h5').exists() or Path(model_path / 'saved_model.pb').exists():
             model_path = str(model_path)
-
         else:
             model_path = str(list(model_path.rglob('*.pb'))[0].parent)
 
@@ -98,7 +94,7 @@ def load(model_path: Path) -> Model:
         logger.info(model_path)
         try:
             '''.h5/hdf5 format'''
-            return load_model(model_path, custom_objects=custom_objects)
+            return load_model(f"{model_path}.h5", custom_objects=custom_objects)
         except TypeError:
             '''.pb format'''
             return load_model(model_path)
