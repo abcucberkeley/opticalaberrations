@@ -22,15 +22,15 @@ class PsfGenerator3D:
     3D PSF generator, courtesy of Martin Weigert (https://github.com/maweigert)
     """
 
-    def __init__(self, psf_shape, units, lam_detection, n, na_detection):
+    def __init__(self, psf_shape, units, lam_detection, n, na_detection, dtype='widefield'):
         """
-        encapsulates 3D PSF generator
-
-        :param psf_shape: tuple, psf shape as (z,y,x), e.g. (64,64,64)
-        :param units: tuple, voxel size in microns, e.g. (0.1,0.1,0.1)
-        :param lam_detection: scalar, wavelength in microns, e.g. 0.5
-        :param n: scalar, refractive index, eg 1.33
-        :param na_detection: scalar, numerical aperture of detection objective, eg 1.1
+        Args:
+            psf_shape: tuple, psf shape as (z,y,x), e.g. (64,64,64)
+            units: tuple, voxel size in microns, e.g. (0.1,0.1,0.1)
+            lam_detection: scalar, wavelength in microns, e.g. 0.5
+            n: scalar, refractive index, eg 1.33
+            na_detection: scalar, numerical aperture of detection objective, eg 1.1
+            dtype: widefield or confocal
         """
 
         psf_shape = tuple(psf_shape)
@@ -55,6 +55,7 @@ class PsfGenerator3D:
         idx = np.arange(self.Nz) - self.Nz // 2
         kz = self.dz * idx
         self.theoretical_psf(kx=kx, ky=ky, kz=kz)
+        self.dtype = dtype
 
     def theoretical_psf(self, kx, ky, kz):
         KZ3, KY3, KX3 = np.meshgrid(kz, ky, kx, indexing="ij")
@@ -78,20 +79,20 @@ class PsfGenerator3D:
 
     def masked_phase_array(self, phi, normed=True):
         """
-        returns masked Zernike polynomial for back focal plane, masked according to the setup
+        Returns masked Zernike polynomial for back focal plane, masked according to the setup
 
-        :param phi: Zernike/ZernikeWavefront object
-        :param normed: boolean, multiplied by normalization factor, eg True
-        :return: masked wavefront, 2d array
+        Args:
+            phi: Zernike/ZernikeWavefront object
+            normed: boolean, multiplied by normalization factor, eg True
         """
         return self.kmask2 * phi.phase(self.krho, self.kphi, normed=normed, outside=None)
 
     def coherent_psf(self, phi):
         """
-        returns the coherent psf for a given wavefront phi
+        Returns the coherent psf for a given wavefront phi
 
-        :param phi: Zernike/ZernikeWavefront object
-        :return: coherent psf, 3d array
+        Args:
+            phi: Zernike/ZernikeWavefront object
         """
         phi = self.masked_phase_array(phi)
         ku = self.kbase * np.exp(2.j * np.pi * phi / self.lam_detection)
@@ -100,16 +101,22 @@ class PsfGenerator3D:
 
     def incoherent_psf(self, phi):
         """
-        returns the incoherent psf for a given wavefront phi
+        Returns the incoherent psf for a given wavefront phi
            (which is just the squared absolute value of the coherent one)
            The psf is normalized such that the sum intensity on each plane equals one
 
-        :param phi: Zernike/ZernikeWavefront object
-        :param randomize_axial: randomize starting pos along the axial axis
-        :return: incoherent psf, 3d array
+        Args:
+            phi: Zernike/ZernikeWavefront object
         """
         _psf = np.abs(self.coherent_psf(phi)) ** 2
         _psf = np.array([p / np.sum(p) for p in _psf])
         _psf = np.fft.fftshift(_psf)
         _psf /= np.max(_psf)
-        return _psf
+
+        if self.dtype == 'widefield':
+            return _psf
+        elif self.dtype == 'confocal':
+            return _psf**2
+        else:
+            logger.error("Unknown PSF type")
+            exit()

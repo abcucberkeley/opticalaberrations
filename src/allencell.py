@@ -83,10 +83,11 @@ def convolve(kernel, sample, sample_voxel_size, save_path, cuda=False):
     modelgen = SyntheticPSF(
         n_modes=60,
         lam_detection=.605,
+        dtype='confocal',
         psf_shape=(64, 64, 64),
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        x_voxel_size=.1,
+        y_voxel_size=.1,
+        z_voxel_size=.3,
         snr=100,
         max_jitter=0,
     )
@@ -102,8 +103,8 @@ def convolve(kernel, sample, sample_voxel_size, save_path, cuda=False):
     conv /= np.nanmax(conv)
 
     width = [(i // 2) for i in sample.shape]
-    center = [(i // 2) + 1 for i in conv.shape]
-    # center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
+    # center = [(i // 2) + 1 for i in conv.shape]
+    center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
     conv = conv[
            center[0] - width[0]:center[0] + width[0],
            center[1] - width[1]:center[1] + width[1],
@@ -168,7 +169,7 @@ def create_dataset(
     kernels: Path,
     samples: Path,
     sample_voxel_size: tuple = (.29, .29, .29),
-    conv_voxel_size: tuple = (.3, .075, .075),
+    conv_voxel_size: tuple = (.15, .05, .05),
     psf_shape: tuple = (128, 128, 128)
 ):
     for s in samples.rglob('*.tiff'):

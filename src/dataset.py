@@ -54,6 +54,7 @@ def create_synthetic_sample(
     max_jitter: float,
     input_shape: int,
     modes: int,
+    psf_type: str,
     distribution: str,
     gamma: float,
     bimodal: bool,
@@ -75,6 +76,7 @@ def create_synthetic_sample(
         n_modes=modes,
         max_jitter=max_jitter,
         snr=(min_psnr, max_psnr),
+        dtype=psf_type,
         distribution=distribution,
         gamma=gamma,
         bimodal=bimodal,
@@ -216,6 +218,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--psf_type", default='widefield', type=str,
+        help="widefield or confocal"
+    )
+
+    parser.add_argument(
         "--dist", default='powerlaw', type=str,
         help="distribution of the zernike amplitudes"
     )
@@ -280,6 +287,7 @@ def main(args=None):
             noise=args.noise,
             modes=args.modes,
             input_shape=args.input_shape,
+            psf_type=args.psf_type,
             distribution=args.dist,
             gamma=args.gamma,
             bimodal=args.bimodal,

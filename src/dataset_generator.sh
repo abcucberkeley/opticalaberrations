@@ -11,6 +11,9 @@ yVOXEL=.15
 zVOXEL=.6
 MODES=60
 GAMMA=.75
+LAMBDA=.605
+NA=1.0
+DTYPE='widefield'
 
 TYPE='--otf'
 OUTDIR="${OUTDIR}/train"
@@ -64,6 +67,8 @@ do
         j="${j} --x_voxel_size ${xVOXEL}"
         j="${j} --y_voxel_size ${yVOXEL}"
         j="${j} --z_voxel_size ${zVOXEL}"
+        j="${j} --na_detection ${NA}"
+        j="${j} --lam_detection ${LAMBDA}"
 
         task="/usr/bin/sbatch"
         task="${task} --qos=abc_normal"

@@ -28,6 +28,7 @@ class SyntheticPSF:
     def __init__(
         self,
         amplitude_ranges=(-.1, .1),
+        dtype='widefield',
         distribution='dirichlet',
         bimodal=False,
         gamma=1.5,
@@ -50,6 +51,7 @@ class SyntheticPSF:
         """
         Args:
             amplitude_ranges: range tuple, array, or wavefront object (in microns)
+            dtype: widefield or confocal
             distribution: desired distribution for the amplitudes
             gamma: optional exponent of the powerlaw distribution
             bimodal: optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes
@@ -69,6 +71,7 @@ class SyntheticPSF:
         """
 
         self.n_modes = n_modes
+        self.dtype = dtype
         self.order = order
         self.refractive_index = refractive_index
         self.lam_detection = lam_detection
@@ -96,7 +99,8 @@ class SyntheticPSF:
             units=self.voxel_size,
             lam_detection=self.lam_detection,
             n=self.refractive_index,
-            na_detection=self.na_detection
+            na_detection=self.na_detection,
+            dtype=dtype
         )
 
         self.ipsf = self.theoretical_psf(normed=True, noise=False)
