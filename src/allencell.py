@@ -2,6 +2,8 @@ import logging
 import sys
 import time
 import multiprocessing as mp
+
+from typing import Optional
 from functools import partial
 from pathlib import Path
 import numpy as np
@@ -9,10 +11,10 @@ import cupy as cp
 from cupyx.scipy.signal import fftconvolve as cupyx_fftconvolve
 from scipy.signal import fftconvolve as scipy_fftconvolve
 from skimage.util import view_as_windows
+from skimage.restoration import richardson_lucy
 
 import quilt3 as q3
 from tifffile import imsave, imread
-from tqdm import tqdm, trange
 
 import utils
 import cli
@@ -27,24 +29,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 classes = {k: label for k, label, in
-           zip(range(15),
-               [
-                   'Cells',
-                   'Nuclei',
-                   'Transmitted Light',
-                   'Microtubules',
-                   'Actin Filaments',
-                   'Desmosomes',
-                   'DNA',
-                   'Nucleoli',
-                   'Nuclear Envelope',
-                   'Membrane (cellmask)',
-                   'Membrane (rfp safe harbor)',
-                   'Actomyosin Bundles',
-                   'Endoplasmic Reticulum',
-                   'Golgi Apparatus',
-                   'Mitochondria'
-               ])
+           zip([
+               'Cells',
+               'Nuclei',
+               'Transmitted Light',
+               'Microtubules',
+               'Actin Filaments',
+               'Desmosomes',
+               'DNA',
+               'Nucleoli',
+               'Nuclear Envelope',
+               'Membrane (cellmask)',
+               'Membrane (rfp safe harbor)',
+               'Actomyosin Bundles',
+               'Endoplasmic Reticulum',
+               'Golgi Apparatus',
+               'Mitochondria'
+               ], range(15))
            }
 
 
@@ -59,10 +60,16 @@ def parse_args(args):
     download = subparsers.add_parser("download")
     download.add_argument('--savedir', default='/media/supernova/data/allencell', type=Path)
 
-    dataset = subparsers.add_parser("dataset")
-    dataset.add_argument('kernels', type=Path)
-    dataset.add_argument('samples', type=Path)
-    dataset.add_argument('--savedir', default='../dataset/allencell', type=Path)
+    decon = subparsers.add_parser("decon")
+    decon.add_argument('psf', type=Path)
+    decon.add_argument('samples', type=Path)
+    decon.add_argument('--label', type=str, default=None)
+    decon.add_argument('--savedir', default='../dataset/allencell/deconvolved', type=Path)
+
+    conv = subparsers.add_parser("conv")
+    conv.add_argument('kernels', type=Path)
+    conv.add_argument('samples', type=Path)
+    conv.add_argument('--savedir', default='../dataset/allencell/convolved', type=Path)
 
     return parser.parse_args(args)
 
@@ -79,15 +86,25 @@ def download_data(savedir: Path):
     #         b.fetch(f['Key'], f"P{savedir}/{f['Key']}")
 
 
-def convolve(kernel, sample, sample_voxel_size, save_path, cuda=False):
+def deconvolve(sample, psf, label, niters, save_path):
+    psf = imread(psf)
+    # logger.info(f"PSF: {psf.shape}")
+    data = imread(sample)[label]
+    # logger.info(f"Data: {data.shape}")
+    deconvolved = richardson_lucy(data, psf, niters)
+    # logger.info(f"Deconvolved: {deconvolved.shape}")
+    imsave(save_path/sample.name, deconvolved)
+
+
+def convolve(kernel, sample, sample_voxel_size, psf_shape, save_path, cuda=False):
     modelgen = SyntheticPSF(
         n_modes=60,
         lam_detection=.605,
         dtype='confocal',
-        psf_shape=(64, 64, 64),
-        x_voxel_size=.1,
-        y_voxel_size=.1,
-        z_voxel_size=.3,
+        psf_shape=psf_shape,
+        x_voxel_size=.29,
+        y_voxel_size=.29,
+        z_voxel_size=.29,
         snr=100,
         max_jitter=0,
     )
@@ -103,8 +120,7 @@ def convolve(kernel, sample, sample_voxel_size, save_path, cuda=False):
     conv /= np.nanmax(conv)
 
     width = [(i // 2) for i in sample.shape]
-    # center = [(i // 2) + 1 for i in conv.shape]
-    center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
+    center = [(i // 2) + 1 for i in conv.shape]
     conv = conv[
            center[0] - width[0]:center[0] + width[0],
            center[1] - width[1]:center[1] + width[1],
@@ -128,40 +144,24 @@ def create_sample(
     sample: Path,
     kernels: Path,
     savedir: Path,
-    label: int,
     sample_voxel_size: tuple,
-    conv_voxel_size: tuple,
     psf_shape: tuple
 ):
-    sample = imread(sample)[label]
-    logger.info(f"Sample: {sample.shape}")
-    rescaled_shape = [round(sample.shape[i] * (sample_voxel_size[i] / conv_voxel_size[i])) for i in range(3)]
-    rescaled_shape = tuple(rescaled_shape[i] if rescaled_shape[i] > psf_shape[i] else psf_shape[i] for i in range(3))
+    data = imread(sample)
+    logger.info(f"Sample: {data.shape}")
 
-    samples = preprocessing.resize(
-        sample,
-        voxel_size=conv_voxel_size,
-        crop_shape=rescaled_shape,
-        sample_voxel_size=sample_voxel_size,
+    utils.multiprocess(
+        partial(
+            convolve,
+            sample=data,
+            psf_shape=psf_shape,
+            sample_voxel_size=sample_voxel_size,
+            save_path=savedir/sample.stem,
+            cuda=True
+        ),
+        jobs=list(kernels.rglob('*.tif')),
+        cores=-1
     )
-    logger.info(f"Rescaled sample  {samples.shape}")
-
-    windows = view_as_windows(samples, window_shape=psf_shape)
-
-    for i in range(0, windows.shape[0], psf_shape[0]):
-        for j in range(0, windows.shape[1], psf_shape[1]):
-            for k in range(0, windows.shape[2], psf_shape[2]):
-                utils.multiprocess(
-                    partial(
-                        convolve,
-                        sample=windows[i, j, k],
-                        sample_voxel_size=conv_voxel_size,
-                        save_path=savedir / f'{i}-{j}-{k}',
-                        cuda=True
-                    ),
-                    jobs=list(kernels.rglob('*.tif')),
-                    cores=-1
-                )
 
 
 def create_dataset(
@@ -169,38 +169,77 @@ def create_dataset(
     kernels: Path,
     samples: Path,
     sample_voxel_size: tuple = (.29, .29, .29),
-    conv_voxel_size: tuple = (.15, .05, .05),
-    psf_shape: tuple = (128, 128, 128)
+    psf_shape: tuple = (64, 64, 64)
 ):
     for s in samples.rglob('*.tiff'):
         logger.info(s)
-        for k, label in classes.items():
+        savedir.mkdir(exist_ok=True, parents=True)
+
+        create_sample(
+            sample=s,
+            kernels=kernels,
+            savedir=savedir,
+            sample_voxel_size=sample_voxel_size,
+            psf_shape=psf_shape
+        )
+
+
+def decon_dataset(
+    savedir: Path,
+    psf: Path,
+    samples: Path,
+    niters: int = 1,
+    label: Optional = None,
+):
+    if label is None:
+        for label, k in classes.items():
             logger.info(label)
-            save_path = Path(f'{savedir}/convolved/{label.lower().replace(" ", "_")}')
+            save_path = Path(f'{savedir}/{label.lower().replace(" ", "_")}')
             save_path.mkdir(exist_ok=True, parents=True)
 
-            create_sample(
-                sample=s,
-                label=k,
-                kernels=kernels,
-                savedir=save_path,
-                sample_voxel_size=sample_voxel_size,
-                conv_voxel_size=conv_voxel_size,
-                psf_shape=psf_shape
+            utils.multiprocess(
+                partial(
+                    deconvolve,
+                    psf=psf,
+                    label=k,
+                    save_path=save_path,
+                ),
+                jobs=list(samples.rglob('*.tiff')),
+                cores=-1
             )
-        exit()
+    else:
+        k = classes.get(label)
+        logger.info(f"{label}: {k}")
+        save_path = Path(f'{savedir}/{label.lower().replace(" ", "_")}')
+        save_path.mkdir(exist_ok=True, parents=True)
+
+        utils.multiprocess(
+            partial(
+                deconvolve,
+                psf=psf,
+                label=k,
+                niters=niters,
+                save_path=save_path,
+            ),
+            jobs=list(samples.rglob('*.tiff')),
+            cores=-1
+        )
 
 
 def main(args=None):
     timeit = time.time()
     args = parse_args(args)
+    logger.info(args)
 
     mp.set_start_method('spawn', force=True)
 
-    if args.dtype == "dataset":
+    if args.dtype == 'conv':
         create_dataset(savedir=args.savedir, kernels=args.kernels, samples=args.samples)
 
-    elif args.dtype == "download":
+    elif args.dtype == 'decon':
+        decon_dataset(savedir=args.savedir, psf=args.psf, samples=args.samples, label=args.label)
+
+    elif args.dtype == 'download':
         download_data(savedir=args.savedir)
 
     else:

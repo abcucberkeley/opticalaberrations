@@ -4,6 +4,8 @@ import time
 import multiprocessing as mp
 from functools import partial
 from pathlib import Path
+
+
 import fibsem_tools.io as fibsem
 import numpy as np
 import xarray as xr
@@ -200,6 +202,7 @@ def create_dataset(
 def main(args=None):
     timeit = time.time()
     args = parse_args(args)
+    logger.info(args)
 
     mp.set_start_method('spawn', force=True)
 

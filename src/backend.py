@@ -63,15 +63,10 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 def load(model_path: Path) -> Model:
-    model_path = model_path.with_suffix('')
+    model_path = Path(model_path)
 
     try:
-        if Path(f'{model_path}.h5').exists() or Path(model_path / 'saved_model.pb').exists():
-            model_path = str(model_path)
-        else:
-            model_path = str(list(model_path.rglob('saved_model.pb'))[0].parent)
-
-        if 'opticaltransformer' in model_path:
+        if 'opticaltransformer' in str(model_path):
             custom_objects = {
                 "Stem": opticaltransformer.Stem,
                 "Patchify": opticaltransformer.Patchify,
@@ -91,13 +86,19 @@ def load(model_path: Path) -> Model:
                 "TB": opticalresnet.TB,
             }
 
-        logger.info(model_path)
         try:
             '''.h5/hdf5 format'''
-            return load_model(f"{model_path}.h5", custom_objects=custom_objects)
-        except TypeError:
+            if model_path.is_file() and model_path.suffix == '.h5':
+                return load_model(str(model_path), custom_objects=custom_objects)
+            else:
+                return load_model(str(list(model_path.rglob('*.h5'))[0]), custom_objects=custom_objects)
+
+        except FileNotFoundError:
             '''.pb format'''
-            return load_model(model_path)
+            if model_path.is_file() and model_path.suffix == '.pb':
+                return load_model(str(model_path.parent))
+            else:
+                return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
 
     except Exception as e:
         logger.exception(e)

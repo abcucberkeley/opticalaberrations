@@ -7,6 +7,7 @@ from tifffile import imread, imsave
 import numpy as np
 from tqdm import trange
 
+
 import cli
 from utils import peak_aberration
 from synthetic import SyntheticPSF
@@ -278,6 +279,7 @@ def parse_args(args):
 def main(args=None):
     timeit = time.time()
     args = parse_args(args)
+    logger.info(args)
 
     def sample(k):
         return create_synthetic_sample(
@@ -306,8 +308,7 @@ def main(args=None):
         )
 
     if args.dist == 'single':
-        for i in trange(10):
-            sample(k=i)
+        sample(k=0)
     else:
         for i in trange(100):
             sample(k=i)

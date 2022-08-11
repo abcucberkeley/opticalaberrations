@@ -1,6 +1,7 @@
 import logging
 import time
 from pathlib import Path
+
 from subprocess import call
 
 import cli
@@ -112,6 +113,7 @@ def parse_args(args):
 
 def main(args=None):
     args = parse_args(args)
+    logging.info(args)
 
     outdir = Path(f"{args.outdir}/{args.name}")
     outdir.mkdir(exist_ok=True, parents=True)
