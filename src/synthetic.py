@@ -283,9 +283,9 @@ class SyntheticPSF:
         ], axis=0)
 
         if plot is not None:
-            vmin, vmax, vcenter, step = 0, 6, 1, .1
+            vmin, vmax, vcenter, step = 0, 3, 1, .1
             highcmap = plt.get_cmap('YlOrRd', 256)
-            lowcmap = plt.get_cmap('YlGnBu_r', 256)
+            lowcmap = plt.get_cmap('terrain', 256)
             low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
             high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
             cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))

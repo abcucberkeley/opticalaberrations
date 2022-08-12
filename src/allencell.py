@@ -10,8 +10,6 @@ import numpy as np
 import cupy as cp
 from cupyx.scipy.signal import fftconvolve as cupyx_fftconvolve
 from scipy.signal import fftconvolve as scipy_fftconvolve
-from skimage.util import view_as_windows
-from skimage.restoration import richardson_lucy
 
 import quilt3 as q3
 from tifffile import imsave, imread
@@ -60,11 +58,10 @@ def parse_args(args):
     download = subparsers.add_parser("download")
     download.add_argument('--savedir', default='/media/supernova/data/allencell', type=Path)
 
-    decon = subparsers.add_parser("decon")
-    decon.add_argument('psf', type=Path)
+    decon = subparsers.add_parser("split")
     decon.add_argument('samples', type=Path)
     decon.add_argument('--label', type=str, default=None)
-    decon.add_argument('--savedir', default='../dataset/allencell/deconvolved', type=Path)
+    decon.add_argument('--savedir', default='../dataset/allencell/channels', type=Path)
 
     conv = subparsers.add_parser("conv")
     conv.add_argument('kernels', type=Path)
@@ -86,27 +83,18 @@ def download_data(savedir: Path):
     #         b.fetch(f['Key'], f"P{savedir}/{f['Key']}")
 
 
-def deconvolve(sample, psf, label, niters, save_path):
-    psf = imread(psf)
-    # logger.info(f"PSF: {psf.shape}")
-    data = imread(sample)[label]
-    # logger.info(f"Data: {data.shape}")
-    deconvolved = richardson_lucy(data, psf, niters)
-    # logger.info(f"Deconvolved: {deconvolved.shape}")
-    imsave(save_path/sample.name, deconvolved)
-
-
 def convolve(kernel, sample, sample_voxel_size, psf_shape, save_path, cuda=False):
     modelgen = SyntheticPSF(
         n_modes=60,
         lam_detection=.605,
-        dtype='confocal',
+        # dtype='confocal',
         psf_shape=psf_shape,
-        x_voxel_size=.29,
-        y_voxel_size=.29,
-        z_voxel_size=.29,
+        x_voxel_size=.15,
+        y_voxel_size=.15,
+        z_voxel_size=.6,
         snr=100,
         max_jitter=0,
+        na_detection=1.0,
     )
 
     ker = imread(kernel)
@@ -121,6 +109,7 @@ def convolve(kernel, sample, sample_voxel_size, psf_shape, save_path, cuda=False
 
     width = [(i // 2) for i in sample.shape]
     center = [(i // 2) + 1 for i in conv.shape]
+    # center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
     conv = conv[
            center[0] - width[0]:center[0] + width[0],
            center[1] - width[1]:center[1] + width[1],
@@ -168,10 +157,10 @@ def create_dataset(
     savedir: Path,
     kernels: Path,
     samples: Path,
-    sample_voxel_size: tuple = (.29, .29, .29),
+    sample_voxel_size: tuple = (.6, .15, .15),
     psf_shape: tuple = (64, 64, 64)
 ):
-    for s in samples.rglob('*.tiff'):
+    for s in samples.rglob('*.tif'):
         logger.info(s)
         savedir.mkdir(exist_ok=True, parents=True)
 
@@ -184,11 +173,14 @@ def create_dataset(
         )
 
 
-def decon_dataset(
+def split(sample, label, save_path):
+    data = imread(sample)[label]
+    imsave(save_path/f"{sample.stem}.tif", data)
+
+
+def split_channels(
     savedir: Path,
-    psf: Path,
     samples: Path,
-    niters: int = 1,
     label: Optional = None,
 ):
     if label is None:
@@ -199,8 +191,7 @@ def decon_dataset(
 
             utils.multiprocess(
                 partial(
-                    deconvolve,
-                    psf=psf,
+                    split,
                     label=k,
                     save_path=save_path,
                 ),
@@ -215,10 +206,8 @@ def decon_dataset(
 
         utils.multiprocess(
             partial(
-                deconvolve,
-                psf=psf,
+                split,
                 label=k,
-                niters=niters,
                 save_path=save_path,
             ),
             jobs=list(samples.rglob('*.tiff')),
@@ -236,8 +225,8 @@ def main(args=None):
     if args.dtype == 'conv':
         create_dataset(savedir=args.savedir, kernels=args.kernels, samples=args.samples)
 
-    elif args.dtype == 'decon':
-        decon_dataset(savedir=args.savedir, psf=args.psf, samples=args.samples, label=args.label)
+    elif args.dtype == 'split':
+        split_channels(savedir=args.savedir, samples=args.samples, label=args.label)
 
     elif args.dtype == 'download':
         download_data(savedir=args.savedir)
