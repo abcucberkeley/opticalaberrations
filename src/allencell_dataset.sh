@@ -6,11 +6,10 @@ ENV=~/anaconda3/envs/deep/bin/python
 OUTDIR='/clusterfs/nvme/thayer/allencell/aics/label-free-imaging-collection/dataset/'
 KERNELS='/clusterfs/nvme/thayer/allencell/aics/label-free-imaging-collection/kernels/'
 DATASET='/clusterfs/nvme/thayer/allencell/aics/label-free-imaging-collection/channels/golgi_apparatus'
-SAMPLES=$(find "${DATASET}" -type f -name "*.tif")
-echo $SAMPLES
 
-for S in SAMPLES
+for S in $(find "${DATASET}" -type f -name "*.tif")
 do
+    echo $S
     while [ $(squeue -u thayeralshaabi -h -t pending -r | wc -l) -gt 500 ]
     do
       sleep 10s
