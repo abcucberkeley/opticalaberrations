@@ -1,6 +1,7 @@
 import logging
 import sys
 import time
+import shutil
 import multiprocessing as mp
 
 from typing import Optional
@@ -68,6 +69,11 @@ def parse_args(args):
     conv.add_argument('samples', type=Path)
     conv.add_argument('--savedir', default='../dataset/allencell/convolved', type=Path)
 
+    dataset = subparsers.add_parser("dataset")
+    dataset.add_argument('--sample', type=Path)
+    dataset.add_argument('--kernels', type=Path)
+    dataset.add_argument('--savedir', type=Path)
+
     return parser.parse_args(args)
 
 
@@ -81,96 +87,6 @@ def download_data(savedir: Path):
     # for i in b.ls(collection):
     #     for f in tqdm(i):
     #         b.fetch(f['Key'], f"P{savedir}/{f['Key']}")
-
-
-def convolve(kernel, sample, sample_voxel_size, psf_shape, save_path, cuda=False):
-    modelgen = SyntheticPSF(
-        n_modes=60,
-        lam_detection=.605,
-        # dtype='confocal',
-        psf_shape=psf_shape,
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
-        snr=100,
-        max_jitter=0,
-        na_detection=1.0,
-    )
-
-    ker = imread(kernel)
-
-    if cuda:
-        conv = cupyx_fftconvolve(cp.array(sample), cp.array(ker), mode='full').get()
-    else:
-        ker = imread(kernel)
-        conv = scipy_fftconvolve(sample, ker, mode='full')
-
-    conv /= np.nanmax(conv)
-
-    width = [(i // 2) for i in sample.shape]
-    center = [(i // 2) + 1 for i in conv.shape]
-    # center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
-    conv = conv[
-           center[0] - width[0]:center[0] + width[0],
-           center[1] - width[1]:center[1] + width[1],
-           center[2] - width[2]:center[2] + width[2],
-           ]
-    save_path = f'{save_path}_{"_".join(kernel.parts[-4:])}'
-    imsave(save_path, conv)
-
-    conv = preprocessing.resize(
-        conv,
-        crop_shape=modelgen.psf_shape,
-        voxel_size=modelgen.voxel_size,
-        sample_voxel_size=sample_voxel_size,
-        debug=f'{save_path}_embeddings',
-    )
-
-    modelgen.embedding(psf=conv, plot=f'{save_path}_embeddings')
-
-
-def create_sample(
-    sample: Path,
-    kernels: Path,
-    savedir: Path,
-    sample_voxel_size: tuple,
-    psf_shape: tuple
-):
-    data = imread(sample)
-    logger.info(f"Sample: {data.shape}")
-
-    utils.multiprocess(
-        partial(
-            convolve,
-            sample=data,
-            psf_shape=psf_shape,
-            sample_voxel_size=sample_voxel_size,
-            save_path=savedir/sample.stem,
-            cuda=True
-        ),
-        jobs=list(kernels.rglob('*.tif')),
-        cores=-1
-    )
-
-
-def create_dataset(
-    savedir: Path,
-    kernels: Path,
-    samples: Path,
-    sample_voxel_size: tuple = (.6, .15, .15),
-    psf_shape: tuple = (64, 64, 64)
-):
-    for s in samples.rglob('*.tif'):
-        logger.info(s)
-        savedir.mkdir(exist_ok=True, parents=True)
-
-        create_sample(
-            sample=s,
-            kernels=kernels,
-            savedir=savedir,
-            sample_voxel_size=sample_voxel_size,
-            psf_shape=psf_shape
-        )
 
 
 def split(sample, label, save_path):
@@ -215,6 +131,91 @@ def split_channels(
         )
 
 
+def convolve(kernel, sample, sample_voxel_size, psf_shape, save_path, sample_name, cuda=False, embeddings=False):
+    modelgen = SyntheticPSF(
+        n_modes=60,
+        lam_detection=.605,
+        # dtype='confocal',
+        psf_shape=psf_shape,
+        x_voxel_size=.15,
+        y_voxel_size=.15,
+        z_voxel_size=.6,
+        snr=1000,
+        max_jitter=0,
+        na_detection=1.0,
+    )
+
+    ker = imread(kernel)
+
+    if cuda:
+        conv = cupyx_fftconvolve(cp.array(sample), cp.array(ker), mode='full').get()
+    else:
+        conv = scipy_fftconvolve(sample, ker, mode='full')
+
+    conv /= np.nanmax(conv)
+
+    width = [(i // 2) for i in sample.shape]
+    center = [(i // 2) + 1 for i in conv.shape]
+    # center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
+    conv = conv[
+           center[0] - width[0]:center[0] + width[0],
+           center[1] - width[1]:center[1] + width[1],
+           center[2] - width[2]:center[2] + width[2],
+           ]
+
+    conv = preprocessing.resize(
+        conv,
+        crop_shape=modelgen.psf_shape,
+        voxel_size=modelgen.voxel_size,
+        sample_voxel_size=sample_voxel_size,
+        debug=f'{save_path}_embeddings' if embeddings else None,
+    )
+
+    if embeddings:
+        modelgen.embedding(psf=conv, plot=f'{save_path}_embeddings')
+
+    save_path = Path(f'{save_path}/{"/".join(kernel.parts[-7:-1])}/{sample_name}/{kernel.name}')
+    save_path.parent.mkdir(exist_ok=True, parents=True)
+    shutil.copy(kernel.with_suffix(".json"), save_path.with_suffix(".json"))
+    imsave(save_path, conv)
+
+
+def create_sample(
+    sample: Path,
+    kernels: Path,
+    savedir: Path,
+    sample_voxel_size: tuple = (.6, .15, .15),
+    psf_shape: tuple = (64, 64, 64)
+):
+    data = imread(sample)
+    utils.multiprocess(
+        partial(
+            convolve,
+            sample=data,
+            psf_shape=psf_shape,
+            sample_voxel_size=sample_voxel_size,
+            save_path=savedir,
+            sample_name=sample.stem,
+            cuda=True
+        ),
+        jobs=list(kernels.rglob('*.tif')),
+        cores=-1
+    )
+
+
+def convolve_dataset(
+    savedir: Path,
+    kernels: Path,
+    samples: Path,
+):
+    for s in samples.rglob('*.tif'):
+        create_sample(
+            sample=s,
+            savedir=savedir,
+            kernels=kernels,
+        )
+
+
 def main(args=None):
     timeit = time.time()
     args = parse_args(args)
@@ -223,7 +224,10 @@ def main(args=None):
     mp.set_start_method('spawn', force=True)
 
     if args.dtype == 'conv':
-        create_dataset(savedir=args.savedir, kernels=args.kernels, samples=args.samples)
+        convolve_dataset(savedir=args.savedir, kernels=args.kernels, samples=args.samples)
+
+    elif args.dtype == 'dataset':
+        create_sample(sample=args.sample, kernels=args.kernels, savedir=args.savedir)
 
     elif args.dtype == 'split':
         split_channels(savedir=args.savedir, samples=args.samples, label=args.label)
