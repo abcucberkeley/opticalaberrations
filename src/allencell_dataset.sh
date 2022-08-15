@@ -33,10 +33,10 @@ do
         sleep 10s
       done
 
-      for S in $(find "${DATASET}" -type f -name "*.tif")
+      for IMG in $(find "${DATASET}" -type f -name "*.tif")
       do
         j="${ENV} allencell_dataset.py ${TYPE}"
-        j="${j} --sample ${S}"
+        j="${j} --sample ${IMG}"
         j="${j} --outdir ${OUTDIR}"
         j="${j} --filename ${SAMPLES[$S-1]}"
         j="${j} --bimodal"
