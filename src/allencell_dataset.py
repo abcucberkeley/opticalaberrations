@@ -7,6 +7,8 @@ from tifffile import imread, imsave
 import numpy as np
 from tqdm import trange
 from scipy.signal import fftconvolve as scipy_fftconvolve
+from skimage.filters import window, gaussian
+from scipy.ndimage.morphology import distance_transform_edt
 
 
 import cli
@@ -69,7 +71,9 @@ def create_synthetic_sample(
     refractive_index: float,
     na_detection: float,
     cpu_workers: int,
-    save_kernel: bool
+    save_kernel: bool,
+    debug: bool = True,
+    apodization_dist: int = 10,
 ):
     gen = SyntheticPSF(
         order='ansi',
@@ -117,7 +121,9 @@ def create_synthetic_sample(
 
     sample = imread(sample)
     conv = scipy_fftconvolve(sample, kernel, mode='full')
-    conv /= np.nanmax(conv)
+    conv /= np.nanpercentile(conv, 99.9)
+    conv[conv > 1] = 1
+    conv = np.nan_to_num(conv, nan=0)
 
     width = [(i // 2) for i in sample.shape]
     center = [(i // 2) + 1 for i in conv.shape]
@@ -125,18 +131,41 @@ def create_synthetic_sample(
        center[0] - width[0]:center[0] + width[0],
        center[1] - width[1]:center[1] + width[1],
        center[2] - width[2]:center[2] + width[2],
-   ]
+    ]
 
-    inputs = resize(
+    conv = resize(
         conv,
         crop_shape=gen.psf_shape,
         voxel_size=gen.voxel_size,
         sample_voxel_size=gen.voxel_size,
     )
 
+    circular_mask = window(('general_gaussian', apodization_dist/3, 2.5*apodization_dist), conv.shape)
+
+    # corner_mask = np.zeros_like(conv, dtype=int)
+    # corner_mask[1:-1, 1:-1, 1:-1] = 1.
+    # corner_mask = distance_transform_edt(corner_mask, return_distances=True)
+    # corner_mask = .5 - (.5 * np.cos((np.pi*corner_mask)/apodization_dist))
+    # corner_mask[
+    #     apodization_dist:conv.shape[0] - apodization_dist,
+    #     apodization_dist:conv.shape[1] - apodization_dist,
+    #     apodization_dist:conv.shape[2] - apodization_dist,
+    # ] = 1.
+    # # corner_mask = gaussian(corner_mask, sigma=2)
+    #
+    # import matplotlib.pyplot as plt
+    # fig, axes = plt.subplots(1, 2, figsize=(15, 5))
+    # axes[0].imshow(circular_mask[circular_mask.shape[0]//2, :, :], cmap='magma')
+    # axes[0].set_title('Circular mask')
+    # axes[1].imshow(corner_mask[corner_mask.shape[0]//2, :, :], cmap='magma')
+    # axes[1].set_title('Corner mask')
+    # plt.show()
+
+    inputs = conv * circular_mask
+
     if otf:
-        inputs = gen.embedding(psf=inputs)
-        kernel = gen.embedding(psf=kernel)
+        inputs = gen.embedding(psf=inputs, plot=f"{savepath}_embedding" if debug else None)
+        kernel = gen.embedding(psf=kernel, plot=f"{savepath}_kernel_embedding" if debug else None)
 
     save_synthetic_sample(
         savepath,

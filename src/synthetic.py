@@ -4,7 +4,8 @@ from typing import Any
 
 import numpy as np
 from pathlib import Path
-from skimage import transform, filters
+from skimage import transform
+from skimage.filters import gaussian
 from functools import partial
 import multiprocessing as mp
 from typing import Iterable
@@ -230,8 +231,8 @@ class SyntheticPSF:
         alpha = np.abs(otf)
 
         if gaussian_filter is not None:
-            alpha = filters.gaussian(alpha, gaussian_filter)
-            phi = filters.gaussian(phi, gaussian_filter)
+            alpha = gaussian(alpha, gaussian_filter)
+            phi = gaussian(phi, gaussian_filter)
 
         alpha /= np.nanpercentile(alpha, 99.9)
         alpha[alpha > 1] = 1
@@ -293,9 +294,9 @@ class SyntheticPSF:
 
             fig, axes = plt.subplots(3, 3)
 
-            m = axes[0, 0].imshow(psf[psf.shape[0] // 2, :, :], cmap='hot', vmin=0, vmax=1)
-            axes[0, 1].imshow(psf[:, psf.shape[1] // 2, :], cmap='hot', vmin=0, vmax=1)
-            axes[0, 2].imshow(psf[:, :, psf.shape[2] // 2].T, cmap='hot', vmin=0, vmax=1)
+            m = axes[0, 0].imshow(np.max(psf, axis=0), cmap='hot', vmin=0, vmax=1)
+            axes[0, 1].imshow(np.max(psf, axis=1), cmap='hot', vmin=0, vmax=1)
+            axes[0, 2].imshow(np.max(psf, axis=2).T, cmap='hot', vmin=0, vmax=1)
             cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
             cax.yaxis.set_label_position("right")

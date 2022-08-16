@@ -46,7 +46,7 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
 
     psfargs = dict(
         n_modes=60,
-        distribution='powerlaw',
+        distribution='dirichlet',
         bimodal=True,
         gamma=.75,
         lam_detection=wavelength,
@@ -72,8 +72,8 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
     # min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
     # max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
 
-    min_amps = np.arange(0, .1, .005).round(3)
-    max_amps = np.arange(.005, .105, .005).round(3)
+    min_amps = np.arange(0, .45, .05).round(3)
+    max_amps = np.arange(.05, .5, .05).round(3)
 
     for mina, maxa in zip(min_amps, max_amps):
         psfargs['amplitude_ranges'] = (mina, maxa)
