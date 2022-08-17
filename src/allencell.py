@@ -89,8 +89,16 @@ def download_data(savedir: Path):
     #         b.fetch(f['Key'], f"P{savedir}/{f['Key']}")
 
 
-def split(sample, label, save_path):
-    data = imread(sample)[label]
+def split(sample, label, save_path, axis=1):
+    if axis == 0:
+        data = imread(sample)[label]
+    elif axis == 1:
+        data = imread(sample)[:, label]
+    elif axis == 2:
+        data = imread(sample)[:, :, label]
+    else:
+        data = imread(sample)[:, :, :, label]
+
     imsave(save_path/f"{sample.stem}.tif", data)
 
 

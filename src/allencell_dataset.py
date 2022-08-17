@@ -7,10 +7,6 @@ from tifffile import imread, imsave
 import numpy as np
 from tqdm import trange
 from scipy.signal import fftconvolve as scipy_fftconvolve
-from skimage.filters import window, gaussian
-from scipy.ndimage.morphology import distance_transform_edt
-from numpy.lib.stride_tricks import sliding_window_view
-
 
 import cli
 from preprocessing import resize
@@ -52,11 +48,63 @@ def save_synthetic_sample(savepath, inputs, kernel, amps, snr, maxcounts, save_k
         )
 
 
+def convolve(
+    savepath: Path,
+    gen: SyntheticPSF,
+    sample: Path,
+    kernel: np.array,
+    amps: np.array,
+    snr: int,
+    maxcounts: int,
+    save_kernel: bool,
+    debug: bool,
+    strides: int,
+):
+    sample = imread(sample)
+    conv = scipy_fftconvolve(sample, kernel, mode='full')
+    conv /= np.nanpercentile(conv, 99.9)
+    conv[conv > 1] = 1
+    conv = np.nan_to_num(conv, nan=0)
+
+    width = [(i // 2) for i in sample.shape]
+    center = [(i // 2) + 1 for i in conv.shape]
+    conv = conv[
+       center[0] - width[0]:center[0] + width[0],
+       center[1] - width[1]:center[1] + width[1],
+       center[2] - width[2]:center[2] + width[2],
+    ]
+
+    conv = resize(
+        conv,
+        crop_shape=[conv.shape[i] if conv.shape[i] >= gen.psf_shape[i] else gen.psf_shape[i] for i in range(3)],
+        voxel_size=gen.voxel_size,
+        sample_voxel_size=gen.voxel_size,
+    )
+
+    kernel = gen.embedding(psf=kernel, plot=f"{savepath}_kernel_embedding" if debug else None)
+
+    average_emb = gen.rolling_average_embedding(
+        psf=conv,
+        strides=strides,
+        apodization=True,
+        plot=f"{savepath}_embedding" if debug else None
+    )
+
+    save_synthetic_sample(
+        savepath,
+        average_emb,
+        kernel=kernel,
+        amps=amps,
+        snr=snr,
+        maxcounts=maxcounts,
+        save_kernel=save_kernel
+    )
+
+
 def create_synthetic_sample(
     filename: str,
     sample: Path,
     outdir: Path,
-    otf: bool,
     input_shape: int,
     modes: int,
     psf_type: str,
@@ -74,7 +122,7 @@ def create_synthetic_sample(
     cpu_workers: int,
     save_kernel: bool,
     debug: bool = True,
-    apodization_dist: int = 10,
+    strides: int = 64,
 ):
     gen = SyntheticPSF(
         order='ansi',
@@ -96,96 +144,87 @@ def create_synthetic_sample(
         na_detection=na_detection,
     )
 
-    outdir = outdir / f"x{round(x_voxel_size*1000)}-y{round(y_voxel_size*1000)}-z{round(z_voxel_size*1000)}"
-    outdir = outdir / f"i{input_shape}"
+    if distribution == 'single':
+        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
+        outdir = outdir / f"i{input_shape}"
 
-    if distribution == 'powerlaw':
-        outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
+        if distribution == 'powerlaw':
+            outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
+        else:
+            outdir = outdir / f"{distribution}"
+
+        outdir = outdir / f"z{modes}"
+        outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
+        for i in range(5, 11):
+            savepath = outdir / f"m{i}"
+
+            phi = np.zeros(modes)
+            phi[i] = np.random.uniform(min_amplitude, max_amplitude)
+
+            kernel, amps, snr, zplanes, maxcounts = gen.single_psf(
+                phi=phi,
+                zplanes=0,
+                normed=True,
+                noise=False,
+                augmentation=True,
+                meta=True
+            )
+            savepath = savepath / sample.stem
+            savepath.mkdir(exist_ok=True, parents=True)
+            savepath = savepath / filename
+
+            convolve(
+                savepath=savepath,
+                gen=gen,
+                sample=sample,
+                kernel=kernel,
+                amps=amps,
+                snr=snr,
+                maxcounts=maxcounts,
+                save_kernel=save_kernel,
+                debug=debug,
+                strides=strides,
+            )
+
     else:
-        outdir = outdir / f"{distribution}"
+        kernel, amps, snr, zplanes, maxcounts = gen.single_psf(
+            phi=(min_amplitude, max_amplitude),
+            zplanes=0,
+            normed=True,
+            noise=False,
+            augmentation=True,
+            meta=True
+        )
 
-    savepath = outdir / f"z{modes}"
-    savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-                          f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
-    savepath = savepath / sample.stem
-    savepath.mkdir(exist_ok=True, parents=True)
-    savepath = savepath / filename
+        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
+        outdir = outdir / f"i{input_shape}"
 
-    kernel, amps, snr, zplanes, maxcounts = gen.single_psf(
-        phi=(min_amplitude, max_amplitude),
-        zplanes=0,
-        normed=True,
-        noise=False,
-        augmentation=True,
-        meta=True
-    )
+        if distribution == 'powerlaw':
+            outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
+        else:
+            outdir = outdir / f"{distribution}"
 
-    sample = imread(sample)
-    conv = scipy_fftconvolve(sample, kernel, mode='full')
-    conv /= np.nanpercentile(conv, 99.95)
-    conv[conv > 1] = 1
-    conv = np.nan_to_num(conv, nan=0)
+        savepath = outdir / f"z{modes}"
+        savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
-    width = [(i // 2) for i in sample.shape]
-    center = [(i // 2) + 1 for i in conv.shape]
-    conv = conv[
-       center[0] - width[0]:center[0] + width[0],
-       center[1] - width[1]:center[1] + width[1],
-       center[2] - width[2]:center[2] + width[2],
-    ]
+        savepath = savepath / sample.stem
+        savepath.mkdir(exist_ok=True, parents=True)
+        savepath = savepath / filename
 
-    conv = resize(
-        conv,
-        crop_shape=[conv.shape[i] if conv.shape[i] >= gen.psf_shape[i] else gen.psf_shape[i] for i in range(3)],
-        voxel_size=gen.voxel_size,
-        sample_voxel_size=gen.voxel_size,
-    )
-
-    windows = np.reshape(
-        sliding_window_view(conv, window_shape=gen.psf_shape)[  # steps with strides
-            ::gen.psf_shape[0]//2, ::gen.psf_shape[1]//2, ::gen.psf_shape[2]//2
-        ],
-        (-1, *gen.psf_shape)  # stack windows
-    )
-
-    for w in range(windows.shape[0]):
-        inputs = windows[w]
-        ker = kernel
-        circular_mask = window(('general_gaussian', apodization_dist/3, 2.5*apodization_dist), inputs.shape)
-
-        # corner_mask = np.zeros_like(inputs, dtype=int)
-        # corner_mask[1:-1, 1:-1, 1:-1] = 1.
-        # corner_mask = distance_transform_edt(corner_mask, return_distances=True)
-        # corner_mask = .5 - (.5 * np.cos((np.pi*corner_mask)/apodization_dist))
-        # corner_mask[
-        #     apodization_dist:inputs.shape[0] - apodization_dist,
-        #     apodization_dist:inputs.shape[1] - apodization_dist,
-        #     apodization_dist:inputs.shape[2] - apodization_dist,
-        # ] = 1.
-        # # corner_mask = gaussian(corner_mask, sigma=2)
-        #
-        # import matplotlib.pyplot as plt
-        # fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-        # axes[0].imshow(circular_mask[circular_mask.shape[0]//2, :, :], cmap='magma')
-        # axes[0].set_title('Circular mask')
-        # axes[1].imshow(corner_mask[corner_mask.shape[0]//2, :, :], cmap='magma')
-        # axes[1].set_title('Corner mask')
-        # plt.show()
-
-        inputs *= circular_mask
-
-        if otf:
-            inputs = gen.embedding(psf=inputs, plot=f"{savepath}_window_{w}_embedding" if debug else None)
-            ker = gen.embedding(psf=ker, plot=f"{savepath}_window_{w}_kernel_embedding" if debug else None)
-
-        save_synthetic_sample(
-            f"{savepath}_window_{w}",
-            inputs,
-            kernel=ker,
+        convolve(
+            savepath=savepath,
+            gen=gen,
+            sample=sample,
+            kernel=kernel,
             amps=amps,
             snr=snr,
             maxcounts=maxcounts,
-            save_kernel=save_kernel
+            save_kernel=save_kernel,
+            debug=debug,
+            strides=strides,
         )
 
 
@@ -195,11 +234,6 @@ def parse_args(args):
     parser.add_argument("--filename", type=str, default='psf')
     parser.add_argument("--sample", type=Path, default='sample.tif')
     parser.add_argument("--outdir", type=Path, default='../dataset')
-
-    parser.add_argument(
-        '--otf', action='store_true',
-        help='toggle to convert input to frequency space (OTF)'
-    )
 
     parser.add_argument(
         '--kernels', action='store_true',
@@ -299,7 +333,6 @@ def main(args=None):
             filename=f"{int(args.filename)+k}",
             sample=args.sample,
             outdir=args.outdir,
-            otf=args.otf,
             save_kernel=args.kernels,
             modes=args.modes,
             input_shape=args.input_shape,
@@ -318,8 +351,11 @@ def main(args=None):
             cpu_workers=args.cpu_workers,
         )
 
-    for i in trange(10):
-        sample(k=i)
+    if args.dist == 'single':
+        sample(k=0)
+    else:
+        for i in trange(10):
+            sample(k=i)
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

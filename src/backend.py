@@ -568,27 +568,10 @@ def bootstrap_predict(
         for k in range(0, len(arr), s):
             yield arr[k:k + s]
 
-    def average_embedding(psf):
-        psf = transform.rescale(
-            psf,
-            (
-                resize[0] / psfgen.voxel_size[0],
-                resize[1] / psfgen.voxel_size[1],
-                resize[2] / psfgen.voxel_size[2],
-            ),
-            order=3,
-            anti_aliasing=True,
-        )
-        windows = sliding_window_view(psf, window_shape=psfgen.psf_shape)
-        return np.mean(
-            [psfgen.embedding(psf=windows[w, w, w]) for w in range(windows.shape[0])],
-            axis=0
-        )
-
     if rolling_average_embedding:
         model_inputs = np.stack([
             np.expand_dims(
-                average_embedding(np.squeeze(i)),
+                psfgen.rolling_average_embedding(psf=np.squeeze(i), plot=plot, strides=16),
                 axis=-1
             ) for i in inputs
         ], axis=0)
