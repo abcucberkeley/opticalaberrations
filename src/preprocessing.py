@@ -1,7 +1,7 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def resize_with_crop_or_pad(psf: np.array, crop_shape: tuple, **kwargs):
+def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
     rank = len(crop_shape)
     index = [[0, psf.shape[d]] for d in range(rank)]
     pad = [[0, 0] for _ in range(rank)]
@@ -37,7 +37,7 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: tuple, **kwargs):
     return np.pad(psf[slicer], pad, **kwargs)
 
 
-def resize(vol, voxel_size: tuple, crop_shape: tuple, sample_voxel_size: tuple = (.1, .1, .1), debug: Any = None):
+def resize(vol, voxel_size: Sequence, crop_shape: Sequence, sample_voxel_size: Sequence = (.1, .1, .1), debug: Any = None):
     def plot(cls, img):
         if img.shape[0] == 6:
             vmin, vmax, vcenter, step = 0, 2, 1, .1

@@ -234,11 +234,11 @@ class SyntheticPSF:
             alpha = gaussian(alpha, gaussian_filter)
             phi = gaussian(phi, gaussian_filter)
 
-        alpha /= np.nanpercentile(alpha, 99.9)
+        alpha /= np.nanpercentile(alpha, 99.95)
         alpha[alpha > 1] = 1
         alpha = np.nan_to_num(alpha, nan=0)
 
-        phi /= np.nanpercentile(phi, 99.9)
+        phi /= np.nanpercentile(phi, 99.95)
         phi[phi > 1] = 1
         phi[phi < -1] = -1
         phi = np.nan_to_num(phi, nan=0)
