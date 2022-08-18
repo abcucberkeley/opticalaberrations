@@ -1371,7 +1371,7 @@ def evalsample(
     niter: int = 1,
     na: float = 1.0,
     reference_voxel_size: tuple = (.002, .002, .002),
-    embedding_average: bool = False
+    rolling_embedding: bool = False
 ):
 
     plt.rcParams.update({
@@ -1452,7 +1452,7 @@ def evalsample(
             np.expand_dims(conv[np.newaxis, :], axis=-1),
             psfgen=modelgen,
             resize=reference_voxel_size,
-            rolling_average_embedding=embedding_average,
+            rolling_embedding=rolling_embedding,
             batch_size=1,
             n_samples=1,
             desc=f'Iter[{k}]',

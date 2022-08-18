@@ -545,7 +545,7 @@ def bootstrap_predict(
     desc: str = 'MiniBatch-probabilistic-predictions',
     plot: Any = None,
     return_embeddings: bool = False,
-    rolling_average_embedding: bool = False,
+    rolling_embedding: bool = False,
 ):
     """
     Average predictions and compute stdev
@@ -568,10 +568,10 @@ def bootstrap_predict(
         for k in range(0, len(arr), s):
             yield arr[k:k + s]
 
-    if rolling_average_embedding:
+    if rolling_embedding:
         model_inputs = np.stack([
             np.expand_dims(
-                psfgen.rolling_average_embedding(psf=np.squeeze(i), plot=plot, strides=16),
+                psfgen.rolling_embedding(psf=np.squeeze(i), plot=plot, strides=16),
                 axis=-1
             ) for i in inputs
         ], axis=0)

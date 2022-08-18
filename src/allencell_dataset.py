@@ -7,6 +7,8 @@ from tifffile import imread, imsave
 import numpy as np
 from tqdm import trange
 from scipy.signal import fftconvolve as scipy_fftconvolve
+from skimage.morphology import disk
+from skimage.filters import threshold_otsu, rank
 
 import cli
 from preprocessing import resize
@@ -61,8 +63,12 @@ def convolve(
     strides: int,
 ):
     sample = imread(sample)
+    t = threshold_otsu(sample)
+    sample[sample <= t] = 0.
+    imsave(f"{savepath}_otsu.tif", sample)
+
     conv = scipy_fftconvolve(sample, kernel, mode='full')
-    conv /= np.nanpercentile(conv, 99.9)
+    conv /= np.nanpercentile(conv, 99.99)
     conv[conv > 1] = 1
     conv = np.nan_to_num(conv, nan=0)
 
@@ -80,19 +86,21 @@ def convolve(
         voxel_size=gen.voxel_size,
         sample_voxel_size=gen.voxel_size,
     )
+    imsave(f"{savepath}_conv.tif", conv)
 
-    kernel = gen.embedding(psf=kernel, plot=f"{savepath}_kernel_embedding" if debug else None)
+    kernel = gen.embedding(psf=kernel, log10=True, plot=f"{savepath}_kernel_embedding" if debug else None)
 
-    average_emb = gen.rolling_average_embedding(
+    emb = gen.rolling_embedding(
         psf=conv,
         strides=strides,
         apodization=True,
+        log10=True,
         plot=f"{savepath}_embedding" if debug else None
     )
 
     save_synthetic_sample(
         savepath,
-        average_emb,
+        emb,
         kernel=kernel,
         amps=amps,
         snr=snr,

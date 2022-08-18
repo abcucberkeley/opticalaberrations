@@ -237,11 +237,11 @@ class SyntheticPSF:
             alpha = gaussian(alpha, gaussian_filter)
             phi = gaussian(phi, gaussian_filter)
 
-        alpha /= np.nanpercentile(alpha, 99.9)
+        alpha /= np.nanpercentile(alpha, 99.99)
         alpha[alpha > 1] = 1
         alpha = np.nan_to_num(alpha, nan=0)
 
-        phi /= np.nanpercentile(phi, 99.9)
+        phi /= np.nanpercentile(phi, 99.99)
         phi[phi > 1] = 1
         phi[phi < -1] = -1
         phi = np.nan_to_num(phi, nan=0)
@@ -267,7 +267,7 @@ class SyntheticPSF:
         })
         # plt.style.use("dark_background")
 
-        vmin, vmax, vcenter, step = 0, 3, 1, .1
+        vmin, vmax, vcenter, step = -2, 2, 0, .1
         highcmap = plt.get_cmap('YlOrRd', 256)
         lowcmap = plt.get_cmap('terrain', 256)
         low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -315,7 +315,8 @@ class SyntheticPSF:
         na_mask: bool = True,
         ratio: bool = True,
         padsize: Any = None,
-        plot: Any = None
+        plot: Any = None,
+        log10: bool = False,
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
@@ -330,6 +331,10 @@ class SyntheticPSF:
             mask = self.na_mask()
             amp *= mask
             phase *= mask
+
+        if log10:
+            amp = np.log10(amp)
+            amp = np.nan_to_num(amp, nan=0)
 
         emb = np.stack([
             amp[amp.shape[0] // 2, :, :],
@@ -348,7 +353,7 @@ class SyntheticPSF:
         else:
             return emb
 
-    def rolling_average_embedding(
+    def rolling_embedding(
         self,
         psf: np.array,
         na_mask: bool = True,
@@ -356,7 +361,8 @@ class SyntheticPSF:
         ratio: bool = True,
         strides: int = 32,
         padsize: Any = None,
-        plot: Any = None
+        plot: Any = None,
+        log10: bool = False
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
@@ -369,6 +375,9 @@ class SyntheticPSF:
         embeddings = []
         for w in trange(windows.shape[0], desc='Sliding windows'):
             inputs = windows[w]
+            inputs /= np.nanpercentile(inputs, 99.99)
+            inputs[inputs > 1] = 1
+            inputs = np.nan_to_num(inputs, nan=0)
 
             if apodization:
                 circular_mask = window(('general_gaussian', 10 / 3, 2.5 * 10), inputs.shape)
@@ -399,11 +408,13 @@ class SyntheticPSF:
                     na_mask=na_mask,
                     ratio=ratio,
                     padsize=padsize,
+                    log10=log10,
                     plot=f"{plot}_window_{w}"
                 )
             )
 
-        emb = np.nanmean(embeddings, axis=0)
+        embeddings = np.array(embeddings)
+        emb = np.vstack([np.nanmax(embeddings[:, :3], axis=0), np.nanmean(embeddings[:, 3:], axis=0)])
 
         if plot is not None:
             self.plot_embeddings(psf=psf, emb=emb, save_path=plot)
@@ -484,6 +495,7 @@ class SyntheticPSF:
         na_mask: bool = False,
         ratio: bool = False,
         padsize: Any = None,
+        log10: bool = False,
         plot: bool = False,
         save_path: Path = Path.cwd()/'test',
     ):
@@ -504,7 +516,8 @@ class SyntheticPSF:
             psf,
             na_mask=na_mask,
             ratio=ratio,
-            padsize=padsize
+            padsize=padsize,
+            log10=log10
         )
 
         if plot:
