@@ -62,7 +62,7 @@ def convolve(
     strides: int,
     log10: bool = True,
     apodization: bool = True,
-    principle_planes: bool = False,
+    principle_planes: bool = True,
     rolling_embedding: bool = True,
     debug: bool = True,
 ):
