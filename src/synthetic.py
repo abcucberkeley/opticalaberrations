@@ -11,6 +11,7 @@ import multiprocessing as mp
 from typing import Iterable
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from tifffile import imsave
 from tqdm import trange
 from skimage.filters import window
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -267,7 +268,7 @@ class SyntheticPSF:
         })
         # plt.style.use("dark_background")
 
-        vmin, vmax, vcenter, step = -2, 2, 0, .1
+        vmin, vmax, vcenter, step = -2, .5, 0, .1
         highcmap = plt.get_cmap('YlOrRd', 256)
         lowcmap = plt.get_cmap('terrain', 256)
         low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -293,9 +294,9 @@ class SyntheticPSF:
         cax.yaxis.set_label_position("right")
         cax.set_ylabel(r'Embedding ($\alpha$)')
 
-        m = axes[2, 0].imshow(emb[3], cmap='coolwarm', vmin=-1, vmax=1)
-        axes[2, 1].imshow(emb[4], cmap='coolwarm', vmin=-1, vmax=1)
-        axes[2, 2].imshow(emb[5].T, cmap='coolwarm', vmin=-1, vmax=1)
+        m = axes[2, 0].imshow(emb[3], cmap='coolwarm', vmin=-.5, vmax=.5)
+        axes[2, 1].imshow(emb[4], cmap='coolwarm', vmin=-.5, vmax=.5)
+        axes[2, 2].imshow(emb[5].T, cmap='coolwarm', vmin=-.5, vmax=.5)
         cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
@@ -317,6 +318,7 @@ class SyntheticPSF:
         padsize: Any = None,
         plot: Any = None,
         log10: bool = False,
+        principle_planes: bool = True,
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
@@ -357,16 +359,21 @@ class SyntheticPSF:
 
         if log10:
             amp = np.log10(amp)
-            amp = np.nan_to_num(amp, nan=0)
+            amp = np.nan_to_num(amp, nan=0, posinf=0, neginf=0)
 
-        emb = np.stack([
-            amp[amp.shape[0] // 2, :, :],
-            amp[:, amp.shape[1] // 2, :],
-            amp[:, :, amp.shape[2] // 2],
-            phase[phase.shape[0] // 2, :, :],
-            phase[:, phase.shape[1] // 2, :],
-            phase[:, :, phase.shape[2] // 2],
-        ], axis=0)
+        if principle_planes:
+            emb = np.stack([
+                amp[amp.shape[0] // 2, :, :],
+                amp[:, amp.shape[1] // 2, :],
+                amp[:, :, amp.shape[2] // 2],
+                phase[phase.shape[0] // 2, :, :],
+                phase[:, phase.shape[1] // 2, :],
+                phase[:, :, phase.shape[2] // 2],
+            ], axis=0)
+        else:
+            emb = np.stack([amp, phase], axis=0)
+            imsave(f"{plot}_alpha.tif", amp)
+            imsave(f"{plot}_phi.tif", phase)
 
         if plot is not None:
             self.plot_embeddings(psf=psf, emb=emb, save_path=plot)
@@ -385,7 +392,8 @@ class SyntheticPSF:
         strides: int = 32,
         padsize: Any = None,
         plot: Any = None,
-        log10: bool = False
+        log10: bool = False,
+        principle_planes: bool = True,
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
@@ -432,12 +440,26 @@ class SyntheticPSF:
                     ratio=ratio,
                     padsize=padsize,
                     log10=log10,
+                    principle_planes=True,
                     plot=f"{plot}_window_{w}"
                 )
             )
 
-        embeddings = np.array(embeddings)
-        emb = np.vstack([np.nanmax(embeddings[:, :3], axis=0), np.nanmean(embeddings[:, 3:], axis=0)])
+        if principle_planes:
+            embeddings = np.array(embeddings)
+            emb = np.vstack([np.nanmax(embeddings[:, :3], axis=0), np.nanmean(embeddings[:, 3:], axis=0)])
+        else:
+            embeddings = np.array(embeddings)
+            alpha = np.nanmax(embeddings[:, 0], axis=0)
+            phi = embeddings[:, 1]
+            pos = phi >= 0
+            neg = phi < 0
+            phi_pos = np.nanmax(phi*pos, axis=0)
+            phi_neg = np.nanmin(phi*neg, axis=0)
+            emb = np.stack([alpha, phi_pos+phi_neg])
+
+            imsave(f"{plot}_alpha.tif", emb[0])
+            imsave(f"{plot}_phi.tif", emb[1])
 
         if plot is not None:
             self.plot_embeddings(psf=psf, emb=emb, save_path=plot)

@@ -90,9 +90,17 @@ def convolve(
 
     kernel = gen.embedding(psf=kernel, log10=True, plot=f"{savepath}_kernel_embedding" if debug else None)
 
-    emb = gen.embedding(
+    # emb = gen.embedding(
+    #     psf=conv,
+    #     log10=True,
+    #     plot=f"{savepath}_embedding" if debug else None
+    # )
+
+    emb = gen.rolling_embedding(
         psf=conv,
         log10=True,
+        apodization=True,
+        strides=strides,
         plot=f"{savepath}_embedding" if debug else None
     )
 
