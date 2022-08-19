@@ -4,7 +4,7 @@ HANDLER=slurm
 ENV=~/anaconda3/envs/deep/bin/python
 
 OUTDIR='/clusterfs/nvme/thayer/allencell/aics/label-free-imaging-collection/dataset/train/golgi_apparatus'
-DATASET='/clusterfs/nvme/thayer/allencell/aics/label-free-imaging-collection/channels/golgi_apparatus'
+DATASET='/clusterfs/nvme/thayer/allencell/aics/label-free-imaging-collection/channels/fovs/golgi_apparatus'
 
 SHAPE=64
 xVOXEL=.15
