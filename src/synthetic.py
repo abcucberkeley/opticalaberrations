@@ -375,7 +375,7 @@ class SyntheticPSF:
             imsave(f"{plot}_alpha.tif", amp)
             imsave(f"{plot}_phi.tif", phase)
 
-        if plot is not None:
+        if plot is not None and principle_planes:
             self.plot_embeddings(psf=psf, emb=emb, save_path=plot)
 
         if psf.ndim == 4:
@@ -393,7 +393,7 @@ class SyntheticPSF:
         padsize: Any = None,
         plot: Any = None,
         log10: bool = False,
-        principle_planes: bool = True,
+        principle_planes: bool = False,
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
@@ -440,7 +440,7 @@ class SyntheticPSF:
                     ratio=ratio,
                     padsize=padsize,
                     log10=log10,
-                    principle_planes=True,
+                    principle_planes=principle_planes,
                     plot=f"{plot}_window_{w}"
                 )
             )
@@ -452,16 +452,14 @@ class SyntheticPSF:
             embeddings = np.array(embeddings)
             alpha = np.nanmax(embeddings[:, 0], axis=0)
             phi = embeddings[:, 1]
-            pos = phi >= 0
-            neg = phi < 0
-            phi_pos = np.nanmax(phi*pos, axis=0)
-            phi_neg = np.nanmin(phi*neg, axis=0)
+            phi_pos = np.nanmax(phi*(phi >= 0), axis=0)
+            phi_neg = np.nanmin(phi*(phi < 0), axis=0)
             emb = np.stack([alpha, phi_pos+phi_neg])
 
             imsave(f"{plot}_alpha.tif", emb[0])
             imsave(f"{plot}_phi.tif", emb[1])
 
-        if plot is not None:
+        if plot is not None and principle_planes:
             self.plot_embeddings(psf=psf, emb=emb, save_path=plot)
 
         return emb

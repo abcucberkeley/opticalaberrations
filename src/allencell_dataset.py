@@ -59,14 +59,19 @@ def convolve(
     snr: int,
     maxcounts: int,
     save_kernel: bool,
-    debug: bool,
     strides: int,
+    log10: bool = True,
+    apodization: bool = True,
+    principle_planes: bool = False,
+    rolling_embedding: bool = True,
+    debug: bool = True,
 ):
+    # remove background
     sample = imread(sample)
     t = threshold_otsu(sample)
     sample[sample <= t] = 0.
-    imsave(f"{savepath}_otsu.tif", sample)
 
+    # convolve with a PSF
     conv = scipy_fftconvolve(sample, kernel, mode='full')
     conv /= np.nanpercentile(conv, 99.99)
     conv[conv > 1] = 1
@@ -86,23 +91,26 @@ def convolve(
         voxel_size=gen.voxel_size,
         sample_voxel_size=gen.voxel_size,
     )
-    imsave(f"{savepath}_conv.tif", conv)
+    # imsave(f"{savepath}_conv.tif", conv)
 
     kernel = gen.embedding(psf=kernel, log10=True, plot=f"{savepath}_kernel_embedding" if debug else None)
 
-    # emb = gen.embedding(
-    #     psf=conv,
-    #     log10=True,
-    #     plot=f"{savepath}_embedding" if debug else None
-    # )
-
-    emb = gen.rolling_embedding(
-        psf=conv,
-        log10=True,
-        apodization=True,
-        strides=strides,
-        plot=f"{savepath}_embedding" if debug else None
-    )
+    if rolling_embedding:
+        emb = gen.rolling_embedding(
+            psf=conv,
+            log10=log10,
+            apodization=apodization,
+            strides=strides,
+            principle_planes=principle_planes,
+            plot=f"{savepath}_embedding" if debug else None
+        )
+    else:
+        emb = gen.embedding(
+            psf=conv,
+            log10=log10,
+            principle_planes=principle_planes,
+            plot=f"{savepath}_embedding" if debug else None
+        )
 
     save_synthetic_sample(
         savepath,
@@ -135,8 +143,6 @@ def create_synthetic_sample(
     na_detection: float,
     cpu_workers: int,
     save_kernel: bool,
-    debug: bool = True,
-    strides: int = 64,
 ):
     gen = SyntheticPSF(
         order='ansi',
@@ -198,8 +204,7 @@ def create_synthetic_sample(
                 snr=snr,
                 maxcounts=maxcounts,
                 save_kernel=save_kernel,
-                debug=debug,
-                strides=strides,
+                strides=input_shape//2,
             )
 
     else:
@@ -237,8 +242,7 @@ def create_synthetic_sample(
             snr=snr,
             maxcounts=maxcounts,
             save_kernel=save_kernel,
-            debug=debug,
-            strides=strides,
+            strides=input_shape//2,
         )
 
 
