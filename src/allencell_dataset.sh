@@ -55,9 +55,7 @@ do
         task="/usr/bin/sbatch"
         task="${task} --qos=abc_normal"
 
-        if [ $(squeue -u thayeralshaabi -h -t pending -r -p dgx | wc -l) -lt 128 ];then
-            task="${task} --partition=dgx"
-        elif [ $(squeue -u thayeralshaabi -h -t pending -r -p abc_a100 | wc -l) -lt 64 ];then
+        if [ $(squeue -u thayeralshaabi -h -t pending -r -p abc_a100 | wc -l) -lt 64 ];then
             task="${task} --partition=abc_a100"
         else
             task="${task} --partition=abc"

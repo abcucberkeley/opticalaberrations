@@ -64,7 +64,7 @@ def convolve(
     apodization: bool = True,
     principle_planes: bool = True,
     rolling_embedding: bool = True,
-    debug: bool = True,
+    debug: bool = False,
 ):
     # remove background
     sample = imread(sample)
