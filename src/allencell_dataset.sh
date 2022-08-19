@@ -21,7 +21,7 @@ amps2=($(seq .05 .05 .5))
 SAMPLES=($(seq 1 10 10))
 
 
-for DIST in powerlaw dirichlet
+for DIST in single
 do
   for AMP in `seq 1 ${#amps1[@]}`
   do

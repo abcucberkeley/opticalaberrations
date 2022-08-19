@@ -177,7 +177,7 @@ def create_synthetic_sample(
         outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
                               f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
-        for i in range(5, 11):
+        for i in range(5, 16):
             savepath = outdir / f"m{i}"
 
             phi = np.zeros(modes)
