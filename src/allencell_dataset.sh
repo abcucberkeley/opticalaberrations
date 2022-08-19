@@ -16,7 +16,6 @@ LAMBDA=.605
 NA=1.0
 DTYPE='widefield'
 
-TYPE='--otf'
 amps1=($(seq 0 .05 .5))
 amps2=($(seq .05 .05 .5))
 SAMPLES=($(seq 1 10 10))
@@ -35,10 +34,11 @@ do
 
       for IMG in $(find "${DATASET}" -type f -name "*.tif")
       do
-        j="${ENV} allencell_dataset.py ${TYPE}"
+        j="${ENV} allencell_dataset.py"
         j="${j} --sample ${IMG}"
         j="${j} --outdir ${OUTDIR}"
         j="${j} --filename ${SAMPLES[$S-1]}"
+        j="${j} --kernels"
         j="${j} --bimodal"
         j="${j} --dist ${DIST}"
         j="${j} --gamma ${GAMMA}"
