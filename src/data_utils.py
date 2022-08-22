@@ -42,7 +42,7 @@ def get_sample(path):
 def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
     files = []
     for i, p in enumerate(Path(datadir).rglob('*.tif')):
-        if i < samplelimit:
+        if samplelimit is None or i < samplelimit:
             if 'kernel' in str(p):
                 continue
             else:
