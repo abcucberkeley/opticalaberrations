@@ -40,9 +40,15 @@ def get_sample(path):
 
 
 def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
-    files = [str(p) for p in Path(datadir).rglob('*.tif')]
-    if samplelimit:
-        files = files[:samplelimit]
+    files = []
+    for i, p in enumerate(Path(datadir).rglob('*.tif')):
+        if i < samplelimit:
+            if 'kernel' in str(p):
+                continue
+            else:
+                files.append(str(p))
+        else:
+            break
 
     dataset_size = len(files) * multiplier
     ds = tf.data.Dataset.from_tensor_slices(files)
