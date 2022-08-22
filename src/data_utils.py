@@ -55,7 +55,7 @@ def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
     ds = ds.repeat(multiplier)
 
     if split is not None:
-        val_size = int(dataset_size * split)
+        val_size = int(np.ceil(dataset_size * split))
         train = ds.skip(val_size)
         val = ds.take(val_size)
 
@@ -74,12 +74,13 @@ def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
 
 
 def collect_dataset(
-        datadir,
-        split=None,
-        multiplier=1,
-        distribution='/',
-        samplelimit=None,
-        max_amplitude=.25,
+    datadir,
+    split=None,
+    multiplier=1,
+    distribution='/',
+    samplelimit=None,
+    max_amplitude=1.,
+    subsample=False,
 ):
     train_data, val_data = None, None
     classes = [
@@ -87,14 +88,24 @@ def collect_dataset(
         if c.is_dir()
            and len(list(c.glob('*.tif'))) > 0
            and distribution in str(c)
-           and float(str(c.name.split('-')[-1].replace('p', '.'))) <= max_amplitude
+           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ]
 
     for c in classes:
         if split is not None:
-            t, v = load_dataset(c, multiplier=multiplier, split=split, samplelimit=samplelimit)
-            train_data = t if train_data is None else train_data.concatenate(t)
-            val_data = v if val_data is None else val_data.concatenate(v)
+            if subsample:
+                s = np.random.choice(['train', 'val'], p=[1 - split, split])
+                if s == 'train':
+                    t = load_dataset(c, multiplier=multiplier, samplelimit=samplelimit)
+                    train_data = t if train_data is None else train_data.concatenate(t)
+                else:
+                    v = load_dataset(c, multiplier=multiplier, samplelimit=samplelimit)
+                    val_data = v if val_data is None else val_data.concatenate(v)
+            else:
+                t, v = load_dataset(c, multiplier=multiplier, split=split, samplelimit=samplelimit)
+                train_data = t if train_data is None else train_data.concatenate(t)
+                val_data = v if val_data is None else val_data.concatenate(v)
+
         else:
             data = load_dataset(c, multiplier=multiplier, samplelimit=samplelimit)
             if 'train' in str(c):

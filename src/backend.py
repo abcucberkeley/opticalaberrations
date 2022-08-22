@@ -13,8 +13,6 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 from tqdm import trange, tqdm
 from tifffile import imsave
-from numpy.lib.stride_tricks import sliding_window_view
-from skimage import transform
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
@@ -66,39 +64,39 @@ def load(model_path: Path) -> Model:
     model_path = Path(model_path)
 
     try:
-        if 'opticaltransformer' in str(model_path):
-            custom_objects = {
-                "Stem": opticaltransformer.Stem,
-                "Patchify": opticaltransformer.Patchify,
-                "Merge": opticaltransformer.Merge,
-                "PatchEncoder": opticaltransformer.PatchEncoder,
-                "MLP": opticaltransformer.MLP,
-                "Transformer": opticaltransformer.Transformer,
-            }
-
-        else:
-            custom_objects = {
-                "Stem": Stem,
-                "MaskedActivation": MaskedActivation,
-                "SpatialAttention": SpatialAttention,
-                "DepthwiseConv3D": DepthwiseConv3D,
-                "CAB": opticalresnet.CAB,
-                "TB": opticalresnet.TB,
-            }
-
         try:
-            '''.h5/hdf5 format'''
-            if model_path.is_file() and model_path.suffix == '.h5':
-                return load_model(str(model_path), custom_objects=custom_objects)
-            else:
-                return load_model(str(list(model_path.rglob('*.h5'))[0]), custom_objects=custom_objects)
-
-        except FileNotFoundError:
             '''.pb format'''
             if model_path.is_file() and model_path.suffix == '.pb':
                 return load_model(str(model_path.parent))
             else:
                 return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
+
+        except FileNotFoundError or OSError:
+            if 'opticaltransformer' in str(model_path):
+                custom_objects = {
+                    "Stem": opticaltransformer.Stem,
+                    "Patchify": opticaltransformer.Patchify,
+                    "Merge": opticaltransformer.Merge,
+                    "PatchEncoder": opticaltransformer.PatchEncoder,
+                    "MLP": opticaltransformer.MLP,
+                    "Transformer": opticaltransformer.Transformer,
+                }
+
+            else:
+                custom_objects = {
+                    "Stem": Stem,
+                    "MaskedActivation": MaskedActivation,
+                    "SpatialAttention": SpatialAttention,
+                    "DepthwiseConv3D": DepthwiseConv3D,
+                    "CAB": opticalresnet.CAB,
+                    "TB": opticalresnet.TB,
+                }
+
+            '''.h5/hdf5 format'''
+            if model_path.is_file() and model_path.suffix == '.h5':
+                return load_model(str(model_path), custom_objects=custom_objects)
+            else:
+                return load_model(str(list(model_path.rglob('*.h5'))[0]), custom_objects=custom_objects)
 
     except Exception as e:
         logger.exception(e)
@@ -107,11 +105,12 @@ def load(model_path: Path) -> Model:
 
 def train(
         dataset: Path,
-        test_dataset: Path,
         outdir: Path,
         network: str,
         distribution: str,
         samplelimit: int,
+        split: float,
+        subsample: bool,
         max_amplitude: float,
         input_shape: int,
         batch_size: int,
@@ -288,8 +287,15 @@ def train(
             append=True,
         )
 
-        checkpoints = ModelCheckpoint(
+        pb_checkpoints = ModelCheckpoint(
             filepath=f"{outdir}",
+            monitor="val_loss",
+            save_best_only=True,
+            verbose=1,
+        )
+
+        h5_checkpoints = ModelCheckpoint(
+            filepath=f"{outdir}.h5",
             monitor="val_loss",
             save_best_only=True,
             verbose=1,
@@ -371,7 +377,8 @@ def train(
         else:
             train_data, val_data = data_utils.collect_dataset(
                 dataset,
-                split=.1,
+                split=split,
+                subsample=subsample,
                 distribution=distribution,
                 samplelimit=samplelimit,
                 max_amplitude=max_amplitude
@@ -521,7 +528,8 @@ def train(
                 callbacks=[
                     tblogger,
                     tensorboard,
-                    checkpoints,
+                    pb_checkpoints,
+                    h5_checkpoints,
                     earlystopping,
                     defibrillator,
                     features,
@@ -987,7 +995,7 @@ def featuremaps(
     })
 
     logger.info(f"Models: {modelpath}")
-    model = load(modelpath)
+    model = load(modelpath/'saved_model.pb')
 
     input_shape = model.layers[1].output_shape[1:-1]
     modes = model.layers[-1].output_shape[-1]

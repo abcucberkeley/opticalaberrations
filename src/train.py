@@ -27,10 +27,6 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--test_dataset", type=Path, help="path to TEST dataset directory"
-    )
-
-    train_parser.add_argument(
         "--outdir", default="../models", type=Path, help='path to save trained models'
     )
 
@@ -99,6 +95,15 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
+        "--split", default=.1, type=float, help='fraction of the dataset to be used for validation'
+    )
+
+    train_parser.add_argument(
+        '--subsample', action='store_true',
+        help='toggle to randomly subsample data for training and validation'
+    )
+
+    train_parser.add_argument(
         '--fixedlr', action='store_true',
         help='toggle to use a fixed learning rate'
     )
@@ -163,7 +168,6 @@ def main(args=None):
     backend.train(
         epochs=args.epochs,
         dataset=args.dataset,
-        test_dataset=args.test_dataset,
         outdir=args.outdir,
         network=args.network,
         input_shape=args.input_shape,
@@ -188,6 +192,8 @@ def main(args=None):
         max_amplitude=args.max_amplitude,
         distribution=args.dist,
         samplelimit=args.samplelimit,
+        split=args.split,
+        subsample=args.subsample,
         wavelength=args.wavelength,
         depth_scalar=args.depth_scalar,
         width_scalar=args.width_scalar,
