@@ -132,13 +132,13 @@ def main(args=None):
         sjob += f' --partition={args.partition} '
         sjob += f' --nodes={args.nodes} '
         sjob += f' --exclusive '
+        sjob += f' --ntasks-per-node=1 '
 
         if args.constraint is not None:
             sjob += f" -C '{args.constraint}' "
 
-        if args.gpus_per_node > 0:
+        if args.gpus > 0:
             sjob += f' --gres=gpu:{args.gpus} '
-            sjob += f' --ntasks-per-node=1 '
 
         sjob += f' --cpus-per-task={args.cpus} '
         sjob += f" --hint=nomultithread "
