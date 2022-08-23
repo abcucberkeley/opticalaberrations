@@ -109,8 +109,6 @@ def train(
         network: str,
         distribution: str,
         samplelimit: int,
-        split: float,
-        subsample: bool,
         max_amplitude: float,
         input_shape: int,
         batch_size: int,
@@ -289,20 +287,20 @@ def train(
 
         pb_checkpoints = ModelCheckpoint(
             filepath=f"{outdir}",
-            monitor="val_loss",
+            monitor="loss",
             save_best_only=True,
             verbose=1,
         )
 
         h5_checkpoints = ModelCheckpoint(
             filepath=f"{outdir}.h5",
-            monitor="val_loss",
+            monitor="loss",
             save_best_only=True,
             verbose=1,
         )
 
         earlystopping = EarlyStopping(
-            monitor='val_loss',
+            monitor='loss',
             min_delta=0,
             patience=50,
             verbose=1,
@@ -311,7 +309,7 @@ def train(
         )
 
         defibrillator = Defibrillator(
-            monitor='val_loss',
+            monitor='loss',
             patience=20,
             verbose=1,
         )
@@ -370,15 +368,12 @@ def train(
                 cpu_workers=cpu_workers
             )
 
-            train_data, val_data = data_utils.create_dataset(config)
+            train_data = data_utils.create_dataset(config)
             training_steps = steps_per_epoch
-            validation_steps = int(steps_per_epoch * .1)
 
         else:
-            train_data, val_data = data_utils.collect_dataset(
+            train_data = data_utils.collect_dataset(
                 dataset,
-                split=split,
-                subsample=subsample,
                 distribution=distribution,
                 samplelimit=samplelimit,
                 max_amplitude=max_amplitude
@@ -418,40 +413,6 @@ def train(
 
                     tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
 
-            sample_writer = tf.summary.create_file_writer(f'{outdir}/test_samples/')
-            with sample_writer.as_default():
-                for s in range(10):
-                    fig = None
-                    for i, (img, y) in enumerate(train_data.shuffle(1000).take(5)):
-                        img = np.squeeze(img, axis=-1)
-
-                        if fig is None:
-                            fig, axes = plt.subplots(5, img.shape[0], figsize=(8, 8))
-
-                        for k in range(img.shape[0]):
-                            if k > 2:
-                                mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=0, vmax=1)
-                            else:
-                                malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
-
-                            axes[i, k].axis('off')
-
-                        if img.shape[0] > 3:
-                            cax = inset_axes(axes[i, 0], width="10%", height="100%", loc='center left', borderpad=-3)
-                            cb = plt.colorbar(malpha, cax=cax)
-                            cax.yaxis.set_label_position("left")
-
-                            cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                            cb = plt.colorbar(mphi, cax=cax)
-                            cax.yaxis.set_label_position("right")
-
-                        else:
-                            cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                            cb = plt.colorbar(malpha, cax=cax)
-                            cax.yaxis.set_label_position("right")
-
-                    tf.summary.image("Evaluation samples", utils.plot_to_image(fig), step=s)
-
             def configure_for_performance(ds):
                 ds = ds.cache()
                 ds = ds.shuffle(batch_size)
@@ -460,15 +421,11 @@ def train(
                 return ds
 
             train_data = configure_for_performance(train_data)
-            val_data = configure_for_performance(val_data)
-
             training_steps = tf.data.experimental.cardinality(train_data).numpy()
-            validation_steps = tf.data.experimental.cardinality(val_data).numpy()
 
-        for img, y in val_data.shuffle(buffer_size=100).take(1):
+        for img, y in train_data.shuffle(buffer_size=100).take(1):
             logger.info(f"Batch size: {batch_size}")
             logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
-            logger.info(f"Validation steps: [{validation_steps}] {y.numpy().shape}")
 
             # from opticaltransformer import Patchify, Merge
             # original = np.squeeze(img[0, 1])
@@ -519,9 +476,7 @@ def train(
         try:
             model.fit(
                 train_data,
-                validation_data=val_data,
                 steps_per_epoch=training_steps,
-                validation_steps=validation_steps,
                 epochs=epochs,
                 verbose=2,
                 shuffle=True,

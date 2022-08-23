@@ -80,7 +80,6 @@ def collect_dataset(
     distribution='/',
     samplelimit=None,
     max_amplitude=1.,
-    subsample=False,
 ):
     train_data, val_data = None, None
     classes = [
@@ -93,40 +92,37 @@ def collect_dataset(
 
     for c in classes:
         if split is not None:
-            if subsample:
-                s = np.random.choice(['train', 'val'], p=[1 - split, split])
-                if s == 'train':
-                    t = load_dataset(c, multiplier=multiplier, samplelimit=samplelimit)
-                    train_data = t if train_data is None else train_data.concatenate(t)
-                else:
-                    v = load_dataset(c, multiplier=multiplier, samplelimit=samplelimit)
-                    val_data = v if val_data is None else val_data.concatenate(v)
-            else:
-                t, v = load_dataset(c, multiplier=multiplier, split=split, samplelimit=samplelimit)
-                train_data = t if train_data is None else train_data.concatenate(t)
-                val_data = v if val_data is None else val_data.concatenate(v)
-
+            t, v = load_dataset(c, multiplier=multiplier, split=split, samplelimit=samplelimit)
+            train_data = t if train_data is None else train_data.concatenate(t)
+            val_data = v if val_data is None else val_data.concatenate(v)
         else:
             data = load_dataset(c, multiplier=multiplier, samplelimit=samplelimit)
-            if 'train' in str(c):
-                train_data = data if train_data is None else train_data.concatenate(data)
-            else:
-                val_data = data if val_data is None else val_data.concatenate(data)
+            train_data = data if train_data is None else train_data.concatenate(data)
 
-    train = train_data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
-    val = val_data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
+    if split is None:
+        train = train_data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
+        for img, y in train.take(1):
+            logger.info(f"Input: {img.numpy().shape}")
+            logger.info(f"Output: {y.numpy().shape}")
 
-    for img, y in val.take(1):
-        logger.info(f"Input: {img.numpy().shape}")
-        logger.info(f"Output: {y.numpy().shape}")
+        logger.info(f"Training samples: {tf.data.experimental.cardinality(train).numpy()}")
+        return train
 
-    logger.info(f"Training samples: {tf.data.experimental.cardinality(train).numpy()}")
-    logger.info(f"Validation samples: {tf.data.experimental.cardinality(val).numpy()}")
+    else:
+        train = train_data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
+        val = val_data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
 
-    return train, val
+        for img, y in train.take(1):
+            logger.info(f"Input: {img.numpy().shape}")
+            logger.info(f"Output: {y.numpy().shape}")
+
+        logger.info(f"Training samples: {tf.data.experimental.cardinality(train).numpy()}")
+        logger.info(f"Validation samples: {tf.data.experimental.cardinality(val).numpy()}")
+
+        return train, val
 
 
-def create_dataset(config):
+def create_dataset(config, split=None):
     master = tf.data.Dataset.from_tensor_slices([f'generator{i}' for i in range(4)])
 
     train = master.interleave(
@@ -140,15 +136,19 @@ def create_dataset(config):
         num_parallel_calls=tf.data.AUTOTUNE,
     )
 
-    val = master.interleave(
-        lambda x: tf.data.Dataset.from_generator(
-            SyntheticPSF(**config).generator,
-            output_signature=(
-                tf.TensorSpec(shape=(None, *config['psf_shape']), dtype=tf.float32),
-                tf.TensorSpec(shape=(None, config['n_modes']), dtype=tf.float32)
-            )
-        ),
-        num_parallel_calls=tf.data.AUTOTUNE,
-    )
+    if split is not None:
+        val = master.interleave(
+            lambda x: tf.data.Dataset.from_generator(
+                SyntheticPSF(**config).generator,
+                output_signature=(
+                    tf.TensorSpec(shape=(None, *config['psf_shape']), dtype=tf.float32),
+                    tf.TensorSpec(shape=(None, config['n_modes']), dtype=tf.float32)
+                )
+            ),
+            num_parallel_calls=tf.data.AUTOTUNE,
+        )
+        return train, val
+    else:
+        return train
 
-    return train, val
+
