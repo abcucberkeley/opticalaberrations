@@ -9,6 +9,8 @@ echo "Env:             ${PYTHON}"
 echo "Script:          ${SCRIPT}"
 echo "#JOBS:           ${JOBS}"
 
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+
 $TASK_1 &
 $TASK_2 &
 $TASK_3 &

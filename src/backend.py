@@ -133,15 +133,17 @@ def train(
         max_psnr: int,
         epochs: int,
         mul: bool,
-        cpu_workers: int,
-        gpu_workers: typing.Any,
+        cluster: bool
 ):
-    if np.isscalar(gpu_workers):
-        gpus = None if gpu_workers == -1 or 1 else [f'/gpu:{i}' for i in range(gpu_workers)]
-    else:
-        gpus = [f'/gpu:{i}' for i in gpu_workers]
 
-    strategy = tf.distribute.MirroredStrategy(gpus)
+    if cluster:
+        strategy = tf.distribute.MultiWorkerMirroredStrategy(
+            cluster_resolver=tf.distribute.cluster_resolver.SlurmClusterResolver(port_base=12023),
+            communication_options=tf.distribute.experimental.CommunicationImplementation.NCCL
+        )
+    else:
+        strategy = tf.distribute.MirroredStrategy()
+
     gpu_workers = strategy.num_replicas_in_sync
     logger.info(f'Number of active GPUs: {gpu_workers}')
     network = network.lower()
@@ -322,7 +324,7 @@ def train(
                 x_voxel_size=x_voxel_size,
                 y_voxel_size=y_voxel_size,
                 z_voxel_size=z_voxel_size,
-                cpu_workers=cpu_workers,
+                cpu_workers=-1,
                 psnr=100,
             ) if epoch % 50 == 0 else epoch
         )
@@ -365,12 +367,11 @@ def train(
                 x_voxel_size=x_voxel_size,
                 y_voxel_size=y_voxel_size,
                 z_voxel_size=z_voxel_size,
-                cpu_workers=cpu_workers
+                cpu_workers=-1
             )
 
             train_data = data_utils.create_dataset(config)
             training_steps = steps_per_epoch
-
         else:
             train_data = data_utils.collect_dataset(
                 dataset,

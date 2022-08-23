@@ -12,29 +12,37 @@ MODES=60
 BATCH=512
 DATA='/clusterfs/nvme/thayer/allencell/aics/label-free-imaging-collection/dataset/train/golgi_apparatus/x150-y150-z600/'
 
-### Fourier-space models
-python manager.py slurm train.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
+
+python manager.py slurm train.py --partition abc_a100 --cluster --nodes 4 --gpus_per_node 4 --cpus-per-task 4 --mem-per-gpu '125GB' \
 --task "--network opticaltransformer --opt Adamw --patch_size '8-8-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname p8x4 \
 --task "--network opticaltransformer --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname p32-p16-p8x2 \
 --name new/allencell/transformers
 
-python manager.py slurm train.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
---task "--network widekernel --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
---taskname widekernel \
---task "--network opticalresnet --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
---taskname opticalresnet \
---name new/allencell/convs
+#### Fourier-space models
+#python manager.py slurm train.py --partition abc_a100 ---cluster -nodes 2 --gpus_per_node 4 --cpus-per-task 4 --mem-per-gpu '125GB' \
+#--task "--network opticaltransformer --opt Adamw --patch_size '8-8-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+#--taskname p8x4 \
+#--task "--network opticaltransformer --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+#--taskname p32-p16-p8x2 \
+#--name new/allencell/transformers
 
-#python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
+#python manager.py slurm train.py --partition abc_a100 --cluster --nodes 2 --gpus_per_node 4 --cpus-per-task 4 --mem-per-gpu '125GB' \
+#--task "--network widekernel --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+#--taskname widekernel \
+#--task "--network opticalresnet --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+#--taskname opticalresnet \
+#--name new/allencell/convs
+
+#python manager.py slurm train.py --partition dgx --gpus_per_node 8 --cpus-per-task 16 --mem-per-gpu '240GB' \
 #--task "--network opticaltransformer --opt Adamw --patch_size '32-16-8-4' --max_amplitude $MAXAMP --batch_size 256 --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 #--taskname p32-p16-p8-p4 \
 #--name new/embeddings/transformers
 
 
 #### Real-space models
-#python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
+#python manager.py slurm train.py --partition dgx --mem '2400GB' --gpus 8 --cpus 128 \
 #--task "--network phasenet --fixedlr --input_shape $SHAPE --batch_size 32 --dist uniform --max_amplitude .075 --modes $MODES --min_psnr $mSNR --max_psnr $xSNR --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL " \
 #--taskname "phasenet-uniform-p075" \
 #--task "--network phasenet --fixedlr --input_shape $SHAPE --batch_size 32 --dist uniform --max_amplitude .15 --modes $MODES --min_psnr $mSNR --max_psnr $xSNR --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL " \

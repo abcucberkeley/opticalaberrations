@@ -144,6 +144,11 @@ def parse_args(args):
         "--gpu_workers", default=1, type=int, help='number of GPUs to use'
     )
 
+    train_parser.add_argument(
+        '--cluster', action='store_true',
+        help='toggle for multi-node/multi-gpu training on a slurm-based cluster'
+    )
+
     return train_parser.parse_known_args(args)[0]
 
 
@@ -186,8 +191,7 @@ def main(args=None):
         wavelength=args.wavelength,
         depth_scalar=args.depth_scalar,
         width_scalar=args.width_scalar,
-        cpu_workers=args.cpu_workers,
-        gpu_workers=args.gpu_workers,
+        cluster=args.cluster,
     )
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
