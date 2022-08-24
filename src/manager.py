@@ -53,12 +53,22 @@ def parse_args(args):
 
     slurm.add_argument(
         "--gpus", default=1, type=int,
-        help='number of GPUs per node to use for this job'
+        help='number of GPUs to use for this job'
     )
 
     slurm.add_argument(
-        "--cpus", default=4, type=int,
-        help='number of CPUs per node to use for this job'
+        "--mem", default='500GB', type=str,
+        help='requested RAM to use for this job'
+    )
+
+    slurm.add_argument(
+        "--cpus", default=5, type=int,
+        help='number of CPUs to use for this job'
+    )
+
+    slurm.add_argument(
+        "--mem", default='160G', type=str,
+        help='requested RAM to use for this job'
     )
 
     slurm.add_argument(
@@ -125,7 +135,6 @@ def main(args=None):
         sjob = '/usr/bin/sbatch '
         sjob += f' --qos={args.qos} '
         sjob += f' --partition={args.partition} '
-        sjob += f' --exclusive '
 
         if args.constraint is not None:
             sjob += f" -C '{args.constraint}' "
@@ -134,6 +143,7 @@ def main(args=None):
             sjob += f' --gres=gpu:{args.gpus} '
 
         sjob += f' --cpus-per-task={args.cpus} '
+        sjob += f" --mem='{args.mem}' "
         sjob += f" --job-name={args.name} "
         sjob += f" --output={outdir}/{args.script.split('.')[0]}.log"
         sjob += f" --export=ALL,"
