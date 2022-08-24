@@ -157,6 +157,10 @@ def main(args=None):
     args = parse_args(args)
     logging.info(args)
 
+    physical_devices = tf.config.list_physical_devices('GPU')
+    for gpu_instance in physical_devices:
+        tf.config.experimental.set_memory_growth(gpu_instance, True)
+
     if args.multinode:
         strategy = tf.distribute.MultiWorkerMirroredStrategy(
             cluster_resolver=tf.distribute.cluster_resolver.SlurmClusterResolver(),
@@ -166,10 +170,6 @@ def main(args=None):
 
     gpu_workers = strategy.num_replicas_in_sync
     logging.info(f'Number of active GPUs: {gpu_workers}')
-
-    physical_devices = tf.config.list_physical_devices('GPU')
-    for gpu_instance in physical_devices:
-        tf.config.experimental.set_memory_growth(gpu_instance, True)
 
     with strategy.scope():
         backend.train(
