@@ -67,11 +67,6 @@ def parse_args(args):
     )
 
     slurm.add_argument(
-        "--mem", default='160G', type=str,
-        help='requested RAM to use for this job'
-    )
-
-    slurm.add_argument(
         "--name", default='train', type=str,
         help='allies name for this job'
     )

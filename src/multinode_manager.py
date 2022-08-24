@@ -97,7 +97,6 @@ def main(args=None):
     if args.gpus > 0:
         sjob += f' --gres=gpu:{args.gpus} '
 
-    sjob += f" --mem='{args.mem}' "
     sjob += f' --cpus-per-task={args.cpus} '
     sjob += f" --job-name={args.name} "
     sjob += f" --output={outdir}/{args.script.split('.')[0]}.log"
