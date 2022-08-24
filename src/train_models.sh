@@ -15,18 +15,14 @@ DATA='/clusterfs/nvme/thayer/allencell/aics/label-free-imaging-collection/datase
 
 #### Fourier-space models
 python multinode_manager.py train.py --partition abc_a100 --nodes 4 --gpus 4 --cpus 16 \
---task "--network opticaltransformer --opt Adamw --patch_size '8-8-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
---taskname p8x4 \
---task "--network opticaltransformer --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--task "--network opticaltransformer --multinode --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname p32-p16-p8x2 \
---name new/allencell/transformers
+--name new/allencell/opticaltransformer
 
 # python multinode_manager.py train.py --partition abc_a100 --nodes 4 --gpus 4 --cpus 16 \
-#--task "--network widekernel --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
-#--taskname widekernel \
-#--task "--network opticalresnet --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
-#--taskname opticalresnet \
-#--name new/allencell/convs
+#--task "--network opticalresnet --multinode --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+#--taskname multikernel \
+#--name new/allencell/opticalresnet
 
 
 #### Real-space models
