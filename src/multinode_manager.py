@@ -50,6 +50,11 @@ def parse_args(args):
     )
 
     slurm.add_argument(
+        "--mem", default='500GB', type=str,
+        help='requested RAM to use for this job'
+    )
+
+    slurm.add_argument(
         "--gpus", default=1, type=int,
         help='number of GPUs per node to use for this job'
     )
@@ -97,6 +102,7 @@ def main(args=None):
     if args.gpus > 0:
         sjob += f' --gres=gpu:{args.gpus} '
 
+    sjob += f" --mem='{args.mem}' "
     sjob += f' --cpus-per-task={args.cpus} '
     sjob += f" --job-name={args.name} "
     sjob += f" --output={outdir}/{args.script.split('.')[0]}.log"
