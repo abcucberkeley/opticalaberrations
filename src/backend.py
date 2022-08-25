@@ -1,6 +1,6 @@
 import logging
 import sys
-import typing
+import numexpr
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
@@ -58,6 +58,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
+numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
 
 def load(model_path: Path) -> Model:
@@ -379,9 +380,9 @@ def train(
 
                     for k in range(img.shape[0]):
                         if k > 2:
-                            mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=0, vmax=1)
+                            mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=-.5, vmax=.5)
                         else:
-                            malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
+                            malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=-2, vmax=2)
 
                         axes[i, k].axis('off')
 
@@ -475,7 +476,7 @@ def train(
                 h5_checkpoints,
                 earlystopping,
                 defibrillator,
-                features,
+                #features,
                 lrscheduler,
             ],
         )

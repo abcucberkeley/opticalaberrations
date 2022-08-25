@@ -7,8 +7,7 @@ from tifffile import imread, imsave
 import numpy as np
 from tqdm import trange
 from scipy.signal import fftconvolve as scipy_fftconvolve
-from skimage.morphology import disk
-from skimage.filters import threshold_otsu, rank
+from skimage.filters import threshold_otsu
 
 import cli
 from preprocessing import resize
@@ -249,9 +248,13 @@ def create_synthetic_sample(
 def parse_args(args):
     parser = cli.argparser()
 
-    parser.add_argument("--filename", type=str, default='psf')
     parser.add_argument("--sample", type=Path, default='sample.tif')
     parser.add_argument("--outdir", type=Path, default='../dataset')
+
+    parser.add_argument(
+        "--iters", default=10, type=int,
+        help='number of samples'
+    )
 
     parser.add_argument(
         '--kernels', action='store_true',
@@ -348,7 +351,7 @@ def main(args=None):
 
     def sample(k):
         return create_synthetic_sample(
-            filename=f"{int(args.filename)+k}",
+            filename=f"{k}",
             sample=args.sample,
             outdir=args.outdir,
             save_kernel=args.kernels,
@@ -369,11 +372,8 @@ def main(args=None):
             cpu_workers=args.cpu_workers,
         )
 
-    if args.dist == 'single':
-        sample(k=0)
-    else:
-        for i in trange(10):
-            sample(k=i)
+    for i in trange(1, args.iters+1):
+        sample(k=i)
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
