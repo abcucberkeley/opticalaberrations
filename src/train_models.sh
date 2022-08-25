@@ -9,7 +9,7 @@ mSNR=1
 xSNR=100
 SHAPE=64
 MODES=60
-BATCH=512
+BATCH=1024
 DATA='/clusterfs/nvme/thayer/allencell/aics/label-free-imaging-collection/dataset/train/golgi_apparatus/x150-y150-z600/'
 
 
