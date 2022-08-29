@@ -97,10 +97,7 @@ def collect_dataset(
             val_data = v if val_data is None else val_data.concatenate(v)
 
         train = train_data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
-        train = train.apply(tf.data.experimental.ignore_errors())
-
         val = val_data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
-        val = val.apply(tf.data.experimental.ignore_errors())
 
         for img, y in train.take(1):
             logger.info(f"Input: {img.numpy().shape}")
@@ -114,7 +111,6 @@ def collect_dataset(
     else:
         data = load_dataset(datadir, multiplier=multiplier, samplelimit=samplelimit)
         data = data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
-        data = data.apply(tf.data.experimental.ignore_errors())
 
         for img, y in data.take(1):
             logger.info(f"Input: {img.numpy().shape}")
