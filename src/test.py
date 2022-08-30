@@ -1,3 +1,6 @@
+import numexpr
+numexpr.set_num_threads(numexpr.detect_number_of_cores())
+
 import logging
 import sys
 import time

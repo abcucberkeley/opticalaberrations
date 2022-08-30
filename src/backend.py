@@ -1,6 +1,8 @@
+import numexpr
+numexpr.set_num_threads(numexpr.detect_number_of_cores())
+
 import logging
 import sys
-import numexpr
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
@@ -58,7 +60,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
-numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
 
 def load(model_path: Path) -> Model:
