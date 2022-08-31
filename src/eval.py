@@ -909,7 +909,9 @@ def eval_bin(datapath, modelpath, samplelimit, na):
         y_pred = y_pred.append(p, ignore_index=True)
 
         y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys.numpy()], columns=['sample'])
-        y['snr'] = int(np.mean(list(map(int, datapath.parent.stem.lstrip('psnr_').split('-')))))
+        y['snr'] = int(np.mean(list(
+            map(int, str([s for s in datapath.parts if s.startswith('psnr_')][0]).lstrip('psnr_').split('-'))
+        )))
         y_true = y_true.append(y, ignore_index=True)
 
     return (y_pred, y_true)
