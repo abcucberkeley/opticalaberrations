@@ -945,7 +945,7 @@ def evalheatmap(
         if c.is_dir()
            and len(list(c.glob('*.tif'))) > 0
            and distribution in str(c)
-           and float(str(c.name.split('-')[-1].replace('p', '.'))) <= max_amplitude
+           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
 
     job = partial(eval_bin, modelpath=modelpath, samplelimit=samplelimit, na=na)
@@ -1215,9 +1215,9 @@ def iterheatmap(
     na: float = 1.0,
 ):
     if reference is None:
-        savepath = modelpath / 'iterheatmap'
+        savepath = modelpath / 'iterheatmaps'
     else:
-        savepath = modelpath / f'{reference.stem}_iterheatmap'
+        savepath = modelpath / f'{reference.stem}_iterheatmaps'
 
     savepath.mkdir(parents=True, exist_ok=True)
     if distribution != '/':
@@ -1241,7 +1241,7 @@ def iterheatmap(
            and len(list(c.glob('*.tif'))) > 0
            and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
            and distribution in str(c)
-           and float(str(c.name.split('-')[-1].replace('p', '.'))) <= max_amplitude
+           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
 
     if reference is None:

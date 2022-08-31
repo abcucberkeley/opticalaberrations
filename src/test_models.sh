@@ -5,13 +5,13 @@ yVOXEL=.15
 zVOXEL=.6
 SHAPE=64
 MAXAMP=1.
-DATA='/clusterfs/nvme/thayer/dataset/embeddings/test/x150-y150-z600/'
+#DATA='/clusterfs/nvme/thayer/dataset/embeddings/test/x150-y150-z600/'
+DATA='/clusterfs/nvme/thayer/dataset/multipoints/test/x150-y150-z600/'
 
 declare -a models=(
-'../models/new/embeddings/transformers/p32-p16-p8x2/'
-'../models/new/embeddings/convs/mul/widekernel'
-#'../models/phasenets/uniform-p15'
-#'../models/phasenets/uniform-p075'
+'../models/new/multipoints/opticaltransformer'
+#'../models/new/embeddings/transformers/p32-p16-p8x2/'
+#'../models/new/embeddings/convs/mul/widekernel'
 )
 
 for MODEL in "${models[@]}"
