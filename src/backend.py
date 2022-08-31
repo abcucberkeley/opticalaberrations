@@ -73,7 +73,7 @@ def load(model_path: Path) -> Model:
             else:
                 return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
 
-        except FileNotFoundError or OSError:
+        except IndexError or FileNotFoundError or OSError:
             if 'opticaltransformer' in str(model_path):
                 custom_objects = {
                     "Stem": opticaltransformer.Stem,
@@ -383,7 +383,7 @@ def train(
                         if k > 2:
                             mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=-.5, vmax=.5)
                         else:
-                            malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=-2, vmax=2)
+                            malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
 
                         axes[i, k].axis('off')
 

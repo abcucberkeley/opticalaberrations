@@ -268,7 +268,7 @@ class SyntheticPSF:
         })
         # plt.style.use("dark_background")
 
-        vmin, vmax, vcenter, step = -2, .5, 0, .1
+        vmin, vmax, vcenter, step = 0, 2, 1, .1
         highcmap = plt.get_cmap('YlOrRd', 256)
         lowcmap = plt.get_cmap('terrain', 256)
         low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))

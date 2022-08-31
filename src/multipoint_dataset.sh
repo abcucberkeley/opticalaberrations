@@ -3,7 +3,7 @@
 HANDLER=slurm
 ENV=~/anaconda3/envs/deep/bin/python
 
-OUTDIR='/clusterfs/nvme/thayer/dataset/multipoints'
+OUTDIR='/clusterfs/nvme/thayer/dataset/multipoints_bigger'
 
 SHAPE=64
 xVOXEL=.15
@@ -28,8 +28,7 @@ amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]:0:${#e
 amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
 mPSNR=($(seq 1 20 81))
 xPSNR=($(seq 20 20 100))
-SAMPLES=($(seq 1 100 200))
-ITERS=100
+SAMPLES=($(seq 1 100 1000))
 
 #TYPE=''
 #OUTDIR="${OUTDIR}/test"
@@ -60,7 +59,7 @@ do
         j="${j} --noise"
         j="${j} --gamma ${GAMMA}"
         j="${j} --outdir ${OUTDIR}"
-        j="${j} --iters ${ITERS}"
+        j="${j} --iters 100"
         j="${j} --npoints ${N}"
         j="${j} --filename ${SAMPLES[$S-1]}"
         j="${j} --modes ${MODES}"

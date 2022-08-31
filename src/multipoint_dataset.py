@@ -98,7 +98,7 @@ def sim(
         noisy_img = img
 
     if emb:
-        noisy_img = gen.embedding(psf=noisy_img, principle_planes=True)
+        noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
 
     save_synthetic_sample(
         savepath,
@@ -382,7 +382,7 @@ def main(args=None):
             cpu_workers=args.cpu_workers,
         )
 
-    for i in trange(1, args.iters+1):
+    for i in trange(args.iters):
         sample(k=i)
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
