@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 import tensorflow as tf
 
+
 import cli
 import eval
 
@@ -89,6 +90,7 @@ def parse_args(args):
 def main(args=None):
     timeit = time.time()
     args = parse_args(args)
+    logging.info(args)
 
     physical_devices = tf.config.list_physical_devices('GPU')
     for gpu_instance in physical_devices:

@@ -3,7 +3,7 @@
 HANDLER=slurm
 ENV=~/anaconda3/envs/deep/bin/python
 
-OUTDIR='/clusterfs/nvme/thayer/dataset/embeddings'
+OUTDIR='/clusterfs/nvme/thayer/dataset/multipoints_bigger'
 
 SHAPE=64
 xVOXEL=.15
@@ -15,7 +15,7 @@ LAMBDA=.605
 NA=1.0
 DTYPE='widefield'
 
-TYPE='--otf'
+TYPE='--emb'
 OUTDIR="${OUTDIR}/train"
 difractionlimit=($(seq 0 .01 .05))
 small=($(seq .055 .005 .1))
@@ -44,19 +44,23 @@ do
   do
     for AMP in `seq 1 ${#amps1[@]}`
     do
-      for S in `seq 1 ${#SAMPLES[@]}`
+      for N in 1 2 3 4 5
       do
+        for S in `seq 1 ${#SAMPLES[@]}`
+        do
         while [ $(squeue -u thayeralshaabi -h -t pending -r | wc -l) -gt 500 ]
         do
           sleep 10s
         done
 
-        j="${ENV} dataset.py ${TYPE}"
+        j="${ENV} multipoint_dataset.py ${TYPE}"
         j="${j} --dist ${DIST}"
         j="${j} --bimodal"
         j="${j} --noise"
         j="${j} --gamma ${GAMMA}"
         j="${j} --outdir ${OUTDIR}"
+        j="${j} --iters 100"
+        j="${j} --npoints ${N}"
         j="${j} --filename ${SAMPLES[$S-1]}"
         j="${j} --modes ${MODES}"
         j="${j} --input_shape ${SHAPE}"
@@ -72,15 +76,7 @@ do
 
         task="/usr/bin/sbatch"
         task="${task} --qos=abc_normal"
-
-        if [ $(squeue -u thayeralshaabi -h -t pending -r -p dgx | wc -l) -lt 128 ];then
-            task="${task} --partition=dgx"
-        elif [ $(squeue -u thayeralshaabi -h -t pending -r -p abc_a100 | wc -l) -lt 64 ];then
-            task="${task} --partition=abc_a100"
-        else
-            task="${task} --partition=abc"
-        fi
-
+        task="${task} --partition=abc"
         task="${task} --cpus-per-task=1"
         task="${task} --mem=15G"
         task="${task} --job-name=psnr#${SNR}-amp#${AMP}-iter#${S}"
@@ -93,6 +89,7 @@ do
         echo "A100: R[$(squeue -u thayeralshaabi -h -t running -r -p abc_a100 | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p abc_a100 | wc -l)]"
         echo "ABC : R[$(squeue -u thayeralshaabi -h -t running -r -p abc | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p abc | wc -l)]"
 
+      done
       done
     done
   done

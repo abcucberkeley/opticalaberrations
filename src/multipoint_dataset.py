@@ -1,3 +1,6 @@
+import numexpr
+numexpr.set_num_threads(numexpr.detect_number_of_cores())
+
 import logging
 import sys
 import time
@@ -7,8 +10,8 @@ from tifffile import imread, imsave
 import numpy as np
 from tqdm import trange
 
-
 import cli
+from preprocessing import resize_with_crop_or_pad
 from utils import peak_aberration
 from synthetic import SyntheticPSF
 
@@ -22,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
 
+    logger.info(f"Saved: {savepath}")
     imsave(f"{savepath}.tif", inputs)
-    # logger.info(f"Saved: {savepath}.tif")
 
     with Path(f"{savepath}.json").open('w') as f:
         json = dict(
@@ -44,15 +47,72 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
             escape_forward_slashes=False
         )
 
-    # logger.info(f"Saved: {savepath}.json")
+
+def sim(
+    savepath: Path,
+    gen: SyntheticPSF,
+    npoints: int,
+    kernel: np.array,
+    amps: np.array,
+    snr: tuple,
+    emb: bool = True,
+    noise: bool = True,
+    radius: float = .45
+):
+    img = np.zeros([3*s for s in kernel.shape])
+    width = [(i // 2) for i in kernel.shape]
+    center = kernel.shape
+
+    for i in range(npoints):
+        p = [
+            np.random.randint(int(kernel.shape[0]*(.5 - radius)), int(kernel.shape[0]*(.5 + radius))),
+            np.random.randint(int(kernel.shape[1]*(.5 - radius)), int(kernel.shape[1]*(.5 + radius))),
+            np.random.randint(int(kernel.shape[2]*(.5 - radius)), int(kernel.shape[2]*(.5 + radius)))
+        ]
+
+        img[
+            (p[0]+center[0])-width[0]:(p[0]+center[0])+width[0],
+            (p[1]+center[1])-width[1]:(p[1]+center[1])+width[1],
+            (p[2]+center[2])-width[2]:(p[2]+center[2])+width[2],
+        ] += kernel
+
+    img = resize_with_crop_or_pad(img, crop_shape=kernel.shape)
+
+    if noise:
+        snr = gen._randuniform(snr)
+        img *= snr * gen.mean_background_noise
+
+        rand_noise = gen._random_noise(
+            image=img,
+            mean=gen.mean_background_noise,
+            sigma=gen.sigma_background_noise
+        )
+        noisy_img = rand_noise + img
+
+        psnr = (np.max(img) / np.mean(rand_noise))
+        maxcounts = np.max(noisy_img)
+        noisy_img /= np.max(noisy_img)
+    else:
+        psnr = np.mean(np.array(snr))
+        maxcounts = np.max(img)
+        noisy_img = img
+
+    if emb:
+        noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
+
+    save_synthetic_sample(
+        savepath,
+        noisy_img,
+        amps=amps,
+        snr=psnr,
+        maxcounts=maxcounts,
+    )
 
 
 def create_synthetic_sample(
     filename: str,
+    npoints: int,
     outdir: Path,
-    otf: bool,
-    noise: bool,
-    max_jitter: float,
     input_shape: int,
     modes: int,
     psf_type: str,
@@ -70,13 +130,14 @@ def create_synthetic_sample(
     refractive_index: float,
     na_detection: float,
     cpu_workers: int,
+    noise: bool,
+    emb: bool,
 ):
     gen = SyntheticPSF(
         order='ansi',
         cpu_workers=cpu_workers,
         n_modes=modes,
-        max_jitter=max_jitter,
-        snr=(min_psnr, max_psnr),
+        snr=1000,
         dtype=psf_type,
         distribution=distribution,
         gamma=gamma,
@@ -91,91 +152,110 @@ def create_synthetic_sample(
         na_detection=na_detection,
     )
 
-    outdir = outdir / f"x{round(x_voxel_size*1000)}-y{round(y_voxel_size*1000)}-z{round(z_voxel_size*1000)}"
-    outdir = outdir / f"i{input_shape}"
-
-    if distribution == 'powerlaw':
-        outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
-    else:
-        outdir = outdir / f"{distribution}"
-
     if distribution == 'single':
+        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
+        outdir = outdir / f"i{input_shape}"
+
+        if distribution == 'powerlaw':
+            outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
+        else:
+            outdir = outdir / f"{distribution}"
+
+        outdir = outdir / f"z{modes}"
+        outdir = outdir / f"psnr_{min_psnr}-{max_psnr}"
+        outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+            f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
         for i in range(5, modes):
             savepath = outdir / f"m{i}"
-            savepath = savepath / f"psnr_{min_psnr}-{max_psnr}"
-            savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-                                  f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
-            savepath.mkdir(exist_ok=True, parents=True)
-            savepath = savepath / filename
 
             phi = np.zeros(modes)
             phi[i] = np.random.uniform(min_amplitude, max_amplitude)
 
-            if otf:
-                inputs, amps, snr, zplanes, maxcounts = gen.single_otf(
-                    phi=phi,
-                    zplanes=0,
-                    normed=True,
-                    noise=noise,
-                    augmentation=noise,
-                    meta=True,
-                    na_mask=True,
-                    ratio=True,
-                    padsize=None
-                )
-            else:
-                inputs, amps, snr, zplanes, maxcounts = gen.single_psf(
-                    phi=phi,
-                    zplanes=0,
-                    normed=True,
-                    noise=noise,
-                    augmentation=noise,
-                    meta=True
-                )
+            # theoretical kernel without noise
+            kernel = gen.single_psf(
+                phi=phi,
+                zplanes=0,
+                normed=True,
+                noise=False,
+                augmentation=True,
+                meta=False
+            )
+            savepath = savepath / f"npoints_{npoints}"
+            savepath.mkdir(exist_ok=True, parents=True)
+            savepath = savepath / filename
 
-            save_synthetic_sample(savepath, inputs, amps, snr, maxcounts)
+            sim(
+                savepath=savepath,
+                gen=gen,
+                npoints=npoints,
+                kernel=kernel,
+                amps=phi,
+                snr=(min_psnr, max_psnr),
+                emb=emb,
+                noise=noise
+            )
+
     else:
+        # theoretical kernel without noise
+        kernel, amps, _, _, _ = gen.single_psf(
+            phi=(min_amplitude, max_amplitude),
+            zplanes=0,
+            normed=True,
+            noise=False,
+            augmentation=True,
+            meta=True
+        )
+
+        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
+        outdir = outdir / f"i{input_shape}"
+
+        if distribution == 'powerlaw':
+            outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
+        else:
+            outdir = outdir / f"{distribution}"
+
         savepath = outdir / f"z{modes}"
         savepath = savepath / f"psnr_{min_psnr}-{max_psnr}"
         savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
                               f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
+        savepath = savepath / f"npoints_{npoints}"
         savepath.mkdir(exist_ok=True, parents=True)
         savepath = savepath / filename
 
-        if otf:
-            inputs, amps, snr, zplanes, maxcounts = gen.single_otf(
-                phi=(min_amplitude, max_amplitude),
-                zplanes=0,
-                normed=True,
-                noise=True,
-                augmentation=True,
-                meta=True,
-                na_mask=True,
-                ratio=True,
-                padsize=None
-            )
-        else:
-            inputs, amps, snr, zplanes, maxcounts = gen.single_psf(
-                phi=(min_amplitude, max_amplitude),
-                zplanes=0,
-                normed=True,
-                noise=True,
-                augmentation=True,
-                meta=True
-            )
-
-        save_synthetic_sample(savepath, inputs, amps, snr, maxcounts)
+        sim(
+            savepath=savepath,
+            gen=gen,
+            npoints=npoints,
+            kernel=kernel,
+            amps=amps,
+            snr=(min_psnr, max_psnr),
+            emb=emb,
+            noise=noise
+        )
 
 
 def parse_args(args):
     parser = cli.argparser()
 
     parser.add_argument("--filename", type=str, default='sample')
+    parser.add_argument("--npoints", type=int, default=1)
     parser.add_argument("--outdir", type=Path, default='../dataset')
 
     parser.add_argument(
-        '--otf', action='store_true',
-        help='toggle to convert input to frequency space (OTF)'
+        '--emb', action='store_true',
+        help='toggle to save embeddings only'
+    )
+
+    parser.add_argument(
+        "--iters", default=10, type=int,
+        help='number of samples'
+    )
+
+    parser.add_argument(
+        '--kernels', action='store_true',
+        help='toggle to save raw kernels'
     )
 
     parser.add_argument(
@@ -249,11 +329,6 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--max_jitter", default=1, type=float,
-        help="max offset from center in microns"
-    )
-
-    parser.add_argument(
         "--refractive_index", default=1.33, type=float,
         help="the quotient of the speed of light as it passes through two media"
     )
@@ -284,8 +359,9 @@ def main(args=None):
     def sample(k):
         return create_synthetic_sample(
             filename=f"{int(args.filename)+k}",
+            emb=args.emb,
+            npoints=args.npoints,
             outdir=args.outdir,
-            otf=args.otf,
             noise=args.noise,
             modes=args.modes,
             input_shape=args.input_shape,
@@ -295,7 +371,6 @@ def main(args=None):
             bimodal=args.bimodal,
             min_amplitude=args.min_amplitude,
             max_amplitude=args.max_amplitude,
-            max_jitter=args.max_jitter,
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
@@ -307,11 +382,8 @@ def main(args=None):
             cpu_workers=args.cpu_workers,
         )
 
-    if args.dist == 'single':
-        sample(k=0)
-    else:
-        for i in trange(100):
-            sample(k=i)
+    for i in trange(args.iters):
+        sample(k=i)
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

@@ -4,13 +4,18 @@ from typing import Any
 
 import numpy as np
 from pathlib import Path
-from skimage import transform, filters
+from skimage import transform
+from skimage.filters import gaussian
 from functools import partial
 import multiprocessing as mp
 from typing import Iterable
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from tifffile import imsave
+from tqdm import trange
+from skimage.filters import window
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from numpy.lib.stride_tricks import sliding_window_view
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -28,6 +33,7 @@ class SyntheticPSF:
     def __init__(
         self,
         amplitude_ranges=(-.1, .1),
+        dtype='widefield',
         distribution='dirichlet',
         bimodal=False,
         gamma=1.5,
@@ -50,6 +56,7 @@ class SyntheticPSF:
         """
         Args:
             amplitude_ranges: range tuple, array, or wavefront object (in microns)
+            dtype: widefield or confocal
             distribution: desired distribution for the amplitudes
             gamma: optional exponent of the powerlaw distribution
             bimodal: optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes
@@ -69,6 +76,7 @@ class SyntheticPSF:
         """
 
         self.n_modes = n_modes
+        self.dtype = dtype
         self.order = order
         self.refractive_index = refractive_index
         self.lam_detection = lam_detection
@@ -96,7 +104,8 @@ class SyntheticPSF:
             units=self.voxel_size,
             lam_detection=self.lam_detection,
             n=self.refractive_index,
-            na_detection=self.na_detection
+            na_detection=self.na_detection,
+            dtype=dtype
         )
 
         self.ipsf = self.theoretical_psf(normed=True, noise=False)
@@ -226,14 +235,14 @@ class SyntheticPSF:
         alpha = np.abs(otf)
 
         if gaussian_filter is not None:
-            alpha = filters.gaussian(alpha, gaussian_filter)
-            phi = filters.gaussian(phi, gaussian_filter)
+            alpha = gaussian(alpha, gaussian_filter)
+            phi = gaussian(phi, gaussian_filter)
 
-        alpha /= np.nanpercentile(alpha, 99.9)
+        alpha /= np.nanpercentile(alpha, 99.99)
         alpha[alpha > 1] = 1
         alpha = np.nan_to_num(alpha, nan=0)
 
-        phi /= np.nanpercentile(phi, 99.9)
+        phi /= np.nanpercentile(phi, 99.99)
         phi[phi > 1] = 1
         phi[phi < -1] = -1
         phi = np.nan_to_num(phi, nan=0)
@@ -247,18 +256,97 @@ class SyntheticPSF:
         mask = np.where(mask >= threshold, mask, 0.)
         return mask
 
+    def plot_embeddings(self, psf: np.array, emb: np.array, save_path: Any):
+        plt.rcParams.update({
+            'font.size': 10,
+            'axes.titlesize': 12,
+            'axes.labelsize': 12,
+            'xtick.labelsize': 10,
+            'ytick.labelsize': 10,
+            'legend.fontsize': 10,
+            'axes.autolimit_mode': 'round_numbers'
+        })
+        # plt.style.use("dark_background")
+
+        vmin, vmax, vcenter, step = 0, 2, 1, .1
+        highcmap = plt.get_cmap('YlOrRd', 256)
+        lowcmap = plt.get_cmap('terrain', 256)
+        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+        cmap = mcolors.ListedColormap(cmap)
+
+        fig, axes = plt.subplots(3, 3)
+
+        m = axes[0, 0].imshow(np.max(psf, axis=0), cmap='hot', vmin=0, vmax=1)
+        axes[0, 1].imshow(np.max(psf, axis=1), cmap='hot', vmin=0, vmax=1)
+        axes[0, 2].imshow(np.max(psf, axis=2).T, cmap='hot', vmin=0, vmax=1)
+        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+        cb = plt.colorbar(m, cax=cax)
+        cax.yaxis.set_label_position("right")
+        cax.set_ylabel('Input (maxproj)')
+
+        m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
+        axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
+        axes[1, 2].imshow(emb[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
+        cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+        cb = plt.colorbar(m, cax=cax)
+        cax.yaxis.set_label_position("right")
+        cax.set_ylabel(r'Embedding ($\alpha$)')
+
+        m = axes[2, 0].imshow(emb[3], cmap='coolwarm', vmin=-.5, vmax=.5)
+        axes[2, 1].imshow(emb[4], cmap='coolwarm', vmin=-.5, vmax=.5)
+        axes[2, 2].imshow(emb[5].T, cmap='coolwarm', vmin=-.5, vmax=.5)
+        cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+        cb = plt.colorbar(m, cax=cax)
+        cax.yaxis.set_label_position("right")
+        cax.set_ylabel(r'Embedding ($\varphi$)')
+
+        for ax in axes.flatten():
+            ax.axis('off')
+
+        if save_path == True:
+            plt.show()
+        else:
+            plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
     def embedding(
         self,
         psf: np.array,
         na_mask: bool = True,
         ratio: bool = True,
         padsize: Any = None,
-        plot: Any = None
+        plot: Any = None,
+        log10: bool = False,
+        principle_planes: bool = True,
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
 
         amp, phase = self.fft(psf, padsize=padsize)
+
+        if psf.shape != self.psf_shape:
+            amp = transform.rescale(
+                amp,
+                (
+                    self.psf_shape[0] / amp.shape[0],
+                    self.psf_shape[1] / amp.shape[1],
+                    self.psf_shape[2] / amp.shape[2],
+                ),
+                order=3,
+                anti_aliasing=True,
+            )
+
+            phase = transform.rescale(
+                phase,
+                (
+                    self.psf_shape[0] / phase.shape[0],
+                    self.psf_shape[1] / phase.shape[1],
+                    self.psf_shape[2] / phase.shape[2],
+                ),
+                order=3,
+                anti_aliasing=True,
+            )
 
         if ratio:
             amp /= self.iotf
@@ -269,62 +357,112 @@ class SyntheticPSF:
             amp *= mask
             phase *= mask
 
-        emb = np.stack([
-            amp[amp.shape[0] // 2, :, :],
-            amp[:, amp.shape[1] // 2, :],
-            amp[:, :, amp.shape[2] // 2],
-            phase[phase.shape[0] // 2, :, :],
-            phase[:, phase.shape[1] // 2, :],
-            phase[:, :, phase.shape[2] // 2],
-        ], axis=0)
+        if log10:
+            amp = np.log10(amp)
+            amp = np.nan_to_num(amp, nan=0, posinf=0, neginf=0)
 
-        if plot is not None:
-            vmin, vmax, vcenter, step = 0, 2, 1, .1
-            highcmap = plt.get_cmap('YlOrRd', 256)
-            lowcmap = plt.get_cmap('YlGnBu_r', 256)
-            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            cmap = mcolors.ListedColormap(cmap)
+        if principle_planes:
+            emb = np.stack([
+                amp[amp.shape[0] // 2, :, :],
+                amp[:, amp.shape[1] // 2, :],
+                amp[:, :, amp.shape[2] // 2],
+                phase[phase.shape[0] // 2, :, :],
+                phase[:, phase.shape[1] // 2, :],
+                phase[:, :, phase.shape[2] // 2],
+            ], axis=0)
+        else:
+            emb = np.stack([amp, phase], axis=0)
+            imsave(f"{plot}_alpha.tif", amp)
+            imsave(f"{plot}_phi.tif", phase)
 
-            fig, axes = plt.subplots(3, 3)
-
-            m = axes[0, 0].imshow(psf[psf.shape[0] // 2, :, :], cmap='hot', vmin=0, vmax=1)
-            axes[0, 1].imshow(psf[:, psf.shape[1] // 2, :], cmap='hot', vmin=0, vmax=1)
-            axes[0, 2].imshow(psf[:, :, psf.shape[2] // 2].T, cmap='hot', vmin=0, vmax=1)
-            cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_label_position("right")
-            cax.set_ylabel('Input (middle)')
-
-            m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
-            axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
-            axes[1, 2].imshow(emb[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
-            cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_label_position("right")
-            cax.set_ylabel(r'Embedding ($\alpha$)')
-
-            m = axes[2, 0].imshow(emb[3], cmap='coolwarm', vmin=-1, vmax=1)
-            axes[2, 1].imshow(emb[4], cmap='coolwarm', vmin=-1, vmax=1)
-            axes[2, 2].imshow(emb[5].T, cmap='coolwarm', vmin=-1, vmax=1)
-            cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_label_position("right")
-            cax.set_ylabel(r'Embedding ($\varphi$)')
-
-            for ax in axes.flatten():
-                ax.axis('off')
-
-            if plot == True:
-                plt.show()
-            else:
-                plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        if plot is not None and principle_planes:
+            self.plot_embeddings(psf=psf, emb=emb, save_path=plot)
 
         if psf.ndim == 4:
             return np.expand_dims(emb, axis=-1)
         else:
             return emb
+
+    def rolling_embedding(
+        self,
+        psf: np.array,
+        na_mask: bool = True,
+        apodization: bool = True,
+        ratio: bool = True,
+        strides: int = 32,
+        padsize: Any = None,
+        plot: Any = None,
+        log10: bool = False,
+        principle_planes: bool = False,
+    ):
+        if psf.ndim == 4:
+            psf = np.squeeze(psf)
+
+        windows = np.reshape(
+            sliding_window_view(psf, window_shape=self.psf_shape)[::strides, ::strides, ::strides],
+            (-1, *self.psf_shape)  # stack windows
+        )
+
+        embeddings = []
+        for w in trange(windows.shape[0], desc='Sliding windows'):
+            inputs = windows[w]
+            inputs /= np.nanpercentile(inputs, 99.99)
+            inputs[inputs > 1] = 1
+            inputs = np.nan_to_num(inputs, nan=0)
+
+            if apodization:
+                circular_mask = window(('general_gaussian', 10 / 3, 2.5 * 10), inputs.shape)
+                inputs *= circular_mask
+
+                # corner_mask = np.zeros_like(inputs, dtype=int)
+                # corner_mask[1:-1, 1:-1, 1:-1] = 1.
+                # corner_mask = distance_transform_edt(corner_mask, return_distances=True)
+                # corner_mask = .5 - (.5 * np.cos((np.pi*corner_mask)/apodization_dist))
+                # corner_mask[
+                #     apodization_dist:inputs.shape[0] - apodization_dist,
+                #     apodization_dist:inputs.shape[1] - apodization_dist,
+                #     apodization_dist:inputs.shape[2] - apodization_dist,
+                # ] = 1.
+                # # corner_mask = gaussian(corner_mask, sigma=2)
+                #
+                # import matplotlib.pyplot as plt
+                # fig, axes = plt.subplots(1, 2, figsize=(15, 5))
+                # axes[0].imshow(circular_mask[circular_mask.shape[0]//2, :, :], cmap='magma')
+                # axes[0].set_title('Circular mask')
+                # axes[1].imshow(corner_mask[corner_mask.shape[0]//2, :, :], cmap='magma')
+                # axes[1].set_title('Corner mask')
+                # plt.show()
+
+            embeddings.append(
+                self.embedding(
+                    psf=inputs,
+                    na_mask=na_mask,
+                    ratio=ratio,
+                    padsize=padsize,
+                    log10=log10,
+                    principle_planes=principle_planes,
+                    plot=f"{plot}_window_{w}"
+                )
+            )
+
+        if principle_planes:
+            embeddings = np.array(embeddings)
+            emb = np.vstack([np.nanmax(embeddings[:, :3], axis=0), np.nanmean(embeddings[:, 3:], axis=0)])
+        else:
+            embeddings = np.array(embeddings)
+            alpha = np.nanmax(embeddings[:, 0], axis=0)
+            phi = embeddings[:, 1]
+            phi_pos = np.nanmax(phi*(phi >= 0), axis=0)
+            phi_neg = np.nanmin(phi*(phi < 0), axis=0)
+            emb = np.stack([alpha, phi_pos+phi_neg])
+
+            imsave(f"{plot}_alpha.tif", emb[0])
+            imsave(f"{plot}_phi.tif", emb[1])
+
+        if plot is not None and principle_planes:
+            self.plot_embeddings(psf=psf, emb=emb, save_path=plot)
+
+        return emb
 
     def single_psf(
         self,
@@ -400,6 +538,7 @@ class SyntheticPSF:
         na_mask: bool = False,
         ratio: bool = False,
         padsize: Any = None,
+        log10: bool = False,
         plot: bool = False,
         save_path: Path = Path.cwd()/'test',
     ):
@@ -420,7 +559,8 @@ class SyntheticPSF:
             psf,
             na_mask=na_mask,
             ratio=ratio,
-            padsize=padsize
+            padsize=padsize,
+            log10=log10
         )
 
         if plot:

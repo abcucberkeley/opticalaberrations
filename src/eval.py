@@ -909,7 +909,9 @@ def eval_bin(datapath, modelpath, samplelimit, na):
         y_pred = y_pred.append(p, ignore_index=True)
 
         y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys.numpy()], columns=['sample'])
-        y['snr'] = int(np.mean(list(map(int, datapath.parent.stem.lstrip('psnr_').split('-')))))
+        y['snr'] = int(np.mean(list(
+            map(int, str([s for s in datapath.parts if s.startswith('psnr_')][0]).lstrip('psnr_').split('-'))
+        )))
         y_true = y_true.append(y, ignore_index=True)
 
     return (y_pred, y_true)
@@ -945,7 +947,7 @@ def evalheatmap(
         if c.is_dir()
            and len(list(c.glob('*.tif'))) > 0
            and distribution in str(c)
-           and float(str(c.name.split('-')[-1].replace('p', '.'))) <= max_amplitude
+           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
 
     job = partial(eval_bin, modelpath=modelpath, samplelimit=samplelimit, na=na)
@@ -1215,9 +1217,9 @@ def iterheatmap(
     na: float = 1.0,
 ):
     if reference is None:
-        savepath = modelpath / 'iterheatmap'
+        savepath = modelpath / 'iterheatmaps'
     else:
-        savepath = modelpath / f'{reference.stem}_iterheatmap'
+        savepath = modelpath / f'{reference.stem}_iterheatmaps'
 
     savepath.mkdir(parents=True, exist_ok=True)
     if distribution != '/':
@@ -1241,7 +1243,7 @@ def iterheatmap(
            and len(list(c.glob('*.tif'))) > 0
            and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
            and distribution in str(c)
-           and float(str(c.name.split('-')[-1].replace('p', '.'))) <= max_amplitude
+           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
 
     if reference is None:
@@ -1371,7 +1373,7 @@ def evalsample(
     niter: int = 1,
     na: float = 1.0,
     reference_voxel_size: tuple = (.002, .002, .002),
-    embedding_average: bool = False
+    rolling_embedding: bool = False
 ):
 
     plt.rcParams.update({
@@ -1452,7 +1454,7 @@ def evalsample(
             np.expand_dims(conv[np.newaxis, :], axis=-1),
             psfgen=modelgen,
             resize=reference_voxel_size,
-            rolling_average_embedding=embedding_average,
+            rolling_embedding=rolling_embedding,
             batch_size=1,
             n_samples=1,
             desc=f'Iter[{k}]',

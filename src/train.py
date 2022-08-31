@@ -1,8 +1,12 @@
+import numexpr
+numexpr.set_num_threads(numexpr.detect_number_of_cores())
+
 import logging
 import sys
 import time
 from pathlib import Path
 import tensorflow as tf
+
 
 import cli
 import backend
@@ -23,10 +27,6 @@ def parse_args(args):
 
     train_parser.add_argument(
         "--dataset", type=Path, help="path to dataset directory"
-    )
-
-    train_parser.add_argument(
-        "--test_dataset", type=Path, help="path to TEST dataset directory"
     )
 
     train_parser.add_argument(
@@ -144,7 +144,12 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--gpu_workers", default=1, type=int, help='number of GPUs to use'
+        "--gpu_workers", default=-1, type=int, help='number of GPUs to use'
+    )
+
+    train_parser.add_argument(
+        '--multinode', action='store_true',
+        help='toggle for multi-node/multi-gpu training on a slurm-based cluster'
     )
 
     return train_parser.parse_known_args(args)[0]
@@ -153,45 +158,54 @@ def parse_args(args):
 def main(args=None):
     timeit = time.time()
     args = parse_args(args)
+    logging.info(args)
 
     physical_devices = tf.config.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
-    backend.train(
-        epochs=args.epochs,
-        dataset=args.dataset,
-        test_dataset=args.test_dataset,
-        outdir=args.outdir,
-        network=args.network,
-        input_shape=args.input_shape,
-        batch_size=args.batch_size,
-        patch_size=[int(i) for i in args.patch_size.split('-')],
-        steps_per_epoch=args.steps_per_epoch,
-        x_voxel_size=args.x_voxel_size,
-        y_voxel_size=args.y_voxel_size,
-        z_voxel_size=args.z_voxel_size,
-        modes=args.modes,
-        activation=args.activation,
-        mul=args.mul,
-        opt=args.opt,
-        lr=args.lr,
-        wd=args.wd,
-        fixedlr=args.fixedlr,
-        warmup=args.warmup,
-        decay_period=args.decay_period,
-        pmodes=args.modes if args.pmodes is None else args.pmodes,
-        min_psnr=args.min_psnr,
-        max_psnr=args.max_psnr,
-        max_amplitude=args.max_amplitude,
-        distribution=args.dist,
-        samplelimit=args.samplelimit,
-        wavelength=args.wavelength,
-        depth_scalar=args.depth_scalar,
-        width_scalar=args.width_scalar,
-        cpu_workers=args.cpu_workers,
-        gpu_workers=args.gpu_workers,
-    )
+    if args.multinode:
+        strategy = tf.distribute.MultiWorkerMirroredStrategy(
+            cluster_resolver=tf.distribute.cluster_resolver.SlurmClusterResolver(),
+        )
+    else:
+        strategy = tf.distribute.MirroredStrategy()
+
+    gpu_workers = strategy.num_replicas_in_sync
+    logging.info(f'Number of active GPUs: {gpu_workers}')
+
+    with strategy.scope():
+        backend.train(
+            epochs=args.epochs,
+            dataset=args.dataset,
+            outdir=args.outdir,
+            network=args.network,
+            input_shape=args.input_shape,
+            batch_size=args.batch_size,
+            patch_size=[int(i) for i in args.patch_size.split('-')],
+            steps_per_epoch=args.steps_per_epoch,
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
+            modes=args.modes,
+            activation=args.activation,
+            mul=args.mul,
+            opt=args.opt,
+            lr=args.lr,
+            wd=args.wd,
+            fixedlr=args.fixedlr,
+            warmup=args.warmup,
+            decay_period=args.decay_period,
+            pmodes=args.modes if args.pmodes is None else args.pmodes,
+            min_psnr=args.min_psnr,
+            max_psnr=args.max_psnr,
+            max_amplitude=args.max_amplitude,
+            distribution=args.dist,
+            samplelimit=args.samplelimit,
+            wavelength=args.wavelength,
+            depth_scalar=args.depth_scalar,
+            width_scalar=args.width_scalar,
+        )
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

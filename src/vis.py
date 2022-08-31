@@ -46,7 +46,7 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
 
     psfargs = dict(
         n_modes=60,
-        distribution='powerlaw',
+        distribution='dirichlet',
         bimodal=True,
         gamma=.75,
         lam_detection=wavelength,
@@ -72,8 +72,8 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
     # min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
     # max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
 
-    min_amps = np.arange(0, .1, .005).round(3)
-    max_amps = np.arange(.005, .105, .005).round(3)
+    min_amps = np.arange(0, .45, .05).round(3)
+    max_amps = np.arange(.05, .5, .05).round(3)
 
     for mina, maxa in zip(min_amps, max_amps):
         psfargs['amplitude_ranges'] = (mina, maxa)
@@ -326,6 +326,7 @@ def plot_relratio(
         x_voxel_size=.15,
         y_voxel_size=.15,
         z_voxel_size=.6,
+        log10=True,
         savepath='../data/relratio',
 ):
     plt.rcParams.update({
@@ -338,7 +339,11 @@ def plot_relratio(
     })
     from utils import peak_aberration
 
-    vmin, vmax, vcenter, step = 0, 2, 1, .1
+    if log10:
+        vmin, vmax, vcenter, step = -2, 2, 0, .1
+    else:
+        vmin, vmax, vcenter, step = 0, 2, 1, .1
+
     highcmap = plt.get_cmap('YlOrRd', 256)
     lowcmap = plt.get_cmap('YlGnBu_r', 256)
     low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -388,7 +393,8 @@ def plot_relratio(
                 meta=True,
                 na_mask=True,
                 ratio=True,
-                padsize=padsize
+                padsize=padsize,
+                log10=log10
             )
 
             abr = round(peak_aberration(phi) * np.sign(amp), 1)

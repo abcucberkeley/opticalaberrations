@@ -3,6 +3,8 @@ import sys
 import time
 from pathlib import Path
 import os
+
+
 import cli
 import imghdr
 
@@ -59,6 +61,7 @@ def main(args=None):
 
     timeit = time.time()
     args = parse_args(args)
+    logging.info(args)
 
     logging.basicConfig(
         level=logging.INFO,

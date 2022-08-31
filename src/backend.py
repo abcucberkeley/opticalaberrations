@@ -1,6 +1,8 @@
+import numexpr
+numexpr.set_num_threads(numexpr.detect_number_of_cores())
+
 import logging
 import sys
-import typing
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
@@ -13,8 +15,6 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 from tqdm import trange, tqdm
 from tifffile import imsave
-from numpy.lib.stride_tricks import sliding_window_view
-from skimage import transform
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
@@ -63,41 +63,42 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 def load(model_path: Path) -> Model:
-    model_path = model_path.with_suffix('')
+    model_path = Path(model_path)
 
     try:
-        if Path(f'{model_path}.h5').exists() or Path(model_path / 'saved_model.pb').exists():
-            model_path = str(model_path)
-        else:
-            model_path = str(list(model_path.rglob('saved_model.pb'))[0].parent)
-
-        if 'opticaltransformer' in model_path:
-            custom_objects = {
-                "Stem": opticaltransformer.Stem,
-                "Patchify": opticaltransformer.Patchify,
-                "Merge": opticaltransformer.Merge,
-                "PatchEncoder": opticaltransformer.PatchEncoder,
-                "MLP": opticaltransformer.MLP,
-                "Transformer": opticaltransformer.Transformer,
-            }
-
-        else:
-            custom_objects = {
-                "Stem": Stem,
-                "MaskedActivation": MaskedActivation,
-                "SpatialAttention": SpatialAttention,
-                "DepthwiseConv3D": DepthwiseConv3D,
-                "CAB": opticalresnet.CAB,
-                "TB": opticalresnet.TB,
-            }
-
-        logger.info(model_path)
         try:
-            '''.h5/hdf5 format'''
-            return load_model(f"{model_path}.h5", custom_objects=custom_objects)
-        except TypeError:
             '''.pb format'''
-            return load_model(model_path)
+            if model_path.is_file() and model_path.suffix == '.pb':
+                return load_model(str(model_path.parent))
+            else:
+                return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
+
+        except IndexError or FileNotFoundError or OSError:
+            if 'opticaltransformer' in str(model_path):
+                custom_objects = {
+                    "Stem": opticaltransformer.Stem,
+                    "Patchify": opticaltransformer.Patchify,
+                    "Merge": opticaltransformer.Merge,
+                    "PatchEncoder": opticaltransformer.PatchEncoder,
+                    "MLP": opticaltransformer.MLP,
+                    "Transformer": opticaltransformer.Transformer,
+                }
+
+            else:
+                custom_objects = {
+                    "Stem": Stem,
+                    "MaskedActivation": MaskedActivation,
+                    "SpatialAttention": SpatialAttention,
+                    "DepthwiseConv3D": DepthwiseConv3D,
+                    "CAB": opticalresnet.CAB,
+                    "TB": opticalresnet.TB,
+                }
+
+            '''.h5/hdf5 format'''
+            if model_path.is_file() and model_path.suffix == '.h5':
+                return load_model(str(model_path), custom_objects=custom_objects)
+            else:
+                return load_model(str(list(model_path.rglob('*.h5'))[0]), custom_objects=custom_objects)
 
     except Exception as e:
         logger.exception(e)
@@ -106,7 +107,6 @@ def load(model_path: Path) -> Model:
 
 def train(
         dataset: Path,
-        test_dataset: Path,
         outdir: Path,
         network: str,
         distribution: str,
@@ -135,401 +135,355 @@ def train(
         max_psnr: int,
         epochs: int,
         mul: bool,
-        cpu_workers: int,
-        gpu_workers: typing.Any,
 ):
-    if np.isscalar(gpu_workers):
-        gpus = None if gpu_workers == -1 or 1 else [f'/gpu:{i}' for i in range(gpu_workers)]
-    else:
-        gpus = [f'/gpu:{i}' for i in gpu_workers]
-
-    strategy = tf.distribute.MirroredStrategy(gpus)
-    gpu_workers = strategy.num_replicas_in_sync
-    logger.info(f'Number of active GPUs: {gpu_workers}')
     network = network.lower()
     opt = opt.lower()
     restored = False
 
-    with strategy.scope():
-        if network == 'opticaltransformer':
-            model = opticaltransformer.OpticalTransformer(
-                name='OpticalTransformer',
-                patches=patch_size,
-                modes=pmodes,
-                na_det=1.0,
-                refractive_index=1.33,
-                lambda_det=wavelength,
-                x_voxel_size=x_voxel_size,
-                y_voxel_size=y_voxel_size,
-                z_voxel_size=z_voxel_size,
-                depth_scalar=depth_scalar,
-                width_scalar=width_scalar,
-                mask_shape=input_shape,
-                activation=activation,
-                mul=mul
-            )
-        elif network == 'opticalhierarchicaltransformer':
-            model = opticalhierarchicaltransformer.OpticalHierarchicalTransformer(
-                name='OpticalHierarchicalTransformer',
-                patches=patch_size,
-                modes=pmodes,
-                na_det=1.0,
-                refractive_index=1.33,
-                lambda_det=wavelength,
-                x_voxel_size=x_voxel_size,
-                y_voxel_size=y_voxel_size,
-                z_voxel_size=z_voxel_size,
-                depth_scalar=depth_scalar,
-                width_scalar=width_scalar,
-                mask_shape=input_shape,
-                activation=activation,
-                mul=mul
-            )
-        elif network == 'opticalresnet':
-            model = opticalresnet.OpticalResNet(
-                name='OpticalResNet',
-                modes=pmodes,
-                na_det=1.0,
-                refractive_index=1.33,
-                lambda_det=wavelength,
-                x_voxel_size=x_voxel_size,
-                y_voxel_size=y_voxel_size,
-                z_voxel_size=z_voxel_size,
-                depth_scalar=depth_scalar,
-                width_scalar=width_scalar,
-                mask_shape=input_shape,
-                activation=activation,
-                mul=mul
-            )
-        elif network == 'widekernel':
-            model = WideKernel(
-                name='WideKernel',
-                modes=pmodes,
-                na_det=1.0,
-                refractive_index=1.33,
-                lambda_det=wavelength,
-                x_voxel_size=x_voxel_size,
-                y_voxel_size=y_voxel_size,
-                z_voxel_size=z_voxel_size,
-                depth_scalar=depth_scalar,
-                width_scalar=width_scalar,
-                mask_shape=input_shape,
-                activation=activation,
-                mul=mul
-            )
-        elif network == 'baseline':
-            model = Baseline(
-                name='Baseline',
-                modes=pmodes,
-                depth_scalar=depth_scalar,
-                width_scalar=width_scalar,
-                activation=activation,
-            )
-        elif network == 'phasenet':
-            model = PhaseNet(
-                name='PhaseNet',
-                modes=pmodes
-            )
+    if network == 'opticaltransformer':
+        model = opticaltransformer.OpticalTransformer(
+            name='OpticalTransformer',
+            patches=patch_size,
+            modes=pmodes,
+            na_det=1.0,
+            refractive_index=1.33,
+            lambda_det=wavelength,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            mask_shape=input_shape,
+            activation=activation,
+            mul=mul
+        )
+    elif network == 'opticalhierarchicaltransformer':
+        model = opticalhierarchicaltransformer.OpticalHierarchicalTransformer(
+            name='OpticalHierarchicalTransformer',
+            patches=patch_size,
+            modes=pmodes,
+            na_det=1.0,
+            refractive_index=1.33,
+            lambda_det=wavelength,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            mask_shape=input_shape,
+            activation=activation,
+            mul=mul
+        )
+    elif network == 'opticalresnet':
+        model = opticalresnet.OpticalResNet(
+            name='OpticalResNet',
+            modes=pmodes,
+            na_det=1.0,
+            refractive_index=1.33,
+            lambda_det=wavelength,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            mask_shape=input_shape,
+            activation=activation,
+            mul=mul
+        )
+    elif network == 'widekernel':
+        model = WideKernel(
+            name='WideKernel',
+            modes=pmodes,
+            na_det=1.0,
+            refractive_index=1.33,
+            lambda_det=wavelength,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            mask_shape=input_shape,
+            activation=activation,
+            mul=mul
+        )
+    elif network == 'baseline':
+        model = Baseline(
+            name='Baseline',
+            modes=pmodes,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            activation=activation,
+        )
+    elif network == 'phasenet':
+        model = PhaseNet(
+            name='PhaseNet',
+            modes=pmodes
+        )
+    else:
+        model = load(Path(network))
+        checkpoint = tf.train.Checkpoint(model)
+        status = checkpoint.restore(network)
+
+        if status:
+            logger.info(f"Restored from {network}")
+            restored = True
         else:
-            model = load(Path(network))
-            checkpoint = tf.train.Checkpoint(model)
-            status = checkpoint.restore(network)
+            logger.info("Initializing from scratch")
 
-            if status:
-                logger.info(f"Restored from {network}")
-                restored = True
-            else:
-                logger.info("Initializing from scratch")
-
-        if network == 'phasenet':
+    if network == 'phasenet':
+        inputs = (input_shape, input_shape, input_shape, 1)
+        lr = .0003
+        opt = Adam(learning_rate=lr)
+        loss = 'mse'
+    else:
+        if network == 'baseline':
             inputs = (input_shape, input_shape, input_shape, 1)
-            lr = .0003
+        else:
+            inputs = (6, input_shape, input_shape, 1)
+
+        loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
+
+        """
+            Adam: A Method for Stochastic Optimization: https://arxiv.org/pdf/1412.6980
+            SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
+            Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
+        """
+        if opt.lower() == 'adam':
             opt = Adam(learning_rate=lr)
-            loss = 'mse'
+        elif opt == 'sgd':
+            opt = SGD(learning_rate=lr, momentum=0.9)
+        elif opt.lower() == 'adamw':
+            opt = AdamW(learning_rate=lr, weight_decay=wd)
+        elif opt == 'sgdw':
+            opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
         else:
-            if network == 'baseline':
-                inputs = (input_shape, input_shape, input_shape, 1)
-            else:
-                inputs = (6, input_shape, input_shape, 1)
+            raise ValueError(f'Unknown optimizer `{opt}`')
 
-            loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
-
-            """
-                Adam: A Method for Stochastic Optimization: https://arxiv.org/pdf/1412.6980
-                SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
-                Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
-            """
-            if opt.lower() == 'adam':
-                opt = Adam(learning_rate=lr)
-            elif opt == 'sgd':
-                opt = SGD(learning_rate=lr, momentum=0.9)
-            elif opt.lower() == 'adamw':
-                opt = AdamW(learning_rate=lr, weight_decay=wd)
-            elif opt == 'sgdw':
-                opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
-            else:
-                raise ValueError(f'Unknown optimizer `{opt}`')
-
-        if not restored:
-            model = model.build(input_shape=inputs)
-            model.compile(
-                optimizer=opt,
-                loss=loss,
-                metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
-            )
-
-        outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
-        outdir.mkdir(exist_ok=True, parents=True)
-        logger.info(model.summary())
-
-        tblogger = CSVLogger(
-            f"{outdir}/logbook.csv",
-            append=True,
+    if not restored:
+        model = model.build(input_shape=inputs)
+        model.compile(
+            optimizer=opt,
+            loss=loss,
+            metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
         )
 
-        checkpoints = ModelCheckpoint(
-            filepath=f"{outdir}",
-            monitor="val_loss",
-            save_best_only=True,
+    outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
+    outdir.mkdir(exist_ok=True, parents=True)
+    logger.info(model.summary())
+
+    tblogger = CSVLogger(
+        f"{outdir}/logbook.csv",
+        append=True,
+    )
+
+    pb_checkpoints = ModelCheckpoint(
+        filepath=f"{outdir}",
+        monitor="loss",
+        save_best_only=True,
+        verbose=1,
+    )
+
+    h5_checkpoints = ModelCheckpoint(
+        filepath=f"{outdir}.h5",
+        monitor="loss",
+        save_best_only=True,
+        verbose=1,
+    )
+
+    earlystopping = EarlyStopping(
+        monitor='loss',
+        min_delta=0,
+        patience=50,
+        verbose=1,
+        mode='auto',
+        restore_best_weights=True
+    )
+
+    defibrillator = Defibrillator(
+        monitor='loss',
+        patience=20,
+        verbose=1,
+    )
+
+    features = LambdaCallback(
+        on_epoch_end=lambda epoch, logs: featuremaps(
+            modelpath=outdir,
+            amplitude_range=.3,
+            wavelength=wavelength,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            cpu_workers=-1,
+            psnr=100,
+        ) if epoch % 50 == 0 else epoch
+    )
+
+    tensorboard = TensorBoardCallback(
+        log_dir=outdir,
+        profile_batch='500,520',
+        histogram_freq=1,
+    )
+
+    if fixedlr:
+        lrscheduler = LearningRateScheduler(
+            initial_learning_rate=lr,
+            verbose=0,
+            fixed=True
+        )
+    else:
+        lrscheduler = LearningRateScheduler(
+            initial_learning_rate=lr,
+            weight_decay=wd,
+            decay_period=epochs if decay_period is None else decay_period,
+            warmup_epochs=0 if warmup is None else warmup,
+            alpha=.01,
+            decay_multiplier=2.,
+            decay=.9,
             verbose=1,
         )
 
-        earlystopping = EarlyStopping(
-            monitor='val_loss',
-            min_delta=0,
-            patience=50,
-            verbose=1,
-            mode='auto',
-            restore_best_weights=True
+    if dataset is None:
+
+        config = dict(
+            psf_shape=inputs,
+            snr=(min_psnr, max_psnr),
+            max_jitter=1,
+            n_modes=modes,
+            distribution=distribution,
+            amplitude_ranges=(-max_amplitude, max_amplitude),
+            lam_detection=wavelength,
+            batch_size=batch_size,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            cpu_workers=-1
         )
 
-        defibrillator = Defibrillator(
-            monitor='val_loss',
-            patience=20,
-            verbose=1,
+        train_data = data_utils.create_dataset(config)
+        training_steps = steps_per_epoch
+    else:
+        train_data = data_utils.collect_dataset(
+            dataset,
+            distribution=distribution,
+            samplelimit=samplelimit,
+            max_amplitude=max_amplitude
         )
 
-        features = LambdaCallback(
-            on_epoch_end=lambda epoch, logs: featuremaps(
-                modelpath=outdir,
-                amplitude_range=.3,
-                wavelength=wavelength,
-                x_voxel_size=x_voxel_size,
-                y_voxel_size=y_voxel_size,
-                z_voxel_size=z_voxel_size,
-                cpu_workers=cpu_workers,
-                psnr=100,
-            ) if epoch % 50 == 0 else epoch
-        )
+        sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
+        with sample_writer.as_default():
+            for s in range(10):
+                fig = None
+                for i, (img, y) in enumerate(train_data.shuffle(1000).take(5)):
+                    img = np.squeeze(img, axis=-1)
 
-        tensorboard = TensorBoardCallback(
-            log_dir=outdir,
-            profile_batch='500,520',
-            histogram_freq=1,
-        )
+                    if fig is None:
+                        fig, axes = plt.subplots(5, img.shape[0], figsize=(8, 8))
 
-        if fixedlr:
-            lrscheduler = LearningRateScheduler(
-                initial_learning_rate=lr,
-                verbose=0,
-                fixed=True
-            )
-        else:
-            lrscheduler = LearningRateScheduler(
-                initial_learning_rate=lr,
-                weight_decay=wd,
-                decay_period=epochs if decay_period is None else decay_period,
-                warmup_epochs=0 if warmup is None else warmup,
-                alpha=.01,
-                decay_multiplier=2.,
-                decay=.9,
-                verbose=1,
-            )
-
-        if dataset is None:
-
-            config = dict(
-                psf_shape=inputs,
-                snr=(min_psnr, max_psnr),
-                max_jitter=1,
-                n_modes=modes,
-                distribution=distribution,
-                amplitude_ranges=(-max_amplitude, max_amplitude),
-                lam_detection=wavelength,
-                batch_size=batch_size,
-                x_voxel_size=x_voxel_size,
-                y_voxel_size=y_voxel_size,
-                z_voxel_size=z_voxel_size,
-                cpu_workers=cpu_workers
-            )
-
-            train_data, val_data = data_utils.create_dataset(config)
-            training_steps = steps_per_epoch
-            validation_steps = int(steps_per_epoch * .1)
-
-        else:
-            train_data, val_data = data_utils.collect_dataset(
-                dataset,
-                split=.1,
-                distribution=distribution,
-                samplelimit=samplelimit,
-                max_amplitude=max_amplitude
-            )
-
-            sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
-            with sample_writer.as_default():
-                for s in range(10):
-                    fig = None
-                    for i, (img, y) in enumerate(train_data.shuffle(1000).take(5)):
-                        img = np.squeeze(img, axis=-1)
-
-                        if fig is None:
-                            fig, axes = plt.subplots(5, img.shape[0], figsize=(8, 8))
-
-                        for k in range(img.shape[0]):
-                            if k > 2:
-                                mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=0, vmax=1)
-                            else:
-                                malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
-
-                            axes[i, k].axis('off')
-
-                        if img.shape[0] > 3:
-                            cax = inset_axes(axes[i, 0], width="10%", height="100%", loc='center left', borderpad=-3)
-                            cb = plt.colorbar(malpha, cax=cax)
-                            cax.yaxis.set_label_position("left")
-
-                            cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                            cb = plt.colorbar(mphi, cax=cax)
-                            cax.yaxis.set_label_position("right")
-
+                    for k in range(img.shape[0]):
+                        if k > 2:
+                            mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=-.5, vmax=.5)
                         else:
-                            cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                            cb = plt.colorbar(malpha, cax=cax)
-                            cax.yaxis.set_label_position("right")
+                            malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
 
-                    tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
+                        axes[i, k].axis('off')
 
-            sample_writer = tf.summary.create_file_writer(f'{outdir}/test_samples/')
-            with sample_writer.as_default():
-                for s in range(10):
-                    fig = None
-                    for i, (img, y) in enumerate(train_data.shuffle(1000).take(5)):
-                        img = np.squeeze(img, axis=-1)
+                    if img.shape[0] > 3:
+                        cax = inset_axes(axes[i, 0], width="10%", height="100%", loc='center left', borderpad=-3)
+                        cb = plt.colorbar(malpha, cax=cax)
+                        cax.yaxis.set_label_position("left")
 
-                        if fig is None:
-                            fig, axes = plt.subplots(5, img.shape[0], figsize=(8, 8))
+                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
+                        cb = plt.colorbar(mphi, cax=cax)
+                        cax.yaxis.set_label_position("right")
 
-                        for k in range(img.shape[0]):
-                            if k > 2:
-                                mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=0, vmax=1)
-                            else:
-                                malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
+                    else:
+                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
+                        cb = plt.colorbar(malpha, cax=cax)
+                        cax.yaxis.set_label_position("right")
 
-                            axes[i, k].axis('off')
+                tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
 
-                        if img.shape[0] > 3:
-                            cax = inset_axes(axes[i, 0], width="10%", height="100%", loc='center left', borderpad=-3)
-                            cb = plt.colorbar(malpha, cax=cax)
-                            cax.yaxis.set_label_position("left")
+        def configure_for_performance(ds):
+            ds = ds.cache()
+            ds = ds.shuffle(batch_size)
+            ds = ds.batch(batch_size)
+            ds = ds.prefetch(buffer_size=tf.data.AUTOTUNE)
+            return ds
 
-                            cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                            cb = plt.colorbar(mphi, cax=cax)
-                            cax.yaxis.set_label_position("right")
+        train_data = configure_for_performance(train_data)
+        training_steps = tf.data.experimental.cardinality(train_data).numpy()
 
-                        else:
-                            cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                            cb = plt.colorbar(malpha, cax=cax)
-                            cax.yaxis.set_label_position("right")
+    for img, y in train_data.shuffle(buffer_size=100).take(1):
+        logger.info(f"Batch size: {batch_size}")
+        logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
 
-                    tf.summary.image("Evaluation samples", utils.plot_to_image(fig), step=s)
+        # from opticaltransformer import Patchify, Merge
+        # original = np.squeeze(img[0, 1])
+        #
+        # vmin = np.min(original)
+        # vmax = np.max(original)
+        # vcenter = (vmin + vmax) / 2
+        # step = .01
+        # print(vmin, vmax, vcenter)
+        #
+        # highcmap = plt.get_cmap('YlOrRd', 256)
+        # lowcmap = plt.get_cmap('YlGnBu_r', 256)
+        # low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+        # high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+        # cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+        # cmap = mcolors.ListedColormap(cmap)
+        #
+        # plt.figure(figsize=(4, 4))
+        # plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
+        # plt.axis("off")
+        # plt.title('Original')
+        #
+        # for p in patch_size:
+        #     patches = Patchify(patch_size=p)(img)
+        #     merged = Merge(patch_size=p)(patches)
+        #     print(patches.shape)
+        #     print(merged.shape)
+        #
+        #     patches = patches[0, 1]
+        #     merged = np.squeeze(merged[0, 1])
+        #
+        #     plt.figure(figsize=(4, 4))
+        #     plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
+        #     plt.axis("off")
+        #     plt.title('Merged')
+        #
+        #     n = int(np.sqrt(patches.shape[0]))
+        #     plt.figure(figsize=(4, 4))
+        #     plt.title('Patches')
+        #     for i, patch in enumerate(patches):
+        #         ax = plt.subplot(n, n, i + 1)
+        #         patch_img = tf.reshape(patch, (p, p)).numpy()
+        #         ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
+        #         ax.axis("off")
+        #
+        # plt.show()
 
-            def configure_for_performance(ds):
-                ds = ds.cache()
-                ds = ds.shuffle(batch_size)
-                ds = ds.batch(batch_size)
-                ds = ds.prefetch(buffer_size=tf.data.AUTOTUNE)
-                return ds
-
-            train_data = configure_for_performance(train_data)
-            val_data = configure_for_performance(val_data)
-
-            training_steps = tf.data.experimental.cardinality(train_data).numpy()
-            validation_steps = tf.data.experimental.cardinality(val_data).numpy()
-
-        for img, y in val_data.shuffle(buffer_size=100).take(1):
-            logger.info(f"Batch size: {batch_size}")
-            logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
-            logger.info(f"Validation steps: [{validation_steps}] {y.numpy().shape}")
-
-            # from opticaltransformer import Patchify, Merge
-            # original = np.squeeze(img[0, 1])
-            #
-            # vmin = np.min(original)
-            # vmax = np.max(original)
-            # vcenter = (vmin + vmax) / 2
-            # step = .01
-            # print(vmin, vmax, vcenter)
-            #
-            # highcmap = plt.get_cmap('YlOrRd', 256)
-            # lowcmap = plt.get_cmap('YlGnBu_r', 256)
-            # low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            # high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            # cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            # cmap = mcolors.ListedColormap(cmap)
-            #
-            # plt.figure(figsize=(4, 4))
-            # plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
-            # plt.axis("off")
-            # plt.title('Original')
-            #
-            # for p in patch_size:
-            #     patches = Patchify(patch_size=p)(img)
-            #     merged = Merge(patch_size=p)(patches)
-            #     print(patches.shape)
-            #     print(merged.shape)
-            #
-            #     patches = patches[0, 1]
-            #     merged = np.squeeze(merged[0, 1])
-            #
-            #     plt.figure(figsize=(4, 4))
-            #     plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
-            #     plt.axis("off")
-            #     plt.title('Merged')
-            #
-            #     n = int(np.sqrt(patches.shape[0]))
-            #     plt.figure(figsize=(4, 4))
-            #     plt.title('Patches')
-            #     for i, patch in enumerate(patches):
-            #         ax = plt.subplot(n, n, i + 1)
-            #         patch_img = tf.reshape(patch, (p, p)).numpy()
-            #         ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
-            #         ax.axis("off")
-            #
-            # plt.show()
-
-        try:
-            model.fit(
-                train_data,
-                validation_data=val_data,
-                steps_per_epoch=training_steps,
-                validation_steps=validation_steps,
-                epochs=epochs,
-                verbose=2,
-                shuffle=True,
-                callbacks=[
-                    tblogger,
-                    tensorboard,
-                    checkpoints,
-                    earlystopping,
-                    defibrillator,
-                    features,
-                    lrscheduler,
-                ],
-            )
-        except tf.errors.ResourceExhaustedError as e:
-            logger.error(e)
-            sys.exit(1)
+    try:
+        model.fit(
+            train_data,
+            steps_per_epoch=training_steps,
+            epochs=epochs,
+            verbose=2,
+            shuffle=True,
+            callbacks=[
+                tblogger,
+                tensorboard,
+                pb_checkpoints,
+                h5_checkpoints,
+                earlystopping,
+                defibrillator,
+                #features,
+                lrscheduler,
+            ],
+        )
+    except tf.errors.ResourceExhaustedError as e:
+        logger.error(e)
+        sys.exit(1)
 
 
 def bootstrap_predict(
@@ -544,7 +498,7 @@ def bootstrap_predict(
     desc: str = 'MiniBatch-probabilistic-predictions',
     plot: Any = None,
     return_embeddings: bool = False,
-    rolling_average_embedding: bool = False,
+    rolling_embedding: bool = False,
 ):
     """
     Average predictions and compute stdev
@@ -567,27 +521,10 @@ def bootstrap_predict(
         for k in range(0, len(arr), s):
             yield arr[k:k + s]
 
-    def average_embedding(psf):
-        psf = transform.rescale(
-            psf,
-            (
-                resize[0] / psfgen.voxel_size[0],
-                resize[1] / psfgen.voxel_size[1],
-                resize[2] / psfgen.voxel_size[2],
-            ),
-            order=3,
-            anti_aliasing=True,
-        )
-        windows = sliding_window_view(psf, window_shape=psfgen.psf_shape)
-        return np.mean(
-            [psfgen.embedding(psf=windows[w, w, w]) for w in range(windows.shape[0])],
-            axis=0
-        )
-
-    if rolling_average_embedding:
+    if rolling_embedding:
         model_inputs = np.stack([
             np.expand_dims(
-                average_embedding(np.squeeze(i)),
+                psfgen.rolling_embedding(psf=np.squeeze(i), plot=plot, strides=16),
                 axis=-1
             ) for i in inputs
         ], axis=0)
@@ -1003,7 +940,7 @@ def featuremaps(
     })
 
     logger.info(f"Models: {modelpath}")
-    model = load(modelpath)
+    model = load(modelpath/'saved_model.pb')
 
     input_shape = model.layers[1].output_shape[1:-1]
     modes = model.layers[-1].output_shape[-1]

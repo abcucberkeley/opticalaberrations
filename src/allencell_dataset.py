@@ -6,9 +6,11 @@ from pathlib import Path
 from tifffile import imread, imsave
 import numpy as np
 from tqdm import trange
-
+from scipy.signal import fftconvolve as scipy_fftconvolve
+from skimage.filters import threshold_otsu
 
 import cli
+from preprocessing import resize
 from utils import peak_aberration
 from synthetic import SyntheticPSF
 
@@ -20,10 +22,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
+def save_synthetic_sample(savepath, inputs, kernel, amps, snr, maxcounts, save_kernel=False):
 
+    logger.info(f"Saved: {savepath}")
     imsave(f"{savepath}.tif", inputs)
-    # logger.info(f"Saved: {savepath}.tif")
+    if save_kernel:
+        imsave(f"{savepath}_kernel.tif", kernel)
 
     with Path(f"{savepath}.json").open('w') as f:
         json = dict(
@@ -44,15 +48,84 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
             escape_forward_slashes=False
         )
 
-    # logger.info(f"Saved: {savepath}.json")
+
+def convolve(
+    savepath: Path,
+    gen: SyntheticPSF,
+    sample: Path,
+    kernel: np.array,
+    amps: np.array,
+    snr: int,
+    maxcounts: int,
+    save_kernel: bool,
+    strides: int,
+    log10: bool = True,
+    apodization: bool = True,
+    principle_planes: bool = True,
+    rolling_embedding: bool = True,
+    debug: bool = False,
+):
+    # remove background
+    sample = imread(sample)
+    t = threshold_otsu(sample)
+    sample[sample <= t] = 0.
+
+    # convolve with a PSF
+    conv = scipy_fftconvolve(sample, kernel, mode='full')
+    conv /= np.nanpercentile(conv, 99.99)
+    conv[conv > 1] = 1
+    conv = np.nan_to_num(conv, nan=0)
+
+    width = [(i // 2) for i in sample.shape]
+    center = [(i // 2) + 1 for i in conv.shape]
+    conv = conv[
+       center[0] - width[0]:center[0] + width[0],
+       center[1] - width[1]:center[1] + width[1],
+       center[2] - width[2]:center[2] + width[2],
+    ]
+
+    conv = resize(
+        conv,
+        crop_shape=[conv.shape[i] if conv.shape[i] >= gen.psf_shape[i] else gen.psf_shape[i] for i in range(3)],
+        voxel_size=gen.voxel_size,
+        sample_voxel_size=gen.voxel_size,
+    )
+    # imsave(f"{savepath}_conv.tif", conv)
+
+    kernel = gen.embedding(psf=kernel, log10=True, plot=f"{savepath}_kernel_embedding" if debug else None)
+
+    if rolling_embedding:
+        emb = gen.rolling_embedding(
+            psf=conv,
+            log10=log10,
+            apodization=apodization,
+            strides=strides,
+            principle_planes=principle_planes,
+            plot=f"{savepath}_embedding" if debug else None
+        )
+    else:
+        emb = gen.embedding(
+            psf=conv,
+            log10=log10,
+            principle_planes=principle_planes,
+            plot=f"{savepath}_embedding" if debug else None
+        )
+
+    save_synthetic_sample(
+        savepath,
+        emb,
+        kernel=kernel,
+        amps=amps,
+        snr=snr,
+        maxcounts=maxcounts,
+        save_kernel=save_kernel
+    )
 
 
 def create_synthetic_sample(
     filename: str,
+    sample: Path,
     outdir: Path,
-    otf: bool,
-    noise: bool,
-    max_jitter: float,
     input_shape: int,
     modes: int,
     psf_type: str,
@@ -64,19 +137,18 @@ def create_synthetic_sample(
     x_voxel_size: float,
     y_voxel_size: float,
     z_voxel_size: float,
-    min_psnr: int,
-    max_psnr: int,
     lam_detection: float,
     refractive_index: float,
     na_detection: float,
     cpu_workers: int,
+    save_kernel: bool,
 ):
     gen = SyntheticPSF(
         order='ansi',
         cpu_workers=cpu_workers,
         n_modes=modes,
-        max_jitter=max_jitter,
-        snr=(min_psnr, max_psnr),
+        max_jitter=0,
+        snr=1000,
         dtype=psf_type,
         distribution=distribution,
         gamma=gamma,
@@ -91,91 +163,102 @@ def create_synthetic_sample(
         na_detection=na_detection,
     )
 
-    outdir = outdir / f"x{round(x_voxel_size*1000)}-y{round(y_voxel_size*1000)}-z{round(z_voxel_size*1000)}"
-    outdir = outdir / f"i{input_shape}"
-
-    if distribution == 'powerlaw':
-        outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
-    else:
-        outdir = outdir / f"{distribution}"
-
     if distribution == 'single':
-        for i in range(5, modes):
+        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
+        outdir = outdir / f"i{input_shape}"
+
+        if distribution == 'powerlaw':
+            outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
+        else:
+            outdir = outdir / f"{distribution}"
+
+        outdir = outdir / f"z{modes}"
+        outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
+        for i in range(5, 16):
             savepath = outdir / f"m{i}"
-            savepath = savepath / f"psnr_{min_psnr}-{max_psnr}"
-            savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-                                  f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
-            savepath.mkdir(exist_ok=True, parents=True)
-            savepath = savepath / filename
 
             phi = np.zeros(modes)
             phi[i] = np.random.uniform(min_amplitude, max_amplitude)
 
-            if otf:
-                inputs, amps, snr, zplanes, maxcounts = gen.single_otf(
-                    phi=phi,
-                    zplanes=0,
-                    normed=True,
-                    noise=noise,
-                    augmentation=noise,
-                    meta=True,
-                    na_mask=True,
-                    ratio=True,
-                    padsize=None
-                )
-            else:
-                inputs, amps, snr, zplanes, maxcounts = gen.single_psf(
-                    phi=phi,
-                    zplanes=0,
-                    normed=True,
-                    noise=noise,
-                    augmentation=noise,
-                    meta=True
-                )
-
-            save_synthetic_sample(savepath, inputs, amps, snr, maxcounts)
-    else:
-        savepath = outdir / f"z{modes}"
-        savepath = savepath / f"psnr_{min_psnr}-{max_psnr}"
-        savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
-        savepath.mkdir(exist_ok=True, parents=True)
-        savepath = savepath / filename
-
-        if otf:
-            inputs, amps, snr, zplanes, maxcounts = gen.single_otf(
-                phi=(min_amplitude, max_amplitude),
+            kernel, amps, snr, zplanes, maxcounts = gen.single_psf(
+                phi=phi,
                 zplanes=0,
                 normed=True,
-                noise=True,
-                augmentation=True,
-                meta=True,
-                na_mask=True,
-                ratio=True,
-                padsize=None
-            )
-        else:
-            inputs, amps, snr, zplanes, maxcounts = gen.single_psf(
-                phi=(min_amplitude, max_amplitude),
-                zplanes=0,
-                normed=True,
-                noise=True,
+                noise=False,
                 augmentation=True,
                 meta=True
             )
+            savepath = savepath / sample.stem
+            savepath.mkdir(exist_ok=True, parents=True)
+            savepath = savepath / filename
 
-        save_synthetic_sample(savepath, inputs, amps, snr, maxcounts)
+            convolve(
+                savepath=savepath,
+                gen=gen,
+                sample=sample,
+                kernel=kernel,
+                amps=amps,
+                snr=snr,
+                maxcounts=maxcounts,
+                save_kernel=save_kernel,
+                strides=input_shape//2,
+            )
+
+    else:
+        kernel, amps, snr, zplanes, maxcounts = gen.single_psf(
+            phi=(min_amplitude, max_amplitude),
+            zplanes=0,
+            normed=True,
+            noise=False,
+            augmentation=True,
+            meta=True
+        )
+
+        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
+        outdir = outdir / f"i{input_shape}"
+
+        if distribution == 'powerlaw':
+            outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
+        else:
+            outdir = outdir / f"{distribution}"
+
+        savepath = outdir / f"z{modes}"
+        savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
+        savepath = savepath / sample.stem
+        savepath.mkdir(exist_ok=True, parents=True)
+        savepath = savepath / filename
+
+        convolve(
+            savepath=savepath,
+            gen=gen,
+            sample=sample,
+            kernel=kernel,
+            amps=amps,
+            snr=snr,
+            maxcounts=maxcounts,
+            save_kernel=save_kernel,
+            strides=input_shape//2,
+        )
 
 
 def parse_args(args):
     parser = cli.argparser()
 
-    parser.add_argument("--filename", type=str, default='sample')
+    parser.add_argument("--sample", type=Path, default='sample.tif')
     parser.add_argument("--outdir", type=Path, default='../dataset')
 
     parser.add_argument(
-        '--otf', action='store_true',
-        help='toggle to convert input to frequency space (OTF)'
+        "--iters", default=10, type=int,
+        help='number of samples'
+    )
+
+    parser.add_argument(
+        '--kernels', action='store_true',
+        help='toggle to save raw kernels'
     )
 
     parser.add_argument(
@@ -209,16 +292,6 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--min_psnr", default=10, type=int,
-        help="minimum PSNR for training samples"
-    )
-
-    parser.add_argument(
-        "--max_psnr", default=100, type=int,
-        help="maximum PSNR for training samples"
-    )
-
-    parser.add_argument(
         "--psf_type", default='widefield', type=str,
         help="widefield or confocal"
     )
@@ -246,11 +319,6 @@ def parse_args(args):
     parser.add_argument(
         "--max_amplitude", default=.25, type=float,
         help="max amplitude for the zernike coefficients"
-    )
-
-    parser.add_argument(
-        "--max_jitter", default=1, type=float,
-        help="max offset from center in microns"
     )
 
     parser.add_argument(
@@ -283,10 +351,10 @@ def main(args=None):
 
     def sample(k):
         return create_synthetic_sample(
-            filename=f"{int(args.filename)+k}",
+            filename=f"{k}",
+            sample=args.sample,
             outdir=args.outdir,
-            otf=args.otf,
-            noise=args.noise,
+            save_kernel=args.kernels,
             modes=args.modes,
             input_shape=args.input_shape,
             psf_type=args.psf_type,
@@ -295,23 +363,17 @@ def main(args=None):
             bimodal=args.bimodal,
             min_amplitude=args.min_amplitude,
             max_amplitude=args.max_amplitude,
-            max_jitter=args.max_jitter,
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
-            min_psnr=args.min_psnr,
-            max_psnr=args.max_psnr,
             lam_detection=args.lam_detection,
             refractive_index=args.refractive_index,
             na_detection=args.na_detection,
             cpu_workers=args.cpu_workers,
         )
 
-    if args.dist == 'single':
-        sample(k=0)
-    else:
-        for i in trange(100):
-            sample(k=i)
+    for i in trange(1, args.iters+1):
+        sample(k=i)
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

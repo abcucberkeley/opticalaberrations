@@ -1,6 +1,7 @@
 import logging
 import time
 from pathlib import Path
+
 from subprocess import call
 
 import cli
@@ -56,13 +57,13 @@ def parse_args(args):
     )
 
     slurm.add_argument(
-        "--cpus", default=5, type=int,
-        help='number of CPUs to use for this job'
+        "--mem", default='500GB', type=str,
+        help='requested RAM to use for this job'
     )
 
     slurm.add_argument(
-        "--mem", default='160G', type=str,
-        help='requested RAM to use for this job'
+        "--cpus", default=5, type=int,
+        help='number of CPUs to use for this job'
     )
 
     slurm.add_argument(
@@ -112,6 +113,7 @@ def parse_args(args):
 
 def main(args=None):
     args = parse_args(args)
+    logging.info(args)
 
     outdir = Path(f"{args.outdir}/{args.name}")
     outdir.mkdir(exist_ok=True, parents=True)
