@@ -318,18 +318,19 @@ def plot_fov(n_modes=60, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
         plt.savefig(f'{savedir}/fov_mode_{i}.pdf', bbox_inches='tight', pad_inches=.25)
 
 
-def plot_relratio(
+def plot_embeddings(
         res=64,
         padsize=None,
         n_modes=15,
-        wavelength=.605,
-        x_voxel_size=.08,
-        y_voxel_size=.08,
-        z_voxel_size=.4,
+        wavelength=.920,
+        x_voxel_size=.15,
+        y_voxel_size=.15,
+        z_voxel_size=.6,
         log10=False,
         psf_type='confocal',
-        savepath='../data/relratio',
+        savepath='../data/embeddings',
 ):
+    savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
