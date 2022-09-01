@@ -341,7 +341,9 @@ def predict(
     dm_pattern: Path,
     dm_state: Any,
     axial_voxel_size: float,
+    model_axial_voxel_size: float,
     lateral_voxel_size: float,
+    model_lateral_voxel_size: float,
     wavelength: float = .605,
     scalar: float = 1,
     threshold: float = 0.0,
@@ -357,7 +359,8 @@ def predict(
     psf = preprocessing.prep_psf(
         img,
         input_shape=model.layers[0].input_shape[0][1:-1],
-        voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+        model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
+        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
     )
 
     psfgen = SyntheticPSF(

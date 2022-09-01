@@ -110,9 +110,14 @@ def resize(vol, voxel_size: Sequence, crop_shape: Sequence, sample_voxel_size: S
     return resized_psf
 
 
-def prep_psf(path: Path, input_shape: tuple, voxel_size: tuple):
+def prep_psf(path: Path, input_shape: tuple, sample_voxel_size: tuple, model_voxel_size: tuple):
     psf = imread(path)
     psf = psf.transpose(0, 2, 1)
     psf = psf / np.max(psf)
-    psf = resize(psf, voxel_size=voxel_size, crop_shape=tuple(3*[input_shape[-1]]))
+    psf = resize(
+        psf,
+        sample_voxel_size=sample_voxel_size,
+        voxel_size=model_voxel_size,
+        crop_shape=tuple(3*[input_shape[-1]])
+    )
     return psf
