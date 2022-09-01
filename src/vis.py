@@ -323,10 +323,11 @@ def plot_relratio(
         padsize=None,
         n_modes=15,
         wavelength=.605,
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
-        log10=True,
+        x_voxel_size=.08,
+        y_voxel_size=.08,
+        z_voxel_size=.4,
+        log10=False,
+        psf_type='confocal',
         savepath='../data/relratio',
 ):
     plt.rcParams.update({
@@ -367,6 +368,7 @@ def plot_relratio(
                 grid[(mode, k, w)] = fig.add_subplot(gs[ax+k, j+1])
 
     gen = SyntheticPSF(
+        dtype=psf_type,
         amplitude_ranges=(-1, 1),
         n_modes=n_modes,
         lam_detection=wavelength,
@@ -400,7 +402,7 @@ def plot_relratio(
             abr = round(peak_aberration(phi) * np.sign(amp), 1)
             grid[(mode, 0, amp)].set_title(f'{abr}$\\lambda$')
 
-            outdir = Path(f'{savepath}/i{res}_pad_{padsize}/mode_{mode}/ratios/')
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_{psf_type}/mode_{mode}/ratios/')
             outdir.mkdir(exist_ok=True, parents=True)
             imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", window)
 
@@ -440,7 +442,7 @@ def plot_relratio(
                 cax.yaxis.set_label_position("right")
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{savepath}/i{res}_pad{padsize}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}/i{res}_pad{padsize}_{psf_type}.pdf', bbox_inches='tight', pad_inches=.25)
 
 
 def plot_gaussian_filters(

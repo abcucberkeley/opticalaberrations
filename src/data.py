@@ -17,6 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 def parse_args(args):
     parser = cli.argparser()
 

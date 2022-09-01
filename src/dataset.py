@@ -50,7 +50,7 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
 def create_synthetic_sample(
     filename: str,
     outdir: Path,
-    otf: bool,
+    emb: bool,
     noise: bool,
     max_jitter: float,
     input_shape: int,
@@ -111,7 +111,7 @@ def create_synthetic_sample(
             phi = np.zeros(modes)
             phi[i] = np.random.uniform(min_amplitude, max_amplitude)
 
-            if otf:
+            if emb:
                 inputs, amps, snr, zplanes, maxcounts = gen.single_otf(
                     phi=phi,
                     zplanes=0,
@@ -121,7 +121,8 @@ def create_synthetic_sample(
                     meta=True,
                     na_mask=True,
                     ratio=True,
-                    padsize=None
+                    padsize=None,
+                    plot=f"{savepath}_embedding"
                 )
             else:
                 inputs, amps, snr, zplanes, maxcounts = gen.single_psf(
@@ -142,7 +143,7 @@ def create_synthetic_sample(
         savepath.mkdir(exist_ok=True, parents=True)
         savepath = savepath / filename
 
-        if otf:
+        if emb:
             inputs, amps, snr, zplanes, maxcounts = gen.single_otf(
                 phi=(min_amplitude, max_amplitude),
                 zplanes=0,
@@ -152,7 +153,8 @@ def create_synthetic_sample(
                 meta=True,
                 na_mask=True,
                 ratio=True,
-                padsize=None
+                padsize=None,
+                plot=f"{savepath}_embedding"
             )
         else:
             inputs, amps, snr, zplanes, maxcounts = gen.single_psf(
@@ -174,8 +176,13 @@ def parse_args(args):
     parser.add_argument("--outdir", type=Path, default='../dataset')
 
     parser.add_argument(
-        '--otf', action='store_true',
-        help='toggle to convert input to frequency space (OTF)'
+        '--emb', action='store_true',
+        help='toggle to save embeddings only'
+    )
+
+    parser.add_argument(
+        "--iters", default=10, type=int,
+        help='number of samples'
     )
 
     parser.add_argument(
@@ -285,7 +292,7 @@ def main(args=None):
         return create_synthetic_sample(
             filename=f"{int(args.filename)+k}",
             outdir=args.outdir,
-            otf=args.otf,
+            emb=args.emb,
             noise=args.noise,
             modes=args.modes,
             input_shape=args.input_shape,
@@ -307,11 +314,8 @@ def main(args=None):
             cpu_workers=args.cpu_workers,
         )
 
-    if args.dist == 'single':
-        sample(k=0)
-    else:
-        for i in trange(100):
-            sample(k=i)
+    for i in trange(args.iters):
+        sample(k=i)
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

@@ -351,7 +351,7 @@ def predict(
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
-    model = backend.load(model)
+    model = backend.load(model, mosaic=True)
 
     psf = preprocessing.prep_psf(
         img,
@@ -412,8 +412,7 @@ def predict(
             ratio=True,
             augmentation=True,
             meta=True,
-            plot=True,
-            save_path=Path(f'{img.parent/img.stem}_diagnosis'),
+            plot=Path(f'{img.parent/img.stem}_diagnosis'),
         )
 
         vis.prediction(
