@@ -539,8 +539,7 @@ class SyntheticPSF:
         ratio: bool = False,
         padsize: Any = None,
         log10: bool = False,
-        plot: bool = False,
-        save_path: Path = Path.cwd()/'test',
+        plot: Any = None,
     ):
 
         psf = self.single_psf(
@@ -560,59 +559,9 @@ class SyntheticPSF:
             na_mask=na_mask,
             ratio=ratio,
             padsize=padsize,
-            log10=log10
+            log10=log10,
+            plot=plot
         )
-
-        if plot:
-            fig, axes = plt.subplots(5, 3, figsize=(8, 12))
-            w = Wavefront(phi).wave(100)
-            mn = np.abs(np.nanquantile(w, .1))
-            mx = np.abs(np.nanquantile(w, .9))
-            axes[0, 0].set_title(f"PSNR: {round(psnr)}")
-            axes[0, 1].set_title(rf"{round(mn+mx, 2)}$\lambda$")
-            axes[0, 2].set_title(rf"$Max_{{count}}$: {round(maxcount)}")
-
-            axes[0, 0].set_ylabel('PSF')
-            m = axes[0, 0].imshow(np.max(psf, axis=0), cmap='hot')
-            axes[0, 1].imshow(np.max(psf, axis=1), cmap='hot')
-            axes[0, 2].imshow(np.max(psf, axis=2).T, cmap='hot')
-            cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-
-            axes[1, 0].set_ylabel('Theoretical PSF')
-            m = axes[1, 0].imshow(np.max(self.ipsf, axis=0), cmap='hot')
-            axes[1, 1].imshow(np.max(self.ipsf, axis=1), cmap='hot')
-            axes[1, 2].imshow(np.max(self.ipsf, axis=2).T, cmap='hot')
-            cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-
-            axes[2, 0].set_ylabel('Theoretical OTF')
-            m = axes[2, 0].imshow(self.iotf[self.iotf.shape[0] // 2, :, :], cmap='jet')
-            axes[2, 1].imshow(self.iotf[:, self.iotf.shape[1] // 2, :], cmap='jet')
-            axes[2, 2].imshow(self.iotf[:, :, self.iotf.shape[2] // 2].T, cmap='jet')
-            cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-
-            axes[-2, 0].set_ylabel(r'Embedding ($\alpha$)')
-            m = axes[-2, 0].imshow(emb[0], cmap='Spectral_r')
-            axes[-2, 1].imshow(emb[1], cmap='Spectral_r')
-            axes[-2, 2].imshow(emb[2].T, cmap='Spectral_r')
-
-            cax = inset_axes(axes[-2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_label_position("right")
-
-            axes[-1, 0].set_ylabel(r'Embedding ($\varphi$)')
-            m = axes[-1, 0].imshow(emb[3], cmap='Spectral_r')
-            axes[-1, 1].imshow(emb[4], cmap='Spectral_r')
-            axes[-1, 2].imshow(emb[5].T, cmap='Spectral_r')
-
-            cax = inset_axes(axes[-1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_label_position("right")
-
-            plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
-            plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
         if meta:
             return emb, y, psnr, zplanes, maxcount

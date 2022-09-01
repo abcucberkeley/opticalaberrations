@@ -17,6 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 def parse_args(args):
     parser = cli.argparser()
 
@@ -31,7 +32,7 @@ def parse_args(args):
     subparsers.add_parser("signal")
     subparsers.add_parser("aberration")
     subparsers.add_parser("psnr")
-    subparsers.add_parser("relratio")
+    subparsers.add_parser("embeddings")
     subparsers.add_parser("gaussian")
     subparsers.add_parser("simulation")
     subparsers.add_parser("shapes")
@@ -70,8 +71,8 @@ def main(args=None):
     elif args.dtype == "fov":
         vis.plot_fov()
 
-    elif args.dtype == "relratio":
-        vis.plot_relratio()
+    elif args.dtype == "embeddings":
+        vis.plot_embeddings()
 
     elif args.dtype == "gaussian":
         vis.plot_gaussian_filters()

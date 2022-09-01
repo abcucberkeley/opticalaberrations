@@ -12,6 +12,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.ticker as mtick
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
+from tifffile import imsave
 
 import utils
 import vis
@@ -351,7 +352,7 @@ def predict(
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
-    model = backend.load(model)
+    model = backend.load(model, mosaic=True)
 
     psf = preprocessing.prep_psf(
         img,
@@ -402,6 +403,9 @@ def predict(
     coffs.index.name = 'ansi'
     coffs.to_csv(f"{img.parent/img.stem}_zernike_coffs.csv")
 
+    pupil_displacement = np.array(p.wave(size=100), dtype='float32')
+    imsave(f"{img.parent/img.stem}_pred_pupil_displacement.tif", pupil_displacement)
+
     if plot:
         psfgen.single_otf(
             p.amplitudes,
@@ -412,8 +416,7 @@ def predict(
             ratio=True,
             augmentation=True,
             meta=True,
-            plot=True,
-            save_path=Path(f'{img.parent/img.stem}_diagnosis'),
+            plot=Path(f'{img.parent/img.stem}_diagnosis'),
         )
 
         vis.prediction(

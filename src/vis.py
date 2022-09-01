@@ -318,17 +318,19 @@ def plot_fov(n_modes=60, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
         plt.savefig(f'{savedir}/fov_mode_{i}.pdf', bbox_inches='tight', pad_inches=.25)
 
 
-def plot_relratio(
+def plot_embeddings(
         res=64,
         padsize=None,
         n_modes=15,
-        wavelength=.605,
+        wavelength=.920,
         x_voxel_size=.15,
         y_voxel_size=.15,
         z_voxel_size=.6,
-        log10=True,
-        savepath='../data/relratio',
+        log10=False,
+        psf_type='confocal',
+        savepath='../data/embeddings',
 ):
+    savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -367,6 +369,7 @@ def plot_relratio(
                 grid[(mode, k, w)] = fig.add_subplot(gs[ax+k, j+1])
 
     gen = SyntheticPSF(
+        dtype=psf_type,
         amplitude_ranges=(-1, 1),
         n_modes=n_modes,
         lam_detection=wavelength,
@@ -400,7 +403,7 @@ def plot_relratio(
             abr = round(peak_aberration(phi) * np.sign(amp), 1)
             grid[(mode, 0, amp)].set_title(f'{abr}$\\lambda$')
 
-            outdir = Path(f'{savepath}/i{res}_pad_{padsize}/mode_{mode}/ratios/')
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_{psf_type}/mode_{mode}/ratios/')
             outdir.mkdir(exist_ok=True, parents=True)
             imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", window)
 
@@ -440,7 +443,7 @@ def plot_relratio(
                 cax.yaxis.set_label_position("right")
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{savepath}/i{res}_pad{padsize}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}/i{res}_pad{padsize}_{psf_type}.pdf', bbox_inches='tight', pad_inches=.25)
 
 
 def plot_gaussian_filters(
@@ -2032,9 +2035,6 @@ def prediction(
     ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-
-    pupil_displacement = np.array(pred_wave, dtype='float32')
-    imsave(f"{save_path}_pupil_displacement.tif", pupil_displacement)
     plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 

@@ -3,19 +3,28 @@
 HANDLER=slurm
 ENV=~/anaconda3/envs/deep/bin/python
 
-OUTDIR='/clusterfs/nvme/thayer/dataset/embeddings'
+#PSF_TYPE='widefield'
+#xVOXEL=.15
+#yVOXEL=.15
+#zVOXEL=.6
+#LAMBDA=.605
+#NA=1.0
 
-SHAPE=64
+PSF_TYPE='confocal'
 xVOXEL=.15
 yVOXEL=.15
 zVOXEL=.6
-MODES=60
-GAMMA=.75
-LAMBDA=.605
+LAMBDA=.920
 NA=1.0
-DTYPE='widefield'
 
-TYPE='--otf'
+ITERS=100
+SHAPE=64
+GAMMA=.75
+MODES=60
+OUTDIR="/clusterfs/nvme/thayer/dataset/${PSF_TYPE}"
+
+
+TYPE='--emb'
 OUTDIR="${OUTDIR}/train"
 difractionlimit=($(seq 0 .01 .05))
 small=($(seq .055 .005 .1))
@@ -52,7 +61,9 @@ do
         done
 
         j="${ENV} dataset.py ${TYPE}"
+        j="${j} --psf_type ${PSF_TYPE}"
         j="${j} --dist ${DIST}"
+        j="${j} --iters ${ITERS}"
         j="${j} --bimodal"
         j="${j} --noise"
         j="${j} --gamma ${GAMMA}"

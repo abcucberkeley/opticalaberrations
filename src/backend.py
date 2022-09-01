@@ -62,47 +62,60 @@ logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 
 
-def load(model_path: Path) -> Model:
+def load(model_path: Path, mosaic=False) -> Model:
     model_path = Path(model_path)
 
-    try:
+    if mosaic:
+        custom_objects = {
+            "Stem": opticaltransformer.Stem,
+            "Patchify": opticaltransformer.Patchify,
+            "Merge": opticaltransformer.Merge,
+            "PatchEncoder": opticaltransformer.PatchEncoder,
+            "MLP": opticaltransformer.MLP,
+            "Transformer": opticaltransformer.Transformer,
+        }
+        if model_path.is_file() and model_path.suffix == '.h5':
+            return load_model(str(model_path), custom_objects=custom_objects)
+        else:
+            return load_model(str(list(model_path.rglob('*.h5'))[0]), custom_objects=custom_objects)
+    else:
         try:
-            '''.pb format'''
-            if model_path.is_file() and model_path.suffix == '.pb':
-                return load_model(str(model_path.parent))
-            else:
-                return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
+            try:
+                '''.pb format'''
+                if model_path.is_file() and model_path.suffix == '.pb':
+                    return load_model(str(model_path.parent))
+                else:
+                    return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
 
-        except IndexError or FileNotFoundError or OSError:
-            if 'opticaltransformer' in str(model_path):
-                custom_objects = {
-                    "Stem": opticaltransformer.Stem,
-                    "Patchify": opticaltransformer.Patchify,
-                    "Merge": opticaltransformer.Merge,
-                    "PatchEncoder": opticaltransformer.PatchEncoder,
-                    "MLP": opticaltransformer.MLP,
-                    "Transformer": opticaltransformer.Transformer,
-                }
+            except IndexError or FileNotFoundError or OSError:
+                if 'opticaltransformer' in str(model_path):
+                    custom_objects = {
+                        "Stem": opticaltransformer.Stem,
+                        "Patchify": opticaltransformer.Patchify,
+                        "Merge": opticaltransformer.Merge,
+                        "PatchEncoder": opticaltransformer.PatchEncoder,
+                        "MLP": opticaltransformer.MLP,
+                        "Transformer": opticaltransformer.Transformer,
+                    }
+                else:
+                    custom_objects = {
+                        "Stem": Stem,
+                        "MaskedActivation": MaskedActivation,
+                        "SpatialAttention": SpatialAttention,
+                        "DepthwiseConv3D": DepthwiseConv3D,
+                        "CAB": opticalresnet.CAB,
+                        "TB": opticalresnet.TB,
+                    }
 
-            else:
-                custom_objects = {
-                    "Stem": Stem,
-                    "MaskedActivation": MaskedActivation,
-                    "SpatialAttention": SpatialAttention,
-                    "DepthwiseConv3D": DepthwiseConv3D,
-                    "CAB": opticalresnet.CAB,
-                    "TB": opticalresnet.TB,
-                }
+                '''.h5/hdf5 format'''
+                if model_path.is_file() and model_path.suffix == '.h5':
+                    return load_model(str(model_path), custom_objects=custom_objects)
+                else:
+                    return load_model(str(list(model_path.rglob('*.h5'))[0]), custom_objects=custom_objects)
 
-            '''.h5/hdf5 format'''
-            if model_path.is_file() and model_path.suffix == '.h5':
-                return load_model(str(model_path), custom_objects=custom_objects)
-            else:
-                return load_model(str(list(model_path.rglob('*.h5'))[0]), custom_objects=custom_objects)
-
-    except Exception as e:
-        logger.exception(e)
-        exit()
+        except Exception as e:
+            logger.exception(e)
+            exit()
 
 
 def train(
@@ -940,7 +953,7 @@ def featuremaps(
     })
 
     logger.info(f"Models: {modelpath}")
-    model = load(modelpath/'saved_model.pb')
+    model = load(modelpath)
 
     input_shape = model.layers[1].output_shape[1:-1]
     modes = model.layers[-1].output_shape[-1]
