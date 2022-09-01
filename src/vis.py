@@ -2035,9 +2035,6 @@ def prediction(
     ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-
-    pupil_displacement = np.array(pred_wave, dtype='float32')
-    imsave(f"{save_path}_pupil_displacement.tif", pupil_displacement)
     plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 

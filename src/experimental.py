@@ -12,6 +12,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.ticker as mtick
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
+from tifffile import imsave
 
 import utils
 import vis
@@ -401,6 +402,9 @@ def predict(
     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
     coffs.index.name = 'ansi'
     coffs.to_csv(f"{img.parent/img.stem}_zernike_coffs.csv")
+
+    pupil_displacement = np.array(p.wave(size=100), dtype='float32')
+    imsave(f"{img.parent/img.stem}_pred_pupil_displacement.tif", pupil_displacement)
 
     if plot:
         psfgen.single_otf(
