@@ -17,35 +17,36 @@ zVOXEL=.6
 LAMBDA=.920
 NA=1.0
 
+DATASET='train'
 ITERS=100
 SHAPE=64
 GAMMA=.75
 MODES=60
-OUTDIR="/clusterfs/nvme/thayer/dataset/${PSF_TYPE}"
+OUTDIR="/clusterfs/nvme/thayer/dataset/${PSF_TYPE}/${DATASET}"
 
+if [ "$DATASET" = "train" ];then
+  TYPE='--emb'
+  difractionlimit=($(seq 0 .01 .05))
+  small=($(seq .055 .005 .1))
+  large=($(seq .11 .01 .4))
+  extreme=($(seq .45 .05 .65))
+  amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
+  echo ${amps[@]}
+  echo ${#amps[@]}
+  amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]:0:${#extreme[@]}-1}" )
+  amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
+  mPSNR=($(seq 1 20 81))
+  xPSNR=($(seq 20 20 100))
+  SAMPLES=($(seq 1 100 1000))
+else
+  TYPE=''
+  amps1=($(seq 0 .025 .5))
+  amps2=($(seq .025 .025 .5))
+  mPSNR=($(seq 1 10 91))
+  xPSNR=($(seq 10 10 100))
+  SAMPLES=($(seq 1 100 100))
+fi
 
-TYPE='--emb'
-OUTDIR="${OUTDIR}/train"
-difractionlimit=($(seq 0 .01 .05))
-small=($(seq .055 .005 .1))
-large=($(seq .11 .01 .4))
-extreme=($(seq .45 .05 .65))
-amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
-echo ${amps[@]}
-echo ${#amps[@]}
-amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]:0:${#extreme[@]}-1}" )
-amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
-mPSNR=($(seq 1 20 81))
-xPSNR=($(seq 20 20 100))
-SAMPLES=($(seq 1 100 1000))
-
-#TYPE=''
-#OUTDIR="${OUTDIR}/test"
-#amps1=($(seq 0 .025 .5))
-#amps2=($(seq .025 .025 .5))
-#mPSNR=($(seq 1 10 91))
-#xPSNR=($(seq 10 10 100))
-#SAMPLES=($(seq 1 100 100))
 
 for DIST in powerlaw dirichlet
 do
