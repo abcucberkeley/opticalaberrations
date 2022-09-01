@@ -17,6 +17,7 @@ zVOXEL=.6
 LAMBDA=.920
 NA=1.0
 
+ITERS=100
 SHAPE=64
 GAMMA=.75
 MODES=60
@@ -62,6 +63,7 @@ do
         j="${ENV} dataset.py ${TYPE}"
         j="${j} --psf_type ${PSF_TYPE}"
         j="${j} --dist ${DIST}"
+        j="${j} --iters ${ITERS}"
         j="${j} --bimodal"
         j="${j} --noise"
         j="${j} --gamma ${GAMMA}"
