@@ -3,14 +3,14 @@
 HANDLER=slurm
 ENV=~/anaconda3/envs/deep/bin/python
 
-#DTYPE='widefield'
+#PSF_TYPE='widefield'
 #xVOXEL=.15
 #yVOXEL=.15
 #zVOXEL=.6
 #LAMBDA=.605
 #NA=1.0
 
-DTYPE='confocal'
+PSF_TYPE='confocal'
 xVOXEL=.15
 yVOXEL=.15
 zVOXEL=.6
@@ -20,7 +20,7 @@ NA=1.0
 SHAPE=64
 GAMMA=.75
 MODES=60
-OUTDIR="/clusterfs/nvme/thayer/dataset/${DTYPE}"
+OUTDIR="/clusterfs/nvme/thayer/dataset/${PSF_TYPE}"
 
 
 TYPE='--emb'
@@ -60,6 +60,7 @@ do
         done
 
         j="${ENV} dataset.py ${TYPE}"
+        j="${j} --psf_type ${PSF_TYPE}"
         j="${j} --dist ${DIST}"
         j="${j} --bimodal"
         j="${j} --noise"
