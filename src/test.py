@@ -59,6 +59,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--psf_type", default='widefield', help="type of the desired PSF"
+    )
+
+    parser.add_argument(
         "--wavelength", default=.605, type=float, help='wavelength in microns'
     )
 
@@ -112,6 +116,11 @@ def main(args=None):
             distribution=args.dist,
             samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,
+            psf_type=args.psf_type,
+            wavelength=args.wavelength,
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
             na=args.na,
         )
     elif args.target == 'iterheatmap':
@@ -122,6 +131,11 @@ def main(args=None):
             distribution=args.dist,
             samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,
+            psf_type=args.psf_type,
+            wavelength=args.wavelength,
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
             na=args.na,
         )
     elif args.target == 'evalsample':
@@ -129,6 +143,11 @@ def main(args=None):
             model_path=args.model,
             kernel_path=args.kernel,
             reference_path=args.reference,
+            psf_type=args.psf_type,
+            wavelength=args.wavelength,
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
             na=args.na,
         )
     else:

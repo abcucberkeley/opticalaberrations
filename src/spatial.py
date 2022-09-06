@@ -29,6 +29,7 @@ class SpatialAttention(layers.Layer):
             mask_shape=64,
             na_det=1.0,
             lambda_det=.605,
+            psf_type='widefield',
             x_voxel_size=.15,
             y_voxel_size=.15,
             z_voxel_size=.6,
@@ -44,6 +45,7 @@ class SpatialAttention(layers.Layer):
         self.mask_shape = mask_shape
         self.na_det = na_det
         self.lambda_det = lambda_det
+        self.psf_type = psf_type
         self.x_voxel_size = x_voxel_size
         self.y_voxel_size = y_voxel_size
         self.z_voxel_size = z_voxel_size
@@ -58,6 +60,7 @@ class SpatialAttention(layers.Layer):
             na_det=self.na_det,
             refractive_index=self.refractive_index,
             lambda_det=self.lambda_det,
+            psf_type=self.psf_type,
             x_voxel_size=self.x_voxel_size,
             y_voxel_size=self.y_voxel_size,
             z_voxel_size=self.z_voxel_size,
@@ -86,6 +89,7 @@ class SpatialAttention(layers.Layer):
             "mask_shape": self.mask_shape,
             "na_det": self.na_det,
             "lambda_det": self.lambda_det,
+            "psf_type": self.psf_type,
             "x_voxel_size": self.x_voxel_size,
             "y_voxel_size": self.y_voxel_size,
             "z_voxel_size": self.z_voxel_size,

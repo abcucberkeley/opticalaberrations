@@ -22,6 +22,7 @@ class MaskedActivation(layers.Layer):
         activation='relu',
         mask_shape=64,
         na_det=1.0,
+        psf_type='widefield',
         lambda_det=.605,
         x_voxel_size=.15,
         y_voxel_size=.15,
@@ -34,6 +35,7 @@ class MaskedActivation(layers.Layer):
         self.mask_shape = mask_shape
         self.na_det = na_det
         self.lambda_det = lambda_det
+        self.psf_type = psf_type
         self.x_voxel_size = x_voxel_size
         self.y_voxel_size = y_voxel_size
         self.z_voxel_size = z_voxel_size
@@ -43,6 +45,7 @@ class MaskedActivation(layers.Layer):
         config = super(MaskedActivation, self).get_config()
         config.update({
             "activation": self.activation,
+            "psf_type": self.psf_type,
             "na_det": self.na_det,
             "lambda_det": self.lambda_det,
             "x_voxel_size": self.x_voxel_size,
@@ -62,6 +65,7 @@ class MaskedActivation(layers.Layer):
             n_modes=60,
             amplitude_ranges=0,
             psf_shape=mask_shape,
+            dtype=self.psf_type,
             lam_detection=self.lambda_det,
             x_voxel_size=self.x_voxel_size,
             y_voxel_size=self.y_voxel_size,

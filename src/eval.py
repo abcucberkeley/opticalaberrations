@@ -873,16 +873,27 @@ def evaluate_modes(
         )
 
 
-def eval_bin(datapath, modelpath, samplelimit, na):
+def eval_bin(
+    datapath,
+    modelpath,
+    samplelimit,
+    na,
+    psf_type,
+    x_voxel_size,
+    y_voxel_size,
+    z_voxel_size,
+    wavelength,
+):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
         n_modes=60,
-        lam_detection=.605,
         amplitude_ranges=(-.25, .25),
         psf_shape=(64, 64, 64),
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        dtype=psf_type,
+        lam_detection=wavelength,
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
         batch_size=100,
         snr=100,
         max_jitter=0,
@@ -924,6 +935,11 @@ def evalheatmap(
     samplelimit: Any = None,
     max_amplitude: float = .25,
     na: float = 1.0,
+    psf_type: str = 'widefield',
+    x_voxel_size: float = .15,
+    y_voxel_size: float = .15,
+    z_voxel_size: float = .6,
+    wavelength: float = .605,
 ):
     savepath = modelpath / 'evalheatmaps'
     savepath.mkdir(parents=True, exist_ok=True)
@@ -950,7 +966,17 @@ def evalheatmap(
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
 
-    job = partial(eval_bin, modelpath=modelpath, samplelimit=samplelimit, na=na)
+    job = partial(
+        eval_bin,
+        modelpath=modelpath,
+        samplelimit=samplelimit,
+        na=na,
+        psf_type=psf_type,
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
+        wavelength=wavelength,
+    )
     preds, ys = zip(*utils.multiprocess(job, classes))
     y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
     y_pred = pd.DataFrame([], columns=['sample']).append(preds, ignore_index=True)
@@ -1034,16 +1060,29 @@ def evalheatmap(
     return fig
 
 
-def iter_eval_bin(datapath, modelpath, niter, psnr, samples, na):
+def iter_eval_bin(
+    datapath,
+    modelpath,
+    niter,
+    psnr,
+    samples,
+    na,
+    psf_type,
+    x_voxel_size,
+    y_voxel_size,
+    z_voxel_size,
+    wavelength,
+):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
         n_modes=60,
-        lam_detection=.605,
         amplitude_ranges=(-.25, .25),
         psf_shape=(64, 64, 64),
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        dtype=psf_type,
+        lam_detection=wavelength,
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
         batch_size=100,
         snr=psnr,
         max_jitter=0,
@@ -1119,7 +1158,20 @@ def iter_eval_bin(datapath, modelpath, niter, psnr, samples, na):
     return (y_pred, y_true)
 
 
-def iter_eval_bin_with_reference(datapath, modelpath, reference, niter, psnr, samples, na):
+def iter_eval_bin_with_reference(
+    datapath,
+    modelpath,
+    reference,
+    niter,
+    psnr,
+    samples,
+    na,
+    psf_type,
+    x_voxel_size,
+    y_voxel_size,
+    z_voxel_size,
+    wavelength,
+):
     reference = imread(reference).astype(np.float)
     reference /= np.max(reference)
     reference = np.expand_dims(reference, axis=-1)
@@ -1127,12 +1179,13 @@ def iter_eval_bin_with_reference(datapath, modelpath, reference, niter, psnr, sa
     model = backend.load(modelpath)
     gen = SyntheticPSF(
         n_modes=60,
-        lam_detection=.605,
         amplitude_ranges=(-.25, .25),
         psf_shape=(64, 64, 64),
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        dtype=psf_type,
+        lam_detection=wavelength,
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
         batch_size=100,
         snr=psnr,
         max_jitter=0,
@@ -1215,6 +1268,11 @@ def iterheatmap(
     samplelimit: Any = None,
     max_amplitude: float = .25,
     na: float = 1.0,
+    psf_type: str = 'widefield',
+    x_voxel_size: float = .15,
+    y_voxel_size: float = .15,
+    z_voxel_size: float = .6,
+    wavelength: float = .605,
 ):
     if reference is None:
         savepath = modelpath / 'iterheatmaps'
@@ -1253,7 +1311,12 @@ def iterheatmap(
             niter=niter,
             psnr=psnr,
             samples=samplelimit,
-            na=na
+            na=na,
+            psf_type=psf_type,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            wavelength=wavelength,
         )
     else:
         job = partial(
@@ -1263,7 +1326,12 @@ def iterheatmap(
             niter=niter,
             psnr=psnr,
             samples=samplelimit,
-            na=na
+            na=na,
+            psf_type=psf_type,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            wavelength=wavelength,
         )
 
     preds, ys = zip(*utils.multiprocess(job, classes))
@@ -1372,8 +1440,13 @@ def evalsample(
     psnr: tuple = (90, 100),
     niter: int = 1,
     na: float = 1.0,
+    psf_type: str = 'widefield',
+    x_voxel_size: float = .15,
+    y_voxel_size: float = .15,
+    z_voxel_size: float = .6,
+    wavelength: float = .605,
     reference_voxel_size: tuple = (.002, .002, .002),
-    rolling_embedding: bool = False
+    rolling_embedding: bool = False,
 ):
 
     plt.rcParams.update({
@@ -1388,11 +1461,12 @@ def evalsample(
 
     modelgen = SyntheticPSF(
         n_modes=60,
-        lam_detection=.605,
         psf_shape=(64, 64, 64),
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        dtype=psf_type,
+        lam_detection=wavelength,
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
         snr=psnr,
         max_jitter=0,
     )
@@ -1414,7 +1488,8 @@ def evalsample(
     else:
         gen = SyntheticPSF(
             n_modes=60,
-            lam_detection=.605,
+            dtype=psf_type,
+            lam_detection=wavelength,
             psf_shape=reference.shape,
             z_voxel_size=reference_voxel_size[0],
             y_voxel_size=reference_voxel_size[1],

@@ -40,6 +40,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--psf_type", default='widefield', help="type of the desired PSF"
+    )
+
+    parser.add_argument(
         "--x_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
     )
 
@@ -78,6 +82,7 @@ def main(args=None):
     if args.target == "random":
         backend.predict(
             model=args.model,
+            psf_type=args.psf_type,
             wavelength=args.wavelength,
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,

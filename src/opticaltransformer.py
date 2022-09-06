@@ -23,6 +23,7 @@ class Stem(layers.Layer):
             kernel_size=7,
             mask_shape=64,
             na_det=1.0,
+            psf_type='widefield',
             lambda_det=.605,
             x_voxel_size=.15,
             y_voxel_size=.15,
@@ -36,6 +37,7 @@ class Stem(layers.Layer):
         self.kernel_size = kernel_size
         self.mask_shape = mask_shape
         self.na_det = na_det
+        self.psf_type = psf_type
         self.lambda_det = lambda_det
         self.x_voxel_size = x_voxel_size
         self.y_voxel_size = y_voxel_size
@@ -54,6 +56,7 @@ class Stem(layers.Layer):
             activation=self.activation,
             mask_shape=self.mask_shape,
             na_det=self.na_det,
+            psf_type=self.psf_type,
             refractive_index=self.refractive_index,
             lambda_det=self.lambda_det,
             x_voxel_size=self.x_voxel_size,
@@ -71,6 +74,7 @@ class Stem(layers.Layer):
             "activation": self.activation,
             "mul": self.mul,
             "mask_shape": self.mask_shape,
+            "psf_type": self.psf_type,
             "na_det": self.na_det,
             "lambda_det": self.lambda_det,
             "x_voxel_size": self.x_voxel_size,
@@ -303,6 +307,7 @@ class OpticalTransformer(Base, ABC):
             mul=False,
             mask_shape=64,
             na_det=1.0,
+            psf_type='widefield',
             lambda_det=.605,
             x_voxel_size=.15,
             y_voxel_size=.15,
@@ -323,6 +328,7 @@ class OpticalTransformer(Base, ABC):
         self.mul = mul
         self.mask_shape = mask_shape
         self.na_det = na_det
+        self.psf_type = psf_type
         self.lambda_det = lambda_det
         self.x_voxel_size = x_voxel_size
         self.y_voxel_size = y_voxel_size
@@ -399,6 +405,7 @@ class OpticalTransformer(Base, ABC):
             na_det=self.na_det,
             refractive_index=self.refractive_index,
             lambda_det=self.lambda_det,
+            psf_type=self.psf_type,
             x_voxel_size=self.x_voxel_size,
             y_voxel_size=self.y_voxel_size,
             z_voxel_size=self.z_voxel_size,

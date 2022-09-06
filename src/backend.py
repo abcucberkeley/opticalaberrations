@@ -139,6 +139,7 @@ def train(
         warmup: int,
         decay_period: int,
         wavelength: float,
+        psf_type: str,
         x_voxel_size: float,
         y_voxel_size: float,
         z_voxel_size: float,
@@ -160,23 +161,7 @@ def train(
             modes=pmodes,
             na_det=1.0,
             refractive_index=1.33,
-            lambda_det=wavelength,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            mask_shape=input_shape,
-            activation=activation,
-            mul=mul
-        )
-    elif network == 'opticalhierarchicaltransformer':
-        model = opticalhierarchicaltransformer.OpticalHierarchicalTransformer(
-            name='OpticalHierarchicalTransformer',
-            patches=patch_size,
-            modes=pmodes,
-            na_det=1.0,
-            refractive_index=1.33,
+            psf_type=psf_type,
             lambda_det=wavelength,
             x_voxel_size=x_voxel_size,
             y_voxel_size=y_voxel_size,
@@ -194,6 +179,7 @@ def train(
             na_det=1.0,
             refractive_index=1.33,
             lambda_det=wavelength,
+            psf_type=psf_type,
             x_voxel_size=x_voxel_size,
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
@@ -323,6 +309,7 @@ def train(
             modelpath=outdir,
             amplitude_range=.3,
             wavelength=wavelength,
+            psf_type=psf_type,
             x_voxel_size=x_voxel_size,
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
@@ -358,6 +345,7 @@ def train(
     if dataset is None:
 
         config = dict(
+            dtype=psf_type,
             psf_shape=inputs,
             snr=(min_psnr, max_psnr),
             max_jitter=1,
@@ -490,7 +478,7 @@ def train(
                 h5_checkpoints,
                 earlystopping,
                 defibrillator,
-                #features,
+                features,
                 lrscheduler,
             ],
         )
@@ -678,6 +666,7 @@ def bootstrap_predict(
 
 def predict(
         model: Path,
+        psf_type: str,
         wavelength: float,
         x_voxel_size: float,
         y_voxel_size: float,
@@ -695,6 +684,7 @@ def predict(
         for amplitude_range in [(0, .1), (.1, .2), (.2, .4), (.4, .6)]:
             for snr in [25, 50]:
                 psfargs = dict(
+                    dtype=psf_type,
                     order='ansi',
                     snr=snr,
                     n_modes=modes,
@@ -938,6 +928,7 @@ def featuremaps(
         modelpath: Path,
         amplitude_range: float,
         wavelength: float,
+        psf_type: str,
         x_voxel_size: float,
         y_voxel_size: float,
         z_voxel_size: float,
@@ -967,6 +958,7 @@ def featuremaps(
 
     psfargs = dict(
         n_modes=modes,
+        dtype=psf_type,
         psf_shape=3 * [input_shape[1]],
         distribution='single',
         lam_detection=wavelength,
@@ -1036,13 +1028,13 @@ def featuremaps(
                         ] = vol
 
                 space = grid.flatten()
-                vmin = np.min(space)
-                vmax = np.max(space)
+                vmin = np.nanquantile(space, .02)
+                vmax = np.nanquantile(space, .98)
                 vcenter = (vmin + vmax)/2
                 step = .01
 
                 highcmap = plt.get_cmap('YlOrRd', 256)
-                lowcmap = plt.get_cmap('YlGnBu_r', 256)
+                lowcmap = plt.get_cmap('terrain', 256)
                 low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
                 high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
                 cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))

@@ -42,6 +42,10 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
+        "--psf_type", default='widefield', help="type of the desired PSF"
+    )
+
+    train_parser.add_argument(
         "--x_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
     )
 
@@ -184,6 +188,7 @@ def main(args=None):
             batch_size=args.batch_size,
             patch_size=[int(i) for i in args.patch_size.split('-')],
             steps_per_epoch=args.steps_per_epoch,
+            psf_type=args.psf_type,
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
