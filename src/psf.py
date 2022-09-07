@@ -8,6 +8,7 @@ import logging
 import sys
 
 import numpy as np
+from skimage.transform import rescale
 import h5py
 
 logging.basicConfig(
@@ -122,8 +123,18 @@ class PsfGenerator3D:
             return _psf
         else:
             with h5py.File(self.dtype, 'r') as file:
-                lattice = file.get('DitheredxzPSFCrossSection').value[0]
+                lattice = file.get('DitheredxzPSFCrossSection').value[:, 0]
 
             print(lattice)
-            _psf = _psf * lattice
+            print(lattice.shape)
+
+            lattice = rescale(
+                lattice, (.0367/self.dz),
+                order=3,
+                anti_aliasing=True,
+            )
+
+            print(lattice.shape)
+
+            _psf = np.dot(_psf * lattice)
             return _psf

@@ -66,15 +66,15 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
     peaks = []
     zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
 
-    difractionlimit = np.arange(0, 0.05, .01).round(3)  # 4  bins
-    small = np.arange(.05, .1, .005).round(3)           # 10 bins
-    large = np.arange(.1, .4, .01).round(3)             # 30 bins
-    extreme = np.arange(.4, .65, .05).round(3)          # 6  bins
-    min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
-    max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
+    # difractionlimit = np.arange(0, 0.05, .01).round(3)  # 4  bins
+    # small = np.arange(.05, .1, .005).round(3)           # 10 bins
+    # large = np.arange(.1, .4, .01).round(3)             # 30 bins
+    # extreme = np.arange(.4, .65, .05).round(3)          # 6  bins
+    # min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
+    # max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
 
-    # min_amps = np.arange(0, .45, .05).round(3)
-    # max_amps = np.arange(.05, .5, .05).round(3)
+    min_amps = np.arange(.15, .45, .01).round(3)
+    max_amps = np.arange(.16, .5, .01).round(3)
 
     for mina, maxa in zip(min_amps, max_amps):
         psfargs['amplitude_ranges'] = (mina, maxa)

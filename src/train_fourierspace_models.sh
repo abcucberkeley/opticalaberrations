@@ -10,7 +10,7 @@ SHAPE=64
 MODES=60
 BATCH=512
 LAMBDA=.920
-DATA="/clusterfs/nvme/thayer/dataset/${PSF_TYPE}/train/x100-y100-z500/"
+DATA="/clusterfs/nvme/thayer/dataset/${PSF_TYPE}_large/train/x100-y100-z500/"
 
 ### Multi-node
 python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 4 --gpus 4 --cpus 16 \
