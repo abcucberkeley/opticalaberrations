@@ -1,13 +1,13 @@
 #!/bin/bash
 
-xVOXEL=.15
-yVOXEL=.15
-zVOXEL=.6
+xVOXEL=.1
+yVOXEL=.1
+zVOXEL=.5
 LAMBDA=.920
 SHAPE=64
 MAXAMP=1.
 PSF_TYPE='confocal'
-DATA="/clusterfs/nvme/thayer/dataset/${PSF_TYPE}/test/x150-y150-z600/"
+DATA="/clusterfs/nvme/thayer/dataset/${PSF_TYPE}/test/x100-y100-z500/"
 
 declare -a models=(
 '../models/new/confocal/opticaltransformer'

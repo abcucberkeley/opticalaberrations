@@ -11,9 +11,9 @@ ENV=~/anaconda3/envs/deep/bin/python
 #NA=1.0
 
 PSF_TYPE='confocal'
-xVOXEL=.15
-yVOXEL=.15
-zVOXEL=.6
+xVOXEL=.1
+yVOXEL=.1
+zVOXEL=.5
 LAMBDA=.920
 NA=1.0
 
