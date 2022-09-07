@@ -23,9 +23,9 @@ ITERS=100
 SHAPE=64
 GAMMA=.75
 MODES=60
-OUTDIR="/clusterfs/nvme/thayer/dataset/${PSF_TYPE}/${DATASET}_large"
+OUTDIR="/clusterfs/nvme/thayer/dataset/${PSF_TYPE}_large/${DATASET}"
 
-if [ "$DATASET" = "widefield" ];then
+if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   mPSNR=($(seq 1 20 81))
   xPSNR=($(seq 20 20 100))
