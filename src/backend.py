@@ -478,7 +478,7 @@ def train(
                 h5_checkpoints,
                 earlystopping,
                 defibrillator,
-                features,
+                # features,
                 lrscheduler,
             ],
         )

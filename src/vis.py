@@ -46,15 +46,16 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
 
     psfargs = dict(
         n_modes=60,
+        dtype='confocal',
         distribution='dirichlet',
         bimodal=True,
         gamma=.75,
         lam_detection=wavelength,
         amplitude_ranges=(0, 1),
         psf_shape=(32, 32, 32),
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        x_voxel_size=.1,
+        y_voxel_size=.1,
+        z_voxel_size=.5,
         batch_size=batch_size,
         snr=30,
         max_jitter=1,
@@ -65,15 +66,15 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
     peaks = []
     zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
 
-    # difractionlimit = np.arange(0, 0.05, .01).round(3)  # 4  bins
-    # small = np.arange(.05, .1, .005).round(3)           # 10 bins
-    # large = np.arange(.1, .4, .01).round(3)             # 30 bins
-    # extreme = np.arange(.4, .65, .05).round(3)          # 6  bins
-    # min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
-    # max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
+    difractionlimit = np.arange(0, 0.05, .01).round(3)  # 4  bins
+    small = np.arange(.05, .1, .005).round(3)           # 10 bins
+    large = np.arange(.1, .4, .01).round(3)             # 30 bins
+    extreme = np.arange(.4, .65, .05).round(3)          # 6  bins
+    min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
+    max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
 
-    min_amps = np.arange(0, .45, .05).round(3)
-    max_amps = np.arange(.05, .5, .05).round(3)
+    # min_amps = np.arange(0, .45, .05).round(3)
+    # max_amps = np.arange(.05, .5, .05).round(3)
 
     for mina, maxa in zip(min_amps, max_amps):
         psfargs['amplitude_ranges'] = (mina, maxa)
