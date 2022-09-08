@@ -323,12 +323,12 @@ def plot_embeddings(
         res=64,
         padsize=None,
         n_modes=15,
-        wavelength=.920,
-        x_voxel_size=.1,
-        y_voxel_size=.1,
-        z_voxel_size=.5,
+        wavelength=.510,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.268,
         log10=False,
-        psf_type='confocal',
+        psf_type='../data/simulations/NAlattice0.25/YuMB/NAAnnulusMax0.40/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat',
         savepath='../data/embeddings',
 ):
     savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
@@ -354,7 +354,7 @@ def plot_embeddings(
     cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
     cmap = mcolors.ListedColormap(cmap)
 
-    waves = np.arange(-.25, .3, step=.05).round(3)
+    waves = np.arange(-.1, .125, step=.025).round(3)
     logger.info(waves)
 
     fig = plt.figure(figsize=(25, 60))
@@ -404,7 +404,7 @@ def plot_embeddings(
             abr = round(peak_aberration(phi) * np.sign(amp), 1)
             grid[(mode, 0, amp)].set_title(f'{abr}$\\lambda$')
 
-            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_{psf_type}/mode_{mode}/ratios/')
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/ratios/')
             outdir.mkdir(exist_ok=True, parents=True)
             imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", window)
 
@@ -444,7 +444,7 @@ def plot_embeddings(
                 cax.yaxis.set_label_position("right")
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{savepath}/i{res}_pad{padsize}_{psf_type}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}/i{res}_pad{padsize}_lattice_small.pdf', bbox_inches='tight', pad_inches=.25)
 
 
 def plot_gaussian_filters(

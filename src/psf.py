@@ -125,16 +125,14 @@ class PsfGenerator3D:
             with h5py.File(self.dtype, 'r') as file:
                 lattice = file.get('DitheredxzPSFCrossSection').value[:, 0]
 
-            print(lattice)
-            print(lattice.shape)
-
             lattice = rescale(
-                lattice, (.0367/self.dz),
+                lattice,
+                (.0367/self.dz),
                 order=3,
                 anti_aliasing=True,
             )
-
-            print(lattice.shape)
-
-            _psf = np.dot(_psf * lattice)
+            w = _psf.shape[0]//2
+            center = lattice.shape[0]//2
+            lattice = lattice[center-w:center+w, np.newaxis, np.newaxis]
+            _psf = _psf * lattice
             return _psf

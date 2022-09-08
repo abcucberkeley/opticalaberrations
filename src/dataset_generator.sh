@@ -11,11 +11,18 @@ NODES='abc'
 #LAMBDA=.605
 #NA=1.0
 
-PSF_TYPE='confocal'
-xVOXEL=.1
-yVOXEL=.1
-zVOXEL=.5
-LAMBDA=.920
+#PSF_TYPE='confocal'
+#xVOXEL=.1
+#yVOXEL=.1
+#zVOXEL=.5
+#LAMBDA=.920
+#NA=1.0
+
+PSF_TYPE='/clusterfs/nvme/thayer/dataset/lattice/NAlattice0.25/YuMB/NAAnnulusMax0.40/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat'
+xVOXEL=.108
+yVOXEL=.108
+zVOXEL=.268
+LAMBDA=.510
 NA=1.0
 
 DATASET='train'
@@ -23,7 +30,7 @@ ITERS=100
 SHAPE=64
 GAMMA=.75
 MODES=60
-OUTDIR="/clusterfs/nvme/thayer/dataset/${PSF_TYPE}_large/${DATASET}"
+OUTDIR="/clusterfs/nvme/thayer/dataset/lattice/${DATASET}"
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
@@ -31,7 +38,10 @@ if [ "$DATASET" = "train" ];then
   xPSNR=($(seq 20 20 100))
   SAMPLES=($(seq 1 100 1000))
 
-  if [ "$PSF_TYPE" = "widefield" ];then
+  if [ "$PSF_TYPE" = "confocal" ];then
+    amps1=($(seq .15 .01 .5))
+    amps2=($(seq .16 .01 .5))
+  else
     difractionlimit=($(seq 0 .01 .05))
     small=($(seq .055 .005 .1))
     large=($(seq .11 .01 .4))
@@ -41,9 +51,6 @@ if [ "$DATASET" = "train" ];then
     echo ${#amps[@]}
     amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]:0:${#extreme[@]}-1}" )
     amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
-  else
-    amps1=($(seq .15 .01 .5))
-    amps2=($(seq .16 .01 .5))
   fi
 
 else
@@ -52,12 +59,12 @@ else
   xPSNR=($(seq 10 10 100))
   SAMPLES=($(seq 1 100 100))
 
-  if [ "$PSF_TYPE" = "widefield" ];then
-    amps1=($(seq 0 .025 .5))
-    amps2=($(seq .025 .025 .5))
-  else
+  if [ "$PSF_TYPE" = "confocal" ];then
     amps1=($(seq .15 .025 .5))
     amps2=($(seq .175 .025 .5))
+  else
+    amps1=($(seq 0 .025 .5))
+    amps2=($(seq .025 .025 .5))
   fi
 fi
 

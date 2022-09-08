@@ -3,7 +3,6 @@ import sys
 from typing import Any
 
 import numpy as np
-from pathlib import Path
 from skimage import transform
 from skimage.filters import gaussian
 from functools import partial
