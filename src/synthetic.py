@@ -253,7 +253,7 @@ class SyntheticPSF:
         if self.dtype == 'widefield':
             threshold = np.nanpercentile(mask.flatten(), 55)
         else:
-            threshold = np.nanpercentile(mask.flatten(), 85)
+            threshold = np.nanpercentile(mask.flatten(), 80)
 
         # logger.info(f'NA-threshold: {threshold}')
         mask = np.where(mask < threshold, mask, 1.)

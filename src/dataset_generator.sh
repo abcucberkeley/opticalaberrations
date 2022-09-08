@@ -18,7 +18,7 @@ NODES='abc'
 #LAMBDA=.920
 #NA=1.0
 
-PSF_TYPE='/clusterfs/nvme/thayer/dataset/lattice/NAlattice0.25/YuMB/NAAnnulusMax0.40/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat'
+PSF_TYPE='/clusterfs/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRect/NAAnnulusMax0.60/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat'
 xVOXEL=.108
 yVOXEL=.108
 zVOXEL=.268

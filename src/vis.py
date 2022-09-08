@@ -328,7 +328,7 @@ def plot_embeddings(
         y_voxel_size=.108,
         z_voxel_size=.268,
         log10=False,
-        psf_type='../data/simulations/NAlattice0.25/YuMB/NAAnnulusMax0.40/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat',
+        psf_type='/home/supernova/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRect/NAAnnulusMax0.60/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat',
         savepath='../data/embeddings',
 ):
     savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
@@ -354,7 +354,8 @@ def plot_embeddings(
     cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
     cmap = mcolors.ListedColormap(cmap)
 
-    waves = np.arange(-.1, .125, step=.025).round(3)
+    waves = np.arange(-.3, .35, step=.05).round(3)
+    # waves = np.arange(-.075, .08, step=.015).round(3) ## small
     logger.info(waves)
 
     fig = plt.figure(figsize=(25, 60))
@@ -444,7 +445,7 @@ def plot_embeddings(
                 cax.yaxis.set_label_position("right")
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{savepath}/i{res}_pad{padsize}_lattice_small.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}/i{res}_pad{padsize}_lattice.pdf', bbox_inches='tight', pad_inches=.25)
 
 
 def plot_gaussian_filters(

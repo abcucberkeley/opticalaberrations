@@ -9,12 +9,12 @@ xyPol = [1, 1, 0];
 crop_factor = 0.1;
 switch figure_name
     case 'covid'
-        lattice_descrip = 'YuMB';
-        PW =  b.PW_Sq45;
+        lattice_descrip = 'HexRect';
+        PW =  b.PW_HexRect;
         algorithm = 'new';
         NAlattice = .25;
         NAsigma = .08;
-        NAannulus = [0.4, 0.3];
+        NAannulus = [0.6, 0.2];
         crop_factor = 0.1;
 end
 NAdet = 1.0;
