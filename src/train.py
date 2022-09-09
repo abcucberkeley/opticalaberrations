@@ -42,6 +42,10 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
+        "--roi", default=None, help="region of interest to crop from the center of the input image"
+    )
+
+    train_parser.add_argument(
         "--psf_type", default='widefield', help="type of the desired PSF"
     )
 
@@ -187,6 +191,7 @@ def main(args=None):
             input_shape=args.input_shape,
             batch_size=args.batch_size,
             patch_size=[int(i) for i in args.patch_size.split('-')],
+            roi=[int(i) for i in args.roi.split('-')] if args.roi is not None else args.roi,
             steps_per_epoch=args.steps_per_epoch,
             psf_type=args.psf_type,
             x_voxel_size=args.x_voxel_size,

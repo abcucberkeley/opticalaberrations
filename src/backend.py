@@ -47,11 +47,11 @@ from stem import Stem
 from activation import MaskedActivation
 from depthwiseconv import DepthwiseConv3D
 from spatial import SpatialAttention
+from roi import ROI
 import opticalresnet
 import opticaltransformer
 from baseline import Baseline
 from widekernel import WideKernel
-import opticalhierarchicaltransformer
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -67,6 +67,7 @@ def load(model_path: Path, mosaic=False) -> Model:
 
     if mosaic:
         custom_objects = {
+            "ROI": ROI,
             "Stem": opticaltransformer.Stem,
             "Patchify": opticaltransformer.Patchify,
             "Merge": opticaltransformer.Merge,
@@ -90,6 +91,7 @@ def load(model_path: Path, mosaic=False) -> Model:
             except IndexError or FileNotFoundError or OSError:
                 if 'opticaltransformer' in str(model_path):
                     custom_objects = {
+                        "ROI": ROI,
                         "Stem": opticaltransformer.Stem,
                         "Patchify": opticaltransformer.Patchify,
                         "Merge": opticaltransformer.Merge,
@@ -149,6 +151,9 @@ def train(
         max_psnr: int,
         epochs: int,
         mul: bool,
+        roi: Any = None,
+        refractive_index: float = 1.33,
+        plot_patches: bool = False
 ):
     network = network.lower()
     opt = opt.lower()
@@ -157,10 +162,11 @@ def train(
     if network == 'opticaltransformer':
         model = opticaltransformer.OpticalTransformer(
             name='OpticalTransformer',
+            roi=roi,
             patches=patch_size,
             modes=pmodes,
             na_det=1.0,
-            refractive_index=1.33,
+            refractive_index=refractive_index,
             psf_type=psf_type,
             lambda_det=wavelength,
             x_voxel_size=x_voxel_size,
@@ -177,7 +183,7 @@ def train(
             name='OpticalResNet',
             modes=pmodes,
             na_det=1.0,
-            refractive_index=1.33,
+            refractive_index=refractive_index,
             lambda_det=wavelength,
             psf_type=psf_type,
             x_voxel_size=x_voxel_size,
@@ -418,51 +424,67 @@ def train(
         logger.info(f"Batch size: {batch_size}")
         logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
 
-        # from opticaltransformer import Patchify, Merge
-        # original = np.squeeze(img[0, 1])
-        #
-        # vmin = np.min(original)
-        # vmax = np.max(original)
-        # vcenter = (vmin + vmax) / 2
-        # step = .01
-        # print(vmin, vmax, vcenter)
-        #
-        # highcmap = plt.get_cmap('YlOrRd', 256)
-        # lowcmap = plt.get_cmap('YlGnBu_r', 256)
-        # low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-        # high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-        # cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-        # cmap = mcolors.ListedColormap(cmap)
-        #
-        # plt.figure(figsize=(4, 4))
-        # plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
-        # plt.axis("off")
-        # plt.title('Original')
-        #
-        # for p in patch_size:
-        #     patches = Patchify(patch_size=p)(img)
-        #     merged = Merge(patch_size=p)(patches)
-        #     print(patches.shape)
-        #     print(merged.shape)
-        #
-        #     patches = patches[0, 1]
-        #     merged = np.squeeze(merged[0, 1])
-        #
-        #     plt.figure(figsize=(4, 4))
-        #     plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
-        #     plt.axis("off")
-        #     plt.title('Merged')
-        #
-        #     n = int(np.sqrt(patches.shape[0]))
-        #     plt.figure(figsize=(4, 4))
-        #     plt.title('Patches')
-        #     for i, patch in enumerate(patches):
-        #         ax = plt.subplot(n, n, i + 1)
-        #         patch_img = tf.reshape(patch, (p, p)).numpy()
-        #         ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
-        #         ax.axis("off")
-        #
-        # plt.show()
+        if plot_patches:
+            img = np.expand_dims(img[0], axis=0)
+            original = np.squeeze(img[0, 1])
+
+            vmin = np.min(original)
+            vmax = np.max(original)
+            vcenter = (vmin + vmax) / 2
+            step = .01
+            print(vmin, vmax, vcenter)
+
+            highcmap = plt.get_cmap('YlOrRd', 256)
+            lowcmap = plt.get_cmap('YlGnBu_r', 256)
+            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+            cmap = mcolors.ListedColormap(cmap)
+
+            plt.figure(figsize=(4, 4))
+            plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
+            plt.axis("off")
+            plt.title('Original')
+
+            for p in patch_size:
+                sample = Stem(
+                    kernel_size=3,
+                    activation=activation,
+                    mask_shape=input_shape,
+                    refractive_index=refractive_index,
+                    lambda_det=wavelength,
+                    psf_type=psf_type,
+                    x_voxel_size=x_voxel_size,
+                    y_voxel_size=y_voxel_size,
+                    z_voxel_size=z_voxel_size,
+                    mul=mul
+                )(img)
+
+                if roi is not None:
+                    sample = ROI(crop_shape=roi)(sample)
+
+                patches = opticaltransformer.Patchify(patch_size=p)(sample)
+                merged = opticaltransformer.Merge(patch_size=p)(patches)
+                print(patches.shape)
+                print(merged.shape)
+
+                patches = patches[0, 1]
+                merged = np.squeeze(merged[0, 1])
+
+                plt.figure(figsize=(4, 4))
+                plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
+                plt.axis("off")
+                plt.title('Merged')
+
+                n = int(np.sqrt(patches.shape[0]))
+                plt.figure(figsize=(4, 4))
+                plt.title('Patches')
+                for i, patch in enumerate(patches):
+                    ax = plt.subplot(n, n, i + 1)
+                    patch_img = tf.reshape(patch, (p, p)).numpy()
+                    ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
+                    ax.axis("off")
+            plt.show()
 
     try:
         model.fit(

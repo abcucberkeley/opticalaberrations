@@ -8,6 +8,7 @@ import tensorflow_addons as tfa
 from tensorflow.keras import layers
 from base import Base
 from activation import MaskedActivation
+from roi import ROI
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -296,6 +297,7 @@ class Transformer(layers.Layer):
 class OpticalTransformer(Base, ABC):
     def __init__(
             self,
+            roi=None,
             patches=(8, 8, 8, 8),
             heads=(2, 4, 8, 16),
             repeats=(2, 4, 6, 2),
@@ -316,6 +318,7 @@ class OpticalTransformer(Base, ABC):
             **kwargs
     ):
         super().__init__(**kwargs)
+        self.roi = roi
         self.patches = patches
         self.heads = heads
         self.repeats = repeats
@@ -412,10 +415,13 @@ class OpticalTransformer(Base, ABC):
             mul=self.mul
         )(inputs)
 
+        if self.roi is not None:
+            m = ROI(crop_shape=self.roi)(m)
+
         for i, (p, h, r) in enumerate(zip(self.patches, self.heads, self.repeats)):
             m = self.transitional_block(
                 m,
-                img_shape=inputs.shape[-2],
+                img_shape=self.roi[-1] if self.roi is not None else inputs.shape[-2],
                 patch_size=self.patches[i],
                 org_patch_size=None if i == 0 else self.patches[i-1],
             )
