@@ -3,11 +3,15 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 import numpy as np
+import zarr
+from tqdm import trange
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib import gridspec
 from tifffile import imread, imsave
-from skimage import transform, filters
+from skimage import transform, filters, feature
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
@@ -121,3 +125,88 @@ def prep_psf(path: Path, input_shape: tuple, sample_voxel_size: tuple, model_vox
         crop_shape=tuple(3*[input_shape[-1]])
     )
     return psf
+
+
+def find_roi(path: Path, window_size: tuple = (64, 64, 64), num_peaks: int = 5, plot: bool = False):
+
+    fov_size: dict = {'x': 512, 'y': 512, 'z': 512}
+
+    if path.suffix == '.tif':
+        roi = imread(path).astype(np.float)
+        return roi[np.newaxis, :]
+
+    elif path.suffix == '.zarr':
+        dataset = zarr.open_array(str(path), mode='r', order='F')
+        dataset = dataset[10000:11000, 19000:20000, 3000:4000]
+        logger.info(f"Sample: {dataset.shape}")
+
+        sliding_windows = np.lib.stride_tricks.sliding_window_view(
+            dataset,
+            window_shape=(fov_size['y'], fov_size['x'], fov_size['z']),
+        )[::fov_size['y']//2, ::fov_size['x']//2, ::fov_size['z']//2]
+        sliding_windows = sliding_windows.reshape((-1, fov_size['y'], fov_size['x'], fov_size['z']))
+
+        rois = []
+        for i in trange(sliding_windows.shape[0], desc=f'Sliding windows {sliding_windows.shape}'):
+            fov = sliding_windows[i].astype(np.float)
+
+            if np.count_nonzero(fov) != 0:
+                # Convert F-order to C-order
+                fov = np.swapaxes(fov, 0, -1)
+                fov = np.swapaxes(fov, 1, -1)
+                fov /= np.nanmax(fov)
+
+                peaks = feature.peak_local_max(
+                    fov,
+                    min_distance=window_size[0]//2,
+                    exclude_border=window_size[0]//2,
+                    num_peaks=num_peaks,
+                    threshold_rel=.5
+                )
+
+                if plot:
+                    fig, axes = plt.subplots(1, 3, figsize=(12, 6))
+                    for ax in range(3):
+                        axes[ax].imshow(np.nanmax(fov, axis=ax)**.5, vmin=0, vmax=1, cmap='gray')
+
+                        for p in range(peaks.shape[0]):
+                            if ax == 0:
+                                axes[ax].plot(peaks[p, 1], peaks[p, 2], marker='.', ls='', color=f'C{p}')
+                                axes[ax].add_patch(patches.Rectangle(
+                                    xy=(peaks[p, 1]-window_size[1]//2, peaks[p, 2]-window_size[2]//2),
+                                    width=window_size[1], height=window_size[2],
+                                    fill=None,
+                                    color=f'C{p}',
+                                    alpha=1
+                                ))
+                            elif ax == 1:
+                                axes[ax].plot(peaks[p, 0], peaks[p, 2], marker='.', ls='', color=f'C{p}')
+                                axes[ax].add_patch(patches.Rectangle(
+                                    xy=(peaks[p, 0]-window_size[0]//2, peaks[p, 2]-window_size[2]//2),
+                                    width=window_size[1], height=window_size[2],
+                                    fill=None,
+                                    color=f'C{p}',
+                                    alpha=1
+                                ))
+                            else:
+                                axes[ax].plot(peaks[p, 0], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                                axes[ax].add_patch(patches.Rectangle(
+                                    xy=(peaks[p, 0]-window_size[0]//2, peaks[p, 1]-window_size[1]//2),
+                                    width=window_size[1], height=window_size[2],
+                                    fill=None,
+                                    color=f'C{p}',
+                                    alpha=1
+                                ))
+                    plt.show()
+
+                for p in range(peaks.shape[0]):
+                    rois.append(fov[
+                        peaks[p, 0]-window_size[0]//2:peaks[p, 0]+window_size[0]//2,
+                        peaks[p, 1]-window_size[1]//2:peaks[p, 1]+window_size[1]//2,
+                        peaks[p, 2]-window_size[2]//2:peaks[p, 2]+window_size[2]//2
+                    ])
+
+        return np.array(rois, dtype=np.float)
+
+    else:
+        logger.error(f"Unknown file format: {path.name}")

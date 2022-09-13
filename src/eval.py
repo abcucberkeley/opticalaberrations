@@ -4,6 +4,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 import matplotlib.pyplot as plt
+import xarray
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
 import numpy as np
@@ -14,6 +15,7 @@ import tensorflow as tf
 from scipy import signal
 from skimage import transform, filters
 from tifffile import imsave
+from preprocessing import find_roi
 
 import utils
 import vis
@@ -1437,16 +1439,17 @@ def evalsample(
     model_path: Path,
     kernel_path: Path = None,
     reference_path: Path = None,
-    psnr: tuple = (90, 100),
+    psnr: tuple = (1000, 1000),
     niter: int = 1,
     na: float = 1.0,
     psf_type: str = 'widefield',
-    x_voxel_size: float = .15,
-    y_voxel_size: float = .15,
-    z_voxel_size: float = .6,
-    wavelength: float = .605,
-    reference_voxel_size: tuple = (.002, .002, .002),
+    x_voxel_size: float = .108,
+    y_voxel_size: float = .108,
+    z_voxel_size: float = .268,
+    wavelength: float = .510,
+    reference_voxel_size: tuple = (.268, .108, .108),
     rolling_embedding: bool = False,
+    apodization: bool = True
 ):
 
     plt.rcParams.update({
@@ -1476,12 +1479,8 @@ def evalsample(
 
     model = backend.load(model_path)
 
-    reference = imread(reference_path).astype(np.float)
-    reference /= np.max(reference)
-    logger.info(f"Reference: {reference.shape}")
-
     ys = np.zeros(60)
-    ys[10] = .1
+    ys[6] = .1
 
     if kernel_path is not None:
         kernel = imread(kernel_path)
@@ -1490,7 +1489,7 @@ def evalsample(
             n_modes=60,
             dtype=psf_type,
             lam_detection=wavelength,
-            psf_shape=reference.shape,
+            psf_shape=[64, 64, 64],
             z_voxel_size=reference_voxel_size[0],
             y_voxel_size=reference_voxel_size[1],
             x_voxel_size=reference_voxel_size[2],
@@ -1506,166 +1505,181 @@ def evalsample(
             augmentation=False,
             meta=False
         )
-    imsave(savepath/f'kernel.tif', kernel)
+    imsave(savepath / f'kernel.tif', kernel)
     logger.info(f"Kernel: {kernel.shape}")
 
-    y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
-    y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
+    rois = find_roi(reference_path, window_size=kernel.shape)
+    logger.info(f"ROIs: {rois.shape}")
 
-    for k in range(1, niter+1):
-        conv = signal.convolve(reference, kernel, mode='full')
-        width = [(i//2) for i in reference.shape]
-        center = [(i//2)+1 for i in conv.shape]
-        # center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
-        conv = conv[
-             center[0]-width[0]:center[0]+width[0],
-             center[1]-width[1]:center[1]+width[1],
-             center[2]-width[2]:center[2]+width[2],
-        ]
-        imsave(savepath/f'convolved_iter_{k}.tif', conv)
+    for w in range(rois.shape[0]):
+        reference = rois[w] / np.max(rois[w])
+        logger.info(f"Reference: {reference.shape}")
 
-        preds, stdev = backend.bootstrap_predict(
-            model,
-            np.expand_dims(conv[np.newaxis, :], axis=-1),
-            psfgen=modelgen,
-            resize=reference_voxel_size,
-            rolling_embedding=rolling_embedding,
-            batch_size=1,
-            n_samples=1,
-            desc=f'Iter[{k}]',
-            plot=savepath/f'embeddings_convolved_iter_{k}',
-        )
+        y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
+        y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
 
-        p_wave = Wavefront(preds)
-        y_wave = Wavefront(ys.flatten())
-        diff_wave = Wavefront(ys - preds)
+        for k in range(1, niter+1):
+            conv = signal.convolve(reference, kernel, mode='full')
+            width = [(i//2) for i in reference.shape]
+            center = [(i//2)+1 for i in conv.shape]
+            # center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
+            conv = conv[
+                 center[0]-width[0]:center[0]+width[0],
+                 center[1]-width[1]:center[1]+width[1],
+                 center[2]-width[2]:center[2]+width[2],
+            ]
 
-        p_psf = modelgen.single_psf(p_wave, zplanes=0)
-        gt_psf = modelgen.single_psf(y_wave, zplanes=0)
-        corrected_psf = modelgen.single_psf(diff_wave, zplanes=0)
-        imsave(savepath / f'corrected_psf_iter_{k}.tif', corrected_psf)
+            conv /= np.nanpercentile(conv, 99.99)
+            conv[conv > 1] = 1
+            conv = np.nan_to_num(conv, nan=0)
 
-        vis.diagnostic_assessment(
-            psf=conv,
-            gt_psf=gt_psf,
-            predicted_psf=p_psf,
-            corrected_psf=corrected_psf,
-            psnr=psnr,
-            maxcounts=psnr,
-            y=y_wave,
-            pred=p_wave,
-            save_path=savepath/f'iter_{k}',
-        )
+            if apodization:
+                circular_mask = filters.window(('general_gaussian', 10/3, 2.5*10), conv.shape)
+                conv *= circular_mask
 
-        p = pd.DataFrame({'residuals': [utils.peak_aberration(preds, na=na)], 'niter': k})
-        y_pred = y_pred.append(p, ignore_index=True)
+            imsave(savepath/f'convolved_iter_{k}_window_{w}.tif', conv)
 
-        y = pd.DataFrame({'residuals': [utils.peak_aberration(ys, na=na)], 'niter': k})
-        y_true = y_true.append(y, ignore_index=True)
-
-        # setup next iter
-        if niter > 1:
-            res = ys - preds
-            kernel = gen.single_psf(
-                phi=Wavefront(res),
-                zplanes=0,
-                normed=True,
-                noise=False,
-                augmentation=False,
-                meta=False
+            preds, stdev = backend.bootstrap_predict(
+                model,
+                np.expand_dims(conv[np.newaxis, :], axis=-1),
+                psfgen=modelgen,
+                resize=reference_voxel_size,
+                rolling_embedding=rolling_embedding,
+                batch_size=1,
+                n_samples=1,
+                desc=f'Iter[{k}]',
+                plot=savepath/f'embeddings_convolved_iter_{k}_window_{w}',
             )
-            ys = res
 
-    error = np.abs(y_true['residuals'] - y_pred['residuals'])
-    error = pd.DataFrame(error, columns=['residuals'])
+            p_wave = Wavefront(preds)
+            y_wave = Wavefront(ys.flatten())
+            diff_wave = Wavefront(ys - preds)
 
-    df = pd.DataFrame(
-        zip(y_true['residuals'], error['residuals'], y_true['niter']),
-        columns=['aberration', 'error', 'niter'],
-    )
+            p_psf = modelgen.single_psf(p_wave, zplanes=0)
+            gt_psf = modelgen.single_psf(y_wave, zplanes=0)
+            corrected_psf = modelgen.single_psf(diff_wave, zplanes=0)
+            imsave(savepath / f'corrected_psf_iter_{k}_window_{w}.tif', corrected_psf)
 
-    means = pd.pivot_table(
-        df[df['niter'] == 0], values='error', index='aberration', columns='niter', aggfunc=np.mean
-    )
-    for i in range(1, niter+1):
-        means[i] = pd.pivot_table(
-            df[df['niter'] == i],
-            values='error', index=means.index, columns='niter', aggfunc=np.mean
+            vis.diagnostic_assessment(
+                psf=conv,
+                gt_psf=gt_psf,
+                predicted_psf=p_psf,
+                corrected_psf=corrected_psf,
+                psnr=psnr,
+                maxcounts=psnr,
+                y=y_wave,
+                pred=p_wave,
+                save_path=savepath/f'iter_{k}_window_{w}',
+            )
+
+            p = pd.DataFrame({'residuals': [utils.peak_aberration(preds, na=na)], 'niter': k})
+            y_pred = y_pred.append(p, ignore_index=True)
+
+            y = pd.DataFrame({'residuals': [utils.peak_aberration(ys, na=na)], 'niter': k})
+            y_true = y_true.append(y, ignore_index=True)
+
+            # setup next iter
+            if niter > 1:
+                res = ys - preds
+                kernel = gen.single_psf(
+                    phi=Wavefront(res),
+                    zplanes=0,
+                    normed=True,
+                    noise=False,
+                    augmentation=False,
+                    meta=False
+                )
+                ys = res
+
+        error = np.abs(y_true['residuals'] - y_pred['residuals'])
+        error = pd.DataFrame(error, columns=['residuals'])
+
+        df = pd.DataFrame(
+            zip(y_true['residuals'], error['residuals'], y_true['niter']),
+            columns=['aberration', 'error', 'niter'],
         )
 
-    bins = np.arange(0, 11, .25)
-    means.index = pd.cut(means.index, bins, labels=bins[1:], include_lowest=True)
-    means.index.name = 'bins'
-    means = means.groupby("bins").agg("mean")
-    means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
-    means = means.sort_index().interpolate()
+        means = pd.pivot_table(
+            df[df['niter'] == 0], values='error', index='aberration', columns='niter', aggfunc=np.mean
+        )
+        for i in range(1, niter+1):
+            means[i] = pd.pivot_table(
+                df[df['niter'] == i],
+                values='error', index=means.index, columns='niter', aggfunc=np.mean
+            )
 
-    logger.info(means)
-    means.to_csv(savepath/f'results_na_{str(na).replace("0.", "p")}.csv')
+        bins = np.arange(0, 11, .25)
+        means.index = pd.cut(means.index, bins, labels=bins[1:], include_lowest=True)
+        means.index.name = 'bins'
+        means = means.groupby("bins").agg("mean")
+        means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
+        means = means.sort_index().interpolate()
 
-    fig, ax = plt.subplots(figsize=(8, 6))
-    levels = [
-        0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
-        .5, .6, .7, .8, .9,
-        1, 1.25, 1.5, 1.75, 2., 2.5,
-        3., 4., 5.,
-    ]
+        logger.info(means)
+        means.to_csv(savepath/f'results_na_{str(na).replace("0.", "p")}.csv')
 
-    vmin, vmax, vcenter, step = levels[0], levels[-1], .25, .05
-    highcmap = plt.get_cmap('magma_r', 256)
-    lowcmap = plt.get_cmap('GnBu_r', 256)
-    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-    cmap = mcolors.ListedColormap(cmap)
+        fig, ax = plt.subplots(figsize=(8, 6))
+        levels = [
+            0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
+            .5, .6, .7, .8, .9,
+            1, 1.25, 1.5, 1.75, 2., 2.5,
+            3., 4., 5.,
+        ]
 
-    contours = ax.contourf(
-        means.columns.values,
-        means.index.values,
-        means.values,
-        cmap=cmap,
-        levels=levels,
-        extend='max',
-        linewidths=2,
-        linestyles='dashed',
-    )
-    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+        vmin, vmax, vcenter, step = levels[0], levels[-1], .25, .05
+        highcmap = plt.get_cmap('magma_r', 256)
+        lowcmap = plt.get_cmap('GnBu_r', 256)
+        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+        cmap = mcolors.ListedColormap(cmap)
 
-    cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
-    cbar = plt.colorbar(
-        contours,
-        cax=cax,
-        fraction=0.046,
-        pad=0.04,
-        extend='both',
-        spacing='proportional',
-        format=FormatStrFormatter("%.2f"),
-        ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
-    )
+        contours = ax.contourf(
+            means.columns.values,
+            means.index.values,
+            means.values,
+            cmap=cmap,
+            levels=levels,
+            extend='max',
+            linewidths=2,
+            linestyles='dashed',
+        )
+        ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
-    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 605~nm$)')
-    cbar.ax.set_title(r'$\lambda$')
-    cbar.ax.yaxis.set_ticks_position('right')
-    cbar.ax.yaxis.set_label_position('left')
+        cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+        cbar = plt.colorbar(
+            contours,
+            cax=cax,
+            fraction=0.046,
+            pad=0.04,
+            extend='both',
+            spacing='proportional',
+            format=FormatStrFormatter("%.2f"),
+            ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
+        )
 
-    ax.set_xlabel(f'Number of iterations')
-    ax.set_xlim(0, niter)
-    ax.set_xticks(range(niter+1))
-    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 605~nm$)')
+        cbar.ax.set_title(r'$\lambda$')
+        cbar.ax.yaxis.set_ticks_position('right')
+        cbar.ax.yaxis.set_label_position('left')
 
-    ax.set_ylabel(
-        'Average Peak-to-peak aberration $|P_{95} - P_{5}|$ '
-        rf'($\lambda = 605~nm$)'
-    )
+        ax.set_xlabel(f'Number of iterations')
+        ax.set_xlim(0, niter)
+        ax.set_xticks(range(niter+1))
+        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-    ax.set_yticks(np.arange(0, 11, .5), minor=True)
-    ax.set_yticks(np.arange(0, 11, 1))
-    ax.set_ylim(.25, 10)
+        ax.set_ylabel(
+            'Average Peak-to-peak aberration $|P_{95} - P_{5}|$ '
+            rf'($\lambda = 605~nm$)'
+        )
 
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    plt.tight_layout()
+        ax.set_yticks(np.arange(0, 11, .5), minor=True)
+        ax.set_yticks(np.arange(0, 11, 1))
+        ax.set_ylim(.25, 10)
 
-    plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    return fig
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        plt.tight_layout()
+
+        plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
