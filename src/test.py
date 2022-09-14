@@ -97,6 +97,11 @@ def parse_args(args):
     parser.add_argument(
         "--dmodes", default=None, type=int, help='minimum number of dominant modes in each sample'
     )
+
+    parser.add_argument(
+        "--peaks", default=None, help="matlab file that outlines peaks-coordinates"
+    )
+
     return parser.parse_args(args)
 
 
@@ -149,6 +154,7 @@ def main(args=None):
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
             na=args.na,
+            peaks=args.peaks,
         )
     else:
         eval.evaluate(

@@ -3,13 +3,16 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 import numpy as np
+import pandas as pd
 import zarr
 from tqdm import trange
-import matplotlib.pyplot as plt
+import h5py
+import seaborn as sns
 import matplotlib.colors as mcolors
 from matplotlib import gridspec
 from tifffile import imread, imsave
 from skimage import transform, filters, feature
+from scipy.spatial import KDTree
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.ticker import FormatStrFormatter
@@ -41,7 +44,8 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
     return np.pad(psf[slicer], pad, **kwargs)
 
 
-def resize(vol, voxel_size: Sequence, crop_shape: Sequence, sample_voxel_size: Sequence = (.1, .1, .1), debug: Any = None):
+def resize(vol, voxel_size: Sequence, crop_shape: Sequence, sample_voxel_size: Sequence = (.1, .1, .1),
+           debug: Any = None):
     def plot(cls, img):
         if img.shape[0] == 6:
             vmin, vmax, vcenter, step = 0, 2, 1, .1
@@ -60,7 +64,7 @@ def resize(vol, voxel_size: Sequence, crop_shape: Sequence, sample_voxel_size: S
                 ax.set_yticks([])
                 ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
                 ax = fig.add_subplot(inner[1])
-                ax.imshow(img[i+3], cmap='coolwarm', vmin=vmin, vmax=vmax)
+                ax.imshow(img[i + 3], cmap='coolwarm', vmin=vmin, vmax=vmax)
                 ax.set_xticks([])
                 ax.set_yticks([])
                 ax.set_xlabel(r'$\varphi = \angle \tau$')
@@ -80,9 +84,9 @@ def resize(vol, voxel_size: Sequence, crop_shape: Sequence, sample_voxel_size: S
     resampled_vol = transform.rescale(
         vol,
         (
-            sample_voxel_size[0]/voxel_size[0],
-            sample_voxel_size[1]/voxel_size[1],
-            sample_voxel_size[2]/voxel_size[2],
+            sample_voxel_size[0] / voxel_size[0],
+            sample_voxel_size[1] / voxel_size[1],
+            sample_voxel_size[2] / voxel_size[2],
         ),
         order=3,
         anti_aliasing=True,
@@ -122,28 +126,80 @@ def prep_psf(path: Path, input_shape: tuple, sample_voxel_size: tuple, model_vox
         psf,
         sample_voxel_size=sample_voxel_size,
         voxel_size=model_voxel_size,
-        crop_shape=tuple(3*[input_shape[-1]])
+        crop_shape=tuple(3 * [input_shape[-1]])
     )
     return psf
 
 
-def find_roi(path: Path, window_size: tuple = (64, 64, 64), num_peaks: int = 5, plot: bool = False):
-
-    fov_size: dict = {'x': 512, 'y': 512, 'z': 512}
+def find_roi(
+        path: Path,
+        window_size: tuple = (64, 64, 64),
+        plot: bool = True,
+        num_peaks: Any = None,
+        min_dist: int = 32,
+        min_intensity: int = 100,
+        peaks_coordinates: Any = None,
+        file_order: str = 'c-order'
+):
+    fov_size: dict = {'x': 256, 'y': 256, 'z': 256}
 
     if path.suffix == '.tif':
-        roi = imread(path).astype(np.float)
-        return roi[np.newaxis, :]
+        dataset = imread(path).astype(np.float)
+        dataset /= np.nanmax(dataset)
+
+        logger.info(f"Sample: {dataset.shape}")
 
     elif path.suffix == '.zarr':
         dataset = zarr.open_array(str(path), mode='r', order='F')
         dataset = dataset[10000:11000, 19000:20000, 3000:4000]
         logger.info(f"Sample: {dataset.shape}")
+    else:
+        logger.error(f"Unknown file format: {path.name}")
+        return
 
+    if peaks_coordinates is not None:
+        with h5py.File(peaks_coordinates, 'r') as file:
+            file = file.get('frameInfo')
+            peaks = pd.DataFrame(
+                np.hstack((file['x'], file['y'], file['z'], file['A'])),
+                columns=['x', 'y', 'z', 'A']
+            ).round(0).astype(int)
+
+            kd = KDTree(peaks[['z', 'y', 'x']].values)
+            dist, idx = kd.query(peaks[['z', 'y', 'x']].values, k=2, workers=-1)
+            peaks['dist'] = dist[:, 1]
+            print(peaks)
+
+            peaks = peaks[peaks['dist'] >= min_dist]
+            peaks = peaks[peaks['A'] >= min_intensity]
+            peaks.sort_values('dist', ascending=False, inplace=True)
+            logger.info(f"Peaks w/ Min-Dist & PSNR")
+            print(peaks)
+
+            if plot:
+                fig, axes = plt.subplots(1, 3)
+                sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color=".15")
+                sns.histplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], bins=50, pthresh=.1, cmap="mako")
+                sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="w", linewidths=1)
+                axes[0].set_ylabel('Intensity')
+                axes[0].set_xlabel('Distance')
+
+                x = np.sort(peaks['dist'])
+                y = np.arange(len(x)) / float(len(x))
+                axes[1].plot(x, y, color='dimgrey')
+                axes[1].set_xlabel('Distance')
+                axes[1].set_ylabel('CDF ')
+
+                sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
+                axes[2].set_xlabel('Distance')
+                plt.show()
+
+            peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
+    else:
         sliding_windows = np.lib.stride_tricks.sliding_window_view(
             dataset,
             window_shape=(fov_size['y'], fov_size['x'], fov_size['z']),
-        )[::fov_size['y']//2, ::fov_size['x']//2, ::fov_size['z']//2]
+        )[::fov_size['y'] // 2, ::fov_size['x'] // 2, ::fov_size['z'] // 2]
         sliding_windows = sliding_windows.reshape((-1, fov_size['y'], fov_size['x'], fov_size['z']))
 
         rois = []
@@ -151,62 +207,79 @@ def find_roi(path: Path, window_size: tuple = (64, 64, 64), num_peaks: int = 5, 
             fov = sliding_windows[i].astype(np.float)
 
             if np.count_nonzero(fov) != 0:
-                # Convert F-order to C-order
-                fov = np.swapaxes(fov, 0, -1)
-                fov = np.swapaxes(fov, 1, -1)
-                fov /= np.nanmax(fov)
+                if file_order != 'c-order':
+                    # Convert F-order to C-order
+                    fov = np.swapaxes(fov, 0, -1)
+                    fov = np.swapaxes(fov, 1, -1)
+                    fov /= np.nanmax(fov)
 
                 peaks = feature.peak_local_max(
                     fov,
-                    min_distance=window_size[0]//2,
-                    exclude_border=window_size[0]//2,
+                    min_distance=min_dist,
+                    exclude_border=min_dist,
                     num_peaks=num_peaks,
                     threshold_rel=.5
                 )
 
-                if plot:
-                    fig, axes = plt.subplots(1, 3, figsize=(12, 6))
-                    for ax in range(3):
-                        axes[ax].imshow(np.nanmax(fov, axis=ax)**.5, vmin=0, vmax=1, cmap='gray')
-
-                        for p in range(peaks.shape[0]):
-                            if ax == 0:
-                                axes[ax].plot(peaks[p, 1], peaks[p, 2], marker='.', ls='', color=f'C{p}')
-                                axes[ax].add_patch(patches.Rectangle(
-                                    xy=(peaks[p, 1]-window_size[1]//2, peaks[p, 2]-window_size[2]//2),
-                                    width=window_size[1], height=window_size[2],
-                                    fill=None,
-                                    color=f'C{p}',
-                                    alpha=1
-                                ))
-                            elif ax == 1:
-                                axes[ax].plot(peaks[p, 0], peaks[p, 2], marker='.', ls='', color=f'C{p}')
-                                axes[ax].add_patch(patches.Rectangle(
-                                    xy=(peaks[p, 0]-window_size[0]//2, peaks[p, 2]-window_size[2]//2),
-                                    width=window_size[1], height=window_size[2],
-                                    fill=None,
-                                    color=f'C{p}',
-                                    alpha=1
-                                ))
-                            else:
-                                axes[ax].plot(peaks[p, 0], peaks[p, 1], marker='.', ls='', color=f'C{p}')
-                                axes[ax].add_patch(patches.Rectangle(
-                                    xy=(peaks[p, 0]-window_size[0]//2, peaks[p, 1]-window_size[1]//2),
-                                    width=window_size[1], height=window_size[2],
-                                    fill=None,
-                                    color=f'C{p}',
-                                    alpha=1
-                                ))
-                    plt.show()
-
                 for p in range(peaks.shape[0]):
                     rois.append(fov[
-                        peaks[p, 0]-window_size[0]//2:peaks[p, 0]+window_size[0]//2,
-                        peaks[p, 1]-window_size[1]//2:peaks[p, 1]+window_size[1]//2,
-                        peaks[p, 2]-window_size[2]//2:peaks[p, 2]+window_size[2]//2
-                    ])
+                                peaks[p, 0] - window_size[0] // 2:peaks[p, 0] + window_size[0] // 2,
+                                peaks[p, 1] - window_size[1] // 2:peaks[p, 1] + window_size[1] // 2,
+                                peaks[p, 2] - window_size[2] // 2:peaks[p, 2] + window_size[2] // 2
+                                ])
 
-        return np.array(rois, dtype=np.float)
+    if plot:
+        fig, axes = plt.subplots(1, 3, figsize=(12, 6), sharey=False, sharex=False)
+        for ax in range(3):
+            axes[ax].imshow(
+                np.nanmax(dataset, axis=ax) ** .5,
+                vmin=0,
+                vmax=1,
+                aspect='auto',
+                cmap='hot'
+            )
 
-    else:
-        logger.error(f"Unknown file format: {path.name}")
+            for p in range(peaks.shape[0]):
+                if ax == 0:
+                    axes[ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                    axes[ax].add_patch(patches.Rectangle(
+                        xy=(peaks[p, 2] - window_size[2] // 2, peaks[p, 1] - window_size[1] // 2),
+                        width=window_size[1],
+                        height=window_size[2],
+                        fill=None,
+                        color=f'C{p}',
+                        alpha=1
+                    ))
+                elif ax == 1:
+                    axes[ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                    axes[ax].add_patch(patches.Rectangle(
+                        xy=(peaks[p, 2] - window_size[2] // 2, peaks[p, 0] - window_size[0] // 2),
+                        width=window_size[1],
+                        height=window_size[2],
+                        fill=None,
+                        color=f'C{p}',
+                        alpha=1
+                    ))
+                else:
+                    axes[ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                    axes[ax].add_patch(patches.Rectangle(
+                        xy=(peaks[p, 1] - window_size[1] // 2, peaks[p, 0] - window_size[0] // 2),
+                        width=window_size[1],
+                        height=window_size[2],
+                        fill=None,
+                        color=f'C{p}',
+                        alpha=1
+                    ))
+        plt.show()
+
+    rois = []
+    for p in range(peaks.shape[0]):
+        r = dataset[
+            peaks[p, 0] - window_size[0] // 2:peaks[p, 0] + window_size[0] // 2,
+            peaks[p, 1] - window_size[1] // 2:peaks[p, 1] + window_size[1] // 2,
+            peaks[p, 2] - window_size[2] // 2:peaks[p, 2] + window_size[2] // 2
+        ]
+        r = resize_with_crop_or_pad(r, crop_shape=window_size)
+        rois.append(r)
+
+    return np.array(rois, dtype=np.float)

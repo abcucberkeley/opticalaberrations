@@ -1449,7 +1449,8 @@ def evalsample(
     wavelength: float = .510,
     reference_voxel_size: tuple = (.268, .108, .108),
     rolling_embedding: bool = False,
-    apodization: bool = True
+    apodization: bool = True,
+    peaks: Any = None,
 ):
 
     plt.rcParams.update({
@@ -1508,7 +1509,7 @@ def evalsample(
     imsave(savepath / f'kernel.tif', kernel)
     logger.info(f"Kernel: {kernel.shape}")
 
-    rois = find_roi(reference_path, window_size=kernel.shape)
+    rois = find_roi(reference_path, window_size=kernel.shape, peaks_coordinates=peaks)
     logger.info(f"ROIs: {rois.shape}")
 
     for w in range(rois.shape[0]):
