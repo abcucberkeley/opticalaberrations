@@ -4,8 +4,6 @@ HANDLER=slurm
 ENV=~/anaconda3/envs/deep/bin/python
 NODES='abc'
 
-OUTDIR='/clusterfs/nvme/thayer/dataset/lattice_multipoints'
-
 #PSF_TYPE='widefield'
 #xVOXEL=.15
 #yVOXEL=.15
@@ -32,7 +30,7 @@ ITERS=100
 SHAPE=64
 GAMMA=.75
 MODES=60
-OUTDIR="/clusterfs/nvme/thayer/dataset/multipoints_bigger/${DATASET}"
+OUTDIR="/clusterfs/nvme/thayer/dataset/lattice_multipoints/${DATASET}"
 
 
 if [ "$DATASET" = "train" ];then
