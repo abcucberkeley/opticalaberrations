@@ -134,24 +134,30 @@ def prep_psf(path: Path, input_shape: tuple, sample_voxel_size: tuple, model_vox
 def find_roi(
         path: Path,
         window_size: tuple = (64, 64, 64),
-        plot: bool = True,
+        plot: Any = True,
         num_peaks: Any = None,
         min_dist: int = 32,
         min_intensity: int = 100,
         peaks_coordinates: Any = None,
         file_order: str = 'c-order'
 ):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+    })
+
     fov_size: dict = {'x': 256, 'y': 256, 'z': 256}
 
     if path.suffix == '.tif':
         dataset = imread(path).astype(np.float)
-        dataset /= np.nanmax(dataset)
-
         logger.info(f"Sample: {dataset.shape}")
 
     elif path.suffix == '.zarr':
         dataset = zarr.open_array(str(path), mode='r', order='F')
-        dataset = dataset[10000:11000, 19000:20000, 3000:4000]
         logger.info(f"Sample: {dataset.shape}")
     else:
         logger.error(f"Unknown file format: {path.name}")
@@ -170,29 +176,58 @@ def find_roi(
             peaks['dist'] = dist[:, 1]
             print(peaks)
 
-            peaks = peaks[peaks['dist'] >= min_dist]
-            peaks = peaks[peaks['A'] >= min_intensity]
-            peaks.sort_values('dist', ascending=False, inplace=True)
-            logger.info(f"Peaks w/ Min-Dist & PSNR")
-            print(peaks)
-
             if plot:
-                fig, axes = plt.subplots(1, 3)
-                sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color=".15")
-                sns.histplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], bins=50, pthresh=.1, cmap="mako")
-                sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="w", linewidths=1)
+                fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+                sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="k")
+                sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
                 axes[0].set_ylabel('Intensity')
                 axes[0].set_xlabel('Distance')
+                axes[0].set_yscale('log')
+                axes[0].set_ylim(10**0, None)
+                axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
                 x = np.sort(peaks['dist'])
                 y = np.arange(len(x)) / float(len(x))
                 axes[1].plot(x, y, color='dimgrey')
                 axes[1].set_xlabel('Distance')
-                axes[1].set_ylabel('CDF ')
+                axes[1].set_ylabel('CDF')
+                axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
                 sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
                 axes[2].set_xlabel('Distance')
-                plt.show()
+                axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+                plt.tight_layout()
+                plt.savefig(plot / f'detected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+
+            peaks = peaks[peaks['dist'] >= min_dist]
+            peaks = peaks[peaks['A'] >= min_intensity]
+            peaks.sort_values(by=['dist', 'A'], ascending=[False, False], inplace=True)
+            logger.info(f"Peaks w/ Min-Dist & PSNR")
+            print(peaks)
+
+            if plot:
+                fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+                sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="k")
+                sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
+                axes[0].set_ylabel('Intensity')
+                axes[0].set_xlabel('Distance')
+                axes[0].set_ylim(0, None)
+                axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+                x = np.sort(peaks['dist'])
+                y = np.arange(len(x)) / float(len(x))
+                axes[1].plot(x, y, color='dimgrey')
+                axes[1].set_xlabel('Distance')
+                axes[1].set_ylabel('CDF')
+                axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+                sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
+                axes[2].set_xlabel('Distance')
+                axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+                plt.tight_layout()
+                plt.savefig(plot / f'selected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
             peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
     else:
@@ -229,12 +264,10 @@ def find_roi(
                                 ])
 
     if plot:
-        fig, axes = plt.subplots(1, 3, figsize=(12, 6), sharey=False, sharex=False)
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False, sharex=False)
         for ax in range(3):
             axes[ax].imshow(
                 np.nanmax(dataset, axis=ax) ** .5,
-                vmin=0,
-                vmax=1,
                 aspect='auto',
                 cmap='hot'
             )
@@ -270,7 +303,9 @@ def find_roi(
                         color=f'C{p}',
                         alpha=1
                     ))
-        plt.show()
+
+        plt.tight_layout()
+        plt.savefig(plot / f'rois.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     rois = []
     for p in range(peaks.shape[0]):
@@ -280,6 +315,7 @@ def find_roi(
             peaks[p, 2] - window_size[2] // 2:peaks[p, 2] + window_size[2] // 2
         ]
         r = resize_with_crop_or_pad(r, crop_shape=window_size)
-        rois.append(r)
+        if r.size != 0:
+            rois.append(r)
 
     return np.array(rois, dtype=np.float)

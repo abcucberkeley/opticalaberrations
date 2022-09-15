@@ -15,7 +15,7 @@ import tensorflow as tf
 from scipy import signal
 from skimage import transform, filters
 from tifffile import imsave
-from preprocessing import find_roi
+from preprocessing import find_roi, resize_with_crop_or_pad
 
 import utils
 import vis
@@ -1481,7 +1481,7 @@ def evalsample(
     model = backend.load(model_path)
 
     ys = np.zeros(60)
-    ys[6] = .1
+    ys[5] = .1
 
     if kernel_path is not None:
         kernel = imread(kernel_path)
@@ -1509,11 +1509,15 @@ def evalsample(
     imsave(savepath / f'kernel.tif', kernel)
     logger.info(f"Kernel: {kernel.shape}")
 
-    rois = find_roi(reference_path, window_size=kernel.shape, peaks_coordinates=peaks)
+    rois = find_roi(reference_path, window_size=kernel.shape, peaks_coordinates=peaks, plot=savepath)
     logger.info(f"ROIs: {rois.shape}")
 
     for w in range(rois.shape[0]):
-        reference = rois[w] / np.max(rois[w])
+
+        reference = rois[w]**2
+        reference /= np.nanpercentile(reference, 99.99)
+        reference[reference > 1] = 1
+
         logger.info(f"Reference: {reference.shape}")
 
         y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
@@ -1522,17 +1526,20 @@ def evalsample(
         for k in range(1, niter+1):
             conv = signal.convolve(reference, kernel, mode='full')
             width = [(i//2) for i in reference.shape]
-            center = [(i//2)+1 for i in conv.shape]
-            # center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
+            # center = [(i//2)+1 for i in conv.shape]
+            center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
             conv = conv[
                  center[0]-width[0]:center[0]+width[0],
                  center[1]-width[1]:center[1]+width[1],
                  center[2]-width[2]:center[2]+width[2],
             ]
+            conv = resize_with_crop_or_pad(conv, crop_shape=kernel.shape)
 
             conv /= np.nanpercentile(conv, 99.99)
             conv[conv > 1] = 1
             conv = np.nan_to_num(conv, nan=0)
+
+            logger.info(f"Convolved: {conv.shape}")
 
             if apodization:
                 circular_mask = filters.window(('general_gaussian', 10/3, 2.5*10), conv.shape)

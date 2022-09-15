@@ -587,82 +587,82 @@ def bootstrap_predict(
             gen = batch_generator(model_inputs, s=batch_size)
 
         for batch in gen:
-            if plot is not None:
-                img = np.squeeze(batch[0])
-                input_img = np.squeeze(inputs[0])
-
-                if img.shape[0] != img.shape[1]:
-                    vmin, vmax, vcenter, step = 0, 2, 1, .1
-                    highcmap = plt.get_cmap('YlOrRd', 256)
-                    lowcmap = plt.get_cmap('YlGnBu_r', 256)
-                    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-                    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-                    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-                    cmap = mcolors.ListedColormap(cmap)
-
-                    fig, axes = plt.subplots(3, 3)
-
-                    if img.shape[0] == 6:
-                        for t in range(3):
-                            inner = gridspec.GridSpecFromSubplotSpec(
-                                1, 2, subplot_spec=axes[0, t], wspace=0.1, hspace=0.1
-                            )
-                            ax = fig.add_subplot(inner[0])
-                            m = ax.imshow(img[t].T if t == 2 else img[t], cmap=cmap, vmin=vmin, vmax=vmax)
-                            ax.set_xticks([])
-                            ax.set_yticks([])
-                            ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-                            ax = fig.add_subplot(inner[1])
-                            ax.imshow(img[t+3].T if t == 2 else img[t+3], cmap='coolwarm', vmin=vmin, vmax=vmax)
-                            ax.set_xticks([])
-                            ax.set_yticks([])
-                            ax.set_xlabel(r'$\varphi = \angle \tau$')
-                    else:
-                        m = axes[0, 0].imshow(input_img[input_img.shape[0]//2, :, :], cmap='hot', vmin=0, vmax=1)
-                        axes[0, 1].imshow(input_img[:, input_img.shape[1]//2, :], cmap='hot', vmin=0, vmax=1)
-                        axes[0, 2].imshow(input_img[:, :, input_img.shape[2]//2].T, cmap='hot', vmin=0, vmax=1)
-                        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-                        cb = plt.colorbar(m, cax=cax)
-                        cax.yaxis.set_label_position("right")
-                        cax.set_ylabel('Input (middle)')
-
-                    m = axes[1, 0].imshow(img[0], cmap=cmap, vmin=vmin, vmax=vmax)
-                    axes[1, 1].imshow(img[1], cmap=cmap, vmin=vmin, vmax=vmax)
-                    axes[1, 2].imshow(img[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
-                    cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-                    cb = plt.colorbar(m, cax=cax)
-                    cax.yaxis.set_label_position("right")
-                    cax.set_ylabel(r'Embedding ($\alpha$)')
-
-                    m = axes[2, 0].imshow(img[3], cmap='coolwarm', vmin=-1, vmax=1)
-                    axes[2, 1].imshow(img[4], cmap='coolwarm', vmin=-1, vmax=1)
-                    axes[2, 2].imshow(img[5].T, cmap='coolwarm', vmin=-1, vmax=1)
-                    cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-                    cb = plt.colorbar(m, cax=cax)
-                    cax.yaxis.set_label_position("right")
-                    cax.set_ylabel(r'Embedding ($\varphi$)')
-
-                    for ax in axes.flatten():
-                        ax.axis('off')
-                else:
-                    fig, axes = plt.subplots(1, 3)
-
-                    axes[1].set_title(str(img.shape))
-                    m = axes[0].imshow(np.max(img, axis=0), cmap='Spectral_r')
-                    axes[1].imshow(np.max(img, axis=1), cmap='Spectral_r')
-                    axes[2].imshow(np.max(img, axis=2).T, cmap='Spectral_r')
-
-                    for ax in axes.flatten():
-                        ax.axis('off')
-
-                    cax = inset_axes(axes[2], width="10%", height="100%", loc='center right', borderpad=-3)
-                    cb = plt.colorbar(m, cax=cax)
-                    cax.yaxis.set_label_position("right")
-
-                if plot == True:
-                    plt.show()
-                else:
-                    plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            # if plot is not None:
+            #     img = np.squeeze(batch[0])
+            #     input_img = np.squeeze(inputs[0])
+            #
+            #     if img.shape[0] != img.shape[1]:
+            #         vmin, vmax, vcenter, step = 0, 2, 1, .1
+            #         highcmap = plt.get_cmap('YlOrRd', 256)
+            #         lowcmap = plt.get_cmap('YlGnBu_r', 256)
+            #         low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+            #         high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+            #         cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+            #         cmap = mcolors.ListedColormap(cmap)
+            #
+            #         fig, axes = plt.subplots(3, 3)
+            #
+            #         if img.shape[0] == 6:
+            #             for t in range(3):
+            #                 inner = gridspec.GridSpecFromSubplotSpec(
+            #                     1, 2, subplot_spec=axes[0, t], wspace=0.1, hspace=0.1
+            #                 )
+            #                 ax = fig.add_subplot(inner[0])
+            #                 m = ax.imshow(img[t].T if t == 2 else img[t], cmap=cmap, vmin=vmin, vmax=vmax)
+            #                 ax.set_xticks([])
+            #                 ax.set_yticks([])
+            #                 ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
+            #                 ax = fig.add_subplot(inner[1])
+            #                 ax.imshow(img[t+3].T if t == 2 else img[t+3], cmap='coolwarm', vmin=vmin, vmax=vmax)
+            #                 ax.set_xticks([])
+            #                 ax.set_yticks([])
+            #                 ax.set_xlabel(r'$\varphi = \angle \tau$')
+            #         else:
+            #             m = axes[0, 0].imshow(input_img[input_img.shape[0]//2, :, :], cmap='hot', vmin=0, vmax=1)
+            #             axes[0, 1].imshow(input_img[:, input_img.shape[1]//2, :], cmap='hot', vmin=0, vmax=1)
+            #             axes[0, 2].imshow(input_img[:, :, input_img.shape[2]//2].T, cmap='hot', vmin=0, vmax=1)
+            #             cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+            #             cb = plt.colorbar(m, cax=cax)
+            #             cax.yaxis.set_label_position("right")
+            #             cax.set_ylabel('Input (middle)')
+            #
+            #         m = axes[1, 0].imshow(img[0], cmap=cmap, vmin=vmin, vmax=vmax)
+            #         axes[1, 1].imshow(img[1], cmap=cmap, vmin=vmin, vmax=vmax)
+            #         axes[1, 2].imshow(img[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
+            #         cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+            #         cb = plt.colorbar(m, cax=cax)
+            #         cax.yaxis.set_label_position("right")
+            #         cax.set_ylabel(r'Embedding ($\alpha$)')
+            #
+            #         m = axes[2, 0].imshow(img[3], cmap='coolwarm', vmin=-1, vmax=1)
+            #         axes[2, 1].imshow(img[4], cmap='coolwarm', vmin=-1, vmax=1)
+            #         axes[2, 2].imshow(img[5].T, cmap='coolwarm', vmin=-1, vmax=1)
+            #         cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+            #         cb = plt.colorbar(m, cax=cax)
+            #         cax.yaxis.set_label_position("right")
+            #         cax.set_ylabel(r'Embedding ($\varphi$)')
+            #
+            #         for ax in axes.flatten():
+            #             ax.axis('off')
+            #     else:
+            #         fig, axes = plt.subplots(1, 3)
+            #
+            #         axes[1].set_title(str(img.shape))
+            #         m = axes[0].imshow(np.max(img, axis=0), cmap='Spectral_r')
+            #         axes[1].imshow(np.max(img, axis=1), cmap='Spectral_r')
+            #         axes[2].imshow(np.max(img, axis=2).T, cmap='Spectral_r')
+            #
+            #         for ax in axes.flatten():
+            #             ax.axis('off')
+            #
+            #         cax = inset_axes(axes[2], width="10%", height="100%", loc='center right', borderpad=-3)
+            #         cb = plt.colorbar(m, cax=cax)
+            #         cax.yaxis.set_label_position("right")
+            #
+            #     if plot == True:
+            #         plt.show()
+            #     else:
+            #         plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
             p = model(batch, training=True).numpy()
             p[:, [0, 1, 2, 4]] = 0.

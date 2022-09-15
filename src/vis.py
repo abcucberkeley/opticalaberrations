@@ -1106,7 +1106,7 @@ def diagnostic_assessment(
         wavelength: float = .605,
         display: bool = False,
         psf_cmap: str = 'hot',
-        gamma: float = .5,
+        gamma: float = 1,
         threshold: float = .01,
 ):
 

@@ -260,7 +260,7 @@ class SyntheticPSF:
         mask = np.where(mask >= threshold, mask, 0.)
         return mask
 
-    def plot_embeddings(self, psf: np.array, emb: np.array, save_path: Any):
+    def plot_embeddings(self, psf: np.array, emb: np.array, save_path: Any, log10: bool = False):
         plt.rcParams.update({
             'font.size': 10,
             'axes.titlesize': 12,
@@ -272,7 +272,11 @@ class SyntheticPSF:
         })
         # plt.style.use("dark_background")
 
-        vmin, vmax, vcenter, step = 0, 2, 1, .1
+        if log10:
+            vmin, vmax, vcenter, step = -2, 2, 0, .1
+        else:
+            vmin, vmax, vcenter, step = 0, 2, 1, .1
+
         highcmap = plt.get_cmap('YlOrRd', 256)
         lowcmap = plt.get_cmap('terrain', 256)
         low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -380,7 +384,7 @@ class SyntheticPSF:
             imsave(f"{plot}_phi.tif", phase)
 
         if plot is not None and principle_planes:
-            self.plot_embeddings(psf=psf, emb=emb, save_path=plot)
+            self.plot_embeddings(psf=psf, emb=emb, save_path=plot, log10=log10)
 
         if psf.ndim == 4:
             return np.expand_dims(emb, axis=-1)
