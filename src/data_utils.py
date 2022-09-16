@@ -29,13 +29,17 @@ def get_image(path):
     return img
 
 
-def get_sample(path):
+def get_sample(path, no_phase=False):
     path = Path(str(path.numpy(), "utf-8"))
     with open(path.with_suffix('.json')) as f:
         hashtbl = ujson.load(f)
 
-    amps = hashtbl['zernikes']
-    img = get_image(path)
+    if no_phase:
+        amps = np.abs(hashtbl['zernikes'])
+        img = get_image(path)[:3]
+    else:
+        amps = hashtbl['zernikes']
+        img = get_image(path)
     return img, amps
 
 
@@ -80,6 +84,7 @@ def collect_dataset(
     distribution='/',
     samplelimit=None,
     max_amplitude=1.,
+    no_phase=False,
 ): 
     if split is not None:
         train_data, val_data = None, None

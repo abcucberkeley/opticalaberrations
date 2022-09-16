@@ -160,6 +160,11 @@ def parse_args(args):
         help='toggle for multi-node/multi-gpu training on a slurm-based cluster'
     )
 
+    train_parser.add_argument(
+        '--no_phase', action='store_true',
+        help='toggle to use exclude phase from the model embeddings'
+    )
+
     return train_parser.parse_known_args(args)[0]
 
 
@@ -215,6 +220,7 @@ def main(args=None):
             wavelength=args.wavelength,
             depth_scalar=args.depth_scalar,
             width_scalar=args.width_scalar,
+            no_phase=args.no_phase,
         )
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")

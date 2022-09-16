@@ -153,6 +153,7 @@ def train(
         mul: bool,
         roi: Any = None,
         refractive_index: float = 1.33,
+        no_phase: bool = False,
         plot_patches: bool = False
 ):
     network = network.lower()
@@ -176,7 +177,8 @@ def train(
             width_scalar=width_scalar,
             mask_shape=input_shape,
             activation=activation,
-            mul=mul
+            mul=mul,
+            no_phase=no_phase
         )
     elif network == 'opticalresnet':
         model = opticalresnet.OpticalResNet(
@@ -244,7 +246,7 @@ def train(
         if network == 'baseline':
             inputs = (input_shape, input_shape, input_shape, 1)
         else:
-            inputs = (6, input_shape, input_shape, 1)
+            inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
 
         loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
 
@@ -373,7 +375,8 @@ def train(
             dataset,
             distribution=distribution,
             samplelimit=samplelimit,
-            max_amplitude=max_amplitude
+            max_amplitude=max_amplitude,
+            no_phase=no_phase
         )
 
         sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
