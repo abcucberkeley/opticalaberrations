@@ -1,10 +1,12 @@
+import matplotlib
+matplotlib.use('TkAgg')
+
 import logging
 import sys
 from functools import partial
 from pathlib import Path
 from typing import Any
 import matplotlib.pyplot as plt
-import xarray
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
 import numpy as np

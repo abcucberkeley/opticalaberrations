@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('TkAgg')
+
 from functools import partial
 from pathlib import Path
 from typing import Any

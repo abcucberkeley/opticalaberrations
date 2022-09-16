@@ -1,6 +1,9 @@
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
+import matplotlib
+matplotlib.use('TkAgg')
+
 import logging
 import sys
 from datetime import datetime
@@ -10,7 +13,6 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from matplotlib import gridspec
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 from tqdm import trange, tqdm
@@ -51,7 +53,6 @@ from roi import ROI
 import opticalresnet
 import opticaltransformer
 from baseline import Baseline
-from widekernel import WideKernel
 
 logging.basicConfig(
     stream=sys.stdout,

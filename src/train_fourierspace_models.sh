@@ -13,23 +13,42 @@ LAMBDA=.510
 DATA="/clusterfs/nvme/thayer/dataset/lattice_multipoints/train/x108-y108-z268/"
 
 python multinode_manager.py train.py --partition abc --constraint 'titan' --mem '500GB' --nodes 3 --gpus 4 --cpus 20 \
---task "--network opticaltransformer --no_phase --multinode --opt Adamw --patch_size '24-12-6-6' --roi '6-48-48' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA  --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--task "--network opticaltransformer --no_phase --multinode --opt Adamw --patch_size '24-12-6-6' --roi '3-48-48' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA  --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname p24-p12-p6x2 \
 --name new/multipoints/lattice/opticaltransformer-roi-nophase
 
-python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 4 --gpus 4 --cpus 16 \
---task "--network opticalresnet --no_phase --multinode --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+python manager.py slurm train.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
+--task "--network opticaltransformer --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--taskname p32-p16-p8x2 \
+--task "--network opticaltransformer --opt Adamw --patch_size '24-12-6-6' --roi '6-48-48' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA  --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--taskname p24-p12-p6x2 \
+--name new/multipoints/lattice/phase/opticaltransformer
+
+python manager.py slurm train.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
+--task "--network opticalresnet --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname multikernel \
---name new/multipoints/lattice/opticalresnet-nophase
+--name new/multipoints/lattice/phase/opticalresnet
+
+python manager.py slurm train.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
+--task "--network opticaltransformer --no_phase --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--taskname p32-p16-p8x2 \
+--task "--network opticaltransformer --no_phase --opt Adamw --patch_size '24-12-6-6' --roi '3-48-48' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA  --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--taskname p24-p12-p6x2 \
+--name new/multipoints/lattice/nophase/opticaltransformer
+
+python manager.py slurm train.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
+--task "--network opticalresnet --no_phase --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--taskname multikernel \
+--name new/multipoints/lattice/nophase/opticalresnet
 
 python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
 --task "--network opticaltransformer -opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname p32-p16-p8x2 \
---task "--network opticaltransformer --opt Adamw --patch_size '24-12-6-6' --roi '6-48-48' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA  --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
---taskname p24-p12-p6x2 \
 --task "--network opticalresnet --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname multikernel \
---name new/multipoints/lattice/
+--task "--network opticaltransformer --opt Adamw --patch_size '24-12-6-6' --roi '6-48-48' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA  --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--taskname p24-p12-p6x2 \
+--name new/multipoints/lattice/dgx
 
 
 ### Optimal settings

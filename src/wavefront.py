@@ -4,10 +4,12 @@ Copyright (c) 2020, Debayan Saha, Martin Weigert, Uwe Schmidt
 All rights reserved.
 """
 
+import matplotlib
+matplotlib.use('TkAgg')
+
 import logging
 import sys
 
-from pprint import pprint
 import numpy as np
 from zernike import Zernike
 

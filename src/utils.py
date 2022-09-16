@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('TkAgg')
+
 import logging
 import multiprocessing as mp
 import sys
