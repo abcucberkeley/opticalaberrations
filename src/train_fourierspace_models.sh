@@ -18,7 +18,7 @@ python multinode_manager.py train.py --partition abc --constraint 'titan' --mem 
 --name new/multipoints/lattice/opticaltransformer-roi-nophase
 
 python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 4 --gpus 4 --cpus 16 \
---task "--network opticalresnet --no_phase --multinode --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $P    SF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--task "--network opticalresnet --no_phase --multinode --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname multikernel \
 --name new/multipoints/lattice/opticalresnet-nophase
 
@@ -27,7 +27,7 @@ python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 
 --taskname p32-p16-p8x2 \
 --task "--network opticaltransformer --opt Adamw --patch_size '24-12-6-6' --roi '6-48-48' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA  --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname p24-p12-p6x2 \
---task "--network opticalresnet --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $P    SF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--task "--network opticalresnet --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname multikernel \
 --name new/multipoints/lattice/
 
