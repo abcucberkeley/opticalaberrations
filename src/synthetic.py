@@ -359,6 +359,8 @@ class SyntheticPSF:
         if ratio:
             amp /= self.iotf
             amp = np.nan_to_num(amp, nan=0)
+            # phase /= self.iphase
+            # phase = np.nan_to_num(phase, nan=0)
 
         if na_mask:
             mask = self.na_mask()

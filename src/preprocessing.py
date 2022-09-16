@@ -230,6 +230,7 @@ def find_roi(
                 plt.savefig(plot / f'selected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
             peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
+            widths = [w//2 for w in window_size]
     else:
         sliding_windows = np.lib.stride_tricks.sliding_window_view(
             dataset,
@@ -309,13 +310,25 @@ def find_roi(
 
     rois = []
     for p in range(peaks.shape[0]):
-        r = dataset[
-            peaks[p, 0] - window_size[0] // 2:peaks[p, 0] + window_size[0] // 2,
-            peaks[p, 1] - window_size[1] // 2:peaks[p, 1] + window_size[1] // 2,
-            peaks[p, 2] - window_size[2] // 2:peaks[p, 2] + window_size[2] // 2
+        start = [
+            peaks[p, s]-widths[s] if peaks[p, s] >= widths[s] else 0
+            for s in range(3)
         ]
-        r = resize_with_crop_or_pad(r, crop_shape=window_size)
+        end = [
+            peaks[p, s]+widths[s] if peaks[p, s]+widths[s] < dataset.shape[s] else dataset.shape[s]
+            for s in range(3)
+        ]
+        r = dataset[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
+
+        # fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+        # axes[0].imshow(np.max(r, axis=0), cmap='hot')
+        # axes[1].imshow(np.max(r, axis=1), cmap='hot')
+        # axes[2].imshow(np.max(r, axis=2), cmap='hot')
+        # axes[1].set_title(f"({peaks[p, 2]}, {peaks[p, 1]}, {peaks[p, 0]})")
+        # plt.show()
+
         if r.size != 0:
+            r = resize_with_crop_or_pad(r, crop_shape=window_size)
             rois.append(r)
 
     return np.array(rois, dtype=np.float)

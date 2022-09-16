@@ -1513,12 +1513,16 @@ def evalsample(
     logger.info(f"ROIs: {rois.shape}")
 
     for w in range(rois.shape[0]):
+        imsave(savepath / f'reference_window_{w}.tif', rois[w])
+        logger.info(f"Reference: {rois[w].shape}")
 
-        reference = rois[w]**2
+        reference = rois[w]
         reference /= np.nanpercentile(reference, 99.99)
         reference[reference > 1] = 1
 
-        logger.info(f"Reference: {reference.shape}")
+        if apodization:
+            circular_mask = filters.window(('general_gaussian', 3., 3), reference.shape)
+            reference *= circular_mask
 
         y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
         y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
@@ -1526,7 +1530,6 @@ def evalsample(
         for k in range(1, niter+1):
             conv = signal.convolve(reference, kernel, mode='full')
             width = [(i//2) for i in reference.shape]
-            # center = [(i//2)+1 for i in conv.shape]
             center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
             conv = conv[
                  center[0]-width[0]:center[0]+width[0],
@@ -1539,13 +1542,8 @@ def evalsample(
             conv[conv > 1] = 1
             conv = np.nan_to_num(conv, nan=0)
 
-            logger.info(f"Convolved: {conv.shape}")
-
-            if apodization:
-                circular_mask = filters.window(('general_gaussian', 10/3, 2.5*10), conv.shape)
-                conv *= circular_mask
-
             imsave(savepath/f'convolved_iter_{k}_window_{w}.tif', conv)
+            logger.info(f"Convolved: {conv.shape}")
 
             preds, stdev = backend.bootstrap_predict(
                 model,
