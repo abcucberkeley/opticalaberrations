@@ -183,6 +183,7 @@ class OpticalResNet(Base, ABC):
             activation='gelu',
             dropout_rate=0.,
             mul=False,
+            no_phase=False,
             mask_shape=64,
             na_det=1.0,
             psf_type='widefield',
@@ -200,6 +201,7 @@ class OpticalResNet(Base, ABC):
         self.dropout_rate = dropout_rate
         self.avg = layers.GlobalAvgPool3D()
         self.mul = mul
+        self.no_phase = no_phase
         self.mask_shape = mask_shape
         self.na_det = na_det
         self.psf_type = psf_type
@@ -228,7 +230,8 @@ class OpticalResNet(Base, ABC):
             x_voxel_size=self.x_voxel_size,
             y_voxel_size=self.y_voxel_size,
             z_voxel_size=self.z_voxel_size,
-            mul=self.mul
+            mul=self.mul,
+            no_phase=self.no_phase
         )(inputs)
 
         for i, r in enumerate([2, 4, 6, 2]):

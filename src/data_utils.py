@@ -1,5 +1,6 @@
 import logging
 import sys
+from functools import partial
 
 from tifffile import imread, imsave, TiffFile
 from pathlib import Path
@@ -101,8 +102,9 @@ def collect_dataset(
             train_data = t if train_data is None else train_data.concatenate(t)
             val_data = v if val_data is None else val_data.concatenate(v)
 
-        train = train_data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
-        val = val_data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
+        func = partial(get_sample, no_phase=no_phase)
+        train = train_data.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
+        val = val_data.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
 
         for img, y in train.take(1):
             logger.info(f"Input: {img.numpy().shape}")
@@ -114,8 +116,9 @@ def collect_dataset(
         return train, val
 
     else:
+        func = partial(get_sample, no_phase=no_phase)
         data = load_dataset(datadir, multiplier=multiplier, samplelimit=samplelimit)
-        data = data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
+        data = data.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
 
         for img, y in data.take(1):
             logger.info(f"Input: {img.numpy().shape}")

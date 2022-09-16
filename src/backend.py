@@ -195,23 +195,8 @@ def train(
             width_scalar=width_scalar,
             mask_shape=input_shape,
             activation=activation,
-            mul=mul
-        )
-    elif network == 'widekernel':
-        model = WideKernel(
-            name='WideKernel',
-            modes=pmodes,
-            na_det=1.0,
-            refractive_index=1.33,
-            lambda_det=wavelength,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            mask_shape=input_shape,
-            activation=activation,
-            mul=mul
+            mul=mul,
+            no_phase=no_phase
         )
     elif network == 'baseline':
         model = Baseline(
@@ -460,7 +445,8 @@ def train(
                     x_voxel_size=x_voxel_size,
                     y_voxel_size=y_voxel_size,
                     z_voxel_size=z_voxel_size,
-                    mul=mul
+                    mul=mul,
+                    no_phase=no_phase
                 )(img)
 
                 if roi is not None:
