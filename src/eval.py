@@ -1483,7 +1483,7 @@ def evalsample(
     model = backend.load(model_path)
 
     ys = np.zeros(60)
-    ys[5] = .1
+    ys[6] = -.1
 
     if kernel_path is not None:
         kernel = imread(kernel_path)
@@ -1523,7 +1523,7 @@ def evalsample(
         reference[reference > 1] = 1
 
         if apodization:
-            circular_mask = filters.window(('general_gaussian', 3., 3), reference.shape)
+            circular_mask = filters.window(('general_gaussian', 3., 16), reference.shape)
             reference *= circular_mask
 
         y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
@@ -1552,6 +1552,7 @@ def evalsample(
                 np.expand_dims(conv[np.newaxis, :], axis=-1),
                 psfgen=modelgen,
                 resize=reference_voxel_size,
+                gamma=.5,
                 rolling_embedding=rolling_embedding,
                 batch_size=1,
                 n_samples=1,

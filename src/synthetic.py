@@ -263,7 +263,13 @@ class SyntheticPSF:
         mask = np.where(mask >= threshold, mask, 0.)
         return mask
 
-    def plot_embeddings(self, psf: np.array, emb: np.array, save_path: Any, log10: bool = False):
+    def plot_embeddings(
+        self,
+        psf: np.array,
+        emb: np.array,
+        save_path: Any,
+        log10: bool = False,
+    ):
         plt.rcParams.update({
             'font.size': 10,
             'axes.titlesize': 12,
@@ -287,7 +293,7 @@ class SyntheticPSF:
         cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
         cmap = mcolors.ListedColormap(cmap)
 
-        fig, axes = plt.subplots(3, 3)
+        fig, axes = plt.subplots(3, 3, figsize=(8, 11))
 
         m = axes[0, 0].imshow(np.max(psf, axis=0), cmap='hot', vmin=0, vmax=1)
         axes[0, 1].imshow(np.max(psf, axis=1), cmap='hot', vmin=0, vmax=1)
@@ -297,10 +303,10 @@ class SyntheticPSF:
         cax.yaxis.set_label_position("right")
         cax.set_ylabel('Input (maxproj)')
 
-        m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
-        axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
-        axes[1, 2].imshow(emb[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
-        cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+        m = axes[-2, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
+        axes[-2, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
+        axes[-2, 2].imshow(emb[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
+        cax = inset_axes(axes[-2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
         cax.set_ylabel(r'Embedding ($\alpha$)')
@@ -330,6 +336,7 @@ class SyntheticPSF:
         plot: Any = None,
         log10: bool = False,
         principle_planes: bool = True,
+        gamma: float = 1.,
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
@@ -360,6 +367,7 @@ class SyntheticPSF:
             )
 
         if ratio:
+            amp = amp ** gamma
             amp /= self.iotf
             amp = np.nan_to_num(amp, nan=0)
             # phase /= self.iphase
@@ -373,6 +381,9 @@ class SyntheticPSF:
         if log10:
             amp = np.log10(amp)
             amp = np.nan_to_num(amp, nan=0, posinf=0, neginf=0)
+
+            phase = np.log10(phase)
+            phase = np.nan_to_num(phase, nan=0, posinf=0, neginf=0)
 
         if principle_planes:
             emb = np.stack([

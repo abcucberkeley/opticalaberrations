@@ -510,6 +510,7 @@ def bootstrap_predict(
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
     plot: Any = None,
+    gamma: float = 1.0,
     return_embeddings: bool = False,
     rolling_embedding: bool = False,
 ):
@@ -526,6 +527,7 @@ def bootstrap_predict(
         threshold: set predictions below threshold to zero
         desc: test to display for the progressbar
         verbose: a toggle for progress bar
+        gamma: apply a gamma to the embeddings
 
     Returns:
         average prediction, stdev
@@ -558,7 +560,9 @@ def bootstrap_predict(
 
         # check z-axis to compute embeddings for fourier models0
         if (model.input_shape[1] != inputs.shape[1]):
-            model_inputs = np.stack([psfgen.embedding(psf=i, plot=plot) for i in inputs], axis=0)
+            model_inputs = np.stack([
+                psfgen.embedding(psf=i, plot=plot, gamma=gamma) for i in inputs
+            ], axis=0)
         else:
             # pass raw PSFs to the model
             model_inputs = inputs
