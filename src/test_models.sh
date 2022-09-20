@@ -13,7 +13,7 @@ declare -a models=(
 '../models/new/lattice/opticaltransformer'
 )
 
-for SIZE in 1. .75 .5
+for SIZE in 1.0 0.75 0.5
 do
   for MODEL in "${models[@]}"
   do

@@ -1292,9 +1292,9 @@ def iterheatmap(
     input_coverage: float = 1.0,
 ):
     if reference is None:
-        savepath = modelpath / 'iterheatmaps'
+        savepath = modelpath / f'iterheatmaps_{input_coverage}'
     else:
-        savepath = modelpath / f'{reference.stem}_iterheatmaps'
+        savepath = modelpath / f'{reference.stem}_iterheatmaps_{input_coverage}'
 
     savepath.mkdir(parents=True, exist_ok=True)
     if distribution != '/':
