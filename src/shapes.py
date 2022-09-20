@@ -285,7 +285,7 @@ def similarity(
     ys = np.zeros(60)
     ys[10] = .1
     kernel = gen.single_psf(
-        phi=Wavefront(ys),
+        phi=Wavefront(ys, lam_detection=.605),
         zplanes=0,
         normed=True,
         noise=False,

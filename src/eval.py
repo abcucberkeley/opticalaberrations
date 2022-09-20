@@ -789,7 +789,7 @@ def eval_mode(phi, model, psfargs):
     model = backend.load(model)
     input_shape = model.layers[0].output_shape[0][1:-1]
 
-    w = Wavefront(phi, order='ansi')
+    w = Wavefront(phi, order='ansi', lam_detection=gen.lam_detection)
     abr = 0 if np.count_nonzero(phi) == 0 else round(utils.peak_aberration(phi))
 
     if input_shape[0] == 3:
@@ -1452,6 +1452,7 @@ def evalsample(
     reference_voxel_size: tuple = (.268, .108, .108),
     rolling_embedding: bool = False,
     apodization: bool = True,
+    apodization_mask_width: int = 8,
     peaks: Any = None,
 ):
 
@@ -1482,12 +1483,14 @@ def evalsample(
 
     model = backend.load(model_path)
 
-    ys = np.zeros(60)
-    ys[6] = -.1
-
     if kernel_path is not None:
         kernel = imread(kernel_path)
     else:
+        w = Wavefront(amplitudes=(.2, .2), modes=60, bimodal=True, distribution='powerlaw', lam_detection=wavelength)
+        ys = w.amplitudes_ansi
+        # ys = np.zeros(60)
+        # ys[6] = .1
+
         gen = SyntheticPSF(
             n_modes=60,
             dtype=psf_type,
@@ -1514,17 +1517,22 @@ def evalsample(
     rois = find_roi(reference_path, window_size=kernel.shape, peaks_coordinates=peaks, plot=savepath)
     logger.info(f"ROIs: {rois.shape}")
 
+    circular_mask = filters.window(('general_gaussian', 4., apodization_mask_width), kernel.shape)
+    imsave(savepath / f'apodization_mask.tif', circular_mask)
+
     for w in range(rois.shape[0]):
         imsave(savepath / f'reference_window_{w}.tif', rois[w])
         logger.info(f"Reference: {rois[w].shape}")
 
-        reference = rois[w]
-        reference /= np.nanpercentile(reference, 99.99)
-        reference[reference > 1] = 1
+        reference = rois[w] ** 4
+        imsave(savepath / f'reference_window_{w}_power.tif', reference)
 
         if apodization:
-            circular_mask = filters.window(('general_gaussian', 3., 16), reference.shape)
             reference *= circular_mask
+            imsave(savepath / f'reference_window_{w}_power_mask.tif', reference)
+
+        reference /= np.nanpercentile(reference, 99.99)
+        reference[reference > 1] = 1
 
         y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
         y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
@@ -1547,6 +1555,42 @@ def evalsample(
             imsave(savepath/f'convolved_iter_{k}_window_{w}.tif', conv)
             logger.info(f"Convolved: {conv.shape}")
 
+            if k == 1:
+                preds, stdev = backend.bootstrap_predict(
+                    model,
+                    np.expand_dims(kernel[np.newaxis, :], axis=-1),
+                    psfgen=modelgen,
+                    resize=reference_voxel_size,
+                    gamma=.5,
+                    rolling_embedding=rolling_embedding,
+                    batch_size=1,
+                    n_samples=1,
+                    desc=f'kernel',
+                    plot=savepath / f'kernel_embeddings',
+                )
+
+                p_wave = Wavefront(preds, lam_detection=wavelength)
+                y_wave = Wavefront(ys.flatten(), lam_detection=wavelength)
+                diff_wave = Wavefront(ys - preds, lam_detection=wavelength)
+
+                p_psf = modelgen.single_psf(p_wave, zplanes=0)
+                gt_psf = modelgen.single_psf(y_wave, zplanes=0)
+                corrected_psf = modelgen.single_psf(diff_wave, zplanes=0)
+                imsave(savepath / f'corrected_psf_iter_{k}_window_{w}.tif', corrected_psf)
+
+                vis.diagnostic_assessment(
+                    psf=kernel,
+                    gt_psf=gt_psf,
+                    predicted_psf=p_psf,
+                    corrected_psf=corrected_psf,
+                    psnr=psnr,
+                    maxcounts=psnr,
+                    y=y_wave,
+                    pred=p_wave,
+                    wavelength=wavelength,
+                    save_path=savepath / f'kernel',
+                )
+
             preds, stdev = backend.bootstrap_predict(
                 model,
                 np.expand_dims(conv[np.newaxis, :], axis=-1),
@@ -1560,9 +1604,9 @@ def evalsample(
                 plot=savepath/f'embeddings_convolved_iter_{k}_window_{w}',
             )
 
-            p_wave = Wavefront(preds)
-            y_wave = Wavefront(ys.flatten())
-            diff_wave = Wavefront(ys - preds)
+            p_wave = Wavefront(preds, lam_detection=wavelength)
+            y_wave = Wavefront(ys.flatten(), lam_detection=wavelength)
+            diff_wave = Wavefront(ys - preds, lam_detection=wavelength)
 
             p_psf = modelgen.single_psf(p_wave, zplanes=0)
             gt_psf = modelgen.single_psf(y_wave, zplanes=0)
@@ -1578,6 +1622,7 @@ def evalsample(
                 maxcounts=psnr,
                 y=y_wave,
                 pred=p_wave,
+                wavelength=wavelength,
                 save_path=savepath/f'iter_{k}_window_{w}',
             )
 

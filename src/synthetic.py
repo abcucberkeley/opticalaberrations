@@ -196,7 +196,8 @@ class SyntheticPSF:
             order=self.order,
             distribution=self.distribution,
             modes=self.n_modes,
-            gamma=self.gamma
+            gamma=self.gamma,
+            lam_detection=self.lam_detection
         )
 
         if noise:
@@ -518,7 +519,8 @@ class SyntheticPSF:
                 distribution=self.distribution,
                 modes=self.n_modes,
                 gamma=self.gamma,
-                bimodal=self.bimodal
+                bimodal=self.bimodal,
+                lam_detection=self.lam_detection
             )
 
         psf = self.psfgen.incoherent_psf(phi) * snr * self.mean_background_noise

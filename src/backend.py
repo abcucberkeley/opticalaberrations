@@ -723,15 +723,15 @@ def predict(
 
                     p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1, n_samples=1)
 
-                    p = Wavefront(p)
+                    p = Wavefront(p, lam_detection=wavelength)
                     logger.info('Prediction')
                     pprint(p.zernikes)
 
                     logger.info('GT')
-                    y = Wavefront(y.flatten())
+                    y = Wavefront(y.flatten(), lam_detection=wavelength)
                     pprint(y.zernikes)
 
-                    diff = Wavefront(y - p)
+                    diff = Wavefront(y - p, lam_detection=wavelength)
 
                     p_psf = gen.single_psf(p, zplanes=0)
                     gt_psf = gen.single_psf(y, zplanes=0)
@@ -752,6 +752,7 @@ def predict(
                         gt_psf=gt_psf,
                         predicted_psf=p_psf,
                         corrected_psf=corrected_psf,
+                        wavelength=wavelength,
                         psnr=psnr,
                         maxcounts=maxcounts,
                         y=y,
@@ -809,15 +810,15 @@ def compare(
 
                 p, std = bootstrap_predict(m, psfgen=gen, inputs=model_input, batch_size=1, n_samples=1)
 
-                p = Wavefront(p)
+                p = Wavefront(p, lam_detection=wavelength)
                 logger.info('Prediction')
                 pprint(p.zernikes)
 
                 logger.info('GT')
-                y = Wavefront(y.flatten())
+                y = Wavefront(y.flatten(), lam_detection=wavelength)
                 pprint(y.zernikes)
 
-                diff = Wavefront(y - p)
+                diff = Wavefront(y - p, lam_detection=wavelength)
 
                 p_psf = gen.single_psf(p, zplanes=0)
                 corrected_psf = gen.single_psf(diff, zplanes=0)
@@ -843,8 +844,8 @@ def compare(
                     n_modes=p.amplitudes.shape[0]
                 ))
                 pred_matlab[:m_amps.shape[0]] = m_amps
-                pred_matlab = Wavefront(pred_matlab.flatten())
-                matlab_diff = Wavefront(y - pred_matlab)
+                pred_matlab = Wavefront(pred_matlab.flatten(), lam_detection=wavelength)
+                matlab_diff = Wavefront(y - pred_matlab, lam_detection=wavelength)
                 matlab_corrected_psf = gen.single_psf(matlab_diff, zplanes=0)
                 imsave(save_path / f'matlab_corrected_psf_{i}.tif', matlab_corrected_psf)
                 pprint(pred_matlab.zernikes)
@@ -857,6 +858,7 @@ def compare(
                     matlab_corrected_psf=matlab_corrected_psf,
                     psnr=psnr,
                     maxcounts=maxcounts,
+                    wavelength=wavelength,
                     y=y,
                     pred=p,
                     pred_matlab=pred_matlab,
@@ -900,15 +902,15 @@ def deconstruct(
         psf, y, psnr, zplanes, maxcounts = next(gen.generator(debug=True))
         p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1)
 
-        p = Wavefront(p)
+        p = Wavefront(p, lam_detection=wavelength)
         logger.info('Prediction')
         pprint(p.zernikes)
 
         logger.info('GT')
-        y = Wavefront(y)
+        y = Wavefront(y, lam_detection=wavelength)
         pprint(y.zernikes)
 
-        diff = Wavefront(y - p)
+        diff = Wavefront(y - p, lam_detection=wavelength)
 
         p_psf = gen.single_psf(p, zplanes=0)
         gt_psf = gen.single_psf(y, zplanes=0)
@@ -925,6 +927,7 @@ def deconstruct(
             corrected_psf=corrected_psf,
             psnr=psnr,
             maxcounts=maxcounts,
+            wavelength=wavelength,
             y=y,
             pred=p,
             save_path=save_path / f'{i}',
@@ -970,7 +973,7 @@ def featuremaps(
     )
     phi = np.zeros(modes)
     phi[10] = amplitude_range
-    amplitude_range = Wavefront(phi)
+    amplitude_range = Wavefront(phi, lam_detection=wavelength)
 
     psfargs = dict(
         n_modes=modes,

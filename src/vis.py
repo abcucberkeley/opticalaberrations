@@ -200,7 +200,7 @@ def plot_fov(n_modes=60, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
         for j, amp in enumerate(tqdm(waves, desc=f'Mode [#{i}]')):
             phi = np.zeros(n_modes)
             phi[i] = amp
-            w = Wavefront(phi, order='ansi')
+            w = Wavefront(phi, order='ansi', lam_detection=wavelength)
 
             for r in res:
                 gen = SyntheticPSF(
@@ -415,7 +415,7 @@ def plot_embeddings(
             for ax in range(6):
                 if amp == waves[-1]:
                     mat = grid[(mode, ax, 'wavefront')].contourf(
-                        Wavefront(phi).wave(100),
+                        Wavefront(phi, lam_detection=wavelength).wave(100),
                         levels=np.arange(-10, 10, step=1),
                         cmap='Spectral_r',
                         extend='both'
@@ -538,7 +538,7 @@ def plot_gaussian_filters(
             for ax in range(6):
                 if amp == waves[-1]:
                     mat = grid[(mode, ax, 'wavefront')].contourf(
-                        Wavefront(phi).wave(100),
+                        Wavefront(phi, lam_detection=wavelength).wave(100),
                         levels=np.arange(-10, 10, step=1),
                         cmap='Spectral_r',
                         extend='both'
@@ -709,7 +709,7 @@ def plot_signal(n_modes=60, wavelength=.605):
         for j, a in enumerate(tqdm(waves, desc=f'Mode [#{i}]')):
             phi = np.zeros(n_modes)
             phi[i] = a
-            w = Wavefront(phi, order='ansi')
+            w = Wavefront(phi, order='ansi', lam_detection=wavelength)
 
             abr = 0 if j == 0 else round(peak_aberration(phi))
             signal[i][abr] = {}
@@ -771,7 +771,7 @@ def plot_signal(n_modes=60, wavelength=.605):
 
             phi = np.zeros(n_modes)
             phi[i] = .5
-            phi = Wavefront(phi, order='ansi').wave(size=100)
+            phi = Wavefront(phi, order='ansi', lam_detection=wavelength).wave(size=100)
 
             mat = axw.contourf(
                 phi,
@@ -826,7 +826,7 @@ def plot_mode(savepath, df, mode_index, n_modes=60, wavelength=.605):
 
     phi = np.zeros(n_modes)
     phi[mode_index] = .5
-    phi = Wavefront(phi, order='ansi').wave(size=100)
+    phi = Wavefront(phi, order='ansi', lam_detection=wavelength).wave(size=100)
 
     mat = axw.contourf(
         phi,
@@ -1109,7 +1109,7 @@ def diagnostic_assessment(
         wavelength: float = .605,
         display: bool = False,
         psf_cmap: str = 'hot',
-        gamma: float = 1,
+        gamma: float = .5,
         threshold: float = .01,
 ):
 
@@ -2284,7 +2284,7 @@ def plot_inputs(
     for i in trange(5, n_modes):
         phi = np.zeros(n_modes)
         phi[i] = .05
-        w = Wavefront(phi, order='ansi')
+        w = Wavefront(phi, order='ansi', lam_detection=wavelength)
         y_wave = w.wave(size=100)
 
         gen = SyntheticPSF(

@@ -203,12 +203,12 @@ def matlab_comparison(
     if not np.isscalar(psnr):
         psnr = psnr[0]
 
-    y_true = Wavefront(y_true)
-    y_pred = Wavefront(y_pred)
-    y_matlab = Wavefront(y_matlab)
+    y_true = Wavefront(y_true, lam_detection=wavelength)
+    y_pred = Wavefront(y_pred, lam_detection=wavelength)
+    y_matlab = Wavefront(y_matlab, lam_detection=wavelength)
 
-    mat_diff = Wavefront(y_true - y_matlab)
-    net_diff = Wavefront(y_true - y_pred)
+    mat_diff = Wavefront(y_true - y_matlab, lam_detection=wavelength)
+    net_diff = Wavefront(y_true - y_pred, lam_detection=wavelength)
 
     step = .25
     y_wave = y_true.wave(size=100)
@@ -396,7 +396,7 @@ def predict(
     dm = pd.DataFrame(dm)
     dm.to_csv(f"{img.parent/img.stem}_corrected_actuators.csv", index=False, header=False)
 
-    p = Wavefront(p, order='ansi')
+    p = Wavefront(p, order='ansi', lam_detection=wavelength)
     if verbose:
         logger.info('Prediction')
         logger.info(p.zernikes)

@@ -40,11 +40,11 @@ class Wavefront:
         self,
         amplitudes,
         order='ansi',
-        modes=15,
+        modes=60,
         lam_detection=.605,
         distribution=None,
         gamma=1.5,
-        bimodal=False,
+        bimodal=True,
     ):
         self.ranges = amplitudes
         self.order = order
