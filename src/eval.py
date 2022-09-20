@@ -1649,7 +1649,7 @@ def evalsample(
             if niter > 1:
                 res = ys - preds
                 kernel = gen.single_psf(
-                    phi=Wavefront(res),
+                    phi=Wavefront(res, lam_detection=wavelength),
                     zplanes=0,
                     normed=True,
                     noise=False,
@@ -1658,7 +1658,6 @@ def evalsample(
                 )
                 ys = res
 
-                print(res)
                 print(np.count_nonzero(kernel))
 
         error = np.abs(y_true['residuals'] - y_pred['residuals'])

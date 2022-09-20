@@ -29,13 +29,13 @@ do
       #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
       #python manager.py slurm test.py --partition abc --constraint titan --mem '500GB' --gpus 4 --cpus 20 \
       python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0 \
-      --task "$MODEL --datadir $DATA/i$SHAPE --n_samples 20 --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP iterheatmap" \
+      --task "$MODEL --input_coverage $SIZE --datadir $DATA/i$SHAPE --n_samples 20 --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP iterheatmap" \
       --taskname $NA \
       --name $MODEL/iterheatmaps_$SIZE
     done
 
     python manager.py slurm predict.py --partition abc --mem '500GB' --cpus 4 --gpus 0 \
-    --task "$MODEL --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL random" \
+    --task "$MODEL --input_coverage $SIZE --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL random" \
     --taskname random \
     --name $MODEL/samples_$SIZE
   done
