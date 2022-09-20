@@ -699,7 +699,7 @@ def predict(
     input_shape = m.layers[0].input_shape[0][1:-1]
 
     for dist in ['powerlaw', 'dirichlet']:
-        for amplitude_range in [(0, .1), (.1, .2), (.2, .4), (.4, .6)]:
+        for amplitude_range in [(.05, .1), (.1, .2), (.2, .4), (.4, .6)]:
             for snr in [25, 50]:
                 psfargs = dict(
                     dtype=psf_type,
@@ -724,13 +724,13 @@ def predict(
                 for i, (psf, y, psnr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True, otf=False)):
                     waves = np.round(utils.microns2waves(amplitude_range[0], wavelength), 2)
                     save_path = Path(
-                        f"{model}/{dist}/lambda-{waves}/psnr-{snr}/"
+                        f"{model}/{dist}/c{input_coverage}/lambda-{waves}/psnr-{snr}/"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
                     if input_coverage != 1.:
                         psf = resize_with_crop_or_pad(psf, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
-                        psf = resize_with_crop_or_pad(psf, crop_shape=gen.psf_shape, mode='edge')
+                        psf = resize_with_crop_or_pad(psf, crop_shape=gen.psf_shape, mode='minimum')
 
                     p, std = bootstrap_predict(
                         m,

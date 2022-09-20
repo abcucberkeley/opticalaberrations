@@ -13,7 +13,7 @@ declare -a models=(
 '../models/new/lattice/opticaltransformer'
 )
 
-for SIZE in .75 .5
+for SIZE in 1. .75 .5
 do
   for MODEL in "${models[@]}"
   do
@@ -34,7 +34,7 @@ do
       --name $MODEL/iterheatmaps_$SIZE
     done
 
-    python manager.py slurm predict.py --partition abc --constraint titan --mem '125GB' --gpus 1 --cpus 5 \
+    python manager.py slurm test.py --partition abc --mem '500GB' --cpus 4 --gpus 0 \
     --task "$MODEL --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL random" \
     --taskname random \
     --name $MODEL/samples_$SIZE

@@ -11,7 +11,7 @@ from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from tifffile import imread
 import tensorflow as tf
 from scipy import signal
@@ -914,7 +914,7 @@ def eval_bin(
     for inputs, ys in val.batch(100):
         if input_coverage != 1.:
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
-            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, mode='edge')
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, mode='minimum')
 
         preds, stdev = backend.bootstrap_predict(
             model,
@@ -951,7 +951,7 @@ def evalheatmap(
     wavelength: float = .605,
     input_coverage: float = 1.0,
 ):
-    savepath = modelpath / 'evalheatmaps'
+    savepath = modelpath / f'evalheatmaps_{input_coverage}'
     savepath.mkdir(parents=True, exist_ok=True)
     if distribution != '/':
         savepath = f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}'
@@ -1123,7 +1123,7 @@ def iter_eval_bin(
     for k in range(1, niter+1):
         if input_coverage != 1.:
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
-            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, mode='edge')
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, mode='minimum')
 
         preds, stdev = backend.bootstrap_predict(
             model,
@@ -1456,7 +1456,7 @@ def evalsample(
     kernel_path: Path = None,
     reference_path: Path = None,
     psnr: tuple = (1000, 1000),
-    niter: int = 1,
+    niter: int = 3,
     na: float = 1.0,
     psf_type: str = 'widefield',
     x_voxel_size: float = .108,
@@ -1500,10 +1500,12 @@ def evalsample(
     if kernel_path is not None:
         kernel = imread(kernel_path)
     else:
-        w = Wavefront(amplitudes=(.2, .2), modes=60, bimodal=True, distribution='powerlaw', lam_detection=wavelength)
-        ys = w.amplitudes_ansi
-        # ys = np.zeros(60)
-        # ys[6] = .1
+        # w = Wavefront(amplitudes=(.2, .2), modes=60, bimodal=True, distribution='powerlaw', lam_detection=wavelength)
+        # ys = w.amplitudes_ansi
+        ys = np.zeros(60)
+        ys[6] = .1
+        # ys[9] = .05
+        # ys[11] = -.05
 
         gen = SyntheticPSF(
             n_modes=60,
@@ -1526,7 +1528,6 @@ def evalsample(
             meta=False
         )
     imsave(savepath / f'kernel.tif', kernel)
-    logger.info(f"Kernel: {kernel.shape}")
 
     rois = find_roi(reference_path, window_size=kernel.shape, peaks_coordinates=peaks, plot=savepath)
     logger.info(f"ROIs: {rois.shape}")
@@ -1536,9 +1537,8 @@ def evalsample(
 
     for w in range(rois.shape[0]):
         imsave(savepath / f'reference_window_{w}.tif', rois[w])
-        logger.info(f"Reference: {rois[w].shape}")
 
-        reference = rois[w] ** 4
+        reference = rois[w] ** 10
         imsave(savepath / f'reference_window_{w}_power.tif', reference)
 
         if apodization:
@@ -1551,7 +1551,7 @@ def evalsample(
         y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
         y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
 
-        for k in range(1, niter+1):
+        for k in trange(1, niter+1):
             conv = signal.convolve(reference, kernel, mode='full')
             width = [(i//2) for i in reference.shape]
             center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
@@ -1562,14 +1562,13 @@ def evalsample(
             ]
             conv = resize_with_crop_or_pad(conv, crop_shape=kernel.shape)
 
-            conv /= np.nanpercentile(conv, 99.99)
-            conv[conv > 1] = 1
-            conv = np.nan_to_num(conv, nan=0)
+            inputs = conv / np.nanpercentile(conv, 99.99)
+            inputs[inputs > 1] = 1
+            inputs = np.nan_to_num(inputs, nan=0)
 
-            imsave(savepath/f'convolved_iter_{k}_window_{w}.tif', conv)
-            logger.info(f"Convolved: {conv.shape}")
+            imsave(savepath/f'convolved_iter_{k}_window_{w}.tif', inputs)
 
-            if k == 1:
+            if k == 1 and w == 0:
                 preds, stdev = backend.bootstrap_predict(
                     model,
                     np.expand_dims(kernel[np.newaxis, :], axis=-1),
@@ -1607,14 +1606,14 @@ def evalsample(
 
             preds, stdev = backend.bootstrap_predict(
                 model,
-                np.expand_dims(conv[np.newaxis, :], axis=-1),
+                np.expand_dims(inputs[np.newaxis, :], axis=-1),
                 psfgen=modelgen,
                 resize=reference_voxel_size,
                 gamma=.5,
                 rolling_embedding=rolling_embedding,
                 batch_size=1,
                 n_samples=1,
-                desc=f'Iter[{k}]',
+                desc=f'Iter[{k}] - MI: {conv.max().round(0)}',
                 plot=savepath/f'embeddings_convolved_iter_{k}_window_{w}',
             )
 
@@ -1628,7 +1627,7 @@ def evalsample(
             imsave(savepath / f'corrected_psf_iter_{k}_window_{w}.tif', corrected_psf)
 
             vis.diagnostic_assessment(
-                psf=conv,
+                psf=inputs,
                 gt_psf=gt_psf,
                 predicted_psf=p_psf,
                 corrected_psf=corrected_psf,
@@ -1659,6 +1658,9 @@ def evalsample(
                 )
                 ys = res
 
+                print(res)
+                print(np.count_nonzero(kernel))
+
         error = np.abs(y_true['residuals'] - y_pred['residuals'])
         error = pd.DataFrame(error, columns=['residuals'])
 
@@ -1684,7 +1686,7 @@ def evalsample(
         means = means.sort_index().interpolate()
 
         logger.info(means)
-        means.to_csv(savepath/f'results_na_{str(na).replace("0.", "p")}.csv')
+        means.to_csv(savepath/f'results_na_{str(na).replace("0.", "p")}_window_{w}.csv')
 
         fig, ax = plt.subplots(figsize=(8, 6))
         levels = [
@@ -1749,5 +1751,5 @@ def evalsample(
         ax.spines['left'].set_visible(False)
         plt.tight_layout()
 
-        plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}_window_{w}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}_window_{w}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
