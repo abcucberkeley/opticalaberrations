@@ -887,6 +887,7 @@ def eval_bin(
     y_voxel_size,
     z_voxel_size,
     wavelength,
+    input_coverage,
 ):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
@@ -911,6 +912,10 @@ def eval_bin(
     y_true = pd.DataFrame([], columns=['sample'])
 
     for inputs, ys in val.batch(100):
+        if input_coverage != 1.:
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, mode='edge')
+
         preds, stdev = backend.bootstrap_predict(
             model,
             inputs,
@@ -944,6 +949,7 @@ def evalheatmap(
     y_voxel_size: float = .15,
     z_voxel_size: float = .6,
     wavelength: float = .605,
+    input_coverage: float = 1.0,
 ):
     savepath = modelpath / 'evalheatmaps'
     savepath.mkdir(parents=True, exist_ok=True)
@@ -980,6 +986,7 @@ def evalheatmap(
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
         wavelength=wavelength,
+        input_coverage=input_coverage
     )
     preds, ys = zip(*utils.multiprocess(job, classes))
     y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
@@ -1076,6 +1083,7 @@ def iter_eval_bin(
     y_voxel_size,
     z_voxel_size,
     wavelength,
+    input_coverage
 ):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
@@ -1113,6 +1121,10 @@ def iter_eval_bin(
     })
 
     for k in range(1, niter+1):
+        if input_coverage != 1.:
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, mode='edge')
+
         preds, stdev = backend.bootstrap_predict(
             model,
             inputs,
@@ -1277,6 +1289,7 @@ def iterheatmap(
     y_voxel_size: float = .15,
     z_voxel_size: float = .6,
     wavelength: float = .605,
+    input_coverage: float = 1.0,
 ):
     if reference is None:
         savepath = modelpath / 'iterheatmaps'
@@ -1321,6 +1334,7 @@ def iterheatmap(
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
             wavelength=wavelength,
+            input_coverage=input_coverage
         )
     else:
         job = partial(

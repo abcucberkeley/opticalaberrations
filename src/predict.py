@@ -67,6 +67,11 @@ def parse_args(args):
         "--gpu_workers", default=1, type=int, help='number of GPUs to use'
     )
 
+    parser.add_argument(
+        "--input_coverage", default=1.0, type=float, help='faction of the image to feed into the model '
+                                                          '(then padded to keep the original image size)'
+    )
+
     return parser.parse_args(args)
 
 
@@ -88,7 +93,8 @@ def main(args=None):
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
             max_jitter=args.max_jitter,
-            cpu_workers=args.cpu_workers
+            cpu_workers=args.cpu_workers,
+            input_coverage=args.input_coverage
         )
 
     elif args.target == "compare":

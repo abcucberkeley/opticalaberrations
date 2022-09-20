@@ -44,6 +44,7 @@ from wavefront import Wavefront
 
 from tensorflow.keras import Model
 from phasenet import PhaseNet
+from preprocessing import resize_with_crop_or_pad
 
 from stem import Stem
 from activation import MaskedActivation
@@ -681,14 +682,15 @@ def bootstrap_predict(
 
 
 def predict(
-        model: Path,
-        psf_type: str,
-        wavelength: float,
-        x_voxel_size: float,
-        y_voxel_size: float,
-        z_voxel_size: float,
-        max_jitter: float,
-        cpu_workers: int,
+    model: Path,
+    psf_type: str,
+    wavelength: float,
+    x_voxel_size: float,
+    y_voxel_size: float,
+    z_voxel_size: float,
+    max_jitter: float,
+    cpu_workers: int,
+    input_coverage: float = 1.0
 ):
     m = load(model)
     m.summary()
@@ -720,8 +722,24 @@ def predict(
 
                 gen = SyntheticPSF(**psfargs)
                 for i, (psf, y, psnr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True, otf=False)):
+                    waves = np.round(utils.microns2waves(amplitude_range[0], wavelength), 2)
+                    save_path = Path(
+                        f"{model}/{dist}/lambda-{waves}/psnr-{snr}/"
+                    )
+                    save_path.mkdir(exist_ok=True, parents=True)
 
-                    p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1, n_samples=1)
+                    if input_coverage != 1.:
+                        psf = resize_with_crop_or_pad(psf, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
+                        psf = resize_with_crop_or_pad(psf, crop_shape=gen.psf_shape, mode='edge')
+
+                    p, std = bootstrap_predict(
+                        m,
+                        psfgen=gen,
+                        inputs=psf,
+                        batch_size=1,
+                        n_samples=1,
+                        plot=save_path / f'embeddings_{i}',
+                    )
 
                     p = Wavefront(p, lam_detection=wavelength)
                     logger.info('Prediction')
@@ -738,11 +756,6 @@ def predict(
                     corrected_psf = gen.single_psf(diff, zplanes=0)
 
                     psf = np.squeeze(psf[0], axis=-1)
-                    waves = np.round(utils.microns2waves(amplitude_range[0], wavelength), 2)
-                    save_path = Path(
-                        f"{model}/{dist}/lambda-{waves}/psnr-{snr}/"
-                    )
-                    save_path.mkdir(exist_ok=True, parents=True)
 
                     imsave(save_path / f'psf_{i}.tif', psf)
                     imsave(save_path / f'corrected_psf_{i}.tif', corrected_psf)

@@ -87,6 +87,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--input_coverage", default=1.0, type=float, help='faction of the image to feed into the model '
+                                                          '(then padded to keep the original image size)'
+    )
+
+    parser.add_argument(
         "--gpu_workers", default=1, type=int, help='number of GPUs to use'
     )
 
@@ -127,6 +132,7 @@ def main(args=None):
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
             na=args.na,
+            input_coverage=args.input_coverage
         )
     elif args.target == 'iterheatmap':
         eval.iterheatmap(
@@ -142,6 +148,7 @@ def main(args=None):
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
             na=args.na,
+            input_coverage=args.input_coverage
         )
     elif args.target == 'evalsample':
         eval.evalsample(

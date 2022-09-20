@@ -14,7 +14,7 @@ import seaborn as sns
 import matplotlib.colors as mcolors
 from matplotlib import gridspec
 from tifffile import imread, imsave
-from skimage import transform, filters, feature
+from skimage import transform, feature
 from scipy.spatial import KDTree
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -31,20 +31,28 @@ logger = logging.getLogger(__name__)
 
 def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
     rank = len(crop_shape)
-    index = [[0, psf.shape[d]] for d in range(rank)]
+    psf_shape = psf.shape[1:-1] if len(psf.shape) == 5 else psf.shape
+    index = [[0, psf_shape[d]] for d in range(rank)]
     pad = [[0, 0] for _ in range(rank)]
     slicer = [slice(None)] * rank
 
     for i in range(rank):
-        if psf.shape[i] < crop_shape[i]:
-            pad[i][0] = (crop_shape[i] - psf.shape[i]) // 2
-            pad[i][1] = crop_shape[i] - psf.shape[i] - pad[i][0]
+        if psf_shape[i] < crop_shape[i]:
+            pad[i][0] = (crop_shape[i] - psf_shape[i]) // 2
+            pad[i][1] = crop_shape[i] - psf_shape[i] - pad[i][0]
         else:
-            index[i][0] = int(np.floor((psf.shape[i] - crop_shape[i]) / 2.))
+            index[i][0] = int(np.floor((psf_shape[i] - crop_shape[i]) / 2.))
             index[i][1] = index[i][0] + crop_shape[i]
 
         slicer[i] = slice(index[i][0], index[i][1])
-    return np.pad(psf[slicer], pad, **kwargs)
+
+    if len(psf.shape) == 5:
+        if psf.shape[0] != 1:
+            return np.array([np.pad(s[slicer], pad, **kwargs) for s in np.squeeze(psf)])[..., np.newaxis]
+        else:
+            return np.pad(np.squeeze(psf)[slicer], pad, **kwargs)[np.newaxis, ..., np.newaxis]
+    else:
+        return np.pad(psf[slicer], pad, **kwargs)
 
 
 def resize(vol, voxel_size: Sequence, crop_shape: Sequence, sample_voxel_size: Sequence = (.1, .1, .1),
