@@ -14,10 +14,11 @@ import pandas as pd
 from tqdm import tqdm, trange
 from tifffile import imread
 import tensorflow as tf
-from scipy import signal
+from scipy import signal, ndimage
 from skimage import transform, filters
 from tifffile import imsave
 from preprocessing import find_roi, resize_with_crop_or_pad
+from astropy import convolution
 
 import utils
 import vis
@@ -1456,7 +1457,7 @@ def evalsample(
     kernel_path: Path = None,
     reference_path: Path = None,
     psnr: tuple = (1000, 1000),
-    niter: int = 3,
+    niter: int = 5,
     na: float = 1.0,
     psf_type: str = 'widefield',
     x_voxel_size: float = .108,
@@ -1500,8 +1501,6 @@ def evalsample(
     if kernel_path is not None:
         kernel = imread(kernel_path)
     else:
-        # w = Wavefront(amplitudes=(.2, .2), modes=60, bimodal=True, distribution='powerlaw', lam_detection=wavelength)
-        # ys = w.amplitudes_ansi
         ys = np.zeros(60)
         ys[6] = .1
         # ys[9] = .05
@@ -1520,7 +1519,7 @@ def evalsample(
         )
 
         kernel = gen.single_psf(
-            phi=Wavefront(ys),
+            phi=Wavefront(ys, lam_detection=wavelength),
             zplanes=0,
             normed=True,
             noise=False,
@@ -1538,7 +1537,7 @@ def evalsample(
     for w in range(rois.shape[0]):
         imsave(savepath / f'reference_window_{w}.tif', rois[w])
 
-        reference = rois[w] ** 10
+        reference = rois[w] ** 4
         imsave(savepath / f'reference_window_{w}_power.tif', reference)
 
         if apodization:
@@ -1552,68 +1551,70 @@ def evalsample(
         y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
 
         for k in trange(1, niter+1):
-            conv = signal.convolve(reference, kernel, mode='full')
-            width = [(i//2) for i in reference.shape]
-            center = np.unravel_index(np.argmax(conv, axis=None), conv.shape)
-            conv = conv[
-                 center[0]-width[0]:center[0]+width[0],
-                 center[1]-width[1]:center[1]+width[1],
-                 center[2]-width[2]:center[2]+width[2],
-            ]
-            conv = resize_with_crop_or_pad(conv, crop_shape=kernel.shape)
+            conv = convolution.convolve_fft(reference, kernel)
 
             inputs = conv / np.nanpercentile(conv, 99.99)
             inputs[inputs > 1] = 1
-            inputs = np.nan_to_num(inputs, nan=0)
 
+            fig, axes = plt.subplots(3, 3, figsize=(8, 11))
+            for i in range(3):
+                axes[0, i].imshow(np.max(kernel, axis=i)**.5, vmin=0, vmax=1)
+                axes[1, i].imshow(np.max(reference, axis=i)**.5, vmin=0, vmax=1)
+                axes[2, i].imshow(np.max(inputs, axis=i)**.5, vmin=0, vmax=1)
+            axes[0, 1].set_title('Kernel')
+            axes[1, 1].set_title('Reference')
+            axes[2, 1].set_title('Convolved')
+            plt.tight_layout()
+
+            plt.savefig(savepath / f'convolved_iter_{k}_window_{w}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
             imsave(savepath/f'convolved_iter_{k}_window_{w}.tif', inputs)
 
-            if k == 1 and w == 0:
-                preds, stdev = backend.bootstrap_predict(
-                    model,
-                    np.expand_dims(kernel[np.newaxis, :], axis=-1),
-                    psfgen=modelgen,
-                    resize=reference_voxel_size,
-                    gamma=.5,
-                    rolling_embedding=rolling_embedding,
-                    batch_size=1,
-                    n_samples=1,
-                    desc=f'kernel',
-                    plot=savepath / f'kernel_embeddings',
-                )
-
-                p_wave = Wavefront(preds, lam_detection=wavelength)
-                y_wave = Wavefront(ys.flatten(), lam_detection=wavelength)
-                diff_wave = Wavefront(ys - preds, lam_detection=wavelength)
-
-                p_psf = modelgen.single_psf(p_wave, zplanes=0)
-                gt_psf = modelgen.single_psf(y_wave, zplanes=0)
-                corrected_psf = modelgen.single_psf(diff_wave, zplanes=0)
-                imsave(savepath / f'corrected_psf_iter_{k}_window_{w}.tif', corrected_psf)
-
-                vis.diagnostic_assessment(
-                    psf=kernel,
-                    gt_psf=gt_psf,
-                    predicted_psf=p_psf,
-                    corrected_psf=corrected_psf,
-                    psnr=psnr,
-                    maxcounts=psnr,
-                    y=y_wave,
-                    pred=p_wave,
-                    wavelength=wavelength,
-                    save_path=savepath / f'kernel',
-                )
+            # if k == 1 and w == 0:
+            #     preds, stdev = backend.bootstrap_predict(
+            #         model,
+            #         np.expand_dims(kernel[np.newaxis, :], axis=-1),
+            #         psfgen=modelgen,
+            #         resize=reference_voxel_size,
+            #         gamma=.5,
+            #         rolling_embedding=rolling_embedding,
+            #         batch_size=1,
+            #         n_samples=1,
+            #         desc=f'kernel',
+            #         plot=savepath / f'kernel_embeddings',
+            #     )
+            #
+            #     p_wave = Wavefront(preds, lam_detection=wavelength)
+            #     y_wave = Wavefront(ys.flatten(), lam_detection=wavelength)
+            #     diff_wave = Wavefront(ys - preds, lam_detection=wavelength)
+            #
+            #     p_psf = modelgen.single_psf(p_wave, zplanes=0)
+            #     gt_psf = modelgen.single_psf(y_wave, zplanes=0)
+            #     corrected_psf = modelgen.single_psf(diff_wave, zplanes=0)
+            #     imsave(savepath / f'corrected_psf_iter_{k}_window_{w}.tif', corrected_psf)
+            #
+            #     vis.diagnostic_assessment(
+            #         psf=kernel,
+            #         gt_psf=gt_psf,
+            #         predicted_psf=p_psf,
+            #         corrected_psf=corrected_psf,
+            #         psnr=psnr,
+            #         maxcounts=psnr,
+            #         y=y_wave,
+            #         pred=p_wave,
+            #         wavelength=wavelength,
+            #         save_path=savepath / f'kernel',
+            #     )
 
             preds, stdev = backend.bootstrap_predict(
                 model,
-                np.expand_dims(inputs[np.newaxis, :], axis=-1),
+                inputs[np.newaxis, :, :, :, np.newaxis],
                 psfgen=modelgen,
                 resize=reference_voxel_size,
                 gamma=.5,
                 rolling_embedding=rolling_embedding,
                 batch_size=1,
                 n_samples=1,
-                desc=f'Iter[{k}] - MI: {conv.max().round(0)}',
+                desc=f'Iter[{k}] - MI: {np.nanpercentile(conv, 90):.4e}',
                 plot=savepath/f'embeddings_convolved_iter_{k}_window_{w}',
             )
 
@@ -1657,8 +1658,6 @@ def evalsample(
                     meta=False
                 )
                 ys = res
-
-                print(np.count_nonzero(kernel))
 
         error = np.abs(y_true['residuals'] - y_pred['residuals'])
         error = pd.DataFrame(error, columns=['residuals'])

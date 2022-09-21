@@ -536,7 +536,7 @@ def bootstrap_predict(
     def batch_generator(arr, s):
         for k in range(0, len(arr), s):
             yield arr[k:k + s]
-
+    
     if rolling_embedding:
         model_inputs = np.stack([
             np.expand_dims(
@@ -659,9 +659,15 @@ def bootstrap_predict(
             #     else:
             #         plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
+            batch = np.nan_to_num(batch, nan=0, posinf=0, neginf=0)
             p = model(batch, training=True).numpy()
+
             p[:, [0, 1, 2, 4]] = 0.
             p[np.abs(p) <= threshold] = 0.
+
+            features = np.array([np.count_nonzero(s) for s in batch])
+            p[np.where(features == 0)[0]] = np.zeros_like(p[0])
+
             b.extend(p)
 
         if preds is None:
