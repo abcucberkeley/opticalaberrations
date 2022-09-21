@@ -14,7 +14,6 @@ import pandas as pd
 from tqdm import tqdm, trange
 from tifffile import imread
 import tensorflow as tf
-from scipy import signal, ndimage
 from skimage import transform, filters
 from tifffile import imsave
 from preprocessing import find_roi, resize_with_crop_or_pad
@@ -1231,7 +1230,7 @@ def iter_eval_bin_with_reference(
     for k in range(1, niter+1):
         inputs = np.array([
             transform.resize(
-                signal.fftconvolve(i, reference, mode='same'),
+                convolution.convolve_fft(i, reference),
                 output_shape=(64, 64, 64),
                 order=3,
                 anti_aliasing=True
