@@ -107,6 +107,11 @@ def parse_args(args):
         "--peaks", default=None, help="matlab file that outlines peaks-coordinates"
     )
 
+    parser.add_argument(
+        '--no_phase', action='store_true',
+        help='toggle to use exclude phase from the model embeddings'
+    )
+
     return parser.parse_args(args)
 
 
@@ -132,7 +137,8 @@ def main(args=None):
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
             na=args.na,
-            input_coverage=args.input_coverage
+            input_coverage=args.input_coverage,
+            no_phase=args.no_phase,
         )
     elif args.target == 'iterheatmap':
         eval.iterheatmap(
@@ -148,7 +154,8 @@ def main(args=None):
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
             na=args.na,
-            input_coverage=args.input_coverage
+            input_coverage=args.input_coverage,
+            no_phase=args.no_phase,
         )
     elif args.target == 'evalsample':
         eval.evalsample(
@@ -162,6 +169,7 @@ def main(args=None):
             z_voxel_size=args.z_voxel_size,
             na=args.na,
             peaks=args.peaks,
+            no_phase=args.no_phase,
         )
     else:
         eval.evaluate(

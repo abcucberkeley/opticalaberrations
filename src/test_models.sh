@@ -12,8 +12,6 @@ DATA="/clusterfs/nvme/thayer/dataset/lattice_multipoints/test/x108-y108-z268/"
 declare -a models=(
 '../models/new/multipoints/lattice/nophase/opticaltransformer-multinode'
 '../models/new/multipoints/lattice/nophase/opticalresnet'
-'../models/new/multipoints/lattice/phase/opticaltransformer/p24-p12-p6x2'
-'../models/new/multipoints/lattice/phase/opticalresnet'
 )
 
 for MODEL in "${models[@]}"
@@ -23,20 +21,20 @@ do
     #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
     #python manager.py slurm test.py --partition abc --constraint titan --mem '500GB' --gpus 4 --cpus 20 \
     python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0\
-    --task "$MODEL --datadir $DATA/i$SHAPE --n_samples 100 --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP evalheatmap" \
+    --task "$MODEL --no_phase --datadir $DATA/i$SHAPE --n_samples 100 --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP evalheatmap" \
     --taskname $NA \
     --name $MODEL/evalheatmaps
 
     #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
     #python manager.py slurm test.py --partition abc --constraint titan --mem '500GB' --gpus 4 --cpus 20 \
     python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0 \
-    --task "$MODEL --datadir $DATA/i$SHAPE --n_samples 20 --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP iterheatmap" \
+    --task "$MODEL --no_phase --datadir $DATA/i$SHAPE --n_samples 20 --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP iterheatmap" \
     --taskname $NA \
     --name $MODEL/iterheatmaps
   done
 
   python manager.py slurm predict.py --partition abc --mem '500GB' --cpus 4 --gpus 0 \
-  --task "$MODEL --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL random" \
+  --task "$MODEL --no_phase --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL random" \
   --taskname random \
   --name $MODEL/samples
 done

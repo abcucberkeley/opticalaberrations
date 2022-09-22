@@ -888,6 +888,7 @@ def eval_bin(
     z_voxel_size,
     wavelength,
     input_coverage,
+    no_phase
 ):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
@@ -906,7 +907,8 @@ def eval_bin(
     )
 
     val = data_utils.load_dataset(datapath, samplelimit=samplelimit)
-    val = val.map(lambda x: tf.py_function(data_utils.get_sample, [x], [tf.float32, tf.float32]))
+    func = partial(data_utils.get_sample, no_phase=no_phase)
+    val = val.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
 
     y_pred = pd.DataFrame([], columns=['sample'])
     y_true = pd.DataFrame([], columns=['sample'])
@@ -950,6 +952,7 @@ def evalheatmap(
     z_voxel_size: float = .6,
     wavelength: float = .605,
     input_coverage: float = 1.0,
+    no_phase: bool = False,
 ):
     savepath = modelpath / f'evalheatmaps_{input_coverage}'
     savepath.mkdir(parents=True, exist_ok=True)
@@ -986,7 +989,8 @@ def evalheatmap(
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
         wavelength=wavelength,
-        input_coverage=input_coverage
+        input_coverage=input_coverage,
+        no_phase=no_phase
     )
     preds, ys = zip(*utils.multiprocess(job, classes))
     y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
@@ -1083,7 +1087,8 @@ def iter_eval_bin(
     y_voxel_size,
     z_voxel_size,
     wavelength,
-    input_coverage
+    input_coverage,
+    no_phase
 ):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
@@ -1102,7 +1107,8 @@ def iter_eval_bin(
     )
 
     val = data_utils.load_dataset(datapath, samplelimit=samples)
-    val = val.map(lambda x: tf.py_function(data_utils.get_sample, [x], [tf.float32, tf.float32]))
+    func = partial(data_utils.get_sample, no_phase=no_phase)
+    val = val.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
     val = np.array(list(val.take(-1)))
 
     inputs = np.array([i.numpy() for i in val[:, 0]])
@@ -1290,6 +1296,7 @@ def iterheatmap(
     z_voxel_size: float = .6,
     wavelength: float = .605,
     input_coverage: float = 1.0,
+    no_phase: bool = False,
 ):
     if reference is None:
         savepath = modelpath / f'iterheatmaps_{input_coverage}'
@@ -1334,7 +1341,8 @@ def iterheatmap(
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
             wavelength=wavelength,
-            input_coverage=input_coverage
+            input_coverage=input_coverage,
+            no_phase=no_phase
         )
     else:
         job = partial(
@@ -1468,6 +1476,7 @@ def evalsample(
     apodization: bool = True,
     apodization_mask_width: int = 8,
     peaks: Any = None,
+    no_phase: bool = False,
 ):
 
     plt.rcParams.update({

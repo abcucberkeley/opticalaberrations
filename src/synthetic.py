@@ -338,6 +338,7 @@ class SyntheticPSF:
         log10: bool = False,
         principle_planes: bool = True,
         gamma: float = 1.,
+        no_phase: bool = False,
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
@@ -387,14 +388,21 @@ class SyntheticPSF:
             phase = np.nan_to_num(phase, nan=0, posinf=0, neginf=0)
 
         if principle_planes:
-            emb = np.stack([
-                amp[amp.shape[0] // 2, :, :],
-                amp[:, amp.shape[1] // 2, :],
-                amp[:, :, amp.shape[2] // 2],
-                phase[phase.shape[0] // 2, :, :],
-                phase[:, phase.shape[1] // 2, :],
-                phase[:, :, phase.shape[2] // 2],
-            ], axis=0)
+            if no_phase:
+                emb = np.stack([
+                    amp[amp.shape[0] // 2, :, :],
+                    amp[:, amp.shape[1] // 2, :],
+                    amp[:, :, amp.shape[2] // 2],
+                ], axis=0)
+            else:
+                emb = np.stack([
+                    amp[amp.shape[0] // 2, :, :],
+                    amp[:, amp.shape[1] // 2, :],
+                    amp[:, :, amp.shape[2] // 2],
+                    phase[phase.shape[0] // 2, :, :],
+                    phase[:, phase.shape[1] // 2, :],
+                    phase[:, :, phase.shape[2] // 2],
+                ], axis=0)
         else:
             emb = np.stack([amp, phase], axis=0)
             imsave(f"{plot}_alpha.tif", amp)

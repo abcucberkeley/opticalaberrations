@@ -514,6 +514,7 @@ def bootstrap_predict(
     gamma: float = 1.0,
     return_embeddings: bool = False,
     rolling_embedding: bool = False,
+    no_phase: bool = False
 ):
     """
     Average predictions and compute stdev
@@ -562,7 +563,7 @@ def bootstrap_predict(
         # check z-axis to compute embeddings for fourier models0
         if model.input_shape[1] != inputs.shape[1]:
             model_inputs = np.stack([
-                psfgen.embedding(psf=i, plot=plot, gamma=gamma) for i in inputs
+                psfgen.embedding(psf=i, plot=plot, gamma=gamma, no_phase=no_phase) for i in inputs
             ], axis=0)
         else:
             # pass raw PSFs to the model
