@@ -505,6 +505,7 @@ class SyntheticPSF:
         noise: bool = False,
         augmentation: bool = False,
         meta: bool = False,
+        no_phase: bool = False,
     ):
         """
         Args:
@@ -557,6 +558,9 @@ class SyntheticPSF:
         noisy_psf /= np.max(noisy_psf) if normed else noisy_psf
 
         if meta:
+            if no_phase:
+                phi.amplitudes = np.abs(phi.amplitudes)
+
             return noisy_psf, phi.amplitudes, psnr, zplanes, maxcount
         else:
             return noisy_psf
@@ -574,6 +578,7 @@ class SyntheticPSF:
         padsize: Any = None,
         log10: bool = False,
         plot: Any = None,
+        no_phase: bool = False
     ):
 
         psf = self.single_psf(
@@ -582,7 +587,8 @@ class SyntheticPSF:
             normed=normed,
             noise=noise,
             augmentation=augmentation,
-            meta=meta
+            meta=meta,
+            no_phase=no_phase
         )
 
         if meta:
@@ -594,10 +600,14 @@ class SyntheticPSF:
             ratio=ratio,
             padsize=padsize,
             log10=log10,
-            plot=plot
+            plot=plot,
+            no_phase=no_phase
         )
 
         if meta:
+            if no_phase:
+                y = np.abs(y)
+
             return emb, y, psnr, zplanes, maxcount
         else:
             return emb

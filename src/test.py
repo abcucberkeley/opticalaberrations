@@ -171,6 +171,17 @@ def main(args=None):
             peaks=args.peaks,
             no_phase=args.no_phase,
         )
+    elif args.target == 'evalpoints':
+        eval.evalpoints(
+            model_path=args.model,
+            psf_type=args.psf_type,
+            wavelength=args.wavelength,
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
+            na=args.na,
+            no_phase=args.no_phase,
+        )
     else:
         eval.evaluate(
             model=args.model,

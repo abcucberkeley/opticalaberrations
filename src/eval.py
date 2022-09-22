@@ -9,6 +9,8 @@ from typing import Any
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
+import matplotlib.patches as patches
+import seaborn as sns
 import numpy as np
 import pandas as pd
 from tqdm import tqdm, trange
@@ -18,6 +20,7 @@ from skimage import transform, filters
 from tifffile import imsave
 from preprocessing import find_roi, resize_with_crop_or_pad
 from astropy import convolution
+from scipy.spatial import KDTree
 
 import utils
 import vis
@@ -1536,7 +1539,7 @@ def evalsample(
         )
     imsave(savepath / f'kernel.tif', kernel)
 
-    rois = find_roi(reference_path, window_size=kernel.shape, peaks_coordinates=peaks, plot=savepath)
+    rois = find_roi(reference_path, window_size=kernel.shape, peaks=peaks, plot=savepath)
     logger.info(f"ROIs: {rois.shape}")
 
     circular_mask = filters.window(('general_gaussian', 4., apodization_mask_width), kernel.shape)
@@ -1679,6 +1682,264 @@ def evalsample(
         means = pd.pivot_table(
             df[df['niter'] == 0], values='error', index='aberration', columns='niter', aggfunc=np.mean
         )
+        for i in range(1, niter+1):
+            means[i] = pd.pivot_table(
+                df[df['niter'] == i],
+                values='error', index=means.index, columns='niter', aggfunc=np.mean
+            )
+
+        bins = np.arange(0, 11, .25)
+        means.index = pd.cut(means.index, bins, labels=bins[1:], include_lowest=True)
+        means.index.name = 'bins'
+        means = means.groupby("bins").agg("mean")
+        means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
+        means = means.sort_index().interpolate()
+
+        logger.info(means)
+        means.to_csv(savepath/f'results_na_{str(na).replace("0.", "p")}_window_{w}.csv')
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        levels = [
+            0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
+            .5, .6, .7, .8, .9,
+            1, 1.25, 1.5, 1.75, 2., 2.5,
+            3., 4., 5.,
+        ]
+
+        vmin, vmax, vcenter, step = levels[0], levels[-1], .25, .05
+        highcmap = plt.get_cmap('magma_r', 256)
+        lowcmap = plt.get_cmap('GnBu_r', 256)
+        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+        cmap = mcolors.ListedColormap(cmap)
+
+        contours = ax.contourf(
+            means.columns.values,
+            means.index.values,
+            means.values,
+            cmap=cmap,
+            levels=levels,
+            extend='max',
+            linewidths=2,
+            linestyles='dashed',
+        )
+        ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+
+        cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+        cbar = plt.colorbar(
+            contours,
+            cax=cax,
+            fraction=0.046,
+            pad=0.04,
+            extend='both',
+            spacing='proportional',
+            format=FormatStrFormatter("%.2f"),
+            ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
+        )
+
+        cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 605~nm$)')
+        cbar.ax.set_title(r'$\lambda$')
+        cbar.ax.yaxis.set_ticks_position('right')
+        cbar.ax.yaxis.set_label_position('left')
+
+        ax.set_xlabel(f'Number of iterations')
+        ax.set_xlim(0, niter)
+        ax.set_xticks(range(niter+1))
+        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+        ax.set_ylabel(
+            'Average Peak-to-peak aberration $|P_{95} - P_{5}|$ '
+            rf'($\lambda = 605~nm$)'
+        )
+
+        ax.set_yticks(np.arange(0, 11, .5), minor=True)
+        ax.set_yticks(np.arange(0, 11, 1))
+        ax.set_ylim(.25, 10)
+
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        plt.tight_layout()
+
+        plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}_window_{w}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}_window_{w}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+def evalpoints(
+    model_path: Path,
+    psnr: tuple = (15, 20),
+    niter: int = 1,
+    na: float = 1.0,
+    min_dist: int = 24,
+    max_dist: int = 32,
+    psf_type: str = 'widefield',
+    x_voxel_size: float = .108,
+    y_voxel_size: float = .108,
+    z_voxel_size: float = .268,
+    wavelength: float = .510,
+    reference_voxel_size: tuple = (.268, .108, .108),
+    rolling_embedding: bool = False,
+    no_phase: bool = False,
+):
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    modelgen = SyntheticPSF(
+        n_modes=60,
+        psf_shape=(64, 64, 64),
+        dtype=psf_type,
+        lam_detection=wavelength,
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
+        snr=psnr,
+        max_jitter=0,
+    )
+
+    savepath = model_path / f'npoints'
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    model = backend.load(model_path)
+
+    gt = np.zeros(60)
+    gt[6] = .1
+    # gt[9] = .05
+    # gt[11] = -.05
+
+    gen = SyntheticPSF(
+        n_modes=60,
+        dtype=psf_type,
+        lam_detection=wavelength,
+        psf_shape=[64, 64, 64],
+        z_voxel_size=reference_voxel_size[0],
+        y_voxel_size=reference_voxel_size[1],
+        x_voxel_size=reference_voxel_size[2],
+        snr=psnr,
+        max_jitter=0,
+    )
+
+    sample = np.zeros([4*s for s in gen.psf_shape])
+    points = np.random.randint(0, sample.shape[-1], size=(100, 3))
+    counts = np.random.randint(psnr[0]**2, psnr[1]**2, size=100)
+    peaks = pd.DataFrame(points, columns=['z', 'y', 'x'])
+    peaks['A'] = counts
+    sample[points[:, 0], points[:, 1], points[:, 2]] = counts
+
+    kernel = gen.single_psf(
+        phi=Wavefront(gt, lam_detection=wavelength),
+        zplanes=0,
+        normed=True,
+        noise=False,
+        augmentation=False,
+        meta=False
+    )
+
+    sample = convolution.convolve_fft(
+        sample,
+        kernel,
+        allow_huge=True
+    )
+
+    rois = find_roi(
+        sample,
+        min_dist=min_dist,
+        max_dist=max_dist,
+        window_size=(64, 64, 64),
+        peaks=peaks,
+        plot=savepath,
+        num_peaks=None
+    )
+
+    logger.info(f"ROIs: {rois.shape}")
+
+    for w in range(rois.shape[0]):
+        ys = gt
+        reference = rois[w]
+        imsave(savepath / f'reference_window_{w}.tif', reference)
+
+        y_pred = pd.DataFrame.from_dict({'niter': [0], 'residuals': [0]})
+        y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
+
+        for k in trange(1, niter+1):
+            if k > 1:
+                reference = convolution.convolve_fft(reference, kernel, allow_huge=True)
+
+            inputs = reference / np.nanpercentile(reference, 99.99)
+            inputs[inputs > 1] = 1
+
+            preds, stdev = backend.bootstrap_predict(
+                model,
+                inputs[np.newaxis, :, :, :, np.newaxis],
+                psfgen=modelgen,
+                resize=reference_voxel_size,
+                rolling_embedding=rolling_embedding,
+                batch_size=1,
+                n_samples=1,
+                desc=f'Iter[{k}] - MI[{np.nanpercentile(reference, 90):.4e}]',
+                plot=savepath/f'embeddings_convolved_iter_{k}_window_{w}',
+            )
+
+            p_wave = Wavefront(preds, lam_detection=wavelength)
+            y_wave = Wavefront(ys.flatten(), lam_detection=wavelength)
+            diff_wave = Wavefront(ys - preds, lam_detection=wavelength)
+
+            p_psf = modelgen.single_psf(p_wave, zplanes=0)
+            gt_psf = modelgen.single_psf(y_wave, zplanes=0)
+            corrected_psf = modelgen.single_psf(diff_wave, zplanes=0)
+            imsave(savepath / f'corrected_psf_iter_{k}_window_{w}.tif', corrected_psf)
+
+            vis.diagnostic_assessment(
+                psf=inputs,
+                gt_psf=gt_psf,
+                predicted_psf=p_psf,
+                corrected_psf=corrected_psf,
+                psnr=psnr,
+                maxcounts=psnr,
+                y=y_wave,
+                pred=p_wave,
+                wavelength=wavelength,
+                save_path=savepath/f'iter_{k}_window_{w}',
+            )
+
+            p = pd.DataFrame({'residuals': [utils.peak_aberration(preds, na=na)], 'niter': k})
+            y_pred = y_pred.append(p, ignore_index=True)
+
+            y = pd.DataFrame({'residuals': [utils.peak_aberration(ys, na=na)], 'niter': k})
+            y_true = y_true.append(y, ignore_index=True)
+
+            # setup next iter
+            if niter > 1:
+                res = ys - preds
+                kernel = gen.single_psf(
+                    phi=Wavefront(res, lam_detection=wavelength),
+                    zplanes=0,
+                    normed=True,
+                    noise=False,
+                    augmentation=False,
+                    meta=False
+                )
+                ys = res
+
+        error = np.abs(y_true['residuals'] - y_pred['residuals'])
+        error = pd.DataFrame(error, columns=['residuals'])
+
+        df = pd.DataFrame(
+            zip(y_true['residuals'], error['residuals'], y_true['niter']),
+            columns=['aberration', 'error', 'niter'],
+        )
+
+        means = pd.pivot_table(
+            df[df['niter'] == 0], values='error', index='aberration', columns='niter', aggfunc=np.mean
+        )
+
         for i in range(1, niter+1):
             means[i] = pd.pivot_table(
                 df[df['niter'] == i],

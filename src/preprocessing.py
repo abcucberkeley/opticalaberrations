@@ -1,10 +1,11 @@
 import matplotlib
+
 matplotlib.use('TkAgg')
 
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Sequence, Union
 import numpy as np
 import pandas as pd
 import zarr
@@ -143,13 +144,14 @@ def prep_psf(path: Path, input_shape: tuple, sample_voxel_size: tuple, model_vox
 
 
 def find_roi(
-        path: Path,
+        path: Union[Path, np.array],
         window_size: tuple = (64, 64, 64),
         plot: Any = True,
         num_peaks: Any = None,
-        min_dist: int = 32,
-        min_intensity: int = 100,
-        peaks_coordinates: Any = None,
+        min_dist: Any = 32,
+        max_dist: Any = None,
+        min_intensity: Any = 100,
+        peaks: Any = None,
         file_order: str = 'c-order'
 ):
     plt.rcParams.update({
@@ -163,10 +165,11 @@ def find_roi(
 
     fov_size: dict = {'x': 256, 'y': 256, 'z': 256}
 
-    if path.suffix == '.tif':
+    if isinstance(path, (np.ndarray, np.generic)):
+        dataset = path
+    elif path.suffix == '.tif':
         dataset = imread(path).astype(np.float)
         logger.info(f"Sample: {dataset.shape}")
-
     elif path.suffix == '.zarr':
         dataset = zarr.open_array(str(path), mode='r', order='F')
         logger.info(f"Sample: {dataset.shape}")
@@ -174,112 +177,96 @@ def find_roi(
         logger.error(f"Unknown file format: {path.name}")
         return
 
-    if peaks_coordinates is not None:
-        with h5py.File(peaks_coordinates, 'r') as file:
+    if isinstance(peaks, Path):
+        with h5py.File(peaks, 'r') as file:
             file = file.get('frameInfo')
             peaks = pd.DataFrame(
                 np.hstack((file['x'], file['y'], file['z'], file['A'])),
                 columns=['x', 'y', 'z', 'A']
             ).round(0).astype(int)
 
-            kd = KDTree(peaks[['z', 'y', 'x']].values)
-            dist, idx = kd.query(peaks[['z', 'y', 'x']].values, k=2, workers=-1)
-            peaks['dist'] = dist[:, 1]
-            print(peaks)
+    kd = KDTree(peaks[['z', 'y', 'x']].values)
+    dist, idx = kd.query(peaks[['z', 'y', 'x']].values, k=2, workers=-1)
+    peaks['dist'] = dist[:, 1]
+    print(peaks)
 
-            if plot:
-                fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-                sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="k")
-                sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
-                axes[0].set_ylabel('Intensity')
-                axes[0].set_xlabel('Distance')
-                axes[0].set_yscale('log')
-                axes[0].set_ylim(10**0, None)
-                axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    # filter out points too close to the edge
+    lzedge = peaks['z'] >= window_size[0]//4
+    hzedge = peaks['z'] <= dataset.shape[0] - window_size[0]//4
+    lyedge = peaks['y'] >= window_size[1]//4
+    hyedge = peaks['y'] <= dataset.shape[1] - window_size[1]//4
+    lxedge = peaks['x'] >= window_size[2]//4
+    hxedge = peaks['x'] <= dataset.shape[2] - window_size[2]//4
+    peaks = peaks[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
 
-                x = np.sort(peaks['dist'])
-                y = np.arange(len(x)) / float(len(x))
-                axes[1].plot(x, y, color='dimgrey')
-                axes[1].set_xlabel('Distance')
-                axes[1].set_ylabel('CDF')
-                axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    if plot:
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+        sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="k")
+        sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
+        axes[0].set_ylabel('Intensity')
+        axes[0].set_xlabel('Distance')
+        axes[0].set_yscale('log')
+        axes[0].set_ylim(10 ** 0, None)
+        axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-                sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
-                axes[2].set_xlabel('Distance')
-                axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        x = np.sort(peaks['dist'])
+        y = np.arange(len(x)) / float(len(x))
+        axes[1].plot(x, y, color='dimgrey')
+        axes[1].set_xlabel('Distance')
+        axes[1].set_ylabel('CDF')
+        axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-                plt.tight_layout()
-                plt.savefig(plot / f'detected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+        sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
+        axes[2].set_xlabel('Distance')
+        axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-            peaks = peaks[peaks['dist'] >= min_dist]
-            peaks = peaks[peaks['A'] >= min_intensity]
-            peaks.sort_values(by=['dist', 'A'], ascending=[False, False], inplace=True)
-            logger.info(f"Peaks w/ Min-Dist & PSNR")
-            print(peaks)
+        plt.tight_layout()
+        plt.savefig(plot / f'detected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
-            if plot:
-                fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-                sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="k")
-                sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
-                axes[0].set_ylabel('Intensity')
-                axes[0].set_xlabel('Distance')
-                axes[0].set_ylim(0, None)
-                axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    if min_dist is not None:
+        peaks = peaks[peaks['dist'] >= min_dist]
 
-                x = np.sort(peaks['dist'])
-                y = np.arange(len(x)) / float(len(x))
-                axes[1].plot(x, y, color='dimgrey')
-                axes[1].set_xlabel('Distance')
-                axes[1].set_ylabel('CDF')
-                axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    if max_dist is not None:
+        peaks = peaks[peaks['dist'] <= max_dist]
 
-                sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
-                axes[2].set_xlabel('Distance')
-                axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    if min_intensity is not None:
+        peaks = peaks[peaks['A'] >= min_intensity]
 
-                plt.tight_layout()
-                plt.savefig(plot / f'selected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+    peaks.sort_values(by=['dist', 'A'], ascending=[False, False], inplace=True)
+    logger.info(f"Peaks w/ Min-Dist & PSNR")
+    print(peaks)
 
-            peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
-            widths = [w//2 for w in window_size]
-    else:
-        sliding_windows = np.lib.stride_tricks.sliding_window_view(
-            dataset,
-            window_shape=(fov_size['y'], fov_size['x'], fov_size['z']),
-        )[::fov_size['y'] // 2, ::fov_size['x'] // 2, ::fov_size['z'] // 2]
-        sliding_windows = sliding_windows.reshape((-1, fov_size['y'], fov_size['x'], fov_size['z']))
+    if plot:
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+        sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="k")
+        sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
+        axes[0].set_ylabel('Intensity')
+        axes[0].set_xlabel('Distance')
+        axes[0].set_ylim(0, None)
+        axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        rois = []
-        for i in trange(sliding_windows.shape[0], desc=f'Sliding windows {sliding_windows.shape}'):
-            fov = sliding_windows[i].astype(np.float)
+        x = np.sort(peaks['dist'])
+        y = np.arange(len(x)) / float(len(x))
+        axes[1].plot(x, y, color='dimgrey')
+        axes[1].set_xlabel('Distance')
+        axes[1].set_ylabel('CDF')
+        axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-            if np.count_nonzero(fov) != 0:
-                if file_order != 'c-order':
-                    # Convert F-order to C-order
-                    fov = np.swapaxes(fov, 0, -1)
-                    fov = np.swapaxes(fov, 1, -1)
-                    fov /= np.nanmax(fov)
+        sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
+        axes[2].set_xlabel('Distance')
+        axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-                peaks = feature.peak_local_max(
-                    fov,
-                    min_distance=min_dist,
-                    exclude_border=min_dist,
-                    num_peaks=num_peaks,
-                    threshold_rel=.5
-                )
+        plt.tight_layout()
+        plt.savefig(plot / f'selected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
-                for p in range(peaks.shape[0]):
-                    rois.append(fov[
-                                peaks[p, 0] - window_size[0] // 2:peaks[p, 0] + window_size[0] // 2,
-                                peaks[p, 1] - window_size[1] // 2:peaks[p, 1] + window_size[1] // 2,
-                                peaks[p, 2] - window_size[2] // 2:peaks[p, 2] + window_size[2] // 2
-                                ])
+    peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
+    widths = [w // 2 for w in window_size]
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False, sharex=False)
         for ax in range(3):
             axes[ax].imshow(
-                np.nanmax(dataset, axis=ax) ** .5,
+                np.nanmax(dataset, axis=ax),
                 aspect='auto',
                 cmap='hot'
             )
@@ -322,11 +309,11 @@ def find_roi(
     rois = []
     for p in range(peaks.shape[0]):
         start = [
-            peaks[p, s]-widths[s] if peaks[p, s] >= widths[s] else 0
+            peaks[p, s] - widths[s] if peaks[p, s] >= widths[s] else 0
             for s in range(3)
         ]
         end = [
-            peaks[p, s]+widths[s] if peaks[p, s]+widths[s] < dataset.shape[s] else dataset.shape[s]
+            peaks[p, s] + widths[s] if peaks[p, s] + widths[s] < dataset.shape[s] else dataset.shape[s]
             for s in range(3)
         ]
         r = dataset[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
