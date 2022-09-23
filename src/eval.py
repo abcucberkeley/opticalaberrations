@@ -1766,19 +1766,16 @@ def evalsample(
 
 
 def eval_roi(
-    inputs: (np.array, np.array),
+    rois: np.array,
     modelpath: Path,
-    sample: np.array,
-    peaks: pd.DataFrame,
     psnr: tuple = (15, 20),
     na: float = 1.0,
-    avg_dist: int = 16,
     psf_type: str = 'widefield',
     x_voxel_size: float = .108,
     y_voxel_size: float = .108,
     z_voxel_size: float = .268,
     wavelength: float = .510,
-    num_peaks: Any = None
+    avg_dist: int = 10
 ):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
@@ -1796,25 +1793,8 @@ def eval_roi(
     )
 
     y_pred = pd.DataFrame([], columns=['sample'])
-    y_true = pd.DataFrame([], columns=['sample'])
 
-    kernel, ys = inputs
-    kernel = np.squeeze(kernel)
-    sample = convolution.convolve_fft(
-        sample,
-        kernel,
-        allow_huge=True
-    )
-    rois = find_roi(
-        sample,
-        min_dist=avg_dist - avg_dist // 2,
-        max_dist=avg_dist + avg_dist // 2,
-        window_size=(64, 64, 64),
-        peaks=peaks,
-        num_peaks=num_peaks
-    )
-
-    for w in tqdm(range(rois.shape[0]), total=rois.shape[0], desc="ROIs"):
+    for w in tqdm(range(rois.shape[0]), total=rois.shape[0], desc=f"ROIs[d{avg_dist}]"):
         reference = rois[w]
         inputs = reference / np.nanpercentile(reference, 99.99)
         inputs[inputs > 1] = 1
@@ -1825,17 +1805,12 @@ def eval_roi(
             psfgen=gen,
             batch_size=1,
             n_samples=1,
-            desc=f"AvgDist[{avg_dist}]"
         )
 
         p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['sample'])
         y_pred = y_pred.append(p, ignore_index=True)
 
-        y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys.numpy()], columns=['sample'])
-        y['dist'] = avg_dist
-        y_true = y_true.append(y, ignore_index=True)
-
-    return (y_pred, y_true)
+    return y_pred
 
 
 def evaldistbin(
@@ -1848,6 +1823,7 @@ def evaldistbin(
     y_voxel_size: float = .108,
     z_voxel_size: float = .268,
     wavelength: float = .510,
+    num_neighbor: int = 5,
     no_phase: bool = False,
     num_peaks: Any = None
 ):
@@ -1860,32 +1836,49 @@ def evaldistbin(
     y_pred = pd.DataFrame([], columns=['dist', 'sample'])
 
     sample = np.zeros([256, 256, 256])
-    points = np.random.randint(0, sample.shape[-1], size=(100, 3))
-    counts = np.random.randint(psnr[0]**2, psnr[1]**2, size=100)
+    points = np.random.randint(0, sample.shape[-1], size=(num_neighbor*50, 3))
+    counts = np.random.randint(psnr[0]**2, psnr[1]**2, size=num_neighbor*50)
     peaks = pd.DataFrame(points, columns=['z', 'y', 'x'])
     peaks['A'] = counts
     sample[points[:, 0], points[:, 1], points[:, 2]] = counts
 
     for avg_dist in trange(10, 60, 10):
-        for kernels, ys in val.batch(1):
-            p, y = eval_roi(
-                inputs=[kernels, ys],
-                modelpath=modelpath,
-                sample=sample,
+        for kernel, ys in val.batch(1):
+            kernel = np.squeeze(kernel)
+            sample = convolution.convolve_fft(
+                sample,
+                kernel,
+                allow_huge=True
+            )
+
+            rois = find_roi(
+                sample,
+                min_dist=avg_dist - avg_dist // 2,
+                max_dist=avg_dist + avg_dist // 2,
+                window_size=(64, 64, 64),
                 peaks=peaks,
+                num_neighbor=num_neighbor,
+                num_peaks=num_peaks,
+            )
+
+            p = eval_roi(
+                rois=rois,
+                modelpath=modelpath,
                 psnr=psnr,
                 na=na,
-                avg_dist=avg_dist,
                 psf_type=psf_type,
                 x_voxel_size=x_voxel_size,
                 y_voxel_size=y_voxel_size,
                 z_voxel_size=z_voxel_size,
                 wavelength=wavelength,
-                num_peaks=num_peaks
+                avg_dist=avg_dist
             )
 
-            y_true = y_true.append(y, ignore_index=True)
             y_pred = y_pred.append(p, ignore_index=True)
+
+            y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys.numpy()], columns=['sample'])
+            y['dist'] = avg_dist
+            y_true = y_true.append(y, ignore_index=True)
 
     return (y_pred, y_true)
 
@@ -1903,9 +1896,10 @@ def distheatmap(
     wavelength: float = .605,
     no_phase: bool = False,
     psnr: tuple = (15, 20),
-    num_peaks: int = 10
+    num_peaks: int = 5,
+    num_neighbor: int = 1,
 ):
-    savepath = modelpath / f'distheatmaps'
+    savepath = modelpath / f'distheatmaps_neighbor_{num_neighbor}'
 
     if distribution != '/':
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
@@ -1943,7 +1937,8 @@ def distheatmap(
         z_voxel_size=z_voxel_size,
         wavelength=wavelength,
         no_phase=no_phase,
-        num_peaks=num_peaks
+        num_peaks=num_peaks,
+        num_neighbor=num_neighbor
     )
     preds, ys = zip(*utils.multiprocess(job, classes))
     y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
@@ -2030,11 +2025,12 @@ def distheatmap(
 
 def evalpoints(
     model_path: Path,
+    num_neighbor: int = 2,
     psnr: tuple = (15, 20),
     niter: int = 1,
     na: float = 1.0,
-    min_dist: int = 24,
-    max_dist: int = 32,
+    min_dist: int = 8,
+    max_dist: int = 256,
     psf_type: str = 'widefield',
     x_voxel_size: float = .108,
     y_voxel_size: float = .108,
@@ -2067,7 +2063,7 @@ def evalpoints(
         max_jitter=0,
     )
 
-    savepath = model_path / f'npoints'
+    savepath = model_path / f'npoints_{num_neighbor}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     model = backend.load(model_path)
@@ -2089,9 +2085,9 @@ def evalpoints(
         max_jitter=0,
     )
 
-    sample = np.zeros([4*s for s in gen.psf_shape])
-    points = np.random.randint(0, sample.shape[-1], size=(100, 3))
-    counts = np.random.randint(psnr[0]**2, psnr[1]**2, size=100)
+    sample = np.zeros([256, 256, 256])
+    points = np.random.randint(0, sample.shape[-1], size=(num_neighbor*50, 3))
+    counts = np.random.randint(psnr[0]**2, psnr[1]**2, size=num_neighbor*50)
     peaks = pd.DataFrame(points, columns=['z', 'y', 'x'])
     peaks['A'] = counts
     sample[points[:, 0], points[:, 1], points[:, 2]] = counts
@@ -2118,7 +2114,8 @@ def evalpoints(
         window_size=(64, 64, 64),
         peaks=peaks,
         plot=savepath,
-        num_peaks=None
+        num_neighbor=num_neighbor,
+        num_peaks=10
     )
 
     logger.info(f"ROIs: {rois.shape}")

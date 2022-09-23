@@ -83,6 +83,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--num_neighbor", default=1, type=int, help='number of neighbors in the fov'
+    )
+
+    parser.add_argument(
         "--na", default=1.0, type=float, help='numerical aperture of detection objective'
     )
 
@@ -168,6 +172,19 @@ def main(args=None):
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
+            num_neighbor=args.num_neighbor,
+            na=args.na,
+            no_phase=args.no_phase,
+        )
+    elif args.target == 'evalpoints':
+        eval.evalpoints(
+            model_path=args.model,
+            psf_type=args.psf_type,
+            wavelength=args.wavelength,
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
+            num_neighbor=args.num_neighbor,
             na=args.na,
             no_phase=args.no_phase,
         )
@@ -183,17 +200,6 @@ def main(args=None):
             z_voxel_size=args.z_voxel_size,
             na=args.na,
             peaks=args.peaks,
-            no_phase=args.no_phase,
-        )
-    elif args.target == 'evalpoints':
-        eval.evalpoints(
-            model_path=args.model,
-            psf_type=args.psf_type,
-            wavelength=args.wavelength,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            na=args.na,
             no_phase=args.no_phase,
         )
     else:

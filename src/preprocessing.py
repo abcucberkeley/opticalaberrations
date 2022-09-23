@@ -148,10 +148,11 @@ def find_roi(
     window_size: tuple = (64, 64, 64),
     plot: Any = None,
     num_peaks: Any = None,
-    min_dist: Any = 32,
+    min_dist: Any = 16,
     max_dist: Any = None,
     min_intensity: Any = 100,
     peaks: Any = None,
+    num_neighbor: int = 5,
     file_order: str = 'c-order'
 ):
 
@@ -163,8 +164,6 @@ def find_roi(
         'ytick.labelsize': 10,
         'legend.fontsize': 10,
     })
-
-    fov_size: dict = {'x': 256, 'y': 256, 'z': 256}
 
     if isinstance(path, (np.ndarray, np.generic)):
         dataset = path
@@ -187,9 +186,12 @@ def find_roi(
             ).round(0).astype(int)
 
     kd = KDTree(peaks[['z', 'y', 'x']].values)
-    dist, idx = kd.query(peaks[['z', 'y', 'x']].values, k=2, workers=-1)
-    peaks['dist'] = dist[:, 1]
-    # print(peaks)
+    dist, idx = kd.query(peaks[['z', 'y', 'x']].values, k=11, workers=-1)
+    for n in range(1, 11):
+        if n == 1:
+            peaks[f'dist'] = dist[:, n]
+        else:
+            peaks[f'dist_{n}'] = dist[:, n]
 
     # filter out points too close to the edge
     lzedge = peaks['z'] >= window_size[0]//4
@@ -235,9 +237,10 @@ def find_roi(
     if min_intensity is not None:
         peaks = peaks[peaks['A'] >= min_intensity]
 
-    peaks.sort_values(by=['dist', 'A'], ascending=[False, False], inplace=True)
-    # logger.info(f"Peaks w/ Min-Dist & PSNR")
-    # print(peaks)
+    neighbors = peaks.columns[peaks.columns.str.startswith('dist')].tolist()
+    peaks['neighbors'] = peaks[peaks[neighbors] < int(window_size[0]/1.75)].count(axis=1)
+    peaks.sort_values(by=['neighbors', 'dist', 'A'], ascending=[True, False, False], inplace=True)
+    peaks = peaks[peaks['neighbors'] == num_neighbor]
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
@@ -320,13 +323,6 @@ def find_roi(
             for s in range(3)
         ]
         r = dataset[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
-
-        # fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        # axes[0].imshow(np.max(r, axis=0), cmap='hot')
-        # axes[1].imshow(np.max(r, axis=1), cmap='hot')
-        # axes[2].imshow(np.max(r, axis=2), cmap='hot')
-        # axes[1].set_title(f"({peaks[p, 2]}, {peaks[p, 1]}, {peaks[p, 0]})")
-        # plt.show()
 
         if r.size != 0:
             r = resize_with_crop_or_pad(r, crop_shape=window_size)
