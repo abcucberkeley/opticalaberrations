@@ -144,16 +144,17 @@ def prep_psf(path: Path, input_shape: tuple, sample_voxel_size: tuple, model_vox
 
 
 def find_roi(
-        path: Union[Path, np.array],
-        window_size: tuple = (64, 64, 64),
-        plot: Any = True,
-        num_peaks: Any = None,
-        min_dist: Any = 32,
-        max_dist: Any = None,
-        min_intensity: Any = 100,
-        peaks: Any = None,
-        file_order: str = 'c-order'
+    path: Union[Path, np.array],
+    window_size: tuple = (64, 64, 64),
+    plot: Any = None,
+    num_peaks: Any = None,
+    min_dist: Any = 32,
+    max_dist: Any = None,
+    min_intensity: Any = 100,
+    peaks: Any = None,
+    file_order: str = 'c-order'
 ):
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -188,7 +189,7 @@ def find_roi(
     kd = KDTree(peaks[['z', 'y', 'x']].values)
     dist, idx = kd.query(peaks[['z', 'y', 'x']].values, k=2, workers=-1)
     peaks['dist'] = dist[:, 1]
-    print(peaks)
+    # print(peaks)
 
     # filter out points too close to the edge
     lzedge = peaks['z'] >= window_size[0]//4
@@ -200,6 +201,8 @@ def find_roi(
     peaks = peaks[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
 
     if plot:
+        plot.mkdir(parents=True, exist_ok=True)
+
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
         sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="k")
         sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
@@ -233,8 +236,8 @@ def find_roi(
         peaks = peaks[peaks['A'] >= min_intensity]
 
     peaks.sort_values(by=['dist', 'A'], ascending=[False, False], inplace=True)
-    logger.info(f"Peaks w/ Min-Dist & PSNR")
-    print(peaks)
+    # logger.info(f"Peaks w/ Min-Dist & PSNR")
+    # print(peaks)
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))

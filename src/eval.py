@@ -1765,6 +1765,273 @@ def evalsample(
         plt.savefig(savepath/f'iterheatmap_na_{str(na).replace("0.", "p")}_window_{w}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
+def eval_roi(
+    inputs: (np.array, np.array),
+    modelpath: Path,
+    sample: np.array,
+    peaks: pd.DataFrame,
+    psnr: tuple = (15, 20),
+    na: float = 1.0,
+    avg_dist: int = 16,
+    psf_type: str = 'widefield',
+    x_voxel_size: float = .108,
+    y_voxel_size: float = .108,
+    z_voxel_size: float = .268,
+    wavelength: float = .510,
+    num_peaks: Any = None
+):
+    model = backend.load(modelpath)
+    gen = SyntheticPSF(
+        n_modes=60,
+        dtype=psf_type,
+        lam_detection=wavelength,
+        psf_shape=[64, 64, 64],
+        z_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        x_voxel_size=z_voxel_size,
+        batch_size=100,
+        snr=psnr,
+        max_jitter=0,
+        cpu_workers=-1,
+    )
+
+    y_pred = pd.DataFrame([], columns=['sample'])
+    y_true = pd.DataFrame([], columns=['sample'])
+
+    kernel, ys = inputs
+    kernel = np.squeeze(kernel)
+    sample = convolution.convolve_fft(
+        sample,
+        kernel,
+        allow_huge=True
+    )
+    rois = find_roi(
+        sample,
+        min_dist=avg_dist - avg_dist // 2,
+        max_dist=avg_dist + avg_dist // 2,
+        window_size=(64, 64, 64),
+        peaks=peaks,
+        num_peaks=num_peaks
+    )
+
+    for w in tqdm(range(rois.shape[0]), total=rois.shape[0], desc="ROIs"):
+        reference = rois[w]
+        inputs = reference / np.nanpercentile(reference, 99.99)
+        inputs[inputs > 1] = 1
+
+        preds, stdev = backend.bootstrap_predict(
+            model,
+            inputs[np.newaxis, :, :, :, np.newaxis],
+            psfgen=gen,
+            batch_size=1,
+            n_samples=1,
+            desc=f"AvgDist[{avg_dist}]"
+        )
+
+        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['sample'])
+        y_pred = y_pred.append(p, ignore_index=True)
+
+        y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys.numpy()], columns=['sample'])
+        y['dist'] = avg_dist
+        y_true = y_true.append(y, ignore_index=True)
+
+    return (y_pred, y_true)
+
+
+def evaldistbin(
+    datapath: Path,
+    modelpath: Path,
+    sample: np.array,
+    peaks: pd.DataFrame,
+    psnr: tuple = (15, 20),
+    na: float = 1.0,
+    psf_type: str = 'widefield',
+    x_voxel_size: float = .108,
+    y_voxel_size: float = .108,
+    z_voxel_size: float = .268,
+    wavelength: float = .510,
+    no_phase: bool = False,
+    num_peaks: Any = None
+):
+
+    val = data_utils.load_dataset(datapath)
+    func = partial(data_utils.get_sample, no_phase=no_phase)
+    val = val.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
+
+    y_true = pd.DataFrame([], columns=['dist', 'sample'])
+    y_pred = pd.DataFrame([], columns=['dist', 'sample'])
+
+    for avg_dist in trange(10, 60, 10):
+        for kernels, ys in val.batch(1):
+            p, y = eval_roi(
+                inputs=[kernels, ys],
+                modelpath=modelpath,
+                sample=sample,
+                peaks=peaks,
+                psnr=psnr,
+                na=na,
+                avg_dist=avg_dist,
+                psf_type=psf_type,
+                x_voxel_size=x_voxel_size,
+                y_voxel_size=y_voxel_size,
+                z_voxel_size=z_voxel_size,
+                wavelength=wavelength,
+                num_peaks=num_peaks
+            )
+
+            y_true = y_true.append(y, ignore_index=True)
+            y_pred = y_pred.append(p, ignore_index=True)
+
+    return (y_pred, y_true)
+
+
+def distheatmap(
+    modelpath: Path,
+    datadir: Path,
+    distribution: str = '/',
+    max_amplitude: float = .25,
+    na: float = 1.0,
+    psf_type: str = 'widefield',
+    x_voxel_size: float = .15,
+    y_voxel_size: float = .15,
+    z_voxel_size: float = .6,
+    wavelength: float = .605,
+    no_phase: bool = False,
+    psnr: tuple = (15, 20),
+    num_peaks: int = 10
+):
+    savepath = modelpath / f'distheatmaps'
+
+    if distribution != '/':
+        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+    else:
+        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    classes = sorted([
+        c for c in Path(datadir).rglob('*/')
+        if c.is_dir()
+           and len(list(c.glob('*.tif'))) > 0
+           and distribution in str(c)
+           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
+    ])
+
+    sample = np.zeros([256, 256, 256])
+    points = np.random.randint(0, sample.shape[-1], size=(100, 3))
+    counts = np.random.randint(psnr[0]**2, psnr[1]**2, size=100)
+    peaks = pd.DataFrame(points, columns=['z', 'y', 'x'])
+    peaks['A'] = counts
+    sample[points[:, 0], points[:, 1], points[:, 2]] = counts
+    imsave(f"{savepath}/sample.tif", sample)
+
+    job = partial(
+        evaldistbin,
+        modelpath=modelpath,
+        sample=sample,
+        peaks=peaks,
+        na=na,
+        psf_type=psf_type,
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
+        wavelength=wavelength,
+        no_phase=no_phase,
+        num_peaks=num_peaks
+    )
+    preds, ys = zip(*utils.multiprocess(job, classes))
+    y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
+    y_pred = pd.DataFrame([], columns=['sample']).append(preds, ignore_index=True)
+
+    error = np.abs(y_true - y_pred)
+    error = pd.DataFrame(error, columns=['sample'])
+
+    bins = np.arange(0, 10.25, .25)
+    df = pd.DataFrame(zip(y_true['sample'], error['sample'], y_true['dist']), columns=['aberration', 'error', 'dist'])
+    df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+
+    means = pd.pivot_table(df, values='error', index='bins', columns='dist', aggfunc=np.mean)
+    means = means.sort_index().interpolate()
+
+    logger.info(means)
+    means.to_csv(f'{savepath}.csv')
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    levels = [
+        0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
+        .5, .6, .7, .8, .9,
+        1, 1.25, 1.5, 1.75, 2., 2.5,
+        3., 4., 5.,
+    ]
+
+    vmin, vmax, vcenter, step = levels[0], levels[-1], .25, .05
+    highcmap = plt.get_cmap('magma_r', 256)
+    lowcmap = plt.get_cmap('GnBu_r', 256)
+    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+    cmap = mcolors.ListedColormap(cmap)
+
+    contours = ax.contourf(
+        means.columns.values,
+        means.index.values,
+        means.values,
+        cmap=cmap,
+        levels=levels,
+        extend='max',
+        linewidths=2,
+        linestyles='dashed',
+    )
+    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+
+    cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+    cbar = plt.colorbar(
+        contours,
+        cax=cax,
+        fraction=0.046,
+        pad=0.04,
+        extend='both',
+        spacing='proportional',
+        format=FormatStrFormatter("%.2f"),
+        ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
+    )
+
+    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 605~nm$)')
+    cbar.ax.set_title(r'$\lambda$')
+    cbar.ax.yaxis.set_ticks_position('right')
+    cbar.ax.yaxis.set_label_position('left')
+
+    ax.set_xlabel(f'Average distance to nearest neighbor')
+    ax.set_xlim(10, 50)
+    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+    ax.set_ylabel(
+        'Average Peak-to-peak aberration $|P_{95} - P_{5}|$'
+        rf'($\lambda = 605~nm$)'
+    )
+    ax.set_yticks(np.arange(0, 11, .5), minor=True)
+    ax.set_yticks(np.arange(0, 11, 1))
+    ax.set_ylim(.25, 10)
+
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    plt.tight_layout()
+
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    return fig
+
+
 def evalpoints(
     model_path: Path,
     psnr: tuple = (15, 20),

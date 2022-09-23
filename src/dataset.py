@@ -100,7 +100,7 @@ def create_synthetic_sample(
         outdir = outdir / f"{distribution}"
 
     if distribution == 'single':
-        for i in range(5, modes):
+        for i in range(5, 15):
             savepath = outdir / f"m{i}"
             savepath = savepath / f"psnr_{min_psnr}-{max_psnr}"
             savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
