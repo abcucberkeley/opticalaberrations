@@ -1841,7 +1841,6 @@ def eval_roi(
 def evaldistbin(
     datapath: Path,
     modelpath: Path,
-    peaks: pd.DataFrame,
     psnr: tuple = (15, 20),
     na: float = 1.0,
     psf_type: str = 'widefield',
