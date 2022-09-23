@@ -1841,7 +1841,6 @@ def eval_roi(
 def evaldistbin(
     datapath: Path,
     modelpath: Path,
-    sample: np.array,
     peaks: pd.DataFrame,
     psnr: tuple = (15, 20),
     na: float = 1.0,
@@ -1860,6 +1859,13 @@ def evaldistbin(
 
     y_true = pd.DataFrame([], columns=['dist', 'sample'])
     y_pred = pd.DataFrame([], columns=['dist', 'sample'])
+
+    sample = np.zeros([256, 256, 256])
+    points = np.random.randint(0, sample.shape[-1], size=(100, 3))
+    counts = np.random.randint(psnr[0]**2, psnr[1]**2, size=100)
+    peaks = pd.DataFrame(points, columns=['z', 'y', 'x'])
+    peaks['A'] = counts
+    sample[points[:, 0], points[:, 1], points[:, 2]] = counts
 
     for avg_dist in trange(10, 60, 10):
         for kernels, ys in val.batch(1):
@@ -1927,20 +1933,11 @@ def distheatmap(
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
 
-    sample = np.zeros([256, 256, 256])
-    points = np.random.randint(0, sample.shape[-1], size=(100, 3))
-    counts = np.random.randint(psnr[0]**2, psnr[1]**2, size=100)
-    peaks = pd.DataFrame(points, columns=['z', 'y', 'x'])
-    peaks['A'] = counts
-    sample[points[:, 0], points[:, 1], points[:, 2]] = counts
-    imsave(f"{savepath}/sample.tif", sample)
-
     job = partial(
         evaldistbin,
         modelpath=modelpath,
-        sample=sample,
-        peaks=peaks,
         na=na,
+        psnr=psnr,
         psf_type=psf_type,
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
