@@ -807,7 +807,7 @@ def predict(
                     gt_psf = gen.single_psf(y_wave, zplanes=0)
                     corrected_psf = gen.single_psf(diff, zplanes=0)
 
-                    imsave(save_path / f'psf_{s}.tif', psf)
+                    imsave(save_path / f'psf_{s}.tif', noisy_img)
                     imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
 
                     vis.diagnostic_assessment(
