@@ -269,6 +269,7 @@ class SyntheticPSF:
         psf: np.array,
         emb: np.array,
         save_path: Any,
+        no_phase: bool = False,
         log10: bool = False,
     ):
         plt.rcParams.update({
@@ -294,7 +295,10 @@ class SyntheticPSF:
         cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
         cmap = mcolors.ListedColormap(cmap)
 
-        fig, axes = plt.subplots(3, 3, figsize=(8, 11))
+        if no_phase:
+            fig, axes = plt.subplots(2, 3, figsize=(8, 11))
+        else:
+            fig, axes = plt.subplots(3, 3, figsize=(8, 11))
 
         m = axes[0, 0].imshow(np.max(psf, axis=0), cmap='hot', vmin=0, vmax=1)
         axes[0, 1].imshow(np.max(psf, axis=1), cmap='hot', vmin=0, vmax=1)
@@ -304,21 +308,22 @@ class SyntheticPSF:
         cax.yaxis.set_label_position("right")
         cax.set_ylabel('Input (maxproj)')
 
-        m = axes[-2, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
-        axes[-2, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
-        axes[-2, 2].imshow(emb[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
-        cax = inset_axes(axes[-2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+        m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
+        axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
+        axes[1, 2].imshow(emb[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
+        cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
         cax.set_ylabel(r'Embedding ($\alpha$)')
 
-        m = axes[2, 0].imshow(emb[3], cmap='coolwarm', vmin=-.5, vmax=.5)
-        axes[2, 1].imshow(emb[4], cmap='coolwarm', vmin=-.5, vmax=.5)
-        axes[2, 2].imshow(emb[5].T, cmap='coolwarm', vmin=-.5, vmax=.5)
-        cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_label_position("right")
-        cax.set_ylabel(r'Embedding ($\varphi$)')
+        if not no_phase:
+            m = axes[-1, 0].imshow(emb[3], cmap='coolwarm', vmin=-.5, vmax=.5)
+            axes[-1, 1].imshow(emb[4], cmap='coolwarm', vmin=-.5, vmax=.5)
+            axes[-1, 2].imshow(emb[5].T, cmap='coolwarm', vmin=-.5, vmax=.5)
+            cax = inset_axes(axes[-1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+            cb = plt.colorbar(m, cax=cax)
+            cax.yaxis.set_label_position("right")
+            cax.set_ylabel(r'Embedding ($\varphi$)')
 
         for ax in axes.flatten():
             ax.axis('off')
@@ -409,7 +414,7 @@ class SyntheticPSF:
             imsave(f"{plot}_phi.tif", phase)
 
         if plot is not None and principle_planes:
-            self.plot_embeddings(psf=psf, emb=emb, save_path=plot, log10=log10)
+            self.plot_embeddings(psf=psf, emb=emb, save_path=plot, log10=log10, no_phase=no_phase)
 
         if psf.ndim == 4:
             return np.expand_dims(emb, axis=-1)

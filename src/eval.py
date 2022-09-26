@@ -9,8 +9,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
-import matplotlib.patches as patches
-import seaborn as sns
+
 import numpy as np
 import pandas as pd
 from tqdm import tqdm, trange
@@ -20,7 +19,7 @@ from skimage import transform, filters
 from tifffile import imsave
 from preprocessing import find_roi, resize_with_crop_or_pad
 from astropy import convolution
-from scipy.spatial import KDTree
+from skimage.restoration import richardson_lucy
 
 import utils
 import vis
@@ -1564,7 +1563,11 @@ def evalsample(
         y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
 
         for k in trange(1, niter+1):
-            conv = convolution.convolve_fft(reference, kernel)
+            if k == 1:
+                conv = convolution.convolve_fft(reference, kernel, allow_huge=True)
+            else:
+                conv = richardson_lucy(reference, kernel, num_iter=30)
+
             inputs = conv / np.nanpercentile(conv, 99.99)
             inputs[inputs > 1] = 1
 
@@ -2129,8 +2132,10 @@ def evalpoints(
         y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
 
         for k in trange(1, niter+1):
-            if k > 1:
+            if k == 1:
                 reference = convolution.convolve_fft(reference, kernel, allow_huge=True)
+            else:
+                reference = richardson_lucy(reference, kernel, num_iter=30)
 
             inputs = reference / np.nanpercentile(reference, 99.99)
             inputs[inputs > 1] = 1

@@ -35,38 +35,18 @@ OUTDIR="/clusterfs/nvme/thayer/dataset/lattice_multipoints/${DATASET}"
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
-  mPSNR=($(seq 1 20 81))
-  xPSNR=($(seq 20 20 100))
+  mPSNR=($(seq 10 10 41))
+  xPSNR=($(seq 20 10 50))
   SAMPLES=($(seq 1 100 1000))
-
-  if [ "$PSF_TYPE" = "confocal" ];then
-    amps1=($(seq .15 .01 .5))
-    amps2=($(seq .16 .01 .5))
-  else
-    difractionlimit=($(seq 0 .01 .05))
-    small=($(seq .055 .005 .1))
-    large=($(seq .11 .01 .4))
-    extreme=($(seq .45 .05 .65))
-    amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
-    echo ${amps[@]}
-    echo ${#amps[@]}
-    amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]:0:${#extreme[@]}-1}" )
-    amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
-  fi
-
+  amps1=($(seq 0 .01 .3))
+  amps2=($(seq .01 .01 .3))
 else
   TYPE=''
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
   SAMPLES=($(seq 1 100 100))
-
-  if [ "$PSF_TYPE" = "confocal" ];then
-    amps1=($(seq .15 .025 .5))
-    amps2=($(seq .175 .025 .5))
-  else
-    amps1=($(seq 0 .025 .5))
-    amps2=($(seq .025 .025 .5))
-  fi
+  amps1=($(seq 0 .05 .3))
+  amps2=($(seq .05 .05 .3))
 fi
 
 

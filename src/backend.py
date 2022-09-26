@@ -560,10 +560,16 @@ def bootstrap_predict(
                 ) for i in inputs
             ], axis=0)
 
-        # check z-axis to compute embeddings for fourier models0
+        # check z-axis to compute embeddings for fourier models
         if model.input_shape[1] != inputs.shape[1]:
             model_inputs = np.stack([
-                psfgen.embedding(psf=i, plot=plot, gamma=gamma, no_phase=no_phase) for i in inputs
+                psfgen.embedding(
+                    psf=i,
+                    plot=plot,
+                    gamma=gamma,
+                    no_phase=no_phase,
+                    principle_planes=True
+                ) for i in inputs
             ], axis=0)
         else:
             # pass raw PSFs to the model
@@ -697,7 +703,10 @@ def predict(
     z_voxel_size: float,
     max_jitter: float,
     cpu_workers: int,
-    input_coverage: float = 1.0
+    input_coverage: float = 1.0,
+    no_phase: bool = False,
+    radius: float = .4,
+    psnr: int = 30
 ):
     m = load(model)
     m.summary()
@@ -706,78 +715,112 @@ def predict(
     input_shape = m.layers[0].input_shape[0][1:-1]
 
     for dist in ['powerlaw', 'dirichlet']:
-        for amplitude_range in [(.05, .1), (.1, .2), (.2, .4), (.4, .6)]:
-            for snr in [25, 50]:
-                psfargs = dict(
-                    dtype=psf_type,
-                    order='ansi',
-                    snr=snr,
-                    n_modes=modes,
-                    distribution=dist,
-                    gamma=1.5,
-                    bimodal=True,
-                    lam_detection=wavelength,
-                    amplitude_ranges=amplitude_range,
-                    psf_shape=3 * [input_shape[-1]],
-                    x_voxel_size=x_voxel_size,
-                    y_voxel_size=y_voxel_size,
-                    z_voxel_size=z_voxel_size,
-                    batch_size=1,
-                    max_jitter=max_jitter,
-                    cpu_workers=cpu_workers,
-                )
+        for amplitude_range in [(.1, .2), (.2, .3)]:
+            psfargs = dict(
+                dtype=psf_type,
+                order='ansi',
+                snr=1000,
+                n_modes=modes,
+                distribution=dist,
+                gamma=1.5,
+                bimodal=True,
+                lam_detection=wavelength,
+                amplitude_ranges=amplitude_range,
+                psf_shape=3 * [input_shape[-1]],
+                x_voxel_size=x_voxel_size,
+                y_voxel_size=y_voxel_size,
+                z_voxel_size=z_voxel_size,
+                batch_size=1,
+                max_jitter=max_jitter,
+                cpu_workers=cpu_workers,
+            )
 
-                gen = SyntheticPSF(**psfargs)
-                for i, (psf, y, psnr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True, otf=False)):
-                    waves = np.round(utils.microns2waves(amplitude_range[0], wavelength), 2)
+            gen = SyntheticPSF(**psfargs)
+            for s, (psf, y, snr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True)):
+                waves = np.round(utils.microns2waves(amplitude_range[0], wavelength), 2)
+                psf = np.squeeze(psf)
+
+                for npoints in trange(1, 6):
+                    if npoints > 1:
+                        img = np.zeros([3 * s for s in gen.psf_shape])
+                        width = [(i // 2) for i in gen.psf_shape]
+                        center = gen.psf_shape
+
+                        for i in range(npoints):
+                            p = [
+                                np.random.randint(int(gen.psf_shape[0] * (.5 - radius)),
+                                                  int(gen.psf_shape[0] * (.5 + radius))),
+                                np.random.randint(int(gen.psf_shape[1] * (.5 - radius)),
+                                                  int(gen.psf_shape[1] * (.5 + radius))),
+                                np.random.randint(int(gen.psf_shape[2] * (.5 - radius)),
+                                                  int(gen.psf_shape[2] * (.5 + radius)))
+                            ]
+
+                            img[
+                                (p[0] + center[0]) - width[0]:(p[0] + center[0]) + width[0],
+                                (p[1] + center[1]) - width[1]:(p[1] + center[1]) + width[1],
+                                (p[2] + center[2]) - width[2]:(p[2] + center[2]) + width[2],
+                            ] += psf
+
+                        img = resize_with_crop_or_pad(img, crop_shape=gen.psf_shape)
+                    else:
+                        img = psf
+
+                    rand_noise = gen._random_noise(
+                        image=img,
+                        mean=gen.mean_background_noise,
+                        sigma=gen.sigma_background_noise
+                    )
+                    noisy_img = rand_noise + (img * psnr * gen.mean_background_noise)
+                    noisy_img /= np.max(noisy_img)
+
                     save_path = Path(
-                        f"{model}/{dist}/c{input_coverage}/lambda-{waves}/psnr-{snr}/"
+                        f"{model}/{dist}/c{input_coverage}/lambda-{waves}/npoints-{npoints}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
                     if input_coverage != 1.:
-                        psf = resize_with_crop_or_pad(psf, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
-                        psf = resize_with_crop_or_pad(psf, crop_shape=gen.psf_shape, mode='minimum')
+                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
+                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, mode='minimum')
 
                     p, std = bootstrap_predict(
                         m,
                         psfgen=gen,
-                        inputs=psf,
+                        inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
                         batch_size=1,
                         n_samples=1,
-                        plot=save_path / f'embeddings_{i}',
+                        no_phase=no_phase,
+                        plot=save_path / f'embeddings_{s}',
                     )
 
-                    p = Wavefront(p, lam_detection=wavelength)
-                    logger.info('Prediction')
-                    pprint(p.zernikes)
+                    p_wave = Wavefront(p, lam_detection=wavelength)
+                    # logger.info('Prediction')
+                    # pprint(p_wave.zernikes)
 
-                    logger.info('GT')
-                    y = Wavefront(y.flatten(), lam_detection=wavelength)
-                    pprint(y.zernikes)
+                    y_wave = Wavefront(y.flatten(), lam_detection=wavelength)
+                    # logger.info('GT')
+                    # pprint(y_wave.zernikes)
 
-                    diff = Wavefront(y - p, lam_detection=wavelength)
+                    diff = y_wave - p_wave
 
-                    p_psf = gen.single_psf(p, zplanes=0)
-                    gt_psf = gen.single_psf(y, zplanes=0)
+                    p_psf = gen.single_psf(p_wave, zplanes=0)
+                    gt_psf = gen.single_psf(y_wave, zplanes=0)
                     corrected_psf = gen.single_psf(diff, zplanes=0)
 
-                    psf = np.squeeze(psf[0], axis=-1)
-
-                    imsave(save_path / f'psf_{i}.tif', psf)
-                    imsave(save_path / f'corrected_psf_{i}.tif', corrected_psf)
+                    imsave(save_path / f'psf_{s}.tif', psf)
+                    imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
 
                     vis.diagnostic_assessment(
-                        psf=psf,
+                        psf=noisy_img,
                         gt_psf=gt_psf,
                         predicted_psf=p_psf,
                         corrected_psf=corrected_psf,
                         wavelength=wavelength,
                         psnr=psnr,
                         maxcounts=maxcounts,
-                        y=y,
-                        pred=p,
-                        save_path=save_path / f'{i}',
+                        y=y_wave,
+                        pred=p_wave,
+                        save_path=save_path / f'{s}',
                         display=False
                     )
 

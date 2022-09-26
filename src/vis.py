@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
-def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
+def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -49,16 +49,16 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
 
     psfargs = dict(
         n_modes=60,
-        dtype='confocal',
+        dtype='/home/supernova/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRect/NAAnnulusMax0.60/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat',
         distribution='dirichlet',
-        bimodal=True,
-        gamma=.75,
+        bimodal=False,
+        gamma=1.5,
         lam_detection=wavelength,
         amplitude_ranges=(0, 1),
         psf_shape=(32, 32, 32),
-        x_voxel_size=.1,
-        y_voxel_size=.1,
-        z_voxel_size=.5,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.268,
         batch_size=batch_size,
         snr=30,
         max_jitter=1,
@@ -76,8 +76,8 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
     # min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
     # max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
 
-    min_amps = np.arange(.15, .45, .01).round(3)
-    max_amps = np.arange(.16, .5, .01).round(3)
+    min_amps = np.arange(0, .3, .01).round(3)
+    max_amps = np.arange(.01, .31, .01).round(3)
 
     for mina, maxa in zip(min_amps, max_amps):
         psfargs['amplitude_ranges'] = (mina, maxa)

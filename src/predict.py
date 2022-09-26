@@ -72,6 +72,11 @@ def parse_args(args):
                                                           '(then padded to keep the original image size)'
     )
 
+    parser.add_argument(
+        '--no_phase', action='store_true',
+        help='toggle to use exclude phase from the model embeddings'
+    )
+
     return parser.parse_args(args)
 
 
@@ -94,7 +99,8 @@ def main(args=None):
             z_voxel_size=args.z_voxel_size,
             max_jitter=args.max_jitter,
             cpu_workers=args.cpu_workers,
-            input_coverage=args.input_coverage
+            input_coverage=args.input_coverage,
+            no_phase=args.no_phase
         )
 
     elif args.target == "compare":

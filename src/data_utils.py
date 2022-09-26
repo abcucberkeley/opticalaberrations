@@ -2,7 +2,7 @@ import logging
 import sys
 from functools import partial
 
-from tifffile import imread, imsave, TiffFile
+from tifffile import TiffFile
 from pathlib import Path
 import numpy as np
 
