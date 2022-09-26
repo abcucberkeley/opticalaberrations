@@ -12,7 +12,7 @@ BATCH=2048
 LAMBDA=.510
 DATA="/clusterfs/nvme/thayer/dataset/lattice_multipoints/train/x108-y108-z268/"
 
-ppython multinode_manager.py train.py --partition abc --constraint 'titan' --mem '500GB' --nodes 3 --gpus 4 --cpus 20 \
+python multinode_manager.py train.py --partition abc --constraint 'titan' --mem '500GB' --nodes 3 --gpus 4 --cpus 20 \
 --task "--network opticaltransformer --multinode --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname p32-p16-p8x2 \
 --name new/multipoints/lattice/$BATCH/phase/opticaltransformer
