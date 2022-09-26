@@ -5,6 +5,7 @@ yVOXEL=.108
 zVOXEL=.268
 LAMBDA=.510
 SHAPE=64
+SAMPLES=10
 MAXAMP=1.
 PSF_TYPE='/clusterfs/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRect/NAAnnulusMax0.60/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat'
 DATA="/clusterfs/nvme/thayer/dataset/lattice_multipoints/test/x108-y108-z268/"
@@ -21,14 +22,14 @@ do
     #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
     #python manager.py slurm test.py --partition abc --constraint titan --mem '500GB' --gpus 4 --cpus 20 \
     python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0\
-    --task "$MODEL --no_phase --datadir $DATA/i$SHAPE --n_samples 50 --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP evalheatmap" \
+    --task "$MODEL --no_phase --datadir $DATA/i$SHAPE --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP evalheatmap" \
     --taskname $NA \
     --name $MODEL/evalheatmaps
 
     #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
     #python manager.py slurm test.py --partition abc --constraint titan --mem '500GB' --gpus 4 --cpus 20 \
     python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0 \
-    --task "$MODEL --no_phase --datadir $DATA/i$SHAPE --n_samples 20 --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP iterheatmap" \
+    --task "$MODEL --no_phase --datadir $DATA/i$SHAPE --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP iterheatmap" \
     --taskname $NA \
     --name $MODEL/iterheatmaps
   done
