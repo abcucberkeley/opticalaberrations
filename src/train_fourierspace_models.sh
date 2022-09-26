@@ -17,7 +17,7 @@ ppython multinode_manager.py train.py --partition abc --constraint 'titan' --mem
 --taskname p32-p16-p8x2 \
 --name new/multipoints/lattice/$BATCH/phase/opticaltransformer
 
-python multinode_manager.py slurm train.py --partition abc_a100 --mem '500GB' --nodes 4 --gpus 4 --cpus 16 \
+python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 4 --gpus 4 --cpus 16 \
 --task "--network opticalresnet --multinode --mul --batch_size $BATCH --max_amplitude $MAXAMP --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname multikernel \
 --name new/multipoints/lattice/$BATCH/phase/opticalresnet
