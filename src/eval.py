@@ -958,11 +958,12 @@ def evalheatmap(
     no_phase: bool = False,
 ):
     savepath = modelpath / f'evalheatmaps_{input_coverage}'
+    savepath.mkdir(parents=True, exist_ok=True)
+
     if distribution != '/':
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
-    savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
@@ -1306,13 +1307,12 @@ def iterheatmap(
         savepath = modelpath / f'iterheatmaps_{input_coverage}'
     else:
         savepath = modelpath / f'{reference.stem}_iterheatmaps_{input_coverage}'
+    savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
-
-    savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
@@ -1889,16 +1889,16 @@ def distheatmap(
     wavelength: float = .605,
     no_phase: bool = False,
     psnr: tuple = (20, 30),
-    num_neighbor: int = 5,
+    num_neighbor: Any = None,
 ):
     savepath = modelpath / f'distheatmaps_neighbor_{num_neighbor}'
+    savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
 
-    savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
@@ -1915,7 +1915,7 @@ def distheatmap(
         if c.is_dir()
            and len(list(c.glob('*.tif'))) > 0
            and distribution in str(c)
-           and f"npoints_{num_neighbor}" in str(c)
+           and f"npoints_{num_neighbor}" in str(c) if num_neighbor is not None
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
 

@@ -83,7 +83,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--num_neighbor", default=1, type=int, help='number of neighbors in the fov'
+        "--num_neighbor", default=None, type=int, help='number of neighbors in the fov'
     )
 
     parser.add_argument(
