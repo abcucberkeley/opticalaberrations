@@ -33,7 +33,7 @@ do
     python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
     --task "$MODEL $PHASE --datadir $DATA/i$SHAPE --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP distheatmap" \
     --taskname all \
-    --name $MODEL/distheatmaps
+    --name $MODEL/distheatmaps_neighbor_None
 
     for N in 2 3 4 5
     do
