@@ -957,11 +957,11 @@ def evalheatmap(
     no_phase: bool = False,
 ):
     savepath = modelpath / f'evalheatmaps_{input_coverage}'
-    savepath.mkdir(parents=True, exist_ok=True)
     if distribution != '/':
-        savepath = f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}'
+        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
-        savepath = f'{savepath}/na_{str(na).replace("0.", "p")}'
+        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+    savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
@@ -1305,11 +1305,12 @@ def iterheatmap(
     else:
         savepath = modelpath / f'{reference.stem}_iterheatmaps_{input_coverage}'
 
-    savepath.mkdir(parents=True, exist_ok=True)
     if distribution != '/':
-        savepath = f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}'
+        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
-        savepath = f'{savepath}/na_{str(na).replace("0.", "p")}'
+        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
