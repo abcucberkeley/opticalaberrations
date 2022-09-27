@@ -39,7 +39,7 @@ do
     done
   done
 
-  python manager.py slurm predict.py --partition abc --mem '500GB' --cpus 4 --gpus 0 \
+  python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
   --task "$MODEL $PHASE --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL random" \
   --taskname random \
   --name $MODEL/samples
