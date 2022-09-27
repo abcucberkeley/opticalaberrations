@@ -926,6 +926,7 @@ def eval_bin(
             psfgen=gen,
             batch_size=100,
             n_samples=1,
+            no_phase=no_phase,
             desc=f"Predictions for ({datapath})"
         )
 
