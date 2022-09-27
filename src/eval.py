@@ -1910,14 +1910,23 @@ def distheatmap(
         'xtick.major.pad': 10
     })
 
-    classes = sorted([
-        c for c in Path(datadir).rglob('*/')
-        if c.is_dir()
-           and len(list(c.glob('*.tif'))) > 0
-           and distribution in str(c)
-           and f"npoints_{num_neighbor}" in str(c) if num_neighbor is not None
-           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
-    ])
+    if num_neighbor is not None:
+        classes = sorted([
+            c for c in Path(datadir).rglob('*/')
+            if c.is_dir()
+               and len(list(c.glob('*.tif'))) > 0
+               and distribution in str(c)
+               and f"npoints_{num_neighbor}" in str(c)
+               and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
+        ])
+    else:
+        classes = sorted([
+            c for c in Path(datadir).rglob('*/')
+            if c.is_dir()
+               and len(list(c.glob('*.tif'))) > 0
+               and distribution in str(c)
+               and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
+        ])
 
     job = partial(
         evaldistbin,
