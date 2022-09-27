@@ -50,8 +50,8 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     psfargs = dict(
         n_modes=60,
         dtype='/home/supernova/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRect/NAAnnulusMax0.60/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat',
-        distribution='dirichlet',
-        bimodal=False,
+        distribution='powerlaw',
+        bimodal=True,
         gamma=1.5,
         lam_detection=wavelength,
         amplitude_ranges=(0, 1),
@@ -69,15 +69,17 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     peaks = []
     zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
 
-    # difractionlimit = np.arange(0, 0.05, .01).round(3)  # 4  bins
-    # small = np.arange(.05, .1, .005).round(3)           # 10 bins
-    # large = np.arange(.1, .4, .01).round(3)             # 30 bins
-    # extreme = np.arange(.4, .65, .05).round(3)          # 6  bins
-    # min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
-    # max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
+    ## Challenging dataset
+    difractionlimit = np.arange(0, 0.05, .01).round(3)  # 4  bins
+    small = np.arange(.05, .1, .005).round(3)           # 10 bins
+    large = np.arange(.1, .4, .01).round(3)             # 30 bins
+    extreme = np.arange(.4, .65, .05).round(3)          # 6  bins
+    min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
+    max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
 
-    min_amps = np.arange(0, .3, .01).round(3)
-    max_amps = np.arange(.01, .31, .01).round(3)
+    ## EASY dataset
+    # min_amps = np.arange(0, .3, .01).round(3)
+    # max_amps = np.arange(.01, .31, .01).round(3)
 
     for mina, maxa in zip(min_amps, max_amps):
         psfargs['amplitude_ranges'] = (mina, maxa)

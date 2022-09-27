@@ -35,12 +35,13 @@ def get_sample(path, no_phase=False):
     with open(path.with_suffix('.json')) as f:
         hashtbl = ujson.load(f)
 
-    if no_phase:
-        amps = np.abs(hashtbl['zernikes'])
-        img = get_image(path)[:3]
-    else:
-        amps = hashtbl['zernikes']
-        img = get_image(path)
+    img = get_image(path)
+    amps = hashtbl['zernikes']
+
+    if no_phase and img.shape[0] == 6:
+        amps = np.abs(amps)
+        img = img[:3]
+
     return img, amps
 
 

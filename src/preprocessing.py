@@ -9,13 +9,12 @@ from typing import Any, Sequence, Union
 import numpy as np
 import pandas as pd
 import zarr
-from tqdm import trange
 import h5py
 import seaborn as sns
 import matplotlib.colors as mcolors
 from matplotlib import gridspec
 from tifffile import imread, imsave
-from skimage import transform, feature
+from skimage import transform
 from scipy.spatial import KDTree
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches

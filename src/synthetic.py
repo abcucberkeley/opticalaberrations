@@ -606,7 +606,7 @@ class SyntheticPSF:
             padsize=padsize,
             log10=log10,
             plot=plot,
-            no_phase=no_phase
+            no_phase=no_phase,
         )
 
         if meta:

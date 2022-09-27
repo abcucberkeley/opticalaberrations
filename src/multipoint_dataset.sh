@@ -25,10 +25,11 @@ zVOXEL=.268
 LAMBDA=.510
 NA=1.0
 
+DIFFICULTY='easy'
 DATASET='train'
 ITERS=100
 SHAPE=64
-GAMMA=.75
+GAMMA=1.5
 MODES=60
 OUTDIR="/clusterfs/nvme/thayer/dataset/lattice_multipoints/${DATASET}"
 
@@ -38,15 +39,36 @@ if [ "$DATASET" = "train" ];then
   mPSNR=($(seq 10 10 41))
   xPSNR=($(seq 20 10 50))
   SAMPLES=($(seq 1 100 1000))
-  amps1=($(seq 0 .01 .3))
-  amps2=($(seq .01 .01 .3))
+
+  if [ "$DIFFICULTY" = "easy" ];then
+    amps1=($(seq 0 .01 .3))
+    amps2=($(seq .01 .01 .3))
+  else
+    difractionlimit=($(seq 0 .01 .05))
+    small=($(seq .055 .005 .1))
+    large=($(seq .11 .01 .4))
+    extreme=($(seq .45 .05 .65))
+    amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
+    echo ${amps[@]}
+    echo ${#amps[@]}
+    amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]:0:${#extreme[@]}-1}" )
+    amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
+  fi
+
 else
   TYPE=''
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
   SAMPLES=($(seq 1 100 100))
-  amps1=($(seq 0 .05 .3))
-  amps2=($(seq .05 .05 .3))
+
+  if [ "$DIFFICULTY" = "easy" ];then
+    amps1=($(seq 0 .05 .3))
+    amps2=($(seq .05 .05 .3))
+  else
+    amps1=($(seq 0 .025 .5))
+    amps2=($(seq .025 .025 .5))
+  fi
+
 fi
 
 

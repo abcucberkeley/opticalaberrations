@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from skimage.feature import peak_local_max
+from scipy.spatial import KDTree
 
 import vis
 from preprocessing import resize_with_crop_or_pad
@@ -184,3 +186,38 @@ def plot_to_image(figure):
     # Add the batch dimension
     image = tf.expand_dims(image, 0)
     return image
+
+
+def mean_min_distance(sample: np.array, plot: bool = False):
+    peaks = peak_local_max(
+        sample,
+        min_distance=1,
+        threshold_rel=.33,
+        exclude_border=False,
+        p_norm=2,
+        num_peaks=10
+    )
+    kd = KDTree(peaks)
+    dists, idx = kd.query(peaks, k=2, workers=-1)
+
+    if plot:
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False, sharex=False)
+        for ax in range(3):
+            axes[ax].imshow(
+                np.nanmax(sample, axis=ax),
+                aspect='auto',
+                cmap='gray'
+            )
+
+            for p in range(dists.shape[0]):
+                if ax == 0:
+                    axes[ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                elif ax == 1:
+                    axes[ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                else:
+                    axes[ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+
+        plt.tight_layout()
+        plt.show()
+
+    return np.round(np.mean(dists), 0)
