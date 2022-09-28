@@ -227,4 +227,4 @@ def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
         plt.tight_layout()
         plt.show()
 
-    return np.round(np.mean(dists), 0)
+    return np.round(np.mean(dists), 2)

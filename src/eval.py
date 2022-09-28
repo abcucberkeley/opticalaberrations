@@ -1021,7 +1021,7 @@ def evalheatmap(
         3., 4., 5.,
     ]
 
-    vmin, vmax, vcenter, step = levels[0], levels[-1], .25, .05
+    vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
     highcmap = plt.get_cmap('magma_r', 256)
     lowcmap = plt.get_cmap('GnBu_r', 256)
     low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -1066,9 +1066,9 @@ def evalheatmap(
         'Average Peak-to-peak aberration $|P_{95} - P_{5}|$'
         rf'($\lambda = 605~nm$)'
     )
-    ax.set_yticks(np.arange(0, 11, .5), minor=True)
-    ax.set_yticks(np.arange(0, 11, 1))
-    ax.set_ylim(.25, 10)
+    ax.set_yticks(np.arange(0, 6, .5), minor=True)
+    ax.set_yticks(np.arange(0, 6, 1))
+    ax.set_ylim(.25, 5)
 
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)
@@ -1404,7 +1404,7 @@ def iterheatmap(
         3., 4., 5.,
     ]
 
-    vmin, vmax, vcenter, step = levels[0], levels[-1], .25, .05
+    vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
     highcmap = plt.get_cmap('magma_r', 256)
     lowcmap = plt.get_cmap('GnBu_r', 256)
     low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -1451,9 +1451,9 @@ def iterheatmap(
         rf'($\lambda = 605~nm$)'
     )
 
-    ax.set_yticks(np.arange(0, 11, .5), minor=True)
-    ax.set_yticks(np.arange(0, 11, 1))
-    ax.set_ylim(.25, 10)
+    ax.set_yticks(np.arange(0, 6, .5), minor=True)
+    ax.set_yticks(np.arange(0, 6, 1))
+    ax.set_ylim(.25, 5)
 
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)
@@ -1709,7 +1709,7 @@ def evalsample(
             3., 4., 5.,
         ]
 
-        vmin, vmax, vcenter, step = levels[0], levels[-1], .25, .05
+        vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
         highcmap = plt.get_cmap('magma_r', 256)
         lowcmap = plt.get_cmap('GnBu_r', 256)
         low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -1756,9 +1756,9 @@ def evalsample(
             rf'($\lambda = 605~nm$)'
         )
 
-        ax.set_yticks(np.arange(0, 11, .5), minor=True)
-        ax.set_yticks(np.arange(0, 11, 1))
-        ax.set_ylim(.25, 10)
+        ax.set_yticks(np.arange(0, 6, .5), minor=True)
+        ax.set_yticks(np.arange(0, 6, 1))
+        ax.set_ylim(.25, 5)
 
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
@@ -1965,7 +1965,7 @@ def distheatmap(
         3., 4., 5.,
     ]
 
-    vmin, vmax, vcenter, step = levels[0], levels[-1], .25, .05
+    vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
     highcmap = plt.get_cmap('magma_r', 256)
     lowcmap = plt.get_cmap('GnBu_r', 256)
     low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -2002,8 +2002,8 @@ def distheatmap(
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
-    ax.set_xlabel(rf'Average distance to nearest neighbor ($\mu$m$)')
-    ax.set_xlim(0, 10)
+    ax.set_xlabel(rf'Average distance to nearest neighbor (microns)')
+    ax.set_xlim(0, 8)
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     ax.set_ylabel(
