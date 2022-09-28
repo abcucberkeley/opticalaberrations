@@ -1469,7 +1469,7 @@ def evalsample(
     kernel_path: Path = None,
     reference_path: Path = None,
     psnr: tuple = (1000, 1000),
-    niter: int = 5,
+    niter: int = 3,
     na: float = 1.0,
     psf_type: str = 'widefield',
     x_voxel_size: float = .108,
@@ -1549,7 +1549,6 @@ def evalsample(
 
     for w in range(rois.shape[0]):
         ys = gt
-
         imsave(savepath / f'reference_window_{w}.tif', rois[w])
 
         reference = rois[w] ** 4
@@ -1566,11 +1565,7 @@ def evalsample(
         y_true = pd.DataFrame.from_dict({'niter': [0], 'residuals': [utils.peak_aberration(ys, na=na)]})
 
         for k in trange(1, niter+1):
-            if k == 1:
-                conv = convolution.convolve_fft(reference, kernel, allow_huge=True)
-            else:
-                conv = richardson_lucy(reference, kernel, num_iter=30)
-
+            conv = convolution.convolve_fft(reference, kernel, allow_huge=True)
             inputs = conv / np.nanpercentile(conv, 99.99)
             inputs[inputs > 1] = 1
 
@@ -1597,6 +1592,7 @@ def evalsample(
                     rolling_embedding=rolling_embedding,
                     batch_size=1,
                     n_samples=1,
+                    no_phase=no_phase,
                     desc=f'kernel',
                     plot=savepath / f'kernel_embeddings',
                 )
@@ -1632,6 +1628,7 @@ def evalsample(
                 rolling_embedding=rolling_embedding,
                 batch_size=1,
                 n_samples=1,
+                no_phase=no_phase,
                 desc=f'Iter[{k}] - MI[{np.nanpercentile(conv, 90):.4e}]',
                 plot=savepath/f'embeddings_convolved_iter_{k}_window_{w}',
             )
@@ -1870,7 +1867,10 @@ def evaldistbin(
         y_pred = y_pred.append(p, ignore_index=True)
 
         y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys.numpy()], columns=['sample'])
-        y['dist'] = [utils.mean_min_distance(np.squeeze(i)) for i in inputs]
+        y['dist'] = [
+            utils.mean_min_distance(np.squeeze(i), voxel_size=(z_voxel_size, y_voxel_size, x_voxel_size))
+            for i in inputs
+        ]
         y_true = y_true.append(y, ignore_index=True)
 
     return (y_pred, y_true)
@@ -2002,17 +2002,17 @@ def distheatmap(
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
-    ax.set_xlabel(f'Average distance to nearest neighbor')
-    ax.set_xlim(1, 40)
+    ax.set_xlabel(rf'Average distance to nearest neighbor ($\mu$m$)')
+    ax.set_xlim(0, 10)
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     ax.set_ylabel(
         'Average Peak-to-peak aberration $|P_{95} - P_{5}|$'
         rf'($\lambda = 605~nm$)'
     )
-    ax.set_yticks(np.arange(0, 11, .5), minor=True)
-    ax.set_yticks(np.arange(0, 11, 1))
-    ax.set_ylim(.25, 10)
+    ax.set_yticks(np.arange(0, 6, .5), minor=True)
+    ax.set_yticks(np.arange(0, 6, 1))
+    ax.set_ylim(.25, 5)
 
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)

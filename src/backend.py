@@ -562,15 +562,23 @@ def bootstrap_predict(
 
         # check z-axis to compute embeddings for fourier models
         if model.input_shape[1] != inputs.shape[1]:
-            model_inputs = np.stack([
-                psfgen.embedding(
+            model_inputs = []
+            for i in inputs:
+                emb = psfgen.embedding(
                     psf=i,
                     plot=plot,
                     gamma=gamma,
                     no_phase=no_phase,
                     principle_planes=True
-                ) for i in inputs
-            ], axis=0)
+                )
+
+                if no_phase and model.input_shape[1] == 6:
+                    phase_mask = np.zeros((3, model.input_shape[2], model.input_shape[3]))
+                    emb = np.concatenate([emb, phase_mask], axis=0)
+
+                model_inputs.append(emb)
+
+            model_inputs = np.stack(model_inputs, axis=0)
         else:
             # pass raw PSFs to the model
             model_inputs = inputs

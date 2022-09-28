@@ -13,6 +13,7 @@ PSF_TYPE='/clusterfs/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRe
 DATA="/clusterfs/nvme/thayer/dataset/lattice_multipoints/test/x108-y108-z268/"
 
 declare -a models=(
+'../models/new/lattice/opticaltransformer'
 '../models/new/multipoints/lattice/nophase/opticaltransformer-multinode'
 )
 
@@ -35,7 +36,7 @@ do
     --taskname all \
     --name $MODEL/distheatmaps_neighbor_None
 
-    for N in 2 3 4 5
+    for N in 1 2 3 4 5
     do
       python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
       --task "$MODEL $PHASE --num_neighbor $N --datadir $DATA/i$SHAPE --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP distheatmap" \

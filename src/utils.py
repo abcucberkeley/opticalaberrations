@@ -188,7 +188,7 @@ def plot_to_image(figure):
     return image
 
 
-def mean_min_distance(sample: np.array, plot: bool = False):
+def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
     peaks = peak_local_max(
         sample,
         min_distance=1,
@@ -196,9 +196,16 @@ def mean_min_distance(sample: np.array, plot: bool = False):
         exclude_border=False,
         p_norm=2,
         num_peaks=10
-    )
-    kd = KDTree(peaks)
-    dists, idx = kd.query(peaks, k=2, workers=-1)
+    ).astype(np.float64)
+
+    # rescale to mu meters
+    scaled_peaks = np.zeros_like(peaks)
+    scaled_peaks[:, 0] = peaks[:, 0] * voxel_size[0]
+    scaled_peaks[:, 1] = peaks[:, 1] * voxel_size[1]
+    scaled_peaks[:, 2] = peaks[:, 2] * voxel_size[2]
+
+    kd = KDTree(scaled_peaks)
+    dists, idx = kd.query(scaled_peaks, k=2, workers=-1)
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False, sharex=False)

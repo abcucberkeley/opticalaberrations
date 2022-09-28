@@ -176,7 +176,7 @@ def find_roi(
         logger.error(f"Unknown file format: {path.name}")
         return
 
-    if isinstance(peaks, Path):
+    if isinstance(peaks, str) or isinstance(peaks, Path):
         with h5py.File(peaks, 'r') as file:
             file = file.get('frameInfo')
             peaks = pd.DataFrame(

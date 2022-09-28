@@ -30,7 +30,6 @@ DATASET='train'
 ITERS=100
 SHAPE=64
 GAMMA=1.5
-MODES=60
 OUTDIR="/clusterfs/nvme/thayer/dataset/lattice_multipoints/${DATASET}"
 
 
@@ -41,9 +40,11 @@ if [ "$DATASET" = "train" ];then
   SAMPLES=($(seq 1 100 1000))
 
   if [ "$DIFFICULTY" = "easy" ];then
-    amps1=($(seq 0 .01 .3))
-    amps2=($(seq .01 .01 .3))
+    MODES=15
+    amps1=($(seq 0 .01 .15))
+    amps2=($(seq .01 .01 .15))
   else
+    MODES=60
     difractionlimit=($(seq 0 .01 .05))
     small=($(seq .055 .005 .1))
     large=($(seq .11 .01 .4))
@@ -62,9 +63,11 @@ else
   SAMPLES=($(seq 1 100 100))
 
   if [ "$DIFFICULTY" = "easy" ];then
-    amps1=($(seq 0 .05 .3))
-    amps2=($(seq .05 .05 .3))
+    MODES=15
+    amps1=($(seq 0 .025 .15))
+    amps2=($(seq .025 .025 .15))
   else
+    MODES=60
     amps1=($(seq 0 .025 .5))
     amps2=($(seq .025 .025 .5))
   fi
