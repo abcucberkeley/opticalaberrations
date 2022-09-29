@@ -1,3 +1,5 @@
+from functools import partial
+
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
@@ -507,7 +509,7 @@ def bootstrap_predict(
     resize: Any = None,
     batch_size: int = 1,
     n_samples: int = 10,
-    threshold: float = 1e-4,
+    threshold: float = 1e-2,
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
     plot: Any = None,
@@ -575,6 +577,8 @@ def bootstrap_predict(
                 if no_phase and model.input_shape[1] == 6:
                     phase_mask = np.zeros((3, model.input_shape[2], model.input_shape[3]))
                     emb = np.concatenate([emb, phase_mask], axis=0)
+                elif model.input_shape[1] == 3:
+                    emb = emb[:3]
 
                 model_inputs.append(emb)
 
