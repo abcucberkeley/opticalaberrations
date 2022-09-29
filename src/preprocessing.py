@@ -152,6 +152,7 @@ def find_roi(
     min_intensity: Any = 100,
     peaks: Any = None,
     num_neighbor: int = 5,
+    voxel_size: tuple = (.268, .108, .108),
     file_order: str = 'c-order'
 ):
 
@@ -184,8 +185,14 @@ def find_roi(
                 columns=['x', 'y', 'z', 'A']
             ).round(0).astype(int)
 
-    kd = KDTree(peaks[['z', 'y', 'x']].values)
-    dist, idx = kd.query(peaks[['z', 'y', 'x']].values, k=11, workers=-1)
+    points = peaks[['z', 'y', 'x']].values
+    scaled_peaks = np.zeros_like(points)
+    scaled_peaks[:, 0] = points[:, 0] * voxel_size[0]
+    scaled_peaks[:, 1] = points[:, 1] * voxel_size[1]
+    scaled_peaks[:, 2] = points[:, 2] * voxel_size[2]
+
+    kd = KDTree(scaled_peaks)
+    dist, idx = kd.query(scaled_peaks, k=11, workers=-1)
     for n in range(1, 11):
         if n == 1:
             peaks[f'dist'] = dist[:, n]
@@ -208,7 +215,7 @@ def find_roi(
         sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="k")
         sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
         axes[0].set_ylabel('Intensity')
-        axes[0].set_xlabel('Distance')
+        axes[0].set_xlabel('Distance (microns)')
         axes[0].set_yscale('log')
         axes[0].set_ylim(10 ** 0, None)
         axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
@@ -216,7 +223,7 @@ def find_roi(
         x = np.sort(peaks['dist'])
         y = np.arange(len(x)) / float(len(x))
         axes[1].plot(x, y, color='dimgrey')
-        axes[1].set_xlabel('Distance')
+        axes[1].set_xlabel('Distance (microns)')
         axes[1].set_ylabel('CDF')
         axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
@@ -237,7 +244,7 @@ def find_roi(
         peaks = peaks[peaks['A'] >= min_intensity]
 
     neighbors = peaks.columns[peaks.columns.str.startswith('dist')].tolist()
-    peaks['neighbors'] = peaks[peaks[neighbors] < int(window_size[0]/1.75)].count(axis=1)
+    peaks['neighbors'] = peaks[peaks[neighbors] <= window_size[0]*voxel_size[0]/2].count(axis=1)
     peaks.sort_values(by=['neighbors', 'dist', 'A'], ascending=[True, False, False], inplace=True)
     peaks = peaks[peaks['neighbors'] == num_neighbor]
 
@@ -264,6 +271,7 @@ def find_roi(
         plt.tight_layout()
         plt.savefig(plot / f'selected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
+    print(peaks)
     peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
     widths = [w // 2 for w in window_size]
 

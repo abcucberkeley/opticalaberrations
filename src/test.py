@@ -5,6 +5,7 @@ import logging
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 
 import tensorflow as tf
@@ -35,7 +36,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--reference", default=None, type=Path, help='path to a reference sample'
+        "--reference", default=None, help='path to a reference sample'
     )
 
     parser.add_argument(
@@ -178,15 +179,20 @@ def main(args=None):
         )
     elif args.target == 'evalpoints':
         eval.evalpoints(
-            model_path=args.model,
+            na=args.na,
+            no_phase=args.no_phase,
+            modelpath=args.model,
+            datadir=args.datadir,
+            distribution=args.dist,
+            samplelimit=args.n_samples,
+            max_amplitude=args.max_amplitude,
             psf_type=args.psf_type,
             wavelength=args.wavelength,
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
+            input_coverage=args.input_coverage,
             num_neighbor=args.num_neighbor,
-            na=args.na,
-            no_phase=args.no_phase,
         )
     elif args.target == 'evalsample':
         eval.evalsample(

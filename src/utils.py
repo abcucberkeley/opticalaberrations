@@ -1,4 +1,6 @@
 import matplotlib
+import scipy.signal
+
 matplotlib.use('TkAgg')
 
 import logging
@@ -14,6 +16,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
 from scipy.spatial import KDTree
+from astropy import convolution
 
 import vis
 from preprocessing import resize_with_crop_or_pad
@@ -228,3 +231,37 @@ def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
         plt.show()
 
     return np.round(np.mean(dists), 1)
+
+
+def fftconvolution(sample, kernel, plot=False):
+    if kernel.size >= 4:
+        conv = []
+        for k in kernel:
+            c = convolution.convolve_fft(sample, k, allow_huge=True)
+            c /= np.nanmax(c)
+            conv.append(c)
+
+            if plot:
+                fig, axes = plt.subplots(3, 3, figsize=(24, 12))
+                for ax in range(3):
+                    axes[0, ax].imshow(np.max(sample, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+                    axes[1, ax].imshow(np.max(k, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+                    axes[2, ax].imshow(np.max(c, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+                plt.tight_layout()
+                plt.show()
+
+        conv = np.array(conv)
+    else:
+        conv = convolution.convolve_fft(sample, kernel, allow_huge=True)
+        conv /= np.nanmax(conv)
+
+        if plot:
+            fig, axes = plt.subplots(3, 3, figsize=(24, 12))
+            for ax in range(3):
+                axes[0, ax].imshow(np.max(sample, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+                axes[1, ax].imshow(np.max(kernel, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+                axes[2, ax].imshow(np.max(conv, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+            plt.tight_layout()
+            plt.show()
+
+    return conv

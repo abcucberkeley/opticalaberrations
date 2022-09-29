@@ -14,7 +14,6 @@ PSF_DATA="/clusterfs/nvme/thayer/dataset/lattice/test/x108-y108-z268/"
 DATA="/clusterfs/nvme/thayer/dataset/lattice_multipoints/test/x108-y108-z268/"
 
 declare -a models=(
-'../models/new/lattice/opticaltransformer'
 '../models/new/multipoints/lattice/nophase/opticaltransformer-multinode'
 )
 
