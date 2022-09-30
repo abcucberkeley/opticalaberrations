@@ -1200,6 +1200,8 @@ def iter_eval_bin_with_reference(
         max_jitter=0,
         cpu_workers=-1,
     )
+    if num_neighbor is None:
+        num_neighbor = np.random.randint(low=1, high=6)
 
     if reference == 'random':
         snr = gen._randuniform(psnr)
@@ -2051,9 +2053,9 @@ def evalpoints(
     wavelength: float = .605,
     input_coverage: float = 1.0,
     no_phase: bool = False,
-    num_neighbor: int = 5,
+    num_neighbor: Any = None,
 ):
-    savepath = modelpath / f'evalpoints_{input_coverage}_neighbor_{num_neighbor}'
+    savepath = modelpath / f'evalpoints_neighbor_{num_neighbor}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
