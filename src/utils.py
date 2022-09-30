@@ -1,6 +1,4 @@
 import matplotlib
-import scipy.signal
-
 matplotlib.use('TkAgg')
 
 import logging

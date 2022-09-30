@@ -33,6 +33,7 @@ def parse_args(args):
     subparsers.add_parser("aberration")
     subparsers.add_parser("psnr")
     subparsers.add_parser("embeddings")
+    subparsers.add_parser("shapes_embeddings")
     subparsers.add_parser("gaussian")
     subparsers.add_parser("simulation")
     subparsers.add_parser("shapes")
@@ -73,6 +74,9 @@ def main(args=None):
 
     elif args.dtype == "embeddings":
         vis.plot_embeddings()
+
+    elif args.dtype == "shapes_embeddings":
+        vis.plot_shapes_embeddings()
 
     elif args.dtype == "gaussian":
         vis.plot_gaussian_filters()

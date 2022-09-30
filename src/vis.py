@@ -10,6 +10,7 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import matplotlib.gridspec as gridspec
+import raster_geometry as rg
 import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
 from typing import Any
@@ -18,6 +19,7 @@ import numpy as np
 import seaborn as sns
 from tqdm import tqdm, trange
 import matplotlib.patches as patches
+from astropy import convolution
 import tensorflow as tf
 from tensorflow_addons.image import gaussian_filter2d
 
@@ -441,6 +443,148 @@ def plot_embeddings(
 
                 cax = inset_axes(
                     grid[(mode, ax, waves[-1])],
+                    width="10%",
+                    height="100%",
+                    loc='center right',
+                    borderpad=-3
+                )
+                cb = plt.colorbar(m, cax=cax)
+                cax.yaxis.set_label_position("right")
+
+    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
+    plt.savefig(f'{savepath}/i{res}_pad{padsize}_lattice.pdf', bbox_inches='tight', pad_inches=.25)
+
+
+def plot_shapes_embeddings(
+        res=64,
+        padsize=None,
+        shapes=5,
+        wavelength=.510,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.268,
+        log10=False,
+        psf_type='/home/supernova/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRect/NAAnnulusMax0.60/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat',
+        savepath='../data/shapes_embeddings',
+):
+    def sphere(image_size, radius=.5, position=.5):
+        img = rg.sphere(shape=image_size, radius=radius, position=position)
+        return img.astype(np.float)
+
+    savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+    })
+    from utils import peak_aberration
+
+    if log10:
+        vmin, vmax, vcenter, step = -2, 2, 0, .1
+    else:
+        vmin, vmax, vcenter, step = 0, 2, 1, .1
+
+    highcmap = plt.get_cmap('YlOrRd', 256)
+    lowcmap = plt.get_cmap('YlGnBu_r', 256)
+    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+    cmap = mcolors.ListedColormap(cmap)
+
+    waves = np.arange(-.3, .35, step=.05).round(3)
+    # waves = np.arange(-.075, .08, step=.015).round(3) ## small
+    logger.info(waves)
+
+    fig = plt.figure(figsize=(25, 60))
+    nrows = shapes * 6
+    gs = fig.add_gridspec(nrows, len(waves)+1)
+
+    grid = {}
+    for th, ax in zip(range(1, shapes), np.round(np.arange(0, nrows, step=6))):
+        for k in range(6):
+            grid[(th, k, 'wavefront')] = fig.add_subplot(gs[ax + k, 0])
+
+            for j, w in enumerate(waves):
+                grid[(th, k, w)] = fig.add_subplot(gs[ax+k, j+1])
+
+    gen = SyntheticPSF(
+        dtype=psf_type,
+        amplitude_ranges=(-1, 1),
+        n_modes=60,
+        lam_detection=wavelength,
+        psf_shape=3*[res],
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
+        snr=100,
+        max_jitter=0,
+        cpu_workers=-1,
+    )
+    mode = 6
+
+    for thickness in trange(1, shapes):
+        if thickness == 1:
+            reference = np.zeros(gen.psf_shape)
+            reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] = 1
+        else:
+            reference = sphere(image_size=gen.psf_shape, radius=thickness, position=.5)
+
+        outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/')
+        outdir.mkdir(exist_ok=True, parents=True)
+        imsave(f"{outdir}/reference_{thickness}.tif", reference)
+
+        for amp in waves:
+            phi = np.zeros(60)
+            phi[mode] = amp
+
+            kernel = gen.single_psf(
+                phi=phi,
+                zplanes=0,
+                normed=True,
+                noise=False,
+                augmentation=False,
+            )
+            inputs = convolution.convolve_fft(reference, kernel, allow_huge=True)
+            inputs /= np.nanmax(inputs)
+            emb = gen.embedding(psf=inputs, principle_planes=True)
+
+            abr = round(peak_aberration(phi) * np.sign(amp), 1)
+            grid[(thickness, 0, amp)].set_title(f'{abr}$\\lambda$')
+
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/ratios/')
+            outdir.mkdir(exist_ok=True, parents=True)
+            imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
+
+            for ax in range(6):
+                if amp == waves[-1]:
+                    mat = grid[(thickness, ax, 'wavefront')].contourf(
+                        Wavefront(phi, lam_detection=wavelength).wave(100),
+                        levels=np.arange(-10, 10, step=1),
+                        cmap='Spectral_r',
+                        extend='both'
+                    )
+                    grid[(thickness, ax, 'wavefront')].axis('off')
+                    grid[(thickness, ax, 'wavefront')].set_aspect('equal')
+
+                if emb.shape[0] == 6:
+                    vol = emb[ax, :, :]
+                else:
+                    vol = np.max(emb, axis=ax)
+
+                m = grid[(thickness, ax, amp)].imshow(
+                    vol,
+                    cmap=cmap if ax < 3 else 'Spectral_r',
+                    vmin=vmin if ax < 3 else -1,
+                    vmax=vmax if ax < 3 else 1,
+                )
+                grid[(thickness, ax, amp)].set_aspect('equal')
+                grid[(thickness, ax, amp)].axis('off')
+
+                cax = inset_axes(
+                    grid[(thickness, ax, waves[-1])],
                     width="10%",
                     height="100%",
                     loc='center right',
