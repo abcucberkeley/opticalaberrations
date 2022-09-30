@@ -920,13 +920,12 @@ def eval_bin(
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
             inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, mode='minimum')
 
-        preds, stdev = backend.bootstrap_predict(
-            model,
-            inputs,
-            psfgen=gen,
+        preds = backend.eval_sign(
+            model=model,
+            inputs=inputs.numpy(),
+            gen=gen,
+            ys=ys.numpy(),
             batch_size=100,
-            n_samples=1,
-            no_phase=no_phase,
             desc=f"Predictions for ({datapath})"
         )
 
@@ -1079,75 +1078,6 @@ def evalheatmap(
     return fig
 
 
-def eval_sign(model, inputs, gen, ys, no_phase, batch_size, desc, reference=None, plot=True):
-    init_preds, stdev = backend.bootstrap_predict(
-        model,
-        inputs,
-        psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
-        no_phase=no_phase,
-        threshold=1e-3,
-        desc=desc
-    )
-    init_preds = np.abs(init_preds)
-
-    res = ys - init_preds
-    g = partial(
-        gen.single_psf,
-        zplanes=0,
-        normed=True,
-        noise=False if reference is not None else True,
-        augmentation=False if reference is not None else True,
-        meta=False
-    )
-    followup_inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
-    if reference is not None:
-        followup_inputs = utils.fftconvolution(reference, followup_inputs, plot=True)
-
-    followup_preds, stdev = backend.bootstrap_predict(
-        model,
-        followup_inputs,
-        psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
-        no_phase=no_phase,
-        desc=desc
-    )
-    followup_preds = np.abs(followup_preds)
-
-    preds = init_preds.copy()
-    for i in range(ys.shape[0]):
-        flips = np.where(followup_preds[i] > (.5 * init_preds[i]))[0]
-        preds[i, flips] *= -1
-
-        if plot:
-            init_preds_wave = Wavefront(init_preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            followup_preds_wave = Wavefront(followup_preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            preds_wave = Wavefront(preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            ys_wave = Wavefront(ys[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
-
-            fig, axes = plt.subplots(2, 1, figsize=(24, 8))
-            axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
-            axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
-            axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
-            axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
-            axes[0].legend(frameon=False, loc='upper left')
-            axes[0].set_xlim((0, 60))
-            axes[0].set_xticks(range(0, 61))
-
-            axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
-            axes[1].plot(ys_wave, '-o', color='C1', label='Ground truth')
-            axes[1].legend(frameon=False, loc='upper left')
-            axes[1].set_xlim((0, 60))
-            axes[1].set_xticks(range(0, 61))
-
-            plt.tight_layout()
-            plt.show()
-
-    return preds
-
-
 def iter_eval_bin(
     datapath,
     modelpath,
@@ -1204,12 +1134,11 @@ def iter_eval_bin(
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
             inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, mode='minimum')
 
-        preds = eval_sign(
+        preds = backend.eval_sign(
             model=model,
             inputs=inputs,
             gen=gen,
             ys=ys,
-            no_phase=no_phase,
             batch_size=samples,
             desc=f"Predictions for ({datapath})"
         )
@@ -1312,12 +1241,11 @@ def iter_eval_bin_with_reference(
     })
 
     for k in range(1, niter+1):
-        preds = eval_sign(
+        preds = backend.eval_sign(
             model=model,
             inputs=inputs,
             gen=gen,
             ys=ys,
-            no_phase=no_phase,
             batch_size=samples,
             reference=reference,
             desc=f"Predictions for ({datapath})"
@@ -1921,13 +1849,12 @@ def evaldistbin(
     y_pred = pd.DataFrame([], columns=['dist', 'sample'])
 
     for inputs, ys in val.batch(100):
-        preds, stdev = backend.bootstrap_predict(
-            model,
-            inputs,
-            psfgen=gen,
+        preds = backend.eval_sign(
+            model=model,
+            inputs=inputs.numpy(),
+            gen=gen,
+            ys=ys.numpy(),
             batch_size=100,
-            n_samples=1,
-            no_phase=no_phase,
             desc=f"Predictions for ({datapath})"
         )
 

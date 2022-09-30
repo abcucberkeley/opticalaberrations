@@ -509,7 +509,7 @@ def bootstrap_predict(
     resize: Any = None,
     batch_size: int = 1,
     n_samples: int = 10,
-    threshold: float = 1e-2,
+    threshold: float = 1e-3,
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
     plot: Any = None,
@@ -706,6 +706,90 @@ def bootstrap_predict(
         return mu, sigma
 
 
+def eval_sign(
+    model: tf.keras.Model,
+    inputs: np.array,
+    gen: SyntheticPSF,
+    ys: np.array,
+    batch_size: int,
+    desc: Any = None,
+    reference: Any = None,
+    plot: Any = None
+):
+    init_preds, stdev = bootstrap_predict(
+        model,
+        inputs,
+        psfgen=gen,
+        batch_size=batch_size,
+        n_samples=1,
+        no_phase=True,
+        desc=desc
+    )
+    init_preds = np.abs(init_preds)
+
+    res = ys - init_preds
+    g = partial(
+        gen.single_psf,
+        zplanes=0,
+        normed=True,
+        noise=False if reference is not None else True,
+        augmentation=False if reference is not None else True,
+        meta=False
+    )
+    followup_inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
+
+    if reference is not None:
+        followup_inputs = utils.fftconvolution(reference, followup_inputs, plot=True)
+
+    followup_preds, stdev = bootstrap_predict(
+        model,
+        followup_inputs,
+        psfgen=gen,
+        batch_size=batch_size,
+        n_samples=1,
+        no_phase=True,
+        desc=desc,
+        plot=plot
+    )
+    followup_preds = np.abs(followup_preds)
+
+    preds = init_preds.copy()
+
+    if ys.shape[0] == 1:
+        flips = np.where(followup_preds > (.5 * init_preds))[0]
+        preds[flips] *= -1
+    else:
+        for i in range(ys.shape[0]):
+            flips = np.where(followup_preds[i] > (.5 * init_preds[i]))[0]
+            preds[i, flips] *= -1
+
+            if plot == True:
+                init_preds_wave = Wavefront(init_preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
+                followup_preds_wave = Wavefront(followup_preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
+                preds_wave = Wavefront(preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
+                ys_wave = Wavefront(ys[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
+                fig, axes = plt.subplots(2, 1, figsize=(24, 8))
+                axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
+                axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
+                axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
+                axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
+                axes[0].legend(frameon=False, loc='upper left')
+                axes[0].set_xlim((0, 60))
+                axes[0].set_xticks(range(0, 61))
+
+                axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
+                axes[1].plot(ys_wave, '-o', color='C1', label='Ground truth')
+                axes[1].legend(frameon=False, loc='upper left')
+                axes[1].set_xlim((0, 60))
+                axes[1].set_xticks(range(0, 61))
+
+                plt.tight_layout()
+                plt.show()
+
+    return preds
+
+
 def predict(
     model: Path,
     psf_type: str,
@@ -795,13 +879,12 @@ def predict(
                         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
                         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, mode='minimum')
 
-                    p, std = bootstrap_predict(
-                        m,
-                        psfgen=gen,
+                    p = eval_sign(
+                        model=m,
                         inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
+                        gen=gen,
+                        ys=y,
                         batch_size=1,
-                        n_samples=1,
-                        no_phase=no_phase,
                         plot=save_path / f'embeddings_{s}',
                     )
 
