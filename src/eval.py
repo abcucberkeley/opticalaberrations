@@ -2053,7 +2053,7 @@ def evalpoints(
     no_phase: bool = False,
     num_neighbor: int = 5,
 ):
-    savepath = modelpath / f'iterheatmaps_{input_coverage}_neighbor_{num_neighbor}'
+    savepath = modelpath / f'evalpoints_{input_coverage}_neighbor_{num_neighbor}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
