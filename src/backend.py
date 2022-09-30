@@ -739,7 +739,7 @@ def eval_sign(
     followup_inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
 
     if reference is not None:
-        followup_inputs = utils.fftconvolution(reference, followup_inputs, plot=True)
+        followup_inputs = utils.fftconvolution(reference, followup_inputs)
 
     followup_preds, stdev = bootstrap_predict(
         model,

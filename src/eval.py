@@ -1172,23 +1172,19 @@ def iter_eval_bin(
 def iter_eval_bin_with_reference(
     datapath,
     modelpath,
-    reference,
-    niter,
-    psnr,
-    samples,
-    na,
-    psf_type,
-    x_voxel_size,
-    y_voxel_size,
-    z_voxel_size,
-    wavelength,
-    no_phase
+    reference: Any = 'random',
+    psnr: tuple = (21, 30),
+    niter: int = 5,
+    samples: int = 1,
+    na: float = 1.0,
+    psf_type: str = 'widefield',
+    x_voxel_size: float = .15,
+    y_voxel_size: float = .15,
+    z_voxel_size: float = .6,
+    wavelength: float = .605,
+    num_neighbor: int = 5,
+    radius: float = .45
 ):
-    if not isinstance(reference, np.ndarray):
-        reference = imread(reference).astype(np.float)
-        reference /= np.max(reference)
-        reference = np.expand_dims(reference, axis=-1)
-
     model = backend.load(modelpath)
     gen = SyntheticPSF(
         n_modes=60,
@@ -1205,6 +1201,31 @@ def iter_eval_bin_with_reference(
         cpu_workers=-1,
     )
 
+    if reference == 'random':
+        snr = gen._randuniform(psnr)
+        reference = np.zeros(gen.psf_shape)
+        for i in range(num_neighbor):
+            reference[
+                np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+                np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+                np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+            ] = snr ** 2
+        reference *= snr * gen.mean_background_noise
+
+        rand_noise = gen._random_noise(
+            image=reference,
+            mean=gen.mean_background_noise,
+            sigma=gen.sigma_background_noise
+        )
+        reference += rand_noise
+        reference /= np.max(reference)
+        reference = reference[..., np.newaxis]
+
+    elif isinstance(reference, Path):
+        reference = imread(reference).astype(np.float)
+        reference /= np.max(reference)
+        reference = np.expand_dims(reference, axis=-1)
+
     val = data_utils.load_dataset(datapath, samplelimit=samples)
     val = val.map(lambda x: tf.py_function(data_utils.get_sample, [x], [tf.float32, tf.float32]))
     val = np.array(list(val.take(-1)))
@@ -1213,17 +1234,14 @@ def iter_eval_bin_with_reference(
     ys = np.array([i.numpy() for i in val[:, 1]])
 
     for i in range(inputs.shape[0]):
-        gt = np.zeros(60)
-        gt[np.random.randint(15)] = np.random.uniform(low=.1, high=.2)
         kernel = gen.single_psf(
-            phi=Wavefront(gt, lam_detection=wavelength),
+            phi=Wavefront(ys[i], lam_detection=wavelength),
             zplanes=0,
             normed=True,
             noise=False,
             augmentation=False,
-            meta=False
+            meta=False,
         )
-        ys[i] = gt
         inputs[i] = kernel[..., np.newaxis]
 
     inputs = utils.fftconvolution(reference, inputs)
@@ -2034,7 +2052,6 @@ def evalpoints(
     input_coverage: float = 1.0,
     no_phase: bool = False,
     num_neighbor: int = 5,
-    radius: float = .45
 ):
     savepath = modelpath / f'iterheatmaps_{input_coverage}_neighbor_{num_neighbor}'
     savepath.mkdir(parents=True, exist_ok=True)
@@ -2053,44 +2070,10 @@ def evalpoints(
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
 
-    gen = SyntheticPSF(
-        n_modes=60,
-        amplitude_ranges=(-.25, .25),
-        psf_shape=(64, 64, 64),
-        dtype=psf_type,
-        lam_detection=wavelength,
-        x_voxel_size=x_voxel_size,
-        y_voxel_size=y_voxel_size,
-        z_voxel_size=z_voxel_size,
-        batch_size=100,
-        snr=psnr,
-        max_jitter=0,
-        cpu_workers=-1,
-    )
-
-    snr = gen._randuniform(psnr)
-    reference = np.zeros(gen.psf_shape)
-    for i in range(num_neighbor):
-        reference[
-            np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
-            np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
-            np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
-        ] = snr**2
-    reference *= snr * gen.mean_background_noise
-
-    rand_noise = gen._random_noise(
-        image=reference,
-        mean=gen.mean_background_noise,
-        sigma=gen.sigma_background_noise
-    )
-    reference += rand_noise
-    reference /= np.max(reference)
-    reference = reference[..., np.newaxis]
-
     job = partial(
         iter_eval_bin_with_reference,
         modelpath=modelpath,
-        reference=reference,
+        reference='random',
         niter=niter,
         psnr=psnr,
         samples=samplelimit,
@@ -2100,7 +2083,6 @@ def evalpoints(
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
         wavelength=wavelength,
-        no_phase=no_phase
     )
 
     preds, ys = zip(*utils.multiprocess(job, classes))
