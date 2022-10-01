@@ -532,13 +532,16 @@ def plot_shapes_embeddings(
         else:
             reference = sphere(image_size=gen.psf_shape, radius=thickness, position=.5)
 
-        outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/')
+        outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}')
         outdir.mkdir(exist_ok=True, parents=True)
         imsave(f"{outdir}/reference_{thickness}.tif", reference)
 
         for amp in waves:
             phi = np.zeros(60)
             phi[mode] = amp
+
+            abr = round(peak_aberration(phi) * np.sign(amp), 1)
+            grid[(thickness, 0, amp)].set_title(f'{abr}$\\lambda$')
 
             kernel = gen.single_psf(
                 phi=phi,
@@ -549,12 +552,14 @@ def plot_shapes_embeddings(
             )
             inputs = convolution.convolve_fft(reference, kernel, allow_huge=True)
             inputs /= np.nanmax(inputs)
+
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}/convolved/')
+            outdir.mkdir(exist_ok=True, parents=True)
+            imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", inputs)
+
             emb = gen.embedding(psf=inputs, principle_planes=True)
 
-            abr = round(peak_aberration(phi) * np.sign(amp), 1)
-            grid[(thickness, 0, amp)].set_title(f'{abr}$\\lambda$')
-
-            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/ratios/')
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}/ratios/')
             outdir.mkdir(exist_ok=True, parents=True)
             imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
 
