@@ -310,7 +310,7 @@ class OpticalTransformer(Base, ABC):
             depth_scalar=1.0,
             width_scalar=1.0,
             activation='gelu',
-            dropout_rate=0.,
+            dropout_rate=0.1,
             rho=.05,
             mul=False,
             no_phase=False,
@@ -441,7 +441,7 @@ class OpticalTransformer(Base, ABC):
                     heads=self._calc_channels(h, width_scalar=self.width_scalar),
                     dims=64,
                     activation=self.activation,
-                    dropout_rate=self.dropout_rate,
+                    dropout_rate=self.dropout_rate/(i+1),
                 )(m)
             m = layers.add([res, m])
 

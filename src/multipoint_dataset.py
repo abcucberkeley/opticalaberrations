@@ -8,11 +8,12 @@ import ujson
 from pathlib import Path
 from tifffile import imread, imsave
 import numpy as np
+import raster_geometry as rg
 from tqdm import trange
 
 import cli
 from preprocessing import resize_with_crop_or_pad
-from utils import peak_aberration
+from utils import peak_aberration, fftconvolution
 from synthetic import SyntheticPSF
 
 logging.basicConfig(
@@ -48,7 +49,7 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
         )
 
 
-def sim(
+def diffraction_limited_sim(
     savepath: Path,
     gen: SyntheticPSF,
     npoints: int,
@@ -109,6 +110,66 @@ def sim(
     )
 
 
+def sim(
+    savepath: Path,
+    gen: SyntheticPSF,
+    npoints: int,
+    kernel: np.array,
+    amps: np.array,
+    snr: tuple,
+    emb: bool = True,
+    noise: bool = True,
+    radius: float = .45,
+    sphere: float = 0,
+):
+    reference = np.zeros(gen.psf_shape)
+    for i in range(npoints):
+        if sphere > 0:
+            reference += rg.sphere(
+                shape=gen.psf_shape,
+                radius=sphere,
+                position=np.random.uniform(low=.1, high=.9)
+            ).astype(np.float)
+        else:
+            reference[
+                np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+                np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+                np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+            ] = gen._randuniform(snr) ** 2
+
+    img = fftconvolution(reference, kernel)
+
+    if noise:
+        snr = gen._randuniform(snr)
+        img *= snr * gen.mean_background_noise
+
+        rand_noise = gen._random_noise(
+            image=img,
+            mean=gen.mean_background_noise,
+            sigma=gen.sigma_background_noise
+        )
+        noisy_img = rand_noise + img
+
+        psnr = (np.max(img) / np.mean(rand_noise))
+        maxcounts = np.max(noisy_img)
+        noisy_img /= np.max(noisy_img)
+    else:
+        psnr = np.mean(np.array(snr))
+        maxcounts = np.max(img)
+        noisy_img = img
+
+    if emb:
+        noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
+
+    save_synthetic_sample(
+        savepath,
+        noisy_img,
+        amps=amps,
+        snr=psnr,
+        maxcounts=maxcounts,
+    )
+
+
 def create_synthetic_sample(
     filename: str,
     npoints: int,
@@ -132,12 +193,14 @@ def create_synthetic_sample(
     cpu_workers: int,
     noise: bool,
     emb: bool,
+    sphere: float
 ):
     gen = SyntheticPSF(
         order='ansi',
         cpu_workers=cpu_workers,
         n_modes=modes,
         snr=1000,
+        max_jitter=0,
         dtype=psf_type,
         distribution=distribution,
         gamma=gamma,
@@ -179,9 +242,9 @@ def create_synthetic_sample(
                 normed=True,
                 noise=False,
                 augmentation=True,
-                meta=False
+                meta=False,
             )
-            savepath = savepath / f"npoints_{npoints}"
+            savepath = savepath / f"sphere_{sphere}" / f"npoints_{npoints}"
             savepath.mkdir(exist_ok=True, parents=True)
             savepath = savepath / filename
 
@@ -193,7 +256,8 @@ def create_synthetic_sample(
                 amps=phi,
                 snr=(min_psnr, max_psnr),
                 emb=emb,
-                noise=noise
+                noise=noise,
+                sphere=sphere
             )
 
     else:
@@ -334,6 +398,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--sphere", default=0, type=float,
+        help="Radius of the reference sphere objects"
+    )
+
+    parser.add_argument(
         "--na_detection", default=1.0, type=float,
         help="Numerical aperture"
     )
@@ -377,6 +446,7 @@ def main(args=None):
             min_psnr=args.min_psnr,
             max_psnr=args.max_psnr,
             lam_detection=args.lam_detection,
+            sphere=args.sphere,
             refractive_index=args.refractive_index,
             na_detection=args.na_detection,
             cpu_workers=args.cpu_workers,

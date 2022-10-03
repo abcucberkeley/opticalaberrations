@@ -181,7 +181,7 @@ class OpticalResNet(Base, ABC):
             depth_scalar=1.0,
             width_scalar=1.0,
             activation='gelu',
-            dropout_rate=0.,
+            dropout_rate=0.1,
             mul=False,
             no_phase=False,
             mask_shape=64,
@@ -254,7 +254,7 @@ class OpticalResNet(Base, ABC):
                     x_voxel_size=self.x_voxel_size,
                     y_voxel_size=self.y_voxel_size,
                     z_voxel_size=self.z_voxel_size,
-                    dropout_rate=self.dropout_rate
+                    dropout_rate=self.dropout_rate/(i+1)
                 )(m)
             m = layers.add([res, m])
 

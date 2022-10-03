@@ -45,10 +45,10 @@ if [ "$DATASET" = "train" ];then
     amps2=($(seq .01 .01 .15))
   else
     MODES=60
-    difractionlimit=($(seq 0 .01 .05))
-    small=($(seq .055 .005 .1))
-    large=($(seq .11 .01 .4))
-    extreme=($(seq .45 .05 .65))
+    difractionlimit=($(seq 0 .005 .05))
+    small=($(seq .05 .0025 .1))
+    large=($(seq .1 .005 .2))
+    extreme=($(seq .2 .02 .4))
     amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
     echo ${amps[@]}
     echo ${#amps[@]}
@@ -68,8 +68,8 @@ else
     amps2=($(seq .025 .025 .15))
   else
     MODES=60
-    amps1=($(seq 0 .025 .5))
-    amps2=($(seq .025 .025 .5))
+    amps1=($(seq 0 .025 .4))
+    amps2=($(seq .025 .025 .4))
   fi
 
 fi
@@ -81,8 +81,10 @@ do
   do
     for AMP in `seq 1 ${#amps1[@]}`
     do
-      for N in 1 2 3 4 5
+      for R in 0 1 2
       do
+        for N in 1 2 3 4 5
+        do
         for S in `seq 1 ${#SAMPLES[@]}`
         do
           while [ $(squeue -u thayeralshaabi -h -t pending -r | wc -l) -gt 500 ]
@@ -92,6 +94,7 @@ do
 
           j="${ENV} multipoint_dataset.py ${TYPE}"
           j="${j} --npoints ${N}"
+          j="${j} --sphere ${R}"
           j="${j} --psf_type ${PSF_TYPE}"
           j="${j} --dist ${DIST}"
           j="${j} --iters ${ITERS}"
@@ -140,6 +143,7 @@ do
           echo "ABC : R[$(squeue -u thayeralshaabi -h -t running -r -p abc | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p abc | wc -l)]"
 
         done
+      done
       done
     done
   done

@@ -50,7 +50,7 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     from utils import microns2waves
 
     psfargs = dict(
-        n_modes=15,
+        n_modes=60,
         dtype='/home/supernova/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRect/NAAnnulusMax0.60/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat',
         distribution='dirichlet',
         bimodal=True,
@@ -72,16 +72,16 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
 
     ## Challenging dataset
-    # difractionlimit = np.arange(0, 0.05, .01).round(3)  # 4  bins
-    # small = np.arange(.05, .1, .005).round(3)           # 10 bins
-    # large = np.arange(.1, .4, .01).round(3)             # 30 bins
-    # extreme = np.arange(.4, .65, .05).round(3)          # 6  bins
-    # min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
-    # max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
+    difractionlimit = np.arange(0, 0.055, .005).round(3)  # 10 bins
+    small = np.arange(.05, .1, .0025).round(3)            # 20 bins
+    large = np.arange(.1, .2, .005).round(3)              # 20 bins
+    extreme = np.arange(.2, .42, .02).round(3)            # 10 bins
+    min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
+    max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
 
     ## Easy dataset
-    min_amps = np.arange(0, .15, .01).round(3)
-    max_amps = np.arange(.01, .16, .01).round(3)
+    # min_amps = np.arange(0, .15, .01).round(3)
+    # max_amps = np.arange(.01, .16, .01).round(3)
 
     for mina, maxa in zip(min_amps, max_amps):
         psfargs['amplitude_ranges'] = (mina, maxa)
@@ -503,7 +503,7 @@ def plot_shapes_embeddings(
     gs = fig.add_gridspec(nrows, len(waves)+1)
 
     grid = {}
-    for th, ax in zip(range(1, shapes), np.round(np.arange(0, nrows, step=6))):
+    for th, ax in zip(range(shapes), np.round(np.arange(0, nrows, step=6))):
         for k in range(6):
             grid[(th, k, 'wavefront')] = fig.add_subplot(gs[ax + k, 0])
 
@@ -525,8 +525,8 @@ def plot_shapes_embeddings(
     )
     mode = 6
 
-    for thickness in trange(1, shapes):
-        if thickness == 1:
+    for thickness in trange(shapes):
+        if thickness == 0:
             reference = np.zeros(gen.psf_shape)
             reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] = 1
         else:

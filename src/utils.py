@@ -232,7 +232,7 @@ def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
 
 
 def fftconvolution(sample, kernel, plot=False):
-    if kernel.size >= 4:
+    if len(kernel.shape) >= 4:
         conv = []
         for k in kernel:
             c = convolution.convolve_fft(sample, k, allow_huge=True)
@@ -262,4 +262,6 @@ def fftconvolution(sample, kernel, plot=False):
             plt.tight_layout()
             plt.show()
 
+    conv = np.nan_to_num(conv, nan=0, neginf=0, posinf=0)
+    conv[conv < 0] = 0
     return conv
