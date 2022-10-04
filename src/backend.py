@@ -721,6 +721,17 @@ def predict_sign(
     threshold: float = 1e-1,
     prev_pred: Any = None
 ):
+    followup_preds = None
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
     # inputs = inputs ** .5
     init_preds, stdev = bootstrap_predict(
         model,
@@ -736,74 +747,92 @@ def predict_sign(
     )
     init_preds = np.abs(init_preds)
 
-    if prev_pred is None:
-        g = partial(
-            gen.single_psf,
-            zplanes=0,
-            normed=True,
-            noise=False,
-            augmentation=False,
-            meta=False
-        )
-
-        predicted_psf = g(init_preds)[np.newaxis, ...]
-        predicted_peaks = np.zeros_like(inputs)
-
-        peaks = peak_local_max(
-            np.squeeze(inputs),
-            min_distance=10,
-            threshold_rel=.33,
-            exclude_border=False,
-            p_norm=2,
-            num_peaks=10
-        ).astype(np.int32)
-
-        for p in peaks:
-            predicted_peaks[0, p[0], p[1], p[2]] = 1
-
-        predicted_inputs = utils.fftconvolution(predicted_peaks, predicted_psf)
-        # predicted_inputs = restoration.richardson_lucy(inputs, predicted_psf, num_iter=10)
-        followup_inputs = inputs - predicted_inputs
-        followup_inputs[followup_inputs < 0] = 0
-
-        # followup_inputs = followup_inputs ** .5
-        followup_preds, stdev = bootstrap_predict(
-            model,
-            followup_inputs,
-            psfgen=gen,
-            batch_size=batch_size,
-            n_samples=1,
-            no_phase=True,
-            desc=desc,
-            verbose=verbose,
-        )
-        followup_preds = np.abs(followup_preds)
-
-        if plot is not None:
-            fig, axes = plt.subplots(5, 3, figsize=(8, 11))
-            for i in range(3):
-                axes[0, i].imshow(np.max(np.squeeze(inputs), axis=i) ** .5, vmin=0, vmax=1, cmap='magma')
-                axes[1, i].imshow(np.max(np.squeeze(predicted_peaks) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
-                axes[2, i].imshow(np.max(np.squeeze(predicted_psf) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
-                axes[3, i].imshow(np.max(np.squeeze(predicted_inputs) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
-                axes[4, i].imshow(np.max(np.squeeze(followup_inputs) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
-
-            axes[0, 0].set_ylabel('Input')
-            axes[1, 0].set_ylabel('Peaks')
-            axes[2, 0].set_ylabel('PSF')
-            axes[3, 0].set_ylabel('Predicted')
-            axes[4, 0].set_ylabel('Followup inputs')
-            plt.tight_layout()
-            plt.savefig(f'{plot}_sign.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    else:
+    if prev_pred is not None:
         followup_preds = init_preds.copy()
         init_preds = pd.read_csv(prev_pred, header=0)['amplitude'].values
 
-    preds = init_preds.copy()
-    flips = np.where(followup_preds > (.25 * init_preds))[0]
-    preds[flips] *= -1
+        preds = init_preds.copy()
+        flips = np.where(followup_preds > (.5 * init_preds))[0]
+        preds[flips] *= -1
+    else:
+        # g = partial(
+        #     gen.single_psf,
+        #     zplanes=0,
+        #     normed=True,
+        #     noise=False,
+        #     augmentation=False,
+        #     meta=False
+        # )
+        #
+        # predicted_psf = g(init_preds)[np.newaxis, ...]
+        # predicted_peaks = np.zeros_like(inputs)
+        #
+        # peaks = peak_local_max(
+        #     np.squeeze(inputs),
+        #     min_distance=10,
+        #     threshold_rel=.33,
+        #     exclude_border=False,
+        #     p_norm=2,
+        #     num_peaks=10
+        # ).astype(np.int32)
+        #
+        # for p in peaks:
+        #     predicted_peaks[0, p[0], p[1], p[2]] = 1
+        #
+        # predicted_inputs = utils.fftconvolution(predicted_peaks, predicted_psf)
+        # # predicted_inputs = restoration.richardson_lucy(inputs, predicted_psf, num_iter=10)
+        # followup_inputs = inputs - predicted_inputs
+        # followup_inputs[followup_inputs < 0] = 0
+        # # followup_inputs = np.nan_to_num(followup_inputs, nan=0, posinf=0, neginf=0)
+        #
+        # # followup_inputs = followup_inputs ** .5
+        # followup_preds, stdev = bootstrap_predict(
+        #     model,
+        #     followup_inputs,
+        #     psfgen=gen,
+        #     batch_size=batch_size,
+        #     n_samples=1,
+        #     no_phase=True,
+        #     desc=desc,
+        #     verbose=verbose,
+        # )
+        # followup_preds = np.abs(followup_preds)
+        #
+        # if plot is not None:
+        #     fig, axes = plt.subplots(5, 3, figsize=(8, 11))
+        #     for i in range(3):
+        #         mi = axes[0, i].imshow(np.max(np.squeeze(inputs), axis=i) ** .5, vmin=0, vmax=1, cmap='magma')
+        #         mpoi = axes[1, i].imshow(np.max(np.squeeze(predicted_peaks) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
+        #         mppsf = axes[2, i].imshow(np.max(np.squeeze(predicted_psf) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
+        #         mp = axes[3, i].imshow(np.max(np.squeeze(predicted_inputs) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
+        #         mr = axes[4, i].imshow(np.max(np.squeeze(followup_inputs) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
+        #
+        #     axes[0, 0].set_ylabel('Input')
+        #     axes[1, 0].set_ylabel('POI')
+        #     axes[2, 0].set_ylabel('PSF')
+        #     axes[3, 0].set_ylabel('Predicted')
+        #     axes[4, 0].set_ylabel('Followup inputs')
+        #
+        #     cax = inset_axes(axes[0, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+        #     plt.colorbar(mi, cax=cax)
+        #     cax = inset_axes(axes[1, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+        #     plt.colorbar(mpoi, cax=cax)
+        #     cax = inset_axes(axes[2, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+        #     plt.colorbar(mppsf, cax=cax)
+        #     cax = inset_axes(axes[3, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+        #     plt.colorbar(mp, cax=cax)
+        #     cax = inset_axes(axes[4, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+        #     plt.colorbar(mr, cax=cax)
+        #
+        #     plt.savefig(f'{plot}_sign.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        #
+        # preds = init_preds.copy()
+        # flips = np.where(followup_preds > (.5 * init_preds))[0]
+        # preds[flips] *= -1
+        preds = init_preds
+        pass
 
-    if plot is not None:
+    if plot is not None and followup_preds is not None:
         init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
         followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
         preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves

@@ -87,7 +87,7 @@ def correct(
 ):
     y, pred, path = k
 
-    psf = preprocessing.prep_psf(path, input_shape=input_shape)
+    psf = preprocessing.prep_sample(path, input_shape=input_shape)
     diff = y - pred
 
     dm = zernikies_to_actuators(pred, dm_pattern=dm_pattern)
@@ -361,7 +361,7 @@ def predict(
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
-    inputs = preprocessing.prep_psf(
+    inputs = preprocessing.prep_sample(
         img,
         input_shape=(64, 64, 64),
         model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
@@ -451,7 +451,7 @@ def predict_dataset(
     psfs = np.array(
         utils.multiprocess(
             partial(
-                preprocessing.prep_psf,
+                preprocessing.prep_sample,
                 image_size=input_shape,
                 voxel_size=voxel_size
             ),
@@ -509,7 +509,7 @@ def compare(
     psfs = np.array(
         utils.multiprocess(
             partial(
-                preprocessing.prep_psf,
+                preprocessing.prep_sample,
                 image_size=input_shape,
                 voxel_size=voxel_size
             ),

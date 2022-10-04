@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence, Union
 import numpy as np
+from scipy import stats as st
 import pandas as pd
 import zarr
 import h5py
@@ -133,21 +134,30 @@ def resize(
     return resized_psf
 
 
-def prep_psf(
+def prep_sample(
     path: Path,
     input_shape: tuple,
     sample_voxel_size: tuple,
-    model_voxel_size: tuple
+    model_voxel_size: tuple,
+    remove_background: bool = True,
 ):
-    psf = imread(path)
+    psf = imread(path).astype(int)
     psf = psf.transpose(0, 2, 1)
-    psf = psf / np.max(psf)
+
+    mode = int(st.mode(psf[psf < np.quantile(psf, .99)], axis=None).mode[0])
+
+    if remove_background:
+        psf -= mode
+        psf[psf < 0] = 0
+
+    psf = psf / np.nanmax(psf)
     psf = resize(
         psf,
         sample_voxel_size=sample_voxel_size,
         voxel_size=model_voxel_size,
         crop_shape=tuple(3 * [input_shape[-1]])
     )
+
     return psf
 
 
