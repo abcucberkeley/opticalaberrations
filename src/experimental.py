@@ -87,7 +87,7 @@ def correct(
 ):
     y, pred, path = k
 
-    psf = preprocessing.prep_psf(path, image_size=input_shape)
+    psf = preprocessing.prep_psf(path, input_shape=input_shape)
     diff = y - pred
 
     dm = zernikies_to_actuators(pred, dm_pattern=dm_pattern)
@@ -351,26 +351,32 @@ def predict(
     scalar: float = 1,
     threshold: float = 0.0,
     verbose: bool = False,
-    plot: bool = False
+    plot: bool = False,
+    psf_type: str = 'widefield',
+    n_modes: int = 60,
+    mosaic: bool = False,
+    prev: Any = None
 ):
     physical_devices = tfc.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
-    model = backend.load(model, mosaic=True)
-
-    psf = preprocessing.prep_psf(
+    inputs = preprocessing.prep_psf(
         img,
-        input_shape=model.layers[0].input_shape[0][1:-1],
+        input_shape=(64, 64, 64),
         model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
     )
 
     psfgen = SyntheticPSF(
+        dtype=psf_type,
+        order='ansi',
         snr=30,
-        n_modes=60,
+        n_modes=n_modes,
+        gamma=1.5,
+        bimodal=True,
         lam_detection=wavelength,
-        psf_shape=psf.shape,
+        psf_shape=(64, 64, 64),
         x_voxel_size=lateral_voxel_size,
         y_voxel_size=lateral_voxel_size,
         z_voxel_size=axial_voxel_size,
@@ -379,18 +385,21 @@ def predict(
         cpu_workers=-1,
     )
 
-    psf_input = np.expand_dims(psf, axis=0)
+    inputs = np.expand_dims(inputs, axis=0)
 
-    p, std = backend.bootstrap_predict(
+    model = backend.load(model, mosaic=mosaic)
+
+    p = backend.predict_sign(
         model,
-        inputs=psf_input,
+        inputs=inputs,
         batch_size=1,
-        n_samples=1,
         threshold=threshold,
-        verbose=False,
-        psfgen=psfgen,
-        plot=Path(f'{img.parent/img.stem}') if plot else None
+        verbose=verbose,
+        gen=psfgen,
+        prev_pred=prev,
+        plot=Path(f'{img.parent/img.stem}') if plot else None,
     )
+
     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
     dm = zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar)
     dm = pd.DataFrame(dm)
@@ -402,7 +411,7 @@ def predict(
         logger.info(p.zernikes)
 
     coffs = [
-        {'n': z.n, 'm': z.m, 'amplitude': utils.microns2waves(a, wavelength=wavelength)}
+        {'n': z.n, 'm': z.m, 'amplitude': a}
         for z, a in p.zernikes.items()
     ]
     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
@@ -413,23 +422,12 @@ def predict(
     imsave(f"{img.parent/img.stem}_pred_pupil_displacement.tif", pupil_displacement)
 
     if plot:
-        psfgen.single_otf(
-            p.amplitudes,
-            zplanes=0,
-            normed=True,
-            noise=True,
-            na_mask=True,
-            ratio=True,
-            augmentation=True,
-            meta=True,
-            plot=Path(f'{img.parent/img.stem}_diagnosis'),
-        )
-
         vis.prediction(
-            psf=psf,
+            psf=np.squeeze(inputs),
             pred=p,
             dm_before=dm_state,
             dm_after=dm.values[:, 0],
+            wavelength=wavelength,
             save_path=Path(f'{img.parent/img.stem}_pred'),
         )
 

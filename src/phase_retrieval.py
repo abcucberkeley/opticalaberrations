@@ -1,5 +1,4 @@
 import logging
-import sys
 import time
 from pathlib import Path
 import os
@@ -22,23 +21,32 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--lateral_voxel_size", default=.1, type=float, help='lateral voxel size in microns for X'
+        "--prev", default=None, type=Path,
+        help="previous predictions .csv file (Default: `None`)"
     )
 
     parser.add_argument(
-        "--axial_voxel_size", default=.1, type=float, help='axial voxel size in microns for Z'
+        "--psf_type", default='../examples/lattice/lattice_PSF_simulation.mat', type=str, help='type of the desired PSF'
     )
 
     parser.add_argument(
-        "--model_lateral_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
     )
 
     parser.add_argument(
-        "--model_axial_voxel_size", default=.6, type=float, help='axial voxel size in microns for Z'
+        "--axial_voxel_size", default=.268, type=float, help='axial voxel size in microns for Z'
     )
 
     parser.add_argument(
-        "--wavelength", default=.605, type=float,
+        "--model_lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+
+    parser.add_argument(
+        "--model_axial_voxel_size", default=.268, type=float, help='axial voxel size in microns for Z'
+    )
+
+    parser.add_argument(
+        "--wavelength", default=.510, type=float,
         help='wavelength in microns'
     )
 
@@ -48,7 +56,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--threshold", default=1e-5, type=float,
+        "--threshold", default=1e-2, type=float,
         help='set predictions below threshold to zero (microns)'
     )
 
@@ -91,6 +99,8 @@ def main(args=None):
             img=args.input,
             dm_pattern=args.pattern,
             dm_state=args.state,
+            prev=args.prev,
+            psf_type=args.psf_type,
             axial_voxel_size=args.axial_voxel_size,
             model_axial_voxel_size=args.model_axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
@@ -144,7 +154,9 @@ def main_function(
     mymodel: str,
     myinput: str,
     mypattern: str,
+    myprev: str,
     mystate: str,
+    psf_type: str,
     axial_voxel_size: float,
     lateral_voxel_size: float,
     model_axial_voxel_size: float,
@@ -165,6 +177,7 @@ def main_function(
         myinput = Path(myinput)
         mypattern = Path(mypattern)
         mystate = Path(mystate)
+        myprev = Path(myprev)
 
         logger = make_a_logger(myinput)
 
@@ -194,6 +207,8 @@ def main_function(
                 img=myinput,
                 dm_pattern=mypattern,
                 dm_state=mystate,
+                prev=myprev,
+                psf_type=psf_type,
                 axial_voxel_size=axial_voxel_size,
                 model_axial_voxel_size=model_axial_voxel_size,
                 lateral_voxel_size=lateral_voxel_size,

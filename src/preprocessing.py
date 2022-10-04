@@ -55,8 +55,12 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
         return np.pad(psf[slicer], pad, **kwargs)
 
 
-def resize(vol, voxel_size: Sequence, crop_shape: Sequence, sample_voxel_size: Sequence = (.1, .1, .1),
-           debug: Any = None):
+def resize(
+    vol, voxel_size: Sequence,
+    crop_shape: Sequence,
+    sample_voxel_size: Sequence = (.1, .1, .1),
+    debug: Any = None
+):
     def plot(cls, img):
         if img.shape[0] == 6:
             vmin, vmax, vcenter, step = 0, 2, 1, .1
@@ -129,7 +133,12 @@ def resize(vol, voxel_size: Sequence, crop_shape: Sequence, sample_voxel_size: S
     return resized_psf
 
 
-def prep_psf(path: Path, input_shape: tuple, sample_voxel_size: tuple, model_voxel_size: tuple):
+def prep_psf(
+    path: Path,
+    input_shape: tuple,
+    sample_voxel_size: tuple,
+    model_voxel_size: tuple
+):
     psf = imread(path)
     psf = psf.transpose(0, 2, 1)
     psf = psf / np.max(psf)

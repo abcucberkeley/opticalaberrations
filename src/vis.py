@@ -51,7 +51,7 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
 
     psfargs = dict(
         n_modes=60,
-        dtype='/home/supernova/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRect/NAAnnulusMax0.60/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat',
+        dtype='../examples/lattice/lattice_PSF_simulation.mat',
         distribution='dirichlet',
         bimodal=True,
         gamma=1.5,
@@ -335,7 +335,7 @@ def plot_embeddings(
         y_voxel_size=.108,
         z_voxel_size=.268,
         log10=False,
-        psf_type='/home/supernova/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRect/NAAnnulusMax0.60/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat',
+        psf_type='../examples/lattice/lattice_PSF_simulation.mat',
         savepath='../data/embeddings',
 ):
     savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
@@ -464,7 +464,7 @@ def plot_shapes_embeddings(
         y_voxel_size=.108,
         z_voxel_size=.268,
         log10=False,
-        psf_type='/home/supernova/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRect/NAAnnulusMax0.60/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat',
+        psf_type='../examples/lattice/lattice_PSF_simulation.mat',
         savepath='../data/shapes_embeddings',
 ):
     def sphere(image_size, radius=.5, position=.5):

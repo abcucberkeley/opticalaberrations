@@ -1,6 +1,9 @@
 from functools import partial
 
 import numexpr
+import pandas as pd
+from skimage.feature import peak_local_max
+
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
 import matplotlib
@@ -19,6 +22,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 from tqdm import trange, tqdm
 from tifffile import imsave
+from skimage import restoration
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
@@ -706,6 +710,124 @@ def bootstrap_predict(
         return mu, sigma
 
 
+def predict_sign(
+    model: tf.keras.Model,
+    inputs: np.array,
+    gen: SyntheticPSF,
+    batch_size: int,
+    desc: Any = None,
+    plot: Any = None,
+    verbose: bool = False,
+    threshold: float = 1e-1,
+    prev_pred: Any = None
+):
+    # inputs = inputs ** .5
+    init_preds, stdev = bootstrap_predict(
+        model,
+        inputs,
+        psfgen=gen,
+        batch_size=batch_size,
+        n_samples=1,
+        no_phase=True,
+        desc=desc,
+        verbose=verbose,
+        threshold=threshold,
+        plot=plot
+    )
+    init_preds = np.abs(init_preds)
+
+    if prev_pred is None:
+        g = partial(
+            gen.single_psf,
+            zplanes=0,
+            normed=True,
+            noise=False,
+            augmentation=False,
+            meta=False
+        )
+
+        predicted_psf = g(init_preds)[np.newaxis, ...]
+        predicted_peaks = np.zeros_like(inputs)
+
+        peaks = peak_local_max(
+            np.squeeze(inputs),
+            min_distance=10,
+            threshold_rel=.33,
+            exclude_border=False,
+            p_norm=2,
+            num_peaks=10
+        ).astype(np.int32)
+
+        for p in peaks:
+            predicted_peaks[0, p[0], p[1], p[2]] = 1
+
+        predicted_inputs = utils.fftconvolution(predicted_peaks, predicted_psf)
+        # predicted_inputs = restoration.richardson_lucy(inputs, predicted_psf, num_iter=10)
+        followup_inputs = inputs - predicted_inputs
+        followup_inputs[followup_inputs < 0] = 0
+
+        # followup_inputs = followup_inputs ** .5
+        followup_preds, stdev = bootstrap_predict(
+            model,
+            followup_inputs,
+            psfgen=gen,
+            batch_size=batch_size,
+            n_samples=1,
+            no_phase=True,
+            desc=desc,
+            verbose=verbose,
+        )
+        followup_preds = np.abs(followup_preds)
+
+        if plot is not None:
+            fig, axes = plt.subplots(5, 3, figsize=(8, 11))
+            for i in range(3):
+                axes[0, i].imshow(np.max(np.squeeze(inputs), axis=i) ** .5, vmin=0, vmax=1, cmap='magma')
+                axes[1, i].imshow(np.max(np.squeeze(predicted_peaks) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
+                axes[2, i].imshow(np.max(np.squeeze(predicted_psf) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
+                axes[3, i].imshow(np.max(np.squeeze(predicted_inputs) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
+                axes[4, i].imshow(np.max(np.squeeze(followup_inputs) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
+
+            axes[0, 0].set_ylabel('Input')
+            axes[1, 0].set_ylabel('Peaks')
+            axes[2, 0].set_ylabel('PSF')
+            axes[3, 0].set_ylabel('Predicted')
+            axes[4, 0].set_ylabel('Followup inputs')
+            plt.tight_layout()
+            plt.savefig(f'{plot}_sign.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    else:
+        followup_preds = init_preds.copy()
+        init_preds = pd.read_csv(prev_pred, header=0)['amplitude'].values
+
+    preds = init_preds.copy()
+    flips = np.where(followup_preds > (.25 * init_preds))[0]
+    preds[flips] *= -1
+
+    if plot is not None:
+        init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+        followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+        preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
+        fig, axes = plt.subplots(2, 1, figsize=(24, 8))
+        axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
+        axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
+        axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
+        axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
+        axes[0].legend(frameon=False, loc='upper left')
+        axes[0].set_xlim((0, 60))
+        axes[0].set_xticks(range(0, 61))
+
+        axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
+        axes[1].legend(frameon=False, loc='upper left')
+        axes[1].set_xlim((0, 60))
+        axes[1].set_xticks(range(0, 61))
+
+        plt.tight_layout()
+        plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    return preds
+
+
 def eval_sign(
     model: tf.keras.Model,
     inputs: np.array,
@@ -723,7 +845,8 @@ def eval_sign(
         batch_size=batch_size,
         n_samples=1,
         no_phase=True,
-        desc=desc
+        desc=desc,
+        plot=plot
     )
     init_preds = np.abs(init_preds)
 
@@ -749,7 +872,6 @@ def eval_sign(
         n_samples=1,
         no_phase=True,
         desc=desc,
-        plot=plot
     )
     followup_preds = np.abs(followup_preds)
 

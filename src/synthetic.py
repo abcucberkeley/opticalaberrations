@@ -296,13 +296,13 @@ class SyntheticPSF:
         cmap = mcolors.ListedColormap(cmap)
 
         if no_phase:
-            fig, axes = plt.subplots(2, 3, figsize=(8, 11))
+            fig, axes = plt.subplots(2, 3, figsize=(8, 8))
         else:
-            fig, axes = plt.subplots(3, 3, figsize=(8, 11))
+            fig, axes = plt.subplots(3, 3, figsize=(8, 8))
 
-        m = axes[0, 0].imshow(np.max(psf, axis=0), cmap='hot', vmin=0, vmax=1)
-        axes[0, 1].imshow(np.max(psf, axis=1), cmap='hot', vmin=0, vmax=1)
-        axes[0, 2].imshow(np.max(psf, axis=2).T, cmap='hot', vmin=0, vmax=1)
+        m = axes[0, 0].imshow(np.max(psf, axis=0)**.5, cmap='hot', vmin=0, vmax=1)
+        axes[0, 1].imshow(np.max(psf, axis=1)**.5, cmap='hot', vmin=0, vmax=1)
+        axes[0, 2].imshow(np.max(psf, axis=2).T**.5, cmap='hot', vmin=0, vmax=1)
         cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
