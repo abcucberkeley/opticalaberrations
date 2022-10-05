@@ -1,3 +1,6 @@
+import concurrent
+import time
+
 import matplotlib
 matplotlib.use('TkAgg')
 
@@ -8,6 +11,8 @@ from typing import Any
 import ujson
 import numpy as np
 import pandas as pd
+import multiprocessing as mp
+from tqdm import tqdm
 from tensorflow import config as tfc
 
 import matplotlib.pyplot as plt
@@ -456,7 +461,6 @@ def predict_dataset(
         predict,
         model=model,
         dm_pattern=dm_pattern,
-        dm_state=dm_state,
         axial_voxel_size=axial_voxel_size,
         model_axial_voxel_size=model_axial_voxel_size,
         lateral_voxel_size=lateral_voxel_size,
@@ -472,12 +476,20 @@ def predict_dataset(
         prev=prev,
     )
 
-    files = []
+    jobs = []
     for file in dataset.rglob('*.tif'):
         if '_' not in file.stem:
-            files.append(file)
+            worker = partial(func, dm_state=dm_state)
+            p = mp.Process(target=worker, args=(file,))
+            p.start()
+            jobs.append(p)
+            print(f"Evaluating: {file}")
 
-    utils.multiprocess(func, jobs=files, cores=6)
+            while len(jobs) >= 6:
+                for p in jobs:
+                    if not p.is_alive():
+                        jobs.remove(p)
+                time.sleep(10)
 
 
 def compare(

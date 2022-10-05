@@ -557,6 +557,7 @@ class SyntheticPSF:
 
         if augmentation:
             noisy_psf = self._crop(noisy_psf, voxel_size=voxel_size, jitter=True)
+            # noisy_psf = noisy_psf ** np.random.uniform(low=.25, high=1.25)
         else:
             noisy_psf = self._crop(noisy_psf, voxel_size=voxel_size)
 

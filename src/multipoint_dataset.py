@@ -129,7 +129,7 @@ def sim(
                 shape=gen.psf_shape,
                 radius=sphere,
                 position=np.random.uniform(low=.1, high=.9)
-            ).astype(np.float)
+            ).astype(np.float) * gen._randuniform(snr) ** 2
         else:
             reference[
                 np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
@@ -149,6 +149,7 @@ def sim(
             sigma=gen.sigma_background_noise
         )
         noisy_img = rand_noise + img
+        # noisy_img = noisy_img ** np.random.uniform(low=.25, high=1.25)
 
         psnr = (np.max(img) / np.mean(rand_noise))
         maxcounts = np.max(noisy_img)
@@ -241,7 +242,7 @@ def create_synthetic_sample(
                 zplanes=0,
                 normed=True,
                 noise=False,
-                augmentation=True,
+                augmentation=False,
                 meta=False,
             )
             savepath = savepath / f"sphere_{sphere}" / f"npoints_{npoints}"
@@ -267,7 +268,7 @@ def create_synthetic_sample(
             zplanes=0,
             normed=True,
             noise=False,
-            augmentation=True,
+            augmentation=False,
             meta=True
         )
 

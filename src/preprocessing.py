@@ -101,7 +101,7 @@ def resize(
     resampled_vol = transform.rescale(
         vol,
         (
-            voxel_size[0],
+            sample_voxel_size[0] / voxel_size[0],
             sample_voxel_size[1] / voxel_size[1],
             sample_voxel_size[2] / voxel_size[2],
         ),

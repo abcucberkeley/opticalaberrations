@@ -27,9 +27,7 @@ NA=1.0
 
 DIFFICULTY='easy'
 DATASET='train'
-ITERS=100
 SHAPE=64
-GAMMA=1.5
 OUTDIR="/clusterfs/nvme/thayer/dataset/lattice_multipoints/${DATASET}"
 
 
@@ -97,10 +95,10 @@ do
           j="${j} --sphere ${R}"
           j="${j} --psf_type ${PSF_TYPE}"
           j="${j} --dist ${DIST}"
-          j="${j} --iters ${ITERS}"
+          j="${j} --iters 100"
           j="${j} --bimodal"
           j="${j} --noise"
-          j="${j} --gamma ${GAMMA}"
+          j="${j} --gamma 1.5"
           j="${j} --outdir ${OUTDIR}"
           j="${j} --filename ${SAMPLES[$S-1]}"
           j="${j} --modes ${MODES}"

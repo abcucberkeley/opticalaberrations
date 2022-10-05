@@ -2,6 +2,8 @@ from functools import partial
 
 import numexpr
 import pandas as pd
+from matplotlib import colors
+from matplotlib.ticker import FormatStrFormatter
 from skimage.feature import peak_local_max
 
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
@@ -22,10 +24,9 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 from tqdm import trange, tqdm
 from tifffile import imsave
-from skimage import restoration
 
 import tensorflow as tf
-from tensorflow.keras.models import load_model, save_model
+from tensorflow.keras.models import load_model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.optimizers import SGD
 from tensorflow_addons.optimizers import AdamW
@@ -777,13 +778,17 @@ def predict_sign(
         ).astype(np.int32)
 
         for p in peaks:
-            predicted_peaks[0, p[0], p[1], p[2]] = 1
+            predicted_peaks[0, p[0], p[1], p[2]] = inputs[0, p[0], p[1], p[2]]
 
         predicted_inputs = utils.fftconvolution(predicted_peaks, predicted_psf)
-        # predicted_inputs = restoration.richardson_lucy(inputs, predicted_psf, num_iter=10)
-        followup_inputs = inputs - predicted_inputs
+        ratio = inputs/predicted_inputs
+        ratio[np.where(predicted_inputs <= .01)] = 1
+        ratio = np.nan_to_num(ratio, nan=1, posinf=1, neginf=1)
+
+        followup_inputs = inputs - (inputs * ratio)
         followup_inputs[followup_inputs < 0] = 0
-        # followup_inputs = np.nan_to_num(followup_inputs, nan=0, posinf=0, neginf=0)
+        followup_inputs = np.nan_to_num(followup_inputs, nan=0, posinf=0, neginf=0)
+        followup_inputs /= np.max(followup_inputs)
 
         # followup_inputs = followup_inputs ** .5
         followup_preds, stdev = bootstrap_predict(
@@ -799,38 +804,59 @@ def predict_sign(
         followup_preds = np.abs(followup_preds)
 
         if plot is not None:
-            fig, axes = plt.subplots(5, 3, figsize=(8, 11))
+            fig, axes = plt.subplots(6, 3, figsize=(7, 11))
+            gamma = .5
+            vmin, vmax, vcenter, step = 0, 10, 1, .25
+            highcmap = plt.get_cmap('terrain_r', 256)
+            lowcmap = plt.get_cmap('Greys_r', 256)
+            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+            cmap = mcolors.ListedColormap(cmap)
+
             for i in range(3):
-                mi = axes[0, i].imshow(np.max(np.squeeze(inputs), axis=i) ** .5, vmin=0, vmax=1, cmap='magma')
-                mpoi = axes[1, i].imshow(np.max(np.squeeze(predicted_peaks) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
-                mppsf = axes[2, i].imshow(np.max(np.squeeze(predicted_psf) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
-                mp = axes[3, i].imshow(np.max(np.squeeze(predicted_inputs) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
-                mr = axes[4, i].imshow(np.max(np.squeeze(followup_inputs) ** .5, axis=i), vmin=0, vmax=1, cmap='magma')
+                mi = axes[0, i].imshow(
+                    np.max(np.squeeze(inputs), axis=i) ** gamma,
+                    vmin=0, vmax=1, cmap='magma'
+                )
+                mpoi = axes[1, i].imshow(
+                    np.max(np.squeeze(predicted_peaks) ** gamma, axis=i),
+                    vmin=0, vmax=1, cmap='hot'
+                )
+                mppsf = axes[2, i].imshow(
+                    np.max(np.squeeze(predicted_psf), axis=i) ** gamma,
+                    vmin=0, vmax=1, cmap='hot'
+                )
+                mp = axes[3, i].imshow(
+                    np.max(np.squeeze(predicted_inputs), axis=i) ** gamma,
+                    vmin=0, vmax=1, cmap='magma'
+                )
+                mr = axes[4, i].imshow(
+                    np.max(np.squeeze(ratio), axis=i),
+                    vmin=vmin, vmax=vmax, cmap=cmap,
+                )
+                mf = axes[5, i].imshow(
+                    np.max(np.squeeze(followup_inputs), axis=i) ** gamma,
+                    vmin=0, vmax=1, cmap='magma'
+                )
 
             axes[0, 0].set_ylabel('Input')
             axes[1, 0].set_ylabel('POI')
             axes[2, 0].set_ylabel('PSF')
             axes[3, 0].set_ylabel('Predicted')
-            axes[4, 0].set_ylabel('Followup inputs')
+            axes[4, 0].set_ylabel('R')
+            axes[5, 0].set_ylabel('Followup inputs')
 
-            cax = inset_axes(axes[0, -1], width="10%", height="100%", loc='center right', borderpad=-3)
-            plt.colorbar(mi, cax=cax)
-            cax = inset_axes(axes[1, -1], width="10%", height="100%", loc='center right', borderpad=-3)
-            plt.colorbar(mpoi, cax=cax)
-            cax = inset_axes(axes[2, -1], width="10%", height="100%", loc='center right', borderpad=-3)
-            plt.colorbar(mppsf, cax=cax)
-            cax = inset_axes(axes[3, -1], width="10%", height="100%", loc='center right', borderpad=-3)
-            plt.colorbar(mp, cax=cax)
-            cax = inset_axes(axes[4, -1], width="10%", height="100%", loc='center right', borderpad=-3)
-            plt.colorbar(mr, cax=cax)
+            for i, m in zip(range(6), [mi, mpoi, mppsf, mp, mr, mf]):
+                cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+                cax.set_ylabel(f"$\gamma$: {gamma:.2f}")
+                plt.colorbar(m, cax=cax)
 
             plt.savefig(f'{plot}_sign.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
         preds = init_preds.copy()
         flips = np.where(followup_preds > (.5 * init_preds))[0]
         preds[flips] *= -1
-        # preds = init_preds
-        # pass
 
     if plot is not None and followup_preds is not None:
         init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
