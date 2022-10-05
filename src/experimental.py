@@ -378,9 +378,9 @@ def predict(
         bimodal=True,
         lam_detection=wavelength,
         psf_shape=(64, 64, 64),
-        x_voxel_size=lateral_voxel_size,
-        y_voxel_size=lateral_voxel_size,
-        z_voxel_size=axial_voxel_size,
+        x_voxel_size=model_lateral_voxel_size,
+        y_voxel_size=model_lateral_voxel_size,
+        z_voxel_size=model_axial_voxel_size,
         batch_size=1,
         max_jitter=0,
         cpu_workers=-1,
@@ -477,7 +477,7 @@ def predict_dataset(
         if '_' not in file.stem:
             files.append(file)
 
-    utils.multiprocess(func, jobs=files, cores=4)
+    utils.multiprocess(func, jobs=files, cores=6)
 
 
 def compare(
