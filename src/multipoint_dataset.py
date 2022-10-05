@@ -129,19 +129,19 @@ def sim(
                 shape=gen.psf_shape,
                 radius=sphere,
                 position=np.random.uniform(low=.1, high=.9)
-            ).astype(np.float) * gen._randuniform(snr) ** 2
+            ).astype(np.float) * np.random.random()
         else:
             reference[
                 np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
                 np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
                 np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
-            ] = gen._randuniform(snr) ** 2
+            ] = np.random.random()
 
     img = fftconvolution(reference, kernel)
 
     if noise:
         snr = gen._randuniform(snr)
-        img *= snr * gen.mean_background_noise
+        img *= snr**2
 
         rand_noise = gen._random_noise(
             image=img,
@@ -151,7 +151,7 @@ def sim(
         noisy_img = rand_noise + img
         # noisy_img = noisy_img ** np.random.uniform(low=.25, high=1.25)
 
-        psnr = (np.max(img) / np.mean(rand_noise))
+        psnr = np.sqrt(np.max(noisy_img))
         maxcounts = np.max(noisy_img)
         noisy_img /= np.max(noisy_img)
     else:

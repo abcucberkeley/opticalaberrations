@@ -537,7 +537,7 @@ class SyntheticPSF:
                 lam_detection=self.lam_detection
             )
 
-        psf = self.psfgen.incoherent_psf(phi) * snr * self.mean_background_noise
+        psf = self.psfgen.incoherent_psf(phi) * snr**2
 
         rand_noise = self._random_noise(
             image=psf,
@@ -545,7 +545,7 @@ class SyntheticPSF:
             sigma=self.sigma_background_noise,
         )
         noisy_psf = rand_noise + psf if noise else psf
-        psnr = (np.max(psf) / np.mean(rand_noise))
+        psnr = np.sqrt(np.max(noisy_psf))
         maxcount = np.max(noisy_psf)
 
         noisy_psf, zplanes = self._axial_resample(
