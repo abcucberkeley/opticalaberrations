@@ -57,7 +57,8 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
 
 
 def resize(
-    vol, voxel_size: Sequence,
+    vol,
+    voxel_size: Sequence,
     crop_shape: Sequence,
     sample_voxel_size: Sequence = (.1, .1, .1),
     debug: Any = None
@@ -88,19 +89,19 @@ def resize(
         else:
             # m = cls[0].imshow(np.max(img, axis=0), cmap='hot', vmin=0, vmax=1)
             # cls[1].imshow(np.max(img, axis=1), cmap='hot', vmin=0, vmax=1)
-            # cls[2].imshow(np.max(img, axis=2).T, cmap='hot', vmin=0, vmax=1)
-            m = cls[0].imshow(img[img.shape[0] // 2, :, :], cmap='hot', vmin=0, vmax=1)
-            cls[1].imshow(img[:, img.shape[1] // 2, :], cmap='hot', vmin=0, vmax=1)
-            cls[2].imshow(img[:, :, img.shape[2] // 2].T, cmap='hot', vmin=0, vmax=1)
+            # cls[2].imshow(np.max(img, axis=2), cmap='hot', vmin=0, vmax=1)
+            m = cls[0].imshow(img[img.shape[0] // 2, :, :]**.5, cmap='hot', vmin=0, vmax=1)
+            cls[1].imshow(img[:, img.shape[1] // 2, :]**.5, cmap='hot', vmin=0, vmax=1)
+            cls[2].imshow(img[:, :, img.shape[2] // 2]**.5, cmap='hot', vmin=0, vmax=1)
 
-        cax = inset_axes(cls[2], width="10%", height="50%", loc='center right', borderpad=-2)
+        cax = inset_axes(cls[2], width="10%", height="100%", loc='center right', borderpad=-2)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
 
     resampled_vol = transform.rescale(
         vol,
         (
-            sample_voxel_size[0] / voxel_size[0],
+            voxel_size[0],
             sample_voxel_size[1] / voxel_size[1],
             sample_voxel_size[2] / voxel_size[2],
         ),
@@ -110,7 +111,7 @@ def resize(
     resized_psf = resize_with_crop_or_pad(resampled_vol, crop_shape)
 
     if debug is not None:
-        fig, axes = plt.subplots(3, 3, figsize=(8, 11))
+        fig, axes = plt.subplots(3, 3, figsize=(11, 11))
 
         axes[0, 1].set_title(f"{str(vol.shape)} @ {sample_voxel_size}")
         axes[0, 0].set_ylabel('Input (middle)')
@@ -139,6 +140,7 @@ def prep_sample(
     input_shape: tuple,
     sample_voxel_size: tuple,
     model_voxel_size: tuple,
+    debug: Any = None,
     remove_background: bool = True,
 ):
     psf = imread(path).astype(int)
@@ -155,7 +157,8 @@ def prep_sample(
         psf,
         sample_voxel_size=sample_voxel_size,
         voxel_size=model_voxel_size,
-        crop_shape=tuple(3 * [input_shape[-1]])
+        crop_shape=tuple(3 * [input_shape[-1]]),
+        debug=debug
     )
 
     return psf

@@ -34,7 +34,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--axial_voxel_size", default=.268, type=float, help='axial voxel size in microns for Z'
+        "--axial_voxel_size", default=.1, type=float, help='axial voxel size in microns for Z'
     )
 
     parser.add_argument(
@@ -51,7 +51,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--scalar", default=1.1, type=float,
+        "--scalar", default=1, type=float,
         help='scale DM actuators by an arbitrary multiplier'
     )
 
@@ -93,7 +93,26 @@ def main(args=None):
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
         import experimental
 
-    if imghdr.what(args.input) == 'tiff':
+    if args.input.is_dir():
+        experimental.predict_dataset(
+            dataset=args.input,
+            model=args.model,
+            dm_pattern=args.pattern,
+            dm_state=args.state,
+            prev=args.prev,
+            psf_type=args.psf_type,
+            axial_voxel_size=args.axial_voxel_size,
+            model_axial_voxel_size=args.model_axial_voxel_size,
+            lateral_voxel_size=args.lateral_voxel_size,
+            model_lateral_voxel_size=args.model_lateral_voxel_size,
+            wavelength=args.wavelength,
+            scalar=args.scalar,
+            threshold=args.threshold,
+            verbose=args.verbose,
+            plot=args.plot
+        )
+
+    elif imghdr.what(args.input) == 'tiff':
         experimental.predict(
             model=args.model,
             img=args.input,

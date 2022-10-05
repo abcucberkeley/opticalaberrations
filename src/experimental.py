@@ -339,8 +339,8 @@ def matlab_comparison(
 
 
 def predict(
-    model: Path,
     img: Path,
+    model: Path,
     dm_pattern: Path,
     dm_state: Any,
     axial_voxel_size: float,
@@ -366,6 +366,7 @@ def predict(
         input_shape=(64, 64, 64),
         model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        debug=Path(f'{img.parent/img.stem}_preprocessing')
     )
 
     psfgen = SyntheticPSF(
@@ -436,58 +437,47 @@ def predict_dataset(
     dataset: Path,
     model: Path,
     dm_pattern: Path,
-    batch_size: int,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
-    wavelength: float,
+    dm_state: Any,
+    axial_voxel_size: float,
+    model_axial_voxel_size: float,
+    lateral_voxel_size: float,
+    model_lateral_voxel_size: float,
+    wavelength: float = .605,
+    scalar: float = 1,
+    threshold: float = 0.0,
+    verbose: bool = False,
+    plot: bool = False,
+    psf_type: str = 'widefield',
+    n_modes: int = 60,
+    mosaic: bool = False,
+    prev: Any = None
 ):
-    model = backend.load(model)
-    model.summary()
-    input_shape = model.layers[0].input_shape[0][1]
-    voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
-
-    df = pd.read_json(dataset, orient='index')
-    psfs = np.array(
-        utils.multiprocess(
-            partial(
-                preprocessing.prep_sample,
-                image_size=input_shape,
-                voxel_size=voxel_size
-            ),
-            df.index.values,
-            desc="Preprocessing PSFs")
-    )
-    predictions, stdev = backend.bootstrap_predict(model, psfs, batch_size=batch_size)
-    df = df.iloc[:, :predictions.shape[-1]]
-
-    outdir = Path(f"{dataset.parent}/predictions")
-    outdir.mkdir(exist_ok=True, parents=True)
-
-    utils.multiprocess(
-        partial(
-            correct,
-            outdir=outdir,
-            dm_pattern=dm_pattern,
-            input_shape=input_shape,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-        ),
-        list(zip(df.values, predictions, df.index.values)),
-        desc="Correcting PSFs"
+    func = partial(
+        predict,
+        model=model,
+        dm_pattern=dm_pattern,
+        dm_state=dm_state,
+        axial_voxel_size=axial_voxel_size,
+        model_axial_voxel_size=model_axial_voxel_size,
+        lateral_voxel_size=lateral_voxel_size,
+        model_lateral_voxel_size=model_lateral_voxel_size,
+        wavelength=wavelength,
+        scalar=scalar,
+        threshold=threshold,
+        verbose=verbose,
+        plot=plot,
+        psf_type=psf_type,
+        n_modes=n_modes,
+        mosaic=mosaic,
+        prev=prev,
     )
 
-    res = pd.DataFrame.from_dict({
-        'psf': df.index.values,
-        'mae': utils.mae(df.values, predictions),
-        'mse': utils.mse(df.values, predictions),
-        'rmse': utils.rmse(df.values, predictions),
-    })
-    logger.info(res)
-    logger.info(f"MAE: {res.mae.mean()}")
-    logger.info(f"MSE: {res.mse.mean()}")
-    res.to_csv(f"{outdir}/results.csv")
+    files = []
+    for file in dataset.rglob('*.tif'):
+        if '_' not in file.stem:
+            files.append(file)
+
+    utils.multiprocess(func, jobs=files, cores=4)
 
 
 def compare(
