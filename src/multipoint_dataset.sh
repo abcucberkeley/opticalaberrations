@@ -35,14 +35,15 @@ if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   mPSNR=($(seq 1 10 41))
   xPSNR=($(seq 11 10 50))
-  SAMPLES=($(seq 1 100 500))
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
     amps1=($(seq 0 .01 .15))
     amps2=($(seq .01 .01 .15))
+    SAMPLES=($(seq 1 100 200))
   else
     MODES=60
+    SAMPLES=($(seq 1 100 500))
     difractionlimit=($(seq 0 .005 .05))
     small=($(seq .05 .0025 .1))
     large=($(seq .1 .005 .2))
