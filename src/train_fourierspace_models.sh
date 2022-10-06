@@ -5,7 +5,6 @@ DEPTH=1.0
 xVOXEL=.108
 yVOXEL=.108
 zVOXEL=.268
-MAXAMP=1
 SHAPE=64
 BATCH=1024
 LAMBDA=.510
@@ -16,8 +15,10 @@ DATA="/clusterfs/nvme/thayer/dataset/$DATASET/train/x108-y108-z268/$DIFFICULTY"
 
 if [ "$DIFFICULTY" = "easy" ];then
   MODES=15
+  MAXAMP=.2
 else
   MODES=60
+  MAXAMP=.5
 fi
 
 #python multinode_manager.py train.py --partition abc --constraint 'titan' --mem '500GB' --nodes 3 --gpus 4 --cpus 20 \
