@@ -194,7 +194,7 @@ def create_synthetic_sample(
     cpu_workers: int,
     noise: bool,
     emb: bool,
-    sphere: float
+    sphere: int
 ):
     gen = SyntheticPSF(
         order='ansi',
@@ -285,7 +285,7 @@ def create_synthetic_sample(
         savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
                               f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
-        savepath = savepath / f"npoints_{npoints}"
+        savepath = savepath / f"sphere_{sphere}" / f"npoints_{npoints}"
         savepath.mkdir(exist_ok=True, parents=True)
         savepath = savepath / filename
 
@@ -399,7 +399,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--sphere", default=0, type=float,
+        "--sphere", default=0, type=int,
         help="Radius of the reference sphere objects"
     )
 

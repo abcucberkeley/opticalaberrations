@@ -35,7 +35,7 @@ if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   mPSNR=($(seq 1 10 41))
   xPSNR=($(seq 11 10 50))
-  SAMPLES=($(seq 1 100 250))
+  SAMPLES=($(seq 1 100 300))
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
@@ -83,65 +83,65 @@ do
       do
         for N in 1 2 3 4 5
         do
-        for S in `seq 1 ${#SAMPLES[@]}`
-        do
-          while [ $(squeue -u thayeralshaabi -h -t pending -r | wc -l) -gt 500 ]
+          for S in `seq 1 ${#SAMPLES[@]}`
           do
-            sleep 10s
-          done
+            while [ $(squeue -u thayeralshaabi -h -t pending -r | wc -l) -gt 500 ]
+            do
+              sleep 10s
+            done
 
-          j="${ENV} multipoint_dataset.py ${TYPE}"
-          j="${j} --npoints ${N}"
-          j="${j} --sphere ${R}"
-          j="${j} --psf_type ${PSF_TYPE}"
-          j="${j} --dist ${DIST}"
-          j="${j} --iters 100"
-          j="${j} --bimodal"
-          j="${j} --noise"
-          j="${j} --gamma 1.5"
-          j="${j} --outdir ${OUTDIR}"
-          j="${j} --filename ${SAMPLES[$S-1]}"
-          j="${j} --modes ${MODES}"
-          j="${j} --input_shape ${SHAPE}"
-          j="${j} --min_psnr ${mPSNR[$SNR-1]}"
-          j="${j} --max_psnr ${xPSNR[$SNR-1]}"
-          j="${j} --min_amplitude ${amps1[$AMP-1]}"
-          j="${j} --max_amplitude ${amps2[$AMP-1]}"
-          j="${j} --x_voxel_size ${xVOXEL}"
-          j="${j} --y_voxel_size ${yVOXEL}"
-          j="${j} --z_voxel_size ${zVOXEL}"
-          j="${j} --na_detection ${NA}"
-          j="${j} --lam_detection ${LAMBDA}"
+            j="${ENV} multipoint_dataset.py ${TYPE}"
+            j="${j} --npoints ${N}"
+            j="${j} --sphere ${R}"
+            j="${j} --psf_type ${PSF_TYPE}"
+            j="${j} --dist ${DIST}"
+            j="${j} --iters 100"
+            j="${j} --bimodal"
+            j="${j} --noise"
+            j="${j} --gamma 1.5"
+            j="${j} --outdir ${OUTDIR}"
+            j="${j} --filename ${SAMPLES[$S-1]}"
+            j="${j} --modes ${MODES}"
+            j="${j} --input_shape ${SHAPE}"
+            j="${j} --min_psnr ${mPSNR[$SNR-1]}"
+            j="${j} --max_psnr ${xPSNR[$SNR-1]}"
+            j="${j} --min_amplitude ${amps1[$AMP-1]}"
+            j="${j} --max_amplitude ${amps2[$AMP-1]}"
+            j="${j} --x_voxel_size ${xVOXEL}"
+            j="${j} --y_voxel_size ${yVOXEL}"
+            j="${j} --z_voxel_size ${zVOXEL}"
+            j="${j} --na_detection ${NA}"
+            j="${j} --lam_detection ${LAMBDA}"
 
-          task="/usr/bin/sbatch"
-          task="${task} --qos=abc_normal"
+            task="/usr/bin/sbatch"
+            task="${task} --qos=abc_normal"
 
-          if [ "$NODES" = "all" ];then
-            if [ $(squeue -u thayeralshaabi -h -t pending -r -p dgx | wc -l) -lt 128 ];then
-              task="${task} --partition=dgx"
-            elif [ $(squeue -u thayeralshaabi -h -t pending -r -p abc_a100 | wc -l) -lt 64 ];then
-              task="${task} --partition=abc_a100"
+            if [ "$NODES" = "all" ];then
+              if [ $(squeue -u thayeralshaabi -h -t pending -r -p dgx | wc -l) -lt 128 ];then
+                task="${task} --partition=dgx"
+              elif [ $(squeue -u thayeralshaabi -h -t pending -r -p abc_a100 | wc -l) -lt 64 ];then
+                task="${task} --partition=abc_a100"
+              else
+                task="${task} --partition=abc"
+              fi
             else
               task="${task} --partition=abc"
             fi
-          else
-            task="${task} --partition=abc"
-          fi
 
-          task="${task} --cpus-per-task=1"
-          task="${task} --mem=15G"
-          task="${task} --job-name=psnr#${SNR}-amp#${AMP}-iter#${S}"
-          task="${task} --time=1:00:00"
-          task="${task} --export=ALL"
-          task="${task} --wrap=\"${j}\""
-          echo $task | bash
+            task="${task} --cpus-per-task=1"
+            task="${task} --mem=15G"
+            task="${task} --job-name=psnr#${SNR}-amp#${AMP}-iter#${S}"
+            task="${task} --time=1:00:00"
+            task="${task} --export=ALL"
+            task="${task} --wrap=\"${j}\""
+            echo $task | bash
 
-          echo "DGX : R[$(squeue -u thayeralshaabi -h -t running -r -p dgx | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p dgx | wc -l)]"
-          echo "A100: R[$(squeue -u thayeralshaabi -h -t running -r -p abc_a100 | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p abc_a100 | wc -l)]"
-          echo "ABC : R[$(squeue -u thayeralshaabi -h -t running -r -p abc | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p abc | wc -l)]"
+            echo "DGX : R[$(squeue -u thayeralshaabi -h -t running -r -p dgx | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p dgx | wc -l)]"
+            echo "A100: R[$(squeue -u thayeralshaabi -h -t running -r -p abc_a100 | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p abc_a100 | wc -l)]"
+            echo "ABC : R[$(squeue -u thayeralshaabi -h -t running -r -p abc | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p abc | wc -l)]"
 
+          done
         done
-      done
       done
     done
   done
