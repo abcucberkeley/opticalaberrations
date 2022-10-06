@@ -35,7 +35,7 @@ if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   mPSNR=($(seq 1 10 41))
   xPSNR=($(seq 11 10 50))
-  SAMPLES=($(seq 1 100 300))
+  SAMPLES=($(seq 1 100 500))
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
