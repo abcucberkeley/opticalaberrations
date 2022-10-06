@@ -18,7 +18,7 @@ NODES='all'
 #LAMBDA=.920
 #NA=1.0
 
-PSF_TYPE='/clusterfs/nvme/thayer/dataset/lattice/simulations/NAlattice0.25/HexRect/NAAnnulusMax0.60/NAsigma0.08/decon_simulation/PSF_OTF_simulation.mat'
+PSF_TYPE='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat'
 xVOXEL=.108
 yVOXEL=.108
 zVOXEL=.268
@@ -28,14 +28,14 @@ NA=1.0
 DIFFICULTY='easy'
 DATASET='train'
 SHAPE=64
-OUTDIR="/clusterfs/nvme/thayer/dataset/lattice_multipoints/${DATASET}"
+OUTDIR="/clusterfs/nvme/thayer/dataset/lattice_objects/${DIFFICULTY}/${DATASET}"
 
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   mPSNR=($(seq 10 10 41))
   xPSNR=($(seq 20 10 50))
-  SAMPLES=($(seq 1 100 1000))
+  SAMPLES=($(seq 1 100 250))
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
