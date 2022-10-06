@@ -33,8 +33,8 @@ OUTDIR="/clusterfs/nvme/thayer/dataset/lattice_objects/${DIFFICULTY}/${DATASET}"
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
-  mPSNR=($(seq 10 10 41))
-  xPSNR=($(seq 20 10 50))
+  mPSNR=($(seq 1 10 41))
+  xPSNR=($(seq 11 10 50))
   SAMPLES=($(seq 1 100 250))
 
   if [ "$DIFFICULTY" = "easy" ];then
