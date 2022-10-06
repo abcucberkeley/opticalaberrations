@@ -1,15 +1,10 @@
 from functools import partial
 
-import numexpr
-import pandas as pd
-from matplotlib import colors
-from matplotlib.ticker import FormatStrFormatter
-from skimage.feature import peak_local_max
-
-numexpr.set_num_threads(numexpr.detect_number_of_cores())
-
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('TKAgg')
+
+import numexpr
+numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
 import logging
 import sys
@@ -18,6 +13,8 @@ from pathlib import Path
 from pprint import pprint
 from typing import Any
 
+import pandas as pd
+from skimage.feature import peak_local_max
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes

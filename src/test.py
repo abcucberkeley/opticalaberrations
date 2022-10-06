@@ -5,8 +5,6 @@ import logging
 import sys
 import time
 from pathlib import Path
-from typing import Any
-
 
 import tensorflow as tf
 

@@ -1,6 +1,9 @@
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
+import matplotlib
+matplotlib.use('TKAgg')
+
 import logging
 import sys
 import time
@@ -297,7 +300,8 @@ def create_synthetic_sample(
             amps=amps,
             snr=(min_psnr, max_psnr),
             emb=emb,
-            noise=noise
+            noise=noise,
+            sphere=sphere
         )
 
 
