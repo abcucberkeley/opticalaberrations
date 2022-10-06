@@ -1,9 +1,7 @@
-import concurrent
-import time
-
 import matplotlib
 matplotlib.use('TkAgg')
 
+import time
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -12,7 +10,6 @@ import ujson
 import numpy as np
 import pandas as pd
 import multiprocessing as mp
-from tqdm import tqdm
 from tensorflow import config as tfc
 
 import matplotlib.pyplot as plt

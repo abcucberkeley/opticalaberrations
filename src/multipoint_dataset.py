@@ -163,7 +163,7 @@ def sim(
         noisy_img = img
 
     if emb:
-        noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
+        noisy_img = gen.embedding(psf=noisy_img, principle_planes=True)
 
     save_synthetic_sample(
         savepath,
