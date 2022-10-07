@@ -2,7 +2,7 @@ import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
 import matplotlib
-matplotlib.use('TKAgg')
+matplotlib.use('Agg')
 
 import logging
 import sys

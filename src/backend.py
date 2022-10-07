@@ -1,7 +1,7 @@
 from functools import partial
 
 import matplotlib
-matplotlib.use('TKAgg')
+matplotlib.use('Agg')
 
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
@@ -1085,11 +1085,11 @@ def predict(
                         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
                         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, mode='minimum')
 
-                    p = eval_sign(
+                    p = predict_sign(
                         model=m,
                         inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
                         gen=gen,
-                        ys=y,
+                        # ys=y,
                         batch_size=1,
                         plot=save_path / f'embeddings_{s}',
                     )
