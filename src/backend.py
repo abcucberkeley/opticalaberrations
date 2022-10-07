@@ -569,7 +569,7 @@ def bootstrap_predict(
             model_inputs = []
             for i in inputs:
                 emb = psfgen.embedding(
-                    psf=i,
+                    psf=np.squeeze(i),
                     plot=plot,
                     gamma=gamma,
                     no_phase=no_phase,
@@ -681,6 +681,10 @@ def bootstrap_predict(
             #         plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
             batch = np.nan_to_num(batch, nan=0, posinf=0, neginf=0)
+
+            if batch.shape[-1] != 1:
+                batch = batch[..., np.newaxis]
+
             p = model(batch, training=True).numpy()
 
             p[:, [0, 1, 2, 4]] = 0.
@@ -716,7 +720,7 @@ def predict_sign(
     desc: Any = None,
     plot: Any = None,
     verbose: bool = False,
-    threshold: float = 1e-1,
+    threshold: float = 1e-2,
     prev_pred: Any = None
 ):
     followup_preds = None
@@ -777,7 +781,15 @@ def predict_sign(
         for p in peaks:
             predicted_peaks[0, p[0], p[1], p[2]] = inputs[0, p[0], p[1], p[2]]
 
-        predicted_inputs = utils.fftconvolution(predicted_peaks, predicted_psf)
+        predicted_inputs = utils.fftconvolution(
+            np.squeeze(predicted_peaks),
+            np.squeeze(predicted_psf)
+        )
+
+        predicted_inputs = predicted_inputs[..., np.newaxis]
+        if len(predicted_inputs.shape) == 4:
+            predicted_inputs = predicted_inputs[np.newaxis, ...]
+
         ratio = inputs/predicted_inputs
         ratio[np.where(predicted_inputs <= .01)] = 1
         ratio = np.nan_to_num(ratio, nan=1, posinf=1, neginf=1)
@@ -801,7 +813,7 @@ def predict_sign(
         followup_preds = np.abs(followup_preds)
 
         if plot is not None:
-            fig, axes = plt.subplots(6, 3, figsize=(7, 11))
+            fig, axes = plt.subplots(6, 3, figsize=(6, 11))
             gamma = .5
             vmin, vmax, vcenter, step = 0, 10, 1, .25
             highcmap = plt.get_cmap('terrain_r', 256)
@@ -814,34 +826,51 @@ def predict_sign(
             for i in range(3):
                 mi = axes[0, i].imshow(
                     np.max(np.squeeze(inputs), axis=i) ** gamma,
-                    vmin=0, vmax=1, cmap='magma'
+                    vmin=0, vmax=1, cmap='magma', aspect='equal'
                 )
+                axes[0, i].set_xticks([])
+                axes[0, i].set_yticks([])
+
                 mpoi = axes[1, i].imshow(
                     np.max(np.squeeze(predicted_peaks) ** gamma, axis=i),
-                    vmin=0, vmax=1, cmap='hot'
+                    vmin=0, vmax=1, cmap='hot', aspect='equal'
                 )
+                axes[1, i].set_xticks([])
+                axes[1, i].set_yticks([])
+
                 mppsf = axes[2, i].imshow(
                     np.max(np.squeeze(predicted_psf), axis=i) ** gamma,
-                    vmin=0, vmax=1, cmap='hot'
+                    vmin=0, vmax=1, cmap='hot', aspect='equal'
                 )
+                axes[2, i].set_xticks([])
+                axes[2, i].set_yticks([])
+
                 mp = axes[3, i].imshow(
                     np.max(np.squeeze(predicted_inputs), axis=i) ** gamma,
-                    vmin=0, vmax=1, cmap='magma'
+                    vmin=0, vmax=1, cmap='magma', aspect='equal'
                 )
+                axes[3, i].set_xticks([])
+                axes[3, i].set_yticks([])
+
                 mr = axes[4, i].imshow(
                     np.max(np.squeeze(ratio), axis=i),
-                    vmin=vmin, vmax=vmax, cmap=cmap,
+                    vmin=vmin, vmax=vmax, cmap=cmap, aspect='equal'
                 )
+                axes[4, i].set_xticks([])
+                axes[4, i].set_yticks([])
+
                 mf = axes[5, i].imshow(
                     np.max(np.squeeze(followup_inputs), axis=i) ** gamma,
-                    vmin=0, vmax=1, cmap='magma'
+                    vmin=0, vmax=1, cmap='magma', aspect='equal'
                 )
+                axes[5, i].set_xticks([])
+                axes[5, i].set_yticks([])
 
             axes[0, 0].set_ylabel('Input')
             axes[1, 0].set_ylabel('POI')
             axes[2, 0].set_ylabel('PSF')
             axes[3, 0].set_ylabel('Predicted')
-            axes[4, 0].set_ylabel('R')
+            axes[4, 0].set_ylabel('Inputs/Predicted')
             axes[5, 0].set_ylabel('Followup inputs')
 
             for i, m in zip(range(6), [mi, mpoi, mppsf, mp, mr, mf]):

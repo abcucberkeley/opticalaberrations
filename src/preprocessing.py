@@ -135,16 +135,14 @@ def resize(
 
 
 def prep_sample(
-    path: Path,
+    psf: np.array,
     input_shape: tuple,
     sample_voxel_size: tuple,
     model_voxel_size: tuple,
     debug: Any = None,
     remove_background: bool = True,
 ):
-    psf = imread(path).astype(int)
     psf = psf.transpose(0, 2, 1)
-
     mode = int(st.mode(psf[psf < np.quantile(psf, .99)], axis=None).mode[0])
 
     if remove_background:

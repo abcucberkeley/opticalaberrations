@@ -17,7 +17,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.ticker as mtick
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
-from tifffile import imsave
+from tifffile import imsave, imread
 
 import utils
 import vis
@@ -363,18 +363,13 @@ def predict(
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
-    inputs = preprocessing.prep_sample(
-        img,
-        input_shape=(64, 64, 64),
-        model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
-        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-        debug=Path(f'{img.parent/img.stem}_preprocessing')
-    )
+    inputs = imread(img).astype(int)
+    esnr = np.sqrt(inputs.max()).round(0).astype(int)
 
     psfgen = SyntheticPSF(
         dtype=psf_type,
         order='ansi',
-        snr=30,
+        snr=esnr,
         n_modes=n_modes,
         gamma=1.5,
         bimodal=True,
@@ -386,6 +381,14 @@ def predict(
         batch_size=1,
         max_jitter=0,
         cpu_workers=-1,
+    )
+
+    inputs = preprocessing.prep_sample(
+        inputs,
+        input_shape=(64, 64, 64),
+        model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
+        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        debug=Path(f'{img.parent/img.stem}_preprocessing')
     )
 
     inputs = np.expand_dims(inputs, axis=0)
