@@ -181,7 +181,7 @@ class OpticalResNet(Base, ABC):
             depth_scalar=1.0,
             width_scalar=1.0,
             activation='gelu',
-            dropout_rate=0.1,
+            dropout_rate=0.05,
             mul=False,
             no_phase=False,
             mask_shape=64,

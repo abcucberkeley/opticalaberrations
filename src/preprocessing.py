@@ -10,7 +10,6 @@ from scipy import stats as st
 import pandas as pd
 import zarr
 import h5py
-import seaborn as sns
 import matplotlib.colors as mcolors
 from matplotlib import gridspec
 from tifffile import imread, imsave
@@ -226,8 +225,9 @@ def find_roi(
     lxedge = peaks['x'] >= window_size[2]//4
     hxedge = peaks['x'] <= dataset.shape[2] - window_size[2]//4
     peaks = peaks[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
-
+    ""
     if plot:
+        import seaborn as sns
         plot.mkdir(parents=True, exist_ok=True)
 
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
