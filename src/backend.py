@@ -796,6 +796,8 @@ def predict_sign(
         ratio = np.nan_to_num(ratio, nan=1, posinf=1, neginf=1)
         inputsr = inputs * ratio
         inputsr /= inputsr.max()
+        inputsr *= 30 ** 2
+        inputsr /= inputsr.max()
 
         followup_inputs = inputs - inputsr
         followup_inputs[followup_inputs < 0] = 0
@@ -1073,7 +1075,7 @@ def predict(
                         mean=gen.mean_background_noise,
                         sigma=gen.sigma_background_noise
                     )
-                    noisy_img = rand_noise + (img * psnr * gen.mean_background_noise)
+                    noisy_img = rand_noise + (img * psnr**2)
                     noisy_img /= np.max(noisy_img)
 
                     save_path = Path(

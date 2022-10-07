@@ -1217,7 +1217,7 @@ def iter_eval_bin_with_reference(
                 np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
                 np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
             ] = snr ** 2
-        reference *= snr * gen.mean_background_noise
+        reference *= snr ** 2
 
         rand_noise = gen._random_noise(
             image=reference,
