@@ -202,7 +202,7 @@ def main_function(
 
         try:
             import matplotlib
-            matplotlib.use('TkAgg')
+            matplotlib.use('Agg')
 
         except ImportError:
             logger.error('The default Qt backend does not work with LabVIEW. Please install Tkinter!')
