@@ -14,6 +14,7 @@ from pprint import pprint
 from typing import Any
 
 import pandas as pd
+from scipy import stats as st
 from skimage.feature import peak_local_max
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -793,8 +794,10 @@ def predict_sign(
         ratio = inputs/predicted_inputs
         ratio[np.where(predicted_inputs <= .01)] = 1
         ratio = np.nan_to_num(ratio, nan=1, posinf=1, neginf=1)
+        inputsr = inputs * ratio
+        inputsr /= inputsr.max()
 
-        followup_inputs = inputs - (inputs * ratio)
+        followup_inputs = inputs - inputsr
         followup_inputs[followup_inputs < 0] = 0
         followup_inputs = np.nan_to_num(followup_inputs, nan=0, posinf=0, neginf=0)
         followup_inputs /= np.max(followup_inputs)

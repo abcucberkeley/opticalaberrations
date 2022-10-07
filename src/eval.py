@@ -890,11 +890,12 @@ def eval_bin(
     z_voxel_size,
     wavelength,
     input_coverage,
-    no_phase
+    no_phase,
+    modes,
 ):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
-        n_modes=60,
+        n_modes=modes,
         amplitude_ranges=(-.25, .25),
         psf_shape=(64, 64, 64),
         dtype=psf_type,
@@ -947,6 +948,7 @@ def evalheatmap(
     distribution: str = '/',
     samplelimit: Any = None,
     max_amplitude: float = .25,
+    modes: int = 60,
     na: float = 1.0,
     psf_type: str = 'widefield',
     x_voxel_size: float = .15,
@@ -992,6 +994,7 @@ def evalheatmap(
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
         wavelength=wavelength,
+        modes=modes,
         input_coverage=input_coverage,
         no_phase=no_phase
     )
@@ -1091,11 +1094,12 @@ def iter_eval_bin(
     z_voxel_size,
     wavelength,
     input_coverage,
-    no_phase
+    no_phase,
+    modes
 ):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
-        n_modes=60,
+        n_modes=modes,
         amplitude_ranges=(-.25, .25),
         psf_shape=(64, 64, 64),
         dtype=psf_type,
@@ -1183,11 +1187,12 @@ def iter_eval_bin_with_reference(
     z_voxel_size: float = .6,
     wavelength: float = .605,
     num_neighbor: int = 5,
-    radius: float = .45
+    radius: float = .45,
+    modes: int = 60,
 ):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
-        n_modes=60,
+        n_modes=modes,
         amplitude_ranges=(-.25, .25),
         psf_shape=(64, 64, 64),
         dtype=psf_type,
@@ -1308,6 +1313,7 @@ def iterheatmap(
     distribution: str = '/',
     samplelimit: Any = None,
     max_amplitude: float = .25,
+    modes: int = 60,
     na: float = 1.0,
     psf_type: str = 'widefield',
     x_voxel_size: float = .15,
@@ -1362,6 +1368,7 @@ def iterheatmap(
             z_voxel_size=z_voxel_size,
             wavelength=wavelength,
             input_coverage=input_coverage,
+            modes=modes,
             no_phase=no_phase
         )
     else:
@@ -1373,6 +1380,7 @@ def iterheatmap(
             psnr=psnr,
             samples=samplelimit,
             na=na,
+            modes=modes,
             psf_type=psf_type,
             x_voxel_size=x_voxel_size,
             y_voxel_size=y_voxel_size,
@@ -1837,6 +1845,7 @@ def evaldistbin(
     modelpath: Path,
     psnr: tuple = (15, 20),
     na: float = 1.0,
+    modes: int = 60,
     psf_type: str = 'widefield',
     x_voxel_size: float = .108,
     y_voxel_size: float = .108,
@@ -1847,7 +1856,7 @@ def evaldistbin(
 
     model = backend.load(modelpath)
     gen = SyntheticPSF(
-        n_modes=60,
+        n_modes=modes,
         amplitude_ranges=(-.25, .25),
         psf_shape=(64, 64, 64),
         dtype=psf_type,
@@ -1897,6 +1906,7 @@ def distheatmap(
     distribution: str = '/',
     max_amplitude: float = .25,
     na: float = 1.0,
+    modes: int = 60,
     psf_type: str = 'widefield',
     x_voxel_size: float = .15,
     y_voxel_size: float = .15,
@@ -1951,6 +1961,7 @@ def distheatmap(
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
+        modes=modes,
         wavelength=wavelength,
         no_phase=no_phase,
     )
@@ -2045,6 +2056,7 @@ def evalpoints(
     distribution: str = '/',
     samplelimit: Any = None,
     max_amplitude: float = .25,
+    modes: int = 60,
     na: float = 1.0,
     psf_type: str = 'widefield',
     x_voxel_size: float = .15,
@@ -2080,6 +2092,7 @@ def evalpoints(
         psnr=psnr,
         samples=samplelimit,
         na=na,
+        modes=modes,
         psf_type=psf_type,
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,

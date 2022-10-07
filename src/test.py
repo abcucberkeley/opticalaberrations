@@ -54,7 +54,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--max_amplitude", default=.25, type=float, help="max amplitude for the zernike coefficients"
+        "--max_amplitude", default=.5, type=float, help="max amplitude for the zernike coefficients"
     )
 
     parser.add_argument(
@@ -79,6 +79,10 @@ def parse_args(args):
 
     parser.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+
+    parser.add_argument(
+        "--modes", default=60, type=int, help="number of modes to describe aberration"
     )
 
     parser.add_argument(
@@ -139,6 +143,7 @@ def main(args=None):
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
+            modes=args.modes,
             na=args.na,
             input_coverage=args.input_coverage,
             no_phase=args.no_phase,
@@ -156,6 +161,7 @@ def main(args=None):
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
+            modes=args.modes,
             na=args.na,
             input_coverage=args.input_coverage,
             no_phase=args.no_phase,
@@ -172,6 +178,7 @@ def main(args=None):
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
             num_neighbor=args.num_neighbor,
+            modes=args.modes,
             na=args.na,
             no_phase=args.no_phase,
         )
@@ -189,6 +196,7 @@ def main(args=None):
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
+            modes=args.modes,
             input_coverage=args.input_coverage,
             num_neighbor=args.num_neighbor,
         )
