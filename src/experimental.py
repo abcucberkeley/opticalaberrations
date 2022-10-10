@@ -395,7 +395,7 @@ def predict(
 
     model = backend.load(model, mosaic=mosaic)
 
-    p = backend.predict_sign(
+    p = backend.booststrap_predict_sign(
         model,
         inputs=inputs,
         batch_size=1,

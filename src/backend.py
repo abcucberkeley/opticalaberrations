@@ -718,176 +718,163 @@ def predict_sign(
     inputs: np.array,
     gen: SyntheticPSF,
     batch_size: int,
+    init_preds: Any = None,
     desc: Any = None,
     plot: Any = None,
     verbose: bool = False,
     threshold: float = 1e-2,
-    prev_pred: Any = None
 ):
-    followup_preds = None
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
 
-    # inputs = inputs ** .5
-    init_preds, stdev = bootstrap_predict(
-        model,
-        inputs,
-        psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
-        no_phase=True,
-        desc=desc,
-        verbose=verbose,
-        threshold=threshold,
-        plot=plot
-    )
-    init_preds = np.abs(init_preds)
-
-    if prev_pred is not None:
-        followup_preds = init_preds.copy()
-        init_preds = pd.read_csv(prev_pred, header=0)['amplitude'].values
-
-        preds = init_preds.copy()
-        flips = np.where(followup_preds > (.5 * init_preds))[0]
-        preds[flips] *= -1
-    else:
-        g = partial(
-            gen.single_psf,
-            zplanes=0,
-            normed=True,
-            noise=False,
-            augmentation=False,
-            meta=False
-        )
-
-        predicted_psf = g(init_preds)[np.newaxis, ...]
-        predicted_peaks = np.zeros_like(inputs)
-
-        peaks = peak_local_max(
-            np.squeeze(inputs),
-            min_distance=10,
-            threshold_rel=.33,
-            exclude_border=False,
-            p_norm=2,
-            num_peaks=10
-        ).astype(np.int32)
-
-        for p in peaks:
-            predicted_peaks[0, p[0], p[1], p[2]] = inputs[0, p[0], p[1], p[2]]
-
-        predicted_inputs = utils.fftconvolution(
-            np.squeeze(predicted_peaks),
-            np.squeeze(predicted_psf)
-        )
-
-        predicted_inputs = predicted_inputs[..., np.newaxis]
-        if len(predicted_inputs.shape) == 4:
-            predicted_inputs = predicted_inputs[np.newaxis, ...]
-
-        ratio = inputs/predicted_inputs
-        ratio[np.where(predicted_inputs <= .01)] = 1
-        ratio = np.nan_to_num(ratio, nan=1, posinf=1, neginf=1)
-        inputsr = inputs * ratio
-        inputsr /= inputsr.max()
-        inputsr *= 30 ** 2
-        inputsr /= inputsr.max()
-
-        followup_inputs = inputs - inputsr
-        followup_inputs[followup_inputs < 0] = 0
-        followup_inputs = np.nan_to_num(followup_inputs, nan=0, posinf=0, neginf=0)
-        followup_inputs /= np.max(followup_inputs)
-
-        # followup_inputs = followup_inputs ** .5
-        followup_preds, stdev = bootstrap_predict(
+    if init_preds is None:
+        init_preds, stdev = bootstrap_predict(
             model,
-            followup_inputs,
+            inputs,
             psfgen=gen,
             batch_size=batch_size,
             n_samples=1,
             no_phase=True,
             desc=desc,
             verbose=verbose,
+            threshold=threshold,
+            plot=plot
         )
-        followup_preds = np.abs(followup_preds)
+        init_preds = np.abs(init_preds)
 
-        if plot is not None:
-            fig, axes = plt.subplots(6, 3, figsize=(6, 11))
-            gamma = .5
-            vmin, vmax, vcenter, step = 0, 10, 1, .25
-            highcmap = plt.get_cmap('terrain_r', 256)
-            lowcmap = plt.get_cmap('Greys_r', 256)
-            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            cmap = mcolors.ListedColormap(cmap)
+    g = partial(
+        gen.single_psf,
+        zplanes=0,
+        normed=True,
+        noise=False,
+        augmentation=False,
+        meta=False
+    )
 
-            for i in range(3):
-                mi = axes[0, i].imshow(
-                    np.max(np.squeeze(inputs), axis=i) ** gamma,
-                    vmin=0, vmax=1, cmap='magma', aspect='equal'
-                )
-                axes[0, i].set_xticks([])
-                axes[0, i].set_yticks([])
+    predicted_psf = g(init_preds)[np.newaxis, ...]
+    predicted_peaks = np.zeros_like(inputs)
 
-                mpoi = axes[1, i].imshow(
-                    np.max(np.squeeze(predicted_peaks) ** gamma, axis=i),
-                    vmin=0, vmax=1, cmap='hot', aspect='equal'
-                )
-                axes[1, i].set_xticks([])
-                axes[1, i].set_yticks([])
+    peaks = peak_local_max(
+        np.squeeze(inputs),
+        min_distance=10,
+        threshold_rel=.33,
+        exclude_border=False,
+        p_norm=2,
+        num_peaks=10
+    ).astype(np.int32)
 
-                mppsf = axes[2, i].imshow(
-                    np.max(np.squeeze(predicted_psf), axis=i) ** gamma,
-                    vmin=0, vmax=1, cmap='hot', aspect='equal'
-                )
-                axes[2, i].set_xticks([])
-                axes[2, i].set_yticks([])
+    for p in peaks:
+        predicted_peaks[0, p[0], p[1], p[2]] = inputs[0, p[0], p[1], p[2]]
 
-                mp = axes[3, i].imshow(
-                    np.max(np.squeeze(predicted_inputs), axis=i) ** gamma,
-                    vmin=0, vmax=1, cmap='magma', aspect='equal'
-                )
-                axes[3, i].set_xticks([])
-                axes[3, i].set_yticks([])
+    predicted_inputs = utils.fftconvolution(
+        np.squeeze(predicted_peaks),
+        np.squeeze(predicted_psf)
+    )
 
-                mr = axes[4, i].imshow(
-                    np.max(np.squeeze(ratio), axis=i),
-                    vmin=vmin, vmax=vmax, cmap=cmap, aspect='equal'
-                )
-                axes[4, i].set_xticks([])
-                axes[4, i].set_yticks([])
+    predicted_inputs = predicted_inputs[..., np.newaxis]
+    if len(predicted_inputs.shape) == 4:
+        predicted_inputs = predicted_inputs[np.newaxis, ...]
 
-                mf = axes[5, i].imshow(
-                    np.max(np.squeeze(followup_inputs), axis=i) ** gamma,
-                    vmin=0, vmax=1, cmap='magma', aspect='equal'
-                )
-                axes[5, i].set_xticks([])
-                axes[5, i].set_yticks([])
+    predicted_inputs *= 30 ** 2
+    rand_noise = gen._random_noise(
+        image=predicted_inputs,
+        mean=gen.mean_background_noise,
+        sigma=gen.sigma_background_noise
+    )
+    predicted_inputs += rand_noise
+    predicted_inputs /= predicted_inputs.max()
 
-            axes[0, 0].set_ylabel('Input')
-            axes[1, 0].set_ylabel('POI')
-            axes[2, 0].set_ylabel('PSF')
-            axes[3, 0].set_ylabel('Predicted')
-            axes[4, 0].set_ylabel('Inputs/Predicted')
-            axes[5, 0].set_ylabel('Followup inputs')
+    # ratio = inputs * predicted_inputs
+    ratio = predicted_inputs / inputs
+    ratio[np.where(predicted_inputs <= .1)] = 1
+    ratio = np.nan_to_num(ratio, nan=1, posinf=1, neginf=1)
 
-            for i, m in zip(range(6), [mi, mpoi, mppsf, mp, mr, mf]):
-                cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-3)
-                cax.set_ylabel(f"$\gamma$: {gamma:.2f}")
-                plt.colorbar(m, cax=cax)
+    followup_inputs = inputs - (inputs * ratio)
+    followup_inputs[followup_inputs < 0] = 0
+    followup_inputs = np.nan_to_num(followup_inputs, nan=0, posinf=0, neginf=0)
+    followup_inputs /= np.max(followup_inputs)
 
-            plt.savefig(f'{plot}_sign.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    followup_preds, stdev = bootstrap_predict(
+        model,
+        followup_inputs,
+        psfgen=gen,
+        batch_size=batch_size,
+        n_samples=1,
+        no_phase=True,
+        desc=desc,
+        verbose=verbose,
+    )
+    followup_preds = np.abs(followup_preds)
 
-        preds = init_preds.copy()
-        flips = np.where(followup_preds > (.5 * init_preds))[0]
-        preds[flips] *= -1
+    if plot is not None:
+        fig, axes = plt.subplots(6, 3, figsize=(6, 11))
+        gamma = .5
+        vmin, vmax, vcenter, step = 0, 3, 1, .01
+        highcmap = plt.get_cmap('terrain_r', 256)
+        lowcmap = plt.get_cmap('Greys_r', 256)
+        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+        cmap = mcolors.ListedColormap(cmap)
+
+        for i in range(3):
+            mi = axes[0, i].imshow(
+                np.max(np.squeeze(inputs), axis=i) ** gamma,
+                vmin=0, vmax=1, cmap='magma', aspect='equal'
+            )
+            axes[0, i].set_xticks([])
+            axes[0, i].set_yticks([])
+
+            mpoi = axes[1, i].imshow(
+                np.max(np.squeeze(predicted_peaks) ** gamma, axis=i),
+                vmin=0, vmax=1, cmap='hot', aspect='equal'
+            )
+            axes[1, i].set_xticks([])
+            axes[1, i].set_yticks([])
+
+            mppsf = axes[2, i].imshow(
+                np.max(np.squeeze(predicted_psf), axis=i) ** gamma,
+                vmin=0, vmax=1, cmap='hot', aspect='equal'
+            )
+            axes[2, i].set_xticks([])
+            axes[2, i].set_yticks([])
+
+            mp = axes[3, i].imshow(
+                np.max(np.squeeze(predicted_inputs), axis=i) ** gamma,
+                vmin=0, vmax=1, cmap='magma', aspect='equal'
+            )
+            axes[3, i].set_xticks([])
+            axes[3, i].set_yticks([])
+
+            mr = axes[4, i].imshow(
+                np.max(np.squeeze(ratio), axis=i),
+                vmin=vmin, vmax=vmax, cmap=cmap, aspect='equal'
+            )
+            axes[4, i].set_xticks([])
+            axes[4, i].set_yticks([])
+
+            mf = axes[5, i].imshow(
+                np.max(np.squeeze(followup_inputs), axis=i) ** gamma,
+                vmin=0, vmax=1, cmap='magma', aspect='equal'
+            )
+            axes[5, i].set_xticks([])
+            axes[5, i].set_yticks([])
+
+        axes[0, 0].set_ylabel('Input')
+        axes[1, 0].set_ylabel('POI')
+        axes[2, 0].set_ylabel('PSF')
+        axes[3, 0].set_ylabel('Predicted')
+        axes[4, 0].set_ylabel('Delta')
+        axes[5, 0].set_ylabel('Followup inputs')
+
+        for i, m in zip(range(6), [mi, mpoi, mppsf, mp, mr, mf]):
+            cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+            cax.set_ylabel(f"$\gamma$: {gamma:.2f}")
+            plt.colorbar(m, cax=cax)
+
+        plt.savefig(f'{plot}_sign.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    preds = init_preds.copy()
+    flips = np.where(followup_preds > (.4 * init_preds))[0]
+    preds[flips] *= -1
 
     if plot is not None and followup_preds is not None:
         init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
@@ -910,6 +897,61 @@ def predict_sign(
 
         plt.tight_layout()
         plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    return preds, followup_inputs
+
+
+def booststrap_predict_sign(
+    model: tf.keras.Model,
+    inputs: np.array,
+    gen: SyntheticPSF,
+    batch_size: int,
+    desc: Any = None,
+    plot: Any = None,
+    verbose: bool = False,
+    threshold: float = 1e-2,
+    prev_pred: Any = None
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    if prev_pred is not None:
+        followup_preds, stdev = bootstrap_predict(
+            model,
+            inputs,
+            psfgen=gen,
+            batch_size=batch_size,
+            n_samples=1,
+            no_phase=True,
+            desc=desc,
+            verbose=verbose,
+            threshold=threshold,
+            plot=plot
+        )
+        followup_preds = np.abs(followup_preds)
+        init_preds = pd.read_csv(prev_pred, header=0)['amplitude'].values
+
+        preds = init_preds.copy()
+        flips = np.where(followup_preds > (.5 * init_preds))[0]
+        preds[flips] *= -1
+    else:
+        preds, followup_inputs = predict_sign(
+            model=model,
+            inputs=inputs,
+            gen=gen,
+            batch_size=batch_size,
+            desc=desc,
+            plot=plot,
+            verbose=verbose,
+            threshold=threshold
+        )
 
     return preds
 
@@ -1087,11 +1129,11 @@ def predict(
                         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
                         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, mode='minimum')
 
-                    p = eval_sign(
+                    p = booststrap_predict_sign(
                         model=m,
                         inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
                         gen=gen,
-                        ys=y,
+                        # ys=y,
                         batch_size=1,
                         plot=save_path / f'embeddings_{s}',
                     )
