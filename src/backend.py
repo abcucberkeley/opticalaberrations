@@ -922,36 +922,25 @@ def booststrap_predict_sign(
         'axes.autolimit_mode': 'round_numbers'
     })
 
-    if prev_pred is not None:
-        followup_preds, stdev = bootstrap_predict(
-            model,
-            inputs,
-            psfgen=gen,
-            batch_size=batch_size,
-            n_samples=1,
-            no_phase=True,
-            desc=desc,
-            verbose=verbose,
-            threshold=threshold,
-            plot=plot
-        )
-        followup_preds = np.abs(followup_preds)
-        init_preds = pd.read_csv(prev_pred, header=0)['amplitude'].values
+    preds, stdev = bootstrap_predict(
+        model,
+        inputs,
+        psfgen=gen,
+        batch_size=batch_size,
+        n_samples=1,
+        no_phase=True,
+        desc=desc,
+        verbose=verbose,
+        threshold=threshold,
+        plot=plot
+    )
+    preds = np.abs(preds)
 
+    if prev_pred is not None:
+        init_preds = pd.read_csv(prev_pred, header=0)['amplitude'].values
+        flips = np.where(preds > (.4 * init_preds))[0]
+        init_preds[flips] *= -1
         preds = init_preds.copy()
-        flips = np.where(followup_preds > (.5 * init_preds))[0]
-        preds[flips] *= -1
-    else:
-        preds, followup_inputs = predict_sign(
-            model=model,
-            inputs=inputs,
-            gen=gen,
-            batch_size=batch_size,
-            desc=desc,
-            plot=plot,
-            verbose=verbose,
-            threshold=threshold
-        )
 
     return preds
 
@@ -1006,11 +995,11 @@ def eval_sign(
     preds = init_preds.copy()
 
     if ys.shape[0] == 1:
-        flips = np.where(followup_preds > (.5 * init_preds))[0]
+        flips = np.where(followup_preds > (.4 * init_preds))[0]
         preds[flips] *= -1
     else:
         for i in range(ys.shape[0]):
-            flips = np.where(followup_preds[i] > (.5 * init_preds[i]))[0]
+            flips = np.where(followup_preds[i] > (.4 * init_preds[i]))[0]
             preds[i, flips] *= -1
 
             if plot == True:

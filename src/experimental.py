@@ -356,7 +356,7 @@ def predict(
     plot: bool = False,
     psf_type: str = 'widefield',
     n_modes: int = 60,
-    mosaic: bool = False,
+    mosaic: bool = True,
     prev: Any = None
 ):
     physical_devices = tfc.list_physical_devices('GPU')
