@@ -22,6 +22,7 @@ tf.get_logger().setLevel(logging.ERROR)
 def get_image(path):
     with TiffFile(path) as tif:
         img = tif.asarray()
+        tif.close()
 
         if np.isnan(np.sum(img)):
             logger.error("NaN!")
@@ -34,6 +35,7 @@ def get_sample(path, no_phase=False):
     path = Path(str(path.numpy(), "utf-8"))
     with open(path.with_suffix('.json')) as f:
         hashtbl = ujson.load(f)
+        f.close()
 
     img = get_image(path)
     amps = hashtbl['zernikes']

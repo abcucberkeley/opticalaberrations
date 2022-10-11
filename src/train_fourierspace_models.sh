@@ -29,13 +29,6 @@ python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 
 --name new/$DATASET/$DIFFICULTY/opticaltransformer
 
 
-DATASET='lattice_multipoints'
-DATA="/clusterfs/nvme/thayer/dataset/$DATASET/train/x108-y108-z268/"
-python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
---task "--network opticaltransformer $PHASE --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
---taskname p32-p16-p8x2 \
---name new/$DATASET/opticaltransformer
-
 ### Optimal settings
 ## Widefield
 #--task "--network opticaltransformer --multinode --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \

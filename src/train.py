@@ -22,7 +22,7 @@ def parse_args(args):
     train_parser = cli.argparser()
 
     train_parser.add_argument(
-        "--network", default='opticalresnet', type=str, help="codename for target network to train"
+        "--network", default='opticaltransformer', type=str, help="codename for target network to train"
     )
 
     train_parser.add_argument(
@@ -34,11 +34,11 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--batch_size", default=256, type=int, help="number of images per batch"
+        "--batch_size", default=512, type=int, help="number of images per batch"
     )
 
     train_parser.add_argument(
-        "--patch_size", default='8-8-8-8', help="patch size for transformer-based model"
+        "--patch_size", default='32-16-8-8', help="patch size for transformer-based model"
     )
 
     train_parser.add_argument(
@@ -46,19 +46,19 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--psf_type", default='widefield', help="type of the desired PSF"
+        "--psf_type", default='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat', help="type of the desired PSF"
     )
 
     train_parser.add_argument(
-        "--x_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
+        "--x_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
     )
 
     train_parser.add_argument(
-        "--y_voxel_size", default=.15, type=float, help='lateral voxel size in microns for Y'
+        "--y_voxel_size", default=.108, type=float, help='lateral voxel size in microns for Y'
     )
 
     train_parser.add_argument(
-        "--z_voxel_size", default=.6, type=float, help='axial voxel size in microns for Z'
+        "--z_voxel_size", default=.268, type=float, help='axial voxel size in microns for Z'
     )
 
     train_parser.add_argument(
@@ -66,7 +66,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--modes", default=15, type=int, help="number of modes to describe aberration"
+        "--modes", default=60, type=int, help="number of modes to describe aberration"
     )
 
     train_parser.add_argument(
@@ -94,7 +94,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--wavelength", default=.605, type=float, help='wavelength in microns'
+        "--wavelength", default=.510, type=float, help='wavelength in microns'
     )
 
     train_parser.add_argument(
@@ -124,7 +124,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--opt", default='Adam', type=str, help='optimizer to use for training'
+        "--opt", default='AdamW', type=str, help='optimizer to use for training'
     )
 
     train_parser.add_argument(
