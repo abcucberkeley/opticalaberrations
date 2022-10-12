@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
@@ -9,9 +8,11 @@ import logging
 import sys
 import time
 import ujson
+from typing import Any
 from pathlib import Path
 from tifffile import imread, imsave
 import numpy as np
+import scipy.stats as st
 import raster_geometry as rg
 from tqdm import trange
 
@@ -62,7 +63,7 @@ def sim(
     snr: tuple,
     emb: bool = True,
     noise: bool = True,
-    random_zoom: bool = True,
+    random_zoom: Any = None,
     radius: float = .3,
     sphere: float = 0,
 ):
@@ -83,21 +84,6 @@ def sim(
 
     img = fftconvolution(reference, kernel)
 
-    if random_zoom:
-        crop = int(np.random.uniform(low=32, high=64))
-        img = resize_with_crop_or_pad(img, crop_shape=[crop]*3)
-        img = resize_with_crop_or_pad(img, crop_shape=gen.psf_shape, mode='minimum')
-
-        # fig, axes = plt.subplots(2, 3, figsize=(8, 4))
-        # for i in range(3):
-        #     axes[0, i].imshow(np.max(img, axis=i), vmin=0, vmax=1, cmap='hot')
-        #     axes[0, i].axis('off')
-        #     axes[1, i].imshow(np.max(cropped, axis=i), vmin=0, vmax=1, cmap='hot')
-        #     axes[1, i].axis('off')
-        # axes[0, 1].set_title('Original')
-        # axes[1, 1].set_title(f'Random zoom ({crop})')
-        # plt.savefig(f'{savepath}_crop.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
     if noise:
         snr = gen._randuniform(snr)
         img *= snr**2
@@ -117,6 +103,14 @@ def sim(
         psnr = np.mean(np.array(snr))
         maxcounts = np.max(img)
         noisy_img = img
+
+    if random_zoom is not None:
+        mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
+        print(mode)
+        crop = int(np.random.uniform(low=random_zoom, high=64))
+        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[crop]*3)
+        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
+        print(noisy_img.shape)
 
     if emb:
         noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
@@ -151,6 +145,7 @@ def create_synthetic_sample(
     refractive_index: float,
     na_detection: float,
     cpu_workers: int,
+    random_zoom: Any,
     noise: bool,
     emb: bool,
     sphere: int
@@ -222,7 +217,7 @@ def create_synthetic_sample(
 
     else:
         # theoretical kernel without noise
-        kernel, amps, _, _, _ = gen.single_psf(
+        kernel, amps, phi, _, _ = gen.single_psf(
             phi=(min_amplitude, max_amplitude),
             zplanes=0,
             normed=True,
@@ -256,6 +251,7 @@ def create_synthetic_sample(
             amps=amps,
             snr=(min_psnr, max_psnr),
             emb=emb,
+            random_zoom=random_zoom,
             noise=noise,
             sphere=sphere
         )
@@ -309,6 +305,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--random_zoom", default=None, type=int,
+    )
+
+    parser.add_argument(
         "--modes", default=60, type=int,
         help="number of modes to describe aberration"
     )
@@ -334,7 +334,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--gamma", default=1.5, type=float,
+        "--gamma", default=.75, type=float,
         help="exponent for the powerlaw distribution"
     )
 
@@ -397,6 +397,7 @@ def main(args=None):
             input_shape=args.input_shape,
             psf_type=args.psf_type,
             distribution=args.dist,
+            random_zoom=args.random_zoom,
             gamma=args.gamma,
             bimodal=args.bimodal,
             min_amplitude=args.min_amplitude,

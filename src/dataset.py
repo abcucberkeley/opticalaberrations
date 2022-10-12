@@ -236,7 +236,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--gamma", default=1.5, type=float,
+        "--gamma", default=.75, type=float,
         help="exponent for the powerlaw distribution"
     )
 

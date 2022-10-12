@@ -51,16 +51,16 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
 
     psfargs = dict(
         n_modes=60,
-        dtype='../examples/lattice/lattice_PSF_simulation.mat',
-        distribution='dirichlet',
+        dtype='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        distribution='powerlaw',
         bimodal=True,
-        gamma=1.5,
+        gamma=.75,
         lam_detection=wavelength,
         amplitude_ranges=(0, 1),
         psf_shape=(32, 32, 32),
         x_voxel_size=.108,
         y_voxel_size=.108,
-        z_voxel_size=.268,
+        z_voxel_size=.2,
         batch_size=batch_size,
         snr=30,
         max_jitter=1,
@@ -75,7 +75,7 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     difractionlimit = np.arange(0, 0.055, .005).round(3)  # 10 bins
     small = np.arange(.05, .1, .0025).round(3)            # 20 bins
     large = np.arange(.1, .2, .005).round(3)              # 20 bins
-    extreme = np.arange(.2, .42, .02).round(3)            # 10 bins
+    extreme = np.arange(.2, .52, .02).round(3)            # 20 bins
     min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
     max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
 

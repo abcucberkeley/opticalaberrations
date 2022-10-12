@@ -38,7 +38,7 @@ class SyntheticPSF:
         dtype='widefield',
         distribution='dirichlet',
         bimodal=False,
-        gamma=1.5,
+        gamma=.75,
         n_modes=15,
         order='ansi',
         batch_size=1,
@@ -254,8 +254,7 @@ class SyntheticPSF:
 
     def na_mask(self):
         mask = self.iotf
-        threshold = np.nanpercentile(mask.flatten(), 55)
-
+        threshold = np.nanpercentile(mask.flatten(), 65)
         # logger.info(f'NA-threshold: {threshold}')
         mask = np.where(mask < threshold, mask, 1.)
         mask = np.where(mask >= threshold, mask, 0.)
@@ -283,7 +282,7 @@ class SyntheticPSF:
         if log10:
             vmin, vmax, vcenter, step = -2, 2, 0, .1
         else:
-            vmin, vmax, vcenter, step = 0, 2, 1, .1
+            vmin, vmax, vcenter, step = 0, 3, 1, .1
 
         highcmap = plt.get_cmap('YlOrRd', 256)
         lowcmap = plt.get_cmap('terrain', 256)

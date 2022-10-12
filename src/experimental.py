@@ -371,7 +371,7 @@ def predict(
         order='ansi',
         snr=esnr,
         n_modes=n_modes,
-        gamma=1.5,
+        gamma=.75,
         bimodal=True,
         lam_detection=wavelength,
         psf_shape=(64, 64, 64),

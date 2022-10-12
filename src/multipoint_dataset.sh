@@ -30,25 +30,26 @@ DIFFICULTY='easy'
 DATASET='train'
 SHAPE=64
 OUTDIR="/clusterfs/nvme/thayer/dataset/yumb_lattice_objects/${DIFFICULTY}/${DATASET}"
+RZOOM=48
 
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
-  mPSNR=($(seq 1 10 41))
-  xPSNR=($(seq 10 10 50))
+  mPSNR=($(seq 11 10 51))
+  xPSNR=($(seq 20 10 60))
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
-    amps1=($(seq 0 .01 .15))
-    amps2=($(seq .01 .01 .15))
-    SAMPLES=($(seq 1 100 200))
+    amps1=($(seq 0 .01 .25))
+    amps2=($(seq .01 .01 .25))
+    SAMPLES=($(seq 1 100 300))
   else
     MODES=60
-    SAMPLES=($(seq 1 100 500))
+    SAMPLES=($(seq 1 100 300))
     difractionlimit=($(seq 0 .005 .05))
     small=($(seq .05 .0025 .1))
     large=($(seq .1 .005 .2))
-    extreme=($(seq .2 .02 .4))
+    extreme=($(seq .2 .02 .5))
     amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
     echo ${amps[@]}
     echo ${#amps[@]}
@@ -64,12 +65,12 @@ else
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
-    amps1=($(seq 0 .025 .15))
-    amps2=($(seq .025 .025 .15))
+    amps1=($(seq 0 .025 .25))
+    amps2=($(seq .025 .025 .25))
   else
     MODES=60
-    amps1=($(seq 0 .025 .4))
-    amps2=($(seq .025 .025 .4))
+    amps1=($(seq 0 .025 .5))
+    amps2=($(seq .025 .025 .5))
   fi
 
 fi
@@ -81,7 +82,7 @@ do
   do
     for AMP in `seq 1 ${#amps1[@]}`
     do
-      for R in 0 1 2
+      for R in 0 1
       do
         for N in 1 2 3 4 5
         do
@@ -97,6 +98,7 @@ do
             j="${j} --sphere ${R}"
             j="${j} --psf_type ${PSF_TYPE}"
             j="${j} --dist ${DIST}"
+            j="${j} --random_zoom ${RZOOM}"
             j="${j} --iters 100"
             j="${j} --bimodal"
             j="${j} --noise"

@@ -43,7 +43,7 @@ class Wavefront:
         modes=60,
         lam_detection=.605,
         distribution=None,
-        gamma=1.5,
+        gamma=.75,
         bimodal=True,
     ):
         self.ranges = amplitudes
