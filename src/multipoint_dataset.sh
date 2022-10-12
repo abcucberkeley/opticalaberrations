@@ -102,7 +102,7 @@ do
             j="${j} --iters 100"
             j="${j} --bimodal"
             j="${j} --noise"
-            j="${j} --gamma 1.5"
+            j="${j} --gamma .75"
             j="${j} --outdir ${OUTDIR}"
             j="${j} --filename ${SAMPLES[$S-1]}"
             j="${j} --modes ${MODES}"
