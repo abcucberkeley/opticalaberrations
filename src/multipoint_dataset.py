@@ -106,11 +106,9 @@ def sim(
 
     if random_zoom is not None:
         mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
-        print(mode)
         crop = int(np.random.uniform(low=random_zoom, high=64))
         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[crop]*3)
         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
-        print(noisy_img.shape)
 
     if emb:
         noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
