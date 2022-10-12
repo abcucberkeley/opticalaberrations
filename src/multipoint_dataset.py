@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
@@ -52,67 +53,6 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
         )
 
 
-def diffraction_limited_sim(
-    savepath: Path,
-    gen: SyntheticPSF,
-    npoints: int,
-    kernel: np.array,
-    amps: np.array,
-    snr: tuple,
-    emb: bool = True,
-    noise: bool = True,
-    radius: float = .45
-):
-    img = np.zeros([3*s for s in kernel.shape])
-    width = [(i // 2) for i in kernel.shape]
-    center = kernel.shape
-
-    for i in range(npoints):
-        p = [
-            np.random.randint(int(kernel.shape[0]*(.5 - radius)), int(kernel.shape[0]*(.5 + radius))),
-            np.random.randint(int(kernel.shape[1]*(.5 - radius)), int(kernel.shape[1]*(.5 + radius))),
-            np.random.randint(int(kernel.shape[2]*(.5 - radius)), int(kernel.shape[2]*(.5 + radius)))
-        ]
-
-        img[
-            (p[0]+center[0])-width[0]:(p[0]+center[0])+width[0],
-            (p[1]+center[1])-width[1]:(p[1]+center[1])+width[1],
-            (p[2]+center[2])-width[2]:(p[2]+center[2])+width[2],
-        ] += kernel
-
-    img = resize_with_crop_or_pad(img, crop_shape=kernel.shape)
-
-    if noise:
-        snr = gen._randuniform(snr)
-        img *= snr * gen.mean_background_noise
-
-        rand_noise = gen._random_noise(
-            image=img,
-            mean=gen.mean_background_noise,
-            sigma=gen.sigma_background_noise
-        )
-        noisy_img = rand_noise + img
-
-        psnr = (np.max(img) / np.mean(rand_noise))
-        maxcounts = np.max(noisy_img)
-        noisy_img /= np.max(noisy_img)
-    else:
-        psnr = np.mean(np.array(snr))
-        maxcounts = np.max(img)
-        noisy_img = img
-
-    if emb:
-        noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
-
-    save_synthetic_sample(
-        savepath,
-        noisy_img,
-        amps=amps,
-        snr=psnr,
-        maxcounts=maxcounts,
-    )
-
-
 def sim(
     savepath: Path,
     gen: SyntheticPSF,
@@ -122,7 +62,8 @@ def sim(
     snr: tuple,
     emb: bool = True,
     noise: bool = True,
-    radius: float = .45,
+    random_zoom: bool = True,
+    radius: float = .3,
     sphere: float = 0,
 ):
     reference = np.zeros(gen.psf_shape)
@@ -131,7 +72,7 @@ def sim(
             reference += rg.sphere(
                 shape=gen.psf_shape,
                 radius=sphere,
-                position=np.random.uniform(low=.1, high=.9)
+                position=np.random.uniform(low=.2, high=.8)
             ).astype(np.float) * np.random.random()
         else:
             reference[
@@ -142,13 +83,28 @@ def sim(
 
     img = fftconvolution(reference, kernel)
 
+    if random_zoom:
+        crop = int(np.random.uniform(low=32, high=64))
+        img = resize_with_crop_or_pad(img, crop_shape=[crop]*3)
+        img = resize_with_crop_or_pad(img, crop_shape=gen.psf_shape, mode='minimum')
+
+        # fig, axes = plt.subplots(2, 3, figsize=(8, 4))
+        # for i in range(3):
+        #     axes[0, i].imshow(np.max(img, axis=i), vmin=0, vmax=1, cmap='hot')
+        #     axes[0, i].axis('off')
+        #     axes[1, i].imshow(np.max(cropped, axis=i), vmin=0, vmax=1, cmap='hot')
+        #     axes[1, i].axis('off')
+        # axes[0, 1].set_title('Original')
+        # axes[1, 1].set_title(f'Random zoom ({crop})')
+        # plt.savefig(f'{savepath}_crop.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
     if noise:
         snr = gen._randuniform(snr)
         img *= snr**2
 
         rand_noise = gen._random_noise(
             image=img,
-            mean=gen.mean_background_noise,
+            mean=int(np.random.uniform(low=0, high=10)),
             sigma=gen.sigma_background_noise
         )
         noisy_img = rand_noise + img
@@ -163,7 +119,7 @@ def sim(
         noisy_img = img
 
     if emb:
-        noisy_img = gen.embedding(psf=noisy_img, principle_planes=True)
+        noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
 
     save_synthetic_sample(
         savepath,
@@ -272,7 +228,7 @@ def create_synthetic_sample(
             normed=True,
             noise=False,
             augmentation=False,
-            meta=True
+            meta=True,
         )
 
         outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"

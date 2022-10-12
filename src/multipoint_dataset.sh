@@ -18,17 +18,18 @@ NODES='abc'
 #LAMBDA=.920
 #NA=1.0
 
-PSF_TYPE='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat'
+#PSF_TYPE='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat'
+PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 xVOXEL=.108
 yVOXEL=.108
-zVOXEL=.268
+zVOXEL=.200
 LAMBDA=.510
 NA=1.0
 
 DIFFICULTY='easy'
 DATASET='train'
 SHAPE=64
-OUTDIR="/clusterfs/nvme/thayer/dataset/lattice_objects/${DIFFICULTY}/${DATASET}"
+OUTDIR="/clusterfs/nvme/thayer/dataset/yumb_lattice_objects/${DIFFICULTY}/${DATASET}"
 
 
 if [ "$DATASET" = "train" ];then

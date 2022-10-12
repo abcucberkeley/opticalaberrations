@@ -1,13 +1,12 @@
-addpath(genpath('/home/supernova/storage/ABCcode/XR_Repository'));
+addpath(genpath('~/fiona/ABCcode/XR_Repository'));
 
 %% parameters
-rt = '/home/supernova/nvme/thayer/dataset/lattice/';
+rt = '~/Gitlab/opticalaberrations/lattice/';
 b = load([rt, 'plane wave sets for common lattices 1-7-22.mat']);
-figure_name = 'covid'
+lattice_name = 'fish'
 algorithm = 'original';
 xyPol = [1, 1, 0];
-crop_factor = 0.1;
-switch figure_name
+switch lattice_name
     case 'covid'
         lattice_descrip = 'HexRect';
         PW =  b.PW_HexRect;
@@ -15,6 +14,14 @@ switch figure_name
         NAlattice = .25;
         NAsigma = .08;
         NAannulus = [0.6, 0.2];
+        crop_factor = 0.1;
+    case 'fish'
+        lattice_descrip = 'YuMB';
+        PW =  b.PW_Sq45;
+        algorithm = 'new';
+        NAlattice = .35;
+        NAsigma = .1;
+        NAannulus = [0.4, 0.3];
         crop_factor = 0.1;
 end
 NAdet = 1.0;

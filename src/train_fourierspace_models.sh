@@ -1,17 +1,18 @@
 #!/bin/bash
 
-PSF_TYPE='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat'
+#PSF_TYPE='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat'
+PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DEPTH=1.0
 xVOXEL=.108
 yVOXEL=.108
-zVOXEL=.268
+zVOXEL=.200
 SHAPE=64
 BATCH=1024
 LAMBDA=.510
 DIFFICULTY='hard'
 PHASE='--no_phase'
-DATASET='lattice_objects'
-DATA="/clusterfs/nvme/thayer/dataset/$DATASET/$DIFFICULTY/train/x108-y108-z268/"
+DATASET='yumb_lattice_objects'
+DATA="/clusterfs/nvme/thayer/dataset/$DATASET/$DIFFICULTY/train/x108-y108-z200/"
 
 if [ "$DIFFICULTY" = "easy" ];then
   MODES=15

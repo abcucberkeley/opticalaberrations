@@ -50,7 +50,7 @@ class SyntheticPSF:
         lam_detection=.605,
         refractive_index=1.33,
         snr=(10, 50),
-        mean_background_noise=100,
+        mean_background_noise=0,
         sigma_background_noise=4,
         max_jitter=1,
         cpu_workers=1
@@ -254,10 +254,7 @@ class SyntheticPSF:
 
     def na_mask(self):
         mask = self.iotf
-        if self.dtype == 'widefield':
-            threshold = np.nanpercentile(mask.flatten(), 55)
-        else:
-            threshold = np.nanpercentile(mask.flatten(), 80)
+        threshold = np.nanpercentile(mask.flatten(), 55)
 
         # logger.info(f'NA-threshold: {threshold}')
         mask = np.where(mask < threshold, mask, 1.)
