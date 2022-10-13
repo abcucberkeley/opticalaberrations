@@ -63,7 +63,7 @@ def sim(
     snr: tuple,
     emb: bool = True,
     noise: bool = True,
-    random_zoom: Any = None,
+    random_crop: Any = None,
     radius: float = .3,
     sphere: float = 0,
 ):
@@ -104,9 +104,9 @@ def sim(
         maxcounts = np.max(img)
         noisy_img = img
 
-    if random_zoom is not None:
+    if random_crop is not None:
         mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
-        crop = int(np.random.uniform(low=random_zoom, high=64))
+        crop = int(np.random.uniform(low=random_crop, high=gen.psf_shape[0]+1))
         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[crop]*3)
         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
 
@@ -143,7 +143,7 @@ def create_synthetic_sample(
     refractive_index: float,
     na_detection: float,
     cpu_workers: int,
-    random_zoom: Any,
+    random_crop: Any,
     noise: bool,
     emb: bool,
     sphere: int
@@ -249,7 +249,7 @@ def create_synthetic_sample(
             amps=amps,
             snr=(min_psnr, max_psnr),
             emb=emb,
-            random_zoom=random_zoom,
+            random_crop=random_crop,
             noise=noise,
             sphere=sphere
         )
@@ -303,7 +303,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--random_zoom", default=None, type=int,
+        "--random_crop", default=None, type=int,
     )
 
     parser.add_argument(
@@ -395,7 +395,7 @@ def main(args=None):
             input_shape=args.input_shape,
             psf_type=args.psf_type,
             distribution=args.dist,
-            random_zoom=args.random_zoom,
+            random_crop=args.random_crop,
             gamma=args.gamma,
             bimodal=args.bimodal,
             min_amplitude=args.min_amplitude,

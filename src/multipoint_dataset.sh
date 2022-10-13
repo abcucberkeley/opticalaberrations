@@ -30,7 +30,7 @@ DIFFICULTY='easy'
 DATASET='train'
 SHAPE=64
 OUTDIR="/clusterfs/nvme/thayer/dataset/yumb_lattice_objects/${DIFFICULTY}/${DATASET}"
-RZOOM=48
+RCROP=32
 
 
 if [ "$DATASET" = "train" ];then
@@ -98,7 +98,7 @@ do
             j="${j} --sphere ${R}"
             j="${j} --psf_type ${PSF_TYPE}"
             j="${j} --dist ${DIST}"
-            j="${j} --random_zoom ${RZOOM}"
+            j="${j} --random_crop ${RCROP}"
             j="${j} --iters 100"
             j="${j} --bimodal"
             j="${j} --noise"

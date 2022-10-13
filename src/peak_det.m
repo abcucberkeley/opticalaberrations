@@ -1,11 +1,11 @@
-addpath(genpath('/home/supernova/fiona/ABCcode/XR_GU_Repository'));
-addpath(genpath('/home/supernova/fiona/ABCcode/XR_Repository'));
+addpath(genpath('~/fiona/ABCcode/XR_GU_Repository'));
+addpath(genpath('~/fiona/ABCcode/XR_Repository'));
 
 %% Step 1: load data
 %  rt is the root directory of data, you may provide root directory. If it
 %  is not provided, the load condition data function will prompt out to
 %  choose the root directory interactively.
-rt = '/home/supernova/nvme/thayer/covid/exp1_corp/';
+rt = '~/nvme/thayer/covid/exp1_corp/';
 % follow the below when asking for inputs (They may be different for your own experiments):
 % Enter the number of channels: 2
 % click folder name 'ch1' when it first prompts out.
@@ -17,7 +17,7 @@ data = XR_loadConditionData3D(rt, 'MovieSelector', 'exp', 'dz', 0.5, 'PixelSize'
 %% Step 2: Estimate psf sigmas if there are calibration files and they are not available (optional)
 % The sigmas of psfs are estimated separately. The filename is provided as
 % input for the estimation.
-ch1_psf_filename = '/home/supernova/nvme/thayer/covid/PSF/DS/488nm_CamB_ch0_hexrect_NA0p25_dNAa0p08_500nmstep.tif';
+ch1_psf_filename = '~/nvme/thayer/covid/PSF/DS/488nm_CamB_ch0_hexrect_NA0p25_dNAa0p08_500nmstep.tif';
 [sigmaXY_ch1, sigmaZ_ch1] = GU_estimateSigma3D(ch1_psf_filename, []);
 % ch2_psf_filename = '';
 % [sigmaXY_ch2, sigmaZ_ch2] = GU_estimateSigma3D(ch2_psf_filename, []);
