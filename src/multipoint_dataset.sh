@@ -29,6 +29,7 @@ NA=1.0
 DIFFICULTY='easy'
 DATASET='train'
 SHAPE=64
+RCROP=32
 OUTDIR="/clusterfs/nvme/thayer/dataset/yumb_lattice_objects/${DIFFICULTY}/${DATASET}"
 
 
