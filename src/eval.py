@@ -19,7 +19,7 @@ from skimage import transform, filters
 from tifffile import imsave
 from preprocessing import find_roi, resize_with_crop_or_pad
 from astropy import convolution
-from skimage.restoration import richardson_lucy
+from scipy import stats as st
 
 import utils
 import vis
@@ -918,8 +918,9 @@ def eval_bin(
 
     for inputs, ys in val.batch(100):
         if input_coverage != 1.:
+            mode = np.abs(st.mode(inputs, axis=None).mode[0])
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
-            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, mode='minimum')
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, constant_values=mode)
 
         preds = backend.eval_sign(
             model=model,

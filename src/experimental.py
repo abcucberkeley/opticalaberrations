@@ -106,7 +106,7 @@ def points_detection(
     call([job], shell=True)
 
 
-def correct(
+def predict_rois(
     img: Path,
     model: Path,
     dm_pattern: Path,
