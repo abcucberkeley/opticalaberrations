@@ -171,6 +171,7 @@ def main(args=None):
             modelpath=args.model,
             datadir=args.datadir,
             distribution=args.dist,
+            samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,
             psf_type=args.psf_type,
             wavelength=args.wavelength,

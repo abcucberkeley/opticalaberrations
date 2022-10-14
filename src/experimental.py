@@ -11,13 +11,7 @@ from typing import Any, Sequence, Union
 import numpy as np
 from scipy import stats as st
 import pandas as pd
-import zarr
-import h5py
 from tifffile import imread, imsave
-from scipy.spatial import KDTree
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-
 
 import utils
 import vis
@@ -117,6 +111,7 @@ def predict_rois(
     model: Path,
     dm_pattern: Path,
     dm_state: Any,
+    peaks: Any,
     axial_voxel_size: float,
     model_axial_voxel_size: float,
     lateral_voxel_size: float,
@@ -124,36 +119,130 @@ def predict_rois(
     wavelength: float = .605,
     scalar: float = 1,
     threshold: float = 0.0,
-    verbose: bool = False,
     plot: bool = False,
     psf_type: str = 'widefield',
     n_modes: int = 60,
     mosaic: bool = True,
-    prev: Any = None
+    prev: Any = None,
 ):
     physical_devices = tfc.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
+    sample = imread(img).astype(int)
+    esnr = np.sqrt(sample.max()).round(0).astype(int)
+
+    sample = preprocessing.prep_sample(
+        sample,
+        crop_shape=None,
+        model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
+        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        debug=Path(f'{img.parent / img.stem}_preprocessing'),
+        remove_background=True,
+    )
+
+    psfgen = SyntheticPSF(
+        dtype=psf_type,
+        order='ansi',
+        snr=esnr,
+        n_modes=n_modes,
+        gamma=.75,
+        bimodal=True,
+        lam_detection=wavelength,
+        psf_shape=(64, 64, 64),
+        x_voxel_size=model_lateral_voxel_size,
+        y_voxel_size=model_lateral_voxel_size,
+        z_voxel_size=model_axial_voxel_size,
+        batch_size=1,
+        max_jitter=0,
+        cpu_workers=-1,
+    )
+
+    model = backend.load(model, mosaic=mosaic)
+
+    rois = preprocessing.find_roi(
+        sample,
+        peaks=peaks,
+        window_size=(64, 64, 64),
+        plot=Path(f'{img.parent / img.stem}_rois'),
+        num_peaks=20,
+        min_dist=1,
+        max_dist=None,
+        min_intensity=100,
+        max_neighbor=5,
+        voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+    )
+
+    # for w in range(rois.shape[0]):
+    #     inputs = rois[w]
+    #     imsave(f'{img.parent / img.stem}_roi_{w}.tif', inputs)
+    #
+    #     inputs = preprocessing.prep_sample(
+    #         inputs,
+    #         crop_shape=(64, 64, 64),
+    #         model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
+    #         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+    #         debug=Path(f'{img.parent / img.stem}_preprocessing')
+    #     )
+    #
+    #     inputs = np.expand_dims(inputs, axis=0)
+    #     p = backend.booststrap_predict_sign(
+    #         model,
+    #         inputs=inputs,
+    #         batch_size=1,
+    #         threshold=threshold,
+    #         verbose=False,
+    #         gen=psfgen,
+    #         prev_pred=prev,
+    #         plot=Path(f'{img.parent / img.stem}') if plot else None,
+    #     )
+    #
+    #     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
+    #     dm = zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar)
+    #     dm = pd.DataFrame(dm)
+    #     dm.to_csv(f"{img.parent / img.stem}_corrected_actuators.csv", index=False, header=False)
+    #
+    #     p = Wavefront(p, order='ansi', lam_detection=wavelength)
+    #     coffs = [
+    #         {'n': z.n, 'm': z.m, 'amplitude': a}
+    #         for z, a in p.zernikes.items()
+    #     ]
+    #     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
+    #     coffs.index.name = 'ansi'
+    #     coffs.to_csv(f"{img.parent / img.stem}_zernike_coffs.csv")
+    #
+    #     pupil_displacement = np.array(p.wave(size=100), dtype='float32')
+    #     imsave(f"{img.parent / img.stem}_pred_pupil_displacement.tif", pupil_displacement)
+    #
+    #     if plot:
+    #         vis.prediction(
+    #             psf=np.squeeze(inputs),
+    #             pred=p,
+    #             dm_before=dm_state,
+    #             dm_after=dm.values[:, 0],
+    #             wavelength=wavelength,
+    #             save_path=Path(f'{img.parent / img.stem}_pred'),
+    #         )
+
 
 def predict(
-    img: Path,
-    model: Path,
-    dm_pattern: Path,
-    dm_state: Any,
-    axial_voxel_size: float,
-    model_axial_voxel_size: float,
-    lateral_voxel_size: float,
-    model_lateral_voxel_size: float,
-    wavelength: float = .605,
-    scalar: float = 1,
-    threshold: float = 0.0,
-    verbose: bool = False,
-    plot: bool = False,
-    psf_type: str = 'widefield',
-    n_modes: int = 60,
-    mosaic: bool = True,
-    prev: Any = None
+        img: Path,
+        model: Path,
+        dm_pattern: Path,
+        dm_state: Any,
+        axial_voxel_size: float,
+        model_axial_voxel_size: float,
+        lateral_voxel_size: float,
+        model_lateral_voxel_size: float,
+        wavelength: float = .605,
+        scalar: float = 1,
+        threshold: float = 0.0,
+        verbose: bool = False,
+        plot: bool = False,
+        psf_type: str = 'widefield',
+        n_modes: int = 60,
+        mosaic: bool = True,
+        prev: Any = None
 ):
     physical_devices = tfc.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
@@ -181,10 +270,10 @@ def predict(
 
     inputs = preprocessing.prep_sample(
         inputs,
-        input_shape=(64, 64, 64),
+        crop_shape=(64, 64, 64),
         model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-        debug=Path(f'{img.parent/img.stem}_preprocessing')
+        debug=Path(f'{img.parent / img.stem}_preprocessing')
     )
 
     inputs = np.expand_dims(inputs, axis=0)
@@ -199,13 +288,13 @@ def predict(
         verbose=verbose,
         gen=psfgen,
         prev_pred=prev,
-        plot=Path(f'{img.parent/img.stem}') if plot else None,
+        plot=Path(f'{img.parent / img.stem}') if plot else None,
     )
 
     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
     dm = zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar)
     dm = pd.DataFrame(dm)
-    dm.to_csv(f"{img.parent/img.stem}_corrected_actuators.csv", index=False, header=False)
+    dm.to_csv(f"{img.parent / img.stem}_corrected_actuators.csv", index=False, header=False)
 
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
     if verbose:
@@ -218,10 +307,10 @@ def predict(
     ]
     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
     coffs.index.name = 'ansi'
-    coffs.to_csv(f"{img.parent/img.stem}_zernike_coffs.csv")
+    coffs.to_csv(f"{img.parent / img.stem}_zernike_coffs.csv")
 
     pupil_displacement = np.array(p.wave(size=100), dtype='float32')
-    imsave(f"{img.parent/img.stem}_pred_pupil_displacement.tif", pupil_displacement)
+    imsave(f"{img.parent / img.stem}_pred_pupil_displacement.tif", pupil_displacement)
 
     if plot:
         vis.prediction(
@@ -230,28 +319,28 @@ def predict(
             dm_before=dm_state,
             dm_after=dm.values[:, 0],
             wavelength=wavelength,
-            save_path=Path(f'{img.parent/img.stem}_pred'),
+            save_path=Path(f'{img.parent / img.stem}_pred'),
         )
 
 
 def predict_dataset(
-    dataset: Path,
-    model: Path,
-    dm_pattern: Path,
-    dm_state: Any,
-    axial_voxel_size: float,
-    model_axial_voxel_size: float,
-    lateral_voxel_size: float,
-    model_lateral_voxel_size: float,
-    wavelength: float = .605,
-    scalar: float = 1,
-    threshold: float = 0.0,
-    verbose: bool = False,
-    plot: bool = False,
-    psf_type: str = 'widefield',
-    n_modes: int = 60,
-    mosaic: bool = False,
-    prev: Any = None
+        dataset: Path,
+        model: Path,
+        dm_pattern: Path,
+        dm_state: Any,
+        axial_voxel_size: float,
+        model_axial_voxel_size: float,
+        lateral_voxel_size: float,
+        model_lateral_voxel_size: float,
+        wavelength: float = .605,
+        scalar: float = 1,
+        threshold: float = 0.0,
+        verbose: bool = False,
+        plot: bool = False,
+        psf_type: str = 'widefield',
+        n_modes: int = 60,
+        mosaic: bool = False,
+        prev: Any = None
 ):
     func = partial(
         predict,

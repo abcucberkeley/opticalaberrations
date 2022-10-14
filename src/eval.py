@@ -918,7 +918,7 @@ def eval_bin(
 
     for inputs, ys in val.batch(100):
         if input_coverage != 1.:
-            mode = np.abs(st.mode(inputs, axis=None).mode[0])
+            mode = np.mean([np.abs(st.mode(s, axis=None).mode[0]) for s in inputs])
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
             inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, constant_values=mode)
 
@@ -1136,8 +1136,9 @@ def iter_eval_bin(
 
     for k in range(1, niter+1):
         if input_coverage != 1.:
+            mode = np.mean([np.abs(st.mode(s, axis=None).mode[0]) for s in inputs])
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
-            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, mode='minimum')
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, constant_values=mode)
 
         preds = backend.eval_sign(
             model=model,
@@ -1844,6 +1845,7 @@ def eval_roi(
 def evaldistbin(
     datapath: Path,
     modelpath: Path,
+    samplelimit: Any = None,
     psnr: tuple = (15, 20),
     na: float = 1.0,
     modes: int = 60,
@@ -1853,6 +1855,7 @@ def evaldistbin(
     z_voxel_size: float = .268,
     wavelength: float = .510,
     no_phase: bool = False,
+    input_coverage: float = 1.0
 ):
 
     model = backend.load(modelpath)
@@ -1871,7 +1874,7 @@ def evaldistbin(
         cpu_workers=-1,
     )
 
-    val = data_utils.load_dataset(datapath)
+    val = data_utils.load_dataset(datapath, samplelimit=samplelimit)
     func = partial(data_utils.get_sample, no_phase=no_phase)
     val = val.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
 
@@ -1879,6 +1882,11 @@ def evaldistbin(
     y_pred = pd.DataFrame([], columns=['dist', 'sample'])
 
     for inputs, ys in val.batch(100):
+        if input_coverage != 1.:
+            mode = np.mean([np.abs(st.mode(s, axis=None).mode[0]) for s in inputs])
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, constant_values=mode)
+
         preds = backend.eval_sign(
             model=model,
             inputs=inputs.numpy(),
@@ -1916,8 +1924,10 @@ def distheatmap(
     no_phase: bool = False,
     psnr: tuple = (20, 30),
     num_neighbor: Any = None,
+    samplelimit: Any = None,
+    input_coverage: float = 1.0,
 ):
-    savepath = modelpath / f'distheatmaps_neighbor_{num_neighbor}'
+    savepath = modelpath / f'distheatmaps_neighbor_{num_neighbor}_{input_coverage}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -1956,6 +1966,7 @@ def distheatmap(
     job = partial(
         evaldistbin,
         modelpath=modelpath,
+        samplelimit=samplelimit,
         na=na,
         psnr=psnr,
         psf_type=psf_type,
@@ -1965,6 +1976,7 @@ def distheatmap(
         modes=modes,
         wavelength=wavelength,
         no_phase=no_phase,
+        input_coverage=input_coverage,
     )
     preds, ys = zip(*utils.multiprocess(job, classes))
     y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)

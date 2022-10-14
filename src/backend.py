@@ -517,8 +517,6 @@ def bootstrap_predict(
     desc: str = 'MiniBatch-probabilistic-predictions',
     plot: Any = None,
     gamma: float = 1.0,
-    return_embeddings: bool = False,
-    rolling_embedding: bool = False,
     no_phase: bool = False
 ):
     """
@@ -542,53 +540,46 @@ def bootstrap_predict(
     def batch_generator(arr, s):
         for k in range(0, len(arr), s):
             yield arr[k:k + s]
-    
-    if rolling_embedding:
-        model_inputs = np.stack([
+
+
+    if resize is not None:
+        inputs = np.stack([
             np.expand_dims(
-                psfgen.rolling_embedding(psf=np.squeeze(i), plot=plot, strides=16),
+                preprocessing.resize(
+                    np.squeeze(i),
+                    crop_shape=psfgen.psf_shape,
+                    voxel_size=psfgen.voxel_size,
+                    sample_voxel_size=resize,
+                    debug=plot,
+                ),
                 axis=-1
             ) for i in inputs
         ], axis=0)
+
+    # check z-axis to compute embeddings for fourier models
+    if model.input_shape[1] != inputs.shape[1]:
+        model_inputs = []
+        for i in inputs:
+            emb = psfgen.embedding(
+                psf=np.squeeze(i),
+                plot=plot,
+                gamma=gamma,
+                no_phase=no_phase,
+                principle_planes=True
+            )
+
+            if no_phase and model.input_shape[1] == 6:
+                phase_mask = np.zeros((3, model.input_shape[2], model.input_shape[3]))
+                emb = np.concatenate([emb, phase_mask], axis=0)
+            elif model.input_shape[1] == 3:
+                emb = emb[:3]
+
+            model_inputs.append(emb)
+
+        model_inputs = np.stack(model_inputs, axis=0)
     else:
-        if resize is not None:
-            inputs = np.stack([
-                np.expand_dims(
-                    preprocessing.resize(
-                        np.squeeze(i),
-                        crop_shape=psfgen.psf_shape,
-                        voxel_size=psfgen.voxel_size,
-                        sample_voxel_size=resize,
-                        debug=plot,
-                    ),
-                    axis=-1
-                ) for i in inputs
-            ], axis=0)
-
-        # check z-axis to compute embeddings for fourier models
-        if model.input_shape[1] != inputs.shape[1]:
-            model_inputs = []
-            for i in inputs:
-                emb = psfgen.embedding(
-                    psf=np.squeeze(i),
-                    plot=plot,
-                    gamma=gamma,
-                    no_phase=no_phase,
-                    principle_planes=True
-                )
-
-                if no_phase and model.input_shape[1] == 6:
-                    phase_mask = np.zeros((3, model.input_shape[2], model.input_shape[3]))
-                    emb = np.concatenate([emb, phase_mask], axis=0)
-                elif model.input_shape[1] == 3:
-                    emb = emb[:3]
-
-                model_inputs.append(emb)
-
-            model_inputs = np.stack(model_inputs, axis=0)
-        else:
-            # pass raw PSFs to the model
-            model_inputs = inputs
+        # pass raw PSFs to the model
+        model_inputs = inputs
 
     preds = None
     total = n_samples * (len(model_inputs) // batch_size)
@@ -707,10 +698,7 @@ def bootstrap_predict(
     sigma = np.std(preds, axis=-1)
     sigma = sigma.flatten() if sigma.shape[0] == 1 else sigma
 
-    if return_embeddings:
-        return mu, sigma, model_inputs
-    else:
-        return mu, sigma
+    return mu, sigma
 
 
 def predict_sign(
@@ -1101,6 +1089,8 @@ def predict(
                     else:
                         img = psf
 
+                    img[img < 0] = 0
+                    img = np.nan_to_num(img, nan=0)
                     rand_noise = gen._random_noise(
                         image=img,
                         mean=gen.mean_background_noise,
@@ -1115,14 +1105,15 @@ def predict(
                     save_path.mkdir(exist_ok=True, parents=True)
 
                     if input_coverage != 1.:
+                        mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
                         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
-                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, mode='minimum')
+                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
 
-                    p = booststrap_predict_sign(
+                    p = eval_sign(
                         model=m,
                         inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
                         gen=gen,
-                        # ys=y,
+                        ys=y,
                         batch_size=1,
                         plot=save_path / f'embeddings_{s}',
                     )

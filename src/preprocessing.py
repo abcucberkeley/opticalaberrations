@@ -57,7 +57,7 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
 def resize(
     vol,
     voxel_size: Sequence,
-    crop_shape: Sequence,
+    crop_shape: Any,
     sample_voxel_size: Sequence = (.1, .1, .1),
     debug: Any = None
 ):
@@ -106,7 +106,10 @@ def resize(
         order=3,
         anti_aliasing=True,
     )
-    resized_psf = resize_with_crop_or_pad(resampled_vol, crop_shape)
+    if crop_shape is not None:
+        resized_vol = resize_with_crop_or_pad(resampled_vol, crop_shape)
+    else:
+        resized_vol = resampled_vol
 
     if debug is not None:
         fig, axes = plt.subplots(3, 3, figsize=(11, 11))
@@ -120,44 +123,46 @@ def resize(
         plot(axes[1, :], resampled_vol)
         imsave(f'{debug}_resampled_psf.tif', resampled_vol)
 
-        axes[2, 1].set_title(str(resized_psf.shape))
+        axes[2, 1].set_title(str(resized_vol.shape))
         axes[2, 0].set_ylabel('Resized (middle)')
-        plot(axes[2, :], resized_psf)
-        imsave(f'{debug}_resized_psf.tif', resized_psf)
+        plot(axes[2, :], resized_vol)
+        imsave(f'{debug}_resized_psf.tif', resized_vol)
 
         if debug == True:
             plt.show()
         else:
             plt.savefig(f'{debug}_rescaling.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-    return resized_psf
+    return resized_vol
 
 
 def prep_sample(
-    psf: np.array,
-    input_shape: tuple,
+    sample: np.array,
+    crop_shape: Any,
     sample_voxel_size: tuple,
     model_voxel_size: tuple,
     debug: Any = None,
     remove_background: bool = True,
 ):
-    psf = psf.transpose(0, 2, 1)
-    mode = int(st.mode(psf[psf < np.quantile(psf, .99)], axis=None).mode[0])
+    sample = sample.transpose(0, 2, 1)
+    mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
 
     if remove_background:
-        psf -= mode
-        psf[psf < 0] = 0
+        sample -= mode
+        sample[sample < 0] = 0
 
-    psf = psf / np.nanmax(psf)
-    psf = resize(
-        psf,
-        sample_voxel_size=sample_voxel_size,
-        voxel_size=model_voxel_size,
-        crop_shape=tuple(3 * [input_shape[-1]]),
-        debug=debug
-    )
+    sample = sample / np.nanmax(sample)
 
-    return psf
+    if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
+        sample = resize(
+            sample,
+            sample_voxel_size=sample_voxel_size,
+            voxel_size=model_voxel_size,
+            crop_shape=crop_shape,
+            debug=debug
+        )
+
+    return sample
 
 
 def find_roi(
@@ -165,12 +170,12 @@ def find_roi(
     window_size: tuple = (64, 64, 64),
     plot: Any = None,
     num_peaks: Any = None,
-    min_dist: Any = 16,
+    min_dist: Any = 1,
     max_dist: Any = None,
     min_intensity: Any = 100,
     peaks: Any = None,
-    num_neighbor: int = 5,
-    voxel_size: tuple = (.268, .108, .108),
+    max_neighbor: int = 5,
+    voxel_size: tuple = (.200, .108, .108),
     file_order: str = 'c-order'
 ):
 
@@ -225,18 +230,19 @@ def find_roi(
     lxedge = peaks['x'] >= window_size[2]//4
     hxedge = peaks['x'] <= dataset.shape[2] - window_size[2]//4
     peaks = peaks[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
-    ""
+
     if plot:
         import seaborn as sns
         plot.mkdir(parents=True, exist_ok=True)
 
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="k")
+        sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="C0")
         sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
         axes[0].set_ylabel('Intensity')
         axes[0].set_xlabel('Distance (microns)')
         axes[0].set_yscale('log')
         axes[0].set_ylim(10 ** 0, None)
+        axes[0].set_xlim(0, None)
         axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         x = np.sort(peaks['dist'])
@@ -244,10 +250,12 @@ def find_roi(
         axes[1].plot(x, y, color='dimgrey')
         axes[1].set_xlabel('Distance (microns)')
         axes[1].set_ylabel('CDF')
+        axes[1].set_xlim(0, None)
         axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
         axes[2].set_xlabel('Distance')
+        axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         plt.tight_layout()
@@ -265,15 +273,15 @@ def find_roi(
     neighbors = peaks.columns[peaks.columns.str.startswith('dist')].tolist()
     peaks['neighbors'] = peaks[peaks[neighbors] <= window_size[0]*voxel_size[0]/2].count(axis=1)
     peaks.sort_values(by=['neighbors', 'dist', 'A'], ascending=[True, False, False], inplace=True)
-    peaks = peaks[peaks['neighbors'] == num_neighbor]
+    peaks = peaks[peaks['neighbors'] <= max_neighbor]
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="k")
+        sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="C0")
         sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
         axes[0].set_ylabel('Intensity')
         axes[0].set_xlabel('Distance')
-        axes[0].set_ylim(0, None)
+        axes[0].set_xlim(0, None)
         axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         x = np.sort(peaks['dist'])
@@ -281,10 +289,12 @@ def find_roi(
         axes[1].plot(x, y, color='dimgrey')
         axes[1].set_xlabel('Distance')
         axes[1].set_ylabel('CDF')
+        axes[1].set_xlim(0, None)
         axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
         axes[2].set_xlabel('Distance')
+        axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         plt.tight_layout()

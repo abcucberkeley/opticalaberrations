@@ -1,8 +1,11 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import logging
 import time
 from pathlib import Path
-import os
 import cli
+import experimental
 
 
 def parse_args(args):
@@ -24,10 +27,6 @@ def parse_args(args):
         "--flipz", action='store_true',
         help='a toggle to flip Z axis'
     )
-    deskew.add_argument(
-        "--verbose", action='store_true',
-        help='a toggle for a progress bar'
-    )
 
     points = subparsers.add_parser("points")
     points.add_argument("input", type=Path, help="path to input .tif file")
@@ -37,10 +36,6 @@ def parse_args(args):
     )
     points.add_argument(
         "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
-    )
-    points.add_argument(
-        "--verbose", action='store_true',
-        help='a toggle for a progress bar'
     )
 
     predict = subparsers.add_parser("predict")
@@ -87,9 +82,52 @@ def parse_args(args):
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
     )
-    predict.add_argument(
-        "--verbose", action='store_true',
-        help='a toggle for a progress bar'
+
+    predict_rois = subparsers.add_parser("predict_rois")
+    predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
+    predict_rois.add_argument("input", type=Path, help="path to input .tif file")
+    predict_rois.add_argument("peaks", type=Path, help="path to point detection results (.mat file)")
+    predict_rois.add_argument("pattern", type=Path, help="path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv)")
+
+    predict_rois.add_argument(
+        "--state", default=None, type=Path,
+        help="optional path to current DM state .csv file (Default: `blank mirror`)"
+    )
+    predict_rois.add_argument(
+        "--prev", default=None, type=Path,
+        help="previous predictions .csv file (Default: `None`)"
+    )
+    predict_rois.add_argument(
+        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat', type=str,
+        help='type of the desired PSF'
+    )
+    predict_rois.add_argument(
+        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+    predict_rois.add_argument(
+        "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
+    )
+    predict_rois.add_argument(
+        "--model_lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+    predict_rois.add_argument(
+        "--model_axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
+    )
+    predict_rois.add_argument(
+        "--wavelength", default=.510, type=float,
+        help='wavelength in microns'
+    )
+    predict_rois.add_argument(
+        "--scalar", default=.5, type=float,
+        help='scale DM actuators by an arbitrary multiplier'
+    )
+    predict_rois.add_argument(
+        "--threshold", default=1e-2, type=float,
+        help='set predictions below threshold to zero (microns)'
+    )
+    predict_rois.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
     )
 
     return parser.parse_args(args)
@@ -106,14 +144,6 @@ def main(args=None):
         format='%(asctime)s - %(levelname)s - %(message)s',
     )
     logger = logging.getLogger('')
-
-    if args.verbose:
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
-        import experimental
-
-    else:
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        import experimental
 
     if args.func == 'deskew':
         experimental.deskew(
@@ -132,7 +162,7 @@ def main(args=None):
         )
 
     elif args.func == 'predict':
-        experimental.correct(
+        experimental.predict(
             model=args.model,
             img=args.input,
             dm_pattern=args.pattern,
@@ -146,107 +176,32 @@ def main(args=None):
             wavelength=args.wavelength,
             scalar=args.scalar,
             threshold=args.threshold,
-            verbose=args.verbose,
             plot=args.plot
         )
+
+    elif args.func == 'predict_rois':
+        experimental.predict_rois(
+            model=args.model,
+            img=args.input,
+            peaks=args.peaks,
+            dm_pattern=args.pattern,
+            dm_state=args.state,
+            prev=args.prev,
+            psf_type=args.psf_type,
+            axial_voxel_size=args.axial_voxel_size,
+            model_axial_voxel_size=args.model_axial_voxel_size,
+            lateral_voxel_size=args.lateral_voxel_size,
+            model_lateral_voxel_size=args.model_lateral_voxel_size,
+            wavelength=args.wavelength,
+            scalar=args.scalar,
+            threshold=args.threshold,
+            plot=args.plot
+        )
+
     else:
         logger.error(f"Error")
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
-
-
-def make_a_logger(myinput: Path):
-    """
-        Creates a logger that will output to the console and to a log.txt file
-        in the same folder as the file specified by 'myinput'.
-    """
-
-    # Create a custom logger
-    # get root logger.  FYI, this "root logger" is called from experimental.py and other places via globals
-    logger = logging.getLogger('')
-
-    # don't duplicate handlers if we already have them
-    if logger.hasHandlers() == False:
-        log_filepath = Path(myinput.parent, 'log.txt')
-        print(f'Logging output to: {log_filepath}')
-
-        # Create handlers
-        c_handler = logging.StreamHandler()
-        f_handler = logging.FileHandler(log_filepath, mode='w')
-
-        # Create formatters and add it to handlers
-        c_format = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
-        c_handler.setFormatter(c_format)
-        f_handler.setFormatter(c_format)
-
-        # Add handlers to the logger
-        logger.addHandler(c_handler)
-        logger.addHandler(f_handler)
-        logger.setLevel(logging.INFO)  # have to put the logging level here not at the handler level. sigh.
-
-    return logger
-
-
-def main_function(
-    mymodel: str,
-    myinput: str,
-    mypattern: str,
-    myprev: str,
-    mystate: str,
-    psf_type: str,
-    axial_voxel_size: float,
-    lateral_voxel_size: float,
-    model_axial_voxel_size: float,
-    model_lateral_voxel_size: float,
-    mywavelength: float,
-    myscalar: float = 1.,
-    mythreshold: float = 0.,
-    verbose: bool = True,
-    plot: bool = True
-):
-    """ Replicates main but using parameters so that we can call it from LabVIEW. """
-    try:
-
-        timestart = time.time()
-               
-        # python truly hates spaces in names. Can get short name running a batch file with @ECHO OFF echo %~s1
-        mymodel = Path(mymodel)
-        myinput = Path(myinput)
-        mypattern = Path(mypattern)
-        mystate = Path(mystate)
-        myprev = Path(myprev)
-
-        logger = make_a_logger(myinput)
-
-        try:
-            import matplotlib
-            matplotlib.use('Agg')
-
-        except ImportError:
-            logger.error('The default Qt backend does not work with LabVIEW. Please install Tkinter!')
-
-        try:
-            if verbose:
-                os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
-                import experimental
-
-            else:
-                os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-                import experimental
-
-        except ImportError:
-            return logger.error("Error: Please install tensorflow first!")
-
-        if imghdr.what(myinput) == 'tiff':
-            logger.info("Yes, input is a tiff file.")
-            # RUN CODE HERE
-        else:
-            logger.error(f"Error: Input file format is not tiff, instead is: {imghdr.what(myinput)} File: {myinput}")
-
-        logger.info(f"Total time elapsed: {time.time() - timestart:.2f} sec.")
-
-    except BaseException as err:
-        logging.exception("Exception occurred")
 
 
 if __name__ == "__main__":
