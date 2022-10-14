@@ -30,7 +30,6 @@ DIFFICULTY='easy'
 DATASET='train'
 SHAPE=64
 OUTDIR="/clusterfs/nvme/thayer/dataset/yumb_lattice_objects/${DIFFICULTY}/${DATASET}"
-RCROP=32
 
 
 if [ "$DATASET" = "train" ];then
@@ -98,7 +97,6 @@ do
             j="${j} --sphere ${R}"
             j="${j} --psf_type ${PSF_TYPE}"
             j="${j} --dist ${DIST}"
-            j="${j} --random_crop ${RCROP}"
             j="${j} --iters 100"
             j="${j} --bimodal"
             j="${j} --noise"
@@ -116,6 +114,10 @@ do
             j="${j} --z_voxel_size ${zVOXEL}"
             j="${j} --na_detection ${NA}"
             j="${j} --lam_detection ${LAMBDA}"
+
+            if [ "$DATASET" = "train" ];then
+              j="${j} --random_crop ${RCROP}"
+            fi
 
             task="/usr/bin/sbatch"
             task="${task} --qos=abc_normal"
