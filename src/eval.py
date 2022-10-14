@@ -923,9 +923,9 @@ def eval_bin(
 
         preds = backend.eval_sign(
             model=model,
-            inputs=inputs.numpy(),
+            inputs=inputs if isinstance(inputs, np.ndarray) else inputs.numpy(),
             gen=gen,
-            ys=ys.numpy(),
+            ys=ys if isinstance(ys, np.ndarray) else ys.numpy(),
             batch_size=100,
             desc=f"Predictions for ({datapath})"
         )
