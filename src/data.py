@@ -6,7 +6,6 @@ import tensorflow as tf
 
 
 import cli
-import experimental
 import shapes
 import vis
 
@@ -92,9 +91,6 @@ def main(args=None):
 
     elif args.dtype == "similarity":
         shapes.similarity()
-
-    elif args.dtype == "parse":
-        experimental.create_dataset(data_path=args.dataset)
 
     else:
         logger.error("Error: unknown action!")

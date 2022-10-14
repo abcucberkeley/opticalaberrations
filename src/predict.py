@@ -103,21 +103,11 @@ def main(args=None):
             no_phase=args.no_phase
         )
 
-    elif args.target == "compare":
-        backend.compare(
-            model=args.model,
-            wavelength=args.wavelength,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            max_jitter=args.max_jitter,
-            cpu_workers=args.cpu_workers
-        )
-
     elif args.target == "featuremaps":
         backend.featuremaps(
             modelpath=args.model,
             wavelength=args.wavelength,
+            psf_type=args.psf_type,
             amplitude_range=args.amplitude_range,
             psnr=args.psnr,
             x_voxel_size=args.x_voxel_size,
