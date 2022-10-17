@@ -2,6 +2,7 @@ import logging
 import sys
 from functools import partial
 
+import pandas as pd
 from tifffile import TiffFile
 from pathlib import Path
 import numpy as np
@@ -9,6 +10,7 @@ import numpy as np
 import tensorflow as tf
 import ujson
 from synthetic import SyntheticPSF
+from utils import multiprocess
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -32,19 +34,43 @@ def get_image(path):
 
 
 def get_sample(path, no_phase=False):
-    path = Path(str(path.numpy(), "utf-8"))
-    with open(path.with_suffix('.json')) as f:
-        hashtbl = ujson.load(f)
-        f.close()
+    try:
+        if isinstance(path, tf.Tensor):
+            path = Path(str(path.numpy(), "utf-8"))
+        else:
+            path = Path(str(path))
 
-    img = get_image(path)
-    amps = hashtbl['zernikes']
+        with open(path.with_suffix('.json')) as f:
+            hashtbl = ujson.load(f)
+            f.close()
 
-    if no_phase and img.shape[0] == 6:
-        amps = np.abs(amps)
-        img = img[:3]
+        img = get_image(path)
+        amps = hashtbl['zernikes']
 
-    return img, amps
+        if no_phase and img.shape[0] == 6:
+            amps = np.abs(amps)
+            img = img[:3]
+
+        return img, amps
+
+    except Exception as e:
+        logger.warning(f"Corrupted file {path}: {e}")
+
+
+def check_sample(path):
+    try:
+        with open(path.with_suffix('.json')) as f:
+            ujson.load(f)
+            f.close()
+
+        with TiffFile(path) as tif:
+            tif.asarray()
+            tif.close()
+        return 1
+
+    except Exception as e:
+        logger.warning(f"Corrupted file {path}: {e}")
+        return path
 
 
 def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
@@ -54,7 +80,9 @@ def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
             if 'kernel' in str(p):
                 continue
             else:
-                files.append(str(p))
+                check = check_sample(p)
+                if check == 1:
+                    files.append(str(p))
         else:
             break
 
@@ -79,6 +107,16 @@ def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
             f"dataset [{tf.data.experimental.cardinality(ds).numpy()}]"
         )
         return ds
+
+
+def check_dataset(datadir):
+    jobs = multiprocess(check_sample, list(Path(datadir).rglob('*.tif')), cores=-1)
+    corrupted = [j for j in jobs if j != 1]
+    corrupted = pd.DataFrame(corrupted, columns=['path'])
+    logger.info(f"Corrupted files [{corrupted.index.shape[0]}]")
+    print(corrupted)
+    corrupted.to_csv(datadir/'corrupted.csv', header=False, index=False)
+    return corrupted
 
 
 def collect_dataset(

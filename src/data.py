@@ -8,6 +8,7 @@ import tensorflow as tf
 import cli
 import shapes
 import vis
+import data_utils
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -43,6 +44,9 @@ def parse_args(args):
 
     syn_parser = subparsers.add_parser("synthetic")
     syn_parser.add_argument("img", type=Path, help="path to a tif image")
+
+    data_parser = subparsers.add_parser("check")
+    data_parser.add_argument("datadir", type=Path, help="path to dataset dir")
 
     return parser.parse_args(args)
 
@@ -91,6 +95,9 @@ def main(args=None):
 
     elif args.dtype == "similarity":
         shapes.similarity()
+
+    elif args.dtype == "check":
+        data_utils.check_dataset(args.datadir)
 
     else:
         logger.error("Error: unknown action!")
