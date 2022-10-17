@@ -364,7 +364,7 @@ def predict_dataset(
     jobs = []
     for file in dataset.rglob('*.tif'):
         if '_' not in file.stem:
-            worker = partial(func, dm_state=dm_state)
+            worker = partial(func, dm_state=f"{file.parent}/DM{file.stem}.csv")
             p = mp.Process(target=worker, args=(file,))
             p.start()
             jobs.append(p)

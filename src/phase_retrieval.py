@@ -51,7 +51,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--scalar", default=.5, type=float,
+        "--scalar", default=.75, type=float,
         help='scale DM actuators by an arbitrary multiplier'
     )
 
