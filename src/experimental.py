@@ -78,8 +78,9 @@ def deskew(
     flags += f"'DSRCombined',false"
 
     deskew = f"XR_deskewRotateFrame('{img}',{flags})"
-    repo = "addpath(genpath('~/fiona/ABCcode/XR_Repository'))"
-    job = f"{matlab} \"{repo}; {deskew}; exit;\""
+    repo = Path(__file__).parent.parent.absolute()
+    llsm = f"addpath(genpath('{repo}/LLSM3DTools/'))"
+    job = f"{matlab} \"{llsm}; {deskew}; exit;\""
 
     print(job)
     call([job], shell=True)
@@ -101,8 +102,9 @@ def points_detection(
     matlab += f' -nojvm -r '
 
     det = f"TA_PointDetection('{img}','{psf}',{lateral_voxel_size},{axial_voxel_size},{skew_angle},{sigma_xy},{sigma_z})"
-    repo = "addpath(genpath('~/fiona/ABCcode/XR_Repository'))"
-    job = f"{matlab} \"{repo}; {det}; exit;\""
+    repo = Path(__file__).parent.parent.absolute()
+    llsm = f"addpath(genpath('{repo}/LLSM3DTools/'))"
+    job = f"{matlab} \"{llsm}; {det}; exit;\""
 
     print(job)
     call([job], shell=True)
