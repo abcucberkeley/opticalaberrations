@@ -51,14 +51,14 @@ def parse_args(args):
         help="previous predictions .csv file (Default: `None`)"
     )
     predict.add_argument(
-        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat', type=str,
-        help='type of the desired PSF'
+        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        type=str, help='type of the desired PSF'
     )
     predict.add_argument(
         "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
     )
     predict.add_argument(
-        "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
+        "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
     )
     predict.add_argument(
         "--model_lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
@@ -71,7 +71,7 @@ def parse_args(args):
         help='wavelength in microns'
     )
     predict.add_argument(
-        "--scalar", default=.5, type=float,
+        "--scalar", default=.75, type=float,
         help='scale DM actuators by an arbitrary multiplier'
     )
     predict.add_argument(
@@ -105,7 +105,7 @@ def parse_args(args):
         "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
     )
     predict_rois.add_argument(
-        "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
+        "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
     )
     predict_rois.add_argument(
         "--model_lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
@@ -118,7 +118,7 @@ def parse_args(args):
         help='wavelength in microns'
     )
     predict_rois.add_argument(
-        "--scalar", default=.5, type=float,
+        "--scalar", default=.75, type=float,
         help='scale DM actuators by an arbitrary multiplier'
     )
     predict_rois.add_argument(
@@ -137,13 +137,13 @@ def main(args=None):
 
     timeit = time.time()
     args = parse_args(args)
-    logging.info(args)
 
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
     )
     logger = logging.getLogger('')
+    logger.info(args)
 
     if args.func == 'deskew':
         experimental.deskew(

@@ -2,8 +2,6 @@ import logging
 import time
 from pathlib import Path
 import os
-
-
 import cli
 import imghdr
 
@@ -26,7 +24,8 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--psf_type", default='../examples/lattice/lattice_PSF_simulation.mat', type=str, help='type of the desired PSF'
+        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        type=str, help='type of the desired PSF'
     )
 
     parser.add_argument(
@@ -42,7 +41,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--model_axial_voxel_size", default=.268, type=float, help='axial voxel size in microns for Z'
+        "--model_axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
     )
 
     parser.add_argument(
@@ -77,13 +76,13 @@ def main(args=None):
 
     timeit = time.time()
     args = parse_args(args)
-    logging.info(args)
 
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
     )
     logger = logging.getLogger('')
+    logger.info(args)
 
     if args.verbose:
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'

@@ -1,4 +1,6 @@
 import matplotlib
+from skimage.feature import peak_local_max
+
 matplotlib.use('Agg')
 
 import logging
@@ -107,7 +109,8 @@ def resize(
         anti_aliasing=True,
     )
     if crop_shape is not None:
-        resized_vol = resize_with_crop_or_pad(resampled_vol, crop_shape)
+        mode = np.abs(st.mode(resampled_vol, axis=None).mode[0])
+        resized_vol = resize_with_crop_or_pad(resampled_vol, crop_shape=crop_shape, constant_values=mode)
     else:
         resized_vol = resampled_vol
 
