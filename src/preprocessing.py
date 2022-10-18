@@ -1,6 +1,4 @@
 import matplotlib
-from skimage.feature import peak_local_max
-
 matplotlib.use('Agg')
 
 import logging
@@ -10,6 +8,7 @@ from typing import Any, Sequence, Union
 import numpy as np
 from scipy import stats as st
 import pandas as pd
+import seaborn as sns
 import zarr
 import h5py
 import matplotlib.colors as mcolors
@@ -179,7 +178,6 @@ def find_roi(
     peaks: Any = None,
     max_neighbor: int = 5,
     voxel_size: tuple = (.200, .108, .108),
-    file_order: str = 'c-order'
 ):
 
     plt.rcParams.update({
@@ -235,9 +233,6 @@ def find_roi(
     peaks = peaks[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
 
     if plot:
-        import seaborn as sns
-        plot.mkdir(parents=True, exist_ok=True)
-
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
         sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="C0")
         sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
@@ -262,7 +257,7 @@ def find_roi(
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         plt.tight_layout()
-        plt.savefig(plot / f'detected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+        plt.savefig(f'{plot}_detected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     if min_dist is not None:
         peaks = peaks[peaks['dist'] >= min_dist]
@@ -274,7 +269,8 @@ def find_roi(
         peaks = peaks[peaks['A'] >= min_intensity]
 
     neighbors = peaks.columns[peaks.columns.str.startswith('dist')].tolist()
-    peaks['neighbors'] = peaks[peaks[neighbors] <= window_size[0]*voxel_size[0]/2].count(axis=1)
+    min_dist = np.min(window_size)*np.min(voxel_size)
+    peaks['neighbors'] = peaks[peaks[neighbors] <= min_dist].count(axis=1)
     peaks.sort_values(by=['neighbors', 'dist', 'A'], ascending=[True, False, False], inplace=True)
     peaks = peaks[peaks['neighbors'] <= max_neighbor]
 
@@ -301,9 +297,10 @@ def find_roi(
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         plt.tight_layout()
-        plt.savefig(plot / f'selected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+        plt.savefig(f'{plot}_selected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
-    print(peaks)
+    logger.info(f"Predicted points of interest")
+    print(peaks.head(num_peaks))
     peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
     widths = [w // 2 for w in window_size]
 
@@ -349,7 +346,7 @@ def find_roi(
                     ))
 
         plt.tight_layout()
-        plt.savefig(plot / f'rois.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+        plt.savefig(f'{plot}_rois.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     rois = []
     for p in range(peaks.shape[0]):

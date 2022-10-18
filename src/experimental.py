@@ -91,6 +91,8 @@ def points_detection(
     axial_voxel_size: float,
     lateral_voxel_size: float,
     skew_angle: float = 32.45,
+    sigma_xy: float = 1.1,
+    sigma_z: float = 1.1,
 ):
     matlab = 'matlab '
     matlab += f' -nodisplay'
@@ -98,7 +100,7 @@ def points_detection(
     matlab += f' -nodesktop'
     matlab += f' -nojvm -r '
 
-    det = f"TA_PointDetection('{img}','{psf}',{lateral_voxel_size},{axial_voxel_size},{skew_angle})"
+    det = f"TA_PointDetection('{img}','{psf}',{lateral_voxel_size},{axial_voxel_size},{skew_angle},{sigma_xy},{sigma_z})"
     repo = "addpath(genpath('~/fiona/ABCcode/XR_Repository'))"
     job = f"{matlab} \"{repo}; {det}; exit;\""
 
@@ -124,6 +126,9 @@ def predict_rois(
     n_modes: int = 60,
     mosaic: bool = True,
     prev: Any = None,
+    window_size: int = 32,
+    num_rois: int = 10,
+    min_intensity: int = 200,
 ):
     physical_devices = tfc.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
@@ -131,15 +136,13 @@ def predict_rois(
 
     sample = imread(img).astype(int)
     esnr = np.sqrt(sample.max()).round(0).astype(int)
+    model_voxel_size = (model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size)
+    sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
 
-    sample = preprocessing.prep_sample(
-        sample,
-        crop_shape=None,
-        model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
-        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-        debug=Path(f'{img.parent / img.stem}_preprocessing'),
-        remove_background=True,
-    )
+    mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
+    sample -= mode
+    sample[sample < 0] = 0
+    sample = sample / np.nanmax(sample)
 
     psfgen = SyntheticPSF(
         dtype=psf_type,
@@ -159,70 +162,90 @@ def predict_rois(
     )
 
     model = backend.load(model, mosaic=mosaic)
+    dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
 
     rois = preprocessing.find_roi(
         sample,
         peaks=peaks,
-        window_size=(64, 64, 64),
-        plot=Path(f'{img.parent / img.stem}_rois'),
-        num_peaks=20,
+        window_size=tuple(3*[window_size*2]),
+        plot=Path(f'{img.parent/img.stem}'),
+        num_peaks=num_rois,
         min_dist=1,
         max_dist=None,
-        min_intensity=100,
-        max_neighbor=5,
-        voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        max_neighbor=10,
+        min_intensity=min_intensity,
+        voxel_size=sample_voxel_size,
     )
 
-    # for w in range(rois.shape[0]):
-    #     inputs = rois[w]
-    #     imsave(f'{img.parent / img.stem}_roi_{w}.tif', inputs)
-    #
-    #     inputs = preprocessing.prep_sample(
-    #         inputs,
-    #         crop_shape=(64, 64, 64),
-    #         model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
-    #         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-    #         debug=Path(f'{img.parent / img.stem}_preprocessing')
-    #     )
-    #
-    #     inputs = np.expand_dims(inputs, axis=0)
-    #     p = backend.booststrap_predict_sign(
-    #         model,
-    #         inputs=inputs,
-    #         batch_size=1,
-    #         threshold=threshold,
-    #         verbose=False,
-    #         gen=psfgen,
-    #         prev_pred=prev,
-    #         plot=Path(f'{img.parent / img.stem}') if plot else None,
-    #     )
-    #
-    #     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
-    #     dm = zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar)
-    #     dm = pd.DataFrame(dm)
-    #     dm.to_csv(f"{img.parent / img.stem}_corrected_actuators.csv", index=False, header=False)
-    #
-    #     p = Wavefront(p, order='ansi', lam_detection=wavelength)
-    #     coffs = [
-    #         {'n': z.n, 'm': z.m, 'amplitude': a}
-    #         for z, a in p.zernikes.items()
-    #     ]
-    #     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
-    #     coffs.index.name = 'ansi'
-    #     coffs.to_csv(f"{img.parent / img.stem}_zernike_coffs.csv")
-    #
-    #     pupil_displacement = np.array(p.wave(size=100), dtype='float32')
-    #     imsave(f"{img.parent / img.stem}_pred_pupil_displacement.tif", pupil_displacement)
-    #
-    #     if plot:
-    #         vis.prediction(
-    #             psf=np.squeeze(inputs),
-    #             pred=p,
-    #             dm_before=dm_state,
-    #             dm_after=dm.values[:, 0],
-    #             wavelength=wavelength,
-    #             save_path=Path(f'{img.parent / img.stem}_pred'),
-    #         )
+    predictions = np.zeros((rois.shape[0], model.output_shape[1]))
+    outdir = Path(f'{img.parent / img.stem}_rois')
+    for w in range(rois.shape[0]):
+        inputs = rois[w]
+        imsave(f'{outdir}/{w}.tif', inputs)
+
+        inputs = preprocessing.prep_sample(
+            inputs,
+            crop_shape=tuple(3*[window_size]),
+            model_voxel_size=model_voxel_size,
+            sample_voxel_size=sample_voxel_size,
+            debug=Path(f'{outdir}/{w}_preprocessing')
+        )
+
+        inputs = np.expand_dims(inputs, axis=0)
+        p, std = backend.booststrap_predict_sign(
+            model,
+            inputs=inputs,
+            batch_size=1,
+            threshold=threshold,
+            verbose=False,
+            gen=psfgen,
+            prev_pred=prev,
+            plot=Path(f'{outdir}/{w}') if plot else None,
+        )
+        predictions[w] = p
+
+        dm = pd.DataFrame(zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar))
+        p = Wavefront(p, order='ansi', lam_detection=wavelength)
+
+        if plot:
+            vis.prediction(
+                psf=np.squeeze(inputs),
+                pred=p,
+                pred_std=std,
+                dm_before=dm_state,
+                dm_after=dm.values[:, 0],
+                wavelength=wavelength,
+                save_path=Path(f'{outdir}/{w}_pred'),
+            )
+
+    p = np.mean(predictions, axis=0)
+    p_std = np.std(predictions, axis=0)
+    dm = pd.DataFrame(zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar))
+    dm.to_csv(f"{outdir}_corrected_actuators.csv", index=False, header=False)
+
+    p = Wavefront(p, order='ansi', lam_detection=wavelength)
+
+    coffs = [
+        {'n': z.n, 'm': z.m, 'amplitude': a}
+        for z, a in p.zernikes.items()
+    ]
+    coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
+    coffs.index.name = 'ansi'
+    coffs.to_csv(f"{outdir}_zernike_coffs.csv")
+
+    pupil_displacement = np.array(p.wave(size=100), dtype='float32')
+    imsave(f"{outdir}_pred_pupil_displacement.tif", pupil_displacement)
+
+    if plot:
+        vis.prediction(
+            psf=np.squeeze(sample),
+            pred=p,
+            pred_std=p_std,
+            dm_before=dm_state,
+            dm_after=dm.values[:, 0],
+            wavelength=wavelength,
+            save_path=Path(f'{outdir}_pred'),
+        )
 
 
 def predict(
@@ -280,7 +303,7 @@ def predict(
 
     model = backend.load(model, mosaic=mosaic)
 
-    p = backend.booststrap_predict_sign(
+    p, std = backend.booststrap_predict_sign(
         model,
         inputs=inputs,
         batch_size=1,
@@ -316,6 +339,7 @@ def predict(
         vis.prediction(
             psf=np.squeeze(inputs),
             pred=p,
+            pred_std=std,
             dm_before=dm_state,
             dm_after=dm.values[:, 0],
             wavelength=wavelength,

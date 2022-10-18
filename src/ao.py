@@ -102,6 +102,15 @@ def parse_args(args):
         help='type of the desired PSF'
     )
     predict_rois.add_argument(
+        "--window_size", default=32, type=int, help='size of the window to crop around each point of interest'
+    )
+    predict_rois.add_argument(
+        "--num_rois", default=10, type=int, help='max number of detected points to use for estimating aberrations'
+    )
+    predict_rois.add_argument(
+        "--min_intensity", default=200, type=int, help='minimum intensity desired for detecting peaks of interest'
+    )
+    predict_rois.add_argument(
         "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
     )
     predict_rois.add_argument(
@@ -195,7 +204,10 @@ def main(args=None):
             wavelength=args.wavelength,
             scalar=args.scalar,
             threshold=args.threshold,
-            plot=args.plot
+            plot=args.plot,
+            window_size=args.window_size,
+            num_rois=args.num_rois,
+            min_intensity=args.min_intensity,
         )
 
     else:

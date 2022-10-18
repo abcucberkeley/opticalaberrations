@@ -2013,6 +2013,7 @@ def prediction(
         psf_cmap: str = 'hot',
         gamma: float = .5,
         threshold: float = .01,
+        pred_std: Any = None
 ):
     def wavefront(iax, phi, levels, label='', nas=(.75, .85, .95)):
         def na_mask(radius):
@@ -2180,7 +2181,17 @@ def prediction(
     ax_acts.axhline(0, ls='--', color='k', alpha=.5)
 
     ax_zcoff.plot(pred.amplitudes_ansi_waves, color='dimgrey', label='Predictions')
-    ax_zcoff.legend(frameon=False, loc='lower left')
+    if pred_std is not None:
+        ax_zcoff.fill_between(
+            range(len(pred.amplitudes_ansi_waves)),
+            pred.amplitudes_ansi_waves - pred_std,
+            pred.amplitudes_ansi_waves + pred_std,
+            label=r'$\pm \sigma$',
+            color='gray',
+            alpha=0.33
+        )
+
+    ax_zcoff.legend(frameon=False, loc='lower left', ncol=2)
     ax_zcoff.set_ylabel(f'Amplitudes ($\lambda = {wavelength}~\mu m$)')
     ax_zcoff.spines['top'].set_visible(False)
     ax_zcoff.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)

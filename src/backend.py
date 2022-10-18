@@ -953,7 +953,7 @@ def booststrap_predict_sign(
             plt.tight_layout()
             plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-    return preds
+    return preds, stdev
 
 
 def eval_sign(
