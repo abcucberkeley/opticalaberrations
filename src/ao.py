@@ -30,7 +30,7 @@ def parse_args(args):
 
     points = subparsers.add_parser("points")
     points.add_argument("input", type=Path, help="path to input .tif file")
-    points.add_argument("psf", type=Path, help="path to PSF .tif file")
+    points.add_argument("--psf", default=None, type=Path, help="path to PSF .tif file")
     points.add_argument(
         "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
     )

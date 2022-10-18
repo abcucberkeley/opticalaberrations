@@ -14,11 +14,15 @@ function []=TA_PointDetection(img, psf, dxy, dz, angle, sigma_xy, sigma_z)
     data.framerate = NaN;
     data.markers = {488e-9};
 
-    %% Estimate psf sigmas if there are calibration files and they are not available (optional)
-    % The sigmas of psfs are estimated separately. The filename is provided as
-    % input for the estimation.
-    % [sigma_xy, sigma_z] = GU_estimateSigma3D(psf, []);
-    sigma_mat = [sigma_xy, sigma_z];
+    if strcmp(psf,'none')
+        sigma_mat = [sigma_xy, sigma_z];
+    else
+        %% Estimate psf sigmas if there are calibration files and they are not available (optional)
+        % The sigmas of psfs are estimated separately. The filename is provided as
+        % input for the estimation.
+        [sigma_xy, sigma_z] = GU_estimateSigma3D(psf, []);
+        sigma_mat = [sigma_xy, sigma_z];
+    end
 
     %% Detection
     % Detect diffraction-limited points using deskewed data.

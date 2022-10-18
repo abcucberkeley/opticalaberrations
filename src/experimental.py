@@ -88,9 +88,9 @@ def deskew(
 
 def points_detection(
     img: Path,
-    psf: Path,
     axial_voxel_size: float,
     lateral_voxel_size: float,
+    psf: Any = None,
     skew_angle: float = 32.45,
     sigma_xy: float = 1.1,
     sigma_z: float = 1.1,
@@ -101,7 +101,11 @@ def points_detection(
     matlab += f' -nodesktop'
     matlab += f' -nojvm -r '
 
-    det = f"TA_PointDetection('{img}','{psf}',{lateral_voxel_size},{axial_voxel_size},{skew_angle},{sigma_xy},{sigma_z})"
+    if psf is not None:
+        det = f"TA_PointDetection('{img}','{psf}',{lateral_voxel_size},{axial_voxel_size},{skew_angle},{sigma_xy},{sigma_z})"
+    else:
+        det = f"TA_PointDetection('{img}','none',{lateral_voxel_size},{axial_voxel_size},{skew_angle},{sigma_xy},{sigma_z})"
+
     repo = Path(__file__).parent.parent.absolute()
     llsm = f"addpath(genpath('{repo}/LLSM3DTools/'))"
     job = f"{matlab} \"{llsm}; {det}; exit;\""
