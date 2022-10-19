@@ -64,7 +64,7 @@ def sim(
     emb: bool = True,
     noise: bool = True,
     random_crop: Any = None,
-    radius: float = .3,
+    radius: float = .4,
     sphere: float = 0,
 ):
     reference = np.zeros(gen.psf_shape)

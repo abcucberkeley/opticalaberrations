@@ -39,6 +39,11 @@ do
       --taskname all \
       --name $MODEL/distheatmaps_neighbor_None_${COV}
 
+      python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
+      --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --modes $MODES --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP densityheatmap" \
+      --taskname all \
+      --name $MODEL/densityheatmaps_None_${COV}
+
       #python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
       #--task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --modes $MODES --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP evalpoints" \
       #--taskname all \

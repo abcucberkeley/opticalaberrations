@@ -1498,9 +1498,9 @@ def evalsample(
     niter: int = 3,
     na: float = 1.0,
     psf_type: str = 'widefield',
-    x_voxel_size: float = .108,
-    y_voxel_size: float = .108,
-    z_voxel_size: float = .268,
+    x_voxel_size: float = .15,
+    y_voxel_size: float = .15,
+    z_voxel_size: float = .6,
     wavelength: float = .510,
     reference_voxel_size: tuple = (.268, .108, .108),
     rolling_embedding: bool = False,
@@ -1797,12 +1797,12 @@ def evalsample(
 def eval_roi(
     rois: np.array,
     modelpath: Path,
-    psnr: tuple = (15, 20),
+    psnr: tuple = (21, 30),
     na: float = 1.0,
     psf_type: str = 'widefield',
-    x_voxel_size: float = .108,
-    y_voxel_size: float = .108,
-    z_voxel_size: float = .268,
+    x_voxel_size: float = .15,
+    y_voxel_size: float = .15,
+    z_voxel_size: float = .6,
     wavelength: float = .510,
     avg_dist: int = 10
 ):
@@ -1846,13 +1846,13 @@ def evaldistbin(
     datapath: Path,
     modelpath: Path,
     samplelimit: Any = None,
-    psnr: tuple = (15, 20),
+    psnr: tuple = (21, 30),
     na: float = 1.0,
     modes: int = 60,
     psf_type: str = 'widefield',
-    x_voxel_size: float = .108,
-    y_voxel_size: float = .108,
-    z_voxel_size: float = .268,
+    x_voxel_size: float = .15,
+    y_voxel_size: float = .15,
+    z_voxel_size: float = .6,
     wavelength: float = .510,
     no_phase: bool = False,
     input_coverage: float = 1.0
@@ -1922,7 +1922,7 @@ def distheatmap(
     z_voxel_size: float = .6,
     wavelength: float = .605,
     no_phase: bool = False,
-    psnr: tuple = (20, 30),
+    psnr: tuple = (21, 30),
     num_neighbor: Any = None,
     samplelimit: Any = None,
     input_coverage: float = 1.0,
@@ -2042,6 +2042,219 @@ def distheatmap(
 
     ax.set_xlabel(rf'Average distance to nearest neighbor (microns)')
     ax.set_xlim(0, 8)
+    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+    ax.set_ylabel(
+        'Average Peak-to-peak aberration $|P_{95} - P_{5}|$'
+        rf'($\lambda = 605~nm$)'
+    )
+    ax.set_yticks(np.arange(0, 6, .5), minor=True)
+    ax.set_yticks(np.arange(0, 6, 1))
+    ax.set_ylim(.25, 5)
+
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    plt.tight_layout()
+
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    return fig
+
+
+def evaldensitybin(
+    datapath: Path,
+    modelpath: Path,
+    samplelimit: Any = None,
+    psnr: tuple = (21, 30),
+    na: float = 1.0,
+    modes: int = 60,
+    psf_type: str = 'widefield',
+    x_voxel_size: float = .15,
+    y_voxel_size: float = .15,
+    z_voxel_size: float = .6,
+    wavelength: float = .510,
+    no_phase: bool = False,
+    input_coverage: float = 1.0
+):
+
+    model = backend.load(modelpath)
+    gen = SyntheticPSF(
+        n_modes=modes,
+        amplitude_ranges=(-.25, .25),
+        psf_shape=(64, 64, 64),
+        dtype=psf_type,
+        lam_detection=wavelength,
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
+        batch_size=100,
+        snr=psnr,
+        max_jitter=0,
+        cpu_workers=-1,
+    )
+
+    val = data_utils.load_dataset(datapath, samplelimit=samplelimit)
+    func = partial(data_utils.get_sample, no_phase=no_phase)
+    val = val.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
+
+    y_true = pd.DataFrame([], columns=['neighbors', 'dist', 'sample'])
+    y_pred = pd.DataFrame([], columns=['neighbors', 'dist', 'sample'])
+
+    for inputs, ys in val.batch(100):
+        if input_coverage != 1.:
+            mode = np.mean([np.abs(st.mode(s, axis=None).mode[0]) for s in inputs])
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, constant_values=mode)
+
+        preds = backend.eval_sign(
+            model=model,
+            inputs=inputs.numpy(),
+            gen=gen,
+            ys=ys.numpy(),
+            batch_size=100,
+            desc=f"Predictions for ({datapath})"
+        )
+
+        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['sample'])
+        y_pred = y_pred.append(p, ignore_index=True)
+
+        y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys.numpy()], columns=['sample'])
+        y['dist'] = [
+            utils.mean_min_distance(np.squeeze(i), voxel_size=(z_voxel_size, y_voxel_size, x_voxel_size))
+            for i in inputs
+        ]
+        y['neighbors'] = int(np.mean(list(
+            map(int, str([s for s in datapath.parts if s.startswith('npoints_')][0]).lstrip('npoints_'))
+        )))
+        y_true = y_true.append(y, ignore_index=True)
+
+    return (y_pred, y_true)
+
+
+def densityheatmap(
+    modelpath: Path,
+    datadir: Path,
+    distribution: str = '/',
+    max_amplitude: float = .25,
+    na: float = 1.0,
+    modes: int = 60,
+    psf_type: str = 'widefield',
+    x_voxel_size: float = .15,
+    y_voxel_size: float = .15,
+    z_voxel_size: float = .6,
+    wavelength: float = .605,
+    no_phase: bool = False,
+    psnr: tuple = (21, 30),
+    samplelimit: Any = None,
+    input_coverage: float = 1.0,
+):
+    savepath = modelpath / f'densityheatmaps_{input_coverage}'
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    if distribution != '/':
+        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+    else:
+        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+    classes = sorted([
+        c for c in Path(datadir).rglob('*/')
+        if c.is_dir()
+           and len(list(c.glob('*.tif'))) > 0
+           and distribution in str(c)
+           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
+    ])
+
+    job = partial(
+        evaldensitybin,
+        modelpath=modelpath,
+        samplelimit=samplelimit,
+        na=na,
+        psnr=psnr,
+        psf_type=psf_type,
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
+        modes=modes,
+        wavelength=wavelength,
+        no_phase=no_phase,
+        input_coverage=input_coverage,
+    )
+    preds, ys = zip(*utils.multiprocess(job, classes))
+    y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
+    y_pred = pd.DataFrame([], columns=['sample']).append(preds, ignore_index=True)
+
+    error = np.abs(y_true - y_pred)
+    error = pd.DataFrame(error, columns=['sample'])
+
+    bins = np.arange(0, 10.25, .25)
+    df = pd.DataFrame(
+        zip(y_true['sample'], error['sample'], y_true['neighbors'], y_true['dist']),
+        columns=['aberration', 'error', 'neighbors', 'dist']
+    )
+    df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+
+    means = pd.pivot_table(df, values='error', index='bins', columns='neighbors', aggfunc=np.mean)
+    means = means.sort_index().interpolate()
+
+    logger.info(means)
+    means.to_csv(f'{savepath}.csv')
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    levels = [
+        0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
+        .5, .6, .7, .8, .9,
+        1, 1.25, 1.5, 1.75, 2., 2.5,
+        3., 4., 5.,
+    ]
+
+    vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
+    highcmap = plt.get_cmap('magma_r', 256)
+    lowcmap = plt.get_cmap('GnBu_r', 256)
+    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+    cmap = mcolors.ListedColormap(cmap)
+
+    contours = ax.contourf(
+        means.columns.values,
+        means.index.values,
+        means.values,
+        cmap=cmap,
+        levels=levels,
+        extend='max',
+        linewidths=2,
+        linestyles='dashed',
+    )
+    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+
+    cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+    cbar = plt.colorbar(
+        contours,
+        cax=cax,
+        fraction=0.046,
+        pad=0.04,
+        extend='both',
+        spacing='proportional',
+        format=FormatStrFormatter("%.2f"),
+        ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
+    )
+
+    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 605~nm$)')
+    cbar.ax.set_title(r'$\lambda$')
+    cbar.ax.yaxis.set_ticks_position('right')
+    cbar.ax.yaxis.set_label_position('left')
+
+    ax.set_xlabel(rf'Number of points')
+    ax.set_xlim(0, 20)
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     ax.set_ylabel(

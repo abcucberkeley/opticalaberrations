@@ -35,6 +35,8 @@ OUTDIR="/clusterfs/nvme/thayer/dataset/yumb_lattice_objects/${DIFFICULTY}/${DATA
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
+  ITERS=100
+  NEIGHBORS=($(seq 1 1 5))
   mPSNR=($(seq 11 10 51))
   xPSNR=($(seq 20 10 60))
 
@@ -56,12 +58,13 @@ if [ "$DATASET" = "train" ];then
     amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]:0:${#extreme[@]}-1}" )
     amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
   fi
-
 else
   TYPE=''
+  ITERS=25
+  NEIGHBORS=($(seq 1 1 20))
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
-  SAMPLES=($(seq 1 100 100))
+  SAMPLES=($(seq 1 25 25))
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
@@ -72,7 +75,6 @@ else
     amps1=($(seq 0 .025 .5))
     amps2=($(seq .025 .025 .5))
   fi
-
 fi
 
 
@@ -84,7 +86,7 @@ do
     do
       for R in 0 1
       do
-        for N in 1 2 3 4 5
+        for N in `seq 1 ${#NEIGHBORS[@]}`
         do
           for S in `seq 1 ${#SAMPLES[@]}`
           do
@@ -98,7 +100,7 @@ do
             j="${j} --sphere ${R}"
             j="${j} --psf_type ${PSF_TYPE}"
             j="${j} --dist ${DIST}"
-            j="${j} --iters 100"
+            j="${j} --iters ${ITERS}"
             j="${j} --bimodal"
             j="${j} --noise"
             j="${j} --gamma .75"

@@ -183,6 +183,22 @@ def main(args=None):
             na=args.na,
             no_phase=args.no_phase,
         )
+    elif args.target == 'densityheatmap':
+        eval.densityheatmap(
+            modelpath=args.model,
+            datadir=args.datadir,
+            distribution=args.dist,
+            samplelimit=args.n_samples,
+            max_amplitude=args.max_amplitude,
+            psf_type=args.psf_type,
+            wavelength=args.wavelength,
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
+            modes=args.modes,
+            na=args.na,
+            no_phase=args.no_phase,
+        )
     elif args.target == 'evalpoints':
         eval.evalpoints(
             na=args.na,
