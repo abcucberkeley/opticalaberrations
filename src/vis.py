@@ -2184,8 +2184,8 @@ def prediction(
     if pred_std is not None:
         ax_zcoff.fill_between(
             range(len(pred.amplitudes_ansi_waves)),
-            pred.amplitudes_ansi_waves - pred_std,
-            pred.amplitudes_ansi_waves + pred_std,
+            pred.amplitudes_ansi_waves - pred_std.amplitudes_ansi_waves,
+            pred.amplitudes_ansi_waves + pred_std.amplitudes_ansi_waves,
             label=r'$\pm \sigma$',
             color='gray',
             alpha=0.33

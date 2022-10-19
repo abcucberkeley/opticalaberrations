@@ -212,6 +212,7 @@ def predict_rois(
 
         dm = pd.DataFrame(zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar))
         p = Wavefront(p, order='ansi', lam_detection=wavelength)
+        std = Wavefront(std, order='ansi', lam_detection=wavelength)
 
         if plot:
             vis.prediction(
@@ -224,12 +225,28 @@ def predict_rois(
                 save_path=Path(f'{outdir}/{w}_pred'),
             )
 
-    p = np.mean(predictions, axis=0)
-    p_std = np.std(predictions, axis=0)
-    dm = pd.DataFrame(zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar))
+    p_modes = predictions.copy()
+    p_modes[p_modes > 0] = 1
+    p_modes = np.sum(p_modes, axis=0)
+    p_modes[p_modes < predictions.shape[0]//2] = 0
+
+    predictions = pd.DataFrame(predictions.T, columns=[f"p{k}" for k in range(num_rois)])
+    predictions['votes'] = p_modes
+    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
+    det_modes = predictions[pcols][p_modes > num_rois//2]
+    predictions['mean'] = det_modes[det_modes > 0].mean(axis=1)
+    predictions['std'] = det_modes[det_modes > 0].std(axis=1)
+    predictions.fillna(0, inplace=True)
+    predictions.to_csv(f"{outdir}_predictions.csv", index=False, header=False)
+    print(predictions)
+
+    dm = pd.DataFrame(zernikies_to_actuators(
+        predictions['mean'].values, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar
+    ))
     dm.to_csv(f"{outdir}_corrected_actuators.csv", index=False, header=False)
 
-    p = Wavefront(p, order='ansi', lam_detection=wavelength)
+    p = Wavefront(predictions['mean'].values, order='ansi', lam_detection=wavelength)
+    pred_std = Wavefront(predictions['std'].values, order='ansi', lam_detection=wavelength)
 
     coffs = [
         {'n': z.n, 'm': z.m, 'amplitude': a}
@@ -246,7 +263,7 @@ def predict_rois(
         vis.prediction(
             psf=np.squeeze(sample),
             pred=p,
-            pred_std=p_std,
+            pred_std=pred_std,
             dm_before=dm_state,
             dm_after=dm.values[:, 0],
             wavelength=wavelength,
