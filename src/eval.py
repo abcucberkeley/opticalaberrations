@@ -2123,9 +2123,7 @@ def evaldensitybin(
             utils.mean_min_distance(np.squeeze(i), voxel_size=(z_voxel_size, y_voxel_size, x_voxel_size))
             for i in inputs
         ]
-        y['neighbors'] = int(np.mean(list(
-            map(int, str([s for s in datapath.parts if s.startswith('npoints_')][0]).lstrip('npoints_'))
-        )))
+        y['neighbors'] = int(str([s for s in datapath.parts if s.startswith('npoints_')][0]).lstrip('npoints_'))
         y_true = y_true.append(y, ignore_index=True)
 
     return (y_pred, y_true)
@@ -2254,7 +2252,8 @@ def densityheatmap(
     cbar.ax.yaxis.set_label_position('left')
 
     ax.set_xlabel(rf'Number of points')
-    ax.set_xlim(0, 20)
+    ax.set_xticks(np.arange(1, 21, 1))
+    ax.set_xlim(1, 20)
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     ax.set_ylabel(
