@@ -36,7 +36,7 @@ OUTDIR="/clusterfs/nvme/thayer/dataset/yumb_lattice_objects/${DIFFICULTY}/${DATA
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   ITERS=100
-  NEIGHBORS=($(seq 1 1 5))
+  OBJS=($(seq 1 1 5))
   mPSNR=($(seq 11 10 51))
   xPSNR=($(seq 20 10 60))
 
@@ -61,7 +61,7 @@ if [ "$DATASET" = "train" ];then
 else
   TYPE=''
   ITERS=10
-  NEIGHBORS=(1 5 10 15 20 25 30 35 40 50)
+  OBJS=(1 5 10 15 20 25 30 35 40 50)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
   SAMPLES=($(seq 1 10 10))
@@ -86,7 +86,7 @@ do
     do
       for R in 0 1
       do
-        for N in `seq 1 ${#NEIGHBORS[@]}`
+        for N in `seq 1 ${#OBJS[@]}`
         do
           for S in `seq 1 ${#SAMPLES[@]}`
           do
