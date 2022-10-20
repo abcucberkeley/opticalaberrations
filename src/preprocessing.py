@@ -114,6 +114,9 @@ def resize(
         resized_vol = resampled_vol
 
     if debug is not None:
+        debug = Path(debug)
+        debug.mkdir(parents=True, exist_ok=True)
+
         fig, axes = plt.subplots(3, 3, figsize=(11, 11))
 
         axes[0, 1].set_title(f"{str(vol.shape)} @ {sample_voxel_size}")
@@ -146,25 +149,51 @@ def prep_sample(
     debug: Any = None,
     remove_background: bool = True,
 ):
-    sample = sample.transpose(0, 2, 1)
-    mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
+    if len(np.squeeze(sample).shape) == 4:
+        samples = []
+        for i in range(sample.shape[0]):
+            s = sample[i]
+            s = s.transpose(0, 2, 1)
+            mode = int(st.mode(s[s < np.quantile(s, .99)], axis=None).mode[0])
 
-    if remove_background:
-        sample -= mode
-        sample[sample < 0] = 0
+            if remove_background:
+                s -= mode
+                s[s < 0] = 0
 
-    sample = sample / np.nanmax(sample)
+            s /= np.nanmax(s)
 
-    if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-        sample = resize(
-            sample,
-            sample_voxel_size=sample_voxel_size,
-            voxel_size=model_voxel_size,
-            crop_shape=crop_shape,
-            debug=debug
-        )
+            if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
+                s = resize(
+                    s,
+                    sample_voxel_size=sample_voxel_size,
+                    voxel_size=model_voxel_size,
+                    crop_shape=crop_shape,
+                    debug=debug/f"{i}_preprocessing" if debug is not None else None
+                )
+            samples.append(s)
 
-    return sample
+        return np.array(samples)
+
+    else:
+        sample = sample.transpose(0, 2, 1)
+        mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
+
+        if remove_background:
+            sample -= mode
+            sample[sample < 0] = 0
+
+        sample = sample / np.nanmax(sample)
+
+        if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
+            sample = resize(
+                sample,
+                sample_voxel_size=sample_voxel_size,
+                voxel_size=model_voxel_size,
+                crop_shape=crop_shape,
+                debug=debug
+            )
+
+        return sample
 
 
 def find_roi(
@@ -299,8 +328,12 @@ def find_roi(
         plt.tight_layout()
         plt.savefig(f'{plot}_selected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
+    peaks = peaks.head(num_peaks)
+    peaks.to_csv(f"{plot}_rois.csv")
+
     logger.info(f"Predicted points of interest")
-    print(peaks.head(num_peaks))
+    print(peaks)
+
     peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
     widths = [w // 2 for w in window_size]
 

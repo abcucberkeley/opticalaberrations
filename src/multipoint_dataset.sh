@@ -27,7 +27,7 @@ LAMBDA=.510
 NA=1.0
 
 DIFFICULTY='easy'
-DATASET='train'
+DATASET='test'
 SHAPE=64
 RCROP=32
 OUTDIR="/clusterfs/nvme/thayer/dataset/yumb_lattice_objects/${DIFFICULTY}/${DATASET}"
@@ -60,11 +60,11 @@ if [ "$DATASET" = "train" ];then
   fi
 else
   TYPE=''
-  ITERS=25
+  ITERS=10
   NEIGHBORS=($(seq 1 1 20))
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
-  SAMPLES=($(seq 1 25 25))
+  SAMPLES=($(seq 1 10 10))
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15

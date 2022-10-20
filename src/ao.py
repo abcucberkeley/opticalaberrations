@@ -102,7 +102,7 @@ def parse_args(args):
         help='type of the desired PSF'
     )
     predict_rois.add_argument(
-        "--window_size", default=32, type=int, help='size of the window to crop around each point of interest'
+        "--window_size", default=64, type=int, help='size of the window to crop around each point of interest'
     )
     predict_rois.add_argument(
         "--num_rois", default=10, type=int, help='max number of detected points to use for estimating aberrations'

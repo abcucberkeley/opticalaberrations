@@ -509,7 +509,6 @@ def bootstrap_predict(
     model: tf.keras.Model,
     inputs: np.array,
     psfgen: SyntheticPSF,
-    resize: Any = None,
     batch_size: int = 1,
     n_samples: int = 10,
     threshold: float = 1e-3,
@@ -526,7 +525,6 @@ def bootstrap_predict(
         model: pre-trained keras model
         inputs: encoded tokens to be processed
         psfgen: Synthetic PSF object
-        resize: optional resize voxel size
         n_samples: number of predictions of average
         batch_size: number of samples per batch
         threshold: set predictions below threshold to zero
@@ -537,27 +535,13 @@ def bootstrap_predict(
     Returns:
         average prediction, stdev
     """
-    def batch_generator(arr, s):
-        for k in range(0, len(arr), s):
-            yield arr[k:k + s]
-
-
-    if resize is not None:
-        inputs = np.stack([
-            np.expand_dims(
-                preprocessing.resize(
-                    np.squeeze(i),
-                    crop_shape=psfgen.psf_shape,
-                    voxel_size=psfgen.voxel_size,
-                    sample_voxel_size=resize,
-                    debug=plot,
-                ),
-                axis=-1
-            ) for i in inputs
-        ], axis=0)
-
     # check z-axis to compute embeddings for fourier models
-    if model.input_shape[1] != inputs.shape[1]:
+    if len(np.squeeze(inputs.shape)) == 3:
+        emb = model.input_shape[1] == inputs.shape[0]
+    else:
+        emb = model.input_shape[1] == inputs.shape[1]
+
+    if not emb:
         model_inputs = []
         for i in inputs:
             emb = psfgen.embedding(
@@ -581,6 +565,9 @@ def bootstrap_predict(
         # pass raw PSFs to the model
         model_inputs = inputs
 
+    model_inputs = np.nan_to_num(model_inputs, nan=0, posinf=0, neginf=0)
+    model_inputs = model_inputs[..., np.newaxis] if model_inputs.shape[-1] != 1 else model_inputs
+
     preds = None
     total = n_samples * (len(model_inputs) // batch_size)
     if verbose:
@@ -590,9 +577,9 @@ def bootstrap_predict(
         b = []
         if verbose:
             pbar.update(len(model_inputs) // batch_size)
-            gen = tqdm(batch_generator(model_inputs, s=batch_size), leave=False)
+            gen = tqdm(tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size), leave=False)
         else:
-            gen = batch_generator(model_inputs, s=batch_size)
+            gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size)
 
         for batch in gen:
             # if plot is not None:
@@ -671,11 +658,6 @@ def bootstrap_predict(
             #         plt.show()
             #     else:
             #         plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-            batch = np.nan_to_num(batch, nan=0, posinf=0, neginf=0)
-
-            if batch.shape[-1] != 1:
-                batch = batch[..., np.newaxis]
 
             p = model(batch, training=True).numpy()
 
@@ -914,8 +896,8 @@ def booststrap_predict_sign(
         model,
         inputs,
         psfgen=gen,
-        batch_size=5,
-        n_samples=5,
+        batch_size=1,
+        n_samples=1,
         no_phase=True,
         desc=desc,
         verbose=verbose,
@@ -927,31 +909,16 @@ def booststrap_predict_sign(
     if prev_pred is not None:
         followup_preds = preds.copy()
         init_preds = np.abs(pd.read_csv(prev_pred, header=0)['amplitude'].values)
-        flips = np.where(followup_preds > (.4 * init_preds))[0]
-        init_preds[flips] *= -1
-        preds = init_preds.copy()
 
-        if plot is not None and prev_pred is not None:
-            init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-
-            fig, axes = plt.subplots(2, 1, figsize=(24, 8))
-            axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
-            axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
-            axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
-            axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
-            axes[0].legend(frameon=False, loc='upper left')
-            axes[0].set_xlim((0, 60))
-            axes[0].set_xticks(range(0, 61))
-
-            axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
-            axes[1].legend(frameon=False, loc='upper left')
-            axes[1].set_xlim((0, 60))
-            axes[1].set_xticks(range(0, 61))
-
-            plt.tight_layout()
-            plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        if np.squeeze(preds).shape[0] == 1:
+            flips = np.where(followup_preds > (.4 * init_preds))[0]
+            init_preds[flips] *= -1
+            preds = init_preds.copy()
+        else:
+            for i in range(preds.shape[0]):
+                flips = np.where(followup_preds[i] > (.4 * init_preds[i]))[0]
+                init_preds[i, flips] *= -1
+            preds = init_preds.copy()
 
     return preds, stdev
 

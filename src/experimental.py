@@ -167,13 +167,16 @@ def predict_rois(
         cpu_workers=-1,
     )
 
+    outdir = Path(f'{img.parent / img.stem}_rois')
     model = backend.load(model, mosaic=mosaic)
     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
+    logger.info(f"Sample: {sample.shape}")
 
+    logger.info(f"Locating ROIs")
     rois = preprocessing.find_roi(
         sample,
         peaks=peaks,
-        window_size=tuple(3*[window_size*2]),
+        window_size=tuple(3*[window_size]),
         plot=Path(f'{img.parent/img.stem}'),
         num_peaks=num_rois,
         min_dist=1,
@@ -182,48 +185,28 @@ def predict_rois(
         min_intensity=min_intensity,
         voxel_size=sample_voxel_size,
     )
+    logger.info(rois.shape)
 
-    predictions = np.zeros((rois.shape[0], model.output_shape[1]))
-    outdir = Path(f'{img.parent / img.stem}_rois')
-    for w in range(rois.shape[0]):
-        inputs = rois[w]
-        imsave(f'{outdir}/{w}.tif', inputs)
+    logger.info(f"Resampling ROIs")
+    rois = preprocessing.prep_sample(
+        rois,
+        crop_shape=(64, 64, 64),
+        model_voxel_size=model_voxel_size,
+        sample_voxel_size=sample_voxel_size,
+        # debug=outdir
+    )
+    logger.info(rois.shape)
 
-        inputs = preprocessing.prep_sample(
-            inputs,
-            crop_shape=tuple(3*[window_size]),
-            model_voxel_size=model_voxel_size,
-            sample_voxel_size=sample_voxel_size,
-            debug=Path(f'{outdir}/{w}_preprocessing')
-        )
-
-        inputs = np.expand_dims(inputs, axis=0)
-        p, std = backend.booststrap_predict_sign(
-            model,
-            inputs=inputs,
-            batch_size=1,
-            threshold=threshold,
-            verbose=False,
-            gen=psfgen,
-            prev_pred=prev,
-            plot=Path(f'{outdir}/{w}') if plot else None,
-        )
-        predictions[w] = p
-
-        dm = pd.DataFrame(zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar))
-        p = Wavefront(p, order='ansi', lam_detection=wavelength)
-        std = Wavefront(std, order='ansi', lam_detection=wavelength)
-
-        if plot:
-            vis.prediction(
-                psf=np.squeeze(inputs),
-                pred=p,
-                pred_std=std,
-                dm_before=dm_state,
-                dm_after=dm.values[:, 0],
-                wavelength=wavelength,
-                save_path=Path(f'{outdir}/{w}_pred'),
-            )
+    predictions, stds = backend.booststrap_predict_sign(
+        model,
+        inputs=rois,
+        batch_size=rois.shape[0],
+        threshold=threshold,
+        verbose=True,
+        gen=psfgen,
+        prev_pred=prev,
+        plot=outdir if plot else None,
+    )
 
     p_modes = predictions.copy()
     p_modes[p_modes > 0] = 1
