@@ -96,7 +96,7 @@ do
             done
 
             j="${ENV} multipoint_dataset.py ${TYPE}"
-            j="${j} --npoints ${N}"
+            j="${j} --npoints ${OBJS[$N-1]}"
             j="${j} --sphere ${R}"
             j="${j} --psf_type ${PSF_TYPE}"
             j="${j} --dist ${DIST}"
