@@ -2,7 +2,7 @@
 
 HANDLER=slurm
 ENV=~/anaconda3/envs/deep/bin/python
-NODES='abc'
+NODES='all'
 
 #PSF_TYPE='widefield'
 #xVOXEL=.15
@@ -26,7 +26,7 @@ zVOXEL=.200
 LAMBDA=.510
 NA=1.0
 
-DIFFICULTY='easy'
+DIFFICULTY='hard'
 DATASET='test'
 SHAPE=64
 RCROP=32
