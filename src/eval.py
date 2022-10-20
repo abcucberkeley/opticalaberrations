@@ -1889,9 +1889,9 @@ def evaldistbin(
 
         preds = backend.eval_sign(
             model=model,
-            inputs=inputs.numpy(),
+            inputs=inputs if isinstance(inputs, np.ndarray) else inputs.numpy(),
             gen=gen,
-            ys=ys.numpy(),
+            ys=ys if isinstance(ys, np.ndarray) else ys.numpy(),
             batch_size=100,
             desc=f"Predictions for ({datapath})"
         )
@@ -1927,7 +1927,11 @@ def distheatmap(
     samplelimit: Any = None,
     input_coverage: float = 1.0,
 ):
-    savepath = modelpath / f'distheatmaps_neighbor_{num_neighbor}_{input_coverage}'
+    if num_neighbor is not None:
+        savepath = modelpath / f'distheatmaps_neighbor_{num_neighbor}_{input_coverage}'
+    else:
+        savepath = modelpath / f'distheatmaps_{input_coverage}'
+
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -2108,9 +2112,9 @@ def evaldensitybin(
 
         preds = backend.eval_sign(
             model=model,
-            inputs=inputs.numpy(),
+            inputs=inputs if isinstance(inputs, np.ndarray) else inputs.numpy(),
             gen=gen,
-            ys=ys.numpy(),
+            ys=ys if isinstance(ys, np.ndarray) else ys.numpy(),
             batch_size=100,
             desc=f"Predictions for ({datapath})"
         )
@@ -2252,8 +2256,8 @@ def densityheatmap(
     cbar.ax.yaxis.set_label_position('left')
 
     ax.set_xlabel(rf'Number of points')
-    ax.set_xticks(np.arange(1, 21, 1))
-    ax.set_xlim(1, 20)
+    ax.set_xticks(np.arange(0, 55, 5))
+    ax.set_xlim(1, 50)
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     ax.set_ylabel(

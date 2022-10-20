@@ -61,7 +61,7 @@ if [ "$DATASET" = "train" ];then
 else
   TYPE=''
   ITERS=10
-  NEIGHBORS=($(seq 1 1 20))
+  NEIGHBORS=(1 5 10 15 20 25 30 35 40 50)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
   SAMPLES=($(seq 1 10 10))
