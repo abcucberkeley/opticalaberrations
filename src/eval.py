@@ -984,6 +984,7 @@ def evalheatmap(
            and distribution in str(c)
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
+    logger.info(f"BINs: {[len(classes)]}")
 
     job = partial(
         eval_bin,
@@ -1330,6 +1331,7 @@ def iterheatmap(
     else:
         reference = Path(reference)
         savepath = modelpath / f'{reference.stem}_iterheatmaps_{input_coverage}'
+
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -1355,6 +1357,7 @@ def iterheatmap(
            and distribution in str(c)
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
+    logger.info(f"BINs: {[len(classes)]}")
 
     if reference is None:
         job = partial(
@@ -1954,6 +1957,7 @@ def distheatmap(
             c for c in Path(datadir).rglob('*/')
             if c.is_dir()
                and len(list(c.glob('*.tif'))) > 0
+               and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
                and distribution in str(c)
                and f"npoints_{num_neighbor}" in str(c)
                and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
@@ -1962,10 +1966,12 @@ def distheatmap(
         classes = sorted([
             c for c in Path(datadir).rglob('*/')
             if c.is_dir()
+               and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
                and len(list(c.glob('*.tif'))) > 0
                and distribution in str(c)
                and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
         ])
+    logger.info(f"BINs: {[len(classes)]}")
 
     job = partial(
         evaldistbin,
@@ -2171,9 +2177,11 @@ def densityheatmap(
         c for c in Path(datadir).rglob('*/')
         if c.is_dir()
            and len(list(c.glob('*.tif'))) > 0
+           and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
            and distribution in str(c)
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
+    logger.info(f"BINs: {[len(classes)]}")
 
     job = partial(
         evaldensitybin,

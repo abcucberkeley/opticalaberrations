@@ -6,6 +6,7 @@ from functools import partial
 from pathlib import Path
 from subprocess import call
 import multiprocessing as mp
+import tensorflow as tf
 from tensorflow import config as tfc
 from typing import Any, Sequence, Union
 import numpy as np
@@ -200,7 +201,7 @@ def predict_rois(
     predictions, stds = backend.booststrap_predict_sign(
         model,
         inputs=rois,
-        batch_size=rois.shape[0],
+        batch_size=1,
         threshold=threshold,
         verbose=True,
         gen=psfgen,

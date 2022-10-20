@@ -880,6 +880,7 @@ def booststrap_predict_sign(
     plot: Any = None,
     verbose: bool = False,
     threshold: float = 1e-2,
+    sign_threshold: float = .4,
     prev_pred: Any = None
 ):
     plt.rcParams.update({
@@ -896,7 +897,7 @@ def booststrap_predict_sign(
         model,
         inputs,
         psfgen=gen,
-        batch_size=1,
+        batch_size=batch_size,
         n_samples=1,
         no_phase=True,
         desc=desc,
@@ -911,12 +912,12 @@ def booststrap_predict_sign(
         init_preds = np.abs(pd.read_csv(prev_pred, header=0)['amplitude'].values)
 
         if np.squeeze(preds).shape[0] == 1:
-            flips = np.where(followup_preds > (.4 * init_preds))[0]
+            flips = np.where(followup_preds > (sign_threshold * init_preds))[0]
             init_preds[flips] *= -1
             preds = init_preds.copy()
         else:
             for i in range(preds.shape[0]):
-                flips = np.where(followup_preds[i] > (.4 * init_preds[i]))[0]
+                flips = np.where(followup_preds[i] > (sign_threshold * init_preds[i]))[0]
                 init_preds[i, flips] *= -1
             preds = init_preds.copy()
 
@@ -931,7 +932,9 @@ def eval_sign(
     batch_size: int,
     desc: Any = None,
     reference: Any = None,
-    plot: Any = None
+    plot: Any = None,
+    threshold: float = 1e-3,
+    sign_threshold: float = .4,
 ):
     init_preds, stdev = bootstrap_predict(
         model,
@@ -940,6 +943,7 @@ def eval_sign(
         batch_size=batch_size,
         n_samples=1,
         no_phase=True,
+        threshold=threshold,
         desc=desc,
         plot=plot
     )
@@ -966,6 +970,7 @@ def eval_sign(
         batch_size=batch_size,
         n_samples=1,
         no_phase=True,
+        threshold=threshold,
         desc=desc,
     )
     followup_preds = np.abs(followup_preds)
@@ -973,11 +978,11 @@ def eval_sign(
     preds = init_preds.copy()
 
     if ys.shape[0] == 1:
-        flips = np.where(followup_preds > (.4 * init_preds))[0]
+        flips = np.where(followup_preds > (sign_threshold * init_preds))[0]
         preds[flips] *= -1
     else:
         for i in range(ys.shape[0]):
-            flips = np.where(followup_preds[i] > (.4 * init_preds[i]))[0]
+            flips = np.where(followup_preds[i] > (sign_threshold * init_preds[i]))[0]
             preds[i, flips] *= -1
 
             if plot == True:
