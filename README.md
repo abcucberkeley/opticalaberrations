@@ -119,7 +119,7 @@ conda activate ml
 An example of using the [`ao.py`](src/ao.py) script:
 ```
 ~/anaconda3/envs/ml/bin/python src/ao.py predict 
-pretrained_models/fourier_space/i64/z15_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5 
+pretrained_models/z15_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5 
 examples/phase_retrieval/-.tif 
 examples/Zernike_Korra_Bax273.csv 
 --psf_type lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat
@@ -131,7 +131,7 @@ examples/Zernike_Korra_Bax273.csv
 Example of a followup prediction to eval signs:
 ```
 ~/anaconda3/envs/ml/bin/python src/ao.py predict 
-pretrained_models/fourier_space/i64/z15_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5 
+pretrained_models/z15_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5 
 examples/phase_retrieval/-_2.tif 
 examples/Zernike_Korra_Bax273.csv 
 --psf_type lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat
@@ -211,7 +211,7 @@ optional arguments:
 conda activate ml
 
 ~/anaconda3/envs/ml/bin/python src/ao.py predict_rois 
-/pretrained_models/fourier_space/i64/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5
+/pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5
 examples/agarose/exp1.tif
 examples/experimental/agarose/results/Detection3D.mat 
 examples/Zernike_Korra_Bax273.csv 
