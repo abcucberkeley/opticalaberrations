@@ -1,18 +1,18 @@
+import matplotlib
+matplotlib.use('Agg')
+
+import time
 from functools import partial
 from pathlib import Path
-from typing import Any
-
-import ujson
-import numpy as np
-import pandas as pd
+from subprocess import call
+import multiprocessing as mp
+import tensorflow as tf
 from tensorflow import config as tfc
-
-import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-import matplotlib.ticker as mtick
-from matplotlib.ticker import FormatStrFormatter
-import matplotlib.colors as mcolors
-from tifffile import imsave
+from typing import Any, Sequence, Union
+import numpy as np
+from scipy import stats as st
+import pandas as pd
+from tifffile import imread, imsave
 
 import utils
 import vis
@@ -20,6 +20,7 @@ import backend
 import preprocessing
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
+from data_utils import get_image, load_dataset
 
 import logging
 logger = logging.getLogger('')
@@ -38,7 +39,7 @@ def zernikies_to_actuators(coefficients: np.array, dm_pattern: Path, dm_state: n
     return dm_state + (offset * scalar)
 
 
-def phase_retrieval(psf: Path, dx=.15, dz=.6, wavelength=.605, n_modes=60) -> list:
+def matlab_phase_retrieval(psf: Path, dx=.15, dz=.6, wavelength=.605, n_modes=60) -> list:
     try:
         import matlab.engine
         matlab = matlab.engine.start_matlab()
@@ -56,492 +57,378 @@ def phase_retrieval(psf: Path, dx=.15, dz=.6, wavelength=.605, n_modes=60) -> li
         )
 
 
-def create_dataset(data_path: Path):
-    """
-    Creates a JSON file mapping .tif scans to GTs
-
-    Args:
-        data_path: path to raw data directory
-        noisy: a flag to add Gaussian noise to GT
-
-    """
-    files = sorted(data_path.rglob('*.tif'))
-    zcoffs = utils.multiprocess(phase_retrieval, files, desc='Phase retrieval', cores=-1)
-    data = dict(zip(files, zcoffs))
-
-    with open(data_path / 'dataset.json', 'w') as fp:
-        ujson.dump(data, fp, indent=4)
-
-
-def correct(
-    k: tuple,
-    outdir: Path,
-    dm_pattern: Path,
-    input_shape: int,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
+def deskew(
+    img: Path,
+    axial_voxel_size: float,
+    lateral_voxel_size: float,
+    flipz: bool = False,
+    skew_angle: float = 32.45,
 ):
-    y, pred, path = k
+    matlab = 'matlab '
+    matlab += f' -nodisplay'
+    matlab += f' -nosplash'
+    matlab += f' -nodesktop'
+    matlab += f' -nojvm -r '
 
-    psf = preprocessing.prep_psf(path, image_size=input_shape)
-    diff = y - pred
+    flags = f"{lateral_voxel_size},{axial_voxel_size},"
+    flags += f"'SkewAngle',{skew_angle},"
+    flags += f"'Reverse',true,"
+    flags += f"'Rotate',false,"
+    flags += f"'flipZstack',{str(flipz).lower()},"
+    flags += f"'Save16bit',true,"
+    flags += f"'save3DStack',true,"
+    flags += f"'DSRCombined',false"
 
-    dm = zernikies_to_actuators(pred, dm_pattern=dm_pattern)
-    df = pd.DataFrame(dm)
-    df.to_csv(f"{outdir}/{Path(path).stem}_correction_dmpattern.csv", index=False, header=False)
+    deskew = f"XR_deskewRotateFrame('{img}',{flags})"
+    repo = Path(__file__).parent.parent.absolute()
+    llsm = f"addpath(genpath('{repo}/LLSM3DTools/'))"
+    job = f"{matlab} \"{llsm}; {deskew}; exit;\""
 
-    y = Wavefront(y)
-    pred = Wavefront(pred)
-    diff = Wavefront(diff)
-
-    psfargs = dict(
-        amplitude_ranges=(-.2, .2),
-        psf_shape=psf.shape,
-        x_voxel_size=x_voxel_size,
-        y_voxel_size=y_voxel_size,
-        z_voxel_size=z_voxel_size,
-        snr=100,
-        max_jitter=0,
-        batch_size=1
-    )
-
-    gen = SyntheticPSF(**psfargs)
-
-    predicted_psf = gen.single_psf(pred, zplanes=0)
-    corrected_psf = gen.single_psf(diff, zplanes=0)
-    gt_psf = gen.single_psf(y, zplanes=0)
-
-    vis.diagnostic_assessment(
-        psf=psf,
-        gt_psf=gt_psf,
-        predicted_psf=predicted_psf,
-        corrected_psf=corrected_psf,
-        psnr=100,
-        maxcounts=10000,
-        y=y,
-        pred=pred,
-        save_path=Path(f"{outdir}/{Path(path).stem}"),
-        display=False
-    )
+    print(job)
+    call([job], shell=True)
 
 
-def matlab_comparison(
-    args: tuple,
-    wavelength: float = .605,
-    psf_cmap: str = 'hot',
-    wave_cmap: str = 'Spectral_r',
-    gamma: float = .5,
+def points_detection(
+    img: Path,
+    axial_voxel_size: float,
+    lateral_voxel_size: float,
+    psf: Any = None,
+    skew_angle: float = 32.45,
+    sigma_xy: float = 1.1,
+    sigma_z: float = 1.1,
 ):
-    def plot_wavefront(iax, w, levels, label=''):
-        mat = iax.contourf(
-            w,
-            levels=levels,
-            cmap=wave_cmap,
-            vmin=np.min(levels),
-            vmax=np.max(levels),
-            extend='both'
+    matlab = 'matlab '
+    matlab += f' -nodisplay'
+    matlab += f' -nosplash'
+    matlab += f' -nodesktop'
+    matlab += f' -nojvm -r '
+
+    if psf is not None:
+        det = f"TA_PointDetection('{img}','{psf}',{lateral_voxel_size},{axial_voxel_size},{skew_angle},{sigma_xy},{sigma_z})"
+    else:
+        det = f"TA_PointDetection('{img}','none',{lateral_voxel_size},{axial_voxel_size},{skew_angle},{sigma_xy},{sigma_z})"
+
+    repo = Path(__file__).parent.parent.absolute()
+    llsm = f"addpath(genpath('{repo}/LLSM3DTools/'))"
+    job = f"{matlab} \"{llsm}; {det}; exit;\""
+
+    print(job)
+    call([job], shell=True)
+
+
+def get_roi(path, crop_shape, model_voxel_size, sample_voxel_size):
+    try:
+        if isinstance(path, tf.Tensor):
+            path = Path(str(path.numpy(), "utf-8"))
+        else:
+            path = Path(str(path))
+
+        img = get_image(path)
+
+        img = preprocessing.prep_sample(
+            np.squeeze(img),
+            crop_shape=crop_shape,
+            model_voxel_size=model_voxel_size,
+            sample_voxel_size=sample_voxel_size,
+            debug=f"{path.parent}/{path.stem}_preprocessing"
         )
 
-        divider = make_axes_locatable(iax)
-        top = divider.append_axes("top", size='30%', pad=0.2)
-        top.hist(w.flatten(), bins=w.shape[0], color='grey')
+        return img
 
-        top.set_title(label)
-        top.set_yticks([])
-        top.xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
-
-        top.spines['right'].set_visible(False)
-        top.spines['top'].set_visible(False)
-        top.spines['left'].set_visible(False)
-        return mat
-
-    def plot_psf_slice(xy, zy, zx, vol, label='', ylim=(None, None), xlim=(None, None), zlim=(None, None)):
-
-        vol = vol ** gamma
-        vol = np.nan_to_num(vol)
-
-        mid_plane = vol.shape[0] // 2
-        m = xy.imshow(vol[mid_plane, :, :], cmap=psf_cmap)
-        zx.imshow(vol[:, mid_plane, :], cmap=psf_cmap)
-        zy.imshow(vol[:, :, mid_plane].T, cmap=psf_cmap)
-
-        xy.set_ylabel(label)
-
-        xy.set_xlim(*xlim)
-        xy.set_ylim(*ylim)
-
-        zx.set_xlim(*xlim)
-        zx.set_ylim(*zlim)
-
-        zy.set_xlim(*ylim)
-        zy.set_ylim(*zlim)
-
-        return m
-
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-    })
-
-    psfargs, psf, y_true, y_pred, save_path, psnr, zplanes = args
-    y_matlab = np.array(phase_retrieval(Path(save_path).with_suffix('.tif')))
-
-    if psf.ndim == 5:
-        psf = np.squeeze(psf, axis=0)
-        psf = np.squeeze(psf, axis=-1)
-    elif psf.ndim == 4:
-        psf = np.squeeze(psf, axis=-1)
-
-    if not np.isscalar(psnr):
-        psnr = psnr[0]
-
-    y_true = Wavefront(y_true)
-    y_pred = Wavefront(y_pred)
-    y_matlab = Wavefront(y_matlab)
-
-    mat_diff = Wavefront(y_true - y_matlab)
-    net_diff = Wavefront(y_true - y_pred)
-
-    step = .25
-    y_wave = y_true.wave(size=100)
-
-    vmax = round(np.max([
-        np.abs(round(np.nanquantile(y_wave, .1), 2)),
-        np.abs(round(np.nanquantile(y_wave, .9), 2))
-    ])*4)/4
-    vmax = .25 if vmax == 0.0 else vmax
-
-    highcmap = plt.get_cmap('magma_r', 256)
-    middlemap = plt.get_cmap('gist_gray', 256)
-    lowcmap = plt.get_cmap('gist_earth_r', 256)
-
-    ll = np.arange(-vmax, -.25+step, step)
-    mm = [-.15, 0, .15]
-    hh = np.arange(.25, vmax+step, step)
-    mticks = np.concatenate((ll, mm, hh))
-
-    levels = np.vstack((
-        lowcmap(.66*ll/ll.min()),
-        middlemap([.85, .95, 1, .95, .85]),
-        highcmap(.66*hh/hh.max())
-    ))
-    wave_cmap = mcolors.ListedColormap(levels)
-
-    fig = plt.figure(figsize=(10, 18))
-    gs = fig.add_gridspec(21, 4)
-
-    psfs = {
-        'Input': [],
-        'Ground truth': [],
-        'Predicted': [],
-        'Matlab': [],
-        'Matlab_PH': [],
-        'Net_PH': [],
-    }
-    for i, k in zip(range(0, 21, 3), psfs):
-        psfs[k] = [fig.add_subplot(gs[i:i+3, j]) for j in range(3)]
-
-    #cax = fig.add_subplot(gs[0:3, 3])
-    ax_zcoff = fig.add_subplot(gs[-3:, :])
-
-    for i, (k, axes), phi in zip(
-        range(0, 24, 3),
-        psfs.items(),
-        [psf, y_true, y_pred, y_matlab, mat_diff, net_diff]
-    ):
-        if k == 'Input':
-            plot_psf_slice(*axes, psf, label=k)
-        else:
-            p, y, psnr, zs = SyntheticPSF(
-                amplitude_ranges=phi,
-                psf_shape=psfargs['psf_shape'],
-                x_voxel_size=psfargs['x_voxel_size'],
-                y_voxel_size=psfargs['y_voxel_size'],
-                z_voxel_size=psfargs['z_voxel_size'],
-                snr=psfargs['snr'],
-                max_jitter=psfargs['max_jitter']
-            ).single_psf(
-                phi, meta=True, zplanes=0, normed=True, noise=False, augmentation=False
-            )
-
-            plot_psf_slice(*axes, p, label=k)
-
-            if k == 'Ground truth':
-                y_wave = phi.wave(size=100)
-
-                wax = fig.add_subplot(gs[i:i+3, 3])
-                m = plot_wavefront(wax, y_wave, label='', levels=mticks)
-                cbar = fig.colorbar(
-                    m,
-                    cax=fig.add_axes([.95, 0.25, 0.02, .5]),
-                    fraction=0.046,
-                    pad=0.04,
-                    extend='both',
-                    format=FormatStrFormatter("%.2g"),
-                    # spacing='proportional',
-                )
-                cbar.ax.set_title(r'$\lambda$')
-                cbar.ax.set_ylabel(f'$\lambda = {wavelength}~\mu m$')
-                cbar.ax.yaxis.set_ticks_position('right')
-                cbar.ax.yaxis.set_label_position('left')
-
-            else:
-                wax = fig.add_subplot(gs[i:i+3, 3])
-                plot_wavefront(wax, phi.wave(size=100), label='', levels=mticks)
-
-            wax.axis('off')
-
-    psfs['Input'][0].set_title(f"PSNR: {psnr:.2f}")
-    psfs['Input'][2].set_title(f"$\gamma$: {gamma:.2f}")
-    psfs['Net_PH'][0].set_title('XY')
-    psfs['Net_PH'][1].set_title('ZY')
-    psfs['Net_PH'][2].set_title('ZX')
-
-    # ax_zcoff.set_title('Zernike modes')
-    ax_zcoff.plot(y_true.amplitudes_ansi_waves, '-o', color='C3', label='Ground truth')
-    ax_zcoff.plot(y_pred.amplitudes_ansi_waves, '-o', color='C0', label='Predictions')
-    ax_zcoff.plot(y_matlab.amplitudes_ansi_waves, '-o', color='C1', label='Matlab')
-
-    ax_zcoff.legend(frameon=False)
-    ax_zcoff.set_xticks(range(len(y_pred.amplitudes_ansi_waves)))
-    ax_zcoff.set_ylabel(f'Amplitudes\n($\lambda = {wavelength}~\mu m$)')
-    ax_zcoff.spines['top'].set_visible(False)
-
-    net_error = 100 * np.abs(y_true.amplitudes_ansi_waves - y_pred.amplitudes_ansi_waves) / np.abs(y_true.amplitudes_ansi_waves)
-    mat_error = 100 * np.abs(y_true.amplitudes_ansi_waves - y_matlab.amplitudes_ansi_waves) / np.abs(y_true.amplitudes_ansi_waves)
-
-    ax_error = ax_zcoff.twinx()
-    ax_error.bar(range(len(y_pred.zernikes)), net_error, color='C0', alpha=.2)
-    ax_error.bar(range(len(y_pred.zernikes)), mat_error, color='C1', alpha=.2)
-
-    ax_error.set_ylabel(f'MAPE = {np.mean(net_error[np.isfinite(net_error)]):.2f}%', color='darkgrey')
-    ax_error.tick_params(axis='y', labelcolor='darkgrey')
-    ax_error.set_ylim(0, 100)
-
-    ax_error.yaxis.set_major_formatter(mtick.PercentFormatter())
-    ax_error.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
-    ax_error.spines['top'].set_visible(False)
-    xticks = [f"$\\alpha$={z.index_ansi}\n$j$={z.index_noll}\n$n$={z.n}\n$m$={z.m}" for z in y_pred.zernikes]
-    ax_error.set_xticklabels(xticks)
-
-    #plt.subplots_adjust(top=0.95, right=0.95, wspace=.33)
-    plt.tight_layout()
-    plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    except Exception as e:
+        logger.warning(e)
 
 
-def predict(
-    model: Path,
+def predict_rois(
     img: Path,
+    model: Path,
     dm_pattern: Path,
     dm_state: Any,
+    peaks: Any,
     axial_voxel_size: float,
     model_axial_voxel_size: float,
     lateral_voxel_size: float,
     model_lateral_voxel_size: float,
     wavelength: float = .605,
+    plot: bool = False,
+    psf_type: str = 'widefield',
+    mosaic: bool = True,
+    prev: Any = None,
+    window_size: int = 64,
+    num_rois: int = 10,
+    min_intensity: int = 200,
+    threshold: float = 1e-2,
+    sign_threshold: float = .4,
     scalar: float = 1,
-    threshold: float = 0.0,
-    verbose: bool = False,
-    plot: bool = False
 ):
     physical_devices = tfc.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
-    model = backend.load(model, mosaic=True)
+    sample = imread(img).astype(int)
+    esnr = np.sqrt(sample.max()).round(0).astype(int)
+    model_voxel_size = (model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size)
+    sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
 
-    psf = preprocessing.prep_psf(
-        img,
-        input_shape=model.layers[0].input_shape[0][1:-1],
-        model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
-        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-    )
+    mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
+    sample -= mode
+    sample[sample < 0] = 0
+    sample = sample / np.nanmax(sample)
+
+    model = backend.load(model, mosaic=mosaic)
 
     psfgen = SyntheticPSF(
-        snr=30,
-        n_modes=60,
+        dtype=psf_type,
+        order='ansi',
+        snr=esnr,
+        n_modes=model.output_shape[1],
+        gamma=.75,
+        bimodal=True,
         lam_detection=wavelength,
-        psf_shape=psf.shape,
-        x_voxel_size=lateral_voxel_size,
-        y_voxel_size=lateral_voxel_size,
-        z_voxel_size=axial_voxel_size,
+        psf_shape=(64, 64, 64),
+        x_voxel_size=model_lateral_voxel_size,
+        y_voxel_size=model_lateral_voxel_size,
+        z_voxel_size=model_axial_voxel_size,
         batch_size=1,
         max_jitter=0,
         cpu_workers=-1,
     )
 
-    psf_input = np.expand_dims(psf, axis=0)
+    outdir = Path(f'{img.parent / img.stem}_rois')
+    dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
+    logger.info(f"Sample: {sample.shape}")
 
-    p, std = backend.bootstrap_predict(
-        model,
-        inputs=psf_input,
-        batch_size=1,
-        n_samples=1,
-        threshold=threshold,
-        verbose=False,
-        psfgen=psfgen,
-        plot=Path(f'{img.parent/img.stem}') if plot else None
+    preprocessing.find_roi(
+        sample,
+        savepath=outdir,
+        peaks=peaks,
+        window_size=tuple(3*[window_size]),
+        plot=Path(f'{img.parent/img.stem}'),
+        num_peaks=num_rois,
+        min_dist=1,
+        max_dist=None,
+        max_neighbor=10,
+        min_intensity=min_intensity,
+        voxel_size=sample_voxel_size,
     )
+
+    load_sample = partial(
+        get_roi,
+        crop_shape=(64, 64, 64),
+        model_voxel_size=model_voxel_size,
+        sample_voxel_size=sample_voxel_size,
+    )
+    rois = np.array(utils.multiprocess(load_sample, list(outdir.glob(r'roi_[0-9].*')), desc='Loading ROIs'))
+    logger.info(rois.shape)
+
+    predictions, stds = backend.booststrap_predict_sign(
+        model,
+        inputs=rois[..., np.newaxis],
+        threshold=threshold,
+        sign_threshold=sign_threshold,
+        n_samples=5,
+        verbose=True,
+        gen=psfgen,
+        prev_pred=prev,
+        plot=None,
+        desc='Predicting'
+    )
+
+    p_modes = predictions.copy()
+    p_modes[p_modes > 0] = 1
+    p_modes = np.sum(p_modes, axis=0)
+
+    predictions = pd.DataFrame(predictions.T, columns=[f"p{k}" for k in range(num_rois)])
+    predictions['votes'] = p_modes
+    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
+    det_modes = predictions[pcols][p_modes > num_rois//2]
+    predictions['mean'] = det_modes[det_modes > 0].mean(axis=1)
+    predictions['std'] = det_modes[det_modes > 0].std(axis=1)
+    predictions.fillna(0, inplace=True)
+    predictions.index.name = 'ansi'
+    predictions.to_csv(f"{outdir}_predictions.csv", index=False, header=False)
+    print(predictions)
+
+    dm = pd.DataFrame(zernikies_to_actuators(
+        predictions['mean'].values, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar
+    ))
+    dm.to_csv(f"{outdir}_corrected_actuators.csv", index=False, header=False)
+
+    p = Wavefront(predictions['mean'].values, order='ansi', lam_detection=wavelength)
+    pred_std = Wavefront(predictions['std'].values, order='ansi', lam_detection=wavelength)
+
+    coffs = [
+        {'n': z.n, 'm': z.m, 'amplitude': a}
+        for z, a in p.zernikes.items()
+    ]
+    coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
+    coffs.index.name = 'ansi'
+    coffs.to_csv(f"{outdir}_zernike_coffs.csv")
+
+    pupil_displacement = np.array(p.wave(size=100), dtype='float32')
+    imsave(f"{outdir}_pred_pupil_displacement.tif", pupil_displacement)
+
+    if plot:
+        vis.prediction(
+            psf=np.squeeze(sample),
+            pred=p,
+            pred_std=pred_std,
+            dm_before=dm_state,
+            dm_after=dm.values[:, 0],
+            wavelength=wavelength,
+            save_path=Path(f'{outdir}_pred'),
+        )
+
+
+def predict(
+        img: Path,
+        model: Path,
+        dm_pattern: Path,
+        dm_state: Any,
+        axial_voxel_size: float,
+        model_axial_voxel_size: float,
+        lateral_voxel_size: float,
+        model_lateral_voxel_size: float,
+        wavelength: float = .605,
+        scalar: float = 1,
+        threshold: float = 0.0,
+        verbose: bool = False,
+        plot: bool = False,
+        psf_type: str = 'widefield',
+        n_modes: int = 60,
+        mosaic: bool = True,
+        prev: Any = None
+):
+    physical_devices = tfc.list_physical_devices('GPU')
+    for gpu_instance in physical_devices:
+        tfc.experimental.set_memory_growth(gpu_instance, True)
+
+    inputs = imread(img).astype(int)
+    esnr = np.sqrt(inputs.max()).round(0).astype(int)
+
+    psfgen = SyntheticPSF(
+        dtype=psf_type,
+        order='ansi',
+        snr=esnr,
+        n_modes=n_modes,
+        gamma=.75,
+        bimodal=True,
+        lam_detection=wavelength,
+        psf_shape=(64, 64, 64),
+        x_voxel_size=model_lateral_voxel_size,
+        y_voxel_size=model_lateral_voxel_size,
+        z_voxel_size=model_axial_voxel_size,
+        batch_size=1,
+        max_jitter=0,
+        cpu_workers=-1,
+    )
+
+    inputs = preprocessing.prep_sample(
+        inputs,
+        crop_shape=(64, 64, 64),
+        model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
+        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        debug=Path(f'{img.parent / img.stem}_preprocessing')
+    )
+
+    inputs = np.expand_dims(inputs, axis=0)
+
+    model = backend.load(model, mosaic=mosaic)
+
+    p, std = backend.booststrap_predict_sign(
+        model,
+        inputs=inputs,
+        threshold=threshold,
+        verbose=verbose,
+        gen=psfgen,
+        prev_pred=prev,
+        plot=Path(f'{img.parent / img.stem}') if plot else None,
+    )
+
     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
     dm = zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar)
     dm = pd.DataFrame(dm)
-    dm.to_csv(f"{img.parent/img.stem}_corrected_actuators.csv", index=False, header=False)
+    dm.to_csv(f"{img.parent / img.stem}_corrected_actuators.csv", index=False, header=False)
 
-    p = Wavefront(p, order='ansi')
+    p = Wavefront(p, order='ansi', lam_detection=wavelength)
+    std = Wavefront(std, order='ansi', lam_detection=wavelength)
+
     if verbose:
         logger.info('Prediction')
         logger.info(p.zernikes)
 
     coffs = [
-        {'n': z.n, 'm': z.m, 'amplitude': utils.microns2waves(a, wavelength=wavelength)}
+        {'n': z.n, 'm': z.m, 'amplitude': a}
         for z, a in p.zernikes.items()
     ]
     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
     coffs.index.name = 'ansi'
-    coffs.to_csv(f"{img.parent/img.stem}_zernike_coffs.csv")
+    coffs.to_csv(f"{img.parent / img.stem}_zernike_coffs.csv")
 
     pupil_displacement = np.array(p.wave(size=100), dtype='float32')
-    imsave(f"{img.parent/img.stem}_pred_pupil_displacement.tif", pupil_displacement)
+    imsave(f"{img.parent / img.stem}_pred_pupil_displacement.tif", pupil_displacement)
 
     if plot:
-        psfgen.single_otf(
-            p.amplitudes,
-            zplanes=0,
-            normed=True,
-            noise=True,
-            na_mask=True,
-            ratio=True,
-            augmentation=True,
-            meta=True,
-            plot=Path(f'{img.parent/img.stem}_diagnosis'),
-        )
-
         vis.prediction(
-            psf=psf,
+            psf=np.squeeze(inputs),
             pred=p,
+            pred_std=std,
             dm_before=dm_state,
             dm_after=dm.values[:, 0],
-            save_path=Path(f'{img.parent/img.stem}_pred'),
+            wavelength=wavelength,
+            save_path=Path(f'{img.parent / img.stem}_pred'),
         )
 
 
 def predict_dataset(
-    dataset: Path,
-    model: Path,
-    dm_pattern: Path,
-    batch_size: int,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
-    wavelength: float,
+        dataset: Path,
+        model: Path,
+        dm_pattern: Path,
+        dm_state: Any,
+        axial_voxel_size: float,
+        model_axial_voxel_size: float,
+        lateral_voxel_size: float,
+        model_lateral_voxel_size: float,
+        wavelength: float = .605,
+        scalar: float = 1,
+        threshold: float = 0.0,
+        verbose: bool = False,
+        plot: bool = False,
+        psf_type: str = 'widefield',
+        n_modes: int = 60,
+        mosaic: bool = False,
+        prev: Any = None
 ):
-    model = backend.load(model)
-    model.summary()
-    input_shape = model.layers[0].input_shape[0][1]
-    voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
-
-    df = pd.read_json(dataset, orient='index')
-    psfs = np.array(
-        utils.multiprocess(
-            partial(
-                preprocessing.prep_psf,
-                image_size=input_shape,
-                voxel_size=voxel_size
-            ),
-            df.index.values,
-            desc="Preprocessing PSFs")
-    )
-    predictions, stdev = backend.bootstrap_predict(model, psfs, batch_size=batch_size)
-    df = df.iloc[:, :predictions.shape[-1]]
-
-    outdir = Path(f"{dataset.parent}/predictions")
-    outdir.mkdir(exist_ok=True, parents=True)
-
-    utils.multiprocess(
-        partial(
-            correct,
-            outdir=outdir,
-            dm_pattern=dm_pattern,
-            input_shape=input_shape,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-        ),
-        list(zip(df.values, predictions, df.index.values)),
-        desc="Correcting PSFs"
+    func = partial(
+        predict,
+        model=model,
+        dm_pattern=dm_pattern,
+        axial_voxel_size=axial_voxel_size,
+        model_axial_voxel_size=model_axial_voxel_size,
+        lateral_voxel_size=lateral_voxel_size,
+        model_lateral_voxel_size=model_lateral_voxel_size,
+        wavelength=wavelength,
+        scalar=scalar,
+        threshold=threshold,
+        verbose=verbose,
+        plot=plot,
+        psf_type=psf_type,
+        n_modes=n_modes,
+        mosaic=mosaic,
+        prev=prev,
     )
 
-    res = pd.DataFrame.from_dict({
-        'psf': df.index.values,
-        'mae': utils.mae(df.values, predictions),
-        'mse': utils.mse(df.values, predictions),
-        'rmse': utils.rmse(df.values, predictions),
-    })
-    logger.info(res)
-    logger.info(f"MAE: {res.mae.mean()}")
-    logger.info(f"MSE: {res.mse.mean()}")
-    res.to_csv(f"{outdir}/results.csv")
+    jobs = []
+    for file in dataset.rglob('*.tif'):
+        if '_' not in file.stem:
+            worker = partial(func, dm_state=f"{file.parent}/DM{file.stem}.csv")
+            p = mp.Process(target=worker, args=(file,))
+            p.start()
+            jobs.append(p)
+            print(f"Evaluating: {file}")
 
-
-def compare(
-    dataset: Path,
-    model: Path,
-    dm_pattern: Path,
-    batch_size: int,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
-    wavelength: float,
-):
-    model = backend.load(model)
-    model.summary()
-    input_shape = model.layers[0].input_shape[0][1]
-    voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
-
-    df = pd.read_json(dataset, orient='index')
-    psfs = np.array(
-        utils.multiprocess(
-            partial(
-                preprocessing.prep_psf,
-                image_size=input_shape,
-                voxel_size=voxel_size
-            ),
-            df.index.values,
-            desc="Preprocessing PSFs")
-    )
-    predictions, stdev = backend.bootstrap_predict(model, psfs, batch_size=batch_size)
-    df = df.iloc[:, :predictions.shape[-1]]
-
-    outdir = Path(f"{dataset.parent}/predictions")
-    outdir.mkdir(exist_ok=True, parents=True)
-
-    utils.multiprocess(
-        partial(
-            correct,
-            outdir=outdir,
-            dm_pattern=dm_pattern,
-            input_shape=input_shape,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-        ),
-        list(zip(df.values, predictions, df.index.values)),
-        desc="Correcting PSFs"
-    )
-
-    res = pd.DataFrame.from_dict({
-        'psf': df.index.values,
-        'mae': utils.mae(df.values, predictions),
-        'mse': utils.mse(df.values, predictions),
-        'rmse': utils.rmse(df.values, predictions),
-    })
-    logger.info(res)
-    logger.info(f"MAE: {res.mae.mean()}")
-    logger.info(f"MSE: {res.mse.mean()}")
-    res.to_csv(f"{outdir}/results.csv")
+            while len(jobs) >= 6:
+                for p in jobs:
+                    if not p.is_alive():
+                        jobs.remove(p)
+                time.sleep(10)

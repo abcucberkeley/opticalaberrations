@@ -25,6 +25,7 @@ class CAB(layers.Layer):
             filters,
             mask_shape=64,
             na_det=1.0,
+            psf_type='widefield',
             lambda_det=.605,
             x_voxel_size=.15,
             y_voxel_size=.15,
@@ -41,6 +42,7 @@ class CAB(layers.Layer):
         self.mask_shape = mask_shape
         self.na_det = na_det
         self.lambda_det = lambda_det
+        self.psf_type = psf_type
         self.x_voxel_size = x_voxel_size
         self.y_voxel_size = y_voxel_size
         self.z_voxel_size = z_voxel_size
@@ -66,6 +68,7 @@ class CAB(layers.Layer):
             activation=self.activation,
             mask_shape=self.mask_shape,
             na_det=self.na_det,
+            psf_type=self.psf_type,
             refractive_index=self.refractive_index,
             lambda_det=self.lambda_det,
             x_voxel_size=self.x_voxel_size,
@@ -77,6 +80,7 @@ class CAB(layers.Layer):
             activation=self.activation,
             mask_shape=self.mask_shape,
             na_det=self.na_det,
+            psf_type=self.psf_type,
             refractive_index=self.refractive_index,
             lambda_det=self.lambda_det,
             x_voxel_size=self.x_voxel_size,
@@ -93,6 +97,7 @@ class CAB(layers.Layer):
             "filters": self.filters,
             "mask_shape": self.mask_shape,
             "na_det": self.na_det,
+            "psf_type": self.psf_type,
             "refractive_index": self.refractive_index,
             "x_voxel_size": self.x_voxel_size,
             "y_voxel_size": self.y_voxel_size,
@@ -176,10 +181,12 @@ class OpticalResNet(Base, ABC):
             depth_scalar=1.0,
             width_scalar=1.0,
             activation='gelu',
-            dropout_rate=0.,
+            dropout_rate=0.05,
             mul=False,
+            no_phase=False,
             mask_shape=64,
             na_det=1.0,
+            psf_type='widefield',
             lambda_det=.605,
             x_voxel_size=.15,
             y_voxel_size=.15,
@@ -194,8 +201,10 @@ class OpticalResNet(Base, ABC):
         self.dropout_rate = dropout_rate
         self.avg = layers.GlobalAvgPool3D()
         self.mul = mul
+        self.no_phase = no_phase
         self.mask_shape = mask_shape
         self.na_det = na_det
+        self.psf_type = psf_type
         self.lambda_det = lambda_det
         self.x_voxel_size = x_voxel_size
         self.y_voxel_size = y_voxel_size
@@ -215,12 +224,14 @@ class OpticalResNet(Base, ABC):
             activation=self.activation,
             mask_shape=self.mask_shape,
             na_det=self.na_det,
+            psf_type=self.psf_type,
             refractive_index=self.refractive_index,
             lambda_det=self.lambda_det,
             x_voxel_size=self.x_voxel_size,
             y_voxel_size=self.y_voxel_size,
             z_voxel_size=self.z_voxel_size,
-            mul=self.mul
+            mul=self.mul,
+            no_phase=self.no_phase
         )(inputs)
 
         for i, r in enumerate([2, 4, 6, 2]):
@@ -237,12 +248,13 @@ class OpticalResNet(Base, ABC):
                     activation=self.activation,
                     mask_shape=self.mask_shape,
                     na_det=self.na_det,
+                    psf_type=self.psf_type,
                     refractive_index=self.refractive_index,
                     lambda_det=self.lambda_det,
                     x_voxel_size=self.x_voxel_size,
                     y_voxel_size=self.y_voxel_size,
                     z_voxel_size=self.z_voxel_size,
-                    dropout_rate=self.dropout_rate
+                    dropout_rate=self.dropout_rate/(i+1)
                 )(m)
             m = layers.add([res, m])
 

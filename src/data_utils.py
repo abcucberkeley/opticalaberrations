@@ -1,13 +1,16 @@
 import logging
 import sys
+from functools import partial
 
-from tifffile import imread, imsave, TiffFile
+import pandas as pd
+from tifffile import TiffFile
 from pathlib import Path
 import numpy as np
 
 import tensorflow as tf
 import ujson
 from synthetic import SyntheticPSF
+from utils import multiprocess
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -21,6 +24,7 @@ tf.get_logger().setLevel(logging.ERROR)
 def get_image(path):
     with TiffFile(path) as tif:
         img = tif.asarray()
+        tif.close()
 
         if np.isnan(np.sum(img)):
             logger.error("NaN!")
@@ -29,14 +33,44 @@ def get_image(path):
     return img
 
 
-def get_sample(path):
-    path = Path(str(path.numpy(), "utf-8"))
-    with open(path.with_suffix('.json')) as f:
-        hashtbl = ujson.load(f)
+def get_sample(path, no_phase=False):
+    try:
+        if isinstance(path, tf.Tensor):
+            path = Path(str(path.numpy(), "utf-8"))
+        else:
+            path = Path(str(path))
 
-    amps = hashtbl['zernikes']
-    img = get_image(path)
-    return img, amps
+        with open(path.with_suffix('.json')) as f:
+            hashtbl = ujson.load(f)
+            f.close()
+
+        img = get_image(path)
+        amps = hashtbl['zernikes']
+
+        if no_phase and img.shape[0] == 6:
+            amps = np.abs(amps)
+            img = img[:3]
+
+        return img, amps
+
+    except Exception as e:
+        logger.warning(f"Corrupted file {path}: {e}")
+
+
+def check_sample(path):
+    try:
+        with open(path.with_suffix('.json')) as f:
+            ujson.load(f)
+            f.close()
+
+        with TiffFile(path) as tif:
+            tif.asarray()
+            tif.close()
+        return 1
+
+    except Exception as e:
+        logger.warning(f"Corrupted file {path}: {e}")
+        return path
 
 
 def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
@@ -46,7 +80,9 @@ def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
             if 'kernel' in str(p):
                 continue
             else:
-                files.append(str(p))
+                check = check_sample(p)
+                if check == 1:
+                    files.append(str(p))
         else:
             break
 
@@ -73,6 +109,16 @@ def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
         return ds
 
 
+def check_dataset(datadir):
+    jobs = multiprocess(check_sample, list(Path(datadir).rglob('*.tif')), cores=-1)
+    corrupted = [j for j in jobs if j != 1]
+    corrupted = pd.DataFrame(corrupted, columns=['path'])
+    logger.info(f"Corrupted files [{corrupted.index.shape[0]}]")
+    print(corrupted)
+    corrupted.to_csv(datadir/'corrupted.csv', header=False, index=False)
+    return corrupted
+
+
 def collect_dataset(
     datadir,
     split=None,
@@ -80,6 +126,7 @@ def collect_dataset(
     distribution='/',
     samplelimit=None,
     max_amplitude=1.,
+    no_phase=False,
 ): 
     if split is not None:
         train_data, val_data = None, None
@@ -96,8 +143,9 @@ def collect_dataset(
             train_data = t if train_data is None else train_data.concatenate(t)
             val_data = v if val_data is None else val_data.concatenate(v)
 
-        train = train_data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
-        val = val_data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
+        func = partial(get_sample, no_phase=no_phase)
+        train = train_data.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
+        val = val_data.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
 
         for img, y in train.take(1):
             logger.info(f"Input: {img.numpy().shape}")
@@ -109,8 +157,9 @@ def collect_dataset(
         return train, val
 
     else:
+        func = partial(get_sample, no_phase=no_phase)
         data = load_dataset(datadir, multiplier=multiplier, samplelimit=samplelimit)
-        data = data.map(lambda x: tf.py_function(get_sample, [x], [tf.float32, tf.float32]))
+        data = data.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
 
         for img, y in data.take(1):
             logger.info(f"Input: {img.numpy().shape}")

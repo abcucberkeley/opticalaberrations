@@ -1,18 +1,24 @@
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
+import matplotlib
+matplotlib.use('Agg')
+
 import logging
 import sys
 import time
 import ujson
+from typing import Any
 from pathlib import Path
 from tifffile import imread, imsave
 import numpy as np
+import scipy.stats as st
+import raster_geometry as rg
 from tqdm import trange
 
 import cli
 from preprocessing import resize_with_crop_or_pad
-from utils import peak_aberration
+from utils import peak_aberration, fftconvolution
 from synthetic import SyntheticPSF
 
 logging.basicConfig(
@@ -57,45 +63,52 @@ def sim(
     snr: tuple,
     emb: bool = True,
     noise: bool = True,
-    radius: float = .45
+    random_crop: Any = None,
+    radius: float = .4,
+    sphere: float = 0,
 ):
-    img = np.zeros([3*s for s in kernel.shape])
-    width = [(i // 2) for i in kernel.shape]
-    center = kernel.shape
-
+    reference = np.zeros(gen.psf_shape)
     for i in range(npoints):
-        p = [
-            np.random.randint(int(kernel.shape[0]*(.5 - radius)), int(kernel.shape[0]*(.5 + radius))),
-            np.random.randint(int(kernel.shape[1]*(.5 - radius)), int(kernel.shape[1]*(.5 + radius))),
-            np.random.randint(int(kernel.shape[2]*(.5 - radius)), int(kernel.shape[2]*(.5 + radius)))
-        ]
+        if sphere > 0:
+            reference += rg.sphere(
+                shape=gen.psf_shape,
+                radius=sphere,
+                position=np.random.uniform(low=.2, high=.8)
+            ).astype(np.float) * np.random.random()
+        else:
+            reference[
+                np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+                np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+                np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+            ] = np.random.random()
 
-        img[
-            (p[0]+center[0])-width[0]:(p[0]+center[0])+width[0],
-            (p[1]+center[1])-width[1]:(p[1]+center[1])+width[1],
-            (p[2]+center[2])-width[2]:(p[2]+center[2])+width[2],
-        ] += kernel
-
-    img = resize_with_crop_or_pad(img, crop_shape=kernel.shape)
+    img = fftconvolution(reference, kernel)
 
     if noise:
         snr = gen._randuniform(snr)
-        img *= snr * gen.mean_background_noise
+        img *= snr**2
 
         rand_noise = gen._random_noise(
             image=img,
-            mean=gen.mean_background_noise,
+            mean=int(np.random.uniform(low=0, high=10)),
             sigma=gen.sigma_background_noise
         )
         noisy_img = rand_noise + img
+        # noisy_img = noisy_img ** np.random.uniform(low=.25, high=1.25)
 
-        psnr = (np.max(img) / np.mean(rand_noise))
+        psnr = np.sqrt(np.max(noisy_img))
         maxcounts = np.max(noisy_img)
         noisy_img /= np.max(noisy_img)
     else:
         psnr = np.mean(np.array(snr))
         maxcounts = np.max(img)
         noisy_img = img
+
+    if random_crop is not None:
+        mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
+        crop = int(np.random.uniform(low=random_crop, high=gen.psf_shape[0]+1))
+        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[crop]*3)
+        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
 
     if emb:
         noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
@@ -130,14 +143,17 @@ def create_synthetic_sample(
     refractive_index: float,
     na_detection: float,
     cpu_workers: int,
+    random_crop: Any,
     noise: bool,
     emb: bool,
+    sphere: int
 ):
     gen = SyntheticPSF(
         order='ansi',
         cpu_workers=cpu_workers,
         n_modes=modes,
         snr=1000,
+        max_jitter=0,
         dtype=psf_type,
         distribution=distribution,
         gamma=gamma,
@@ -178,10 +194,10 @@ def create_synthetic_sample(
                 zplanes=0,
                 normed=True,
                 noise=False,
-                augmentation=True,
-                meta=False
+                augmentation=False,
+                meta=False,
             )
-            savepath = savepath / f"npoints_{npoints}"
+            savepath = savepath / f"sphere_{sphere}" / f"npoints_{npoints}"
             savepath.mkdir(exist_ok=True, parents=True)
             savepath = savepath / filename
 
@@ -193,18 +209,19 @@ def create_synthetic_sample(
                 amps=phi,
                 snr=(min_psnr, max_psnr),
                 emb=emb,
-                noise=noise
+                noise=noise,
+                sphere=sphere
             )
 
     else:
         # theoretical kernel without noise
-        kernel, amps, _, _, _ = gen.single_psf(
+        kernel, amps, phi, _, _ = gen.single_psf(
             phi=(min_amplitude, max_amplitude),
             zplanes=0,
             normed=True,
             noise=False,
-            augmentation=True,
-            meta=True
+            augmentation=False,
+            meta=True,
         )
 
         outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
@@ -220,7 +237,7 @@ def create_synthetic_sample(
         savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
                               f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
-        savepath = savepath / f"npoints_{npoints}"
+        savepath = savepath / f"sphere_{sphere}" / f"npoints_{npoints}"
         savepath.mkdir(exist_ok=True, parents=True)
         savepath = savepath / filename
 
@@ -232,7 +249,9 @@ def create_synthetic_sample(
             amps=amps,
             snr=(min_psnr, max_psnr),
             emb=emb,
-            noise=noise
+            random_crop=random_crop,
+            noise=noise,
+            sphere=sphere
         )
 
 
@@ -284,6 +303,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--random_crop", default=None, type=int,
+    )
+
+    parser.add_argument(
         "--modes", default=60, type=int,
         help="number of modes to describe aberration"
     )
@@ -309,7 +332,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--gamma", default=1.5, type=float,
+        "--gamma", default=.75, type=float,
         help="exponent for the powerlaw distribution"
     )
 
@@ -331,6 +354,11 @@ def parse_args(args):
     parser.add_argument(
         "--refractive_index", default=1.33, type=float,
         help="the quotient of the speed of light as it passes through two media"
+    )
+
+    parser.add_argument(
+        "--sphere", default=0, type=int,
+        help="Radius of the reference sphere objects"
     )
 
     parser.add_argument(
@@ -367,6 +395,7 @@ def main(args=None):
             input_shape=args.input_shape,
             psf_type=args.psf_type,
             distribution=args.dist,
+            random_crop=args.random_crop,
             gamma=args.gamma,
             bimodal=args.bimodal,
             min_amplitude=args.min_amplitude,
@@ -377,6 +406,7 @@ def main(args=None):
             min_psnr=args.min_psnr,
             max_psnr=args.max_psnr,
             lam_detection=args.lam_detection,
+            sphere=args.sphere,
             refractive_index=args.refractive_index,
             na_detection=args.na_detection,
             cpu_workers=args.cpu_workers,

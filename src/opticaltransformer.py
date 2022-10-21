@@ -8,6 +8,7 @@ import tensorflow_addons as tfa
 from tensorflow.keras import layers
 from base import Base
 from activation import MaskedActivation
+from roi import ROI
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -23,6 +24,7 @@ class Stem(layers.Layer):
             kernel_size=7,
             mask_shape=64,
             na_det=1.0,
+            psf_type='widefield',
             lambda_det=.605,
             x_voxel_size=.15,
             y_voxel_size=.15,
@@ -30,12 +32,14 @@ class Stem(layers.Layer):
             refractive_index=1.33,
             activation='gelu',
             mul=False,
+            no_phase=False,
             **kwargs
     ):
         super().__init__(**kwargs)
         self.kernel_size = kernel_size
         self.mask_shape = mask_shape
         self.na_det = na_det
+        self.psf_type = psf_type
         self.lambda_det = lambda_det
         self.x_voxel_size = x_voxel_size
         self.y_voxel_size = y_voxel_size
@@ -43,6 +47,7 @@ class Stem(layers.Layer):
         self.refractive_index = refractive_index
         self.activation = activation
         self.mul = mul
+        self.no_phase = no_phase
 
         self.conv = layers.Conv3D(
             filters=1,
@@ -54,6 +59,7 @@ class Stem(layers.Layer):
             activation=self.activation,
             mask_shape=self.mask_shape,
             na_det=self.na_det,
+            psf_type=self.psf_type,
             refractive_index=self.refractive_index,
             lambda_det=self.lambda_det,
             x_voxel_size=self.x_voxel_size,
@@ -70,7 +76,9 @@ class Stem(layers.Layer):
             "kernel_size": self.kernel_size,
             "activation": self.activation,
             "mul": self.mul,
+            "no_phase": self.no_phase,
             "mask_shape": self.mask_shape,
+            "psf_type": self.psf_type,
             "na_det": self.na_det,
             "lambda_det": self.lambda_det,
             "x_voxel_size": self.x_voxel_size,
@@ -96,17 +104,20 @@ class Stem(layers.Layer):
         alpha = self.conv(inputs[:, :3])
         alpha = self.act(alpha)
 
-        phi = self.gaussian_filter3D(inputs[:, 3:])
-        phi = self.act(phi)
-        mu_alpha = tf.math.reduce_mean(alpha, axis=[2, 3], keepdims=True)
-        std_alpha = tf.math.reduce_std(alpha, axis=[2, 3], keepdims=True)
-        phi = (phi * mu_alpha) / (std_alpha + 1e-6)
-        emb = layers.concatenate([alpha, phi], axis=1)
-
-        if self.mul:
-            return layers.multiply([alpha, phi])
+        if self.no_phase:
+            return alpha
         else:
-            return emb
+            phi = self.gaussian_filter3D(inputs[:, 3:])
+            phi = self.act(phi)
+            mu_alpha = tf.math.reduce_mean(alpha, axis=[2, 3], keepdims=True)
+            std_alpha = tf.math.reduce_std(alpha, axis=[2, 3], keepdims=True)
+            phi = (phi * mu_alpha) / (std_alpha + 1e-6)
+            emb = layers.concatenate([alpha, phi], axis=1)
+
+            if self.mul:
+                return layers.multiply([alpha, phi])
+            else:
+                return emb
 
 
 class Patchify(layers.Layer):
@@ -292,17 +303,20 @@ class Transformer(layers.Layer):
 class OpticalTransformer(Base, ABC):
     def __init__(
             self,
+            roi=None,
             patches=(8, 8, 8, 8),
             heads=(2, 4, 8, 16),
             repeats=(2, 4, 6, 2),
             depth_scalar=1.0,
             width_scalar=1.0,
             activation='gelu',
-            dropout_rate=0.,
+            dropout_rate=0.05,
             rho=.05,
             mul=False,
+            no_phase=False,
             mask_shape=64,
             na_det=1.0,
+            psf_type='widefield',
             lambda_det=.605,
             x_voxel_size=.15,
             y_voxel_size=.15,
@@ -311,6 +325,7 @@ class OpticalTransformer(Base, ABC):
             **kwargs
     ):
         super().__init__(**kwargs)
+        self.roi = roi
         self.patches = patches
         self.heads = heads
         self.repeats = repeats
@@ -321,8 +336,10 @@ class OpticalTransformer(Base, ABC):
         self.avg = layers.GlobalAvgPool2D()
         self.rho = rho
         self.mul = mul
+        self.no_phase = no_phase
         self.mask_shape = mask_shape
         self.na_det = na_det
+        self.psf_type = psf_type
         self.lambda_det = lambda_det
         self.x_voxel_size = x_voxel_size
         self.y_voxel_size = y_voxel_size
@@ -399,16 +416,21 @@ class OpticalTransformer(Base, ABC):
             na_det=self.na_det,
             refractive_index=self.refractive_index,
             lambda_det=self.lambda_det,
+            psf_type=self.psf_type,
             x_voxel_size=self.x_voxel_size,
             y_voxel_size=self.y_voxel_size,
             z_voxel_size=self.z_voxel_size,
-            mul=self.mul
+            mul=self.mul,
+            no_phase=self.no_phase
         )(inputs)
+
+        if self.roi is not None:
+            m = ROI(crop_shape=self.roi)(m)
 
         for i, (p, h, r) in enumerate(zip(self.patches, self.heads, self.repeats)):
             m = self.transitional_block(
                 m,
-                img_shape=inputs.shape[-2],
+                img_shape=self.roi[-1] if self.roi is not None else inputs.shape[-2],
                 patch_size=self.patches[i],
                 org_patch_size=None if i == 0 else self.patches[i-1],
             )
@@ -419,7 +441,7 @@ class OpticalTransformer(Base, ABC):
                     heads=self._calc_channels(h, width_scalar=self.width_scalar),
                     dims=64,
                     activation=self.activation,
-                    dropout_rate=self.dropout_rate,
+                    dropout_rate=self.dropout_rate/(i+1),
                 )(m)
             m = layers.add([res, m])
 

@@ -4,10 +4,12 @@ Copyright (c) 2020, Debayan Saha, Martin Weigert, Uwe Schmidt
 All rights reserved.
 """
 
+import matplotlib
+matplotlib.use('Agg')
+
 import logging
 import sys
 
-from pprint import pprint
 import numpy as np
 from zernike import Zernike
 
@@ -38,11 +40,11 @@ class Wavefront:
         self,
         amplitudes,
         order='ansi',
-        modes=15,
+        modes=60,
         lam_detection=.605,
         distribution=None,
-        gamma=1.5,
-        bimodal=False,
+        gamma=.75,
+        bimodal=True,
     ):
         self.ranges = amplitudes
         self.order = order

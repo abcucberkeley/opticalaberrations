@@ -22,7 +22,7 @@ def parse_args(args):
     train_parser = cli.argparser()
 
     train_parser.add_argument(
-        "--network", default='opticalresnet', type=str, help="codename for target network to train"
+        "--network", default='opticaltransformer', type=str, help="codename for target network to train"
     )
 
     train_parser.add_argument(
@@ -34,23 +34,31 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--batch_size", default=256, type=int, help="number of images per batch"
+        "--batch_size", default=512, type=int, help="number of images per batch"
     )
 
     train_parser.add_argument(
-        "--patch_size", default='8-8-8-8', help="patch size for transformer-based model"
+        "--patch_size", default='32-16-8-8', help="patch size for transformer-based model"
     )
 
     train_parser.add_argument(
-        "--x_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
+        "--roi", default=None, help="region of interest to crop from the center of the input image"
     )
 
     train_parser.add_argument(
-        "--y_voxel_size", default=.15, type=float, help='lateral voxel size in microns for Y'
+        "--psf_type", default='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat', help="type of the desired PSF"
     )
 
     train_parser.add_argument(
-        "--z_voxel_size", default=.6, type=float, help='axial voxel size in microns for Z'
+        "--x_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+
+    train_parser.add_argument(
+        "--y_voxel_size", default=.108, type=float, help='lateral voxel size in microns for Y'
+    )
+
+    train_parser.add_argument(
+        "--z_voxel_size", default=.268, type=float, help='axial voxel size in microns for Z'
     )
 
     train_parser.add_argument(
@@ -58,7 +66,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--modes", default=15, type=int, help="number of modes to describe aberration"
+        "--modes", default=60, type=int, help="number of modes to describe aberration"
     )
 
     train_parser.add_argument(
@@ -86,7 +94,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--wavelength", default=.605, type=float, help='wavelength in microns'
+        "--wavelength", default=.510, type=float, help='wavelength in microns'
     )
 
     train_parser.add_argument(
@@ -116,7 +124,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--opt", default='Adam', type=str, help='optimizer to use for training'
+        "--opt", default='AdamW', type=str, help='optimizer to use for training'
     )
 
     train_parser.add_argument(
@@ -152,6 +160,11 @@ def parse_args(args):
         help='toggle for multi-node/multi-gpu training on a slurm-based cluster'
     )
 
+    train_parser.add_argument(
+        '--no_phase', action='store_true',
+        help='toggle to use exclude phase from the model embeddings'
+    )
+
     return train_parser.parse_known_args(args)[0]
 
 
@@ -183,7 +196,9 @@ def main(args=None):
             input_shape=args.input_shape,
             batch_size=args.batch_size,
             patch_size=[int(i) for i in args.patch_size.split('-')],
+            roi=[int(i) for i in args.roi.split('-')] if args.roi is not None else args.roi,
             steps_per_epoch=args.steps_per_epoch,
+            psf_type=args.psf_type,
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
@@ -205,6 +220,7 @@ def main(args=None):
             wavelength=args.wavelength,
             depth_scalar=args.depth_scalar,
             width_scalar=args.width_scalar,
+            no_phase=args.no_phase,
         )
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")

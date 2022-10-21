@@ -1,10 +1,7 @@
 import logging
-import sys
 import time
 from pathlib import Path
 import os
-
-
 import cli
 import imghdr
 
@@ -22,7 +19,17 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--lateral_voxel_size", default=.1, type=float, help='lateral voxel size in microns for X'
+        "--prev", default=None, type=Path,
+        help="previous predictions .csv file (Default: `None`)"
+    )
+
+    parser.add_argument(
+        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        type=str, help='type of the desired PSF'
+    )
+
+    parser.add_argument(
+        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
     )
 
     parser.add_argument(
@@ -30,25 +37,25 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--model_lateral_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
+        "--model_lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
     )
 
     parser.add_argument(
-        "--model_axial_voxel_size", default=.6, type=float, help='axial voxel size in microns for Z'
+        "--model_axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
     )
 
     parser.add_argument(
-        "--wavelength", default=.605, type=float,
+        "--wavelength", default=.510, type=float,
         help='wavelength in microns'
     )
 
     parser.add_argument(
-        "--scalar", default=1, type=float,
+        "--scalar", default=.75, type=float,
         help='scale DM actuators by an arbitrary multiplier'
     )
 
     parser.add_argument(
-        "--threshold", default=1e-5, type=float,
+        "--threshold", default=1e-2, type=float,
         help='set predictions below threshold to zero (microns)'
     )
 
@@ -69,13 +76,13 @@ def main(args=None):
 
     timeit = time.time()
     args = parse_args(args)
-    logging.info(args)
 
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
     )
     logger = logging.getLogger('')
+    logger.info(args)
 
     if args.verbose:
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
@@ -85,12 +92,33 @@ def main(args=None):
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
         import experimental
 
-    if imghdr.what(args.input) == 'tiff':
+    if args.input.is_dir():
+        experimental.predict_dataset(
+            dataset=args.input,
+            model=args.model,
+            dm_pattern=args.pattern,
+            dm_state=args.state,
+            prev=args.prev,
+            psf_type=args.psf_type,
+            axial_voxel_size=args.axial_voxel_size,
+            model_axial_voxel_size=args.model_axial_voxel_size,
+            lateral_voxel_size=args.lateral_voxel_size,
+            model_lateral_voxel_size=args.model_lateral_voxel_size,
+            wavelength=args.wavelength,
+            scalar=args.scalar,
+            threshold=args.threshold,
+            verbose=args.verbose,
+            plot=args.plot
+        )
+
+    elif imghdr.what(args.input) == 'tiff':
         experimental.predict(
             model=args.model,
             img=args.input,
             dm_pattern=args.pattern,
             dm_state=args.state,
+            prev=args.prev,
+            psf_type=args.psf_type,
             axial_voxel_size=args.axial_voxel_size,
             model_axial_voxel_size=args.model_axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
@@ -144,7 +172,9 @@ def main_function(
     mymodel: str,
     myinput: str,
     mypattern: str,
+    myprev: str,
     mystate: str,
+    psf_type: str,
     axial_voxel_size: float,
     lateral_voxel_size: float,
     model_axial_voxel_size: float,
@@ -165,12 +195,13 @@ def main_function(
         myinput = Path(myinput)
         mypattern = Path(mypattern)
         mystate = Path(mystate)
+        myprev = Path(myprev)
 
         logger = make_a_logger(myinput)
 
         try:
             import matplotlib
-            matplotlib.use('TkAgg')
+            matplotlib.use('Agg')
 
         except ImportError:
             logger.error('The default Qt backend does not work with LabVIEW. Please install Tkinter!')
@@ -194,6 +225,8 @@ def main_function(
                 img=myinput,
                 dm_pattern=mypattern,
                 dm_state=mystate,
+                prev=myprev,
+                psf_type=psf_type,
                 axial_voxel_size=axial_voxel_size,
                 model_axial_voxel_size=model_axial_voxel_size,
                 lateral_voxel_size=lateral_voxel_size,

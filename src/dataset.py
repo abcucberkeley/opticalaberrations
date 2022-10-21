@@ -100,7 +100,7 @@ def create_synthetic_sample(
         outdir = outdir / f"{distribution}"
 
     if distribution == 'single':
-        for i in range(5, modes):
+        for i in range(5, 15):
             savepath = outdir / f"m{i}"
             savepath = savepath / f"psnr_{min_psnr}-{max_psnr}"
             savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
@@ -236,7 +236,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--gamma", default=1.5, type=float,
+        "--gamma", default=.75, type=float,
         help="exponent for the powerlaw distribution"
     )
 

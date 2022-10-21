@@ -1,9 +1,11 @@
+import matplotlib
+matplotlib.use('Agg')
+
 import logging
 import sys
 from typing import Any
 
 import numpy as np
-from pathlib import Path
 from skimage import transform
 from skimage.filters import gaussian
 from functools import partial
@@ -36,7 +38,7 @@ class SyntheticPSF:
         dtype='widefield',
         distribution='dirichlet',
         bimodal=False,
-        gamma=1.5,
+        gamma=.75,
         n_modes=15,
         order='ansi',
         batch_size=1,
@@ -48,7 +50,7 @@ class SyntheticPSF:
         lam_detection=.605,
         refractive_index=1.33,
         snr=(10, 50),
-        mean_background_noise=100,
+        mean_background_noise=0,
         sigma_background_noise=4,
         max_jitter=1,
         cpu_workers=1
@@ -194,7 +196,8 @@ class SyntheticPSF:
             order=self.order,
             distribution=self.distribution,
             modes=self.n_modes,
-            gamma=self.gamma
+            gamma=self.gamma,
+            lam_detection=self.lam_detection
         )
 
         if noise:
@@ -251,12 +254,20 @@ class SyntheticPSF:
 
     def na_mask(self):
         mask = self.iotf
-        threshold = np.nanpercentile(mask.flatten(), 55)
+        threshold = np.nanpercentile(mask.flatten(), 65)
+        # logger.info(f'NA-threshold: {threshold}')
         mask = np.where(mask < threshold, mask, 1.)
         mask = np.where(mask >= threshold, mask, 0.)
         return mask
 
-    def plot_embeddings(self, psf: np.array, emb: np.array, save_path: Any):
+    def plot_embeddings(
+        self,
+        psf: np.array,
+        emb: np.array,
+        save_path: Any,
+        no_phase: bool = False,
+        log10: bool = False,
+    ):
         plt.rcParams.update({
             'font.size': 10,
             'axes.titlesize': 12,
@@ -268,7 +279,11 @@ class SyntheticPSF:
         })
         # plt.style.use("dark_background")
 
-        vmin, vmax, vcenter, step = 0, 2, 1, .1
+        if log10:
+            vmin, vmax, vcenter, step = -2, 2, 0, .1
+        else:
+            vmin, vmax, vcenter, step = 0, 3, 1, .1
+
         highcmap = plt.get_cmap('YlOrRd', 256)
         lowcmap = plt.get_cmap('terrain', 256)
         low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -276,15 +291,18 @@ class SyntheticPSF:
         cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
         cmap = mcolors.ListedColormap(cmap)
 
-        fig, axes = plt.subplots(3, 3)
+        if no_phase:
+            fig, axes = plt.subplots(2, 3, figsize=(8, 8))
+        else:
+            fig, axes = plt.subplots(3, 3, figsize=(8, 8))
 
-        m = axes[0, 0].imshow(np.max(psf, axis=0), cmap='hot', vmin=0, vmax=1)
-        axes[0, 1].imshow(np.max(psf, axis=1), cmap='hot', vmin=0, vmax=1)
-        axes[0, 2].imshow(np.max(psf, axis=2).T, cmap='hot', vmin=0, vmax=1)
+        m = axes[0, 0].imshow(np.max(psf, axis=0)**.5, cmap='hot', vmin=0, vmax=1)
+        axes[0, 1].imshow(np.max(psf, axis=1)**.5, cmap='hot', vmin=0, vmax=1)
+        axes[0, 2].imshow(np.max(psf, axis=2).T**.5, cmap='hot', vmin=0, vmax=1)
         cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
-        cax.set_ylabel('Input (maxproj)')
+        cax.set_ylabel('Input (MIP)')
 
         m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
         axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
@@ -294,13 +312,14 @@ class SyntheticPSF:
         cax.yaxis.set_label_position("right")
         cax.set_ylabel(r'Embedding ($\alpha$)')
 
-        m = axes[2, 0].imshow(emb[3], cmap='coolwarm', vmin=-.5, vmax=.5)
-        axes[2, 1].imshow(emb[4], cmap='coolwarm', vmin=-.5, vmax=.5)
-        axes[2, 2].imshow(emb[5].T, cmap='coolwarm', vmin=-.5, vmax=.5)
-        cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_label_position("right")
-        cax.set_ylabel(r'Embedding ($\varphi$)')
+        if not no_phase:
+            m = axes[-1, 0].imshow(emb[3], cmap='coolwarm', vmin=-.5, vmax=.5)
+            axes[-1, 1].imshow(emb[4], cmap='coolwarm', vmin=-.5, vmax=.5)
+            axes[-1, 2].imshow(emb[5].T, cmap='coolwarm', vmin=-.5, vmax=.5)
+            cax = inset_axes(axes[-1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+            cb = plt.colorbar(m, cax=cax)
+            cax.yaxis.set_label_position("right")
+            cax.set_ylabel(r'Embedding ($\varphi$)')
 
         for ax in axes.flatten():
             ax.axis('off')
@@ -319,6 +338,8 @@ class SyntheticPSF:
         plot: Any = None,
         log10: bool = False,
         principle_planes: bool = True,
+        gamma: float = 1.,
+        no_phase: bool = False,
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
@@ -349,8 +370,11 @@ class SyntheticPSF:
             )
 
         if ratio:
+            amp = amp ** gamma
             amp /= self.iotf
             amp = np.nan_to_num(amp, nan=0)
+            # phase /= self.iphase
+            # phase = np.nan_to_num(phase, nan=0)
 
         if na_mask:
             mask = self.na_mask()
@@ -361,22 +385,32 @@ class SyntheticPSF:
             amp = np.log10(amp)
             amp = np.nan_to_num(amp, nan=0, posinf=0, neginf=0)
 
+            phase = np.log10(phase)
+            phase = np.nan_to_num(phase, nan=0, posinf=0, neginf=0)
+
         if principle_planes:
-            emb = np.stack([
-                amp[amp.shape[0] // 2, :, :],
-                amp[:, amp.shape[1] // 2, :],
-                amp[:, :, amp.shape[2] // 2],
-                phase[phase.shape[0] // 2, :, :],
-                phase[:, phase.shape[1] // 2, :],
-                phase[:, :, phase.shape[2] // 2],
-            ], axis=0)
+            if no_phase:
+                emb = np.stack([
+                    amp[amp.shape[0] // 2, :, :],
+                    amp[:, amp.shape[1] // 2, :],
+                    amp[:, :, amp.shape[2] // 2],
+                ], axis=0)
+            else:
+                emb = np.stack([
+                    amp[amp.shape[0] // 2, :, :],
+                    amp[:, amp.shape[1] // 2, :],
+                    amp[:, :, amp.shape[2] // 2],
+                    phase[phase.shape[0] // 2, :, :],
+                    phase[:, phase.shape[1] // 2, :],
+                    phase[:, :, phase.shape[2] // 2],
+                ], axis=0)
         else:
             emb = np.stack([amp, phase], axis=0)
             imsave(f"{plot}_alpha.tif", amp)
             imsave(f"{plot}_phi.tif", phase)
 
         if plot is not None and principle_planes:
-            self.plot_embeddings(psf=psf, emb=emb, save_path=plot)
+            self.plot_embeddings(psf=psf, emb=emb, save_path=plot, log10=log10, no_phase=no_phase)
 
         if psf.ndim == 4:
             return np.expand_dims(emb, axis=-1)
@@ -472,6 +506,7 @@ class SyntheticPSF:
         noise: bool = False,
         augmentation: bool = False,
         meta: bool = False,
+        no_phase: bool = False,
     ):
         """
         Args:
@@ -494,10 +529,11 @@ class SyntheticPSF:
                 distribution=self.distribution,
                 modes=self.n_modes,
                 gamma=self.gamma,
-                bimodal=self.bimodal
+                bimodal=self.bimodal,
+                lam_detection=self.lam_detection
             )
 
-        psf = self.psfgen.incoherent_psf(phi) * snr * self.mean_background_noise
+        psf = self.psfgen.incoherent_psf(phi) * snr**2
 
         rand_noise = self._random_noise(
             image=psf,
@@ -505,7 +541,7 @@ class SyntheticPSF:
             sigma=self.sigma_background_noise,
         )
         noisy_psf = rand_noise + psf if noise else psf
-        psnr = (np.max(psf) / np.mean(rand_noise))
+        psnr = np.sqrt(np.max(noisy_psf))
         maxcount = np.max(noisy_psf)
 
         noisy_psf, zplanes = self._axial_resample(
@@ -517,12 +553,16 @@ class SyntheticPSF:
 
         if augmentation:
             noisy_psf = self._crop(noisy_psf, voxel_size=voxel_size, jitter=True)
+            # noisy_psf = noisy_psf ** np.random.uniform(low=.25, high=1.25)
         else:
             noisy_psf = self._crop(noisy_psf, voxel_size=voxel_size)
 
         noisy_psf /= np.max(noisy_psf) if normed else noisy_psf
 
         if meta:
+            if no_phase:
+                phi.amplitudes = np.abs(phi.amplitudes)
+
             return noisy_psf, phi.amplitudes, psnr, zplanes, maxcount
         else:
             return noisy_psf
@@ -540,6 +580,7 @@ class SyntheticPSF:
         padsize: Any = None,
         log10: bool = False,
         plot: Any = None,
+        no_phase: bool = False
     ):
 
         psf = self.single_psf(
@@ -548,7 +589,8 @@ class SyntheticPSF:
             normed=normed,
             noise=noise,
             augmentation=augmentation,
-            meta=meta
+            meta=meta,
+            no_phase=no_phase
         )
 
         if meta:
@@ -560,10 +602,14 @@ class SyntheticPSF:
             ratio=ratio,
             padsize=padsize,
             log10=log10,
-            plot=plot
+            plot=plot,
+            no_phase=no_phase,
         )
 
         if meta:
+            if no_phase:
+                y = np.abs(y)
+
             return emb, y, psnr, zplanes, maxcount
         else:
             return emb

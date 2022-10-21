@@ -6,9 +6,9 @@ import tensorflow as tf
 
 
 import cli
-import experimental
 import shapes
 import vis
+import data_utils
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -33,6 +33,7 @@ def parse_args(args):
     subparsers.add_parser("aberration")
     subparsers.add_parser("psnr")
     subparsers.add_parser("embeddings")
+    subparsers.add_parser("shapes_embeddings")
     subparsers.add_parser("gaussian")
     subparsers.add_parser("simulation")
     subparsers.add_parser("shapes")
@@ -43,6 +44,9 @@ def parse_args(args):
 
     syn_parser = subparsers.add_parser("synthetic")
     syn_parser.add_argument("img", type=Path, help="path to a tif image")
+
+    data_parser = subparsers.add_parser("check")
+    data_parser.add_argument("datadir", type=Path, help="path to dataset dir")
 
     return parser.parse_args(args)
 
@@ -74,6 +78,9 @@ def main(args=None):
     elif args.dtype == "embeddings":
         vis.plot_embeddings()
 
+    elif args.dtype == "shapes_embeddings":
+        vis.plot_shapes_embeddings()
+
     elif args.dtype == "gaussian":
         vis.plot_gaussian_filters()
 
@@ -89,8 +96,8 @@ def main(args=None):
     elif args.dtype == "similarity":
         shapes.similarity()
 
-    elif args.dtype == "parse":
-        experimental.create_dataset(data_path=args.dataset)
+    elif args.dtype == "check":
+        data_utils.check_dataset(args.datadir)
 
     else:
         logger.error("Error: unknown action!")

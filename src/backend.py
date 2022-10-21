@@ -1,3 +1,8 @@
+from functools import partial
+
+import matplotlib
+matplotlib.use('Agg')
+
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
@@ -8,16 +13,18 @@ from pathlib import Path
 from pprint import pprint
 from typing import Any
 
+import pandas as pd
+from scipy import stats as st
+from skimage.feature import peak_local_max
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from matplotlib import gridspec
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 from tqdm import trange, tqdm
 from tifffile import imsave
 
 import tensorflow as tf
-from tensorflow.keras.models import load_model, save_model
+from tensorflow.keras.models import load_model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.optimizers import SGD
 from tensorflow_addons.optimizers import AdamW
@@ -34,7 +41,6 @@ from callbacks import TensorBoardCallback
 import utils
 import vis
 import data_utils
-import preprocessing
 import experimental
 
 from synthetic import SyntheticPSF
@@ -42,16 +48,16 @@ from wavefront import Wavefront
 
 from tensorflow.keras import Model
 from phasenet import PhaseNet
+from preprocessing import resize_with_crop_or_pad
 
 from stem import Stem
 from activation import MaskedActivation
 from depthwiseconv import DepthwiseConv3D
 from spatial import SpatialAttention
+from roi import ROI
 import opticalresnet
 import opticaltransformer
 from baseline import Baseline
-from widekernel import WideKernel
-import opticalhierarchicaltransformer
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -67,6 +73,7 @@ def load(model_path: Path, mosaic=False) -> Model:
 
     if mosaic:
         custom_objects = {
+            "ROI": ROI,
             "Stem": opticaltransformer.Stem,
             "Patchify": opticaltransformer.Patchify,
             "Merge": opticaltransformer.Merge,
@@ -90,6 +97,7 @@ def load(model_path: Path, mosaic=False) -> Model:
             except IndexError or FileNotFoundError or OSError:
                 if 'opticaltransformer' in str(model_path):
                     custom_objects = {
+                        "ROI": ROI,
                         "Stem": opticaltransformer.Stem,
                         "Patchify": opticaltransformer.Patchify,
                         "Merge": opticaltransformer.Merge,
@@ -139,6 +147,7 @@ def train(
         warmup: int,
         decay_period: int,
         wavelength: float,
+        psf_type: str,
         x_voxel_size: float,
         y_voxel_size: float,
         z_voxel_size: float,
@@ -148,6 +157,10 @@ def train(
         max_psnr: int,
         epochs: int,
         mul: bool,
+        roi: Any = None,
+        refractive_index: float = 1.33,
+        no_phase: bool = False,
+        plot_patches: bool = False
 ):
     network = network.lower()
     opt = opt.lower()
@@ -156,10 +169,12 @@ def train(
     if network == 'opticaltransformer':
         model = opticaltransformer.OpticalTransformer(
             name='OpticalTransformer',
+            roi=roi,
             patches=patch_size,
             modes=pmodes,
             na_det=1.0,
-            refractive_index=1.33,
+            refractive_index=refractive_index,
+            psf_type=psf_type,
             lambda_det=wavelength,
             x_voxel_size=x_voxel_size,
             y_voxel_size=y_voxel_size,
@@ -168,32 +183,17 @@ def train(
             width_scalar=width_scalar,
             mask_shape=input_shape,
             activation=activation,
-            mul=mul
-        )
-    elif network == 'opticalhierarchicaltransformer':
-        model = opticalhierarchicaltransformer.OpticalHierarchicalTransformer(
-            name='OpticalHierarchicalTransformer',
-            patches=patch_size,
-            modes=pmodes,
-            na_det=1.0,
-            refractive_index=1.33,
-            lambda_det=wavelength,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            mask_shape=input_shape,
-            activation=activation,
-            mul=mul
+            mul=mul,
+            no_phase=no_phase
         )
     elif network == 'opticalresnet':
         model = opticalresnet.OpticalResNet(
             name='OpticalResNet',
             modes=pmodes,
             na_det=1.0,
-            refractive_index=1.33,
+            refractive_index=refractive_index,
             lambda_det=wavelength,
+            psf_type=psf_type,
             x_voxel_size=x_voxel_size,
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
@@ -201,23 +201,8 @@ def train(
             width_scalar=width_scalar,
             mask_shape=input_shape,
             activation=activation,
-            mul=mul
-        )
-    elif network == 'widekernel':
-        model = WideKernel(
-            name='WideKernel',
-            modes=pmodes,
-            na_det=1.0,
-            refractive_index=1.33,
-            lambda_det=wavelength,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            mask_shape=input_shape,
-            activation=activation,
-            mul=mul
+            mul=mul,
+            no_phase=no_phase
         )
     elif network == 'baseline':
         model = Baseline(
@@ -252,7 +237,7 @@ def train(
         if network == 'baseline':
             inputs = (input_shape, input_shape, input_shape, 1)
         else:
-            inputs = (6, input_shape, input_shape, 1)
+            inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
 
         loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
 
@@ -323,6 +308,7 @@ def train(
             modelpath=outdir,
             amplitude_range=.3,
             wavelength=wavelength,
+            psf_type=psf_type,
             x_voxel_size=x_voxel_size,
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
@@ -358,6 +344,7 @@ def train(
     if dataset is None:
 
         config = dict(
+            dtype=psf_type,
             psf_shape=inputs,
             snr=(min_psnr, max_psnr),
             max_jitter=1,
@@ -379,7 +366,8 @@ def train(
             dataset,
             distribution=distribution,
             samplelimit=samplelimit,
-            max_amplitude=max_amplitude
+            max_amplitude=max_amplitude,
+            no_phase=no_phase
         )
 
         sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
@@ -430,51 +418,68 @@ def train(
         logger.info(f"Batch size: {batch_size}")
         logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
 
-        # from opticaltransformer import Patchify, Merge
-        # original = np.squeeze(img[0, 1])
-        #
-        # vmin = np.min(original)
-        # vmax = np.max(original)
-        # vcenter = (vmin + vmax) / 2
-        # step = .01
-        # print(vmin, vmax, vcenter)
-        #
-        # highcmap = plt.get_cmap('YlOrRd', 256)
-        # lowcmap = plt.get_cmap('YlGnBu_r', 256)
-        # low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-        # high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-        # cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-        # cmap = mcolors.ListedColormap(cmap)
-        #
-        # plt.figure(figsize=(4, 4))
-        # plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
-        # plt.axis("off")
-        # plt.title('Original')
-        #
-        # for p in patch_size:
-        #     patches = Patchify(patch_size=p)(img)
-        #     merged = Merge(patch_size=p)(patches)
-        #     print(patches.shape)
-        #     print(merged.shape)
-        #
-        #     patches = patches[0, 1]
-        #     merged = np.squeeze(merged[0, 1])
-        #
-        #     plt.figure(figsize=(4, 4))
-        #     plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
-        #     plt.axis("off")
-        #     plt.title('Merged')
-        #
-        #     n = int(np.sqrt(patches.shape[0]))
-        #     plt.figure(figsize=(4, 4))
-        #     plt.title('Patches')
-        #     for i, patch in enumerate(patches):
-        #         ax = plt.subplot(n, n, i + 1)
-        #         patch_img = tf.reshape(patch, (p, p)).numpy()
-        #         ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
-        #         ax.axis("off")
-        #
-        # plt.show()
+        if plot_patches:
+            img = np.expand_dims(img[0], axis=0)
+            original = np.squeeze(img[0, 1])
+
+            vmin = np.min(original)
+            vmax = np.max(original)
+            vcenter = (vmin + vmax) / 2
+            step = .01
+            print(vmin, vmax, vcenter)
+
+            highcmap = plt.get_cmap('YlOrRd', 256)
+            lowcmap = plt.get_cmap('YlGnBu_r', 256)
+            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+            cmap = mcolors.ListedColormap(cmap)
+
+            plt.figure(figsize=(4, 4))
+            plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
+            plt.axis("off")
+            plt.title('Original')
+
+            for p in patch_size:
+                sample = Stem(
+                    kernel_size=3,
+                    activation=activation,
+                    mask_shape=input_shape,
+                    refractive_index=refractive_index,
+                    lambda_det=wavelength,
+                    psf_type=psf_type,
+                    x_voxel_size=x_voxel_size,
+                    y_voxel_size=y_voxel_size,
+                    z_voxel_size=z_voxel_size,
+                    mul=mul,
+                    no_phase=no_phase
+                )(img)
+
+                if roi is not None:
+                    sample = ROI(crop_shape=roi)(sample)
+
+                patches = opticaltransformer.Patchify(patch_size=p)(sample)
+                merged = opticaltransformer.Merge(patch_size=p)(patches)
+                print(patches.shape)
+                print(merged.shape)
+
+                patches = patches[0, 1]
+                merged = np.squeeze(merged[0, 1])
+
+                plt.figure(figsize=(4, 4))
+                plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
+                plt.axis("off")
+                plt.title('Merged')
+
+                n = int(np.sqrt(patches.shape[0]))
+                plt.figure(figsize=(4, 4))
+                plt.title('Patches')
+                for i, patch in enumerate(patches):
+                    ax = plt.subplot(n, n, i + 1)
+                    patch_img = tf.reshape(patch, (p, p)).numpy()
+                    ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
+                    ax.axis("off")
+            plt.show()
 
     try:
         model.fit(
@@ -490,7 +495,7 @@ def train(
                 h5_checkpoints,
                 earlystopping,
                 defibrillator,
-                #features,
+                # features,
                 lrscheduler,
             ],
         )
@@ -503,15 +508,14 @@ def bootstrap_predict(
     model: tf.keras.Model,
     inputs: np.array,
     psfgen: SyntheticPSF,
-    resize: Any = None,
     batch_size: int = 1,
     n_samples: int = 10,
-    threshold: float = 1e-4,
+    threshold: float = 1e-3,
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
     plot: Any = None,
-    return_embeddings: bool = False,
-    rolling_embedding: bool = False,
+    gamma: float = 1.0,
+    no_phase: bool = False
 ):
     """
     Average predictions and compute stdev
@@ -520,48 +524,48 @@ def bootstrap_predict(
         model: pre-trained keras model
         inputs: encoded tokens to be processed
         psfgen: Synthetic PSF object
-        resize: optional resize voxel size
         n_samples: number of predictions of average
         batch_size: number of samples per batch
         threshold: set predictions below threshold to zero
         desc: test to display for the progressbar
         verbose: a toggle for progress bar
+        gamma: apply a gamma to the embeddings
 
     Returns:
         average prediction, stdev
     """
-    def batch_generator(arr, s):
-        for k in range(0, len(arr), s):
-            yield arr[k:k + s]
-
-    if rolling_embedding:
-        model_inputs = np.stack([
-            np.expand_dims(
-                psfgen.rolling_embedding(psf=np.squeeze(i), plot=plot, strides=16),
-                axis=-1
-            ) for i in inputs
-        ], axis=0)
+    # check z-axis to compute embeddings for fourier models
+    if len(np.squeeze(inputs.shape)) == 3:
+        emb = model.input_shape[1] == inputs.shape[0]
     else:
-        if resize is not None:
-            inputs = np.stack([
-                np.expand_dims(
-                    preprocessing.resize(
-                        np.squeeze(i),
-                        crop_shape=psfgen.psf_shape,
-                        voxel_size=psfgen.voxel_size,
-                        sample_voxel_size=resize,
-                        debug=plot,
-                    ),
-                    axis=-1
-                ) for i in inputs
-            ], axis=0)
+        emb = model.input_shape[1] == inputs.shape[1]
 
-        # check z-axis to compute embeddings for fourier models0
-        if (model.input_shape[1] != inputs.shape[1]):
-            model_inputs = np.stack([psfgen.embedding(psf=i, plot=plot) for i in inputs], axis=0)
-        else:
-            # pass raw PSFs to the model
-            model_inputs = inputs
+    if not emb:
+        model_inputs = []
+        for i in inputs:
+            emb = psfgen.embedding(
+                psf=np.squeeze(i),
+                plot=plot,
+                gamma=gamma,
+                no_phase=no_phase,
+                principle_planes=True
+            )
+
+            if no_phase and model.input_shape[1] == 6:
+                phase_mask = np.zeros((3, model.input_shape[2], model.input_shape[3]))
+                emb = np.concatenate([emb, phase_mask], axis=0)
+            elif model.input_shape[1] == 3:
+                emb = emb[:3]
+
+            model_inputs.append(emb)
+
+        model_inputs = np.stack(model_inputs, axis=0)
+    else:
+        # pass raw PSFs to the model
+        model_inputs = inputs
+
+    model_inputs = np.nan_to_num(model_inputs, nan=0, posinf=0, neginf=0)
+    model_inputs = model_inputs[..., np.newaxis] if model_inputs.shape[-1] != 1 else model_inputs
 
     preds = None
     total = n_samples * (len(model_inputs) // batch_size)
@@ -572,91 +576,96 @@ def bootstrap_predict(
         b = []
         if verbose:
             pbar.update(len(model_inputs) // batch_size)
-            gen = tqdm(batch_generator(model_inputs, s=batch_size), leave=False)
+            gen = tqdm(tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size), leave=False)
         else:
-            gen = batch_generator(model_inputs, s=batch_size)
+            gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size)
 
         for batch in gen:
-            if plot is not None:
-                img = np.squeeze(batch[0])
-                input_img = np.squeeze(inputs[0])
-
-                if img.shape[0] != img.shape[1]:
-                    vmin, vmax, vcenter, step = 0, 2, 1, .1
-                    highcmap = plt.get_cmap('YlOrRd', 256)
-                    lowcmap = plt.get_cmap('YlGnBu_r', 256)
-                    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-                    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-                    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-                    cmap = mcolors.ListedColormap(cmap)
-
-                    fig, axes = plt.subplots(3, 3)
-
-                    if img.shape[0] == 6:
-                        for t in range(3):
-                            inner = gridspec.GridSpecFromSubplotSpec(
-                                1, 2, subplot_spec=axes[0, t], wspace=0.1, hspace=0.1
-                            )
-                            ax = fig.add_subplot(inner[0])
-                            m = ax.imshow(img[t].T if t == 2 else img[t], cmap=cmap, vmin=vmin, vmax=vmax)
-                            ax.set_xticks([])
-                            ax.set_yticks([])
-                            ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-                            ax = fig.add_subplot(inner[1])
-                            ax.imshow(img[t+3].T if t == 2 else img[t+3], cmap='coolwarm', vmin=vmin, vmax=vmax)
-                            ax.set_xticks([])
-                            ax.set_yticks([])
-                            ax.set_xlabel(r'$\varphi = \angle \tau$')
-                    else:
-                        m = axes[0, 0].imshow(input_img[input_img.shape[0]//2, :, :], cmap='hot', vmin=0, vmax=1)
-                        axes[0, 1].imshow(input_img[:, input_img.shape[1]//2, :], cmap='hot', vmin=0, vmax=1)
-                        axes[0, 2].imshow(input_img[:, :, input_img.shape[2]//2].T, cmap='hot', vmin=0, vmax=1)
-                        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-                        cb = plt.colorbar(m, cax=cax)
-                        cax.yaxis.set_label_position("right")
-                        cax.set_ylabel('Input (middle)')
-
-                    m = axes[1, 0].imshow(img[0], cmap=cmap, vmin=vmin, vmax=vmax)
-                    axes[1, 1].imshow(img[1], cmap=cmap, vmin=vmin, vmax=vmax)
-                    axes[1, 2].imshow(img[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
-                    cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-                    cb = plt.colorbar(m, cax=cax)
-                    cax.yaxis.set_label_position("right")
-                    cax.set_ylabel(r'Embedding ($\alpha$)')
-
-                    m = axes[2, 0].imshow(img[3], cmap='coolwarm', vmin=-1, vmax=1)
-                    axes[2, 1].imshow(img[4], cmap='coolwarm', vmin=-1, vmax=1)
-                    axes[2, 2].imshow(img[5].T, cmap='coolwarm', vmin=-1, vmax=1)
-                    cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-                    cb = plt.colorbar(m, cax=cax)
-                    cax.yaxis.set_label_position("right")
-                    cax.set_ylabel(r'Embedding ($\varphi$)')
-
-                    for ax in axes.flatten():
-                        ax.axis('off')
-                else:
-                    fig, axes = plt.subplots(1, 3)
-
-                    axes[1].set_title(str(img.shape))
-                    m = axes[0].imshow(np.max(img, axis=0), cmap='Spectral_r')
-                    axes[1].imshow(np.max(img, axis=1), cmap='Spectral_r')
-                    axes[2].imshow(np.max(img, axis=2).T, cmap='Spectral_r')
-
-                    for ax in axes.flatten():
-                        ax.axis('off')
-
-                    cax = inset_axes(axes[2], width="10%", height="100%", loc='center right', borderpad=-3)
-                    cb = plt.colorbar(m, cax=cax)
-                    cax.yaxis.set_label_position("right")
-
-                if plot == True:
-                    plt.show()
-                else:
-                    plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            # if plot is not None:
+            #     img = np.squeeze(batch[0])
+            #     input_img = np.squeeze(inputs[0])
+            #
+            #     if img.shape[0] != img.shape[1]:
+            #         vmin, vmax, vcenter, step = 0, 2, 1, .1
+            #         highcmap = plt.get_cmap('YlOrRd', 256)
+            #         lowcmap = plt.get_cmap('YlGnBu_r', 256)
+            #         low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+            #         high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+            #         cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+            #         cmap = mcolors.ListedColormap(cmap)
+            #
+            #         fig, axes = plt.subplots(3, 3)
+            #
+            #         if img.shape[0] == 6:
+            #             for t in range(3):
+            #                 inner = gridspec.GridSpecFromSubplotSpec(
+            #                     1, 2, subplot_spec=axes[0, t], wspace=0.1, hspace=0.1
+            #                 )
+            #                 ax = fig.add_subplot(inner[0])
+            #                 m = ax.imshow(img[t].T if t == 2 else img[t], cmap=cmap, vmin=vmin, vmax=vmax)
+            #                 ax.set_xticks([])
+            #                 ax.set_yticks([])
+            #                 ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
+            #                 ax = fig.add_subplot(inner[1])
+            #                 ax.imshow(img[t+3].T if t == 2 else img[t+3], cmap='coolwarm', vmin=vmin, vmax=vmax)
+            #                 ax.set_xticks([])
+            #                 ax.set_yticks([])
+            #                 ax.set_xlabel(r'$\varphi = \angle \tau$')
+            #         else:
+            #             m = axes[0, 0].imshow(input_img[input_img.shape[0]//2, :, :], cmap='hot', vmin=0, vmax=1)
+            #             axes[0, 1].imshow(input_img[:, input_img.shape[1]//2, :], cmap='hot', vmin=0, vmax=1)
+            #             axes[0, 2].imshow(input_img[:, :, input_img.shape[2]//2].T, cmap='hot', vmin=0, vmax=1)
+            #             cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+            #             cb = plt.colorbar(m, cax=cax)
+            #             cax.yaxis.set_label_position("right")
+            #             cax.set_ylabel('Input (middle)')
+            #
+            #         m = axes[1, 0].imshow(img[0], cmap=cmap, vmin=vmin, vmax=vmax)
+            #         axes[1, 1].imshow(img[1], cmap=cmap, vmin=vmin, vmax=vmax)
+            #         axes[1, 2].imshow(img[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
+            #         cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+            #         cb = plt.colorbar(m, cax=cax)
+            #         cax.yaxis.set_label_position("right")
+            #         cax.set_ylabel(r'Embedding ($\alpha$)')
+            #
+            #         m = axes[2, 0].imshow(img[3], cmap='coolwarm', vmin=-1, vmax=1)
+            #         axes[2, 1].imshow(img[4], cmap='coolwarm', vmin=-1, vmax=1)
+            #         axes[2, 2].imshow(img[5].T, cmap='coolwarm', vmin=-1, vmax=1)
+            #         cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+            #         cb = plt.colorbar(m, cax=cax)
+            #         cax.yaxis.set_label_position("right")
+            #         cax.set_ylabel(r'Embedding ($\varphi$)')
+            #
+            #         for ax in axes.flatten():
+            #             ax.axis('off')
+            #     else:
+            #         fig, axes = plt.subplots(1, 3)
+            #
+            #         axes[1].set_title(str(img.shape))
+            #         m = axes[0].imshow(np.max(img, axis=0), cmap='Spectral_r')
+            #         axes[1].imshow(np.max(img, axis=1), cmap='Spectral_r')
+            #         axes[2].imshow(np.max(img, axis=2).T, cmap='Spectral_r')
+            #
+            #         for ax in axes.flatten():
+            #             ax.axis('off')
+            #
+            #         cax = inset_axes(axes[2], width="10%", height="100%", loc='center right', borderpad=-3)
+            #         cb = plt.colorbar(m, cax=cax)
+            #         cax.yaxis.set_label_position("right")
+            #
+            #     if plot == True:
+            #         plt.show()
+            #     else:
+            #         plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
             p = model(batch, training=True).numpy()
+
             p[:, [0, 1, 2, 4]] = 0.
             p[np.abs(p) <= threshold] = 0.
+
+            features = np.array([np.count_nonzero(s) for s in batch])
+            p[np.where(features == 0)[0]] = np.zeros_like(p[0])
+
             b.extend(p)
 
         if preds is None:
@@ -670,20 +679,373 @@ def bootstrap_predict(
     sigma = np.std(preds, axis=-1)
     sigma = sigma.flatten() if sigma.shape[0] == 1 else sigma
 
-    if return_embeddings:
-        return mu, sigma, model_inputs
+    return mu, sigma
+
+
+def predict_sign(
+    model: tf.keras.Model,
+    inputs: np.array,
+    gen: SyntheticPSF,
+    batch_size: int,
+    init_preds: Any = None,
+    desc: Any = None,
+    plot: Any = None,
+    verbose: bool = False,
+    threshold: float = 1e-2,
+):
+
+    if init_preds is None:
+        init_preds, stdev = bootstrap_predict(
+            model,
+            inputs,
+            psfgen=gen,
+            batch_size=batch_size,
+            n_samples=1,
+            no_phase=True,
+            desc=desc,
+            verbose=verbose,
+            threshold=threshold,
+            plot=plot
+        )
+        init_preds = np.abs(init_preds)
+
+    g = partial(
+        gen.single_psf,
+        zplanes=0,
+        normed=True,
+        noise=False,
+        augmentation=False,
+        meta=False
+    )
+
+    predicted_psf = g(init_preds)[np.newaxis, ...]
+    predicted_peaks = np.zeros_like(inputs)
+
+    peaks = peak_local_max(
+        np.squeeze(inputs),
+        min_distance=10,
+        threshold_rel=.33,
+        exclude_border=False,
+        p_norm=2,
+        num_peaks=10
+    ).astype(np.int32)
+
+    for p in peaks:
+        predicted_peaks[0, p[0], p[1], p[2]] = inputs[0, p[0], p[1], p[2]]
+
+    predicted_inputs = utils.fftconvolution(
+        np.squeeze(predicted_peaks),
+        np.squeeze(predicted_psf)
+    )
+
+    predicted_inputs = predicted_inputs[..., np.newaxis]
+    if len(predicted_inputs.shape) == 4:
+        predicted_inputs = predicted_inputs[np.newaxis, ...]
+
+    predicted_inputs *= 30 ** 2
+    rand_noise = gen._random_noise(
+        image=predicted_inputs,
+        mean=gen.mean_background_noise,
+        sigma=gen.sigma_background_noise
+    )
+    predicted_inputs += rand_noise
+    predicted_inputs /= predicted_inputs.max()
+
+    # ratio = inputs * predicted_inputs
+    ratio = predicted_inputs / inputs
+    ratio[np.where(predicted_inputs <= .1)] = 1
+    ratio = np.nan_to_num(ratio, nan=1, posinf=1, neginf=1)
+
+    followup_inputs = inputs - (inputs * ratio)
+    followup_inputs[followup_inputs < 0] = 0
+    followup_inputs = np.nan_to_num(followup_inputs, nan=0, posinf=0, neginf=0)
+    followup_inputs /= np.max(followup_inputs)
+
+    followup_preds, stdev = bootstrap_predict(
+        model,
+        followup_inputs,
+        psfgen=gen,
+        batch_size=batch_size,
+        n_samples=1,
+        no_phase=True,
+        desc=desc,
+        verbose=verbose,
+    )
+    followup_preds = np.abs(followup_preds)
+
+    if plot is not None:
+        fig, axes = plt.subplots(6, 3, figsize=(6, 11))
+        gamma = .5
+        vmin, vmax, vcenter, step = 0, 3, 1, .01
+        highcmap = plt.get_cmap('terrain_r', 256)
+        lowcmap = plt.get_cmap('Greys_r', 256)
+        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+        cmap = mcolors.ListedColormap(cmap)
+
+        for i in range(3):
+            mi = axes[0, i].imshow(
+                np.max(np.squeeze(inputs), axis=i) ** gamma,
+                vmin=0, vmax=1, cmap='magma', aspect='equal'
+            )
+            axes[0, i].set_xticks([])
+            axes[0, i].set_yticks([])
+
+            mpoi = axes[1, i].imshow(
+                np.max(np.squeeze(predicted_peaks) ** gamma, axis=i),
+                vmin=0, vmax=1, cmap='hot', aspect='equal'
+            )
+            axes[1, i].set_xticks([])
+            axes[1, i].set_yticks([])
+
+            mppsf = axes[2, i].imshow(
+                np.max(np.squeeze(predicted_psf), axis=i) ** gamma,
+                vmin=0, vmax=1, cmap='hot', aspect='equal'
+            )
+            axes[2, i].set_xticks([])
+            axes[2, i].set_yticks([])
+
+            mp = axes[3, i].imshow(
+                np.max(np.squeeze(predicted_inputs), axis=i) ** gamma,
+                vmin=0, vmax=1, cmap='magma', aspect='equal'
+            )
+            axes[3, i].set_xticks([])
+            axes[3, i].set_yticks([])
+
+            mr = axes[4, i].imshow(
+                np.max(np.squeeze(ratio), axis=i),
+                vmin=vmin, vmax=vmax, cmap=cmap, aspect='equal'
+            )
+            axes[4, i].set_xticks([])
+            axes[4, i].set_yticks([])
+
+            mf = axes[5, i].imshow(
+                np.max(np.squeeze(followup_inputs), axis=i) ** gamma,
+                vmin=0, vmax=1, cmap='magma', aspect='equal'
+            )
+            axes[5, i].set_xticks([])
+            axes[5, i].set_yticks([])
+
+        axes[0, 0].set_ylabel('Input')
+        axes[1, 0].set_ylabel('POI')
+        axes[2, 0].set_ylabel('PSF')
+        axes[3, 0].set_ylabel('Predicted')
+        axes[4, 0].set_ylabel('Delta')
+        axes[5, 0].set_ylabel('Followup inputs')
+
+        for i, m in zip(range(6), [mi, mpoi, mppsf, mp, mr, mf]):
+            cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+            cax.set_ylabel(f"$\gamma$: {gamma:.2f}")
+            plt.colorbar(m, cax=cax)
+
+        plt.savefig(f'{plot}_sign.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    preds = init_preds.copy()
+    flips = np.where(followup_preds > (.4 * init_preds))[0]
+    preds[flips] *= -1
+
+    if plot is not None and followup_preds is not None:
+        init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+        followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+        preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
+        fig, axes = plt.subplots(2, 1, figsize=(24, 8))
+        axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
+        axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
+        axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
+        axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
+        axes[0].legend(frameon=False, loc='upper left')
+        axes[0].set_xlim((0, 60))
+        axes[0].set_xticks(range(0, 61))
+
+        axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
+        axes[1].legend(frameon=False, loc='upper left')
+        axes[1].set_xlim((0, 60))
+        axes[1].set_xticks(range(0, 61))
+
+        plt.tight_layout()
+        plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    return preds, followup_inputs
+
+
+def booststrap_predict_sign(
+    model: tf.keras.Model,
+    inputs: np.array,
+    gen: SyntheticPSF,
+    desc: Any = None,
+    plot: Any = None,
+    verbose: bool = False,
+    threshold: float = 1e-2,
+    sign_threshold: float = .4,
+    n_samples: int = 1,
+    prev_pred: Any = None
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    preds, stdev = bootstrap_predict(
+        model,
+        inputs,
+        psfgen=gen,
+        n_samples=n_samples,
+        no_phase=True,
+        desc=desc,
+        verbose=verbose,
+        threshold=threshold,
+        plot=plot
+    )
+    preds = np.abs(preds)
+
+    if prev_pred is not None:
+        followup_preds = preds.copy()
+        init_preds = np.abs(pd.read_csv(prev_pred, header=0)['amplitude'].values)
+
+        if len(np.squeeze(preds).shape) == 1:
+            flips = np.where(followup_preds > (sign_threshold * init_preds))[0]
+            init_preds[flips] *= -1
+            preds = init_preds.copy()
+
+            if plot is not None:
+                init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+                followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+                preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
+                fig, axes = plt.subplots(2, 1, figsize=(24, 8))
+                axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
+                axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
+                axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
+                axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
+                axes[0].legend(frameon=False, loc='upper left')
+                axes[0].set_xlim((0, 60))
+                axes[0].set_xticks(range(0, 61))
+
+                axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
+                axes[1].legend(frameon=False, loc='upper left')
+                axes[1].set_xlim((0, 60))
+                axes[1].set_xticks(range(0, 61))
+
+                plt.tight_layout()
+                plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+        else:
+            for i in range(preds.shape[0]):
+                flips = np.where(followup_preds[i] > (sign_threshold * init_preds[i]))[0]
+                init_preds[i, flips] *= -1
+            preds = init_preds.copy()
+
+    return preds, stdev
+
+
+def eval_sign(
+    model: tf.keras.Model,
+    inputs: np.array,
+    gen: SyntheticPSF,
+    ys: np.array,
+    batch_size: int,
+    desc: Any = None,
+    reference: Any = None,
+    plot: Any = None,
+    threshold: float = 1e-3,
+    sign_threshold: float = .4,
+):
+    init_preds, stdev = bootstrap_predict(
+        model,
+        inputs,
+        psfgen=gen,
+        batch_size=batch_size,
+        n_samples=1,
+        no_phase=True,
+        threshold=threshold,
+        desc=desc,
+        plot=plot
+    )
+    init_preds = np.abs(init_preds)
+
+    res = ys - init_preds
+    g = partial(
+        gen.single_psf,
+        zplanes=0,
+        normed=True,
+        noise=False if reference is not None else True,
+        augmentation=False if reference is not None else True,
+        meta=False
+    )
+    followup_inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
+
+    if reference is not None:
+        followup_inputs = utils.fftconvolution(reference, followup_inputs)
+
+    followup_preds, stdev = bootstrap_predict(
+        model,
+        followup_inputs,
+        psfgen=gen,
+        batch_size=batch_size,
+        n_samples=1,
+        no_phase=True,
+        threshold=threshold,
+        desc=desc,
+    )
+    followup_preds = np.abs(followup_preds)
+
+    preds = init_preds.copy()
+
+    if ys.shape[0] == 1:
+        flips = np.where(followup_preds > (sign_threshold * init_preds))[0]
+        preds[flips] *= -1
     else:
-        return mu, sigma
+        for i in range(ys.shape[0]):
+            flips = np.where(followup_preds[i] > (sign_threshold * init_preds[i]))[0]
+            preds[i, flips] *= -1
+
+            if plot == True:
+                init_preds_wave = Wavefront(init_preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
+                followup_preds_wave = Wavefront(followup_preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
+                preds_wave = Wavefront(preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
+                ys_wave = Wavefront(ys[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
+                fig, axes = plt.subplots(2, 1, figsize=(24, 8))
+                axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
+                axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
+                axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
+                axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
+                axes[0].legend(frameon=False, loc='upper left')
+                axes[0].set_xlim((0, 60))
+                axes[0].set_xticks(range(0, 61))
+
+                axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
+                axes[1].plot(ys_wave, '-o', color='C1', label='Ground truth')
+                axes[1].legend(frameon=False, loc='upper left')
+                axes[1].set_xlim((0, 60))
+                axes[1].set_xticks(range(0, 61))
+
+                plt.tight_layout()
+                plt.show()
+
+    return preds
 
 
 def predict(
-        model: Path,
-        wavelength: float,
-        x_voxel_size: float,
-        y_voxel_size: float,
-        z_voxel_size: float,
-        max_jitter: float,
-        cpu_workers: int,
+    model: Path,
+    psf_type: str,
+    wavelength: float,
+    x_voxel_size: float,
+    y_voxel_size: float,
+    z_voxel_size: float,
+    max_jitter: float,
+    cpu_workers: int,
+    input_coverage: float = 1.0,
+    no_phase: bool = False,
+    radius: float = .4,
+    psnr: int = 30
 ):
     m = load(model)
     m.summary()
@@ -692,65 +1054,114 @@ def predict(
     input_shape = m.layers[0].input_shape[0][1:-1]
 
     for dist in ['powerlaw', 'dirichlet']:
-        for amplitude_range in [(0, .1), (.1, .2), (.2, .4), (.4, .6)]:
-            for snr in [25, 50]:
-                psfargs = dict(
-                    order='ansi',
-                    snr=snr,
-                    n_modes=modes,
-                    distribution=dist,
-                    gamma=1.5,
-                    bimodal=True,
-                    lam_detection=wavelength,
-                    amplitude_ranges=amplitude_range,
-                    psf_shape=3 * [input_shape[-1]],
-                    x_voxel_size=x_voxel_size,
-                    y_voxel_size=y_voxel_size,
-                    z_voxel_size=z_voxel_size,
-                    batch_size=1,
-                    max_jitter=max_jitter,
-                    cpu_workers=cpu_workers,
-                )
+        for amplitude_range in [(.1, .2), (.2, .3)]:
+            psfargs = dict(
+                dtype=psf_type,
+                order='ansi',
+                snr=1000,
+                n_modes=modes,
+                distribution=dist,
+                gamma=.75,
+                bimodal=True,
+                lam_detection=wavelength,
+                amplitude_ranges=amplitude_range,
+                psf_shape=3 * [input_shape[-1]],
+                x_voxel_size=x_voxel_size,
+                y_voxel_size=y_voxel_size,
+                z_voxel_size=z_voxel_size,
+                batch_size=1,
+                max_jitter=max_jitter,
+                cpu_workers=cpu_workers,
+            )
 
-                gen = SyntheticPSF(**psfargs)
-                for i, (psf, y, psnr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True, otf=False)):
+            gen = SyntheticPSF(**psfargs)
+            for s, (psf, y, snr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True)):
+                waves = np.round(utils.microns2waves(amplitude_range[0], wavelength), 2)
+                psf = np.squeeze(psf)
 
-                    p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1, n_samples=1)
+                for npoints in trange(1, 6):
+                    if npoints > 1:
+                        img = np.zeros([3 * s for s in gen.psf_shape])
+                        width = [(i // 2) for i in gen.psf_shape]
+                        center = gen.psf_shape
 
-                    p = Wavefront(p)
-                    logger.info('Prediction')
-                    pprint(p.zernikes)
+                        for i in range(npoints):
+                            p = [
+                                np.random.randint(int(gen.psf_shape[0] * (.5 - radius)),
+                                                  int(gen.psf_shape[0] * (.5 + radius))),
+                                np.random.randint(int(gen.psf_shape[1] * (.5 - radius)),
+                                                  int(gen.psf_shape[1] * (.5 + radius))),
+                                np.random.randint(int(gen.psf_shape[2] * (.5 - radius)),
+                                                  int(gen.psf_shape[2] * (.5 + radius)))
+                            ]
 
-                    logger.info('GT')
-                    y = Wavefront(y.flatten())
-                    pprint(y.zernikes)
+                            img[
+                                (p[0] + center[0]) - width[0]:(p[0] + center[0]) + width[0],
+                                (p[1] + center[1]) - width[1]:(p[1] + center[1]) + width[1],
+                                (p[2] + center[2]) - width[2]:(p[2] + center[2]) + width[2],
+                            ] += psf
 
-                    diff = Wavefront(y - p)
+                        img = resize_with_crop_or_pad(img, crop_shape=gen.psf_shape)
+                    else:
+                        img = psf
 
-                    p_psf = gen.single_psf(p, zplanes=0)
-                    gt_psf = gen.single_psf(y, zplanes=0)
-                    corrected_psf = gen.single_psf(diff, zplanes=0)
+                    img[img < 0] = 0
+                    img = np.nan_to_num(img, nan=0)
+                    rand_noise = gen._random_noise(
+                        image=img,
+                        mean=gen.mean_background_noise,
+                        sigma=gen.sigma_background_noise
+                    )
+                    noisy_img = rand_noise + (img * psnr**2)
+                    noisy_img /= np.max(noisy_img)
 
-                    psf = np.squeeze(psf[0], axis=-1)
-                    waves = np.round(utils.microns2waves(amplitude_range[0], wavelength), 2)
                     save_path = Path(
-                        f"{model}/{dist}/lambda-{waves}/psnr-{snr}/"
+                        f"{model}/{dist}/c{input_coverage}/lambda-{waves}/npoints-{npoints}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
-                    imsave(save_path / f'psf_{i}.tif', psf)
-                    imsave(save_path / f'corrected_psf_{i}.tif', corrected_psf)
+                    if input_coverage != 1.:
+                        mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
+                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
+                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
+
+                    p = eval_sign(
+                        model=m,
+                        inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
+                        gen=gen,
+                        ys=y,
+                        batch_size=1,
+                        plot=save_path / f'embeddings_{s}',
+                    )
+
+                    p_wave = Wavefront(p, lam_detection=wavelength)
+                    # logger.info('Prediction')
+                    # pprint(p_wave.zernikes)
+
+                    y_wave = Wavefront(y.flatten(), lam_detection=wavelength)
+                    # logger.info('GT')
+                    # pprint(y_wave.zernikes)
+
+                    diff = y_wave - p_wave
+
+                    p_psf = gen.single_psf(p_wave, zplanes=0)
+                    gt_psf = gen.single_psf(y_wave, zplanes=0)
+                    corrected_psf = gen.single_psf(diff, zplanes=0)
+
+                    imsave(save_path / f'psf_{s}.tif', noisy_img)
+                    imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
 
                     vis.diagnostic_assessment(
-                        psf=psf,
+                        psf=noisy_img,
                         gt_psf=gt_psf,
                         predicted_psf=p_psf,
                         corrected_psf=corrected_psf,
+                        wavelength=wavelength,
                         psnr=psnr,
                         maxcounts=maxcounts,
-                        y=y,
-                        pred=p,
-                        save_path=save_path / f'{i}',
+                        y=y_wave,
+                        pred=p_wave,
+                        save_path=save_path / f'{s}',
                         display=False
                     )
 
@@ -777,7 +1188,7 @@ def compare(
                 snr=50,
                 n_modes=modes,
                 distribution=dist,
-                gamma=1.5,
+                gamma=.75,
                 bimodal=True,
                 lam_detection=wavelength,
                 amplitude_ranges=amplitude_range,
@@ -803,15 +1214,15 @@ def compare(
 
                 p, std = bootstrap_predict(m, psfgen=gen, inputs=model_input, batch_size=1, n_samples=1)
 
-                p = Wavefront(p)
+                p = Wavefront(p, lam_detection=wavelength)
                 logger.info('Prediction')
                 pprint(p.zernikes)
 
                 logger.info('GT')
-                y = Wavefront(y.flatten())
+                y = Wavefront(y.flatten(), lam_detection=wavelength)
                 pprint(y.zernikes)
 
-                diff = Wavefront(y - p)
+                diff = Wavefront(y - p, lam_detection=wavelength)
 
                 p_psf = gen.single_psf(p, zplanes=0)
                 corrected_psf = gen.single_psf(diff, zplanes=0)
@@ -837,8 +1248,8 @@ def compare(
                     n_modes=p.amplitudes.shape[0]
                 ))
                 pred_matlab[:m_amps.shape[0]] = m_amps
-                pred_matlab = Wavefront(pred_matlab.flatten())
-                matlab_diff = Wavefront(y - pred_matlab)
+                pred_matlab = Wavefront(pred_matlab.flatten(), lam_detection=wavelength)
+                matlab_diff = Wavefront(y - pred_matlab, lam_detection=wavelength)
                 matlab_corrected_psf = gen.single_psf(matlab_diff, zplanes=0)
                 imsave(save_path / f'matlab_corrected_psf_{i}.tif', matlab_corrected_psf)
                 pprint(pred_matlab.zernikes)
@@ -851,6 +1262,7 @@ def compare(
                     matlab_corrected_psf=matlab_corrected_psf,
                     psnr=psnr,
                     maxcounts=maxcounts,
+                    wavelength=wavelength,
                     y=y,
                     pred=p,
                     pred_matlab=pred_matlab,
@@ -894,15 +1306,15 @@ def deconstruct(
         psf, y, psnr, zplanes, maxcounts = next(gen.generator(debug=True))
         p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1)
 
-        p = Wavefront(p)
+        p = Wavefront(p, lam_detection=wavelength)
         logger.info('Prediction')
         pprint(p.zernikes)
 
         logger.info('GT')
-        y = Wavefront(y)
+        y = Wavefront(y, lam_detection=wavelength)
         pprint(y.zernikes)
 
-        diff = Wavefront(y - p)
+        diff = Wavefront(y - p, lam_detection=wavelength)
 
         p_psf = gen.single_psf(p, zplanes=0)
         gt_psf = gen.single_psf(y, zplanes=0)
@@ -919,6 +1331,7 @@ def deconstruct(
             corrected_psf=corrected_psf,
             psnr=psnr,
             maxcounts=maxcounts,
+            wavelength=wavelength,
             y=y,
             pred=p,
             save_path=save_path / f'{i}',
@@ -938,6 +1351,7 @@ def featuremaps(
         modelpath: Path,
         amplitude_range: float,
         wavelength: float,
+        psf_type: str,
         x_voxel_size: float,
         y_voxel_size: float,
         z_voxel_size: float,
@@ -963,10 +1377,11 @@ def featuremaps(
     )
     phi = np.zeros(modes)
     phi[10] = amplitude_range
-    amplitude_range = Wavefront(phi)
+    amplitude_range = Wavefront(phi, lam_detection=wavelength)
 
     psfargs = dict(
         n_modes=modes,
+        dtype=psf_type,
         psf_shape=3 * [input_shape[1]],
         distribution='single',
         lam_detection=wavelength,
@@ -1036,13 +1451,13 @@ def featuremaps(
                         ] = vol
 
                 space = grid.flatten()
-                vmin = np.min(space)
-                vmax = np.max(space)
+                vmin = np.nanquantile(space, .02)
+                vmax = np.nanquantile(space, .98)
                 vcenter = (vmin + vmax)/2
                 step = .01
 
                 highcmap = plt.get_cmap('YlOrRd', 256)
-                lowcmap = plt.get_cmap('YlGnBu_r', 256)
+                lowcmap = plt.get_cmap('terrain', 256)
                 low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
                 high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
                 cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))

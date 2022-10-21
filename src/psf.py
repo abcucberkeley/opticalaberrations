@@ -8,6 +8,8 @@ import logging
 import sys
 
 import numpy as np
+from skimage.transform import rescale
+import h5py
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -116,7 +118,21 @@ class PsfGenerator3D:
         if self.dtype == 'widefield':
             return _psf
         elif self.dtype == 'confocal':
-            return _psf**2
+            _psf = _psf**2
+            _psf /= np.max(_psf)
+            return _psf
         else:
-            logger.error("Unknown PSF type")
-            exit()
+            with h5py.File(self.dtype, 'r') as file:
+                lattice = file.get('DitheredxzPSFCrossSection').value[:, 0]
+
+            lattice = rescale(
+                lattice,
+                (.0367/self.dz),
+                order=3,
+                anti_aliasing=True,
+            )
+            w = _psf.shape[0]//2
+            center = lattice.shape[0]//2
+            lattice = lattice[center-w:center+w, np.newaxis, np.newaxis]
+            _psf = _psf * lattice
+            return _psf

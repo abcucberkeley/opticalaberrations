@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')
+
 import logging
 import multiprocessing as mp
 import sys
@@ -9,6 +12,9 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from skimage.feature import peak_local_max
+from scipy.spatial import KDTree
+from astropy import convolution
 
 import vis
 from preprocessing import resize_with_crop_or_pad
@@ -181,3 +187,81 @@ def plot_to_image(figure):
     # Add the batch dimension
     image = tf.expand_dims(image, 0)
     return image
+
+
+def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
+    peaks = peak_local_max(
+        sample,
+        min_distance=1,
+        threshold_rel=.33,
+        exclude_border=False,
+        p_norm=2,
+        num_peaks=10
+    ).astype(np.float64)
+
+    # rescale to mu meters
+    scaled_peaks = np.zeros_like(peaks)
+    scaled_peaks[:, 0] = peaks[:, 0] * voxel_size[0]
+    scaled_peaks[:, 1] = peaks[:, 1] * voxel_size[1]
+    scaled_peaks[:, 2] = peaks[:, 2] * voxel_size[2]
+
+    kd = KDTree(scaled_peaks)
+    dists, idx = kd.query(scaled_peaks, k=2, workers=-1)
+
+    if plot:
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False, sharex=False)
+        for ax in range(3):
+            axes[ax].imshow(
+                np.nanmax(sample, axis=ax),
+                aspect='auto',
+                cmap='gray'
+            )
+
+            for p in range(dists.shape[0]):
+                if ax == 0:
+                    axes[ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                elif ax == 1:
+                    axes[ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                else:
+                    axes[ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+
+        plt.tight_layout()
+        plt.show()
+
+    return np.round(np.mean(dists), 1)
+
+
+def fftconvolution(sample, kernel, plot=False):
+    if len(kernel.shape) > 4:
+        conv = []
+        for k in kernel:
+            c = convolution.convolve_fft(sample, k, allow_huge=True)
+            c /= np.nanmax(c)
+            conv.append(c)
+
+            if plot:
+                fig, axes = plt.subplots(3, 3, figsize=(24, 12))
+                for ax in range(3):
+                    axes[0, ax].imshow(np.max(sample, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+                    axes[1, ax].imshow(np.max(k, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+                    axes[2, ax].imshow(np.max(c, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+                plt.tight_layout()
+                plt.show()
+
+        conv = np.array(conv)
+    else:
+        conv = convolution.convolve_fft(sample, kernel, allow_huge=True)
+        conv /= np.nanmax(conv)
+
+        if plot:
+            fig, axes = plt.subplots(3, 3, figsize=(24, 12))
+            for ax in range(3):
+                axes[0, ax].imshow(np.max(sample, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+                axes[1, ax].imshow(np.max(kernel, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+                axes[2, ax].imshow(np.max(conv, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
+            plt.tight_layout()
+            plt.show()
+
+    conv = np.nan_to_num(conv, nan=0, neginf=0, posinf=0)
+    conv[conv < 0] = 0
+    return conv

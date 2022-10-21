@@ -40,6 +40,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--psf_type", default='widefield', help="type of the desired PSF"
+    )
+
+    parser.add_argument(
         "--x_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
     )
 
@@ -63,6 +67,16 @@ def parse_args(args):
         "--gpu_workers", default=1, type=int, help='number of GPUs to use'
     )
 
+    parser.add_argument(
+        "--input_coverage", default=1.0, type=float, help='faction of the image to feed into the model '
+                                                          '(then padded to keep the original image size)'
+    )
+
+    parser.add_argument(
+        '--no_phase', action='store_true',
+        help='toggle to use exclude phase from the model embeddings'
+    )
+
     return parser.parse_args(args)
 
 
@@ -78,29 +92,22 @@ def main(args=None):
     if args.target == "random":
         backend.predict(
             model=args.model,
+            psf_type=args.psf_type,
             wavelength=args.wavelength,
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
             max_jitter=args.max_jitter,
-            cpu_workers=args.cpu_workers
-        )
-
-    elif args.target == "compare":
-        backend.compare(
-            model=args.model,
-            wavelength=args.wavelength,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            max_jitter=args.max_jitter,
-            cpu_workers=args.cpu_workers
+            cpu_workers=args.cpu_workers,
+            input_coverage=args.input_coverage,
+            no_phase=args.no_phase
         )
 
     elif args.target == "featuremaps":
         backend.featuremaps(
             modelpath=args.model,
             wavelength=args.wavelength,
+            psf_type=args.psf_type,
             amplitude_range=args.amplitude_range,
             psnr=args.psnr,
             x_voxel_size=args.x_voxel_size,

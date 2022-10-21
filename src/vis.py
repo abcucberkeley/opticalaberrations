@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')
+
 import warnings
 from pathlib import Path
 import logging
@@ -7,6 +10,7 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import matplotlib.gridspec as gridspec
+import raster_geometry as rg
 import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
 from typing import Any
@@ -15,6 +19,7 @@ import numpy as np
 import seaborn as sns
 from tqdm import tqdm, trange
 import matplotlib.patches as patches
+from astropy import convolution
 import tensorflow as tf
 from tensorflow_addons.image import gaussian_filter2d
 
@@ -32,7 +37,7 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
-def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
+def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -46,15 +51,16 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
 
     psfargs = dict(
         n_modes=60,
-        distribution='dirichlet',
+        dtype='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        distribution='powerlaw',
         bimodal=True,
         gamma=.75,
         lam_detection=wavelength,
         amplitude_ranges=(0, 1),
         psf_shape=(32, 32, 32),
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.2,
         batch_size=batch_size,
         snr=30,
         max_jitter=1,
@@ -65,15 +71,17 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.605):
     peaks = []
     zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
 
-    # difractionlimit = np.arange(0, 0.05, .01).round(3)  # 4  bins
-    # small = np.arange(.05, .1, .005).round(3)           # 10 bins
-    # large = np.arange(.1, .4, .01).round(3)             # 30 bins
-    # extreme = np.arange(.4, .65, .05).round(3)          # 6  bins
-    # min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
-    # max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
+    ## Challenging dataset
+    difractionlimit = np.arange(0, 0.055, .005).round(3)  # 10 bins
+    small = np.arange(.05, .1, .0025).round(3)            # 20 bins
+    large = np.arange(.1, .2, .005).round(3)              # 20 bins
+    extreme = np.arange(.2, .52, .02).round(3)            # 20 bins
+    min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
+    max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
 
-    min_amps = np.arange(0, .45, .05).round(3)
-    max_amps = np.arange(.05, .5, .05).round(3)
+    ## Easy dataset
+    # min_amps = np.arange(0, .15, .01).round(3)
+    # max_amps = np.arange(.01, .16, .01).round(3)
 
     for mina, maxa in zip(min_amps, max_amps):
         psfargs['amplitude_ranges'] = (mina, maxa)
@@ -196,7 +204,7 @@ def plot_fov(n_modes=60, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
         for j, amp in enumerate(tqdm(waves, desc=f'Mode [#{i}]')):
             phi = np.zeros(n_modes)
             phi[i] = amp
-            w = Wavefront(phi, order='ansi')
+            w = Wavefront(phi, order='ansi', lam_detection=wavelength)
 
             for r in res:
                 gen = SyntheticPSF(
@@ -322,12 +330,12 @@ def plot_embeddings(
         res=64,
         padsize=None,
         n_modes=15,
-        wavelength=.920,
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        wavelength=.510,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.268,
         log10=False,
-        psf_type='confocal',
+        psf_type='../examples/lattice/lattice_PSF_simulation.mat',
         savepath='../data/embeddings',
 ):
     savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
@@ -353,7 +361,8 @@ def plot_embeddings(
     cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
     cmap = mcolors.ListedColormap(cmap)
 
-    waves = np.arange(-.25, .3, step=.05).round(3)
+    waves = np.arange(-.3, .35, step=.05).round(3)
+    # waves = np.arange(-.075, .08, step=.015).round(3) ## small
     logger.info(waves)
 
     fig = plt.figure(figsize=(25, 60))
@@ -403,14 +412,14 @@ def plot_embeddings(
             abr = round(peak_aberration(phi) * np.sign(amp), 1)
             grid[(mode, 0, amp)].set_title(f'{abr}$\\lambda$')
 
-            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_{psf_type}/mode_{mode}/ratios/')
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/ratios/')
             outdir.mkdir(exist_ok=True, parents=True)
             imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", window)
 
             for ax in range(6):
                 if amp == waves[-1]:
                     mat = grid[(mode, ax, 'wavefront')].contourf(
-                        Wavefront(phi).wave(100),
+                        Wavefront(phi, lam_detection=wavelength).wave(100),
                         levels=np.arange(-10, 10, step=1),
                         cmap='Spectral_r',
                         extend='both'
@@ -443,7 +452,154 @@ def plot_embeddings(
                 cax.yaxis.set_label_position("right")
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{savepath}/i{res}_pad{padsize}_{psf_type}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}/i{res}_pad{padsize}_lattice.pdf', bbox_inches='tight', pad_inches=.25)
+
+
+def plot_shapes_embeddings(
+        res=64,
+        padsize=None,
+        shapes=5,
+        wavelength=.510,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.268,
+        log10=False,
+        psf_type='../examples/lattice/lattice_PSF_simulation.mat',
+        savepath='../data/shapes_embeddings',
+):
+    def sphere(image_size, radius=.5, position=.5):
+        img = rg.sphere(shape=image_size, radius=radius, position=position)
+        return img.astype(np.float)
+
+    savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+    })
+    from utils import peak_aberration
+
+    if log10:
+        vmin, vmax, vcenter, step = -2, 2, 0, .1
+    else:
+        vmin, vmax, vcenter, step = 0, 2, 1, .1
+
+    highcmap = plt.get_cmap('YlOrRd', 256)
+    lowcmap = plt.get_cmap('YlGnBu_r', 256)
+    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+    cmap = mcolors.ListedColormap(cmap)
+
+    waves = np.arange(-.3, .35, step=.05).round(3)
+    # waves = np.arange(-.075, .08, step=.015).round(3) ## small
+    logger.info(waves)
+
+    fig = plt.figure(figsize=(25, 60))
+    nrows = shapes * 6
+    gs = fig.add_gridspec(nrows, len(waves)+1)
+
+    grid = {}
+    for th, ax in zip(range(shapes), np.round(np.arange(0, nrows, step=6))):
+        for k in range(6):
+            grid[(th, k, 'wavefront')] = fig.add_subplot(gs[ax + k, 0])
+
+            for j, w in enumerate(waves):
+                grid[(th, k, w)] = fig.add_subplot(gs[ax+k, j+1])
+
+    gen = SyntheticPSF(
+        dtype=psf_type,
+        amplitude_ranges=(-1, 1),
+        n_modes=60,
+        lam_detection=wavelength,
+        psf_shape=3*[res],
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
+        snr=100,
+        max_jitter=0,
+        cpu_workers=-1,
+    )
+    mode = 6
+
+    for thickness in trange(shapes):
+        if thickness == 0:
+            reference = np.zeros(gen.psf_shape)
+            reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] = 1
+        else:
+            reference = sphere(image_size=gen.psf_shape, radius=thickness, position=.5)
+
+        outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}')
+        outdir.mkdir(exist_ok=True, parents=True)
+        imsave(f"{outdir}/reference_{thickness}.tif", reference)
+
+        for amp in waves:
+            phi = np.zeros(60)
+            phi[mode] = amp
+
+            abr = round(peak_aberration(phi) * np.sign(amp), 1)
+            grid[(thickness, 0, amp)].set_title(f'{abr}$\\lambda$')
+
+            kernel = gen.single_psf(
+                phi=phi,
+                zplanes=0,
+                normed=True,
+                noise=False,
+                augmentation=False,
+            )
+            inputs = convolution.convolve_fft(reference, kernel, allow_huge=True)
+            inputs /= np.nanmax(inputs)
+
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}/convolved/')
+            outdir.mkdir(exist_ok=True, parents=True)
+            imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", inputs)
+
+            emb = gen.embedding(psf=inputs, principle_planes=True)
+
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}/ratios/')
+            outdir.mkdir(exist_ok=True, parents=True)
+            imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
+
+            for ax in range(6):
+                if amp == waves[-1]:
+                    mat = grid[(thickness, ax, 'wavefront')].contourf(
+                        Wavefront(phi, lam_detection=wavelength).wave(100),
+                        levels=np.arange(-10, 10, step=1),
+                        cmap='Spectral_r',
+                        extend='both'
+                    )
+                    grid[(thickness, ax, 'wavefront')].axis('off')
+                    grid[(thickness, ax, 'wavefront')].set_aspect('equal')
+
+                if emb.shape[0] == 6:
+                    vol = emb[ax, :, :]
+                else:
+                    vol = np.max(emb, axis=ax)
+
+                m = grid[(thickness, ax, amp)].imshow(
+                    vol,
+                    cmap=cmap if ax < 3 else 'Spectral_r',
+                    vmin=vmin if ax < 3 else -1,
+                    vmax=vmax if ax < 3 else 1,
+                )
+                grid[(thickness, ax, amp)].set_aspect('equal')
+                grid[(thickness, ax, amp)].axis('off')
+
+                cax = inset_axes(
+                    grid[(thickness, ax, waves[-1])],
+                    width="10%",
+                    height="100%",
+                    loc='center right',
+                    borderpad=-3
+                )
+                cb = plt.colorbar(m, cax=cax)
+                cax.yaxis.set_label_position("right")
+
+    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
+    plt.savefig(f'{savepath}/i{res}_pad{padsize}_lattice.pdf', bbox_inches='tight', pad_inches=.25)
 
 
 def plot_gaussian_filters(
@@ -533,7 +689,7 @@ def plot_gaussian_filters(
             for ax in range(6):
                 if amp == waves[-1]:
                     mat = grid[(mode, ax, 'wavefront')].contourf(
-                        Wavefront(phi).wave(100),
+                        Wavefront(phi, lam_detection=wavelength).wave(100),
                         levels=np.arange(-10, 10, step=1),
                         cmap='Spectral_r',
                         extend='both'
@@ -704,7 +860,7 @@ def plot_signal(n_modes=60, wavelength=.605):
         for j, a in enumerate(tqdm(waves, desc=f'Mode [#{i}]')):
             phi = np.zeros(n_modes)
             phi[i] = a
-            w = Wavefront(phi, order='ansi')
+            w = Wavefront(phi, order='ansi', lam_detection=wavelength)
 
             abr = 0 if j == 0 else round(peak_aberration(phi))
             signal[i][abr] = {}
@@ -766,7 +922,7 @@ def plot_signal(n_modes=60, wavelength=.605):
 
             phi = np.zeros(n_modes)
             phi[i] = .5
-            phi = Wavefront(phi, order='ansi').wave(size=100)
+            phi = Wavefront(phi, order='ansi', lam_detection=wavelength).wave(size=100)
 
             mat = axw.contourf(
                 phi,
@@ -821,7 +977,7 @@ def plot_mode(savepath, df, mode_index, n_modes=60, wavelength=.605):
 
     phi = np.zeros(n_modes)
     phi[mode_index] = .5
-    phi = Wavefront(phi, order='ansi').wave(size=100)
+    phi = Wavefront(phi, order='ansi', lam_detection=wavelength).wave(size=100)
 
     mat = axw.contourf(
         phi,
@@ -1049,7 +1205,7 @@ def plot_dmodes(
     ax_xz = fig.add_subplot(gs[1, 1])
     ax_yz = fig.add_subplot(gs[1, 2])
     ax_w = fig.add_subplot(gs[1, 3])
-    psf_slice(ax_xy, ax_xz, ax_yz, psf, label='PSF (maxproj)')
+    psf_slice(ax_xy, ax_xz, ax_yz, psf, label='PSF (MIP)')
     wavefront(ax_w, y_wave, label='Ground truth', levels=mticks)
 
     otf = gen.embedding(psf)
@@ -1330,7 +1486,7 @@ def diagnostic_assessment(
     ax_xz.set_ylabel(f"PSNR: {psnr:.2f}")
     ax_yz.set_ylabel(f"Max photon count: {maxcounts:.0f}")
 
-    psf_slice(ax_xy, ax_xz, ax_yz, psf, label='Input (maxproj)')
+    psf_slice(ax_xy, ax_xz, ax_yz, psf, label='Input (MIP)')
     psf_slice(ax_pxy, ax_pxz, ax_pyz, predicted_psf, label='Predicted')
     psf_slice(ax_cxy, ax_cxz, ax_cyz, corrected_psf, label='Corrected')
 
@@ -1643,7 +1799,7 @@ def matlab_diagnostic_assessment(
     ax_yz.set_ylabel(f"Max photon count: {maxcounts:.0f}")
 
     psf_slice(ax_xy, ax_xz, ax_yz, psf, label='Input')
-    psf_slice(ax_xygt, ax_xzgt, ax_yzgt, gt_psf, label='Input PSF (maxproj)')
+    psf_slice(ax_xygt, ax_xzgt, ax_yzgt, gt_psf, label='Input PSF (MIP)')
     psf_slice(ax_pxy, ax_pxz, ax_pyz, predicted_psf, label='Predicted')
     psf_slice(ax_cxy, ax_cxz, ax_cyz, corrected_psf, label='Corrected')
     psf_slice(ax_mxy, ax_mxz, ax_myz, matlab_corrected_psf, label='Matlab')
@@ -1857,6 +2013,7 @@ def prediction(
         psf_cmap: str = 'hot',
         gamma: float = .5,
         threshold: float = .01,
+        pred_std: Any = None
 ):
     def wavefront(iax, phi, levels, label='', nas=(.75, .85, .95)):
         def na_mask(radius):
@@ -1997,8 +2154,8 @@ def prediction(
     ax_mxz.set_xlabel('XZ')
     ax_myz.set_xlabel('YZ')
 
-    psf_slice(ax_ixy, ax_ixz, ax_iyz, psf, label=r'Input (max)', maxx=True)
-    psf_slice(ax_mxy, ax_mxz, ax_myz, psf, label=r'Input (middle)')
+    psf_slice(ax_ixy, ax_ixz, ax_iyz, psf, label=r'Input (MIP)', maxx=True)
+    psf_slice(ax_mxy, ax_mxz, ax_myz, psf, label=r'Input (center)')
     mat = wavefront(ax_wavefornt, pred_wave, levels=mticks)
 
     cbar = fig.colorbar(
@@ -2024,7 +2181,17 @@ def prediction(
     ax_acts.axhline(0, ls='--', color='k', alpha=.5)
 
     ax_zcoff.plot(pred.amplitudes_ansi_waves, color='dimgrey', label='Predictions')
-    ax_zcoff.legend(frameon=False, loc='lower left')
+    if pred_std is not None:
+        ax_zcoff.fill_between(
+            range(len(pred.amplitudes_ansi_waves)),
+            pred.amplitudes_ansi_waves - pred_std.amplitudes_ansi_waves,
+            pred.amplitudes_ansi_waves + pred_std.amplitudes_ansi_waves,
+            label=r'$\pm \sigma$',
+            color='gray',
+            alpha=0.33
+        )
+
+    ax_zcoff.legend(frameon=False, loc='lower left', ncol=2)
     ax_zcoff.set_ylabel(f'Amplitudes ($\lambda = {wavelength}~\mu m$)')
     ax_zcoff.spines['top'].set_visible(False)
     ax_zcoff.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
@@ -2035,7 +2202,7 @@ def prediction(
     ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
+    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
@@ -2279,7 +2446,7 @@ def plot_inputs(
     for i in trange(5, n_modes):
         phi = np.zeros(n_modes)
         phi[i] = .05
-        w = Wavefront(phi, order='ansi')
+        w = Wavefront(phi, order='ansi', lam_detection=wavelength)
         y_wave = w.wave(size=100)
 
         gen = SyntheticPSF(
@@ -2370,7 +2537,7 @@ def plot_inputs(
         ax_yz.set_title('ZY')
 
         slice(ax_xy, ax_xz, ax_yz, inputs, label='Input', maxproj=False)
-        slice(ax_pxy, ax_pxz, ax_pyz, psf, label='PSF (maxproj)')
+        slice(ax_pxy, ax_pxz, ax_pyz, psf, label='PSF (MIP)')
         slice(ax_cxy, ax_cxz, ax_cyz, otf, label=r'OTF ($log_{10}$)', maxproj=False)
 
         ax_pcuts.semilogy(psf[:, psf.shape[0]//2, psf.shape[0]//2], '-', label='XY')
