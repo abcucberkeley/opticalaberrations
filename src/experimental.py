@@ -351,6 +351,8 @@ def predict(
     dm.to_csv(f"{img.parent / img.stem}_corrected_actuators.csv", index=False, header=False)
 
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
+    std = Wavefront(std, order='ansi', lam_detection=wavelength)
+
     if verbose:
         logger.info('Prediction')
         logger.info(p.zernikes)

@@ -41,7 +41,6 @@ from callbacks import TensorBoardCallback
 import utils
 import vis
 import data_utils
-import preprocessing
 import experimental
 
 from synthetic import SyntheticPSF
@@ -910,10 +909,33 @@ def booststrap_predict_sign(
         followup_preds = preds.copy()
         init_preds = np.abs(pd.read_csv(prev_pred, header=0)['amplitude'].values)
 
-        if np.squeeze(preds).shape[0] == 1:
+        if len(np.squeeze(preds).shape) == 1:
             flips = np.where(followup_preds > (sign_threshold * init_preds))[0]
             init_preds[flips] *= -1
             preds = init_preds.copy()
+
+            if plot is not None:
+                init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+                followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+                preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
+                fig, axes = plt.subplots(2, 1, figsize=(24, 8))
+                axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
+                axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
+                axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
+                axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
+                axes[0].legend(frameon=False, loc='upper left')
+                axes[0].set_xlim((0, 60))
+                axes[0].set_xticks(range(0, 61))
+
+                axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
+                axes[1].legend(frameon=False, loc='upper left')
+                axes[1].set_xlim((0, 60))
+                axes[1].set_xticks(range(0, 61))
+
+                plt.tight_layout()
+                plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
         else:
             for i in range(preds.shape[0]):
                 flips = np.where(followup_preds[i] > (sign_threshold * init_preds[i]))[0]
