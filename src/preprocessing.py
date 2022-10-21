@@ -86,12 +86,12 @@ def resize(
                 ax.set_xlabel(r'$\varphi = \angle \tau$')
                 cls[i].axis('off')
         else:
-            # m = cls[0].imshow(np.max(img, axis=0), cmap='hot', vmin=0, vmax=1)
-            # cls[1].imshow(np.max(img, axis=1), cmap='hot', vmin=0, vmax=1)
-            # cls[2].imshow(np.max(img, axis=2), cmap='hot', vmin=0, vmax=1)
-            m = cls[0].imshow(img[img.shape[0] // 2, :, :]**.5, cmap='hot', vmin=0, vmax=1)
-            cls[1].imshow(img[:, img.shape[1] // 2, :]**.5, cmap='hot', vmin=0, vmax=1)
-            cls[2].imshow(img[:, :, img.shape[2] // 2]**.5, cmap='hot', vmin=0, vmax=1)
+            m = cls[0].imshow(np.max(img, axis=0)**.5, cmap='hot', vmin=0, vmax=1)
+            cls[1].imshow(np.max(img, axis=1)**.5, cmap='hot', vmin=0, vmax=1)
+            cls[2].imshow(np.max(img, axis=2)**.5, cmap='hot', vmin=0, vmax=1)
+            # m = cls[0].imshow(img[img.shape[0] // 2, :, :]**.5, cmap='hot', vmin=0, vmax=1)
+            # cls[1].imshow(img[:, img.shape[1] // 2, :]**.5, cmap='hot', vmin=0, vmax=1)
+            # cls[2].imshow(img[:, :, img.shape[2] // 2]**.5, cmap='hot', vmin=0, vmax=1)
 
         cax = inset_axes(cls[2], width="10%", height="100%", loc='center right', borderpad=-2)
         cb = plt.colorbar(m, cax=cax)
@@ -115,21 +115,22 @@ def resize(
 
     if debug is not None:
         debug = Path(debug)
-        debug.mkdir(parents=True, exist_ok=True)
+        if debug.is_dir():
+            debug.mkdir(parents=True, exist_ok=True)
 
         fig, axes = plt.subplots(3, 3, figsize=(11, 11))
 
         axes[0, 1].set_title(f"{str(vol.shape)} @ {sample_voxel_size}")
-        axes[0, 0].set_ylabel('Input (middle)')
+        axes[0, 0].set_ylabel('Input (MIP)')
         plot(axes[0, :], vol)
 
         axes[1, 1].set_title(f"{str(resampled_vol.shape)} @ {voxel_size}")
-        axes[1, 0].set_ylabel('Resampled (middle)')
+        axes[1, 0].set_ylabel('Resampled (MIP)')
         plot(axes[1, :], resampled_vol)
         imsave(f'{debug}_resampled_psf.tif', resampled_vol)
 
         axes[2, 1].set_title(str(resized_vol.shape))
-        axes[2, 0].set_ylabel('Resized (middle)')
+        axes[2, 0].set_ylabel('Resized (MIP)')
         plot(axes[2, :], resized_vol)
         imsave(f'{debug}_resized_psf.tif', resized_vol)
 
@@ -153,7 +154,6 @@ def prep_sample(
         samples = []
         for i in range(sample.shape[0]):
             s = sample[i]
-            s = s.transpose(0, 2, 1)
             mode = int(st.mode(s[s < np.quantile(s, .99)], axis=None).mode[0])
 
             if remove_background:
@@ -170,12 +170,12 @@ def prep_sample(
                     crop_shape=crop_shape,
                     debug=debug/f"{i}_preprocessing" if debug is not None else None
                 )
+            s = s.transpose(0, 2, 1)
             samples.append(s)
 
         return np.array(samples)
 
     else:
-        sample = sample.transpose(0, 2, 1)
         mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
 
         if remove_background:
@@ -193,11 +193,13 @@ def prep_sample(
                 debug=debug
             )
 
+        sample = sample.transpose(0, 2, 1)
         return sample
 
 
 def find_roi(
     path: Union[Path, np.array],
+    savepath: Path,
     window_size: tuple = (64, 64, 64),
     plot: Any = None,
     num_peaks: Any = None,
@@ -208,6 +210,7 @@ def find_roi(
     max_neighbor: int = 5,
     voxel_size: tuple = (.200, .108, .108),
 ):
+    savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
@@ -381,7 +384,7 @@ def find_roi(
         plt.tight_layout()
         plt.savefig(f'{plot}_rois.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
-    rois = []
+    logger.info(f"Locating ROIs: {[peaks.shape[0]]}")
     for p in range(peaks.shape[0]):
         start = [
             peaks[p, s] - widths[s] if peaks[p, s] >= widths[s] else 0
@@ -395,6 +398,4 @@ def find_roi(
 
         if r.size != 0:
             r = resize_with_crop_or_pad(r, crop_shape=window_size)
-            rois.append(r)
-
-    return np.array(rois, dtype=np.float)
+            imsave(savepath/f"roi_{p}.tif", r)

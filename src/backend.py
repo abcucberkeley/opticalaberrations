@@ -875,12 +875,12 @@ def booststrap_predict_sign(
     model: tf.keras.Model,
     inputs: np.array,
     gen: SyntheticPSF,
-    batch_size: int,
     desc: Any = None,
     plot: Any = None,
     verbose: bool = False,
     threshold: float = 1e-2,
     sign_threshold: float = .4,
+    n_samples: int = 1,
     prev_pred: Any = None
 ):
     plt.rcParams.update({
@@ -897,8 +897,7 @@ def booststrap_predict_sign(
         model,
         inputs,
         psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
+        n_samples=n_samples,
         no_phase=True,
         desc=desc,
         verbose=verbose,

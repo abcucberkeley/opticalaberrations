@@ -219,20 +219,6 @@ def main(args=None):
             input_coverage=args.input_coverage,
             num_neighbor=args.num_neighbor,
         )
-    elif args.target == 'evalsample':
-        eval.evalsample(
-            model_path=args.model,
-            kernel_path=args.kernel,
-            reference_path=args.reference,
-            psf_type=args.psf_type,
-            wavelength=args.wavelength,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            na=args.na,
-            peaks=args.peaks,
-            no_phase=args.no_phase,
-        )
     else:
         eval.evaluate(
             model=args.model,

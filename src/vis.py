@@ -1205,7 +1205,7 @@ def plot_dmodes(
     ax_xz = fig.add_subplot(gs[1, 1])
     ax_yz = fig.add_subplot(gs[1, 2])
     ax_w = fig.add_subplot(gs[1, 3])
-    psf_slice(ax_xy, ax_xz, ax_yz, psf, label='PSF (maxproj)')
+    psf_slice(ax_xy, ax_xz, ax_yz, psf, label='PSF (MIP)')
     wavefront(ax_w, y_wave, label='Ground truth', levels=mticks)
 
     otf = gen.embedding(psf)
@@ -1486,7 +1486,7 @@ def diagnostic_assessment(
     ax_xz.set_ylabel(f"PSNR: {psnr:.2f}")
     ax_yz.set_ylabel(f"Max photon count: {maxcounts:.0f}")
 
-    psf_slice(ax_xy, ax_xz, ax_yz, psf, label='Input (maxproj)')
+    psf_slice(ax_xy, ax_xz, ax_yz, psf, label='Input (MIP)')
     psf_slice(ax_pxy, ax_pxz, ax_pyz, predicted_psf, label='Predicted')
     psf_slice(ax_cxy, ax_cxz, ax_cyz, corrected_psf, label='Corrected')
 
@@ -1799,7 +1799,7 @@ def matlab_diagnostic_assessment(
     ax_yz.set_ylabel(f"Max photon count: {maxcounts:.0f}")
 
     psf_slice(ax_xy, ax_xz, ax_yz, psf, label='Input')
-    psf_slice(ax_xygt, ax_xzgt, ax_yzgt, gt_psf, label='Input PSF (maxproj)')
+    psf_slice(ax_xygt, ax_xzgt, ax_yzgt, gt_psf, label='Input PSF (MIP)')
     psf_slice(ax_pxy, ax_pxz, ax_pyz, predicted_psf, label='Predicted')
     psf_slice(ax_cxy, ax_cxz, ax_cyz, corrected_psf, label='Corrected')
     psf_slice(ax_mxy, ax_mxz, ax_myz, matlab_corrected_psf, label='Matlab')
@@ -2154,8 +2154,8 @@ def prediction(
     ax_mxz.set_xlabel('XZ')
     ax_myz.set_xlabel('YZ')
 
-    psf_slice(ax_ixy, ax_ixz, ax_iyz, psf, label=r'Input (max)', maxx=True)
-    psf_slice(ax_mxy, ax_mxz, ax_myz, psf, label=r'Input (middle)')
+    psf_slice(ax_ixy, ax_ixz, ax_iyz, psf, label=r'Input (MIP)', maxx=True)
+    psf_slice(ax_mxy, ax_mxz, ax_myz, psf, label=r'Input (center)')
     mat = wavefront(ax_wavefornt, pred_wave, levels=mticks)
 
     cbar = fig.colorbar(
@@ -2537,7 +2537,7 @@ def plot_inputs(
         ax_yz.set_title('ZY')
 
         slice(ax_xy, ax_xz, ax_yz, inputs, label='Input', maxproj=False)
-        slice(ax_pxy, ax_pxz, ax_pyz, psf, label='PSF (maxproj)')
+        slice(ax_pxy, ax_pxz, ax_pyz, psf, label='PSF (MIP)')
         slice(ax_cxy, ax_cxz, ax_cyz, otf, label=r'OTF ($log_{10}$)', maxproj=False)
 
         ax_pcuts.semilogy(psf[:, psf.shape[0]//2, psf.shape[0]//2], '-', label='XY')

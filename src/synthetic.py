@@ -302,7 +302,7 @@ class SyntheticPSF:
         cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
-        cax.set_ylabel('Input (maxproj)')
+        cax.set_ylabel('Input (MIP)')
 
         m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
         axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)

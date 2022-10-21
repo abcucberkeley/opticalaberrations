@@ -20,6 +20,7 @@ import backend
 import preprocessing
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
+from data_utils import get_image, load_dataset
 
 import logging
 logger = logging.getLogger('')
@@ -115,6 +116,29 @@ def points_detection(
     call([job], shell=True)
 
 
+def get_roi(path, crop_shape, model_voxel_size, sample_voxel_size):
+    try:
+        if isinstance(path, tf.Tensor):
+            path = Path(str(path.numpy(), "utf-8"))
+        else:
+            path = Path(str(path))
+
+        img = get_image(path)
+
+        img = preprocessing.prep_sample(
+            np.squeeze(img),
+            crop_shape=crop_shape,
+            model_voxel_size=model_voxel_size,
+            sample_voxel_size=sample_voxel_size,
+            debug=f"{path.parent}/{path.stem}_preprocessing"
+        )
+
+        return img
+
+    except Exception as e:
+        logger.warning(e)
+
+
 def predict_rois(
     img: Path,
     model: Path,
@@ -126,16 +150,16 @@ def predict_rois(
     lateral_voxel_size: float,
     model_lateral_voxel_size: float,
     wavelength: float = .605,
-    scalar: float = 1,
-    threshold: float = 0.0,
     plot: bool = False,
     psf_type: str = 'widefield',
-    n_modes: int = 60,
     mosaic: bool = True,
     prev: Any = None,
-    window_size: int = 32,
+    window_size: int = 64,
     num_rois: int = 10,
     min_intensity: int = 200,
+    threshold: float = 1e-2,
+    sign_threshold: float = .4,
+    scalar: float = 1,
 ):
     physical_devices = tfc.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
@@ -151,11 +175,13 @@ def predict_rois(
     sample[sample < 0] = 0
     sample = sample / np.nanmax(sample)
 
+    model = backend.load(model, mosaic=mosaic)
+
     psfgen = SyntheticPSF(
         dtype=psf_type,
         order='ansi',
         snr=esnr,
-        n_modes=n_modes,
+        n_modes=model.output_shape[1],
         gamma=.75,
         bimodal=True,
         lam_detection=wavelength,
@@ -169,13 +195,12 @@ def predict_rois(
     )
 
     outdir = Path(f'{img.parent / img.stem}_rois')
-    model = backend.load(model, mosaic=mosaic)
     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
     logger.info(f"Sample: {sample.shape}")
 
-    logger.info(f"Locating ROIs")
-    rois = preprocessing.find_roi(
+    preprocessing.find_roi(
         sample,
+        savepath=outdir,
         peaks=peaks,
         window_size=tuple(3*[window_size]),
         plot=Path(f'{img.parent/img.stem}'),
@@ -186,33 +211,32 @@ def predict_rois(
         min_intensity=min_intensity,
         voxel_size=sample_voxel_size,
     )
-    logger.info(rois.shape)
 
-    logger.info(f"Resampling ROIs")
-    rois = preprocessing.prep_sample(
-        rois,
+    load_sample = partial(
+        get_roi,
         crop_shape=(64, 64, 64),
         model_voxel_size=model_voxel_size,
         sample_voxel_size=sample_voxel_size,
-        # debug=outdir
     )
+    rois = np.array(utils.multiprocess(load_sample, list(outdir.glob(r'roi_[0-9].*')), desc='Loading ROIs'))
     logger.info(rois.shape)
 
     predictions, stds = backend.booststrap_predict_sign(
         model,
-        inputs=rois,
-        batch_size=1,
+        inputs=rois[..., np.newaxis],
         threshold=threshold,
+        sign_threshold=sign_threshold,
+        n_samples=5,
         verbose=True,
         gen=psfgen,
         prev_pred=prev,
-        plot=outdir if plot else None,
+        plot=None,
+        desc='Predicting'
     )
 
     p_modes = predictions.copy()
     p_modes[p_modes > 0] = 1
     p_modes = np.sum(p_modes, axis=0)
-    p_modes[p_modes < predictions.shape[0]//2] = 0
 
     predictions = pd.DataFrame(predictions.T, columns=[f"p{k}" for k in range(num_rois)])
     predictions['votes'] = p_modes
@@ -221,6 +245,7 @@ def predict_rois(
     predictions['mean'] = det_modes[det_modes > 0].mean(axis=1)
     predictions['std'] = det_modes[det_modes > 0].std(axis=1)
     predictions.fillna(0, inplace=True)
+    predictions.index.name = 'ansi'
     predictions.to_csv(f"{outdir}_predictions.csv", index=False, header=False)
     print(predictions)
 
@@ -313,7 +338,6 @@ def predict(
     p, std = backend.booststrap_predict_sign(
         model,
         inputs=inputs,
-        batch_size=1,
         threshold=threshold,
         verbose=verbose,
         gen=psfgen,
