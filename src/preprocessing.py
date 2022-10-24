@@ -16,6 +16,8 @@ from matplotlib import gridspec
 from tifffile import imread, imsave
 from skimage import transform
 from scipy.spatial import KDTree
+from numpy.lib.stride_tricks import sliding_window_view
+from skimage.feature import peak_local_max
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.ticker import FormatStrFormatter
@@ -398,4 +400,43 @@ def find_roi(
 
         if r.size != 0:
             r = resize_with_crop_or_pad(r, crop_shape=window_size)
-            imsave(savepath/f"roi_{p}.tif", r)
+            imsave(savepath/f"roi_{p:02}.tif", r)
+
+
+def get_tiles(
+    path: Union[Path, np.array],
+    savepath: Path,
+    window_size: tuple = (64, 64, 64),
+    strides: int = 64,
+):
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+    })
+
+    if isinstance(path, (np.ndarray, np.generic)):
+        dataset = path
+    elif path.suffix == '.tif':
+        dataset = imread(path).astype(np.float)
+        logger.info(f"Sample: {dataset.shape}")
+    elif path.suffix == '.zarr':
+        dataset = zarr.open_array(str(path), mode='r', order='F')
+        logger.info(f"Sample: {dataset.shape}")
+    else:
+        logger.error(f"Unknown file format: {path.name}")
+        return
+
+    windows = np.reshape(
+        sliding_window_view(dataset, window_shape=window_size)[::strides, ::strides, ::strides],
+        (-1, *window_size)  # stack windows
+    )
+
+    logger.info(f"Locating ROIs: {[windows.shape[0]]}")
+    for i, w in enumerate(windows):
+        imsave(savepath/f"roi_{i:02}.tif", w)

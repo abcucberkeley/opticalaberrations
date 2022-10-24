@@ -139,6 +139,55 @@ def parse_args(args):
         help='a toggle for plotting predictions'
     )
 
+    predict_tiles = subparsers.add_parser("predict_tiles")
+    predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
+    predict_tiles.add_argument("input", type=Path, help="path to input .tif file")
+    predict_tiles.add_argument("pattern", type=Path, help="path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv)")
+
+    predict_tiles.add_argument(
+        "--state", default=None, type=Path,
+        help="optional path to current DM state .csv file (Default: `blank mirror`)"
+    )
+    predict_tiles.add_argument(
+        "--prev", default=None, type=Path,
+        help="previous predictions .csv file (Default: `None`)"
+    )
+    predict_tiles.add_argument(
+        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat', type=str,
+        help='type of the desired PSF'
+    )
+    predict_tiles.add_argument(
+        "--window_size", default=64, type=int, help='size of the window to crop around each point of interest'
+    )
+    predict_tiles.add_argument(
+        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+    predict_tiles.add_argument(
+        "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
+    )
+    predict_tiles.add_argument(
+        "--model_lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+    predict_tiles.add_argument(
+        "--model_axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
+    )
+    predict_tiles.add_argument(
+        "--wavelength", default=.510, type=float,
+        help='wavelength in microns'
+    )
+    predict_tiles.add_argument(
+        "--scalar", default=.75, type=float,
+        help='scale DM actuators by an arbitrary multiplier'
+    )
+    predict_tiles.add_argument(
+        "--threshold", default=1e-2, type=float,
+        help='set predictions below threshold to zero (microns)'
+    )
+    predict_tiles.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
+
     return parser.parse_args(args)
 
 
@@ -209,7 +258,24 @@ def main(args=None):
             num_rois=args.num_rois,
             min_intensity=args.min_intensity,
         )
-
+    elif args.func == 'predict_tiles':
+        experimental.predict_tiles(
+            model=args.model,
+            img=args.input,
+            dm_pattern=args.pattern,
+            dm_state=args.state,
+            prev=args.prev,
+            psf_type=args.psf_type,
+            axial_voxel_size=args.axial_voxel_size,
+            model_axial_voxel_size=args.model_axial_voxel_size,
+            lateral_voxel_size=args.lateral_voxel_size,
+            model_lateral_voxel_size=args.model_lateral_voxel_size,
+            wavelength=args.wavelength,
+            scalar=args.scalar,
+            threshold=args.threshold,
+            plot=args.plot,
+            window_size=args.window_size,
+        )
     else:
         logger.error(f"Error")
 
