@@ -413,16 +413,20 @@ def predict_rois(
         desc='Predicting'
     )
 
+    # drop null predictions
+    predictions = predictions[~np.all(predictions == 0, axis=1)]
+
     p_modes = predictions.copy()
     p_modes[p_modes > 0] = 1
     p_modes = np.sum(p_modes, axis=0)
 
-    predictions = pd.DataFrame(predictions.T, columns=[f"p{k}" for k in range(rois.shape[0])])
+    predictions = pd.DataFrame(predictions.T, columns=[f"p{k}" for k in range(predictions.shape[0])])
     predictions['votes'] = p_modes
     predictions['mean'] = np.zeros_like(p_modes)
     predictions['std'] = np.zeros_like(p_modes)
+
     pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
-    det_modes = predictions[pcols][p_modes > rois.shape[0]//2]
+    det_modes = predictions[predictions['votes'] >= p_modes.max()//2][pcols]
     min_amp = det_modes.values.flatten().min()
     max_amp = det_modes.values.flatten().max()
 
@@ -433,7 +437,7 @@ def predict_rois(
         preds = det_modes.iloc[i]
         outliers = preds[pct_outliers(preds.values, threshold=outliers_threshold)]
 
-        if not outliers.empty:
+        if not outliers.empty and preds.shape[0] > 2:
             preds.drop(outliers.index.values, inplace=True)
 
         p = np.mean(preds)
@@ -606,16 +610,20 @@ def predict_tiles(
         desc='Predicting'
     )
 
+    # drop null predictions
+    predictions = predictions[~np.all(predictions == 0, axis=1)]
+
     p_modes = predictions.copy()
     p_modes[p_modes > 0] = 1
     p_modes = np.sum(p_modes, axis=0)
 
-    predictions = pd.DataFrame(predictions.T, columns=[f"p{k}" for k in range(rois.shape[0])])
+    predictions = pd.DataFrame(predictions.T, columns=[f"p{k}" for k in range(predictions.shape[0])])
     predictions['votes'] = p_modes
     predictions['mean'] = np.zeros_like(p_modes)
     predictions['std'] = np.zeros_like(p_modes)
+
     pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
-    det_modes = predictions[pcols][p_modes > rois.shape[0]//2]
+    det_modes = predictions[predictions['votes'] >= p_modes.max()//2][pcols]
     min_amp = det_modes.values.flatten().min()
     max_amp = det_modes.values.flatten().max()
 
@@ -626,7 +634,7 @@ def predict_tiles(
         preds = det_modes.iloc[i]
         outliers = preds[pct_outliers(preds.values, threshold=outliers_threshold)]
 
-        if not outliers.empty:
+        if not outliers.empty and preds.shape[0] > 2:
             preds.drop(outliers.index.values, inplace=True)
 
         p = np.mean(preds)
