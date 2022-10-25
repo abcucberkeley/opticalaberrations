@@ -49,8 +49,8 @@ for running our models on a given 3D stack (`.tif` file).
 > **Note:** Make sure to activate your conda `env` before running the script, or use the full filepath to your `python` environment.
 > 
 ```shell
-usage: ao.py [-h] {deskew,points,predict,predict_rois} ...
-positional arguments: {deskew,points,predict,predict_rois} Arguments for specific action.
+usage: ao.py [-h] {deskew,points,predict,predict_rois,predict_tiles} ...
+positional arguments: {deskew,points,predict,predict_rois,predict_tiles} 
 ```
 
 ## Phase retrieval 
@@ -216,10 +216,88 @@ examples/agarose/exp1.tif
 examples/experimental/agarose/results/Detection3D.mat 
 examples/Zernike_Korra_Bax273.csv 
 --psf_type lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat
---state examples/phase_retrieval/DM_system.csv 
+--state examples/agarose/DM_system.csv 
 --window_size 64
 --plot
 ```
 ![example](examples/agarose/exp1_rois.png)  
 ![example](examples/agarose/exp1_selected_points.png)  
 ![example](examples/agarose/exp1_rois_pred.png)  
+
+
+## Tile-based Prediction 
+
+The script takes 3 positional arguments and a few optional ones described below. 
+
+```shell
+usage: ao.py predict_rois   [-h] 
+                            [--state STATE] 
+                            [--prev PREV] 
+                            [--psf_type PSF_TYPE] 
+                            [--window_size WINDOW_SIZE] 
+                            [--num_rois NUM_ROIS] 
+                            [--min_intensity MIN_INTENSITY] 
+                            [--lateral_voxel_size LATERAL_VOXEL_SIZE] 
+                            [--axial_voxel_size AXIAL_VOXEL_SIZE] 
+                            [--model_lateral_voxel_size MODEL_LATERAL_VOXEL_SIZE] 
+                            [--model_axial_voxel_size MODEL_AXIAL_VOXEL_SIZE] 
+                            [--wavelength WAVELENGTH] 
+                            [--scalar SCALAR] 
+                            [--threshold THRESHOLD]
+                            [--plot]
+                            model input pattern
+
+positional arguments:
+  model                       path to pretrained tensorflow model
+  input                       path to input .tif file
+  pattern                     path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv)
+
+optional arguments:
+  -h, --help                  show this help message and exit
+  --state               
+                              optional path to current DM state .csv file (Default: `blank mirror`)
+  --prev            
+                              previous predictions .csv file (Default: `None`)
+  --psf_type    
+                              type of the desired PSF 
+                              (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`)
+  --window_size 
+                              size of the window to crop around each point of interest (Default: `64`)
+  --num_rois    
+                              max number of detected points to use for estimating aberrations (Default: `10`)
+  --min_intensity 
+                              minimum intensity desired for detecting peaks of interest (Default: `200`)
+  --lateral_voxel_size 
+                              lateral voxel size in microns for X (Default: `0.108`)
+  --axial_voxel_size 
+                              axial voxel size in microns for Z (Default: `0.1`)
+  --model_lateral_voxel_size 
+                              lateral voxel size in microns for X (Default: `0.108`)
+  --model_axial_voxel_size 
+                              axial voxel size in microns for Z (Default: `0.2`)
+  --wavelength 
+                              wavelength in microns (Default: `0.51`)
+  --scalar        
+                              scale DM actuators by an arbitrary multiplier (Default: `0.75`)
+  --threshold 
+                              set predictions below threshold to zero (microns) (Default: `0.01`)
+  --plot                
+                              a toggle for plotting predictions
+```
+
+### Example
+
+```
+conda activate ml
+
+~/anaconda3/envs/ml/bin/python src/ao.py predict_tiles 
+/pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5
+examples/agarose/exp1.tif
+examples/Zernike_Korra_Bax273.csv 
+--psf_type lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat
+--state examples/agarose/DM_system.csv 
+--window_size 64
+--plot
+```
+![example](examples/agarose/exp1_tiles_pred.png)
+![example](examples/agarose/exp1_tiles_predictions.png)  
