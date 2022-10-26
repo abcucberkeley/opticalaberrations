@@ -132,14 +132,29 @@ def detect_rois(
     call([job], shell=True)
 
 
-def get_roi(path, crop_shape, model_voxel_size, sample_voxel_size):
+def load_sample(
+        path: Path,
+        crop_shape: Any,
+        model_voxel_size: tuple,
+        sample_voxel_size: tuple,
+        remove_background: bool = True,
+        normalize: bool = True
+):
     try:
         if isinstance(path, tf.Tensor):
             path = Path(str(path.numpy(), "utf-8"))
         else:
             path = Path(str(path))
 
-        img = get_image(path)
+        img = get_image(path).astype(float)
+
+        if remove_background:
+            mode = int(st.mode(img[img < np.quantile(img, .99)], axis=None).mode[0])
+            img -= mode
+            img[img < 0] = 0
+
+        if normalize:
+            img /= np.nanmax(img)
 
         img = preprocessing.prep_sample(
             np.squeeze(img),
@@ -158,7 +173,6 @@ def get_roi(path, crop_shape, model_voxel_size, sample_voxel_size):
 def predict(
     data: Path,
     model: Path,
-    esnr: int,
     axial_voxel_size: float,
     model_axial_voxel_size: float,
     lateral_voxel_size: float,
@@ -186,7 +200,7 @@ def predict(
     psfgen = SyntheticPSF(
         dtype=psf_type,
         order='ansi',
-        snr=esnr,
+        snr=25,
         n_modes=model.output_shape[1],
         gamma=.75,
         bimodal=True,
@@ -200,13 +214,15 @@ def predict(
         cpu_workers=-1,
     )
 
-    load_sample = partial(
-        get_roi,
+    load = partial(
+        load_sample,
         crop_shape=(64, 64, 64),
         model_voxel_size=model_voxel_size,
         sample_voxel_size=sample_voxel_size,
+        remove_background=False,
+        normalize=False
     )
-    rois = np.array(utils.multiprocess(load_sample, list(data.glob(r'roi_[0-9][0-9].tif')), desc='Loading ROIs'))
+    rois = np.array(utils.multiprocess(load, list(data.glob(r'roi_[0-9][0-9].tif')), desc='Loading ROIs'))
     logger.info(rois.shape)
 
     preds, stds = backend.booststrap_predict_sign(
@@ -271,13 +287,10 @@ def predict_sample(
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
-    inputs = imread(img).astype(int)
-    esnr = np.sqrt(inputs.max()).round(0).astype(int)
-
     psfgen = SyntheticPSF(
         dtype=psf_type,
         order='ansi',
-        snr=esnr,
+        snr=25,
         n_modes=n_modes,
         gamma=.75,
         bimodal=True,
@@ -291,12 +304,13 @@ def predict_sample(
         cpu_workers=-1,
     )
 
-    inputs = preprocessing.prep_sample(
-        inputs,
+    inputs = load_sample(
+        img,
         crop_shape=(64, 64, 64),
         model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-        debug=Path(f'{img.parent / img.stem}_preprocessing')
+        remove_background=True,
+        normalize=True,
     )
 
     inputs = np.expand_dims(inputs, axis=0)
@@ -446,10 +460,12 @@ def predict_rois(
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
     )
 
+    ncols = num_rois // 4
+    nrows = num_rois // ncols
+
     predict(
         data=outdir,
         model=model,
-        esnr=esnr,
         axial_voxel_size=axial_voxel_size,
         model_axial_voxel_size=model_axial_voxel_size,
         lateral_voxel_size=lateral_voxel_size,
@@ -460,6 +476,9 @@ def predict_rois(
         psf_type=psf_type,
         mosaic=True,
         prev=prev,
+        zplanes=1,
+        nrows=ncols,
+        ncols=nrows
     )
 
 
@@ -478,22 +497,15 @@ def predict_tiles(
     sign_threshold: float = .4,
     plot: bool = True
 ):
-    sample = imread(img).astype(int)
-    esnr = np.sqrt(sample.max()).round(0).astype(int)
 
-    mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
-    sample -= mode
-    sample[sample < 0] = 0
-    sample = sample / np.nanmax(sample)
-
-    sample = preprocessing.prep_sample(
-        np.squeeze(sample),
+    sample = load_sample(
+        img,
         crop_shape=None,
         model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-        debug=None
+        remove_background=True,
+        normalize=True,
     )
-
     outdir = Path(f'{img.parent / img.stem}_tiles')
     logger.info(f"Sample: {sample.shape}")
 
@@ -507,7 +519,6 @@ def predict_tiles(
     predict(
         data=outdir,
         model=model,
-        esnr=esnr,
         axial_voxel_size=model_axial_voxel_size,
         model_axial_voxel_size=model_axial_voxel_size,
         lateral_voxel_size=model_lateral_voxel_size,
@@ -546,7 +557,14 @@ def aggregate_predictions(
     final_prediction: str = 'mean',
     scalar: float = 1,
     plot: bool = False,
+    window_size: int = 64,
 ):
+    data = imread(data).astype(float)
+    ncols = data.shape[-1] // window_size
+    nrows = data.shape[-2] // window_size
+
+    print(ncols, nrows)
+
     predictions = pd.read_csv(model_pred, index_col=0, header=0, usecols=lambda col: col == 'ansi' or col.startswith('p'))
     dm_state = np.zeros(69) if eval(str(dm_state)) is None else pd.read_csv(dm_state, header=None).values[:, 0]
 
@@ -655,8 +673,8 @@ def aggregate_predictions(
         vis.wavefronts(
             scale='max',
             predictions=predictions,
-            ncols=4,
-            nrows=4,
+            ncols=ncols,
+            nrows=nrows,
             wavelength=wavelength,
             save_path=Path(f"{model_pred.with_suffix('')}_wavefronts"),
         )
