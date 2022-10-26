@@ -2004,16 +2004,13 @@ def plot_eval(means: pd.DataFrame, save_path, wavelength=.605, nsamples=100, lab
 
 
 def prediction(
-        psf: np.array,
-        pred: Wavefront,
-        dm_before: np.array,
-        dm_after: np.array,
-        save_path: Path,
-        wavelength: float = .605,
-        psf_cmap: str = 'hot',
-        gamma: float = .5,
-        threshold: float = .01,
-        pred_std: Any = None
+    pred: Wavefront,
+    dm_before: np.array,
+    dm_after: np.array,
+    save_path: Path,
+    wavelength: float = .605,
+    threshold: float = .01,
+    pred_std: Any = None
 ):
     def wavefront(iax, phi, levels, label='', nas=(.75, .85, .95)):
         def na_mask(radius):
@@ -2063,37 +2060,6 @@ def prediction(
         iax.axis('off')
         return mat
 
-    def psf_slice(xy, zx, zy, vol, label='', maxx=True):
-        vol = vol ** gamma
-        vol = np.nan_to_num(vol)
-
-        if maxx:
-            m = xy.imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
-            zx.imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
-            zy.imshow(np.max(vol, axis=2).T, cmap=psf_cmap, vmin=0, vmax=1)
-        else:
-            mid_plane = vol.shape[0] // 2
-            m = xy.imshow(vol[mid_plane, :, :], cmap=psf_cmap, vmin=0, vmax=1)
-            zx.imshow(vol[:, mid_plane, :], cmap=psf_cmap, vmin=0, vmax=1)
-            zy.imshow(vol[:, :, mid_plane].T, cmap=psf_cmap, vmin=0, vmax=1)
-
-        cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-        cax.set_ylabel(f"$\gamma$: {gamma:.2f}")
-        cax.yaxis.set_label_position("right")
-
-        xy.set_ylabel(label)
-        xy.set_xticks([])
-        xy.set_yticks([])
-
-        zx.set_xticks([])
-        zx.set_yticks([])
-
-        zy.set_xticks([])
-        zy.set_yticks([])
-        return m
-
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -2104,26 +2070,14 @@ def prediction(
         'axes.autolimit_mode': 'round_numbers'
     })
 
-    if len(psf.shape) > 3:
-        psf = np.squeeze(psf, axis=-1)
-        psf = np.squeeze(psf, axis=0)
-
     pred_wave = pred.wave(size=100)
 
-    fig = plt.figure(figsize=(8, 11))
-    gs = fig.add_gridspec(6, 3)
+    fig = plt.figure(figsize=(8, 8))
+    gs = fig.add_gridspec(4, 3)
 
     ax_acts = fig.add_subplot(gs[:2, :2])
     ax_wavefornt = fig.add_subplot(gs[:2, 2])
     cax = inset_axes(ax_wavefornt, width="10%", height="100%", loc='center right', borderpad=-4)
-
-    ax_ixy = fig.add_subplot(gs[2, 0])
-    ax_ixz = fig.add_subplot(gs[2, 1])
-    ax_iyz = fig.add_subplot(gs[2, 2])
-
-    ax_mxy = fig.add_subplot(gs[3, 0])
-    ax_mxz = fig.add_subplot(gs[3, 1])
-    ax_myz = fig.add_subplot(gs[3, 2])
 
     ax_zcoff = fig.add_subplot(gs[-2:, :])
 
@@ -2150,12 +2104,6 @@ def prediction(
     ))
     wave_cmap = mcolors.ListedColormap(levels)
 
-    ax_mxy.set_xlabel('XY')
-    ax_mxz.set_xlabel('XZ')
-    ax_myz.set_xlabel('YZ')
-
-    psf_slice(ax_ixy, ax_ixz, ax_iyz, psf, label=r'Input (MIP)', maxx=True)
-    psf_slice(ax_mxy, ax_mxz, ax_myz, psf, label=r'Input (center)')
     mat = wavefront(ax_wavefornt, pred_wave, levels=mticks)
 
     cbar = fig.colorbar(

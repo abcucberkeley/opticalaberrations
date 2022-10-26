@@ -5,7 +5,7 @@ yVOXEL=.108
 zVOXEL=.200
 LAMBDA=.510
 SHAPE=64
-SAMPLES=10
+SAMPLES=25
 MAXAMP=.5
 MODES=15
 
@@ -24,27 +24,27 @@ do
   do
     for COV in 1.0 0.75 0.5
     do
-      #python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
       #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
-      python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
+      #python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
+      python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
       --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --modes $MODES --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP evalheatmap" \
       --taskname $NA \
       --name $MODEL/evalheatmaps_${COV}
 
-      python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
+      python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
       --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --modes $MODES --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP distheatmap" \
       --taskname $NA \
       --name $MODEL/distheatmaps_${COV}
 
-      python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
+      python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
       --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --modes $MODES --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP densityheatmap" \
       --taskname $NA \
       --name $MODEL/densityheatmaps_${COV}
 
-      python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
-      --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --modes $MODES --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP iterheatmap" \
+      python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
+      --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --modes $MODES --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP evalpoints" \
       --taskname $NA \
-      --name $MODEL/iterheatmaps_${COV}
+      --name $MODEL/evalpoints_${COV}
     done
 
     #for N in 2 3 4 5
@@ -53,11 +53,6 @@ do
       #--task "$MODEL --num_neighbor $N --datadir $DATA/i$SHAPE --modes $MODES --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP distheatmap" \
       #--taskname $NA \
       #--name $MODEL/distheatmaps_neighbor_${N}
-
-      #python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0 \
-      #--task "$MODEL --num_neighbor $N --datadir $DATA/i$SHAPE --modes $MODES --n_samples $SAMPLES --na $NA --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --max_amplitude $MAXAMP evalpoints" \
-      #--taskname $NA \
-      #--name $MODEL/evalpoints_neighbor_${N}
     #done
   done
 

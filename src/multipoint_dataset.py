@@ -29,7 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
+def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, npoints=1):
 
     logger.info(f"Saved: {savepath}")
     imsave(f"{savepath}.tif", inputs)
@@ -41,6 +41,7 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
             snr=int(snr),
             shape=inputs.shape,
             maxcounts=int(maxcounts),
+            npoints=int(npoints),
             peak2peak=float(peak_aberration(amps))
         )
 
@@ -119,6 +120,7 @@ def sim(
         amps=amps,
         snr=psnr,
         maxcounts=maxcounts,
+        npoints=npoints,
     )
 
 

@@ -1192,6 +1192,8 @@ def iter_eval_bin_with_reference(
     num_neighbor: int = 5,
     radius: float = .45,
     modes: int = 60,
+    input_coverage: float = 1.0,
+    no_phase: bool = False,
 ):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
@@ -1237,7 +1239,8 @@ def iter_eval_bin_with_reference(
         reference = np.expand_dims(reference, axis=-1)
 
     val = data_utils.load_dataset(datapath, samplelimit=samples)
-    val = val.map(lambda x: tf.py_function(data_utils.get_sample, [x], [tf.float32, tf.float32]))
+    func = partial(data_utils.get_sample, no_phase=no_phase)
+    val = val.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
     val = np.array(list(val.take(-1)))
 
     inputs = np.array([i.numpy() for i in val[:, 0]])
@@ -1269,6 +1272,11 @@ def iter_eval_bin_with_reference(
     })
 
     for k in range(1, niter+1):
+        if input_coverage != 1.:
+            mode = np.mean([np.abs(st.mode(s, axis=None).mode[0]) for s in inputs])
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, constant_values=mode)
+
         preds = backend.eval_sign(
             model=model,
             inputs=inputs,
@@ -1998,9 +2006,8 @@ def evalpoints(
     wavelength: float = .605,
     input_coverage: float = 1.0,
     no_phase: bool = False,
-    num_neighbor: Any = None,
 ):
-    savepath = modelpath / f'evalpoints_neighbor_{num_neighbor}'
+    savepath = modelpath / f'evalpoints_{input_coverage}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -2031,6 +2038,8 @@ def evalpoints(
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
         wavelength=wavelength,
+        no_phase=no_phase,
+        input_coverage=input_coverage
     )
 
     preds, ys = zip(*utils.multiprocess(job, classes))

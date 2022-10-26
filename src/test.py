@@ -203,8 +203,6 @@ def main(args=None):
         )
     elif args.target == 'evalpoints':
         eval.evalpoints(
-            na=args.na,
-            no_phase=args.no_phase,
             modelpath=args.model,
             datadir=args.datadir,
             distribution=args.dist,
@@ -216,8 +214,9 @@ def main(args=None):
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
             modes=args.modes,
+            na=args.na,
             input_coverage=args.input_coverage,
-            num_neighbor=args.num_neighbor,
+            no_phase=args.no_phase,
         )
     else:
         eval.evaluate(

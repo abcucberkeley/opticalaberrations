@@ -510,7 +510,7 @@ def bootstrap_predict(
     psfgen: SyntheticPSF,
     batch_size: int = 1,
     n_samples: int = 10,
-    threshold: float = 1e-3,
+    threshold: float = 0.1,
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
     plot: Any = None,
@@ -526,7 +526,7 @@ def bootstrap_predict(
         psfgen: Synthetic PSF object
         n_samples: number of predictions of average
         batch_size: number of samples per batch
-        threshold: set predictions below threshold to zero
+        threshold: set predictions below threshold to zero (wavelength)
         desc: test to display for the progressbar
         verbose: a toggle for progress bar
         gamma: apply a gamma to the embeddings
@@ -534,6 +534,8 @@ def bootstrap_predict(
     Returns:
         average prediction, stdev
     """
+    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
+
     # check z-axis to compute embeddings for fourier models
     if len(np.squeeze(inputs.shape)) == 3:
         emb = model.input_shape[1] == inputs.shape[0]
@@ -691,7 +693,7 @@ def predict_sign(
     desc: Any = None,
     plot: Any = None,
     verbose: bool = False,
-    threshold: float = 1e-2,
+    threshold: float = 0.,
 ):
 
     if init_preds is None:
@@ -877,7 +879,7 @@ def booststrap_predict_sign(
     desc: Any = None,
     plot: Any = None,
     verbose: bool = False,
-    threshold: float = 1e-2,
+    threshold: float = 0.,
     sign_threshold: float = .4,
     n_samples: int = 1,
     prev_pred: Any = None
@@ -891,6 +893,7 @@ def booststrap_predict_sign(
         'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
+    prev_pred = None if eval(str(prev_pred)) is None else prev_pred
 
     preds, stdev = bootstrap_predict(
         model,
@@ -954,7 +957,7 @@ def eval_sign(
     desc: Any = None,
     reference: Any = None,
     plot: Any = None,
-    threshold: float = 1e-3,
+    threshold: float = 0.,
     sign_threshold: float = .4,
 ):
     init_preds, stdev = bootstrap_predict(
@@ -1079,7 +1082,7 @@ def predict(
                 waves = np.round(utils.microns2waves(amplitude_range[0], wavelength), 2)
                 psf = np.squeeze(psf)
 
-                for npoints in trange(1, 6):
+                for npoints in tqdm([1, 3, 5, 10, 15]):
                     if npoints > 1:
                         img = np.zeros([3 * s for s in gen.psf_shape])
                         width = [(i // 2) for i in gen.psf_shape]
