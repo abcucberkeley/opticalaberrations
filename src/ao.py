@@ -24,6 +24,9 @@ def parse_args(args):
         "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
     )
     deskew.add_argument(
+        "--skew_angle", default=32.45, type=float, help='skew angle'
+    )
+    deskew.add_argument(
         "--flipz", action='store_true',
         help='a toggle to flip Z axis'
     )
@@ -239,6 +242,7 @@ def main(args=None):
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
             flipz=args.flipz,
+            skew_angle=args.skew_angle,
         )
 
     elif args.func == 'detect_rois':

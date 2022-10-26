@@ -111,6 +111,8 @@ def detect_rois(
     sigma_xy: float = 1.1,
     sigma_z: float = 1.1,
 ):
+    psf = None if eval(str(psf)) is None else psf
+
     matlab = 'matlab '
     matlab += f' -nodisplay'
     matlab += f' -nosplash'
