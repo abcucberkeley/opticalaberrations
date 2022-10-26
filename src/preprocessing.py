@@ -432,11 +432,13 @@ def get_tiles(
         logger.error(f"Unknown file format: {path.name}")
         return
 
-    windows = np.reshape(
-        sliding_window_view(dataset, window_shape=window_size)[::strides, ::strides, ::strides],
-        (-1, *window_size)  # stack windows
-    )
+    logger.info(f"Sample: {[dataset.shape]}")
+    windows = sliding_window_view(dataset, window_shape=window_size)[::strides, ::strides, ::strides]
+    zplanes, nrows, ncols = windows.shape[:3]
+    windows = np.reshape(windows, (-1, *window_size))
 
     logger.info(f"Locating ROIs: {[windows.shape[0]]}")
     for i, w in enumerate(windows):
         imsave(savepath/f"roi_{i:02}.tif", w)
+
+    return zplanes, nrows, ncols

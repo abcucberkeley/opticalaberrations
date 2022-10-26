@@ -169,6 +169,10 @@ def predict(
     prev: Any = None,
     prediction_threshold: float = 0.,
     sign_threshold: float = .4,
+    plot: bool = True,
+    zplanes: int = 1,
+    nrows: int = 1,
+    ncols: int = 1,
 ):
     model_voxel_size = (model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size)
     sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
@@ -229,6 +233,16 @@ def predict(
 
     predictions.index.name = 'ansi'
     predictions.to_csv(f"{data}_predictions.csv")
+
+    if plot:
+        vis.wavefronts(
+            scale='mean',
+            predictions=predictions,
+            nrows=nrows,
+            ncols=ncols,
+            wavelength=wavelength,
+            save_path=Path(f"{data.with_suffix('')}_wavefronts"),
+        )
 
 
 def predict_sample(
@@ -405,6 +419,7 @@ def predict_rois(
     prediction_threshold: float = 0.,
     sign_threshold: float = .4,
     minimum_distance: float = 1.,
+    plot: bool = False,
 ):
     sample = imread(img).astype(int)
     esnr = np.sqrt(sample.max()).round(0).astype(int)
@@ -422,7 +437,7 @@ def predict_rois(
         savepath=outdir,
         peaks=peaks,
         window_size=tuple(3*[window_size]),
-        plot=Path(f'{img.parent/img.stem}'),
+        plot=Path(f'{img.parent/img.stem}') if plot else None,
         num_peaks=num_rois,
         min_dist=minimum_distance,
         max_dist=None,
@@ -461,6 +476,7 @@ def predict_tiles(
     window_size: int = 64,
     prediction_threshold: float = 0.,
     sign_threshold: float = .4,
+    plot: bool = True
 ):
     sample = imread(img).astype(int)
     esnr = np.sqrt(sample.max()).round(0).astype(int)
@@ -470,10 +486,18 @@ def predict_tiles(
     sample[sample < 0] = 0
     sample = sample / np.nanmax(sample)
 
+    sample = preprocessing.prep_sample(
+        np.squeeze(sample),
+        crop_shape=None,
+        model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
+        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        debug=None
+    )
+
     outdir = Path(f'{img.parent / img.stem}_tiles')
     logger.info(f"Sample: {sample.shape}")
 
-    preprocessing.get_tiles(
+    zplanes, nrows, ncols = preprocessing.get_tiles(
         sample,
         savepath=outdir,
         strides=window_size,
@@ -484,9 +508,9 @@ def predict_tiles(
         data=outdir,
         model=model,
         esnr=esnr,
-        axial_voxel_size=axial_voxel_size,
+        axial_voxel_size=model_axial_voxel_size,
         model_axial_voxel_size=model_axial_voxel_size,
-        lateral_voxel_size=lateral_voxel_size,
+        lateral_voxel_size=model_lateral_voxel_size,
         model_lateral_voxel_size=model_lateral_voxel_size,
         prediction_threshold=prediction_threshold,
         sign_threshold=sign_threshold,
@@ -494,7 +518,19 @@ def predict_tiles(
         psf_type=psf_type,
         mosaic=True,
         prev=prev,
+        plot=plot,
+        zplanes=zplanes,
+        nrows=nrows,
+        ncols=ncols
     )
+
+    if plot:
+        vis.tiles(
+            data=np.max(sample, axis=0),
+            strides=64,
+            window_size=(64, 64),
+            save_path=Path(f"{outdir.with_suffix('')}_tiles"),
+        )
 
 
 def aggregate_predictions(
@@ -616,6 +652,15 @@ def aggregate_predictions(
     imsave(f"{model_pred.with_suffix('')}_pred_pupil_displacement.tif", pupil_displacement)
 
     if plot:
+        vis.wavefronts(
+            scale='max',
+            predictions=predictions,
+            ncols=4,
+            nrows=4,
+            wavelength=wavelength,
+            save_path=Path(f"{model_pred.with_suffix('')}_wavefronts"),
+        )
+
         vis.prediction(
             pred=p,
             pred_std=pred_std,

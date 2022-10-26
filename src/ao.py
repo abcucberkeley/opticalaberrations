@@ -138,6 +138,10 @@ def parse_args(args):
         "--sign_threshold", default=.4, type=float,
         help='flip sign of modes above given threshold'
     )
+    predict_rois.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -177,6 +181,10 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--sign_threshold", default=.4, type=float,
         help='flip sign of modes above given threshold'
+    )
+    predict_tiles.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
@@ -290,6 +298,7 @@ def main(args=None):
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
             minimum_distance=args.minimum_distance,
+            plot=args.plot
         )
     elif args.func == 'predict_tiles':
         experimental.predict_tiles(
@@ -305,6 +314,7 @@ def main(args=None):
             model_lateral_voxel_size=args.model_lateral_voxel_size,
             wavelength=args.wavelength,
             window_size=args.window_size,
+            plot=args.plot
         )
     elif args.func == 'aggregate_predictions':
         experimental.aggregate_predictions(
@@ -313,13 +323,13 @@ def main(args=None):
             dm_pattern=args.pattern,
             dm_state=args.state,
             wavelength=args.wavelength,
-            plot=args.plot,
             prediction_threshold=args.prediction_threshold,
             majority_threshold=args.majority_threshold,
             min_percentile=args.min_percentile,
             max_percentile=args.max_percentile,
             final_prediction=args.final_prediction,
             scalar=args.scalar,
+            plot=args.plot,
         )
     else:
         logger.error(f"Error")

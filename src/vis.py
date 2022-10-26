@@ -7,7 +7,8 @@ import logging
 import sys
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+from mpl_toolkits.axes_grid1 import make_axes_locatable, ImageGrid
+from numpy.lib.stride_tricks import sliding_window_view
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import matplotlib.gridspec as gridspec
 import raster_geometry as rg
@@ -2003,157 +2004,6 @@ def plot_eval(means: pd.DataFrame, save_path, wavelength=.605, nsamples=100, lab
     plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
-def prediction(
-    pred: Wavefront,
-    dm_before: np.array,
-    dm_after: np.array,
-    save_path: Path,
-    wavelength: float = .605,
-    threshold: float = .01,
-    pred_std: Any = None
-):
-    def wavefront(iax, phi, levels, label='', nas=(.75, .85, .95)):
-        def na_mask(radius):
-            center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
-            Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
-            dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
-            mask = dist_from_center <= radius
-            return mask
-
-        mat = iax.contourf(
-            phi,
-            levels=levels,
-            cmap=wave_cmap,
-            vmin=np.min(levels),
-            vmax=np.max(levels),
-            extend='both'
-        )
-
-        pcts = []
-        for d in nas:
-            r = (d * phi.shape[0]) / 2
-            circle = patches.Circle((50, 50), r, ls='--', ec="dimgrey", fc="none", zorder=3)
-            iax.add_patch(circle)
-
-            mask = phi * na_mask(radius=r)
-            pcts.append((np.nanquantile(mask, .05), np.nanquantile(mask, .95)))
-
-        circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
-        iax.add_patch(circle)
-
-        divider = make_axes_locatable(iax)
-        top = divider.append_axes("top", size='30%', pad=0.2)
-        phi = phi.flatten()
-        top.hist(phi, bins=60, color='grey')
-
-        err = '\n'.join([
-            f'$P2P_{{NA={na}}}$={abs(p[1]-p[0]):.2f}\t[$P_{{05}}$={p[0]:.2f}, $P_{{95}}$={p[1]:.2f}]'
-            for na, p in zip(nas, pcts)
-        ])
-        top.set_title(f'{label}\n{err}')
-        top.set_yticks([])
-        top.xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
-        top.set_xlim((np.nanquantile(phi, 0.01), np.nanquantile(phi, 0.99)))
-        top.spines['right'].set_visible(False)
-        top.spines['top'].set_visible(False)
-        top.spines['left'].set_visible(False)
-        iax.axis('off')
-        return mat
-
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-
-    pred_wave = pred.wave(size=100)
-
-    fig = plt.figure(figsize=(8, 8))
-    gs = fig.add_gridspec(4, 3)
-
-    ax_acts = fig.add_subplot(gs[:2, :2])
-    ax_wavefornt = fig.add_subplot(gs[:2, 2])
-    cax = inset_axes(ax_wavefornt, width="10%", height="100%", loc='center right', borderpad=-4)
-
-    ax_zcoff = fig.add_subplot(gs[-2:, :])
-
-    step = .25
-    vmax = round(np.max([
-        np.abs(round(np.nanquantile(pred_wave, .05), 2)),
-        np.abs(round(np.nanquantile(pred_wave, .95), 2))
-    ]) * 4) / 4
-    vmax = .25 if vmax < threshold else vmax
-
-    highcmap = plt.get_cmap('magma_r', 256)
-    middlemap = plt.get_cmap('gist_gray', 256)
-    lowcmap = plt.get_cmap('gist_earth_r', 256)
-
-    ll = np.arange(-vmax, -.25 + step, step)
-    mm = [-.15, 0, .15]
-    hh = np.arange(.25, vmax + step, step)
-    mticks = np.concatenate((ll, mm, hh))
-
-    levels = np.vstack((
-        lowcmap(.66 * ll / ll.min()),
-        middlemap([.85, .95, 1, .95, .85]),
-        highcmap(.66 * hh / hh.max())
-    ))
-    wave_cmap = mcolors.ListedColormap(levels)
-
-    mat = wavefront(ax_wavefornt, pred_wave, levels=mticks)
-
-    cbar = fig.colorbar(
-        mat,
-        cax=cax,
-        fraction=0.046,
-        pad=0.04,
-        extend='both',
-        format=FormatStrFormatter("%.2g"),
-        # spacing='proportional',
-    )
-    cbar.ax.set_title(r'$\lambda$')
-    cbar.ax.set_ylabel(f'$\lambda = {wavelength}~\mu m$')
-    cbar.ax.yaxis.set_ticks_position('right')
-    cbar.ax.yaxis.set_label_position('left')
-
-    ax_acts.plot(dm_before, ls='--', color='C1', label='Current')
-    ax_acts.plot(dm_after, color='C0', label='Predictions')
-    ax_acts.set_xlim(0, 68)
-    ax_acts.set_title(f'DM actuators (volts)')
-    ax_acts.legend(frameon=False, loc='lower left', ncol=2)
-    ax_acts.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
-    ax_acts.axhline(0, ls='--', color='k', alpha=.5)
-
-    ax_zcoff.plot(pred.amplitudes_ansi_waves, color='dimgrey', label='Predictions')
-    if pred_std is not None:
-        ax_zcoff.fill_between(
-            range(len(pred.amplitudes_ansi_waves)),
-            pred.amplitudes_ansi_waves - pred_std.amplitudes_ansi_waves,
-            pred.amplitudes_ansi_waves + pred_std.amplitudes_ansi_waves,
-            label=r'$\pm \sigma$',
-            color='gray',
-            alpha=0.33
-        )
-
-    ax_zcoff.legend(frameon=False, loc='lower left', ncol=2)
-    ax_zcoff.set_ylabel(f'Amplitudes ($\lambda = {wavelength}~\mu m$)')
-    ax_zcoff.spines['top'].set_visible(False)
-    ax_zcoff.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-    ax_zcoff.spines['top'].set_visible(False)
-    ax_zcoff.set_xticks(range(len(pred.amplitudes_ansi_waves)), minor=True)
-    ax_zcoff.set_xticks(range(0, len(pred.amplitudes_ansi_waves)+5, 5), minor=False)
-    ax_zcoff.set_xlim((0, len(pred.amplitudes_ansi_waves)))
-    ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
-
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-
 def plot_models(df: pd.DataFrame, save_path, wavelength=.605, nsamples=100, label=''):
     plt.rcParams.update({
         'font.size': 10,
@@ -2511,3 +2361,304 @@ def plot_inputs(
 
         plt.subplots_adjust(top=0.95, right=0.95, wspace=.3)
         plt.savefig(f'../data/inputs/{i}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+def prediction(
+    pred: Wavefront,
+    dm_before: np.array,
+    dm_after: np.array,
+    save_path: Path,
+    wavelength: float = .605,
+    threshold: float = .01,
+    pred_std: Any = None
+):
+    def wavefront(iax, phi, levels, label='', nas=(.75, .85, .95)):
+        def na_mask(radius):
+            center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
+            Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
+            dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
+            mask = dist_from_center <= radius
+            return mask
+
+        mat = iax.contourf(
+            phi,
+            levels=levels,
+            cmap=wave_cmap,
+            vmin=np.min(levels),
+            vmax=np.max(levels),
+            extend='both'
+        )
+
+        pcts = []
+        for d in nas:
+            r = (d * phi.shape[0]) / 2
+            circle = patches.Circle((50, 50), r, ls='--', ec="dimgrey", fc="none", zorder=3)
+            iax.add_patch(circle)
+
+            mask = phi * na_mask(radius=r)
+            pcts.append((np.nanquantile(mask, .05), np.nanquantile(mask, .95)))
+
+        circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
+        iax.add_patch(circle)
+
+        divider = make_axes_locatable(iax)
+        top = divider.append_axes("top", size='30%', pad=0.2)
+        phi = phi.flatten()
+        top.hist(phi, bins=60, color='grey')
+
+        err = '\n'.join([
+            f'$P2P_{{NA={na}}}$={abs(p[1]-p[0]):.2f}\t[$P_{{05}}$={p[0]:.2f}, $P_{{95}}$={p[1]:.2f}]'
+            for na, p in zip(nas, pcts)
+        ])
+        top.set_title(f'{label}\n{err}')
+        top.set_yticks([])
+        top.xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
+        top.set_xlim((np.nanquantile(phi, 0.01), np.nanquantile(phi, 0.99)))
+        top.spines['right'].set_visible(False)
+        top.spines['top'].set_visible(False)
+        top.spines['left'].set_visible(False)
+        iax.axis('off')
+        return mat
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    pred_wave = pred.wave(size=100)
+
+    fig = plt.figure(figsize=(8, 8))
+    gs = fig.add_gridspec(4, 3)
+
+    ax_acts = fig.add_subplot(gs[:2, :2])
+    ax_wavefornt = fig.add_subplot(gs[:2, 2])
+    cax = inset_axes(ax_wavefornt, width="10%", height="100%", loc='center right', borderpad=-4)
+
+    ax_zcoff = fig.add_subplot(gs[-2:, :])
+
+    step = .25
+    vmax = round(np.max([
+        np.abs(round(np.nanquantile(pred_wave, .05), 2)),
+        np.abs(round(np.nanquantile(pred_wave, .95), 2))
+    ]) * 4) / 4
+    vmax = .25 if vmax < threshold else vmax
+
+    highcmap = plt.get_cmap('magma_r', 256)
+    middlemap = plt.get_cmap('gist_gray', 256)
+    lowcmap = plt.get_cmap('gist_earth_r', 256)
+
+    ll = np.arange(-vmax, -.25 + step, step)
+    mm = [-.15, 0, .15]
+    hh = np.arange(.25, vmax + step, step)
+    mticks = np.concatenate((ll, mm, hh))
+
+    levels = np.vstack((
+        lowcmap(.66 * ll / ll.min()),
+        middlemap([.85, .95, 1, .95, .85]),
+        highcmap(.66 * hh / hh.max())
+    ))
+    wave_cmap = mcolors.ListedColormap(levels)
+
+    mat = wavefront(ax_wavefornt, pred_wave, levels=mticks)
+
+    cbar = fig.colorbar(
+        mat,
+        cax=cax,
+        fraction=0.046,
+        pad=0.04,
+        extend='both',
+        format=FormatStrFormatter("%.2g"),
+        # spacing='proportional',
+    )
+    cbar.ax.set_title(r'$\lambda$')
+    cbar.ax.set_ylabel(f'$\lambda = {wavelength}~\mu m$')
+    cbar.ax.yaxis.set_ticks_position('right')
+    cbar.ax.yaxis.set_label_position('left')
+
+    ax_acts.plot(dm_before, ls='--', color='C1', label='Current')
+    ax_acts.plot(dm_after, color='C0', label='Predictions')
+    ax_acts.set_xlim(0, 68)
+    ax_acts.set_title(f'DM actuators (volts)')
+    ax_acts.legend(frameon=False, loc='lower left', ncol=2)
+    ax_acts.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
+    ax_acts.axhline(0, ls='--', color='k', alpha=.5)
+
+    ax_zcoff.plot(pred.amplitudes_ansi_waves, color='dimgrey', label='Predictions')
+    if pred_std is not None:
+        ax_zcoff.fill_between(
+            range(len(pred.amplitudes_ansi_waves)),
+            pred.amplitudes_ansi_waves - pred_std.amplitudes_ansi_waves,
+            pred.amplitudes_ansi_waves + pred_std.amplitudes_ansi_waves,
+            label=r'$\pm \sigma$',
+            color='gray',
+            alpha=0.33
+        )
+
+    ax_zcoff.legend(frameon=False, loc='lower left', ncol=2)
+    ax_zcoff.set_ylabel(f'Amplitudes ($\lambda = {wavelength}~\mu m$)')
+    ax_zcoff.spines['top'].set_visible(False)
+    ax_zcoff.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+    ax_zcoff.spines['top'].set_visible(False)
+    ax_zcoff.set_xticks(range(len(pred.amplitudes_ansi_waves)), minor=True)
+    ax_zcoff.set_xticks(range(0, len(pred.amplitudes_ansi_waves)+5, 5), minor=False)
+    ax_zcoff.set_xlim((0, len(pred.amplitudes_ansi_waves)))
+    ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
+
+    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
+    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+def tiles(
+    data: np.ndarray,
+    save_path: Path,
+    strides: int = 64,
+    window_size: tuple = (64, 64),
+    gamma: float = .5,
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    data = data ** gamma
+    tiles = sliding_window_view(data, window_shape=window_size)[::strides, ::strides]
+    nrows, ncols = tiles.shape[0], tiles.shape[1]
+    tiles = np.reshape(tiles, (-1, *window_size))
+
+    fig = plt.figure(figsize=(11, 8))
+    grid = ImageGrid(
+        fig, 111,
+        nrows_ncols=(nrows, ncols),
+        share_all=True,
+        label_mode="L",
+        cbar_location="top",
+        cbar_mode="single",
+        axes_pad=.2,
+        cbar_pad=.1
+    )
+
+    for ax, t in zip(grid, tiles):
+        im = ax.imshow(t, cmap='hot', vmin=0, vmax=1, aspect='equal')
+
+    cbar = grid.cbar_axes[0].colorbar(im)
+    cbar.ax.xaxis.set_ticks_position('top')
+    cbar.ax.xaxis.set_label_position('top')
+    cbar.ax.set_yticks([])
+    cbar.ax.set_title(rf"$\gamma$={gamma}")
+
+    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+def wavefronts(
+    predictions: pd.DataFrame,
+    nrows: int,
+    ncols: int,
+    save_path: Path,
+    wavelength: float = .605,
+    threshold: float = .01,
+    scale: str = 'mean'
+):
+    def pupil(iax, phi, levels, label='', nas=(.50, .75, .85, .95)):
+        def na_mask(radius):
+            center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
+            Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
+            dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
+            mask = dist_from_center <= radius
+            return mask
+
+        mat = iax.contourf(
+            phi,
+            levels=levels,
+            cmap=wave_cmap,
+            vmin=np.min(levels),
+            vmax=np.max(levels),
+            extend='both'
+        )
+
+        pcts = []
+        for d in nas:
+            r = (d * phi.shape[0]) / 2
+            circle = patches.Circle((50, 50), r, ls='--', ec="dimgrey", fc="none", zorder=3)
+            iax.add_patch(circle)
+
+            mask = phi * na_mask(radius=r)
+            pcts.append((np.nanquantile(mask, .05), np.nanquantile(mask, .95)))
+
+        circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
+        iax.add_patch(circle)
+        iax.axis('off')
+        return mat
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
+    final_pred = Wavefront(predictions[scale].values, lam_detection=wavelength)
+    pred_wave = final_pred.wave(size=100)
+
+    step = .25
+    vmax = round(np.max([
+        np.abs(round(np.nanquantile(pred_wave, .05), 2)),
+        np.abs(round(np.nanquantile(pred_wave, .95), 2))
+    ]) * 4) / 4
+    vmax = .25 if vmax < threshold else vmax
+
+    highcmap = plt.get_cmap('magma_r', 256)
+    middlemap = plt.get_cmap('gist_gray', 256)
+    lowcmap = plt.get_cmap('gist_earth_r', 256)
+
+    ll = np.arange(-vmax, -.25 + step, step)
+    mm = [-.15, 0, .15]
+    hh = np.arange(.25, vmax + step, step)
+    mticks = np.concatenate((ll, mm, hh))
+
+    levels = np.vstack((
+        lowcmap(.66 * ll / ll.min()),
+        middlemap([.85, .95, 1, .95, .85]),
+        highcmap(.66 * hh / hh.max())
+    ))
+    wave_cmap = mcolors.ListedColormap(levels)
+
+    fig = plt.figure(figsize=(11, 8))
+    grid = ImageGrid(
+        fig, 111,
+        nrows_ncols=(nrows, ncols),
+        share_all=True,
+        label_mode="L",
+        cbar_location="top",
+        cbar_mode="single",
+        axes_pad=.2,
+        cbar_pad=.1
+    )
+
+    for ax, pred in zip(grid, pcols):
+        pred = Wavefront(predictions[pred].values, lam_detection=wavelength)
+        pred_wave = pred.wave(size=100)
+        mat = pupil(ax, pred_wave, levels=mticks)
+
+    cbar = grid.cbar_axes[0].colorbar(mat)
+    cbar.ax.xaxis.set_ticks_position('top')
+    cbar.ax.xaxis.set_label_position('top')
+    cbar.ax.set_yticks([])
+    cbar.ax.set_title(f'$\lambda = {wavelength}~\mu m$')
+
+    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)

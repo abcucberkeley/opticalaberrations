@@ -23,7 +23,7 @@ model_lateral_voxel_size = .108
 model_axial_voxel_size = .2
 sign_threshold = .5
 prediction_threshold = .1
-window_size = 128
+window_size = 64
 plot = True
 
 # extra `aggregate_predictions` flags
@@ -92,6 +92,7 @@ predict_rois += f" --window_size {window_size}"
 predict_rois += f" --prediction_threshold 0."
 predict_rois += f" --sign_threshold {sign_threshold}"
 predict_rois += f" --prev {prev}"
+predict_rois += f" --plot" if plot else ""
 
 prev = None  # replace with initial predictions .csv file
 sample = repo/'data/agarose/exp1.tif'  # replace with second sample
@@ -109,6 +110,7 @@ predict_tiles += f" --window_size {window_size}"
 predict_tiles += f" --prediction_threshold 0."
 predict_tiles += f" --sign_threshold {sign_threshold}"
 predict_tiles += f" --prev {prev}"
+predict_tiles += f" --plot" if plot else ""
 
 prev = None  # replace with initial predictions .csv file
 sample = repo/'data/agarose/exp1.tif'  # replace with second sample
@@ -125,10 +127,10 @@ aggregate_predictions_flags += f" --final_prediction {final_prediction}"
 aggregate_predictions_flags += f" --plot" if plot else ""
 
 roi_predictions = f"{sample.with_suffix('')}_rois_predictions.csv"
-aggregate_roi_predictions = f"{python} {script} aggregate_predictions {roi_predictions} {sample} {dm}"
+aggregate_roi_predictions = f"{python} {script} aggregate_predictions {roi_predictions} {sample} {dm} {aggregate_predictions_flags}"
 
 tile_predictions = f"{sample.with_suffix('')}_tiles_predictions.csv"
-aggregate_tile_predictions = f"{python} {script} aggregate_predictions {tile_predictions} {sample} {dm}"
+aggregate_tile_predictions = f"{python} {script} aggregate_predictions {tile_predictions} {sample} {dm} {aggregate_predictions_flags}"
 
 
 # call(deskew, shell=True)
