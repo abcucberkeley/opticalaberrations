@@ -504,7 +504,7 @@ def train(
         sys.exit(1)
 
 
-def bootstrap_predict(
+def simple_predict(
     model: tf.keras.Model,
     inputs: np.array,
     psfgen: SyntheticPSF,
@@ -684,13 +684,99 @@ def bootstrap_predict(
     return mu, sigma
 
 
+def bootstrap_predict(
+    model: tf.keras.Model,
+    inputs: np.array,
+    psfgen: SyntheticPSF,
+    batch_size: int = 1,
+    n_samples: int = 10,
+    threshold: float = 0.1,
+    verbose: bool = True,
+    plot: Any = None,
+    gamma: float = 1.0,
+    no_phase: bool = False,
+    desc: str = 'MiniBatch-probabilistic-predictions',
+):
+    """
+    Average predictions and compute stdev
+
+    Args:
+        model: pre-trained keras model
+        inputs: encoded tokens to be processed
+        psfgen: Synthetic PSF object
+        n_samples: number of predictions of average
+        batch_size: number of samples per batch
+        threshold: set predictions below threshold to zero (wavelength)
+        desc: test to display for the progressbar
+        verbose: a toggle for progress bar
+        gamma: apply a gamma to the embeddings
+
+    Returns:
+        average prediction, stdev
+    """
+    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
+
+    # check z-axis to compute embeddings for fourier models
+    if len(np.squeeze(inputs.shape)) == 3:
+        emb = model.input_shape[1] == inputs.shape[0]
+    else:
+        emb = model.input_shape[1] == inputs.shape[1]
+
+    if not emb:
+        logger.info(f"Generating embeddings")
+
+        model_inputs = []
+        for i in inputs:
+            emb = psfgen.embedding(
+                psf=np.squeeze(i),
+                plot=plot,
+                gamma=gamma,
+                no_phase=no_phase,
+                principle_planes=True
+            )
+
+            if no_phase and model.input_shape[1] == 6:
+                phase_mask = np.zeros((3, model.input_shape[2], model.input_shape[3]))
+                emb = np.concatenate([emb, phase_mask], axis=0)
+            elif model.input_shape[1] == 3:
+                emb = emb[:3]
+
+            model_inputs.append(emb)
+
+        model_inputs = np.stack(model_inputs, axis=0)
+    else:
+        # pass raw PSFs to the model
+        model_inputs = inputs
+
+    model_inputs = np.nan_to_num(model_inputs, nan=0, posinf=0, neginf=0)
+    model_inputs = model_inputs[..., np.newaxis] if model_inputs.shape[-1] != 1 else model_inputs
+    features = np.array([np.count_nonzero(s) for s in inputs])
+
+    logger.info(f"[BS={batch_size}, n={n_samples}] - {desc}")
+    gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples)
+    preds = model.predict(gen, batch_size=batch_size, verbose=verbose)
+    preds[:, [0, 1, 2, 4]] = 0.
+    preds[np.abs(preds) <= threshold] = 0.
+    preds = np.stack(np.split(preds, n_samples), axis=-1)
+
+    mu = np.mean(preds, axis=-1)
+    mu = mu.flatten() if mu.shape[0] == 1 else mu
+
+    sigma = np.std(preds, axis=-1)
+    sigma = sigma.flatten() if sigma.shape[0] == 1 else sigma
+
+    mu[np.where(features == 0)[0]] = np.zeros_like(mu[0])
+    sigma[np.where(features == 0)[0]] = np.zeros_like(sigma[0])
+
+    return mu, sigma
+
+
 def predict_sign(
     model: tf.keras.Model,
     inputs: np.array,
     gen: SyntheticPSF,
     batch_size: int,
     init_preds: Any = None,
-    desc: Any = None,
     plot: Any = None,
     verbose: bool = False,
     threshold: float = 0.,
@@ -704,7 +790,6 @@ def predict_sign(
             batch_size=batch_size,
             n_samples=1,
             no_phase=True,
-            desc=desc,
             verbose=verbose,
             threshold=threshold,
             plot=plot
@@ -770,7 +855,6 @@ def predict_sign(
         batch_size=batch_size,
         n_samples=1,
         no_phase=True,
-        desc=desc,
         verbose=verbose,
     )
     followup_preds = np.abs(followup_preds)
@@ -876,12 +960,12 @@ def booststrap_predict_sign(
     model: tf.keras.Model,
     inputs: np.array,
     gen: SyntheticPSF,
-    desc: Any = None,
     plot: Any = None,
     verbose: bool = False,
     threshold: float = 0.,
     sign_threshold: float = .4,
     n_samples: int = 1,
+    batch_size: int = 1,
     prev_pred: Any = None
 ):
     plt.rcParams.update({
@@ -902,8 +986,8 @@ def booststrap_predict_sign(
         psfgen=gen,
         n_samples=n_samples,
         no_phase=True,
-        desc=desc,
         verbose=verbose,
+        batch_size=batch_size,
         threshold=threshold,
         plot=plot
     )
@@ -955,7 +1039,6 @@ def eval_sign(
     gen: SyntheticPSF,
     ys: np.array,
     batch_size: int,
-    desc: Any = None,
     reference: Any = None,
     plot: Any = None,
     threshold: float = 0.,
@@ -969,7 +1052,6 @@ def eval_sign(
         n_samples=1,
         no_phase=True,
         threshold=threshold,
-        desc=desc,
         plot=plot
     )
     if len(ys.shape) > 1:
@@ -999,7 +1081,6 @@ def eval_sign(
         n_samples=1,
         no_phase=True,
         threshold=threshold,
-        desc=desc,
     )
     if len(ys.shape) > 1:
         followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]

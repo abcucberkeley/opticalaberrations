@@ -27,6 +27,7 @@ sign_threshold = .5
 prediction_threshold = .1
 num_predictions = 10
 window_size = 64
+batch_size = 256
 plot = True
 
 # extra `aggregate_predictions` flags
@@ -76,6 +77,7 @@ predict_sample += f" --psf_type {psf_type}"
 predict_sample += f" --prediction_threshold 0."
 predict_sample += f" --sign_threshold {sign_threshold}"
 predict_sample += f" --num_predictions {num_predictions}"
+predict_sample += f" --batch_size {batch_size}"
 predict_sample += f" --prev {prev}"
 predict_sample += f" --plot" if plot else ""
 
@@ -98,6 +100,7 @@ predict_rois += f" --window_size {window_size}"
 predict_rois += f" --prediction_threshold 0."
 predict_rois += f" --sign_threshold {sign_threshold}"
 predict_rois += f" --num_predictions {num_predictions}"
+predict_rois += f" --batch_size {batch_size}"
 predict_rois += f" --prev {prev}"
 predict_rois += f" --plot" if plot else ""
 
@@ -117,6 +120,7 @@ predict_tiles += f" --window_size {window_size}"
 predict_tiles += f" --prediction_threshold 0."
 predict_tiles += f" --sign_threshold {sign_threshold}"
 predict_tiles += f" --num_predictions {num_predictions}"
+predict_tiles += f" --batch_size {batch_size}"
 predict_tiles += f" --prev {prev}"
 predict_tiles += f" --plot" if plot else ""
 
@@ -142,11 +146,11 @@ aggregate_tile_predictions = f"{python} {script} aggregate_predictions {tile_pre
 
 # call(deskew, shell=True)
 
-call(predict_sample, shell=True)
+# call(predict_sample, shell=True)
 
-call(detect_rois, shell=True)
-call(predict_rois, shell=True)
-call(aggregate_roi_predictions, shell=True)
+# call(detect_rois, shell=True)
+# call(predict_rois, shell=True)
+# call(aggregate_roi_predictions, shell=True)
 
 call(predict_tiles, shell=True)
 call(aggregate_tile_predictions, shell=True)

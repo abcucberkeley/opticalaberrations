@@ -93,12 +93,18 @@ def parse_args(args):
         "--num_predictions", default=10, type=int,
         help="number of predictions per sample to evaluate model's confidence"
     )
+    predict_sample.add_argument(
+        "--batch_size", default=64, type=int, help='maximum batch size for the model'
+    )
 
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_rois.add_argument("input", type=Path, help="path to input .tif file")
     predict_rois.add_argument("peaks", type=Path, help="path to point detection results (.mat file)")
 
+    predict_rois.add_argument(
+        "--batch_size", default=64, type=int, help='maximum batch size for the model'
+    )
     predict_rois.add_argument(
         "--window_size", default=64, type=int, help='size of the window to crop around each point of interest'
     )
@@ -159,6 +165,9 @@ def parse_args(args):
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_tiles.add_argument("input", type=Path, help="path to input .tif file")
 
+    predict_tiles.add_argument(
+        "--batch_size", default=64, type=int, help='maximum batch size for the model'
+    )
     predict_tiles.add_argument(
         "--window_size", default=64, type=int, help='size of the window to crop around each point of interest'
     )
@@ -294,7 +303,8 @@ def main(args=None):
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
             num_predictions=args.num_predictions,
-            plot=args.plot
+            plot=args.plot,
+            batch_size=args.batch_size
         )
 
     elif args.func == 'predict_rois':
@@ -316,7 +326,8 @@ def main(args=None):
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
             minimum_distance=args.minimum_distance,
-            plot=args.plot
+            plot=args.plot,
+            batch_size=args.batch_size
         )
     elif args.func == 'predict_tiles':
         experimental.predict_tiles(
@@ -333,7 +344,8 @@ def main(args=None):
             num_predictions=args.num_predictions,
             wavelength=args.wavelength,
             window_size=args.window_size,
-            plot=args.plot
+            plot=args.plot,
+            batch_size=args.batch_size
         )
     elif args.func == 'aggregate_predictions':
         experimental.aggregate_predictions(
