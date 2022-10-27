@@ -972,7 +972,10 @@ def eval_sign(
         desc=desc,
         plot=plot
     )
-    init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
+    if len(ys.shape) > 1:
+        init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
+    else:
+        init_preds = np.abs(init_preds)[:ys.shape[-1]]
 
     res = ys - init_preds
     g = partial(
@@ -998,7 +1001,10 @@ def eval_sign(
         threshold=threshold,
         desc=desc,
     )
-    followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]
+    if len(ys.shape) > 1:
+        followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]
+    else:
+        followup_preds = np.abs(followup_preds)[:ys.shape[-1]]
 
     preds = init_preds.copy()
 
