@@ -6,8 +6,8 @@ python = Path('~/anaconda3/envs/deep/bin/python')
 repo = Path('~/Gitlab/opticalaberrations/')
 script = repo/'src/ao.py'
 
-sample = repo/'data/agarose/exp1.tif'
-points = repo/'data/agarose/results/Detection3D.mat'
+sample = repo/'examples/simulated/0/0.tif'
+points = repo/'examples/simulated/0/results/Detection3D.mat'
 
 dm = repo/'examples/Zernike_Korra_Bax273.csv'
 model = repo/'pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5'
@@ -43,7 +43,7 @@ flipz = False
 
 
 # extra `detect_rois` flags
-psf = None
+psf = repo/'examples/simulated/psf.tif'
 
 deskew = f"{python} {script} deskew"
 deskew += f" {sample}"
@@ -54,7 +54,8 @@ deskew += f" --axial_voxel_size {axial_voxel_size}"
 
 
 detect_rois = f"{python} {script} detect_rois"
-detect_rois += f" {sample} {psf}"
+detect_rois += f" {sample}"
+detect_rois += f" --psf {psf}"
 detect_rois += f" --lateral_voxel_size {lateral_voxel_size}"
 detect_rois += f" --axial_voxel_size {axial_voxel_size}"
 
@@ -73,8 +74,8 @@ phase_retrieval += f" --prediction_threshold 0."
 phase_retrieval += f" --sign_threshold {sign_threshold}"
 phase_retrieval += f" --plot" if plot else ""
 
-prev = None  # replace with initial predictions .csv file
-sample = repo/'data/agarose/exp1.tif'  # replace with second sample
+prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
+# sample = repo/'data/agarose/exp1.tif'  # replace with second sample
 phase_retrieval_signed = f"{phase_retrieval} --prev {prev}"
 
 predict_rois = f"{python} {script} predict_rois"
@@ -94,8 +95,8 @@ predict_rois += f" --sign_threshold {sign_threshold}"
 predict_rois += f" --prev {prev}"
 predict_rois += f" --plot" if plot else ""
 
-prev = None  # replace with initial predictions .csv file
-sample = repo/'data/agarose/exp1.tif'  # replace with second sample
+prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
+# sample = repo/'data/agarose/exp1.tif'  # replace with second sample
 predict_rois_signed = f"{predict_rois} --prev {prev}"
 
 predict_tiles = f"{python} {script} predict_tiles"
@@ -112,8 +113,8 @@ predict_tiles += f" --sign_threshold {sign_threshold}"
 predict_tiles += f" --prev {prev}"
 predict_tiles += f" --plot" if plot else ""
 
-prev = None  # replace with initial predictions .csv file
-sample = repo/'data/agarose/exp1.tif'  # replace with second sample
+prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
+# sample = repo/'data/agarose/exp1.tif'  # replace with second sample
 predict_tiles_signed = f"{predict_tiles} --prev {prev}"
 
 
@@ -134,10 +135,10 @@ aggregate_tile_predictions = f"{python} {script} aggregate_predictions {tile_pre
 
 
 # call(deskew, shell=True)
-# call(detect_rois, shell=True)
 
-call(predict_rois, shell=True)
-call(aggregate_roi_predictions, shell=True)
+# call(detect_rois, shell=True)
+# call(predict_rois, shell=True)
+# call(aggregate_roi_predictions, shell=True)
 
 call(predict_tiles, shell=True)
 call(aggregate_tile_predictions, shell=True)

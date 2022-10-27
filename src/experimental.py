@@ -106,12 +106,12 @@ def detect_rois(
     img: Path,
     axial_voxel_size: float,
     lateral_voxel_size: float,
-    psf: Any = None,
+    psf: str = 'none',
     skew_angle: float = 32.45,
     sigma_xy: float = 1.1,
     sigma_z: float = 1.1,
 ):
-    psf = None if eval(str(psf)) is None else psf
+    psf = None if psf == '' else psf
 
     matlab = 'matlab '
     matlab += f' -nodisplay'
@@ -119,11 +119,7 @@ def detect_rois(
     matlab += f' -nodesktop'
     matlab += f' -nojvm -r '
 
-    if psf is not None:
-        det = f"TA_PointDetection('{img}','{psf}',{lateral_voxel_size},{axial_voxel_size},{skew_angle},{sigma_xy},{sigma_z})"
-    else:
-        det = f"TA_PointDetection('{img}','none',{lateral_voxel_size},{axial_voxel_size},{skew_angle},{sigma_xy},{sigma_z})"
-
+    det = f"TA_PointDetection('{img}','{psf}',{lateral_voxel_size},{axial_voxel_size},{skew_angle},{sigma_xy},{sigma_z})"
     repo = Path(__file__).parent.parent.absolute()
     llsm = f"addpath(genpath('{repo}/LLSM3DTools/'))"
     job = f"{matlab} \"{llsm}; {det}; exit;\""
@@ -149,7 +145,7 @@ def load_sample(
         img = get_image(path).astype(float)
 
         if remove_background:
-            mode = int(st.mode(img[img < np.quantile(img, .99)], axis=None).mode[0])
+            mode = st.mode(img[img < np.quantile(img, .99)], axis=None).mode[0]
             img -= mode
             img[img < 0] = 0
 
@@ -435,10 +431,10 @@ def predict_rois(
     minimum_distance: float = 1.,
     plot: bool = False,
 ):
-    sample = imread(img).astype(int)
-    esnr = np.sqrt(sample.max()).round(0).astype(int)
+    sample = imread(img).astype(float)
+    esnr = np.sqrt(sample.max()).astype(int)
 
-    mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
+    mode = st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0]
     sample -= mode
     sample[sample < 0] = 0
     sample = sample / np.nanmax(sample)
@@ -563,10 +559,14 @@ def aggregate_predictions(
     ncols = data.shape[-1] // window_size
     nrows = data.shape[-2] // window_size
 
-    print(ncols, nrows)
-
-    predictions = pd.read_csv(model_pred, index_col=0, header=0, usecols=lambda col: col == 'ansi' or col.startswith('p'))
+    predictions = pd.read_csv(
+        model_pred,
+        index_col=0,
+        header=0,
+        usecols=lambda col: col == 'ansi' or col.startswith('p')
+    )
     dm_state = np.zeros(69) if eval(str(dm_state)) is None else pd.read_csv(dm_state, header=None).values[:, 0]
+    original_pcols = predictions.columns
 
     # filter out diffraction small predictions
     prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
@@ -582,72 +582,85 @@ def aggregate_predictions(
     predictions['votes'] = p_modes
     det_modes = predictions[predictions['votes'] > p_modes.max() * majority_threshold][pcols]
 
-    if plot:
-        fig, axes = plt.subplots(nrows=det_modes.shape[0], figsize=(8, 11))
+    if det_modes.shape[0] > 0:
+        if plot:
+            fig, axes = plt.subplots(nrows=det_modes.shape[0], figsize=(8, 11))
 
-    for i in tqdm(range(det_modes.shape[0]), desc='Detecting outliers', total=det_modes.shape[0]):
-        preds = det_modes.iloc[i]
+        for i in tqdm(range(det_modes.shape[0]), desc='Detecting outliers', total=det_modes.shape[0]):
+            preds = det_modes.iloc[i]
+
+            if plot:
+                min_amp = det_modes.values.flatten().min()
+                max_amp = det_modes.values.flatten().max()
+
+                ax = axes[i] if det_modes.shape[0] > 1 else axes
+                ax = sns.violinplot(
+                    preds,
+                    linewidth=1,
+                    alpha=.75,
+                    ax=ax,
+                    color="lightgrey",
+                    notch=False,
+                    showcaps=False,
+                    flierprops={"marker": "."},
+                    boxprops={"facecolor": "lightgrey"},
+                )
+
+            outliers = preds[percentile_filter(preds.values, min_pct=min_percentile, max_pct=max_percentile)]
+
+            if not outliers.empty and preds.shape[0] > 2:
+                preds.drop(outliers.index.values, inplace=True)
+
+            predictions.loc[det_modes.index[i], 'mean'] = np.nanmean(preds)
+            predictions.loc[det_modes.index[i], 'median'] = np.nanmedian(preds)
+            predictions.loc[det_modes.index[i], 'min'] = np.nanmin(preds)
+            predictions.loc[det_modes.index[i], 'max'] = np.nanmax(preds)
+            predictions.loc[det_modes.index[i], 'std'] = np.nanstd(preds)
+
+            if plot:
+                ax.plot(
+                    predictions.loc[det_modes.index[i], final_prediction], np.zeros_like(1),
+                    'o', clip_on=False, color='C0', label='Prediction', zorder=3
+                )
+                ax.plot(
+                    outliers, np.zeros_like(outliers),
+                    'x', clip_on=False, color='C3', label='Outliers', zorder=3
+                )
+
+                ax.spines.right.set_visible(False)
+                ax.spines.left.set_visible(False)
+                ax.spines.top.set_visible(False)
+                ax.set_yticks([])
+                ax.set_xlim(min_amp - .05, max_amp + .05)
+                ax.set_ylabel(f'{det_modes.index[i]}')
+                ax.set_xlabel('')
 
         if plot:
-            min_amp = det_modes.values.flatten().min()
-            max_amp = det_modes.values.flatten().max()
+            if det_modes.shape[0] > 1:
+                axes[0].legend(ncol=2, frameon=False)
+                axes[-1].set_xlabel(f'Amplitudes ($\mu m$)')
+            else:
+                axes.legend(ncol=2, frameon=False)
+                axes.set_xlabel(f'Amplitudes ($\mu m$)')
 
-            ax = axes[i] if det_modes.shape[0] > 1 else axes
-            ax = sns.violinplot(
-                preds,
-                linewidth=1,
-                alpha=.75,
-                ax=ax,
-                color="lightgrey",
-                notch=False,
-                showcaps=False,
-                flierprops={"marker": "."},
-                boxprops={"facecolor": "lightgrey"},
-            )
+            plt.tight_layout()
+            plt.savefig(f"{model_pred.with_suffix('')}_aggregated.png", bbox_inches='tight', dpi=300,
+                        pad_inches=.25)
+    else:
+        logger.warning(f"No modes detected with the current configs")
 
-        outliers = preds[percentile_filter(preds.values, min_pct=min_percentile, max_pct=max_percentile)]
+        for c in original_pcols:
+            predictions[c] = np.zeros_like(predictions.index)
 
-        if not outliers.empty and preds.shape[0] > 2:
-            preds.drop(outliers.index.values, inplace=True)
-
-        predictions.loc[det_modes.index[i], 'mean'] = np.nanmean(preds)
-        predictions.loc[det_modes.index[i], 'median'] = np.nanmedian(preds)
-        predictions.loc[det_modes.index[i], 'min'] = np.nanmin(preds)
-        predictions.loc[det_modes.index[i], 'max'] = np.nanmax(preds)
-        predictions.loc[det_modes.index[i], 'std'] = np.nanstd(preds)
-
-        if plot:
-            ax.plot(
-                predictions.loc[det_modes.index[i], final_prediction], np.zeros_like(1),
-                'o', clip_on=False, color='C0', label='Prediction', zorder=3
-            )
-            ax.plot(
-                outliers, np.zeros_like(outliers),
-                'x', clip_on=False, color='C3', label='Outliers', zorder=3
-            )
-
-            ax.spines.right.set_visible(False)
-            ax.spines.left.set_visible(False)
-            ax.spines.top.set_visible(False)
-            ax.set_yticks([])
-            ax.set_xlim(min_amp - .05, max_amp + .05)
-            ax.set_ylabel(f'{det_modes.index[i]}')
-            ax.set_xlabel('')
-
-    if plot:
-        if det_modes.shape[0] > 1:
-            axes[0].legend(ncol=2, frameon=False)
-            axes[-1].set_xlabel(f'Amplitudes ($\mu m$)')
-        else:
-            axes.legend(ncol=2, frameon=False)
-            axes.set_xlabel(f'Amplitudes ($\mu m$)')
-
-        plt.tight_layout()
-        plt.savefig(f"{model_pred.with_suffix('')}_aggregated_predictions.png", bbox_inches='tight', dpi=300, pad_inches=.25)
+        predictions['mean'] = predictions[pcols].mean(axis=1)
+        predictions['median'] = predictions[pcols].median(axis=1)
+        predictions['min'] = predictions[pcols].min(axis=1)
+        predictions['max'] = predictions[pcols].max(axis=1)
+        predictions['std'] = predictions[pcols].std(axis=1)
 
     predictions.fillna(0, inplace=True)
     predictions.index.name = 'ansi'
-    predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated_predictions.csv")
+    predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated.csv")
     print(predictions)
 
     dm = pd.DataFrame(zernikies_to_actuators(

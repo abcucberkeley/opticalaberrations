@@ -893,7 +893,8 @@ def booststrap_predict_sign(
         'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
-    prev_pred = None if eval(str(prev_pred)) is None else prev_pred
+    if eval(str(prev_pred)) is None:
+        prev_pred = None
 
     preds, stdev = bootstrap_predict(
         model,
