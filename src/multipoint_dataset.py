@@ -64,6 +64,7 @@ def sim(
     snr: tuple,
     emb: bool = True,
     noise: bool = True,
+    normalize: bool = True,
     random_crop: Any = None,
     radius: float = .4,
     sphere: float = 0,
@@ -74,24 +75,24 @@ def sim(
             reference += rg.sphere(
                 shape=gen.psf_shape,
                 radius=sphere,
-                position=np.random.uniform(low=.2, high=.8)
+                position=np.random.uniform(low=.1, high=.9, size=3)
             ).astype(np.float) * np.random.random()
         else:
             reference[
                 np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
                 np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
                 np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
-            ] = np.random.random()
+            ] += np.random.random()
 
+    reference /= np.max(reference)
     img = fftconvolution(reference, kernel)
+    snr = gen._randuniform(snr)
+    img *= snr ** 2
 
     if noise:
-        snr = gen._randuniform(snr)
-        img *= snr**2
-
         rand_noise = gen._random_noise(
             image=img,
-            mean=int(np.random.uniform(low=0, high=10)),
+            mean=gen.mean_background_noise,
             sigma=gen.sigma_background_noise
         )
         noisy_img = rand_noise + img
@@ -99,7 +100,6 @@ def sim(
 
         psnr = np.sqrt(np.max(noisy_img))
         maxcounts = np.max(noisy_img)
-        noisy_img /= np.max(noisy_img)
     else:
         psnr = np.mean(np.array(snr))
         maxcounts = np.max(img)
@@ -110,6 +110,9 @@ def sim(
         crop = int(np.random.uniform(low=random_crop, high=gen.psf_shape[0]+1))
         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[crop]*3)
         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
+
+    if normalize:
+        noisy_img /= np.max(noisy_img)
 
     if emb:
         noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
@@ -147,6 +150,7 @@ def create_synthetic_sample(
     cpu_workers: int,
     random_crop: Any,
     noise: bool,
+    normalize: bool,
     emb: bool,
     sphere: int
 ):
@@ -212,7 +216,8 @@ def create_synthetic_sample(
                 snr=(min_psnr, max_psnr),
                 emb=emb,
                 noise=noise,
-                sphere=sphere
+                normalize=normalize,
+                sphere=sphere,
             )
 
     else:
@@ -253,6 +258,7 @@ def create_synthetic_sample(
             emb=emb,
             random_crop=random_crop,
             noise=noise,
+            normalize=normalize,
             sphere=sphere
         )
 
@@ -282,6 +288,11 @@ def parse_args(args):
     parser.add_argument(
         '--noise', action='store_true',
         help='toggle to add random background and shot noise to the generated PSFs'
+    )
+
+    parser.add_argument(
+        '--normalize', action='store_true',
+        help='toggle to scale the generated PSFs to 1.0'
     )
 
     parser.add_argument(
@@ -393,6 +404,7 @@ def main(args=None):
             npoints=args.npoints,
             outdir=args.outdir,
             noise=args.noise,
+            normalize=args.normalize,
             modes=args.modes,
             input_shape=args.input_shape,
             psf_type=args.psf_type,

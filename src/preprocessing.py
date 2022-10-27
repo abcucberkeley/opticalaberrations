@@ -17,7 +17,6 @@ from tifffile import imread, imsave
 from skimage import transform
 from scipy.spatial import KDTree
 from numpy.lib.stride_tricks import sliding_window_view
-from skimage.feature import peak_local_max
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.ticker import FormatStrFormatter
@@ -60,8 +59,8 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
 def resize(
     vol,
     voxel_size: Sequence,
-    crop_shape: Any,
     sample_voxel_size: Sequence = (.1, .1, .1),
+    minimum_shape: tuple = (64, 64, 64),
     debug: Any = None
 ):
     def plot(cls, img):
@@ -109,11 +108,13 @@ def resize(
         order=3,
         anti_aliasing=True,
     )
-    if crop_shape is not None:
-        mode = np.abs(st.mode(resampled_vol, axis=None).mode[0])
-        resized_vol = resize_with_crop_or_pad(resampled_vol, crop_shape=crop_shape, constant_values=mode)
-    else:
-        resized_vol = resampled_vol
+
+    mode = np.abs(st.mode(resampled_vol, axis=None).mode[0])
+    resized_vol = resize_with_crop_or_pad(
+        resampled_vol,
+        crop_shape=[s if s >= m else m for s, m in zip(resampled_vol.shape, minimum_shape)],
+        constant_values=mode
+    )
 
     if debug is not None:
         debug = Path(debug)
@@ -146,7 +147,6 @@ def resize(
 
 def prep_sample(
     sample: np.array,
-    crop_shape: Any,
     sample_voxel_size: tuple,
     model_voxel_size: tuple,
     debug: Any = None,
@@ -169,7 +169,6 @@ def prep_sample(
                     s,
                     sample_voxel_size=sample_voxel_size,
                     voxel_size=model_voxel_size,
-                    crop_shape=crop_shape,
                     debug=debug/f"{i}_preprocessing" if debug is not None else None
                 )
             s = s.transpose(0, 2, 1)
@@ -191,7 +190,6 @@ def prep_sample(
                 sample,
                 sample_voxel_size=sample_voxel_size,
                 voxel_size=model_voxel_size,
-                crop_shape=crop_shape,
                 debug=debug
             )
 

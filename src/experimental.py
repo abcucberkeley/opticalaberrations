@@ -130,7 +130,6 @@ def detect_rois(
 
 def load_sample(
         path: Path,
-        crop_shape: Any,
         model_voxel_size: tuple,
         sample_voxel_size: tuple,
         remove_background: bool = True,
@@ -154,10 +153,9 @@ def load_sample(
 
         img = preprocessing.prep_sample(
             np.squeeze(img),
-            crop_shape=crop_shape,
             model_voxel_size=model_voxel_size,
             sample_voxel_size=sample_voxel_size,
-            debug=f"{path.parent}/{path.stem}_preprocessing"
+            debug=Path(f"{path.with_suffix('')}_preprocessing")
         )
 
         return img
@@ -213,7 +211,6 @@ def predict(
 
     load = partial(
         load_sample,
-        crop_shape=(64, 64, 64),
         model_voxel_size=model_voxel_size,
         sample_voxel_size=sample_voxel_size,
         remove_background=False,
@@ -304,7 +301,6 @@ def predict_sample(
 
     inputs = load_sample(
         img,
-        crop_shape=(64, 64, 64),
         model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
         remove_background=True,
@@ -324,13 +320,13 @@ def predict_sample(
         verbose=verbose,
         gen=psfgen,
         prev_pred=prev,
-        plot=Path(f'{img.parent / img.stem}') if plot else None,
+        plot=Path(f"{img.with_suffix('')}_preprocessing") if plot else None,
     )
 
     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
     dm = zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar)
     dm = pd.DataFrame(dm)
-    dm.to_csv(f"{img.parent / img.stem}_corrected_actuators.csv")
+    dm.to_csv(f"{img.with_suffix('')}_corrected_actuators.csv")
 
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
     std = Wavefront(std, order='ansi', lam_detection=wavelength)
@@ -345,10 +341,10 @@ def predict_sample(
     ]
     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
     coffs.index.name = 'ansi'
-    coffs.to_csv(f"{img.parent / img.stem}_zernike_coffs.csv")
+    coffs.to_csv(f"{img.with_suffix('')}_zernike_coffs.csv")
 
     pupil_displacement = np.array(p.wave(size=100), dtype='float32')
-    imsave(f"{img.parent / img.stem}_pred_pupil_displacement.tif", pupil_displacement)
+    imsave(f"{img.with_suffix('')}_pupil_displacement.tif", pupil_displacement)
 
     if plot:
         vis.prediction(
@@ -357,7 +353,7 @@ def predict_sample(
             dm_before=dm_state,
             dm_after=dm.values[:, 0],
             wavelength=wavelength,
-            save_path=Path(f'{img.parent / img.stem}_pred'),
+            save_path=Path(f"{img.with_suffix('')}_prediction"),
         )
 
 
@@ -445,7 +441,7 @@ def predict_rois(
     sample[sample < 0] = 0
     sample = sample / np.nanmax(sample)
 
-    outdir = Path(f'{img.parent / img.stem}_rois')
+    outdir = Path(f"{img.with_suffix('')}_rois")
     logger.info(f"Sample: {sample.shape}")
 
     preprocessing.find_roi(
@@ -453,7 +449,7 @@ def predict_rois(
         savepath=outdir,
         peaks=peaks,
         window_size=tuple(3*[window_size]),
-        plot=Path(f'{img.parent/img.stem}') if plot else None,
+        plot=img.with_suffix('') if plot else None,
         num_peaks=num_rois,
         min_dist=minimum_distance,
         max_dist=None,
@@ -504,13 +500,12 @@ def predict_tiles(
 
     sample = load_sample(
         img,
-        crop_shape=None,
         model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
         remove_background=True,
         normalize=True,
     )
-    outdir = Path(f'{img.parent / img.stem}_tiles')
+    outdir = Path(f"{img.with_suffix('')}_tiles")
     logger.info(f"Sample: {sample.shape}")
 
     zplanes, nrows, ncols = preprocessing.get_tiles(
@@ -689,7 +684,7 @@ def aggregate_predictions(
     coffs.to_csv(f"{model_pred.with_suffix('')}_zernike_coffs.csv")
 
     pupil_displacement = np.array(p.wave(size=100), dtype='float32')
-    imsave(f"{model_pred.with_suffix('')}_pred_pupil_displacement.tif", pupil_displacement)
+    imsave(f"{model_pred.with_suffix('')}_pupil_displacement.tif", pupil_displacement)
 
     if plot:
         vis.wavefronts(

@@ -82,6 +82,10 @@ def parse_args(args):
         help='set predictions below threshold to zero (waves)'
     )
     predict_sample.add_argument(
+        "--sign_threshold", default=.4, type=float,
+        help='flip sign of modes above given threshold'
+    )
+    predict_sample.add_argument(
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
     )

@@ -6,8 +6,9 @@ python = Path('~/anaconda3/envs/deep/bin/python')
 repo = Path('~/Gitlab/opticalaberrations/')
 script = repo/'src/ao.py'
 
-sample = repo/'examples/simulated/0/0.tif'
-points = repo/'examples/simulated/0/results/Detection3D.mat'
+n = '5'
+sample = repo/f'examples/simulated/{n}/{n}.tif'
+points = repo/f'examples/simulated/{n}/results/Detection3D.mat'
 
 dm = repo/'examples/Zernike_Korra_Bax273.csv'
 model = repo/'pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5'
@@ -62,25 +63,25 @@ detect_rois += f" --lateral_voxel_size {lateral_voxel_size}"
 detect_rois += f" --axial_voxel_size {axial_voxel_size}"
 
 
-phase_retrieval = f"{python} {script} predict_sample"
-phase_retrieval += f" {model} {sample} {dm}"
-phase_retrieval += f" --state {state}"
-phase_retrieval += f" --scalar {scalar}"
-phase_retrieval += f" --wavelength {wavelength}"
-phase_retrieval += f" --lateral_voxel_size {lateral_voxel_size}"
-phase_retrieval += f" --axial_voxel_size {axial_voxel_size}"
-phase_retrieval += f" --model_lateral_voxel_size {model_lateral_voxel_size}"
-phase_retrieval += f" --model_axial_voxel_size {model_axial_voxel_size}"
-phase_retrieval += f" --psf_type {psf_type}"
-phase_retrieval += f" --prediction_threshold 0."
-phase_retrieval += f" --sign_threshold {sign_threshold}"
-phase_retrieval += f" --num_predictions {num_predictions}"
-phase_retrieval += f" --prev {prev}"
-phase_retrieval += f" --plot" if plot else ""
+predict_sample = f"{python} {script} predict_sample"
+predict_sample += f" {model} {sample} {dm}"
+predict_sample += f" --state {state}"
+predict_sample += f" --scalar {scalar}"
+predict_sample += f" --wavelength {wavelength}"
+predict_sample += f" --lateral_voxel_size {lateral_voxel_size}"
+predict_sample += f" --axial_voxel_size {axial_voxel_size}"
+predict_sample += f" --model_lateral_voxel_size {model_lateral_voxel_size}"
+predict_sample += f" --model_axial_voxel_size {model_axial_voxel_size}"
+predict_sample += f" --psf_type {psf_type}"
+predict_sample += f" --prediction_threshold 0."
+predict_sample += f" --sign_threshold {sign_threshold}"
+predict_sample += f" --num_predictions {num_predictions}"
+predict_sample += f" --prev {prev}"
+predict_sample += f" --plot" if plot else ""
 
 prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
 # sample = repo/'data/agarose/exp1.tif'  # replace with second sample
-phase_retrieval_signed = f"{phase_retrieval} --prev {prev}"
+predict_sample_signed = f"{predict_sample} --prev {prev}"
 
 predict_rois = f"{python} {script} predict_rois"
 predict_rois += f" {model} {sample} {points}"
@@ -123,7 +124,6 @@ prev = None  # replace with initial predictions .csv file (*_predictions_zernike
 # sample = repo/'data/agarose/exp1.tif'  # replace with second sample
 predict_tiles_signed = f"{predict_tiles} --prev {prev}"
 
-
 aggregate_predictions_flags = f" --state {state}"
 aggregate_predictions_flags += f" --scalar {scalar}"
 aggregate_predictions_flags += f" --prediction_threshold {prediction_threshold}"
@@ -142,9 +142,11 @@ aggregate_tile_predictions = f"{python} {script} aggregate_predictions {tile_pre
 
 # call(deskew, shell=True)
 
-# call(detect_rois, shell=True)
-# call(predict_rois, shell=True)
-# call(aggregate_roi_predictions, shell=True)
+call(predict_sample, shell=True)
+
+call(detect_rois, shell=True)
+call(predict_rois, shell=True)
+call(aggregate_roi_predictions, shell=True)
 
 call(predict_tiles, shell=True)
 call(aggregate_tile_predictions, shell=True)

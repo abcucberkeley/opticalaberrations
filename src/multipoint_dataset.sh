@@ -37,8 +37,8 @@ if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   ITERS=100
   OBJS=($(seq 1 1 5))
-  mPSNR=($(seq 11 10 51))
-  xPSNR=($(seq 20 10 60))
+  mPSNR=($(seq 1 10 41))
+  xPSNR=($(seq 10 10 50))
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
@@ -103,6 +103,7 @@ do
             j="${j} --iters ${ITERS}"
             j="${j} --bimodal"
             j="${j} --noise"
+            j="${j} --normalize"
             j="${j} --gamma .75"
             j="${j} --outdir ${OUTDIR}"
             j="${j} --filename ${SAMPLES[$S-1]}"
