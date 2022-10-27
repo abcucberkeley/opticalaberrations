@@ -9,7 +9,7 @@ SAMPLES=25
 MAXAMP=.5
 MODES=15
 
-DIFFICULTY='hard'
+DIFFICULTY='easy'
 DATASET='yumb_lattice_objects'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/$DIFFICULTY/test/x108-y108-z200/"
@@ -20,9 +20,9 @@ declare -a models=(
 
 for MODEL in "${models[@]}"
 do
-  for NA in 1. .75
+  for NA in 1. .9 .8
   do
-    for COV in 1.0 0.75 0.5
+    for COV in 1.0 0.5
     do
       #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
       #python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
@@ -56,7 +56,7 @@ do
     #done
   done
 
-  for COV in 1.0 0.75 0.5
+  for COV in 1.0 0.5
   do
     python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
     --task "$MODEL --psf_type $PSF_TYPE --input_coverage $COV --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL random" \

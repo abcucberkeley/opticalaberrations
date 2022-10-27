@@ -179,6 +179,7 @@ def predict(
     prev: Any = None,
     prediction_threshold: float = 0.,
     sign_threshold: float = .4,
+    num_predictions: int = 1,
     plot: bool = True,
     zplanes: int = 1,
     nrows: int = 1,
@@ -226,7 +227,7 @@ def predict(
         inputs=rois[..., np.newaxis],
         threshold=prediction_threshold,
         sign_threshold=sign_threshold,
-        n_samples=5,
+        n_samples=num_predictions,
         verbose=True,
         gen=psfgen,
         prev_pred=prev,
@@ -274,6 +275,7 @@ def predict_sample(
     plot: bool = False,
     psf_type: str = 'widefield',
     n_modes: int = 60,
+    num_predictions: int = 1,
     mosaic: bool = True,
     prev: Any = None
 ):
@@ -318,6 +320,7 @@ def predict_sample(
         inputs=inputs,
         threshold=prediction_threshold,
         sign_threshold=sign_threshold,
+        n_samples=num_predictions,
         verbose=verbose,
         gen=psfgen,
         prev_pred=prev,
@@ -374,6 +377,7 @@ def predict_dataset(
         plot: bool = False,
         psf_type: str = 'widefield',
         n_modes: int = 60,
+        num_predictions: int = 1,
         mosaic: bool = False,
         prev: Any = None
 ):
@@ -393,6 +397,7 @@ def predict_dataset(
         psf_type=psf_type,
         n_modes=n_modes,
         mosaic=mosaic,
+        num_predictions=num_predictions,
         prev=prev,
     )
 
@@ -422,6 +427,7 @@ def predict_rois(
     model_lateral_voxel_size: float,
     wavelength: float = .605,
     psf_type: str = 'widefield',
+    num_predictions: int = 1,
     prev: Any = None,
     window_size: int = 64,
     num_rois: int = 10,
@@ -468,6 +474,7 @@ def predict_rois(
         model_lateral_voxel_size=model_lateral_voxel_size,
         prediction_threshold=prediction_threshold,
         sign_threshold=sign_threshold,
+        num_predictions=num_predictions,
         wavelength=wavelength,
         psf_type=psf_type,
         mosaic=True,
@@ -487,6 +494,7 @@ def predict_tiles(
     model_lateral_voxel_size: float,
     wavelength: float = .605,
     psf_type: str = 'widefield',
+    num_predictions: int = 1,
     prev: Any = None,
     window_size: int = 64,
     prediction_threshold: float = 0.,
@@ -521,6 +529,7 @@ def predict_tiles(
         model_lateral_voxel_size=model_lateral_voxel_size,
         prediction_threshold=prediction_threshold,
         sign_threshold=sign_threshold,
+        num_predictions=num_predictions,
         wavelength=wavelength,
         psf_type=psf_type,
         mosaic=True,

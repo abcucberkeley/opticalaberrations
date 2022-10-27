@@ -85,6 +85,10 @@ def parse_args(args):
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
     )
+    predict_sample.add_argument(
+        "--num_predictions", default=10, type=int,
+        help="number of predictions per sample to evaluate model's confidence"
+    )
 
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -142,6 +146,10 @@ def parse_args(args):
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
     )
+    predict_rois.add_argument(
+        "--num_predictions", default=10, type=int,
+        help="number of predictions per ROI to evaluate model's confidence"
+    )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -185,6 +193,10 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
+    )
+    predict_tiles.add_argument(
+        "--num_predictions", default=10, type=int,
+        help="number of predictions per tile to evaluate model's confidence"
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
@@ -277,6 +289,7 @@ def main(args=None):
             scalar=args.scalar,
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
+            num_predictions=args.num_predictions,
             plot=args.plot
         )
 
@@ -293,6 +306,7 @@ def main(args=None):
             model_lateral_voxel_size=args.model_lateral_voxel_size,
             wavelength=args.wavelength,
             window_size=args.window_size,
+            num_predictions=args.num_predictions,
             num_rois=args.num_rois,
             min_intensity=args.min_intensity,
             prediction_threshold=args.prediction_threshold,
@@ -312,6 +326,7 @@ def main(args=None):
             model_axial_voxel_size=args.model_axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
             model_lateral_voxel_size=args.model_lateral_voxel_size,
+            num_predictions=args.num_predictions,
             wavelength=args.wavelength,
             window_size=args.window_size,
             plot=args.plot

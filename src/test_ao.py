@@ -14,6 +14,7 @@ model = repo/'pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltra
 psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 
 # common flags
+prev = None
 state = None
 wavelength = .510
 scalar = .75
@@ -23,6 +24,7 @@ model_lateral_voxel_size = .108
 model_axial_voxel_size = .2
 sign_threshold = .5
 prediction_threshold = .1
+num_predictions = 10
 window_size = 64
 plot = True
 
@@ -72,6 +74,8 @@ phase_retrieval += f" --model_axial_voxel_size {model_axial_voxel_size}"
 phase_retrieval += f" --psf_type {psf_type}"
 phase_retrieval += f" --prediction_threshold 0."
 phase_retrieval += f" --sign_threshold {sign_threshold}"
+phase_retrieval += f" --num_predictions {num_predictions}"
+phase_retrieval += f" --prev {prev}"
 phase_retrieval += f" --plot" if plot else ""
 
 prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
@@ -92,6 +96,7 @@ predict_rois += f" --psf_type {psf_type}"
 predict_rois += f" --window_size {window_size}"
 predict_rois += f" --prediction_threshold 0."
 predict_rois += f" --sign_threshold {sign_threshold}"
+predict_rois += f" --num_predictions {num_predictions}"
 predict_rois += f" --prev {prev}"
 predict_rois += f" --plot" if plot else ""
 
@@ -110,6 +115,7 @@ predict_tiles += f" --psf_type {psf_type}"
 predict_tiles += f" --window_size {window_size}"
 predict_tiles += f" --prediction_threshold 0."
 predict_tiles += f" --sign_threshold {sign_threshold}"
+predict_tiles += f" --num_predictions {num_predictions}"
 predict_tiles += f" --prev {prev}"
 predict_tiles += f" --plot" if plot else ""
 

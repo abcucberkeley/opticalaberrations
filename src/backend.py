@@ -972,7 +972,7 @@ def eval_sign(
         desc=desc,
         plot=plot
     )
-    init_preds = np.abs(init_preds)
+    init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
 
     res = ys - init_preds
     g = partial(
@@ -998,7 +998,7 @@ def eval_sign(
         threshold=threshold,
         desc=desc,
     )
-    followup_preds = np.abs(followup_preds)
+    followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]
 
     preds = init_preds.copy()
 
@@ -1120,7 +1120,7 @@ def predict(
                     noisy_img /= np.max(noisy_img)
 
                     save_path = Path(
-                        f"{model}/{dist}/c{input_coverage}/lambda-{waves}/npoints-{npoints}"
+                        f"{model}/samples/{dist}/c{input_coverage}/lambda-{waves}/npoints-{npoints}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
