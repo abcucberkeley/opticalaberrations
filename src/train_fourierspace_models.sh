@@ -11,7 +11,7 @@ BATCH=1024
 LAMBDA=.510
 DIFFICULTY='hard'
 PHASE='--no_phase'
-DATASET='yumb_lattice_objects'
+DATASET='yumb'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/$DIFFICULTY/train/x108-y108-z200/"
 
 if [ "$DIFFICULTY" = "easy" ];then

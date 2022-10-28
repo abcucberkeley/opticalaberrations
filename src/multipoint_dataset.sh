@@ -27,10 +27,10 @@ LAMBDA=.510
 NA=1.0
 
 DIFFICULTY='hard'
-DATASET='test'
+DATASET='train'
 SHAPE=64
 RCROP=32
-OUTDIR="/clusterfs/nvme/thayer/dataset/yumb_lattice_objects/${DIFFICULTY}/${DATASET}"
+OUTDIR="/clusterfs/nvme/thayer/dataset/yumb/${DIFFICULTY}/${DATASET}"
 
 
 if [ "$DATASET" = "train" ];then
@@ -44,10 +44,10 @@ if [ "$DATASET" = "train" ];then
     MODES=15
     amps1=($(seq 0 .01 .25))
     amps2=($(seq .01 .01 .25))
-    SAMPLES=($(seq 1 100 300))
+    SAMPLES=($(seq 1 100 500))
   else
     MODES=60
-    SAMPLES=($(seq 1 100 300))
+    SAMPLES=($(seq 1 100 500))
     difractionlimit=($(seq 0 .005 .05))
     small=($(seq .05 .0025 .1))
     large=($(seq .1 .005 .2))
