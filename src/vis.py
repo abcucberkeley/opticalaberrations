@@ -2386,7 +2386,7 @@ def prediction(
             cmap=wave_cmap,
             vmin=np.min(levels),
             vmax=np.max(levels),
-            extend='both'
+            extend='both',
         )
 
         pcts = []
@@ -2432,7 +2432,7 @@ def prediction(
 
     pred_wave = pred.wave(size=100)
 
-    fig = plt.figure(figsize=(8, 8))
+    fig = plt.figure(figsize=(10, 8))
     gs = fig.add_gridspec(4, 3)
 
     ax_acts = fig.add_subplot(gs[:2, :2])

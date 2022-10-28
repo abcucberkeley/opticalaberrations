@@ -146,11 +146,11 @@ aggregate_tile_predictions = f"{python} {script} aggregate_predictions {tile_pre
 
 # call(deskew, shell=True)
 
-# call(predict_sample, shell=True)
+call(predict_sample, shell=True)
 
-# call(detect_rois, shell=True)
-# call(predict_rois, shell=True)
-# call(aggregate_roi_predictions, shell=True)
+call(detect_rois, shell=True)
+call(predict_rois, shell=True)
+call(aggregate_roi_predictions, shell=True)
 
 call(predict_tiles, shell=True)
 call(aggregate_tile_predictions, shell=True)
