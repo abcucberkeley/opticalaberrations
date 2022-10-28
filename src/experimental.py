@@ -306,7 +306,7 @@ def predict_sample(
 
     model = backend.load(model, mosaic=mosaic)
 
-    psfgen = SyntheticPSF(
+    modelpsfgen = SyntheticPSF(
         dtype=psf_type,
         psf_shape=(64, 64, 64),
         n_modes=model.output_shape[1],
@@ -314,6 +314,17 @@ def predict_sample(
         x_voxel_size=model_lateral_voxel_size,
         y_voxel_size=model_lateral_voxel_size,
         z_voxel_size=model_axial_voxel_size,
+    )
+
+    psfgen = SyntheticPSF(
+        dtype=psf_type,
+        snr=1000,
+        psf_shape=(64, 64, 64),
+        n_modes=model.output_shape[1],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size,
     )
 
     inputs = load_sample(
@@ -333,7 +344,7 @@ def predict_sample(
         sign_threshold=sign_threshold,
         n_samples=num_predictions,
         verbose=verbose,
-        gen=psfgen,
+        gen=modelpsfgen,
         prev_pred=prev,
         batch_size=batch_size,
         plot=Path(f"{img.with_suffix('')}_predictions_embeddings") if plot else None,
@@ -360,17 +371,6 @@ def predict_sample(
 
     pupil_displacement = np.array(p.wave(size=100), dtype='float32')
     imsave(f"{img.with_suffix('')}_predictions_pupil_displacement.tif", pupil_displacement)
-
-    psfgen = SyntheticPSF(
-        dtype=psf_type,
-        snr=1000,
-        psf_shape=(64, 64, 64),
-        n_modes=model.output_shape[1],
-        lam_detection=wavelength,
-        x_voxel_size=lateral_voxel_size,
-        y_voxel_size=lateral_voxel_size,
-        z_voxel_size=axial_voxel_size,
-    )
 
     psf = psfgen.single_psf(phi=p, normed=True, noise=False)
     imsave(f"{img.with_suffix('')}_predictions_psf.tif", psf)

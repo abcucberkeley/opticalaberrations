@@ -1,5 +1,3 @@
-from functools import partial
-
 import matplotlib
 matplotlib.use('Agg')
 
@@ -12,15 +10,16 @@ from datetime import datetime
 from pathlib import Path
 from pprint import pprint
 from typing import Any
+from functools import partial
 
 import pandas as pd
 from scipy import stats as st
-from skimage.feature import peak_local_max
+from skimage.restoration import richardson_lucy
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
-from tqdm import trange, tqdm
+from tqdm import tqdm
 from tifffile import imsave
 
 import tensorflow as tf
@@ -775,185 +774,91 @@ def predict_sign(
     model: tf.keras.Model,
     inputs: np.array,
     gen: SyntheticPSF,
-    batch_size: int,
-    init_preds: Any = None,
+    modelgen: SyntheticPSF,
     plot: Any = None,
     verbose: bool = False,
     threshold: float = 0.,
+    sign_threshold: float = .4,
+    n_samples: int = 1,
+    batch_size: int = 1,
 ):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
 
-    if init_preds is None:
-        init_preds, stdev = bootstrap_predict(
-            model,
-            inputs,
-            psfgen=gen,
-            batch_size=batch_size,
-            n_samples=1,
-            no_phase=True,
-            verbose=verbose,
-            threshold=threshold,
-            plot=plot
-        )
-        init_preds = np.abs(init_preds)
-
-    g = partial(
-        gen.single_psf,
-        zplanes=0,
-        normed=True,
-        noise=False,
-        augmentation=False,
-        meta=False
+    init_preds, stdev = bootstrap_predict(
+        model,
+        inputs,
+        psfgen=modelgen,
+        n_samples=n_samples,
+        no_phase=True,
+        verbose=verbose,
+        batch_size=batch_size,
+        threshold=threshold,
+        plot=plot
     )
+    init_preds = np.abs(init_preds)
 
-    predicted_psf = g(init_preds)[np.newaxis, ...]
-    predicted_peaks = np.zeros_like(inputs)
+    logger.info(f"Evaluating signs")
+    abrs = range(init_preds.shape) if len(init_preds.shape) > 1 else range(1)
+    make_psf = partial(gen.single_psf, zplanes=0, normed=True, noise=False)
+    psfs = np.stack(gen.batch(
+        make_psf,
+        [Wavefront(init_preds[i], lam_detection=gen.lam_detection) for i in abrs]
+    ), axis=0)
 
-    peaks = peak_local_max(
-        np.squeeze(inputs),
-        min_distance=10,
-        threshold_rel=.33,
-        exclude_border=False,
-        p_norm=2,
-        num_peaks=10
-    ).astype(np.int32)
-
-    for p in peaks:
-        predicted_peaks[0, p[0], p[1], p[2]] = inputs[0, p[0], p[1], p[2]]
-
-    predicted_inputs = utils.fftconvolution(
-        np.squeeze(predicted_peaks),
-        np.squeeze(predicted_psf)
-    )
-
-    predicted_inputs = predicted_inputs[..., np.newaxis]
-    if len(predicted_inputs.shape) == 4:
-        predicted_inputs = predicted_inputs[np.newaxis, ...]
-
-    predicted_inputs *= 30 ** 2
-    rand_noise = gen._random_noise(
-        image=predicted_inputs,
-        mean=gen.mean_background_noise,
-        sigma=gen.sigma_background_noise
-    )
-    predicted_inputs += rand_noise
-    predicted_inputs /= predicted_inputs.max()
-
-    # ratio = inputs * predicted_inputs
-    ratio = predicted_inputs / inputs
-    ratio[np.where(predicted_inputs <= .1)] = 1
-    ratio = np.nan_to_num(ratio, nan=1, posinf=1, neginf=1)
-
-    followup_inputs = inputs - (inputs * ratio)
-    followup_inputs[followup_inputs < 0] = 0
-    followup_inputs = np.nan_to_num(followup_inputs, nan=0, posinf=0, neginf=0)
-    followup_inputs /= np.max(followup_inputs)
+    followup_inputs = richardson_lucy(inputs, psfs, num_iter=10)
 
     followup_preds, stdev = bootstrap_predict(
         model,
         followup_inputs,
-        psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
+        psfgen=modelgen,
+        n_samples=n_samples,
         no_phase=True,
-        verbose=verbose,
+        verbose=False,
+        batch_size=batch_size,
+        threshold=threshold,
     )
-    followup_preds = np.abs(followup_preds)
 
-    if plot is not None:
-        fig, axes = plt.subplots(6, 3, figsize=(6, 11))
-        gamma = .5
-        vmin, vmax, vcenter, step = 0, 3, 1, .01
-        highcmap = plt.get_cmap('terrain_r', 256)
-        lowcmap = plt.get_cmap('Greys_r', 256)
-        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-        cmap = mcolors.ListedColormap(cmap)
+    if len(np.squeeze(init_preds).shape) == 1:
+        flips = np.where(followup_preds > (sign_threshold * init_preds))[0]
+        init_preds[flips] *= -1
+        preds = init_preds.copy()
 
-        for i in range(3):
-            mi = axes[0, i].imshow(
-                np.max(np.squeeze(inputs), axis=i) ** gamma,
-                vmin=0, vmax=1, cmap='magma', aspect='equal'
-            )
-            axes[0, i].set_xticks([])
-            axes[0, i].set_yticks([])
+        if plot is not None:
+            init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
 
-            mpoi = axes[1, i].imshow(
-                np.max(np.squeeze(predicted_peaks) ** gamma, axis=i),
-                vmin=0, vmax=1, cmap='hot', aspect='equal'
-            )
-            axes[1, i].set_xticks([])
-            axes[1, i].set_yticks([])
+            fig, axes = plt.subplots(2, 1, figsize=(24, 8))
+            axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
+            axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
+            axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
+            axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
+            axes[0].legend(frameon=False, loc='upper left')
+            axes[0].set_xlim((0, 60))
+            axes[0].set_xticks(range(0, 61))
 
-            mppsf = axes[2, i].imshow(
-                np.max(np.squeeze(predicted_psf), axis=i) ** gamma,
-                vmin=0, vmax=1, cmap='hot', aspect='equal'
-            )
-            axes[2, i].set_xticks([])
-            axes[2, i].set_yticks([])
+            axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
+            axes[1].legend(frameon=False, loc='upper left')
+            axes[1].set_xlim((0, 60))
+            axes[1].set_xticks(range(0, 61))
 
-            mp = axes[3, i].imshow(
-                np.max(np.squeeze(predicted_inputs), axis=i) ** gamma,
-                vmin=0, vmax=1, cmap='magma', aspect='equal'
-            )
-            axes[3, i].set_xticks([])
-            axes[3, i].set_yticks([])
+            plt.tight_layout()
+            plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    else:
+        for i in range(init_preds.shape[0]):
+            flips = np.where(followup_preds[i] > (sign_threshold * init_preds[i]))[0]
+            init_preds[i, flips] *= -1
+        preds = init_preds.copy()
 
-            mr = axes[4, i].imshow(
-                np.max(np.squeeze(ratio), axis=i),
-                vmin=vmin, vmax=vmax, cmap=cmap, aspect='equal'
-            )
-            axes[4, i].set_xticks([])
-            axes[4, i].set_yticks([])
-
-            mf = axes[5, i].imshow(
-                np.max(np.squeeze(followup_inputs), axis=i) ** gamma,
-                vmin=0, vmax=1, cmap='magma', aspect='equal'
-            )
-            axes[5, i].set_xticks([])
-            axes[5, i].set_yticks([])
-
-        axes[0, 0].set_ylabel('Input')
-        axes[1, 0].set_ylabel('POI')
-        axes[2, 0].set_ylabel('PSF')
-        axes[3, 0].set_ylabel('Predicted')
-        axes[4, 0].set_ylabel('Delta')
-        axes[5, 0].set_ylabel('Followup inputs')
-
-        for i, m in zip(range(6), [mi, mpoi, mppsf, mp, mr, mf]):
-            cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-3)
-            cax.set_ylabel(f"$\gamma$: {gamma:.2f}")
-            plt.colorbar(m, cax=cax)
-
-        plt.savefig(f'{plot}_sign.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-    preds = init_preds.copy()
-    flips = np.where(followup_preds > (.4 * init_preds))[0]
-    preds[flips] *= -1
-
-    if plot is not None and followup_preds is not None:
-        init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-        followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-        preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-
-        fig, axes = plt.subplots(2, 1, figsize=(24, 8))
-        axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
-        axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
-        axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
-        axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
-        axes[0].legend(frameon=False, loc='upper left')
-        axes[0].set_xlim((0, 60))
-        axes[0].set_xticks(range(0, 61))
-
-        axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
-        axes[1].legend(frameon=False, loc='upper left')
-        axes[1].set_xlim((0, 60))
-        axes[1].set_xticks(range(0, 61))
-
-        plt.tight_layout()
-        plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-    return preds, followup_inputs
+    return preds, stdev
 
 
 def booststrap_predict_sign(

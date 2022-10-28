@@ -6,7 +6,7 @@ python = Path('~/anaconda3/envs/deep/bin/python')
 repo = Path('~/Gitlab/opticalaberrations/')
 script = repo/'src/ao.py'
 
-n = '1'
+n = 'neg'
 sample = repo/f'examples/simulated/{n}/{n}.tif'
 points = repo/f'examples/simulated/{n}/results/Detection3D.mat'
 
@@ -171,7 +171,7 @@ decon_tiles_predictions += f" --iters {decon_iters}"
 call(predict_sample, shell=True)
 call(decon_sample_predictions, shell=True)
 
-# call(detect_rois, shell=True)
+call(detect_rois, shell=True)
 call(predict_rois, shell=True)
 call(aggregate_roi_predictions, shell=True)
 call(decon_roi_predictions, shell=True)
