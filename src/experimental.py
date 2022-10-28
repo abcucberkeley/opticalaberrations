@@ -1,6 +1,4 @@
 import matplotlib
-from tqdm import tqdm
-
 matplotlib.use('Agg')
 
 import time
@@ -17,6 +15,7 @@ import pandas as pd
 from tifffile import imread, imsave
 import seaborn as sns
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 import utils
 import vis
@@ -24,7 +23,7 @@ import backend
 import preprocessing
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
-from data_utils import get_image, load_dataset
+from data_utils import get_image
 
 import logging
 logger = logging.getLogger('')
@@ -128,12 +127,41 @@ def detect_rois(
     call([job], shell=True)
 
 
+def decon(img: Path, psf: Path, iters: int = 10):
+    matlab = 'matlab '
+    matlab += f' -nodisplay'
+    matlab += f' -nosplash'
+    matlab += f' -nodesktop'
+    matlab += f' -nojvm -r '
+
+    det = f"TA_Decon('{img}','{psf}',{iters}, '{psf.with_suffix('')}_decon.tif')"
+    repo = Path(__file__).parent.parent.absolute()
+    llsm = f"addpath(genpath('{repo}/LLSM3DTools/'))"
+    job = f"{matlab} \"{llsm}; {det}; exit;\""
+
+    print(job)
+    call([job], shell=True)
+
+    original_image = imread(img).astype(float)
+    original_image /= np.max(original_image)
+
+    corrected_image = imread(f"{psf.with_suffix('')}_decon.tif").astype(float)
+    corrected_image /= np.max(corrected_image)
+
+    vis.prediction(
+        original_image=original_image,
+        corrected_image=corrected_image,
+        save_path=f"{psf.with_suffix('')}_decon"
+    )
+
+
 def load_sample(
-        path: Path,
-        model_voxel_size: tuple,
-        sample_voxel_size: tuple,
-        remove_background: bool = True,
-        normalize: bool = True
+    path: Path,
+    model_voxel_size: tuple,
+    sample_voxel_size: tuple,
+    remove_background: bool = True,
+    normalize: bool = True,
+    debug: bool = False
 ):
     try:
         if isinstance(path, tf.Tensor):
@@ -155,7 +183,7 @@ def load_sample(
             np.squeeze(img),
             model_voxel_size=model_voxel_size,
             sample_voxel_size=sample_voxel_size,
-            debug=Path(f"{path.with_suffix('')}_preprocessing")
+            debug=Path(f"{path.with_suffix('')}_preprocessing") if debug else None
         )
 
         return img
@@ -195,19 +223,12 @@ def predict(
 
     psfgen = SyntheticPSF(
         dtype=psf_type,
-        order='ansi',
-        snr=25,
-        n_modes=model.output_shape[1],
-        gamma=.75,
-        bimodal=True,
-        lam_detection=wavelength,
         psf_shape=(64, 64, 64),
+        n_modes=model.output_shape[1],
+        lam_detection=wavelength,
         x_voxel_size=model_lateral_voxel_size,
         y_voxel_size=model_lateral_voxel_size,
         z_voxel_size=model_axial_voxel_size,
-        batch_size=1,
-        max_jitter=0,
-        cpu_workers=-1,
     )
 
     load = partial(
@@ -247,12 +268,12 @@ def predict(
 
     if plot:
         vis.wavefronts(
-            scale='mean',
+            scale='max',
             predictions=predictions,
             nrows=nrows,
             ncols=ncols,
             wavelength=wavelength,
-            save_path=Path(f"{data.with_suffix('')}_wavefronts"),
+            save_path=Path(f"{data.with_suffix('')}_predictions_wavefronts"),
         )
 
 
@@ -272,7 +293,6 @@ def predict_sample(
     verbose: bool = False,
     plot: bool = False,
     psf_type: str = 'widefield',
-    n_modes: int = 60,
     num_predictions: int = 1,
     batch_size: int = 1,
     mosaic: bool = True,
@@ -284,21 +304,16 @@ def predict_sample(
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
+    model = backend.load(model, mosaic=mosaic)
+
     psfgen = SyntheticPSF(
         dtype=psf_type,
-        order='ansi',
-        snr=25,
-        n_modes=n_modes,
-        gamma=.75,
-        bimodal=True,
-        lam_detection=wavelength,
         psf_shape=(64, 64, 64),
+        n_modes=model.output_shape[1],
+        lam_detection=wavelength,
         x_voxel_size=model_lateral_voxel_size,
         y_voxel_size=model_lateral_voxel_size,
         z_voxel_size=model_axial_voxel_size,
-        batch_size=1,
-        max_jitter=0,
-        cpu_workers=-1,
     )
 
     inputs = load_sample(
@@ -311,8 +326,6 @@ def predict_sample(
 
     inputs = np.expand_dims(inputs, axis=0)
 
-    model = backend.load(model, mosaic=mosaic)
-
     p, std = backend.booststrap_predict_sign(
         model,
         inputs=inputs,
@@ -323,13 +336,12 @@ def predict_sample(
         gen=psfgen,
         prev_pred=prev,
         batch_size=batch_size,
-        plot=Path(f"{img.with_suffix('')}_preprocessing") if plot else None,
+        plot=Path(f"{img.with_suffix('')}_predictions_embeddings") if plot else None,
     )
 
     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
-    dm = zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar)
-    dm = pd.DataFrame(dm)
-    dm.to_csv(f"{img.with_suffix('')}_corrected_actuators.csv")
+    dm = pd.DataFrame(zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar))
+    dm.to_csv(f"{img.with_suffix('')}_predictions_corrected_actuators.csv", index=False, header=False)
 
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
     std = Wavefront(std, order='ansi', lam_detection=wavelength)
@@ -344,19 +356,33 @@ def predict_sample(
     ]
     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
     coffs.index.name = 'ansi'
-    coffs.to_csv(f"{img.with_suffix('')}_zernike_coffs.csv")
+    coffs.to_csv(f"{img.with_suffix('')}_predictions_zernike_coffs.csv")
 
     pupil_displacement = np.array(p.wave(size=100), dtype='float32')
-    imsave(f"{img.with_suffix('')}_pupil_displacement.tif", pupil_displacement)
+    imsave(f"{img.with_suffix('')}_predictions_pupil_displacement.tif", pupil_displacement)
+
+    psfgen = SyntheticPSF(
+        dtype=psf_type,
+        snr=1000,
+        psf_shape=(64, 64, 64),
+        n_modes=model.output_shape[1],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size,
+    )
+
+    psf = psfgen.single_psf(phi=p, normed=True, noise=False)
+    imsave(f"{img.with_suffix('')}_predictions_psf.tif", psf)
 
     if plot:
-        vis.prediction(
+        vis.diagnosis(
             pred=p,
             pred_std=std,
             dm_before=dm_state,
             dm_after=dm.values[:, 0],
             wavelength=wavelength,
-            save_path=Path(f"{img.with_suffix('')}_prediction"),
+            save_path=Path(f"{img.with_suffix('')}_predictions_diagnosis"),
         )
 
 
@@ -455,7 +481,7 @@ def predict_rois(
         savepath=outdir,
         peaks=peaks,
         window_size=tuple(3*[window_size]),
-        plot=img.with_suffix('') if plot else None,
+        plot=f"{outdir}_predictions" if plot else None,
         num_peaks=num_rois,
         min_dist=minimum_distance,
         max_dist=None,
@@ -549,7 +575,7 @@ def predict_tiles(
             data=np.max(sample, axis=0),
             strides=64,
             window_size=(64, 64),
-            save_path=Path(f"{outdir.with_suffix('')}_tiles"),
+            save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
         )
 
 
@@ -559,6 +585,9 @@ def aggregate_predictions(
     dm_pattern: Path,
     dm_state: Any,
     wavelength: float = .605,
+    axial_voxel_size: float = .1,
+    lateral_voxel_size: float = .108,
+    psf_type: str = 'widefield',
     majority_threshold: float = .5,
     min_percentile: int = 10,
     max_percentile: int = 90,
@@ -578,7 +607,6 @@ def aggregate_predictions(
         header=0,
         usecols=lambda col: col == 'ansi' or col.startswith('p')
     )
-    dm_state = np.zeros(69) if eval(str(dm_state)) is None else pd.read_csv(dm_state, header=None).values[:, 0]
     original_pcols = predictions.columns
 
     # filter out diffraction small predictions
@@ -674,12 +702,12 @@ def aggregate_predictions(
     predictions.fillna(0, inplace=True)
     predictions.index.name = 'ansi'
     predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated.csv")
-    print(predictions)
 
+    dm_state = np.zeros(69) if eval(str(dm_state)) is None else pd.read_csv(dm_state, header=None).values[:, 0]
     dm = pd.DataFrame(zernikies_to_actuators(
         predictions[final_prediction].values, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar
     ))
-    dm.to_csv(f"{model_pred.with_suffix('')}_corrected_actuators.csv", index=False, header=False)
+    dm.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv", index=False, header=False)
 
     p = Wavefront(predictions[final_prediction].values, order='ansi', lam_detection=wavelength)
     pred_std = Wavefront(predictions['std'].values, order='ansi', lam_detection=wavelength)
@@ -690,10 +718,24 @@ def aggregate_predictions(
     ]
     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
     coffs.index.name = 'ansi'
-    coffs.to_csv(f"{model_pred.with_suffix('')}_zernike_coffs.csv")
+    coffs.to_csv(f"{model_pred.with_suffix('')}_aggregated_zernike_coffs.csv")
 
     pupil_displacement = np.array(p.wave(size=100), dtype='float32')
-    imsave(f"{model_pred.with_suffix('')}_pupil_displacement.tif", pupil_displacement)
+    imsave(f"{model_pred.with_suffix('')}_aggregated_pupil_displacement.tif", pupil_displacement)
+
+    psfgen = SyntheticPSF(
+        dtype=psf_type,
+        snr=1000,
+        psf_shape=(64, 64, 64),
+        n_modes=predictions[final_prediction].shape[0],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size,
+    )
+
+    psf = psfgen.single_psf(phi=p, normed=True, noise=False)
+    imsave(f"{model_pred.with_suffix('')}_aggregated_psf.tif", psf)
 
     if plot:
         vis.wavefronts(
@@ -702,14 +744,14 @@ def aggregate_predictions(
             ncols=ncols,
             nrows=nrows,
             wavelength=wavelength,
-            save_path=Path(f"{model_pred.with_suffix('')}_wavefronts"),
+            save_path=Path(f"{model_pred.with_suffix('')}_aggregated_wavefronts"),
         )
 
-        vis.prediction(
+        vis.diagnosis(
             pred=p,
             pred_std=pred_std,
             dm_before=dm_state,
             dm_after=dm.values[:, 0],
             wavelength=wavelength,
-            save_path=Path(f"{model_pred.with_suffix('')}_prediction"),
+            save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis"),
         )

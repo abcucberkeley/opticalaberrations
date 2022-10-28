@@ -2363,7 +2363,7 @@ def plot_inputs(
         plt.savefig(f'../data/inputs/{i}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
-def prediction(
+def diagnosis(
     pred: Wavefront,
     dm_before: np.array,
     dm_after: np.array,
@@ -2508,6 +2508,74 @@ def prediction(
     ax_zcoff.set_xticks(range(0, len(pred.amplitudes_ansi_waves)+5, 5), minor=False)
     ax_zcoff.set_xlim((0, len(pred.amplitudes_ansi_waves)))
     ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
+
+    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
+    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+def prediction(
+    original_image,
+    corrected_image,
+    save_path,
+    cmap='magma',
+    gamma=.5
+):
+    def slice(xy, zx, zy, vol, label='', maxproj=True):
+
+        if vol.shape[-1] == 3:
+            m = xy.imshow(vol[:, :, 0], cmap=cmap, vmin=0, vmax=1)
+            zx.imshow(vol[:, :, 1], cmap=cmap, vmin=0, vmax=1)
+            zy.imshow(vol[:, :, 2], cmap=cmap, vmin=0, vmax=1)
+        else:
+            vol = vol ** gamma
+            vol = np.nan_to_num(vol)
+
+            if maxproj:
+                m = xy.imshow(np.max(vol, axis=0), cmap=cmap, vmin=0, vmax=1)
+                zx.imshow(np.max(vol, axis=1), cmap=cmap, vmin=0, vmax=1)
+                zy.imshow(np.max(vol, axis=2), cmap=cmap, vmin=0, vmax=1)
+            else:
+                mid_plane = vol.shape[0] // 2
+                m = xy.imshow(vol[mid_plane, :, :], cmap=cmap, vmin=0, vmax=1)
+                zx.imshow(vol[:, mid_plane, :], cmap=cmap, vmin=0, vmax=1)
+                zy.imshow(vol[:, :, mid_plane], cmap=cmap, vmin=0, vmax=1)
+
+        cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
+        cb = plt.colorbar(m, cax=cax)
+        cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+        cax.yaxis.set_label_position("right")
+        cb.ax.set_ylabel(rf"$\gamma$={gamma}")
+        xy.set_ylabel(label)
+        return m
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    fig = plt.figure(figsize=(8, 6))
+    gs = fig.add_gridspec(2, 3)
+
+    ax_xy = fig.add_subplot(gs[0, 0])
+    ax_xz = fig.add_subplot(gs[0, 1])
+    ax_yz = fig.add_subplot(gs[0, 2])
+
+    ax_pxy = fig.add_subplot(gs[1, 0])
+    ax_pxz = fig.add_subplot(gs[1, 1])
+    ax_pyz = fig.add_subplot(gs[1, 2])
+
+    ax_pxy.set_xlabel('XY')
+    ax_pxz.set_xlabel('XZ')
+    ax_pyz.set_xlabel('YZ')
+
+    slice(ax_xy, ax_xz, ax_yz, original_image, label='Input (MIP)', maxproj=True)
+    slice(ax_pxy, ax_pxz, ax_pyz, corrected_image, label='Corrected (MIP)', maxproj=True)
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
     # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)

@@ -31,6 +31,11 @@ def parse_args(args):
         help='a toggle to flip Z axis'
     )
 
+    decon = subparsers.add_parser("decon")
+    decon.add_argument("input", type=Path, help="path to input .tif file")
+    decon.add_argument("psf", type=Path, help="path to PSF .tif file")
+    decon.add_argument("--iters", default=10, type=Path, help="number of iterations for Richardson-Lucy deconvolution")
+
     detect_rois = subparsers.add_parser("detect_rois")
     detect_rois.add_argument("input", type=Path, help="path to input .tif file")
     detect_rois.add_argument("--psf", default=None, type=Path, help="path to PSF .tif file")
@@ -222,6 +227,16 @@ def parse_args(args):
         help="optional path to current DM state .csv file (Default: `blank mirror`)"
     )
     aggregate_predictions.add_argument(
+        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        type=str, help='type of the desired PSF'
+    )
+    aggregate_predictions.add_argument(
+        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+    aggregate_predictions.add_argument(
+        "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
+    )
+    aggregate_predictions.add_argument(
         "--wavelength", default=.510, type=float,
         help='wavelength in microns'
     )
@@ -276,6 +291,14 @@ def main(args=None):
             lateral_voxel_size=args.lateral_voxel_size,
             flipz=args.flipz,
             skew_angle=args.skew_angle,
+        )
+
+    elif args.func == 'decon':
+        experimental.decon(
+            img=args.input,
+            psf=args.psf,
+            iters=args.iters,
+
         )
 
     elif args.func == 'detect_rois':
@@ -354,6 +377,9 @@ def main(args=None):
             dm_pattern=args.pattern,
             dm_state=args.state,
             wavelength=args.wavelength,
+            psf_type=args.psf_type,
+            axial_voxel_size=args.axial_voxel_size,
+            lateral_voxel_size=args.lateral_voxel_size,
             prediction_threshold=args.prediction_threshold,
             majority_threshold=args.majority_threshold,
             min_percentile=args.min_percentile,

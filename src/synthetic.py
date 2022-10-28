@@ -38,10 +38,10 @@ class SyntheticPSF:
         dtype='widefield',
         distribution='dirichlet',
         bimodal=False,
-        gamma=.75,
-        n_modes=15,
+        gamma=1.5,
+        n_modes=60,
         order='ansi',
-        batch_size=1,
+        batch_size=100,
         psf_shape=(64, 64, 64),
         x_voxel_size=.15,
         y_voxel_size=.15,
@@ -50,10 +50,10 @@ class SyntheticPSF:
         lam_detection=.605,
         refractive_index=1.33,
         snr=(10, 50),
-        mean_background_noise=0,
+        mean_background_noise=100,
         sigma_background_noise=4,
-        max_jitter=1,
-        cpu_workers=1
+        max_jitter=0,
+        cpu_workers=-1
     ):
         """
         Args:

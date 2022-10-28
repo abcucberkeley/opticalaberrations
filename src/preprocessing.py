@@ -332,11 +332,9 @@ def find_roi(
         plt.savefig(f'{plot}_selected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     peaks = peaks.head(num_peaks)
-    peaks.to_csv(f"{plot}_rois.csv")
+    peaks.to_csv(f"{plot}_stats.csv")
 
     logger.info(f"Predicted points of interest")
-    print(peaks)
-
     peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
     widths = [w // 2 for w in window_size]
 
@@ -382,7 +380,7 @@ def find_roi(
                     ))
 
         plt.tight_layout()
-        plt.savefig(f'{plot}_rois.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+        plt.savefig(f'{plot}_mips.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     logger.info(f"Locating ROIs: {[peaks.shape[0]]}")
     for p in range(peaks.shape[0]):

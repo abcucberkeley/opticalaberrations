@@ -752,7 +752,7 @@ def bootstrap_predict(
     model_inputs = model_inputs[..., np.newaxis] if model_inputs.shape[-1] != 1 else model_inputs
     features = np.array([np.count_nonzero(s) for s in inputs])
 
-    logger.info(f"[BS={batch_size}, n={n_samples}] - {desc}")
+    logger.info(f"[BS={batch_size}, n={n_samples}] {desc}")
     gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples)
     preds = model.predict(gen, batch_size=batch_size, verbose=verbose)
     preds[:, [0, 1, 2, 4]] = 0.
@@ -1043,6 +1043,7 @@ def eval_sign(
     plot: Any = None,
     threshold: float = 0.,
     sign_threshold: float = .4,
+    desc: str = 'Eval',
 ):
     init_preds, stdev = bootstrap_predict(
         model,
@@ -1081,6 +1082,7 @@ def eval_sign(
         n_samples=1,
         no_phase=True,
         threshold=threshold,
+        desc=desc,
     )
     if len(ys.shape) > 1:
         followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]

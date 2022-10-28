@@ -6,7 +6,7 @@ python = Path('~/anaconda3/envs/deep/bin/python')
 repo = Path('~/Gitlab/opticalaberrations/')
 script = repo/'src/ao.py'
 
-n = '5'
+n = '1'
 sample = repo/f'examples/simulated/{n}/{n}.tif'
 points = repo/f'examples/simulated/{n}/results/Detection3D.mat'
 
@@ -45,6 +45,8 @@ minimum_distance = 1.
 skew_angle = 32.45
 flipz = False
 
+# extra `decon` flags
+decon_iters = 10
 
 # extra `detect_rois` flags
 psf = repo/'examples/simulated/psf.tif'
@@ -135,6 +137,10 @@ aggregate_predictions_flags += f" --majority_threshold {majority_threshold}"
 aggregate_predictions_flags += f" --min_percentile {min_percentile}"
 aggregate_predictions_flags += f" --max_percentile {max_percentile}"
 aggregate_predictions_flags += f" --final_prediction {final_prediction}"
+aggregate_predictions_flags += f" --lateral_voxel_size {lateral_voxel_size}"
+aggregate_predictions_flags += f" --axial_voxel_size {axial_voxel_size}"
+aggregate_predictions_flags += f" --psf_type {psf_type}"
+aggregate_predictions_flags += f" --wavelength {wavelength}"
 aggregate_predictions_flags += f" --plot" if plot else ""
 
 roi_predictions = f"{sample.with_suffix('')}_rois_predictions.csv"
@@ -144,13 +150,32 @@ tile_predictions = f"{sample.with_suffix('')}_tiles_predictions.csv"
 aggregate_tile_predictions = f"{python} {script} aggregate_predictions {tile_predictions} {sample} {dm} {aggregate_predictions_flags}"
 
 
+decon_sample_predictions = f"{python} {script} decon"
+decon_sample_predictions += f" {sample}"
+decon_sample_predictions += f" {sample.with_suffix('')}_predictions_psf.tif"
+decon_sample_predictions += f" --iters {decon_iters}"
+
+decon_roi_predictions = f"{python} {script} decon"
+decon_roi_predictions += f" {sample}"
+decon_roi_predictions += f" {sample.with_suffix('')}_rois_predictions_aggregated_psf.tif"
+decon_roi_predictions += f" --iters {decon_iters}"
+
+decon_tiles_predictions = f"{python} {script} decon"
+decon_tiles_predictions += f" {sample}"
+decon_tiles_predictions += f" {sample.with_suffix('')}_tiles_predictions_aggregated_psf.tif"
+decon_tiles_predictions += f" --iters {decon_iters}"
+
+
 # call(deskew, shell=True)
 
 call(predict_sample, shell=True)
+call(decon_sample_predictions, shell=True)
 
 # call(detect_rois, shell=True)
 call(predict_rois, shell=True)
 call(aggregate_roi_predictions, shell=True)
+call(decon_roi_predictions, shell=True)
 
 call(predict_tiles, shell=True)
 call(aggregate_tile_predictions, shell=True)
+call(decon_tiles_predictions, shell=True)
