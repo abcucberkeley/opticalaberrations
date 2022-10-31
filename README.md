@@ -1,5 +1,18 @@
 # Multiscale attention networks for sensorless detection of aberrations in adaptive optics
 
+# Table of Contents
+* [Installation](#installation)
+   * [For Linux or Windows](#for-linux-or-windows)
+   * [For MOSAIC Microscope](#for-mosaic-microscope)
+* [Utilities](#utilities)
+   * [Simple predictions](#simple-predictions)
+   * [ROI-based predictions](#roi-based-predictions)
+   * [Tile-based predictions](#tile-based-predictions)
+   * [Deconvolution](#deconvolution)
+   * [Point detection](#point-detection)
+   * [Deskew](#deskew)
+
+
 
 ## Installation
 
@@ -15,7 +28,7 @@ Once you have Anaconda installed on your system, clone the repo using the follow
 git clone https://github.com/abcucberkeley/opticalaberrations.git
 ```
 
-Also, clone the LLSM3D tools repository for additional utils such as `deskew` and `point detection`
+Also, clone the LLSM3D tools repository for additional utils such as `decon`, `deskew` and `point detection`
 ```shell
 git clone https://github.com/abcucberkeley/LLSM3DTools.git
 ```
@@ -28,7 +41,7 @@ conda activate ml
 ```
 
 
-### For `MOSAIC Microcope`: 
+### For `MOSAIC` microscope: 
 
 SVN update (repo will be downloaded to `"C:\SPIM\Common\Calculations\Python\Phase Retrieval ML\opticalaberrations\"`)
 ```
@@ -41,263 +54,277 @@ conda env create -f “C:\SPIM\Common\Calculations\Python\Phase Retrieval ML\opt
 ```
 
 
-## Usage
+## Utilities
 
 The [`ao.py`](src/ao.py) script provides a CLI 
 for running our models on a given 3D stack (`.tif` file). 
 
 > **Note:** Make sure to activate your conda `env` before running the script, or use the full filepath to your `python` environment.
-> 
-```shell
-usage: ao.py [-h] {deskew,points,predict,predict_rois,predict_tiles} ...
-positional arguments: {deskew,points,predict,predict_rois,predict_tiles} 
-```
 
-## Phase retrieval 
 
-The script takes 3 positional arguments and a few optional ones described below. 
+### Simple predictions
 
 For each successful run, the script will output the following files:
-- `*_pred.png`: visualization of the model predictions 
-- `*_zernike_coffs.csv`: predicted zernike modes 
-- `*_pupil_displacement.tif`: predicted pupil displacement 
-- `*_corrected_actuators.csv`: a new vector describing the new positions for the DM's actuators
+- `*_predictions_zernike_coffs.csv`: predicted zernike modes 
+- `*_predictions_pupil_displacement.tif`: predicted wavefront
+- `*_predictions_corrected_actuators.csv`: a new vector describing the new positions for the DM's actuators
 
 ```shell
-usage: ao.py predict    [-h] 
-                        [--state STATE] 
-                        [--prev PREV] 
-                        [--psf_type PSF_TYPE] 
-                        [--lateral_voxel_size LATERAL_VOXEL_SIZE] 
-                        [--axial_voxel_size AXIAL_VOXEL_SIZE] 
-                        [--model_lateral_voxel_size MODEL_LATERAL_VOXEL_SIZE] 
-                        [--model_axial_voxel_size MODEL_AXIAL_VOXEL_SIZE] 
-                        [--wavelength WAVELENGTH] 
-                        [--scalar SCALAR] 
-                        [--threshold THRESHOLD] 
-                        [--plot] 
-                        model input pattern
-
-positional arguments:
-  model                       path to pretrained tensorflow model
-  input                       path to input .tif file
-  pattern                     path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv)
-
-optional arguments:
-  -h, --help                  show this help message and exit
-  --state               
-                              optional path to current DM state .csv file (Default: `blank mirror`)
-  --prev                
-                              previous predictions .csv file (Default: `None`)
-  --psf_type            
-                              type of the desired PSF 
-                              (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`)
-  --lateral_voxel_size 
-                              lateral voxel size in microns for X (Default: `0.108`)
-  --axial_voxel_size 
-                              axial voxel size in microns for Z (Default: `0.1`)
-  --model_lateral_voxel_size 
-                              lateral voxel size in microns for X (Default: `0.108`)
-  --model_axial_voxel_size 
-                              axial voxel size in microns for Z (Default: `0.2`)
-  --wavelength 
-                              wavelength in microns (Default: `0.51`)
-  --scalar              
-                              scale DM actuators by an arbitrary multiplier (Default: `0.75`)
-  --threshold THRESHOLD
-                              set predictions below threshold to zero (microns) (Default: `0.01`)
-  --plot                
-                              a toggle for plotting predictions
+usage: ao.py predict [--optinal_flags] model input pattern
 ```
-
-### Example
-
-```
-conda activate ml
-```
-
-An example of using the [`ao.py`](src/ao.py) script:
-```
-~/anaconda3/envs/ml/bin/python src/ao.py predict 
-pretrained_models/z15_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5 
-examples/phase_retrieval/-.tif 
-examples/Zernike_Korra_Bax273.csv 
---psf_type lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat
---state examples/phase_retrieval/DM-.csv 
---plot
-```
-![example](examples/phase_retrieval/-_pred.png)  
-
-Example of a followup prediction to eval signs:
-```
-~/anaconda3/envs/ml/bin/python src/ao.py predict 
-pretrained_models/z15_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5 
-examples/phase_retrieval/-_2.tif 
-examples/Zernike_Korra_Bax273.csv 
---psf_type lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat
---state examples/phase_retrieval/DM-.csv 
---prev examples/phase_retrieval/-_zernike_coffs.csv
---plot
-```
-![example](examples/phase_retrieval/-_2_sign_correction.png)  
-![example](examples/phase_retrieval/-_2_pred.png)  
-
-
-
-## ROI-based Prediction 
-
-The script takes 4 positional arguments and a few optional ones described below. 
-
-```shell
-usage: ao.py predict_rois   [-h] 
-                            [--state STATE] 
-                            [--prev PREV] 
-                            [--psf_type PSF_TYPE] 
-                            [--window_size WINDOW_SIZE] 
-                            [--num_rois NUM_ROIS] 
-                            [--min_intensity MIN_INTENSITY] 
-                            [--lateral_voxel_size LATERAL_VOXEL_SIZE] 
-                            [--axial_voxel_size AXIAL_VOXEL_SIZE] 
-                            [--model_lateral_voxel_size MODEL_LATERAL_VOXEL_SIZE] 
-                            [--model_axial_voxel_size MODEL_AXIAL_VOXEL_SIZE] 
-                            [--wavelength WAVELENGTH] 
-                            [--scalar SCALAR] 
-                            [--threshold THRESHOLD]
-                            [--plot]
-                            model input peaks pattern
-
-positional arguments:
-  model                       path to pretrained tensorflow model
-  input                       path to input .tif file
-  peaks                       path to point detection results (.mat file)
-  pattern                     path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv)
-
-optional arguments:
-  -h, --help                  show this help message and exit
-  --state               
-                              optional path to current DM state .csv file (Default: `blank mirror`)
-  --prev            
-                              previous predictions .csv file (Default: `None`)
-  --psf_type    
-                              type of the desired PSF 
-                              (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`)
-  --window_size 
-                              size of the window to crop around each point of interest (Default: `64`)
-  --num_rois    
-                              max number of detected points to use for estimating aberrations (Default: `10`)
-  --min_intensity 
-                              minimum intensity desired for detecting peaks of interest (Default: `200`)
-  --lateral_voxel_size 
-                              lateral voxel size in microns for X (Default: `0.108`)
-  --axial_voxel_size 
-                              axial voxel size in microns for Z (Default: `0.1`)
-  --model_lateral_voxel_size 
-                              lateral voxel size in microns for X (Default: `0.108`)
-  --model_axial_voxel_size 
-                              axial voxel size in microns for Z (Default: `0.2`)
-  --wavelength 
-                              wavelength in microns (Default: `0.51`)
-  --scalar        
-                              scale DM actuators by an arbitrary multiplier (Default: `0.75`)
-  --threshold 
-                              set predictions below threshold to zero (microns) (Default: `0.01`)
-  --plot                
-                              a toggle for plotting predictions
-```
-
-### Example
-
-```
-conda activate ml
-
-~/anaconda3/envs/ml/bin/python src/ao.py predict_rois 
-/pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5
-examples/agarose/exp1.tif
-examples/experimental/agarose/results/Detection3D.mat 
-examples/Zernike_Korra_Bax273.csv 
---psf_type lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat
---state examples/agarose/DM_system.csv 
---window_size 64
---plot
-```
-![example](examples/agarose/exp1_rois.png)  
-![example](examples/agarose/exp1_selected_points.png)  
-![example](examples/agarose/exp1_rois_pred.png)  
-
-
-## Tile-based Prediction 
 
 The script takes 3 positional arguments and a few optional ones described below. 
 
+#### Positional arguments:
+
+|           | Description                                                   |
+|-----------|---------------------------------------------------------------|
+| `model`   | path to pretrained tensorflow model                           |
+| `input`   | path to input (.tif file)                                     |
+| `pattern` | path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv) |
+
+
+#### Optional arguments:
+
+|                            | Description                                                                                                       |
+|----------------------------|-------------------------------------------------------------------------------------------------------------------|
+| `help`                     | show this help message and exit                                                                                   |
+| `state`                    | optional path to current DM state .csv file (Default: `blank mirror`)                                             |
+| `prev`                     | previous predictions .csv file (Default: `None`)                                                                  |
+| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                            |
+| `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                |
+| `model_lateral_voxel_size` | lateral voxel size in microns for X (Default: `0.108`)                                                            |
+| `model_axial_voxel_size`   | axial voxel size in microns for Z (Default: `0.1`)                                                                |
+| `wavelength`               | wavelength in microns (Default: `0.51`)                                                                           |
+| `scalar`                   | scale DM actuators by an arbitrary multiplier (Default: `0.75`)                                                   |
+| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                   |
+| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`) |
+| `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                   |
+| `plot`                     | a toggle for plotting predictions                                                                                 |
+| `psf_type`                 | type of the desired PSF <br/> (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`)          |
+
+
+
+### ROI-based predictions 
+
+For each successful run, the script will output the following files:
+- `*_rois_predictions_stats.csv`: a statistical summary of the selected candidate ROIs
+- `*_rois_predictions.csv`: a statistical summary of the predictions for each ROI
+
 ```shell
-usage: ao.py predict_rois   [-h] 
-                            [--state STATE] 
-                            [--prev PREV] 
-                            [--psf_type PSF_TYPE] 
-                            [--window_size WINDOW_SIZE] 
-                            [--num_rois NUM_ROIS] 
-                            [--min_intensity MIN_INTENSITY] 
-                            [--lateral_voxel_size LATERAL_VOXEL_SIZE] 
-                            [--axial_voxel_size AXIAL_VOXEL_SIZE] 
-                            [--model_lateral_voxel_size MODEL_LATERAL_VOXEL_SIZE] 
-                            [--model_axial_voxel_size MODEL_AXIAL_VOXEL_SIZE] 
-                            [--wavelength WAVELENGTH] 
-                            [--scalar SCALAR] 
-                            [--threshold THRESHOLD]
-                            [--plot]
-                            model input pattern
-
-positional arguments:
-  model                       path to pretrained tensorflow model
-  input                       path to input .tif file
-  pattern                     path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv)
-
-optional arguments:
-  -h, --help                  show this help message and exit
-  --state               
-                              optional path to current DM state .csv file (Default: `blank mirror`)
-  --prev            
-                              previous predictions .csv file (Default: `None`)
-  --psf_type    
-                              type of the desired PSF 
-                              (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`)
-  --window_size 
-                              size of the window to crop around each point of interest (Default: `64`)
-  --num_rois    
-                              max number of detected points to use for estimating aberrations (Default: `10`)
-  --min_intensity 
-                              minimum intensity desired for detecting peaks of interest (Default: `200`)
-  --lateral_voxel_size 
-                              lateral voxel size in microns for X (Default: `0.108`)
-  --axial_voxel_size 
-                              axial voxel size in microns for Z (Default: `0.1`)
-  --model_lateral_voxel_size 
-                              lateral voxel size in microns for X (Default: `0.108`)
-  --model_axial_voxel_size 
-                              axial voxel size in microns for Z (Default: `0.2`)
-  --wavelength 
-                              wavelength in microns (Default: `0.51`)
-  --scalar        
-                              scale DM actuators by an arbitrary multiplier (Default: `0.75`)
-  --threshold 
-                              set predictions below threshold to zero (microns) (Default: `0.01`)
-  --plot                
-                              a toggle for plotting predictions
+usage: ao.py predict_rois [--optinal_flags] model input peaks
 ```
 
-### Example
+The script takes 3 positional arguments and a few optional ones described below. 
 
-```
-conda activate ml
+#### Positional arguments:
 
-~/anaconda3/envs/ml/bin/python src/ao.py predict_tiles 
-/pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5
-examples/agarose/exp1.tif
-examples/Zernike_Korra_Bax273.csv 
---psf_type lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat
---state examples/agarose/DM_system.csv 
---window_size 64
---plot
+|         | Description                                 |
+|---------|---------------------------------------------|
+| `model` | path to pretrained tensorflow model         |
+| `input` | path to input (.tif file)                   |
+| `peaks` | path to point detection results (.mat file) |
+
+
+#### Optional arguments:
+
+|                            | Description                                                                                                       |
+|----------------------------|-------------------------------------------------------------------------------------------------------------------|
+| `help`                     | show this help message and exit                                                                                   |
+| `window_size`              | size of the window to crop around each point of interest (Default: `64`)                                          |
+| `num_rois`                 | max number of detected points to use for estimating aberrations (Default: `10`)                                   |
+| `min_intensity`            | minimum intensity desired for detecting peaks of interest (Default: `200`)                                        |
+| `minimum_distance`         | minimum distance to the nearest neighbor (microns) (Default: `1.0`)                                               |
+| `prev`                     | previous predictions .csv file (Default: `None`)                                                                  |
+| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                            |
+| `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                |
+| `model_lateral_voxel_size` | lateral voxel size in microns for X (Default: `0.108`)                                                            |
+| `model_axial_voxel_size`   | axial voxel size in microns for Z (Default: `0.1`)                                                                |
+| `wavelength`               | wavelength in microns (Default: `0.51`)                                                                           |
+| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                   |
+| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`) |
+| `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                   |
+| `batch_size`               | maximum batch size for the model (Default: `100`)                                                                 |
+| `plot`                     | a toggle for plotting predictions                                                                                 |
+| `psf_type`                 | type of the desired PSF <br/> (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`)          |
+
+
+
+
+### Tile-based predictions 
+
+For each successful run, the script will output the following files:
+- `*_tiles_predictions.csv`: a statistical summary of the predictions for each tile
+
+```shell
+usage: ao.py predict_tiles [--optinal_flags] model input
 ```
-![example](examples/agarose/exp1_tiles_pred.png)
-![example](examples/agarose/exp1_tiles_predictions.png)  
+
+The script takes 2 positional arguments and a few optional ones described below.
+
+#### Positional arguments:
+
+|         | Description                         |
+|---------|-------------------------------------|
+| `model` | path to pretrained tensorflow model |
+| `input` | path to input (.tif file)           |
+
+
+#### Optional arguments:
+
+|                            | Description                                                                                                       |
+|----------------------------|-------------------------------------------------------------------------------------------------------------------|
+| `help`                     | show this help message and exit                                                                                   |
+| `window_size`              | size of the window to crop around each point of interest (Default: `64`)                                          |
+| `prev`                     | previous predictions .csv file (Default: `None`)                                                                  |
+| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                            |
+| `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                |
+| `model_lateral_voxel_size` | lateral voxel size in microns for X (Default: `0.108`)                                                            |
+| `model_axial_voxel_size`   | axial voxel size in microns for Z (Default: `0.1`)                                                                |
+| `wavelength`               | wavelength in microns (Default: `0.51`)                                                                           |
+| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                   |
+| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`) |
+| `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                   |
+| `batch_size`               | maximum batch size for the model (Default: `100`)                                                                 |
+| `plot`                     | a toggle for plotting predictions                                                                                 |
+| `psf_type`                 | type of the desired PSF <br/> (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`)          |
+
+
+### Aggregate predictions 
+
+For each successful run, the script will output the following files:
+- `*_predictions_aggregated_psf.tif`: predicted PSF
+- `*_predictions_aggregated.csv`: a statistical summary of the predictions
+- `*_predictions_aggregated_zernike_coffs.csv`: predicted zernike modes 
+- `*_predictions_aggregated_pupil_displacement.tif`: predicted wavefront
+- `*_predictions_aggregated_corrected_actuators.csv`: a new vector describing the new positions for the DM's actuators
+
+
+```shell
+usage: ao.py predict_tiles [--optinal_flags] model input
+```
+
+The script takes 3 positional arguments and a few optional ones described below. 
+
+#### Positional arguments:
+
+|               | Description                                                   |
+|---------------|---------------------------------------------------------------|
+| `predictions` | path to model's predictions (.csv file)                       |
+| `input`       | path to input (.tif file)                                     |
+| `pattern`     | path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv) |
+
+
+
+#### Optional arguments:
+
+|                        | Description                                                                                              |
+|------------------------|----------------------------------------------------------------------------------------------------------|
+| `help`                 | show this help message and exit                                                                          |
+| `state`                | optional path to current DM state .csv file (Default: `blank mirror`)                                    |
+| `scalar`               | scale DM actuators by an arbitrary multiplier (Default: `0.75`)                                          |
+| `prediction_threshold` | set predictions below threshold to zero (waves) (Default: `0.`)                                          |
+| `majority_threshold`   | majority rule to use to determine dominant modes among ROIs (Default: `0.5`)                             |
+| `final_prediction`     | rule to use to calculate final prediction [mean, median, min, max] (Default: `mean`)                     |
+| `min_percentile`       | minimum percentile to filter out outliers (Default: `10`)                                                |
+| `max_percentile`       | maximum percentile to filter out outliers (Default: `90`)                                                |
+| `psf_type`             | type of the desired PSF <br/> (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`) |
+| `lateral_voxel_size`   | lateral voxel size in microns for X (Default: `0.108`)                                                   |
+| `axial_voxel_size`     | axial voxel size in microns for Z (Default: `0.1`)                                                       |
+| `wavelength`           | wavelength in microns (Default: `0.51`)                                                                  |
+| `plot`                 | a toggle for plotting predictions                                                                        |
+
+
+
+### Deconvolution
+
+For each successful run, the script will output the following files:
+- `*_decon.tif`: results of deconvolving the given input with the desired PSF
+
+
+```shell
+usage: ao.py decon [--optinal_flags] input psf
+```
+
+The script takes 3 positional arguments and a few optional ones described below. 
+
+#### Positional arguments:
+
+|         | Description               |
+|---------|---------------------------|
+| `input` | path to input (.tif file) |
+| `psf`   | path to PSF (.tif file)   |
+
+
+
+#### Optional arguments:
+
+|         | Description                                                            |
+|---------|------------------------------------------------------------------------|
+| `help`  | show this help message and exit                                        |
+| `iters` | number of iterations for Richardson-Lucy deconvolution (Default: `10`) |
+| `plot`  | a toggle for plotting results                                          |
+
+
+### Point detection
+
+For each successful run, the script will output the following files:
+- `/results/Detection3D.mat`: predicted points
+
+```shell
+usage: ao.py detect_rois [--optinal_flags] input
+```
+
+The script takes 1 positional argument and a few optional ones described below. 
+
+#### Positional arguments:
+
+|         | Description               |
+|---------|---------------------------|
+| `input` | path to input (.tif file) |
+
+
+#### Optional arguments:
+
+|                      | Description                                            |
+|----------------------|--------------------------------------------------------|
+| `help`               | show this help message and exit                        |
+| `psf`                | path to the experimental PSF (.tif file)               |
+| `lateral_voxel_size` | lateral voxel size in microns for X (Default: `0.108`) |
+| `axial_voxel_size`   | axial voxel size in microns for Z (Default: `0.1`)     |
+
+
+
+### Deskew
+
+For each successful run, the script will output the following files:
+- `/DS/*.tif`: de-skewed image with the desired skew angle
+
+
+```shell
+usage: ao.py deskew [--optinal_flags] input
+```
+
+The script takes 1 positional argument and a few optional ones described below. 
+
+#### Positional arguments:
+
+|         | Description               |
+|---------|---------------------------|
+| `input` | path to input (.tif file) |
+
+
+#### Optional arguments:
+
+|                      | Description                                            |
+|----------------------|--------------------------------------------------------|
+| `help`               | show this help message and exit                        |
+| `lateral_voxel_size` | lateral voxel size in microns for X (Default: `0.108`) |
+| `axial_voxel_size`   | axial voxel size in microns for Z (Default: `0.1`)     |
+| `skew_angle`         | skew angle (Default: `32.45`)                          |
+| `flipz`              | a toggle to flip Z axis                                |
+
+
+
+[//]: # (![example]&#40;examples/phase_retrieval/-_pred.png&#41;)
+

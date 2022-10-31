@@ -6,7 +6,7 @@ python = Path('~/anaconda3/envs/deep/bin/python')
 repo = Path('~/Gitlab/opticalaberrations/')
 script = repo/'src/ao.py'
 
-n = 'neg'
+n = 'powerlaw'
 sample = repo/f'examples/simulated/{n}/{n}.tif'
 points = repo/f'examples/simulated/{n}/results/Detection3D.mat'
 
@@ -154,16 +154,19 @@ decon_sample_predictions = f"{python} {script} decon"
 decon_sample_predictions += f" {sample}"
 decon_sample_predictions += f" {sample.with_suffix('')}_predictions_psf.tif"
 decon_sample_predictions += f" --iters {decon_iters}"
+decon_sample_predictions += f" --plot" if plot else ""
 
 decon_roi_predictions = f"{python} {script} decon"
 decon_roi_predictions += f" {sample}"
 decon_roi_predictions += f" {sample.with_suffix('')}_rois_predictions_aggregated_psf.tif"
 decon_roi_predictions += f" --iters {decon_iters}"
+decon_roi_predictions += f" --plot" if plot else ""
 
 decon_tiles_predictions = f"{python} {script} decon"
 decon_tiles_predictions += f" {sample}"
 decon_tiles_predictions += f" {sample.with_suffix('')}_tiles_predictions_aggregated_psf.tif"
 decon_tiles_predictions += f" --iters {decon_iters}"
+decon_tiles_predictions += f" --plot" if plot else ""
 
 
 # call(deskew, shell=True)

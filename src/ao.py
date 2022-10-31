@@ -34,7 +34,13 @@ def parse_args(args):
     decon = subparsers.add_parser("decon")
     decon.add_argument("input", type=Path, help="path to input .tif file")
     decon.add_argument("psf", type=Path, help="path to PSF .tif file")
-    decon.add_argument("--iters", default=10, type=Path, help="number of iterations for Richardson-Lucy deconvolution")
+    decon.add_argument(
+        "--iters", default=10, type=Path,
+        help="number of iterations for Richardson-Lucy deconvolution")
+    decon.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
 
     detect_rois = subparsers.add_parser("detect_rois")
     detect_rois.add_argument("input", type=Path, help="path to input .tif file")
@@ -96,10 +102,10 @@ def parse_args(args):
     )
     predict_sample.add_argument(
         "--num_predictions", default=10, type=int,
-        help="number of predictions per sample to evaluate model's confidence"
+        help="number of predictions per sample to estimate model's confidence"
     )
     predict_sample.add_argument(
-        "--batch_size", default=64, type=int, help='maximum batch size for the model'
+        "--batch_size", default=100, type=int, help='maximum batch size for the model'
     )
 
     predict_rois = subparsers.add_parser("predict_rois")
@@ -108,7 +114,7 @@ def parse_args(args):
     predict_rois.add_argument("peaks", type=Path, help="path to point detection results (.mat file)")
 
     predict_rois.add_argument(
-        "--batch_size", default=64, type=int, help='maximum batch size for the model'
+        "--batch_size", default=100, type=int, help='maximum batch size for the model'
     )
     predict_rois.add_argument(
         "--window_size", default=64, type=int, help='size of the window to crop around each point of interest'
@@ -163,7 +169,7 @@ def parse_args(args):
     )
     predict_rois.add_argument(
         "--num_predictions", default=10, type=int,
-        help="number of predictions per ROI to evaluate model's confidence"
+        help="number of predictions per ROI to estimate model's confidence"
     )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
@@ -171,7 +177,7 @@ def parse_args(args):
     predict_tiles.add_argument("input", type=Path, help="path to input .tif file")
 
     predict_tiles.add_argument(
-        "--batch_size", default=64, type=int, help='maximum batch size for the model'
+        "--batch_size", default=100, type=int, help='maximum batch size for the model'
     )
     predict_tiles.add_argument(
         "--window_size", default=64, type=int, help='size of the window to crop around each point of interest'
@@ -214,7 +220,7 @@ def parse_args(args):
     )
     predict_tiles.add_argument(
         "--num_predictions", default=10, type=int,
-        help="number of predictions per tile to evaluate model's confidence"
+        help="number of predictions per tile to estimate model's confidence"
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
@@ -298,7 +304,7 @@ def main(args=None):
             img=args.input,
             psf=args.psf,
             iters=args.iters,
-
+            plot=args.plot,
         )
 
     elif args.func == 'detect_rois':

@@ -127,7 +127,7 @@ def detect_rois(
     call([job], shell=True)
 
 
-def decon(img: Path, psf: Path, iters: int = 10):
+def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
     matlab = 'matlab '
     matlab += f' -nodisplay'
     matlab += f' -nosplash'
@@ -142,17 +142,18 @@ def decon(img: Path, psf: Path, iters: int = 10):
     print(job)
     call([job], shell=True)
 
-    original_image = imread(img).astype(float)
-    original_image /= np.max(original_image)
+    if plot:
+        original_image = imread(img).astype(float)
+        original_image /= np.max(original_image)
 
-    corrected_image = imread(f"{psf.with_suffix('')}_decon.tif").astype(float)
-    corrected_image /= np.max(corrected_image)
+        corrected_image = imread(f"{psf.with_suffix('')}_decon.tif").astype(float)
+        corrected_image /= np.max(corrected_image)
 
-    vis.prediction(
-        original_image=original_image,
-        corrected_image=corrected_image,
-        save_path=f"{psf.with_suffix('')}_decon"
-    )
+        vis.prediction(
+            original_image=original_image,
+            corrected_image=corrected_image,
+            save_path=f"{psf.with_suffix('')}_decon_mips"
+        )
 
 
 def load_sample(
