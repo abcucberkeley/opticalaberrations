@@ -28,16 +28,16 @@ Once you have Anaconda installed on your system, clone the repo using the follow
 git clone https://github.com/abcucberkeley/opticalaberrations.git
 ```
 
-Also, clone the LLSM3D tools repository for additional utils such as `decon`, `deskew` and `point detection`
-```shell
-git clone https://github.com/abcucberkeley/LLSM3DTools.git
-```
-
 Create a new `conda` environment using the following commands (will create an environment named "ml"):
 ```shell
 cd opticalaberrations
 conda env create -f requirements.yml
 conda activate ml
+```
+
+Also, clone the LLSM3D tools repository for additional utils such as `decon`, `deskew` and `point detection`
+```shell
+git clone --branch dev https://github.com/abcucberkeley/LLSM3DTools.git
 ```
 
 
@@ -65,12 +65,13 @@ for running our models on a given 3D stack (`.tif` file).
 ### Simple predictions
 
 For each successful run, the script will output the following files:
+- `*_predictions_psf.tif`: predicted PSF
 - `*_predictions_zernike_coffs.csv`: predicted Zernike modes 
 - `*_predictions_pupil_displacement.tif`: predicted wavefront
 - `*_predictions_corrected_actuators.csv`: a new vector describing the new positions for the DM's actuators
 
 ```shell
-usage: ao.py predict [--optional_flags] model input pattern
+usage: ao.py predict_sample [--optional_flags] model input pattern
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -201,7 +202,7 @@ For each successful run, the script will output the following files:
 
 
 ```shell
-usage: ao.py predict_tiles [--optinal_flags] model input
+usage: ao.py aggregate_predictions [--optinal_flags] model input
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 

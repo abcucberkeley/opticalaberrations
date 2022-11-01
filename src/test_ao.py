@@ -6,13 +6,17 @@ python = Path('~/anaconda3/envs/deep/bin/python')
 repo = Path('~/Gitlab/opticalaberrations/')
 script = repo/'src/ao.py'
 
-n = 'test'
-sample = repo/f'examples/simulated/{n}/{n}.tif'
-points = repo/f'examples/simulated/{n}/results/Detection3D.mat'
+n = 'single'
+sample = repo/f'examples/{n}/{n}.tif'
+points = repo/f'examples/{n}/results/Detection3D.mat'
 
 dm = repo/'examples/Zernike_Korra_Bax273.csv'
 model = repo/'pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5'
 psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
+
+# extra `detect_rois` flags
+psf = repo/'examples/psf.tif'
+
 
 # common flags
 prev = None
@@ -46,10 +50,8 @@ skew_angle = 32.45
 flipz = False
 
 # extra `decon` flags
-decon_iters = 20
+decon_iters = 10
 
-# extra `detect_rois` flags
-psf = repo/'examples/simulated/psf.tif'
 
 deskew = f"{python} {script} deskew"
 deskew += f" {sample}"

@@ -123,7 +123,7 @@ class PsfGenerator3D:
             return _psf
         else:
             with h5py.File(self.dtype, 'r') as file:
-                lattice = file.get('DitheredxzPSFCrossSection').value[:, 0]
+                lattice = file.get('DitheredxzPSFCrossSection')[:, 0]
 
             lattice = rescale(
                 lattice,

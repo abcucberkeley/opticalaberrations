@@ -1,3 +1,5 @@
+from time import time
+
 import matplotlib
 matplotlib.use('Agg')
 
@@ -15,10 +17,12 @@ from functools import partial
 import pandas as pd
 from scipy import stats as st
 from skimage.restoration import richardson_lucy
+from skimage.util import apply_parallel
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
+import scipy as sp
 from tqdm import tqdm
 from tifffile import imsave
 
@@ -813,7 +817,8 @@ def predict_sign(
         [Wavefront(init_preds[i], lam_detection=gen.lam_detection) for i in abrs]
     ), axis=0)
 
-    followup_inputs = richardson_lucy(np.squeeze(inputs), np.squeeze(psfs), num_iter=10)
+    with sp.fft.set_workers(-1):
+        followup_inputs = richardson_lucy(np.squeeze(inputs), np.squeeze(psfs), num_iter=20)
 
     if len(followup_inputs.shape) == 3:
         followup_inputs = followup_inputs[np.newaxis, ..., np.newaxis]

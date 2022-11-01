@@ -339,12 +339,12 @@ def find_roi(
     widths = [w // 2 for w in window_size]
 
     if plot:
-        fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False, sharex=False)
-        for ax in range(3):
+        fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharey=False, sharex=False)
+        for ax in range(2):
             axes[ax].imshow(
                 np.nanmax(dataset, axis=ax),
-                aspect='auto',
-                cmap='hot'
+                aspect='equal',
+                cmap='Greys_r',
             )
 
             for p in range(peaks.shape[0]):
@@ -358,6 +358,7 @@ def find_roi(
                         color=f'C{p}',
                         alpha=1
                     ))
+                    axes[ax].set_title('XY')
                 elif ax == 1:
                     axes[ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
                     axes[ax].add_patch(patches.Rectangle(
@@ -368,16 +369,7 @@ def find_roi(
                         color=f'C{p}',
                         alpha=1
                     ))
-                else:
-                    axes[ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
-                    axes[ax].add_patch(patches.Rectangle(
-                        xy=(peaks[p, 1] - window_size[1] // 2, peaks[p, 0] - window_size[0] // 2),
-                        width=window_size[1],
-                        height=window_size[2],
-                        fill=None,
-                        color=f'C{p}',
-                        alpha=1
-                    ))
+                    axes[ax].set_title('XZ')
 
         plt.tight_layout()
         plt.savefig(f'{plot}_mips.png', bbox_inches='tight', dpi=300, pad_inches=.25)

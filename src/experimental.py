@@ -78,6 +78,7 @@ def deskew(
     skew_angle: float = 32.45,
 ):
     matlab = 'matlab '
+    matlab += f' -wait'
     matlab += f' -nodisplay'
     matlab += f' -nosplash'
     matlab += f' -nodesktop'
@@ -98,7 +99,7 @@ def deskew(
     job = f"{matlab} \"{llsm}; {deskew}; exit;\""
 
     print(job)
-    call([job], shell=True)
+    call(job, shell=True)
 
 
 def detect_rois(
@@ -113,6 +114,7 @@ def detect_rois(
     psf = None if psf == '' else psf
 
     matlab = 'matlab '
+    matlab += f' -wait'
     matlab += f' -nodisplay'
     matlab += f' -nosplash'
     matlab += f' -nodesktop'
@@ -124,11 +126,12 @@ def detect_rois(
     job = f"{matlab} \"{llsm}; {det}; exit;\""
 
     print(job)
-    call([job], shell=True)
+    call(job, shell=True)
 
 
 def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
     matlab = 'matlab '
+    matlab += f' -wait'
     matlab += f' -nodisplay'
     matlab += f' -nosplash'
     matlab += f' -nodesktop'
@@ -140,7 +143,7 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
     job = f"{matlab} \"{llsm}; {det}; exit;\""
 
     print(job)
-    call([job], shell=True)
+    call(job, shell=True)
 
     if plot:
         original_image = imread(img).astype(float)
@@ -149,10 +152,24 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
         corrected_image = imread(f"{psf.with_suffix('')}_decon.tif").astype(float)
         corrected_image /= np.max(corrected_image)
 
-        vis.prediction(
-            original_image=original_image,
-            corrected_image=corrected_image,
-            save_path=f"{psf.with_suffix('')}_decon_mips"
+        # vis.prediction(
+        #     original_image=original_image,
+        #     corrected_image=corrected_image,
+        #     save_path=f"{psf.with_suffix('')}_decon_correction"
+        # )
+
+        vis.tiles(
+            data=np.max(original_image, axis=0),
+            strides=64,
+            window_size=(64, 64),
+            save_path=Path(f"{psf.with_suffix('')}_mips"),
+        )
+
+        vis.tiles(
+            data=np.max(corrected_image, axis=0),
+            strides=64,
+            window_size=(64, 64),
+            save_path=Path(f"{psf.with_suffix('')}_decon_mips"),
         )
 
 
