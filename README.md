@@ -8,6 +8,7 @@
    * [Simple predictions](#simple-predictions)
    * [ROI-based predictions](#roi-based-predictions)
    * [Tile-based predictions](#tile-based-predictions)
+   * [Aggregate predictions](#aggregate-predictions)
    * [Deconvolution](#deconvolution)
    * [Point detection](#point-detection)
    * [Deskew](#deskew)
@@ -56,7 +57,7 @@ conda env create -f “C:\SPIM\Common\Calculations\Python\Phase Retrieval ML\opt
 
 ## Utilities
 
-The [`src/ao.py`](src/ao.py) script provides a CLI 
+The [`src/python ao.py`](src/python ao.py) script provides a CLI 
 for running our models on a given 3D stack (`.tif` file). 
 
 > **Note:** Make sure to activate your conda `env` before running the script, or use the full filepath to your `python` environment.
@@ -70,8 +71,9 @@ For each successful run, the script will output the following files:
 - `*_predictions_pupil_displacement.tif`: predicted wavefront
 - `*_predictions_corrected_actuators.csv`: a new vector describing the new positions for the DM's actuators
 
+#### Example Usage (Sample):
 ```shell
-usage: ao.py predict_sample [--optional_flags] model input pattern
+python ao.py predict_sample [--optional_flags] model input pattern
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -112,8 +114,9 @@ For each successful run, the script will output the following files:
 - `*_rois_predictions_stats.csv`: a statistical summary of the selected candidate ROIs
 - `*_rois_predictions.csv`: a statistical summary of the predictions for each ROI
 
+#### Example Usage (ROI-based):
 ```shell
-usage: ao.py predict_rois [--optinal_flags] model input peaks
+python ao.py predict_rois [--optional_flags] model input peaks
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -122,7 +125,7 @@ The script takes 3 positional arguments and a few optional ones described below.
 
 |         | Description                                 |
 |---------|---------------------------------------------|
-| `model` | path to pretrained tensorflow model         |
+| `model` | path to pretrained TensorFlow model         |
 | `input` | path to input (.tif file)                   |
 | `peaks` | path to point detection results (.mat file) |
 
@@ -157,8 +160,9 @@ The script takes 3 positional arguments and a few optional ones described below.
 For each successful run, the script will output the following files:
 - `*_tiles_predictions.csv`: a statistical summary of the predictions for each tile
 
+#### Example Usage (Tiles):
 ```shell
-usage: ao.py predict_tiles [--optinal_flags] model input
+python ao.py predict_tiles [--optional_flags] model input
 ```
 
 The script takes 2 positional arguments and a few optional ones described below.
@@ -167,7 +171,7 @@ The script takes 2 positional arguments and a few optional ones described below.
 
 |         | Description                         |
 |---------|-------------------------------------|
-| `model` | path to pretrained tensorflow model |
+| `model` | path to pretrained TensorFlow model |
 | `input` | path to input (.tif file)           |
 
 
@@ -201,8 +205,9 @@ For each successful run, the script will output the following files:
 - `*_predictions_aggregated_corrected_actuators.csv`: a new vector describing the new positions for the DM's actuators
 
 
+#### Example Usage (Aggregate):
 ```shell
-usage: ao.py aggregate_predictions [--optinal_flags] model input
+python ao.py aggregate_predictions [--optional_flags] model input
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -242,9 +247,9 @@ The script takes 3 positional arguments and a few optional ones described below.
 For each successful run, the script will output the following files:
 - `*_decon.tif`: results of deconvolving the given input with the desired PSF
 
-
+#### Example Usage (Deconvolution)
 ```shell
-usage: ao.py decon [--optinal_flags] input psf
+python ao.py decon [--optional_flags] input psf
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -272,8 +277,9 @@ The script takes 3 positional arguments and a few optional ones described below.
 For each successful run, the script will output the following files:
 - `/results/Detection3D.mat`: predicted points
 
+#### Example Usage (Detect ROIs):
 ```shell
-usage: ao.py detect_rois [--optinal_flags] input
+python ao.py detect_rois [--optional_flags] input
 ```
 
 The script takes 1 positional argument and a few optional ones described below. 
@@ -302,8 +308,9 @@ For each successful run, the script will output the following files:
 - `/DS/*.tif`: de-skewed image with the desired skew angle
 
 
+#### Example Usage (Deskew):
 ```shell
-usage: ao.py deskew [--optinal_flags] input
+python ao.py deskew [--optional_flags] input
 ```
 
 The script takes 1 positional argument and a few optional ones described below. 
@@ -324,8 +331,3 @@ The script takes 1 positional argument and a few optional ones described below.
 | `axial_voxel_size`   | axial voxel size in microns for Z (Default: `0.1`)     |
 | `skew_angle`         | skew angle (Default: `32.45`)                          |
 | `flipz`              | a toggle to flip Z axis                                |
-
-
-
-[//]: # (![example]&#40;examples/phase_retrieval/-_pred.png&#41;)
-
