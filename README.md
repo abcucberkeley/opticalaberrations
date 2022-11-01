@@ -112,7 +112,7 @@ For each successful run, the script will output the following files:
 - `*_rois_predictions.csv`: a statistical summary of the predictions for each ROI
 
 ```shell
-usage: ao.py predict_rois [--optinal_flags] model input peaks
+usage: ao.py predict_rois [--optional_flags] model input peaks
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -121,7 +121,7 @@ The script takes 3 positional arguments and a few optional ones described below.
 
 |         | Description                                 |
 |---------|---------------------------------------------|
-| `model` | path to pretrained tensorflow model         |
+| `model` | path to pretrained TensorFlow model         |
 | `input` | path to input (.tif file)                   |
 | `peaks` | path to point detection results (.mat file) |
 
@@ -157,7 +157,7 @@ For each successful run, the script will output the following files:
 - `*_tiles_predictions.csv`: a statistical summary of the predictions for each tile
 
 ```shell
-usage: ao.py predict_tiles [--optinal_flags] model input
+usage: ao.py predict_tiles [--optional_flags] model input
 ```
 
 The script takes 2 positional arguments and a few optional ones described below.
@@ -166,7 +166,7 @@ The script takes 2 positional arguments and a few optional ones described below.
 
 |         | Description                         |
 |---------|-------------------------------------|
-| `model` | path to pretrained tensorflow model |
+| `model` | path to pretrained TensorFlow model |
 | `input` | path to input (.tif file)           |
 
 
@@ -243,7 +243,7 @@ For each successful run, the script will output the following files:
 
 
 ```shell
-usage: ao.py decon [--optinal_flags] input psf
+usage: ao.py decon [--optional_flags] input psf
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -272,7 +272,7 @@ For each successful run, the script will output the following files:
 - `/results/Detection3D.mat`: predicted points
 
 ```shell
-usage: ao.py detect_rois [--optinal_flags] input
+usage: ao.py detect_rois [--optional_flags] input
 ```
 
 The script takes 1 positional argument and a few optional ones described below. 
