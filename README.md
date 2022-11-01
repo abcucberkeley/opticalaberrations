@@ -56,7 +56,7 @@ conda env create -f “C:\SPIM\Common\Calculations\Python\Phase Retrieval ML\opt
 
 ## Utilities
 
-The [`ao.py`](src/ao.py) script provides a CLI 
+The [`src/ao.py`](src/ao.py) script provides a CLI 
 for running our models on a given 3D stack (`.tif` file). 
 
 > **Note:** Make sure to activate your conda `env` before running the script, or use the full filepath to your `python` environment.
