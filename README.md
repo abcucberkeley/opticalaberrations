@@ -8,6 +8,7 @@
    * [Simple predictions](#simple-predictions)
    * [ROI-based predictions](#roi-based-predictions)
    * [Tile-based predictions](#tile-based-predictions)
+   * [Aggregate predictions](#aggregate_predictions)
    * [Deconvolution](#deconvolution)
    * [Point detection](#point-detection)
    * [Deskew](#deskew)
@@ -69,8 +70,9 @@ For each successful run, the script will output the following files:
 - `*_predictions_pupil_displacement.tif`: predicted wavefront
 - `*_predictions_corrected_actuators.csv`: a new vector describing the new positions for the DM's actuators
 
+#### Example Usage (Sample):
 ```shell
-usage: ao.py predict [--optional_flags] model input pattern
+ao.py predict_sample [--optional_flags] model input pattern
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -111,8 +113,9 @@ For each successful run, the script will output the following files:
 - `*_rois_predictions_stats.csv`: a statistical summary of the selected candidate ROIs
 - `*_rois_predictions.csv`: a statistical summary of the predictions for each ROI
 
+#### Example Usage (ROI-based):
 ```shell
-usage: ao.py predict_rois [--optional_flags] model input peaks
+ao.py predict_rois [--optional_flags] model input peaks
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -156,8 +159,9 @@ The script takes 3 positional arguments and a few optional ones described below.
 For each successful run, the script will output the following files:
 - `*_tiles_predictions.csv`: a statistical summary of the predictions for each tile
 
+#### Example Usage (Tiles):
 ```shell
-usage: ao.py predict_tiles [--optional_flags] model input
+ao.py predict_tiles [--optional_flags] model input
 ```
 
 The script takes 2 positional arguments and a few optional ones described below.
@@ -200,8 +204,9 @@ For each successful run, the script will output the following files:
 - `*_predictions_aggregated_corrected_actuators.csv`: a new vector describing the new positions for the DM's actuators
 
 
+#### Example Usage (Aggregate):
 ```shell
-usage: ao.py predict_tiles [--optinal_flags] model input
+ao.py aggregate_predictions [--optional_flags] model input
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -241,9 +246,9 @@ The script takes 3 positional arguments and a few optional ones described below.
 For each successful run, the script will output the following files:
 - `*_decon.tif`: results of deconvolving the given input with the desired PSF
 
-
+#### Example Usage (Deconvolution)
 ```shell
-usage: ao.py decon [--optional_flags] input psf
+ao.py decon [--optional_flags] input psf
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -271,8 +276,9 @@ The script takes 3 positional arguments and a few optional ones described below.
 For each successful run, the script will output the following files:
 - `/results/Detection3D.mat`: predicted points
 
+#### Example Usage (Detect ROIs):
 ```shell
-usage: ao.py detect_rois [--optional_flags] input
+ao.py detect_rois [--optional_flags] input
 ```
 
 The script takes 1 positional argument and a few optional ones described below. 
@@ -301,8 +307,9 @@ For each successful run, the script will output the following files:
 - `/DS/*.tif`: de-skewed image with the desired skew angle
 
 
+#### Example Usage (Deskew):
 ```shell
-usage: ao.py deskew [--optinal_flags] input
+ao.py deskew [--optional_flags] input
 ```
 
 The script takes 1 positional argument and a few optional ones described below. 
