@@ -8,7 +8,7 @@
    * [Simple predictions](#simple-predictions)
    * [ROI-based predictions](#roi-based-predictions)
    * [Tile-based predictions](#tile-based-predictions)
-   * [Aggregate predictions](#aggregate_predictions)
+   * [Aggregate predictions](#aggregate-predictions)
    * [Deconvolution](#deconvolution)
    * [Point detection](#point-detection)
    * [Deskew](#deskew)
