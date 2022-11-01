@@ -65,23 +65,23 @@ for running our models on a given 3D stack (`.tif` file).
 ### Simple predictions
 
 For each successful run, the script will output the following files:
-- `*_predictions_zernike_coffs.csv`: predicted zernike modes 
+- `*_predictions_zernike_coffs.csv`: predicted Zernike modes 
 - `*_predictions_pupil_displacement.tif`: predicted wavefront
 - `*_predictions_corrected_actuators.csv`: a new vector describing the new positions for the DM's actuators
 
 ```shell
-usage: ao.py predict [--optinal_flags] model input pattern
+usage: ao.py predict [--optional_flags] model input pattern
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
 
 #### Positional arguments:
 
-|           | Description                                                   |
-|-----------|---------------------------------------------------------------|
-| `model`   | path to pretrained tensorflow model                           |
-| `input`   | path to input (.tif file)                                     |
-| `pattern` | path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv) |
+|           | Description                                                     |
+|-----------|-----------------------------------------------------------------|
+| `model`   | path to pretrained TensorFlow model                             |
+| `input`   | path to input (.tif file)                                       |
+| `pattern` | path DM pattern mapping matrix (e.g., Zernike_Korra_Bax273.csv) |
 
 
 #### Optional arguments:
