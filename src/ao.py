@@ -136,7 +136,7 @@ def parse_args(args):
         help='minimum intensity desired for detecting peaks of interest'
     )
     predict_rois.add_argument(
-        "--minimum_distance", default=1., type=float,
+        "--minimum_distance", default=.5, type=float,
         help='minimum distance to the nearest neighbor (microns)'
     )
     predict_rois.add_argument(

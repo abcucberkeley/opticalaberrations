@@ -806,14 +806,19 @@ def predict_sign(
     init_preds = np.abs(init_preds)
 
     logger.info(f"Evaluating signs")
-    abrs = range(init_preds.shape) if len(init_preds.shape) > 1 else range(1)
+    abrs = range(init_preds.shape[0]) if len(init_preds.shape) > 1 else range(1)
     make_psf = partial(gen.single_psf, zplanes=0, normed=True, noise=False)
     psfs = np.stack(gen.batch(
         make_psf,
         [Wavefront(init_preds[i], lam_detection=gen.lam_detection) for i in abrs]
     ), axis=0)
 
-    followup_inputs = richardson_lucy(inputs, psfs, num_iter=10)
+    followup_inputs = richardson_lucy(np.squeeze(inputs), np.squeeze(psfs), num_iter=10)
+
+    if len(followup_inputs.shape) == 3:
+        followup_inputs = followup_inputs[np.newaxis, ..., np.newaxis]
+    else:
+        followup_inputs = followup_inputs[..., np.newaxis]
 
     followup_preds, stdev = bootstrap_predict(
         model,
@@ -826,37 +831,36 @@ def predict_sign(
         threshold=threshold,
     )
 
+    flips = np.stack(np.where(followup_preds > (sign_threshold * init_preds)), axis=0)
+
     if len(np.squeeze(init_preds).shape) == 1:
-        flips = np.where(followup_preds > (sign_threshold * init_preds))[0]
-        init_preds[flips] *= -1
-        preds = init_preds.copy()
-
-        if plot is not None:
-            init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-
-            fig, axes = plt.subplots(2, 1, figsize=(24, 8))
-            axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
-            axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
-            axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
-            axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
-            axes[0].legend(frameon=False, loc='upper left')
-            axes[0].set_xlim((0, 60))
-            axes[0].set_xticks(range(0, 61))
-
-            axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
-            axes[1].legend(frameon=False, loc='upper left')
-            axes[1].set_xlim((0, 60))
-            axes[1].set_xticks(range(0, 61))
-
-            plt.tight_layout()
-            plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        init_preds[flips[0]] *= -1
     else:
-        for i in range(init_preds.shape[0]):
-            flips = np.where(followup_preds[i] > (sign_threshold * init_preds[i]))[0]
-            init_preds[i, flips] *= -1
-        preds = init_preds.copy()
+        init_preds[flips[0], flips[1]] *= -1
+
+    preds = init_preds.copy()
+
+    if len(np.squeeze(init_preds).shape) == 1 and plot is not None:
+        init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+        followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+        preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
+        fig, axes = plt.subplots(2, 1, figsize=(24, 8))
+        axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
+        axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
+        axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
+        axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
+        axes[0].legend(frameon=False, loc='upper left')
+        axes[0].set_xlim((0, 60))
+        axes[0].set_xticks(range(0, 61))
+
+        axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
+        axes[1].legend(frameon=False, loc='upper left')
+        axes[1].set_xlim((0, 60))
+        axes[1].set_xticks(range(0, 61))
+
+        plt.tight_layout()
+        plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return preds, stdev
 

@@ -6,7 +6,7 @@ python = Path('~/anaconda3/envs/deep/bin/python')
 repo = Path('~/Gitlab/opticalaberrations/')
 script = repo/'src/ao.py'
 
-n = 'powerlaw'
+n = 'test'
 sample = repo/f'examples/simulated/{n}/{n}.tif'
 points = repo/f'examples/simulated/{n}/results/Detection3D.mat'
 
@@ -46,7 +46,7 @@ skew_angle = 32.45
 flipz = False
 
 # extra `decon` flags
-decon_iters = 10
+decon_iters = 20
 
 # extra `detect_rois` flags
 psf = repo/'examples/simulated/psf.tif'

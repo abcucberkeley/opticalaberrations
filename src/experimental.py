@@ -222,7 +222,7 @@ def predict(
 
     model = backend.load(model, mosaic=mosaic)
 
-    psfgen = SyntheticPSF(
+    modelpsfgen = SyntheticPSF(
         dtype=psf_type,
         psf_shape=(64, 64, 64),
         n_modes=model.output_shape[1],
@@ -230,6 +230,17 @@ def predict(
         x_voxel_size=model_lateral_voxel_size,
         y_voxel_size=model_lateral_voxel_size,
         z_voxel_size=model_axial_voxel_size,
+    )
+
+    psfgen = SyntheticPSF(
+        dtype=psf_type,
+        snr=1000,
+        psf_shape=(64, 64, 64),
+        n_modes=model.output_shape[1],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size,
     )
 
     load = partial(
@@ -250,7 +261,8 @@ def predict(
         sign_threshold=sign_threshold,
         n_samples=num_predictions,
         verbose=True,
-        gen=psfgen,
+        gen=modelpsfgen,
+        # modelgen=modelpsfgen,
         prev_pred=prev,
         plot=None,
     )
@@ -346,6 +358,7 @@ def predict_sample(
         n_samples=num_predictions,
         verbose=verbose,
         gen=modelpsfgen,
+        # modelgen=modelpsfgen,
         prev_pred=prev,
         batch_size=batch_size,
         plot=Path(f"{img.with_suffix('')}_predictions_embeddings") if plot else None,
@@ -486,7 +499,7 @@ def predict_rois(
         num_peaks=num_rois,
         min_dist=minimum_distance,
         max_dist=None,
-        max_neighbor=10,
+        max_neighbor=20,
         min_intensity=min_intensity,
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
     )
@@ -610,16 +623,16 @@ def aggregate_predictions(
     )
     original_pcols = predictions.columns
 
-    # filter out diffraction small predictions
+    # filter out small predictions
     prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
-    predictions[predictions < prediction_threshold] = 0.
+    predictions[np.abs(predictions) < prediction_threshold] = 0.
 
     # drop null predictions
     predictions = predictions.loc[:, (predictions != 0).any(axis=0)]
     pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
 
     p_modes = predictions[pcols].values
-    p_modes[p_modes > 0] = 1
+    p_modes[p_modes != 0] = 1
     p_modes = np.sum(p_modes, axis=1)
     predictions['votes'] = p_modes
     det_modes = predictions[predictions['votes'] > p_modes.max() * majority_threshold][pcols]
@@ -653,8 +666,12 @@ def aggregate_predictions(
             if not outliers.empty and preds.shape[0] > 2:
                 preds.drop(outliers.index.values, inplace=True)
 
-            predictions.loc[det_modes.index[i], 'mean'] = np.nanmean(preds)
-            predictions.loc[det_modes.index[i], 'median'] = np.nanmedian(preds)
+            sign = preds[preds != 0]
+            sign = 1 if sign[sign < 0].shape[0] <= sign[sign > 0].shape[0] else -1
+
+            predictions.loc[det_modes.index[i], 'mean'] = np.nanmean(preds.abs()) * sign
+            predictions.loc[det_modes.index[i], 'median'] = np.nanmedian(preds.abs()) * sign
+
             predictions.loc[det_modes.index[i], 'min'] = np.nanmin(preds)
             predictions.loc[det_modes.index[i], 'max'] = np.nanmax(preds)
             predictions.loc[det_modes.index[i], 'std'] = np.nanstd(preds)

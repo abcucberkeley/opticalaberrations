@@ -2518,7 +2518,7 @@ def prediction(
     original_image,
     corrected_image,
     save_path,
-    cmap='magma',
+    cmap='hot',
     gamma=.5
 ):
     def slice(xy, zx, zy, vol, label='', maxproj=True):
