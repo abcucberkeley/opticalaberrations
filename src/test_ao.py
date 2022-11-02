@@ -1,22 +1,29 @@
 from pathlib import Path
 from subprocess import call
+import platform
 
 # required flags
 python = Path('~/anaconda3/envs/deep/bin/python')
 repo = Path('~/Gitlab/opticalaberrations/')
 script = repo/'src/ao.py'
 
-n = 'single'
-sample = repo/f'examples/{n}/{n}.tif'
+if platform.system() == "Windows":
+    python  = Path('python.exe')    # Where to find python
+    repo    = Path(r'C:\SPIM\Common\Calculations\Python\PHASER~2\opticalaberrations')  # Top folder of repo (path with spaces still fails.  use dir /x to find shortened name)
+    script  = repo/'src/ao.py'  # Script to run
+
+
+n = 'single'                                            # The subfolder within /examples where the test data should exist.
+sample = repo/f'examples/{n}/{n}.tif'                   # Test image file
 points = repo/f'examples/{n}/results/Detection3D.mat'
 
-dm = repo/'examples/Zernike_Korra_Bax273.csv'
+dm = repo/'examples/Zernike_Korra_Bax273.csv'           # Deformable Mirror offsets that produce the Zernike functions
 model = repo/'pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5'
-psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
+psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'    # excitation PSF being used.  This is sythesized.
+
 
 # extra `detect_rois` flags
 psf = repo/'examples/psf.tif'
-
 
 # common flags
 prev = None
@@ -52,6 +59,8 @@ flipz = False
 # extra `decon` flags
 decon_iters = 10
 
+
+## Construct the commands as strings using the flags we assigned above
 
 deskew = f"{python} {script} deskew"
 deskew += f" {sample}"
@@ -170,6 +179,9 @@ decon_tiles_predictions += f" {sample.with_suffix('')}_tiles_predictions_aggrega
 decon_tiles_predictions += f" --iters {decon_iters}"
 decon_tiles_predictions += f" --plot" if plot else ""
 
+
+
+## Execute the calls to each.  You can comment out the ones you don't want to run, but some (e.g., 'decon') need the outputs from the preceeding call
 
 # call(deskew, shell=True)
 
