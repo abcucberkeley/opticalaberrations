@@ -229,6 +229,7 @@ def predict(
     zplanes: int = 1,
     nrows: int = 1,
     ncols: int = 1,
+    est_sign: bool = False
 ):
     model_voxel_size = (model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size)
     sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
@@ -270,19 +271,32 @@ def predict(
     rois = np.array(utils.multiprocess(load, list(data.glob(r'roi_[0-9][0-9].tif')), desc='Loading ROIs'))
     logger.info(rois.shape)
 
-    preds, stds = backend.booststrap_predict_sign(
-        model,
-        batch_size=batch_size,
-        inputs=rois[..., np.newaxis],
-        threshold=prediction_threshold,
-        sign_threshold=sign_threshold,
-        n_samples=num_predictions,
-        verbose=True,
-        gen=modelpsfgen,
-        # modelgen=modelpsfgen,
-        prev_pred=prev,
-        plot=None,
-    )
+    if est_sign:
+        preds, stds = backend.predict_sign(
+            model,
+            batch_size=batch_size,
+            inputs=rois[..., np.newaxis],
+            threshold=prediction_threshold,
+            sign_threshold=sign_threshold,
+            n_samples=num_predictions,
+            verbose=True,
+            gen=psfgen,
+            modelgen=modelpsfgen,
+            plot=None,
+        )
+    else:
+        preds, stds = backend.booststrap_predict_sign(
+            model,
+            batch_size=batch_size,
+            inputs=rois[..., np.newaxis],
+            threshold=prediction_threshold,
+            sign_threshold=sign_threshold,
+            n_samples=num_predictions,
+            verbose=True,
+            gen=modelpsfgen,
+            prev_pred=prev,
+            plot=None,
+        )
 
     predictions = pd.DataFrame(preds.T, columns=[f"p{k}" for k in range(preds.shape[0])])
     pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
@@ -326,7 +340,8 @@ def predict_sample(
     num_predictions: int = 1,
     batch_size: int = 1,
     mosaic: bool = True,
-    prev: Any = None
+    prev: Any = None,
+    est_sign: bool = False
 ):
     dm_state = None if eval(str(dm_state)) is None else dm_state
 
@@ -335,6 +350,7 @@ def predict_sample(
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
     model = backend.load(model, mosaic=mosaic)
+    # model, modelpsfgen = backend.load(model, mosaic=mosaic, psfgen=True)
 
     modelpsfgen = SyntheticPSF(
         dtype=psf_type,
@@ -367,19 +383,32 @@ def predict_sample(
 
     inputs = np.expand_dims(inputs, axis=0)
 
-    p, std = backend.booststrap_predict_sign(
-        model,
-        inputs=inputs,
-        threshold=prediction_threshold,
-        sign_threshold=sign_threshold,
-        n_samples=num_predictions,
-        verbose=verbose,
-        gen=modelpsfgen,
-        # modelgen=modelpsfgen,
-        prev_pred=prev,
-        batch_size=batch_size,
-        plot=Path(f"{img.with_suffix('')}_predictions_embeddings") if plot else None,
-    )
+    if est_sign:
+        p, std = backend.predict_sign(
+            model,
+            inputs=inputs,
+            threshold=prediction_threshold,
+            sign_threshold=sign_threshold,
+            n_samples=num_predictions,
+            verbose=verbose,
+            gen=psfgen,
+            modelgen=modelpsfgen,
+            batch_size=batch_size,
+            plot=Path(f"{img.with_suffix('')}_predictions_embeddings") if plot else None,
+        )
+    else:
+        p, std = backend.booststrap_predict_sign(
+            model,
+            inputs=inputs,
+            threshold=prediction_threshold,
+            sign_threshold=sign_threshold,
+            n_samples=num_predictions,
+            verbose=verbose,
+            gen=modelpsfgen,
+            prev_pred=prev,
+            batch_size=batch_size,
+            plot=Path(f"{img.with_suffix('')}_predictions_embeddings") if plot else None,
+        )
 
     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
     dm = pd.DataFrame(zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar))

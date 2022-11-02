@@ -346,7 +346,7 @@ class SyntheticPSF:
 
         amp, phase = self.fft(psf, padsize=padsize)
 
-        if psf.shape != self.psf_shape:
+        if amp.shape != self.psf_shape:
             amp = transform.rescale(
                 amp,
                 (
@@ -358,6 +358,7 @@ class SyntheticPSF:
                 anti_aliasing=True,
             )
 
+        if phase.shape != self.psf_shape:
             phase = transform.rescale(
                 phase,
                 (

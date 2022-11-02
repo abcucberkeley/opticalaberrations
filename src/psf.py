@@ -6,6 +6,7 @@ All rights reserved.
 
 import logging
 import sys
+from pathlib import Path
 
 import numpy as np
 from skimage.transform import rescale
@@ -122,8 +123,11 @@ class PsfGenerator3D:
             _psf /= np.max(_psf)
             return _psf
         else:
-            with h5py.File(self.dtype, 'r') as file:
-                lattice = file.get('DitheredxzPSFCrossSection')[:, 0]
+            if isinstance(self.dtype, str) or isinstance(self.dtype, Path):
+                with h5py.File(self.dtype, 'r') as file:
+                    lattice = file.get('DitheredxzPSFCrossSection')[:, 0]
+            else:
+                lattice = self.dtype
 
             lattice = rescale(
                 lattice,

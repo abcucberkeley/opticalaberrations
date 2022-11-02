@@ -1,5 +1,3 @@
-from time import time
-
 import matplotlib
 matplotlib.use('Agg')
 
@@ -8,6 +6,7 @@ numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
 import logging
 import sys
+import h5py
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
@@ -17,7 +16,6 @@ from functools import partial
 import pandas as pd
 from scipy import stats as st
 from skimage.restoration import richardson_lucy
-from skimage.util import apply_parallel
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -71,7 +69,7 @@ logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 
 
-def load(model_path: Path, mosaic=False) -> Model:
+def load(model_path: Path, mosaic=False, psfgen=False):
     model_path = Path(model_path)
 
     if mosaic:
@@ -85,9 +83,27 @@ def load(model_path: Path, mosaic=False) -> Model:
             "Transformer": opticaltransformer.Transformer,
         }
         if model_path.is_file() and model_path.suffix == '.h5':
-            return load_model(str(model_path), custom_objects=custom_objects)
+            model_path = str(model_path)
         else:
-            return load_model(str(list(model_path.rglob('*.h5'))[0]), custom_objects=custom_objects)
+            model_path = str(list(model_path.rglob('*.h5'))[0])
+
+        model = load_model(model_path, custom_objects=custom_objects)
+
+        if psfgen:
+            with h5py.File(model_path, 'r') as file:
+                psfgen = SyntheticPSF(
+                    dtype=np.array(file.get('psf_type')[:]),
+                    psf_shape=(64, 64, 64),
+                    n_modes=int(file.get('n_modes')[()]),
+                    lam_detection=float(file.get('wavelength')[()]),
+                    x_voxel_size=float(file.get('x_voxel_size')[()]),
+                    y_voxel_size=float(file.get('y_voxel_size')[()]),
+                    z_voxel_size=float(file.get('z_voxel_size')[()]),
+                )
+            return model, psfgen
+        else:
+            return model
+
     else:
         try:
             try:
@@ -120,9 +136,26 @@ def load(model_path: Path, mosaic=False) -> Model:
 
                 '''.h5/hdf5 format'''
                 if model_path.is_file() and model_path.suffix == '.h5':
-                    return load_model(str(model_path), custom_objects=custom_objects)
+                    model_path = str(model_path)
                 else:
-                    return load_model(str(list(model_path.rglob('*.h5'))[0]), custom_objects=custom_objects)
+                    model_path = str(list(model_path.rglob('*.h5'))[0])
+
+                model = load_model(model_path, custom_objects=custom_objects)
+
+                if psfgen:
+                    with h5py.File(model_path, 'r') as file:
+                        psfgen = SyntheticPSF(
+                            dtype=np.array(file.get('psf_type')[:]),
+                            psf_shape=(64, 64, 64),
+                            n_modes=int(file.get('n_modes')[()]),
+                            lam_detection=float(file.get('wavelength')[()]),
+                            x_voxel_size=float(file.get('x_voxel_size')[()]),
+                            y_voxel_size=float(file.get('y_voxel_size')[()]),
+                            z_voxel_size=float(file.get('z_voxel_size')[()]),
+                        )
+                    return model, psfgen
+                else:
+                    return model
 
         except Exception as e:
             logger.exception(e)
@@ -320,6 +353,18 @@ def train(
         ) if epoch % 50 == 0 else epoch
     )
 
+    metadata = LambdaCallback(
+        on_epoch_end=lambda epoch, logs: save_metadata(
+            filepath=outdir,
+            n_modes=pmodes,
+            psf_type=psf_type,
+            wavelength=wavelength,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+        )
+    )
+
     tensorboard = TensorBoardCallback(
         log_dir=outdir,
         profile_batch='500,520',
@@ -496,6 +541,7 @@ def train(
                 tensorboard,
                 pb_checkpoints,
                 h5_checkpoints,
+                metadata,
                 earlystopping,
                 defibrillator,
                 # features,
@@ -720,7 +766,7 @@ def bootstrap_predict(
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
 
     # check z-axis to compute embeddings for fourier models
-    if len(np.squeeze(inputs.shape)) == 3:
+    if len(inputs.shape) == 3:
         emb = model.input_shape[1] == inputs.shape[0]
     else:
         emb = model.input_shape[1] == inputs.shape[1]
@@ -1531,6 +1577,26 @@ def featuremaps(
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
     plt.savefig(f'{modelpath}/featuremaps.pdf', bbox_inches='tight', pad_inches=.25)
     return fig
+
+
+def save_metadata(
+    filepath: Path,
+    wavelength: float,
+    psf_type: str,
+    x_voxel_size: float,
+    y_voxel_size: float,
+    z_voxel_size: float,
+    n_modes: int,
+):
+    with h5py.File(f"{filepath}.h5", 'r+') as file:
+        file.create_dataset('n_modes', data=n_modes)
+        file.create_dataset('wavelength', data=wavelength)
+        file.create_dataset('x_voxel_size', data=x_voxel_size)
+        file.create_dataset('y_voxel_size', data=y_voxel_size)
+        file.create_dataset('z_voxel_size', data=z_voxel_size)
+
+        with h5py.File(psf_type, 'r') as f:
+            file.create_dataset('psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
 
 
 def kernels(modelpath: Path, activation='relu'):
