@@ -35,7 +35,7 @@ def parse_args(args):
     decon.add_argument("input", type=Path, help="path to input .tif file")
     decon.add_argument("psf", type=Path, help="path to PSF .tif file")
     decon.add_argument(
-        "--iters", default=10, type=Path,
+        "--iters", default=10, type=int,
         help="number of iterations for Richardson-Lucy deconvolution")
     decon.add_argument(
         "--plot", action='store_true',
@@ -66,7 +66,7 @@ def parse_args(args):
     )
     predict_sample.add_argument(
         "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
-        type=str, help='type of the desired PSF'
+        type=Path, help='type of the desired PSF'
     )
     predict_sample.add_argument(
         "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
@@ -124,7 +124,7 @@ def parse_args(args):
         help="previous predictions .csv file (Default: `None`)"
     )
     predict_rois.add_argument(
-        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat', type=str,
+        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat', type=Path,
         help='type of the desired PSF'
     )
     predict_rois.add_argument(
@@ -187,7 +187,7 @@ def parse_args(args):
         help="previous predictions .csv file (Default: `None`)"
     )
     predict_tiles.add_argument(
-        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat', type=str,
+        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat', type=Path,
         help='type of the desired PSF'
     )
     predict_tiles.add_argument(
@@ -234,7 +234,7 @@ def parse_args(args):
     )
     aggregate_predictions.add_argument(
         "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
-        type=str, help='type of the desired PSF'
+        type=Path, help='type of the desired PSF'
     )
     aggregate_predictions.add_argument(
         "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
