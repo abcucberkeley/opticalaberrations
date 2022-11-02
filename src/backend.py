@@ -56,6 +56,7 @@ from activation import MaskedActivation
 from depthwiseconv import DepthwiseConv3D
 from spatial import SpatialAttention
 from roi import ROI
+import opticalnet
 import opticalresnet
 import opticaltransformer
 from baseline import Baseline
@@ -72,7 +73,7 @@ tf.get_logger().setLevel(logging.ERROR)
 def load(model_path: Path, mosaic=False, psfgen=False):
     model_path = Path(model_path)
 
-    if mosaic:
+    if 'transformer' in str(model_path):
         custom_objects = {
             "ROI": ROI,
             "Stem": opticaltransformer.Stem,
@@ -82,6 +83,27 @@ def load(model_path: Path, mosaic=False, psfgen=False):
             "MLP": opticaltransformer.MLP,
             "Transformer": opticaltransformer.Transformer,
         }
+    elif 'resnet' in str(model_path):
+        custom_objects = {
+            "Stem": Stem,
+            "MaskedActivation": MaskedActivation,
+            "SpatialAttention": SpatialAttention,
+            "DepthwiseConv3D": DepthwiseConv3D,
+            "CAB": opticalresnet.CAB,
+            "TB": opticalresnet.TB,
+        }
+    else:
+        custom_objects = {
+            "ROI": ROI,
+            "Stem": opticalnet.Stem,
+            "Patchify": opticalnet.Patchify,
+            "Merge": opticalnet.Merge,
+            "PatchEncoder": opticalnet.PatchEncoder,
+            "MLP": opticalnet.MLP,
+            "Transformer": opticalnet.Transformer,
+        }
+
+    if mosaic:
         if model_path.is_file() and model_path.suffix == '.h5':
             model_path = str(model_path)
         else:
@@ -114,26 +136,6 @@ def load(model_path: Path, mosaic=False, psfgen=False):
                     return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
 
             except IndexError or FileNotFoundError or OSError:
-                if 'opticaltransformer' in str(model_path):
-                    custom_objects = {
-                        "ROI": ROI,
-                        "Stem": opticaltransformer.Stem,
-                        "Patchify": opticaltransformer.Patchify,
-                        "Merge": opticaltransformer.Merge,
-                        "PatchEncoder": opticaltransformer.PatchEncoder,
-                        "MLP": opticaltransformer.MLP,
-                        "Transformer": opticaltransformer.Transformer,
-                    }
-                else:
-                    custom_objects = {
-                        "Stem": Stem,
-                        "MaskedActivation": MaskedActivation,
-                        "SpatialAttention": SpatialAttention,
-                        "DepthwiseConv3D": DepthwiseConv3D,
-                        "CAB": opticalresnet.CAB,
-                        "TB": opticalresnet.TB,
-                    }
-
                 '''.h5/hdf5 format'''
                 if model_path.is_file() and model_path.suffix == '.h5':
                     model_path = str(model_path)
@@ -202,7 +204,24 @@ def train(
     opt = opt.lower()
     restored = False
 
-    if network == 'opticaltransformer':
+    if isinstance(psf_type, str) or isinstance(psf_type, Path):
+        with h5py.File(psf_type, 'r') as file:
+            psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
+
+    if network == 'opticalnet':
+        model = opticaltransformer.OpticalTransformer(
+            name='OpticalNet',
+            roi=roi,
+            patches=patch_size,
+            modes=pmodes,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            activation=activation,
+            mul=mul,
+            no_phase=no_phase
+        )
+
+    elif network == 'opticaltransformer':
         model = opticaltransformer.OpticalTransformer(
             name='OpticalTransformer',
             roi=roi,
@@ -1588,15 +1607,23 @@ def save_metadata(
     z_voxel_size: float,
     n_modes: int,
 ):
-    with h5py.File(f"{filepath}.h5", 'r+') as file:
-        file.create_dataset('n_modes', data=n_modes)
-        file.create_dataset('wavelength', data=wavelength)
-        file.create_dataset('x_voxel_size', data=x_voxel_size)
-        file.create_dataset('y_voxel_size', data=y_voxel_size)
-        file.create_dataset('z_voxel_size', data=z_voxel_size)
+    def add_param(h5file, name, data):
+        try:
+            if name not in h5file.keys():
+                h5file.create_dataset(name, data=data)
+        except Exception as e:
+            logger.error(e)
 
-        with h5py.File(psf_type, 'r') as f:
-            file.create_dataset('psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
+    with h5py.File(f"{filepath}.h5", 'r+') as file:
+        add_param(file, name='n_modes', data=n_modes)
+        add_param(file, name='wavelength', data=wavelength)
+        add_param(file, name='x_voxel_size', data=x_voxel_size)
+        add_param(file, name='y_voxel_size', data=y_voxel_size)
+        add_param(file, name='z_voxel_size', data=z_voxel_size)
+
+        if isinstance(psf_type, str) or isinstance(psf_type, Path):
+            with h5py.File(psf_type, 'r') as f:
+                add_param(file, name='psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
 
 
 def kernels(modelpath: Path, activation='relu'):

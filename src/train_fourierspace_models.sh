@@ -27,8 +27,8 @@ python manager.py slurm train.py --partition abc_a100 --mem '500GB' --gpus 4 --c
 --taskname p32-p16-p8x2 \
 --name new/$DATASET/$DIFFICULTY/opticaltransformer
 
-BATCH=4096
-python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 3 --gpus 4 --cpus 16 \
+BATCH=2048
+python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 2 --gpus 4 --cpus 16 \
 --task "--network opticaltransformer --multinode $PHASE --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname p32-p16-p8x2 \
 --name new/$DATASET/$DIFFICULTY/opticaltransformer_multinode

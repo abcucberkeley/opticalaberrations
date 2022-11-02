@@ -22,7 +22,7 @@ def parse_args(args):
     train_parser = cli.argparser()
 
     train_parser.add_argument(
-        "--network", default='opticaltransformer', type=str, help="codename for target network to train"
+        "--network", default='opticalnet', type=str, help="codename for target network to train"
     )
 
     train_parser.add_argument(
