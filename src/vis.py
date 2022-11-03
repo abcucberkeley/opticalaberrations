@@ -2565,8 +2565,8 @@ def prediction(
     ax_pxy = fig.add_subplot(gs[1, 0])
     ax_pxz = fig.add_subplot(gs[1, 1])
 
-    ax_pxy.sett_title('XY')
-    ax_pxz.sett_title('XZ')
+    ax_pxy.set_title('XY')
+    ax_pxz.set_title('XZ')
 
     slice(ax_xy, ax_xz, original_image, label='Input (MIP)', maxproj=True)
     slice(ax_pxy, ax_pxz, corrected_image, label='Corrected (MIP)', maxproj=True)
