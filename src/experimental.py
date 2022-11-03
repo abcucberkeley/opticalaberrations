@@ -1,3 +1,5 @@
+import re
+
 import matplotlib
 matplotlib.use('Agg')
 
@@ -137,7 +139,8 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
     matlab += f' -nodesktop'
     matlab += f' -nojvm -r '
 
-    det = f"TA_Decon('{img}','{psf}',{iters}, '{psf.with_suffix('')}_decon.tif')"
+    save_path = Path(f"{str(psf.with_suffix('')).replace('_psf', '')}_decon.tif")
+    det = f"TA_Decon('{img}','{psf}',{iters}, '{save_path}')"
     repo = Path(__file__).parent.parent.absolute()
     llsm = f"addpath(genpath('{repo}/LLSM3DTools/'))"
     job = f"{matlab} \"{llsm}; {det}; exit;\""
@@ -149,45 +152,32 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
         original_image = imread(img).astype(float)
         original_image /= np.max(original_image)
 
-        corrected_image = imread(f"{psf.with_suffix('')}_decon.tif").astype(float)
+        corrected_image = imread(save_path).astype(float)
         corrected_image /= np.max(corrected_image)
 
-        # vis.prediction(
-        #     original_image=original_image,
-        #     corrected_image=corrected_image,
-        #     save_path=f"{psf.with_suffix('')}_decon_correction"
-        # )
-
-        vis.tiles(
-            data=np.max(original_image, axis=0),
-            strides=64,
-            window_size=(64, 64),
-            save_path=Path(f"{psf.with_suffix('')}_mips"),
-        )
-
-        vis.tiles(
-            data=np.max(corrected_image, axis=0),
-            strides=64,
-            window_size=(64, 64),
-            save_path=Path(f"{psf.with_suffix('')}_decon_mips"),
+        vis.prediction(
+            original_image=original_image,
+            corrected_image=corrected_image,
+            save_path=f"{save_path.with_suffix('')}_correction"
         )
 
 
 def load_sample(
-    path: Path,
+    data: Path,
     model_voxel_size: tuple,
     sample_voxel_size: tuple,
     remove_background: bool = True,
     normalize: bool = True,
-    debug: bool = False
 ):
     try:
-        if isinstance(path, tf.Tensor):
-            path = Path(str(path.numpy(), "utf-8"))
+        if isinstance(data, np.ndarray):
+            img = data
+        elif isinstance(data, tf.Tensor):
+            path = Path(str(data.numpy(), "utf-8"))
+            img = get_image(path).astype(float)
         else:
-            path = Path(str(path))
-
-        img = get_image(path).astype(float)
+            path = Path(str(data))
+            img = get_image(path).astype(float)
 
         if remove_background:
             mode = st.mode(img[img < np.quantile(img, .99)], axis=None).mode[0]
@@ -201,7 +191,6 @@ def load_sample(
             np.squeeze(img),
             model_voxel_size=model_voxel_size,
             sample_voxel_size=sample_voxel_size,
-            debug=Path(f"{path.with_suffix('')}_preprocessing") if debug else None
         )
 
         return img
@@ -211,14 +200,12 @@ def load_sample(
 
 
 def predict(
+    rois: list,
     data: Path,
     model: Path,
     axial_voxel_size: float,
-    model_axial_voxel_size: float,
     lateral_voxel_size: float,
-    model_lateral_voxel_size: float,
     wavelength: float = .605,
-    psf_type: str = 'widefield',
     mosaic: bool = True,
     prev: Any = None,
     prediction_threshold: float = 0.,
@@ -226,34 +213,22 @@ def predict(
     num_predictions: int = 1,
     batch_size: int = 1,
     plot: bool = True,
-    zplanes: int = 1,
+    ztiles: int = 1,
     nrows: int = 1,
     ncols: int = 1,
     est_sign: bool = False
 ):
-    model_voxel_size = (model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size)
-    sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
-
     physical_devices = tfc.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
+    modelpsfgen = backend.load_metadata(model)
     model = backend.load(model, mosaic=mosaic)
 
-    modelpsfgen = SyntheticPSF(
-        dtype=psf_type,
-        psf_shape=(64, 64, 64),
-        n_modes=model.output_shape[1],
-        lam_detection=wavelength,
-        x_voxel_size=model_lateral_voxel_size,
-        y_voxel_size=model_lateral_voxel_size,
-        z_voxel_size=model_axial_voxel_size,
-    )
-
     psfgen = SyntheticPSF(
-        dtype=psf_type,
+        dtype=modelpsfgen.dtype,
         snr=1000,
-        psf_shape=(64, 64, 64),
+        psf_shape=modelpsfgen.psf_shape,
         n_modes=model.output_shape[1],
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
@@ -263,12 +238,14 @@ def predict(
 
     load = partial(
         load_sample,
-        model_voxel_size=model_voxel_size,
-        sample_voxel_size=sample_voxel_size,
-        remove_background=False,
-        normalize=False
+        model_voxel_size=modelpsfgen.voxel_size,
+        sample_voxel_size=psfgen.voxel_size,
+        remove_background=True,
+        normalize=True,
     )
-    rois = np.array(utils.multiprocess(load, list(data.glob(r'roi_[0-9][0-9].tif')), desc='Loading ROIs'))
+
+    print(len(rois))
+    rois = np.array(utils.multiprocess(load, rois, desc='Processing ROIs'))
     logger.info(rois.shape)
 
     if est_sign:
@@ -298,7 +275,13 @@ def predict(
             plot=None,
         )
 
-    predictions = pd.DataFrame(preds.T, columns=[f"p{k}" for k in range(preds.shape[0])])
+    columns = []
+    for z in range(ztiles):
+        for y in range(nrows):
+            for x in range(ncols):
+                columns.append(f"p-z{z}-y{y}-x{x}")
+
+    predictions = pd.DataFrame(preds.T, columns=columns)
     pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
 
     predictions['mean'] = predictions[pcols].mean(axis=1)
@@ -316,6 +299,7 @@ def predict(
             predictions=predictions,
             nrows=nrows,
             ncols=ncols,
+            ztiles=ztiles,
             wavelength=wavelength,
             save_path=Path(f"{data.with_suffix('')}_predictions_wavefronts"),
         )
@@ -327,16 +311,13 @@ def predict_sample(
     dm_pattern: Path,
     dm_state: Any,
     axial_voxel_size: float,
-    model_axial_voxel_size: float,
     lateral_voxel_size: float,
-    model_lateral_voxel_size: float,
     wavelength: float = .605,
     scalar: float = 1,
     prediction_threshold: float = 0.0,
     sign_threshold: float = .4,
     verbose: bool = False,
     plot: bool = False,
-    psf_type: str = 'widefield',
     num_predictions: int = 1,
     batch_size: int = 1,
     mosaic: bool = True,
@@ -349,23 +330,13 @@ def predict_sample(
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
 
+    modelpsfgen = backend.load_metadata(model)
     model = backend.load(model, mosaic=mosaic)
-    # model, modelpsfgen = backend.load(model, mosaic=mosaic, psfgen=True)
-
-    modelpsfgen = SyntheticPSF(
-        dtype=psf_type,
-        psf_shape=(64, 64, 64),
-        n_modes=model.output_shape[1],
-        lam_detection=wavelength,
-        x_voxel_size=model_lateral_voxel_size,
-        y_voxel_size=model_lateral_voxel_size,
-        z_voxel_size=model_axial_voxel_size,
-    )
 
     psfgen = SyntheticPSF(
-        dtype=psf_type,
-        snr=1000,
-        psf_shape=(64, 64, 64),
+        dtype=modelpsfgen.dtype,
+        snr=100,
+        psf_shape=modelpsfgen.psf_shape,
         n_modes=model.output_shape[1],
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
@@ -375,8 +346,8 @@ def predict_sample(
 
     inputs = load_sample(
         img,
-        model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
-        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        model_voxel_size=modelpsfgen.voxel_size,
+        sample_voxel_size=psfgen.voxel_size,
         remove_background=True,
         normalize=True,
     )
@@ -452,15 +423,12 @@ def predict_dataset(
         dm_pattern: Path,
         dm_state: Any,
         axial_voxel_size: float,
-        model_axial_voxel_size: float,
         lateral_voxel_size: float,
-        model_lateral_voxel_size: float,
         wavelength: float = .605,
         scalar: float = 1,
         prediction_threshold: float = 0.0,
         verbose: bool = False,
         plot: bool = False,
-        psf_type: str = 'widefield',
         n_modes: int = 60,
         num_predictions: int = 1,
         batch_size: int = 1,
@@ -472,15 +440,12 @@ def predict_dataset(
         model=model,
         dm_pattern=dm_pattern,
         axial_voxel_size=axial_voxel_size,
-        model_axial_voxel_size=model_axial_voxel_size,
         lateral_voxel_size=lateral_voxel_size,
-        model_lateral_voxel_size=model_lateral_voxel_size,
         wavelength=wavelength,
         scalar=scalar,
         threshold=prediction_threshold,
         verbose=verbose,
         plot=plot,
-        psf_type=psf_type,
         n_modes=n_modes,
         mosaic=mosaic,
         num_predictions=num_predictions,
@@ -509,11 +474,8 @@ def predict_rois(
     model: Path,
     peaks: Any,
     axial_voxel_size: float,
-    model_axial_voxel_size: float,
     lateral_voxel_size: float,
-    model_lateral_voxel_size: float,
     wavelength: float = .605,
-    psf_type: str = 'widefield',
     num_predictions: int = 1,
     batch_size: int = 1,
     prev: Any = None,
@@ -536,9 +498,9 @@ def predict_rois(
     outdir = Path(f"{img.with_suffix('')}_rois")
     logger.info(f"Sample: {sample.shape}")
 
-    preprocessing.find_roi(
+    rois = preprocessing.find_roi(
         sample,
-        savepath=outdir,
+        # savepath=outdir,
         peaks=peaks,
         window_size=tuple(3*[window_size]),
         plot=f"{outdir}_predictions" if plot else None,
@@ -554,21 +516,19 @@ def predict_rois(
     nrows = num_rois // ncols
 
     predict(
+        rois=rois,
         data=outdir,
         model=model,
         axial_voxel_size=axial_voxel_size,
-        model_axial_voxel_size=model_axial_voxel_size,
         lateral_voxel_size=lateral_voxel_size,
-        model_lateral_voxel_size=model_lateral_voxel_size,
         prediction_threshold=prediction_threshold,
         sign_threshold=sign_threshold,
         num_predictions=num_predictions,
         batch_size=batch_size,
         wavelength=wavelength,
-        psf_type=psf_type,
         mosaic=True,
         prev=prev,
-        zplanes=1,
+        ztiles=1,
         nrows=ncols,
         ncols=nrows
     )
@@ -578,11 +538,8 @@ def predict_tiles(
     img: Path,
     model: Path,
     axial_voxel_size: float,
-    model_axial_voxel_size: float,
     lateral_voxel_size: float,
-    model_lateral_voxel_size: float,
     wavelength: float = .605,
-    psf_type: str = 'widefield',
     num_predictions: int = 1,
     batch_size: int = 1,
     prev: Any = None,
@@ -591,10 +548,11 @@ def predict_tiles(
     sign_threshold: float = .4,
     plot: bool = True
 ):
+    modelpsfgen = backend.load_metadata(model)
 
     sample = load_sample(
         img,
-        model_voxel_size=(model_axial_voxel_size, model_lateral_voxel_size, model_lateral_voxel_size),
+        model_voxel_size=modelpsfgen.voxel_size,
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
         remove_background=True,
         normalize=True,
@@ -602,52 +560,49 @@ def predict_tiles(
     outdir = Path(f"{img.with_suffix('')}_tiles")
     logger.info(f"Sample: {sample.shape}")
 
-    zplanes, nrows, ncols = preprocessing.get_tiles(
+    windows, ztiles, nrows, ncols = preprocessing.get_tiles(
         sample,
-        savepath=outdir,
+        # savepath=outdir,
         strides=window_size,
         window_size=tuple(3*[window_size]),
     )
 
     predict(
+        rois=windows,
         data=outdir,
         model=model,
-        axial_voxel_size=model_axial_voxel_size,
-        model_axial_voxel_size=model_axial_voxel_size,
-        lateral_voxel_size=model_lateral_voxel_size,
-        model_lateral_voxel_size=model_lateral_voxel_size,
+        axial_voxel_size=modelpsfgen.z_voxel_size,
+        lateral_voxel_size=modelpsfgen.x_voxel_size,
         prediction_threshold=prediction_threshold,
         sign_threshold=sign_threshold,
         num_predictions=num_predictions,
         batch_size=batch_size,
         wavelength=wavelength,
-        psf_type=psf_type,
         mosaic=True,
         prev=prev,
         plot=plot,
-        zplanes=zplanes,
+        ztiles=ztiles,
         nrows=nrows,
         ncols=ncols
     )
 
     if plot:
         vis.tiles(
-            data=np.max(sample, axis=0),
-            strides=64,
-            window_size=(64, 64),
+            data=sample,
+            strides=window_size,
+            window_size=window_size,
             save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
         )
 
 
 def aggregate_predictions(
-    data: Path,
+    model: Path,
     model_pred: Path,
     dm_pattern: Path,
     dm_state: Any,
     wavelength: float = .605,
     axial_voxel_size: float = .1,
     lateral_voxel_size: float = .108,
-    psf_type: str = 'widefield',
     majority_threshold: float = .5,
     min_percentile: int = 10,
     max_percentile: int = 90,
@@ -655,11 +610,11 @@ def aggregate_predictions(
     final_prediction: str = 'mean',
     scalar: float = 1,
     plot: bool = False,
-    window_size: int = 64,
 ):
-    data = imread(data).astype(float)
-    ncols = data.shape[-1] // window_size
-    nrows = data.shape[-2] // window_size
+    def calc_length(s):
+        return int(re.sub(r'[a-z]+', '', s)) + 1
+
+    modelpsfgen = backend.load_metadata(model)
 
     predictions = pd.read_csv(
         model_pred,
@@ -788,9 +743,9 @@ def aggregate_predictions(
     imsave(f"{model_pred.with_suffix('')}_aggregated_pupil_displacement.tif", pupil_displacement)
 
     psfgen = SyntheticPSF(
-        dtype=psf_type,
-        snr=1000,
-        psf_shape=(64, 64, 64),
+        dtype=modelpsfgen.dtype,
+        snr=100,
+        psf_shape=modelpsfgen.psf_shape,
         n_modes=predictions[final_prediction].shape[0],
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
@@ -801,12 +756,15 @@ def aggregate_predictions(
     psf = psfgen.single_psf(phi=p, normed=True, noise=False)
     imsave(f"{model_pred.with_suffix('')}_aggregated_psf.tif", psf)
 
+    _, ztiles, nrows, ncols = [c.split('-') for c in pcols][-1]
+
     if plot:
         vis.wavefronts(
+            ztiles=calc_length(ztiles),
+            nrows=calc_length(nrows),
+            ncols=calc_length(ncols),
             scale='max',
             predictions=predictions,
-            ncols=ncols,
-            nrows=nrows,
             wavelength=wavelength,
             save_path=Path(f"{model_pred.with_suffix('')}_aggregated_wavefronts"),
         )

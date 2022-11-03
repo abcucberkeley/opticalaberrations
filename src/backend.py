@@ -70,7 +70,21 @@ logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 
 
-def load(model_path: Path, mosaic=False, psfgen=False):
+def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64)):
+    with h5py.File(model_path, 'r') as file:
+        psfgen = SyntheticPSF(
+            dtype=np.array(file.get('psf_type')[:]),
+            psf_shape=psf_shape,
+            n_modes=int(file.get('n_modes')[()]),
+            lam_detection=float(file.get('wavelength')[()]),
+            x_voxel_size=float(file.get('x_voxel_size')[()]),
+            y_voxel_size=float(file.get('y_voxel_size')[()]),
+            z_voxel_size=float(file.get('z_voxel_size')[()]),
+        )
+    return psfgen
+
+
+def load(model_path: Path, mosaic=False):
     model_path = Path(model_path)
 
     if 'transformer' in str(model_path):
@@ -110,21 +124,7 @@ def load(model_path: Path, mosaic=False, psfgen=False):
             model_path = str(list(model_path.rglob('*.h5'))[0])
 
         model = load_model(model_path, custom_objects=custom_objects)
-
-        if psfgen:
-            with h5py.File(model_path, 'r') as file:
-                psfgen = SyntheticPSF(
-                    dtype=np.array(file.get('psf_type')[:]),
-                    psf_shape=(64, 64, 64),
-                    n_modes=int(file.get('n_modes')[()]),
-                    lam_detection=float(file.get('wavelength')[()]),
-                    x_voxel_size=float(file.get('x_voxel_size')[()]),
-                    y_voxel_size=float(file.get('y_voxel_size')[()]),
-                    z_voxel_size=float(file.get('z_voxel_size')[()]),
-                )
-            return model, psfgen
-        else:
-            return model
+        return model
 
     else:
         try:
@@ -143,21 +143,7 @@ def load(model_path: Path, mosaic=False, psfgen=False):
                     model_path = str(list(model_path.rglob('*.h5'))[0])
 
                 model = load_model(model_path, custom_objects=custom_objects)
-
-                if psfgen:
-                    with h5py.File(model_path, 'r') as file:
-                        psfgen = SyntheticPSF(
-                            dtype=np.array(file.get('psf_type')[:]),
-                            psf_shape=(64, 64, 64),
-                            n_modes=int(file.get('n_modes')[()]),
-                            lam_detection=float(file.get('wavelength')[()]),
-                            x_voxel_size=float(file.get('x_voxel_size')[()]),
-                            y_voxel_size=float(file.get('y_voxel_size')[()]),
-                            z_voxel_size=float(file.get('z_voxel_size')[()]),
-                        )
-                    return model, psfgen
-                else:
-                    return model
+                return model
 
         except Exception as e:
             logger.exception(e)

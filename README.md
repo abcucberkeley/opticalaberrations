@@ -96,15 +96,12 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `prev`                     | previous predictions .csv file (Default: `None`)                                                                  |
 | `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                            |
 | `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                |
-| `model_lateral_voxel_size` | lateral voxel size in microns for X (Default: `0.108`)                                                            |
-| `model_axial_voxel_size`   | axial voxel size in microns for Z (Default: `0.1`)                                                                |
 | `wavelength`               | wavelength in microns (Default: `0.51`)                                                                           |
 | `scalar`                   | scale DM actuators by an arbitrary multiplier (Default: `0.75`)                                                   |
 | `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                   |
 | `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`) |
 | `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                   |
 | `plot`                     | a toggle for plotting predictions                                                                                 |
-| `psf_type`                 | type of the desired PSF <br/> (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`)          |
 
 
 
@@ -142,15 +139,12 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `prev`                     | previous predictions .csv file (Default: `None`)                                                                  |
 | `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                            |
 | `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                |
-| `model_lateral_voxel_size` | lateral voxel size in microns for X (Default: `0.108`)                                                            |
-| `model_axial_voxel_size`   | axial voxel size in microns for Z (Default: `0.1`)                                                                |
 | `wavelength`               | wavelength in microns (Default: `0.51`)                                                                           |
 | `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                   |
 | `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`) |
 | `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                   |
 | `batch_size`               | maximum batch size for the model (Default: `100`)                                                                 |
 | `plot`                     | a toggle for plotting predictions                                                                                 |
-| `psf_type`                 | type of the desired PSF <br/> (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`)          |
 
 
 
@@ -180,19 +174,16 @@ The script takes 2 positional arguments and a few optional ones described below.
 |                            | Description                                                                                                       |
 |----------------------------|-------------------------------------------------------------------------------------------------------------------|
 | `help`                     | show this help message and exit                                                                                   |
-| `window_size`              | size of the window to crop around each point of interest (Default: `64`)                                          |
+| `window_size`              | size of the window to crop for each tile (Default: `64`)                                                          |
 | `prev`                     | previous predictions .csv file (Default: `None`)                                                                  |
 | `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                            |
 | `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                |
-| `model_lateral_voxel_size` | lateral voxel size in microns for X (Default: `0.108`)                                                            |
-| `model_axial_voxel_size`   | axial voxel size in microns for Z (Default: `0.1`)                                                                |
 | `wavelength`               | wavelength in microns (Default: `0.51`)                                                                           |
 | `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                   |
 | `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`) |
 | `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                   |
 | `batch_size`               | maximum batch size for the model (Default: `100`)                                                                 |
 | `plot`                     | a toggle for plotting predictions                                                                                 |
-| `psf_type`                 | type of the desired PSF <br/> (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`)          |
 
 
 ### Aggregate predictions 
@@ -207,7 +198,7 @@ For each successful run, the script will output the following files:
 
 #### Example Usage (Aggregate):
 ```shell
-python ao.py aggregate_predictions [--optional_flags] model input
+python ao.py aggregate_predictions [--optional_flags] model predictions pattern
 ```
 
 The script takes 3 positional arguments and a few optional ones described below. 
@@ -216,8 +207,8 @@ The script takes 3 positional arguments and a few optional ones described below.
 
 |               | Description                                                   |
 |---------------|---------------------------------------------------------------|
+| `model`       | path to pretrained TensorFlow model                           |
 | `predictions` | path to model's predictions (.csv file)                       |
-| `input`       | path to input (.tif file)                                     |
 | `pattern`     | path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv) |
 
 
@@ -234,7 +225,6 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `final_prediction`     | rule to use to calculate final prediction [mean, median, min, max] (Default: `mean`)                     |
 | `min_percentile`       | minimum percentile to filter out outliers (Default: `10`)                                                |
 | `max_percentile`       | maximum percentile to filter out outliers (Default: `90`)                                                |
-| `psf_type`             | type of the desired PSF <br/> (Default: `../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat`) |
 | `lateral_voxel_size`   | lateral voxel size in microns for X (Default: `0.108`)                                                   |
 | `axial_voxel_size`     | axial voxel size in microns for Z (Default: `0.1`)                                                       |
 | `wavelength`           | wavelength in microns (Default: `0.51`)                                                                  |

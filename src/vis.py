@@ -2521,12 +2521,11 @@ def prediction(
     cmap='hot',
     gamma=.5
 ):
-    def slice(xy, zx, zy, vol, label='', maxproj=True):
+    def slice(xy, zx, vol, label='', maxproj=True):
 
         if vol.shape[-1] == 3:
             m = xy.imshow(vol[:, :, 0], cmap=cmap, vmin=0, vmax=1)
             zx.imshow(vol[:, :, 1], cmap=cmap, vmin=0, vmax=1)
-            zy.imshow(vol[:, :, 2], cmap=cmap, vmin=0, vmax=1)
         else:
             vol = vol ** gamma
             vol = np.nan_to_num(vol)
@@ -2534,14 +2533,12 @@ def prediction(
             if maxproj:
                 m = xy.imshow(np.max(vol, axis=0), cmap=cmap, vmin=0, vmax=1)
                 zx.imshow(np.max(vol, axis=1), cmap=cmap, vmin=0, vmax=1)
-                zy.imshow(np.max(vol, axis=2), cmap=cmap, vmin=0, vmax=1)
             else:
                 mid_plane = vol.shape[0] // 2
                 m = xy.imshow(vol[mid_plane, :, :], cmap=cmap, vmin=0, vmax=1)
                 zx.imshow(vol[:, mid_plane, :], cmap=cmap, vmin=0, vmax=1)
-                zy.imshow(vol[:, :, mid_plane], cmap=cmap, vmin=0, vmax=1)
 
-        cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
+        cax = inset_axes(zx, width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
         cax.yaxis.set_label_position("right")
@@ -2559,23 +2556,20 @@ def prediction(
         'axes.autolimit_mode': 'round_numbers'
     })
 
-    fig = plt.figure(figsize=(8, 6))
-    gs = fig.add_gridspec(2, 3)
+    fig = plt.figure(figsize=(8, 8))
+    gs = fig.add_gridspec(2, 2)
 
     ax_xy = fig.add_subplot(gs[0, 0])
     ax_xz = fig.add_subplot(gs[0, 1])
-    ax_yz = fig.add_subplot(gs[0, 2])
 
     ax_pxy = fig.add_subplot(gs[1, 0])
     ax_pxz = fig.add_subplot(gs[1, 1])
-    ax_pyz = fig.add_subplot(gs[1, 2])
 
-    ax_pxy.set_xlabel('XY')
-    ax_pxz.set_xlabel('XZ')
-    ax_pyz.set_xlabel('YZ')
+    ax_pxy.sett_title('XY')
+    ax_pxz.sett_title('XZ')
 
-    slice(ax_xy, ax_xz, ax_yz, original_image, label='Input (MIP)', maxproj=True)
-    slice(ax_pxy, ax_pxz, ax_pyz, corrected_image, label='Corrected (MIP)', maxproj=True)
+    slice(ax_xy, ax_xz, original_image, label='Input (MIP)', maxproj=True)
+    slice(ax_pxy, ax_pxz, corrected_image, label='Corrected (MIP)', maxproj=True)
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
     # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
@@ -2586,8 +2580,8 @@ def tiles(
     data: np.ndarray,
     save_path: Path,
     strides: int = 64,
-    window_size: tuple = (64, 64),
-    gamma: float = .5,
+    window_size: int = 64,
+    gamma: float = 1.,
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -2600,43 +2594,48 @@ def tiles(
     })
 
     data = data ** gamma
-    tiles = sliding_window_view(data, window_shape=window_size)[::strides, ::strides]
-    nrows, ncols = tiles.shape[0], tiles.shape[1]
-    tiles = np.reshape(tiles, (-1, *window_size))
+    ztiles = np.array_split(range(data.shape[0]), data.shape[0]//window_size)
 
-    fig = plt.figure(figsize=(11, 8))
-    grid = ImageGrid(
-        fig, 111,
-        nrows_ncols=(nrows, ncols),
-        share_all=True,
-        label_mode="L",
-        cbar_location="top",
-        cbar_mode="single",
-        axes_pad=.2,
-        cbar_pad=.1
-    )
+    for z, idx in enumerate(ztiles):
+        sample = np.max(data[idx], axis=0)
+        tiles = sliding_window_view(sample, window_shape=[window_size, window_size])[::strides, ::strides]
+        nrows, ncols = tiles.shape[0], tiles.shape[1]
+        tiles = np.reshape(tiles, (-1, window_size, window_size))
 
-    for ax, t in zip(grid, tiles):
-        im = ax.imshow(t, cmap='hot', vmin=0, vmax=1, aspect='equal')
+        fig = plt.figure(figsize=(11, 8))
+        grid = ImageGrid(
+            fig, 111,
+            nrows_ncols=(nrows, ncols),
+            share_all=True,
+            label_mode="L",
+            cbar_location="top",
+            cbar_mode="single",
+            axes_pad=.2,
+            cbar_pad=.1
+        )
 
-    cbar = grid.cbar_axes[0].colorbar(im)
-    cbar.ax.xaxis.set_ticks_position('top')
-    cbar.ax.xaxis.set_label_position('top')
-    cbar.ax.set_yticks([])
-    cbar.ax.set_title(rf"$\gamma$={gamma}")
+        for ax, t in zip(grid, tiles):
+            im = ax.imshow(t, cmap='hot', vmin=0, vmax=1, aspect='equal')
 
-    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        cbar = grid.cbar_axes[0].colorbar(im)
+        cbar.ax.xaxis.set_ticks_position('top')
+        cbar.ax.xaxis.set_label_position('top')
+        cbar.ax.set_yticks([])
+        cbar.ax.set_title(rf"$\gamma$={gamma}")
+
+        # plt.savefig(f'{save_path}_z{z}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{save_path}_z{z}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
 def wavefronts(
     predictions: pd.DataFrame,
+    ztiles: int,
     nrows: int,
     ncols: int,
     save_path: Path,
     wavelength: float = .605,
     threshold: float = .01,
-    scale: str = 'mean'
+    scale: str = 'mean',
 ):
     def pupil(iax, phi, levels, label='', nas=(.50, .75, .85, .95)):
         def na_mask(radius):
@@ -2705,28 +2704,31 @@ def wavefronts(
     ))
     wave_cmap = mcolors.ListedColormap(levels)
 
-    fig = plt.figure(figsize=(11, 8))
-    grid = ImageGrid(
-        fig, 111,
-        nrows_ncols=(nrows, ncols),
-        share_all=True,
-        label_mode="L",
-        cbar_location="top",
-        cbar_mode="single",
-        axes_pad=.2,
-        cbar_pad=.1
-    )
+    ztiles = np.array_split(pcols, ztiles)
 
-    for ax, pred in zip(grid, pcols):
-        pred = Wavefront(predictions[pred].values, lam_detection=wavelength)
-        pred_wave = pred.wave(size=100)
-        mat = pupil(ax, pred_wave, levels=mticks)
+    for z, cols in enumerate(ztiles):
+        fig = plt.figure(figsize=(11, 8))
+        grid = ImageGrid(
+            fig, 111,
+            nrows_ncols=(nrows, ncols),
+            share_all=True,
+            label_mode="L",
+            cbar_location="top",
+            cbar_mode="single",
+            axes_pad=.2,
+            cbar_pad=.1
+        )
 
-    cbar = grid.cbar_axes[0].colorbar(mat)
-    cbar.ax.xaxis.set_ticks_position('top')
-    cbar.ax.xaxis.set_label_position('top')
-    cbar.ax.set_yticks([])
-    cbar.ax.set_title(f'$\lambda = {wavelength}~\mu m$')
+        for ax, pred in zip(grid, cols):
+            pred = Wavefront(predictions[pred].values, lam_detection=wavelength)
+            pred_wave = pred.wave(size=100)
+            mat = pupil(ax, pred_wave, levels=mticks)
 
-    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        cbar = grid.cbar_axes[0].colorbar(mat)
+        cbar.ax.xaxis.set_ticks_position('top')
+        cbar.ax.xaxis.set_label_position('top')
+        cbar.ax.set_yticks([])
+        cbar.ax.set_title(f'$\lambda = {wavelength}~\mu m$')
+
+        # plt.savefig(f'{save_path}_z{z}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{save_path}_z{z}.png', dpi=300, bbox_inches='tight', pad_inches=.25)

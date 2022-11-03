@@ -65,20 +65,10 @@ def parse_args(args):
         help="previous predictions .csv file (Default: `None`)"
     )
     predict_sample.add_argument(
-        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
-        type=Path, help='type of the desired PSF'
-    )
-    predict_sample.add_argument(
         "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
     )
     predict_sample.add_argument(
         "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
-    )
-    predict_sample.add_argument(
-        "--model_lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
-    )
-    predict_sample.add_argument(
-        "--model_axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
     )
     predict_sample.add_argument(
         "--wavelength", default=.510, type=float,
@@ -180,7 +170,7 @@ def parse_args(args):
         "--batch_size", default=100, type=int, help='maximum batch size for the model'
     )
     predict_tiles.add_argument(
-        "--window_size", default=64, type=int, help='size of the window to crop around each point of interest'
+        "--window_size", default=64, type=int, help='size of the window to crop each tile'
     )
     predict_tiles.add_argument(
         "--prev", default=None, type=Path,
@@ -224,17 +214,14 @@ def parse_args(args):
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
+    aggregate_predictions.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     aggregate_predictions.add_argument("predictions", type=Path, help="path to csv file")
-    aggregate_predictions.add_argument("input", type=Path, help="path to input .tif file")
-    aggregate_predictions.add_argument("pattern", type=Path, help="path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv)")
+    aggregate_predictions.add_argument("pattern", type=Path,
+                                       help="path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv)")
 
     aggregate_predictions.add_argument(
         "--state", default=None, type=Path,
         help="optional path to current DM state .csv file (Default: `blank mirror`)"
-    )
-    aggregate_predictions.add_argument(
-        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
-        type=Path, help='type of the desired PSF'
     )
     aggregate_predictions.add_argument(
         "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
@@ -322,11 +309,8 @@ def main(args=None):
             dm_pattern=args.pattern,
             dm_state=args.state,
             prev=args.prev,
-            psf_type=args.psf_type,
             axial_voxel_size=args.axial_voxel_size,
-            model_axial_voxel_size=args.model_axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
-            model_lateral_voxel_size=args.model_lateral_voxel_size,
             wavelength=args.wavelength,
             scalar=args.scalar,
             prediction_threshold=args.prediction_threshold,
@@ -342,11 +326,8 @@ def main(args=None):
             img=args.input,
             peaks=args.peaks,
             prev=args.prev,
-            psf_type=args.psf_type,
             axial_voxel_size=args.axial_voxel_size,
-            model_axial_voxel_size=args.model_axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
-            model_lateral_voxel_size=args.model_lateral_voxel_size,
             wavelength=args.wavelength,
             window_size=args.window_size,
             num_predictions=args.num_predictions,
@@ -363,13 +344,10 @@ def main(args=None):
             model=args.model,
             img=args.input,
             prev=args.prev,
-            psf_type=args.psf_type,
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
             axial_voxel_size=args.axial_voxel_size,
-            model_axial_voxel_size=args.model_axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
-            model_lateral_voxel_size=args.model_lateral_voxel_size,
             num_predictions=args.num_predictions,
             wavelength=args.wavelength,
             window_size=args.window_size,
@@ -378,12 +356,11 @@ def main(args=None):
         )
     elif args.func == 'aggregate_predictions':
         experimental.aggregate_predictions(
-            data=args.input,
+            model=args.model,
             model_pred=args.predictions,
             dm_pattern=args.pattern,
             dm_state=args.state,
             wavelength=args.wavelength,
-            psf_type=args.psf_type,
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
             prediction_threshold=args.prediction_threshold,

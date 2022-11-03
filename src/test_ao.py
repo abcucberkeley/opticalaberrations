@@ -84,9 +84,6 @@ predict_sample += f" --scalar {scalar}"
 predict_sample += f" --wavelength {wavelength}"
 predict_sample += f" --lateral_voxel_size {lateral_voxel_size}"
 predict_sample += f" --axial_voxel_size {axial_voxel_size}"
-predict_sample += f" --model_lateral_voxel_size {model_lateral_voxel_size}"
-predict_sample += f" --model_axial_voxel_size {model_axial_voxel_size}"
-predict_sample += f" --psf_type {psf_type}"
 predict_sample += f" --prediction_threshold 0."
 predict_sample += f" --sign_threshold {sign_threshold}"
 predict_sample += f" --num_predictions {num_predictions}"
@@ -106,9 +103,6 @@ predict_rois += f" --minimum_distance {minimum_distance}"
 predict_rois += f" --wavelength {wavelength}"
 predict_rois += f" --lateral_voxel_size {lateral_voxel_size}"
 predict_rois += f" --axial_voxel_size {axial_voxel_size}"
-predict_rois += f" --model_lateral_voxel_size {model_lateral_voxel_size}"
-predict_rois += f" --model_axial_voxel_size {model_axial_voxel_size}"
-predict_rois += f" --psf_type {psf_type}"
 predict_rois += f" --window_size {window_size}"
 predict_rois += f" --prediction_threshold 0."
 predict_rois += f" --sign_threshold {sign_threshold}"
@@ -126,9 +120,6 @@ predict_tiles += f" {model} {sample}"
 predict_tiles += f" --wavelength {wavelength}"
 predict_tiles += f" --lateral_voxel_size {lateral_voxel_size}"
 predict_tiles += f" --axial_voxel_size {axial_voxel_size}"
-predict_tiles += f" --model_lateral_voxel_size {model_lateral_voxel_size}"
-predict_tiles += f" --model_axial_voxel_size {model_axial_voxel_size}"
-predict_tiles += f" --psf_type {psf_type}"
 predict_tiles += f" --window_size {window_size}"
 predict_tiles += f" --prediction_threshold 0."
 predict_tiles += f" --sign_threshold {sign_threshold}"
@@ -150,16 +141,14 @@ aggregate_predictions_flags += f" --max_percentile {max_percentile}"
 aggregate_predictions_flags += f" --final_prediction {final_prediction}"
 aggregate_predictions_flags += f" --lateral_voxel_size {lateral_voxel_size}"
 aggregate_predictions_flags += f" --axial_voxel_size {axial_voxel_size}"
-aggregate_predictions_flags += f" --psf_type {psf_type}"
 aggregate_predictions_flags += f" --wavelength {wavelength}"
 aggregate_predictions_flags += f" --plot" if plot else ""
 
 roi_predictions = f"{sample.with_suffix('')}_rois_predictions.csv"
-aggregate_roi_predictions = f"{python} {script} aggregate_predictions {roi_predictions} {sample} {dm} {aggregate_predictions_flags}"
+aggregate_roi_predictions = f"{python} {script} aggregate_predictions {model} {roi_predictions} {dm} {aggregate_predictions_flags}"
 
 tile_predictions = f"{sample.with_suffix('')}_tiles_predictions.csv"
-aggregate_tile_predictions = f"{python} {script} aggregate_predictions {tile_predictions} {sample} {dm} {aggregate_predictions_flags}"
-
+aggregate_tile_predictions = f"{python} {script} aggregate_predictions {model} {tile_predictions} {dm} {aggregate_predictions_flags}"
 
 decon_sample_predictions = f"{python} {script} decon"
 decon_sample_predictions += f" {sample}"
@@ -180,8 +169,8 @@ decon_tiles_predictions += f" --iters {decon_iters}"
 decon_tiles_predictions += f" --plot" if plot else ""
 
 
-
-## Execute the calls to each.  You can comment out the ones you don't want to run, but some (e.g., 'decon') need the outputs from the preceeding call
+## Execute the calls to each.  You can comment out the ones you don't want to run,
+# but some (e.g., 'decon') need the outputs from the preceeding call
 
 # call(deskew, shell=True)
 

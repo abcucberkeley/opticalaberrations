@@ -199,7 +199,6 @@ def prep_sample(
 
 def find_roi(
     path: Union[Path, np.array],
-    savepath: Path,
     window_size: tuple = (64, 64, 64),
     plot: Any = None,
     num_peaks: Any = None,
@@ -209,8 +208,8 @@ def find_roi(
     peaks: Any = None,
     max_neighbor: int = 5,
     voxel_size: tuple = (.200, .108, .108),
+    savepath: Any = None,
 ):
-    savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
@@ -374,6 +373,7 @@ def find_roi(
         plt.tight_layout()
         plt.savefig(f'{plot}_mips.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
+    rois = []
     logger.info(f"Locating ROIs: {[peaks.shape[0]]}")
     for p in range(peaks.shape[0]):
         start = [
@@ -388,17 +388,21 @@ def find_roi(
 
         if r.size != 0:
             r = resize_with_crop_or_pad(r, crop_shape=window_size)
-            imsave(savepath/f"roi_{p:02}.tif", r)
+            rois.append(r)
+
+            if savepath is not None:
+                savepath.mkdir(parents=True, exist_ok=True)
+                imsave(savepath / f"roi_{p:02}.tif", r)
+
+    return rois
 
 
 def get_tiles(
     path: Union[Path, np.array],
-    savepath: Path,
     window_size: tuple = (64, 64, 64),
     strides: int = 64,
+    savepath: Any = None,
 ):
-    savepath.mkdir(parents=True, exist_ok=True)
-
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -426,7 +430,10 @@ def get_tiles(
     windows = np.reshape(windows, (-1, *window_size))
 
     logger.info(f"Locating ROIs: {[windows.shape[0]]}")
-    for i, w in enumerate(windows):
-        imsave(savepath/f"roi_{i:02}.tif", w)
 
-    return zplanes, nrows, ncols
+    if savepath is not None:
+        savepath.mkdir(parents=True, exist_ok=True)
+        for i, w in enumerate(windows):
+            imsave(savepath/f"roi_{i:02}.tif", w)
+
+    return windows, zplanes, nrows, ncols
