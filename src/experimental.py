@@ -495,8 +495,8 @@ def predict_rois(
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
     )
 
-    ncols = int(np.ceil(len(rois)/4))
-    nrows = len(rois) // ncols
+    ncols = int(np.ceil(len(rois)/5))
+    nrows = int(np.ceil(len(rois)/ncols))
 
     predict(
         rois=rois,
