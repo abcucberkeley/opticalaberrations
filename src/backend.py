@@ -826,6 +826,107 @@ def bootstrap_predict(
 
 
 def predict_sign(
+    gen: SyntheticPSF,
+    init_preds: np.ndarray,
+    followup_preds: np.ndarray,
+    sign_threshold: float = .4,
+    plot: Any = None,
+):
+    def pct_change(cur, prev):
+        t = utils.waves2microns(.05, wavelength=gen.lam_detection)
+        cur[cur < t] = 0
+        prev[prev < t] = 0
+
+        if np.array_equal(cur, prev):
+            return np.zeros_like(prev)
+
+        pct = ((cur - prev) / (prev+1e-6)) * 100.0
+        pct[pct > 100] = 100
+        pct[pct < -100] = -100
+        return pct
+
+    init_preds = np.abs(init_preds)
+    followup_preds = np.abs(followup_preds)
+
+    preds = init_preds.copy()
+    pchange = pct_change(followup_preds, init_preds)
+    flips = np.stack(np.where(followup_preds > (sign_threshold * init_preds)), axis=0)
+
+    if len(np.squeeze(preds).shape) == 1:
+        preds[flips[0]] *= -1
+    else:
+        preds[flips[0], flips[1]] *= -1
+
+    if plot is not None:
+        if len(np.squeeze(preds).shape) == 1:
+            init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
+            preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            preds_error = Wavefront(np.zeros_like(preds), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
+            percent_changes = pchange
+            percent_changes_error = np.zeros_like(pchange)
+        else:
+            init_preds_wave = Wavefront(np.mean(init_preds, axis=0),
+                                        lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            followup_preds_wave = Wavefront(np.mean(followup_preds, axis=0),
+                                            lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            preds_error = Wavefront(np.mean(preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
+            preds_wave = Wavefront(np.mean(preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            percent_changes = np.mean(pchange, axis=0)
+            percent_changes_error = np.std(pchange, axis=0)
+
+        fig, axes = plt.subplots(3, 1, figsize=(24, 8))
+        axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Initial')
+        axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
+        axes[0].legend(frameon=False, loc='upper left')
+        axes[0].set_xlim((0, 60))
+        axes[0].set_xticks(range(0, 61))
+
+        axes[1].plot(np.zeros_like(percent_changes), '--', color='lightgrey')
+        axes[1].bar(
+            range(gen.n_modes),
+            percent_changes,
+            yerr=percent_changes_error,
+            capsize=10,
+            color='C1',
+            alpha=.75,
+            align='center',
+            ecolor='black',
+            label='Percent change',
+        )
+        axes[1].legend(frameon=False, loc='upper left')
+        axes[1].set_xlim((0, 60))
+        axes[1].set_ylim((-100, 100))
+        axes[1].set_yticks(range(-100, 125, 25))
+        axes[1].set_yticklabels(['-100+', '-75', '-50', '-25', '0', '25', '50', '75', '100+'])
+        axes[1].set_xticks(range(0, 61))
+
+        axes[2].plot(np.zeros_like(preds_wave), '--', color='lightgrey')
+        axes[2].bar(
+            range(gen.n_modes),
+            preds_wave,
+            yerr=preds_error,
+            capsize=10,
+            alpha=.75,
+            color='C0',
+            align='center',
+            ecolor='black',
+            label='Predictions',
+        )
+        axes[2].legend(frameon=False, loc='upper left')
+        axes[2].set_xlim((0, 60))
+        axes[2].set_xticks(range(0, 61))
+
+        plt.tight_layout()
+        plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    return preds, pchange
+
+
+def booststrap_predict_sign(
     model: tf.keras.Model,
     inputs: np.array,
     gen: SyntheticPSF,
@@ -836,7 +937,11 @@ def predict_sign(
     sign_threshold: float = .4,
     n_samples: int = 1,
     batch_size: int = 1,
+    prev_pred: Any = None,
+    estimate_sign_with_decon: bool = False,
+    decon_iters: int = 5
 ):
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -846,6 +951,8 @@ def predict_sign(
         'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
+
+    prev_pred = None if eval(str(prev_pred)) is None else prev_pred
 
     init_preds, stdev = bootstrap_predict(
         model,
@@ -856,146 +963,65 @@ def predict_sign(
         verbose=verbose,
         batch_size=batch_size,
         threshold=threshold,
-        plot=plot
+        # plot=plot
     )
     init_preds = np.abs(init_preds)
 
-    logger.info(f"Evaluating signs")
-    abrs = range(init_preds.shape[0]) if len(init_preds.shape) > 1 else range(1)
-    make_psf = partial(gen.single_psf, zplanes=0, normed=True, noise=False)
-    psfs = np.stack(gen.batch(
-        make_psf,
-        [Wavefront(init_preds[i], lam_detection=gen.lam_detection) for i in abrs]
-    ), axis=0)
+    if estimate_sign_with_decon:
+        logger.info(f"Estimating signs w/ Decon")
+        abrs = range(init_preds.shape[0]) if len(init_preds.shape) > 1 else range(1)
+        make_psf = partial(gen.single_psf, zplanes=0, normed=True, noise=False)
+        psfs = np.stack(gen.batch(
+            make_psf,
+            [Wavefront(init_preds[i], lam_detection=gen.lam_detection) for i in abrs]
+        ), axis=0)
 
-    with sp.fft.set_workers(-1):
-        followup_inputs = richardson_lucy(np.squeeze(inputs), np.squeeze(psfs), num_iter=20)
+        with sp.fft.set_workers(-1):
+            followup_inputs = richardson_lucy(np.squeeze(inputs), np.squeeze(psfs), num_iter=decon_iters)
 
-    if len(followup_inputs.shape) == 3:
-        followup_inputs = followup_inputs[np.newaxis, ..., np.newaxis]
-    else:
-        followup_inputs = followup_inputs[..., np.newaxis]
+        if len(followup_inputs.shape) == 3:
+            followup_inputs = followup_inputs[np.newaxis, ..., np.newaxis]
+        else:
+            followup_inputs = followup_inputs[..., np.newaxis]
 
-    followup_preds, stdev = bootstrap_predict(
-        model,
-        followup_inputs,
-        psfgen=modelgen,
-        n_samples=n_samples,
-        no_phase=True,
-        verbose=False,
-        batch_size=batch_size,
-        threshold=threshold,
-    )
+        followup_preds, stdev = bootstrap_predict(
+            model,
+            followup_inputs,
+            psfgen=modelgen,
+            n_samples=n_samples,
+            no_phase=True,
+            verbose=False,
+            batch_size=batch_size,
+            threshold=threshold,
+        )
+        followup_preds = np.abs(followup_preds)
 
-    flips = np.stack(np.where(followup_preds > (sign_threshold * init_preds)), axis=0)
+        preds, pchanges = predict_sign(
+            gen=gen,
+            init_preds=init_preds,
+            followup_preds=followup_preds,
+            sign_threshold=sign_threshold,
+            plot=plot
+        )
 
-    if len(np.squeeze(init_preds).shape) == 1:
-        init_preds[flips[0]] *= -1
-    else:
-        init_preds[flips[0], flips[1]] *= -1
-
-    preds = init_preds.copy()
-
-    if len(np.squeeze(init_preds).shape) == 1 and plot is not None:
-        init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-        followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-        preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-
-        fig, axes = plt.subplots(2, 1, figsize=(24, 8))
-        axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
-        axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
-        axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
-        axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
-        axes[0].legend(frameon=False, loc='upper left')
-        axes[0].set_xlim((0, 60))
-        axes[0].set_xticks(range(0, 61))
-
-        axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
-        axes[1].legend(frameon=False, loc='upper left')
-        axes[1].set_xlim((0, 60))
-        axes[1].set_xticks(range(0, 61))
-
-        plt.tight_layout()
-        plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-    return preds, stdev
-
-
-def booststrap_predict_sign(
-    model: tf.keras.Model,
-    inputs: np.array,
-    gen: SyntheticPSF,
-    plot: Any = None,
-    verbose: bool = False,
-    threshold: float = 0.,
-    sign_threshold: float = .4,
-    n_samples: int = 1,
-    batch_size: int = 1,
-    prev_pred: Any = None
-):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-    if eval(str(prev_pred)) is None:
-        prev_pred = None
-
-    preds, stdev = bootstrap_predict(
-        model,
-        inputs,
-        psfgen=gen,
-        n_samples=n_samples,
-        no_phase=True,
-        verbose=verbose,
-        batch_size=batch_size,
-        threshold=threshold,
-        plot=plot
-    )
-    preds = np.abs(preds)
-
-    if prev_pred is not None:
-        followup_preds = preds.copy()
+    elif prev_pred is not None:
+        logger.info(f"Evaluating signs")
+        followup_preds = init_preds.copy()
         init_preds = np.abs(pd.read_csv(prev_pred, header=0)['amplitude'].values)
 
-        if len(np.squeeze(preds).shape) == 1:
-            flips = np.where(followup_preds > (sign_threshold * init_preds))[0]
-            init_preds[flips] *= -1
-            preds = init_preds.copy()
+        preds, pchanges = predict_sign(
+            gen=gen,
+            init_preds=init_preds,
+            followup_preds=followup_preds,
+            sign_threshold=sign_threshold,
+            plot=plot
+        )
 
-            if plot is not None:
-                init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-                followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-                preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+    else:
+        preds = init_preds
+        pchanges = np.zeros_like(preds)
 
-                fig, axes = plt.subplots(2, 1, figsize=(24, 8))
-                axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
-                axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
-                axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
-                axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
-                axes[0].legend(frameon=False, loc='upper left')
-                axes[0].set_xlim((0, 60))
-                axes[0].set_xticks(range(0, 61))
-
-                axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
-                axes[1].legend(frameon=False, loc='upper left')
-                axes[1].set_xlim((0, 60))
-                axes[1].set_xticks(range(0, 61))
-
-                plt.tight_layout()
-                plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-        else:
-            for i in range(preds.shape[0]):
-                flips = np.where(followup_preds[i] > (sign_threshold * init_preds[i]))[0]
-                init_preds[i, flips] *= -1
-            preds = init_preds.copy()
-
-    return preds, stdev
+    return preds, stdev, pchanges
 
 
 def eval_sign(

@@ -40,17 +40,18 @@ num_predictions = 10
 window_size = 64
 batch_size = 256
 plot = True
+estimate_sign_with_decon = False
 
 # extra `aggregate_predictions` flags
 majority_threshold = .5
-min_percentile = 10
-max_percentile = 90
+min_percentile = 1
+max_percentile = 99
 final_prediction = 'mean'
 
 # extra `predict_rois` flags
 num_rois = 10
 min_intensity = 200
-minimum_distance = 1.
+minimum_distance = .5
 
 # extra `deskew` flags
 skew_angle = 32.45
@@ -90,6 +91,7 @@ predict_sample += f" --num_predictions {num_predictions}"
 predict_sample += f" --batch_size {batch_size}"
 predict_sample += f" --prev {prev}"
 predict_sample += f" --plot" if plot else ""
+predict_sample += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
 prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
 # sample = repo/'data/agarose/exp1.tif'  # replace with second sample
@@ -110,6 +112,7 @@ predict_rois += f" --num_predictions {num_predictions}"
 predict_rois += f" --batch_size {batch_size}"
 predict_rois += f" --prev {prev}"
 predict_rois += f" --plot" if plot else ""
+predict_rois += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
 prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
 # sample = repo/'data/agarose/exp1.tif'  # replace with second sample
@@ -127,6 +130,7 @@ predict_tiles += f" --num_predictions {num_predictions}"
 predict_tiles += f" --batch_size {batch_size}"
 predict_tiles += f" --prev {prev}"
 predict_tiles += f" --plot" if plot else ""
+predict_tiles += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
 prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
 # sample = repo/'data/agarose/exp1.tif'  # replace with second sample

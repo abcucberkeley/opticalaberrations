@@ -97,6 +97,10 @@ def parse_args(args):
     predict_sample.add_argument(
         "--batch_size", default=100, type=int, help='maximum batch size for the model'
     )
+    predict_sample.add_argument(
+        "--estimate_sign_with_decon", action='store_true',
+        help='a toggle for estimating signs of each Zernike mode via decon'
+    )
 
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -161,6 +165,10 @@ def parse_args(args):
         "--num_predictions", default=10, type=int,
         help="number of predictions per ROI to estimate model's confidence"
     )
+    predict_rois.add_argument(
+        "--estimate_sign_with_decon", action='store_true',
+        help='a toggle for estimating signs of each Zernike mode via decon'
+    )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -211,6 +219,10 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--num_predictions", default=10, type=int,
         help="number of predictions per tile to estimate model's confidence"
+    )
+    predict_tiles.add_argument(
+        "--estimate_sign_with_decon", action='store_true',
+        help='a toggle for estimating signs of each Zernike mode via decon'
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
@@ -317,7 +329,8 @@ def main(args=None):
             sign_threshold=args.sign_threshold,
             num_predictions=args.num_predictions,
             plot=args.plot,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            estimate_sign_with_decon=args.estimate_sign_with_decon,
         )
 
     elif args.func == 'predict_rois':
@@ -337,7 +350,8 @@ def main(args=None):
             sign_threshold=args.sign_threshold,
             minimum_distance=args.minimum_distance,
             plot=args.plot,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            estimate_sign_with_decon=args.estimate_sign_with_decon,
         )
     elif args.func == 'predict_tiles':
         experimental.predict_tiles(
@@ -352,7 +366,8 @@ def main(args=None):
             wavelength=args.wavelength,
             window_size=args.window_size,
             plot=args.plot,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            estimate_sign_with_decon=args.estimate_sign_with_decon,
         )
     elif args.func == 'aggregate_predictions':
         experimental.aggregate_predictions(

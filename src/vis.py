@@ -2677,7 +2677,6 @@ def wavefronts(
         'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
-    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
     final_pred = Wavefront(predictions[scale].values, lam_detection=wavelength)
     pred_wave = final_pred.wave(size=100)
 
@@ -2704,9 +2703,7 @@ def wavefronts(
     ))
     wave_cmap = mcolors.ListedColormap(levels)
 
-    ztiles = np.array_split(pcols, ztiles)
-
-    for z, cols in enumerate(ztiles):
+    for z in range(ztiles):
         fig = plt.figure(figsize=(11, 8))
         grid = ImageGrid(
             fig, 111,
@@ -2719,10 +2716,13 @@ def wavefronts(
             cbar_pad=.1
         )
 
-        for ax, pred in zip(grid, cols):
-            pred = Wavefront(predictions[pred].values, lam_detection=wavelength)
-            pred_wave = pred.wave(size=100)
-            mat = pupil(ax, pred_wave, levels=mticks)
+        i = 0
+        for y in range(nrows):
+            for x in range(ncols):
+                pred = Wavefront(predictions[f"p-z{z}-y{y}-x{x}"].values, lam_detection=wavelength)
+                pred_wave = pred.wave(size=100)
+                mat = pupil(grid[i], pred_wave, levels=mticks)
+                i += 1
 
         cbar = grid.cbar_axes[0].colorbar(mat)
         cbar.ax.xaxis.set_ticks_position('top')
