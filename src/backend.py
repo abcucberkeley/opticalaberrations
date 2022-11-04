@@ -359,7 +359,16 @@ def train(
     )
 
     metadata = LambdaCallback(
-        on_epoch_end=lambda epoch, logs: save_metadata(
+        on_train_begin=lambda logs: save_metadata(
+            filepath=outdir,
+            n_modes=pmodes,
+            psf_type=psf_type,
+            wavelength=wavelength,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+        ),
+        on_train_end=lambda logs: save_metadata(
             filepath=outdir,
             n_modes=pmodes,
             psf_type=psf_type,
