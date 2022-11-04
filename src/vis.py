@@ -2611,17 +2611,22 @@ def tiles(
             cbar_location="top",
             cbar_mode="single",
             axes_pad=.2,
-            cbar_pad=.1
+            cbar_pad=.2
         )
 
-        for ax, t in zip(grid, tiles):
-            im = ax.imshow(t, cmap='hot', vmin=0, vmax=1, aspect='equal')
+        i = 0
+        for y in range(nrows):
+            for x in range(ncols):
+                im = grid[i].imshow(tiles[i], cmap='hot', vmin=0, vmax=1, aspect='equal')
+                grid[i].set_title(f"z{z}-y{y}-x{x}", pad=1)
+                grid[i].axis('off')
+                i += 1
 
         cbar = grid.cbar_axes[0].colorbar(im)
         cbar.ax.xaxis.set_ticks_position('top')
         cbar.ax.xaxis.set_label_position('top')
         cbar.ax.set_yticks([])
-        cbar.ax.set_title(rf"$\gamma$={gamma}")
+        cbar.ax.set_xlabel(rf"$\gamma$={gamma}")
 
         # plt.savefig(f'{save_path}_z{z}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{save_path}_z{z}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
@@ -2713,7 +2718,7 @@ def wavefronts(
             cbar_location="top",
             cbar_mode="single",
             axes_pad=.2,
-            cbar_pad=.1
+            cbar_pad=.2
         )
 
         i = 0
@@ -2722,6 +2727,7 @@ def wavefronts(
                 pred = Wavefront(predictions[f"p-z{z}-y{y}-x{x}"].values, lam_detection=wavelength)
                 pred_wave = pred.wave(size=100)
                 mat = pupil(grid[i], pred_wave, levels=mticks)
+                grid[i].set_title(f"z{z}-y{y}-x{x}", pad=1)
                 i += 1
 
         cbar = grid.cbar_axes[0].colorbar(mat)

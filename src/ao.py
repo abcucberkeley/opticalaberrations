@@ -273,6 +273,10 @@ def parse_args(args):
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
     )
+    aggregate_predictions.add_argument(
+        "--ignore_tile", action='append', default=None,
+        help='IDs [e.g., "z0-y0-x0"] for tiles you wish to ignore'
+    )
 
     return parser.parse_args(args)
 
@@ -383,6 +387,7 @@ def main(args=None):
             min_percentile=args.min_percentile,
             max_percentile=args.max_percentile,
             final_prediction=args.final_prediction,
+            ignore_tile=args.ignore_tile,
             scalar=args.scalar,
             plot=args.plot,
         )

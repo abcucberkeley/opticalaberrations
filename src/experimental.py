@@ -596,6 +596,7 @@ def aggregate_predictions(
     final_prediction: str = 'mean',
     scalar: float = 1,
     plot: bool = False,
+    ignore_tile: Any = None,
 ):
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
@@ -609,6 +610,14 @@ def aggregate_predictions(
         usecols=lambda col: col == 'ansi' or col.startswith('p')
     )
     original_pcols = predictions.columns
+
+    if ignore_tile is not None:
+        for tile in ignore_tile:
+            col = f"p-{tile}"
+            if col in predictions.columns:
+                predictions.loc[:, col] = np.zeros_like(predictions.index)
+            else:
+                logger.warning(f"`{tile}` was not found!")
 
     # filter out small predictions
     prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
