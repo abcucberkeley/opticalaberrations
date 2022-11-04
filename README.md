@@ -21,6 +21,8 @@ We recommend using Anaconda
 (https://docs.anaconda.com/anaconda/install/index.html)
 to install the required packages for running our models. 
 
+> **Note:** Please make sure you have Git LFS installed to download our pretrained models:
+https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage
 
 ### For `Linux` or `Windows`: 
 
