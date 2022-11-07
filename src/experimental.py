@@ -309,7 +309,7 @@ def predict_sample(
     img: Path,
     model: Path,
     dm_pattern: Path,
-    dm_state: Any,
+    dm_state: Path,
     axial_voxel_size: float,
     lateral_voxel_size: float,
     wavelength: float = .605,
@@ -324,7 +324,7 @@ def predict_sample(
     prev: Any = None,
     est_sign: bool = False
 ):
-    dm_state = None if eval(str(dm_state)) is None else dm_state
+    dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
     physical_devices = tfc.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
