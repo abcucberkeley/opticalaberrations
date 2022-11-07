@@ -37,8 +37,8 @@ if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   ITERS=100
   OBJS=($(seq 1 1 5))
-  mPSNR=($(seq 11 10 51))
-  xPSNR=($(seq 20 10 60))
+  mPSNR=($(seq 11 10 41))
+  xPSNR=($(seq 20 10 50))
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15

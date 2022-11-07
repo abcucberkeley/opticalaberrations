@@ -208,6 +208,7 @@ def predict(
     wavelength: float = .605,
     mosaic: bool = True,
     prev: Any = None,
+    estimate_sign_with_decon: bool = False,
     prediction_threshold: float = 0.,
     sign_threshold: float = .4,
     num_predictions: int = 1,
@@ -216,8 +217,26 @@ def predict(
     ztiles: int = 1,
     nrows: int = 1,
     ncols: int = 1,
-    est_sign: bool = False
 ):
+    def summarize_predictions(data):
+        columns = []
+        for z in range(ztiles):
+            for y in range(nrows):
+                for x in range(ncols):
+                    columns.append(f"p-z{z}-y{y}-x{x}")
+
+        df = pd.DataFrame(data.T, columns=columns)
+        pcols = df.columns[pd.Series(df.columns).str.startswith('p')]
+
+        df['mean'] = df[pcols].mean(axis=1)
+        df['median'] = df[pcols].median(axis=1)
+        df['min'] = df[pcols].min(axis=1)
+        df['max'] = df[pcols].max(axis=1)
+        df['std'] = df[pcols].std(axis=1)
+
+        df.index.name = 'ansi'
+        return df
+
     physical_devices = tfc.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
         tfc.experimental.set_memory_growth(gpu_instance, True)
@@ -227,7 +246,7 @@ def predict(
 
     psfgen = SyntheticPSF(
         dtype=modelpsfgen.dtype,
-        snr=1000,
+        snr=100,
         psf_shape=modelpsfgen.psf_shape,
         n_modes=model.output_shape[1],
         lam_detection=wavelength,
@@ -244,54 +263,29 @@ def predict(
         normalize=True,
     )
 
-    print(len(rois))
     rois = np.array(utils.multiprocess(load, rois, desc='Processing ROIs'))
     logger.info(rois.shape)
 
-    if est_sign:
-        preds, stds = backend.predict_sign(
-            model,
-            batch_size=batch_size,
-            inputs=rois[..., np.newaxis],
-            threshold=prediction_threshold,
-            sign_threshold=sign_threshold,
-            n_samples=num_predictions,
-            verbose=True,
-            gen=psfgen,
-            modelgen=modelpsfgen,
-            plot=None,
-        )
-    else:
-        preds, stds = backend.booststrap_predict_sign(
-            model,
-            batch_size=batch_size,
-            inputs=rois[..., np.newaxis],
-            threshold=prediction_threshold,
-            sign_threshold=sign_threshold,
-            n_samples=num_predictions,
-            verbose=True,
-            gen=modelpsfgen,
-            prev_pred=prev,
-            plot=None,
-        )
+    preds, stds, pchange = backend.booststrap_predict_sign(
+        model,
+        batch_size=batch_size,
+        inputs=rois[..., np.newaxis],
+        threshold=prediction_threshold,
+        sign_threshold=sign_threshold,
+        n_samples=num_predictions,
+        verbose=True,
+        gen=psfgen,
+        modelgen=modelpsfgen,
+        prev_pred=prev,
+        estimate_sign_with_decon=estimate_sign_with_decon,
+        plot=Path(f"{data.with_suffix('')}_predictions") if plot else None,
+    )
 
-    columns = []
-    for z in range(ztiles):
-        for y in range(nrows):
-            for x in range(ncols):
-                columns.append(f"p-z{z}-y{y}-x{x}")
-
-    predictions = pd.DataFrame(preds.T, columns=columns)
-    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
-
-    predictions['mean'] = predictions[pcols].mean(axis=1)
-    predictions['median'] = predictions[pcols].median(axis=1)
-    predictions['min'] = predictions[pcols].min(axis=1)
-    predictions['max'] = predictions[pcols].max(axis=1)
-    predictions['std'] = predictions[pcols].std(axis=1)
-
-    predictions.index.name = 'ansi'
+    predictions = summarize_predictions(preds)
     predictions.to_csv(f"{data}_predictions.csv")
+
+    pchanges = summarize_predictions(pchange)
+    pchanges.to_csv(f"{data}_predictions_percent_changes.csv")
 
     if plot:
         vis.wavefronts(
@@ -322,7 +316,7 @@ def predict_sample(
     batch_size: int = 1,
     mosaic: bool = True,
     prev: Any = None,
-    est_sign: bool = False
+    estimate_sign_with_decon: bool = False,
 ):
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
@@ -354,32 +348,20 @@ def predict_sample(
 
     inputs = np.expand_dims(inputs, axis=0)
 
-    if est_sign:
-        p, std = backend.predict_sign(
-            model,
-            inputs=inputs,
-            threshold=prediction_threshold,
-            sign_threshold=sign_threshold,
-            n_samples=num_predictions,
-            verbose=verbose,
-            gen=psfgen,
-            modelgen=modelpsfgen,
-            batch_size=batch_size,
-            plot=Path(f"{img.with_suffix('')}_predictions_embeddings") if plot else None,
-        )
-    else:
-        p, std = backend.booststrap_predict_sign(
-            model,
-            inputs=inputs,
-            threshold=prediction_threshold,
-            sign_threshold=sign_threshold,
-            n_samples=num_predictions,
-            verbose=verbose,
-            gen=modelpsfgen,
-            prev_pred=prev,
-            batch_size=batch_size,
-            plot=Path(f"{img.with_suffix('')}_predictions_embeddings") if plot else None,
-        )
+    p, std, pchange = backend.booststrap_predict_sign(
+        model,
+        inputs=inputs,
+        threshold=prediction_threshold,
+        sign_threshold=sign_threshold,
+        n_samples=num_predictions,
+        verbose=verbose,
+        gen=psfgen,
+        modelgen=modelpsfgen,
+        batch_size=batch_size,
+        prev_pred=prev,
+        estimate_sign_with_decon=estimate_sign_with_decon,
+        plot=Path(f"{img.with_suffix('')}_predictions") if plot else None,
+    )
 
     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
     dm = pd.DataFrame(zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar))
@@ -478,7 +460,6 @@ def predict_rois(
     wavelength: float = .605,
     num_predictions: int = 1,
     batch_size: int = 1,
-    prev: Any = None,
     window_size: int = 64,
     num_rois: int = 10,
     min_intensity: int = 200,
@@ -486,6 +467,8 @@ def predict_rois(
     sign_threshold: float = .4,
     minimum_distance: float = 1.,
     plot: bool = False,
+    prev: Any = None,
+    estimate_sign_with_decon: bool = False,
 ):
     sample = imread(img).astype(float)
     esnr = np.sqrt(sample.max()).astype(int)
@@ -512,8 +495,8 @@ def predict_rois(
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
     )
 
-    ncols = num_rois // 4
-    nrows = num_rois // ncols
+    ncols = int(np.ceil(len(rois)/5))
+    nrows = int(np.ceil(len(rois)/ncols))
 
     predict(
         rois=rois,
@@ -530,7 +513,8 @@ def predict_rois(
         prev=prev,
         ztiles=1,
         nrows=ncols,
-        ncols=nrows
+        ncols=nrows,
+        estimate_sign_with_decon=estimate_sign_with_decon
     )
 
 
@@ -542,11 +526,12 @@ def predict_tiles(
     wavelength: float = .605,
     num_predictions: int = 1,
     batch_size: int = 1,
-    prev: Any = None,
     window_size: int = 64,
     prediction_threshold: float = 0.,
     sign_threshold: float = .4,
-    plot: bool = True
+    plot: bool = True,
+    prev: Any = None,
+    estimate_sign_with_decon: bool = False,
 ):
     modelpsfgen = backend.load_metadata(model)
 
@@ -583,7 +568,8 @@ def predict_tiles(
         plot=plot,
         ztiles=ztiles,
         nrows=nrows,
-        ncols=ncols
+        ncols=ncols,
+        estimate_sign_with_decon=estimate_sign_with_decon
     )
 
     if plot:
@@ -610,6 +596,7 @@ def aggregate_predictions(
     final_prediction: str = 'mean',
     scalar: float = 1,
     plot: bool = False,
+    ignore_tile: Any = None,
 ):
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
@@ -623,6 +610,14 @@ def aggregate_predictions(
         usecols=lambda col: col == 'ansi' or col.startswith('p')
     )
     original_pcols = predictions.columns
+
+    if ignore_tile is not None:
+        for tile in ignore_tile:
+            col = f"p-{tile}"
+            if col in predictions.columns:
+                predictions.loc[:, col] = np.zeros_like(predictions.index)
+            else:
+                logger.warning(f"`{tile}` was not found!")
 
     # filter out small predictions
     prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
@@ -708,15 +703,15 @@ def aggregate_predictions(
                         pad_inches=.25)
     else:
         logger.warning(f"No modes detected with the current configs")
-
-        for c in original_pcols:
-            predictions[c] = np.zeros_like(predictions.index)
-
         predictions['mean'] = predictions[pcols].mean(axis=1)
         predictions['median'] = predictions[pcols].median(axis=1)
         predictions['min'] = predictions[pcols].min(axis=1)
         predictions['max'] = predictions[pcols].max(axis=1)
         predictions['std'] = predictions[pcols].std(axis=1)
+
+    for c in original_pcols:
+        if c not in predictions.columns:
+            predictions[c] = np.zeros_like(predictions.index)
 
     predictions.fillna(0, inplace=True)
     predictions.index.name = 'ansi'

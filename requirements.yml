@@ -23,3 +23,4 @@ dependencies:
   - zarr
   - pip:
       - raster_geometry
+      - astropy

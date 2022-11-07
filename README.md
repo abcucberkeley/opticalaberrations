@@ -21,6 +21,8 @@ We recommend using Anaconda
 (https://docs.anaconda.com/anaconda/install/index.html)
 to install the required packages for running our models. 
 
+> **Note:** Please make sure you have Git LFS installed to download our pretrained models:
+https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage
 
 ### For `Linux` or `Windows`: 
 
@@ -36,7 +38,7 @@ conda env create -f requirements.yml
 conda activate ml
 ```
 
-Also, clone the LLSM3D tools repository for additional utils such as `decon`, `deskew` and `point detection`
+Finally, clone the LLSM3D tools repository for additional functions such as `decon`, `deskew` and `point detection`
 ```shell
 git clone --branch dev https://github.com/abcucberkeley/LLSM3DTools.git
 ```
