@@ -4,7 +4,7 @@ import platform
 
 # required flags
 python = Path('~/anaconda3/envs/deep/bin/python')
-repo = Path('~/Gitlab/opticalaberrations/')
+repo = Path('~/Github/opticalaberrations/')
 script = repo/'src/ao.py'
 
 if platform.system() == "Windows":
@@ -149,15 +149,14 @@ aggregate_predictions_flags += f" --axial_voxel_size {axial_voxel_size}"
 aggregate_predictions_flags += f" --wavelength {wavelength}"
 aggregate_predictions_flags += f" --plot" if plot else ""
 
-for tile in ignore_tiles:
-    aggregate_predictions_flags += f" --ignore_tile {tile}"
-
-
 roi_predictions = f"{sample.with_suffix('')}_rois_predictions.csv"
 aggregate_roi_predictions = f"{python} {script} aggregate_predictions {model} {roi_predictions} {dm} {aggregate_predictions_flags}"
 
 tile_predictions = f"{sample.with_suffix('')}_tiles_predictions.csv"
 aggregate_tile_predictions = f"{python} {script} aggregate_predictions {model} {tile_predictions} {dm} {aggregate_predictions_flags}"
+
+for tile in ignore_tiles:
+    aggregate_tile_predictions += f" --ignore_tile {tile}"
 
 decon_sample_predictions = f"{python} {script} decon"
 decon_sample_predictions += f" {sample}"

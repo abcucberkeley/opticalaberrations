@@ -185,6 +185,7 @@ The script takes 2 positional arguments and a few optional ones described below.
 | `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`) |
 | `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                   |
 | `batch_size`               | maximum batch size for the model (Default: `100`)                                                                 |
+| `ignore_tile`              | IDs [e.g., "z0-y0-x0"] for tiles you wish to ignore  (Default: None)                                              |
 | `plot`                     | a toggle for plotting predictions                                                                                 |
 
 
