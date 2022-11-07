@@ -952,7 +952,7 @@ def booststrap_predict_sign(
         'axes.autolimit_mode': 'round_numbers'
     })
 
-    prev_pred = None if eval(str(prev_pred)) is None else prev_pred
+    prev_pred = None if (prev_pred is None or str(prev_pred) == 'None') else prev_pred
 
     init_preds, stdev = bootstrap_predict(
         model,
