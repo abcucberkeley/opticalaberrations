@@ -717,7 +717,7 @@ def aggregate_predictions(
     predictions.index.name = 'ansi'
     predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated.csv")
 
-    dm_state = np.zeros(69) if eval(str(dm_state)) is None else pd.read_csv(dm_state, header=None).values[:, 0]
+    dm_state = np.zeros(69) if (dm_state is None or str(dm_state) == 'None') else pd.read_csv(dm_state, header=None).values[:, 0]
     dm = pd.DataFrame(zernikies_to_actuators(
         predictions[final_prediction].values, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar
     ))
