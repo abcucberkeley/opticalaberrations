@@ -66,10 +66,10 @@ decon_iters = 10
 
 deskew = f"{python} {script} deskew"
 deskew += f" {sample}"
-deskew += f" --flipz {num_rois}"
 deskew += f" --skew_angle {skew_angle}"
 deskew += f" --lateral_voxel_size {lateral_voxel_size}"
 deskew += f" --axial_voxel_size {axial_voxel_size}"
+deskew += f" --flipz" if flipz else ""
 
 
 detect_rois = f"{python} {script} detect_rois"
