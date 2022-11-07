@@ -59,7 +59,8 @@ from roi import ROI
 import opticalnet
 import opticalresnet
 import opticaltransformer
-from baseline import Baseline
+import baseline
+import otfnet
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -247,12 +248,17 @@ def train(
             no_phase=no_phase
         )
     elif network == 'baseline':
-        model = Baseline(
+        model = baseline.Baseline(
             name='Baseline',
             modes=pmodes,
             depth_scalar=depth_scalar,
             width_scalar=width_scalar,
             activation=activation,
+        )
+    elif network == 'otfnet':
+        model = otfnet.OTFNet(
+            name='OTFNet',
+            modes=pmodes
         )
     elif network == 'phasenet':
         model = PhaseNet(
@@ -284,7 +290,7 @@ def train(
         loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
 
         """
-            Adam: A Method for Stochastic Optimization: https://arxiv.org/pdf/1412.6980
+            Adam: A Method for Stochastic Optimization: httpsz://arxiv.org/pdf/1412.6980
             SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
             Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
         """

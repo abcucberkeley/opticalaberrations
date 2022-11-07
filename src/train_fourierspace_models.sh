@@ -25,7 +25,17 @@ fi
 python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 2 --gpus 4 --cpus 16 \
 --task "--network opticalnet --multinode $PHASE --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname p32-p16-p8x2 \
---name new/$DATASET/$DIFFICULTY/opticalnet_multinode
+--name new/$DATASET/$DIFFICULTY/opticalnet
+
+python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 2 --gpus 4 --cpus 16 \
+--task "--network opticalresnet --multinode $PHASE --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--taskname p32-p16-p8x2 \
+--name new/$DATASET/$DIFFICULTY/opticalresnet
+
+python multinode_manager.py train.py --partition abc --constraint 'titan' --mem '500GB' --nodes 2 --gpus 4 --cpus 20 \
+--task "--network otfnet --multinode $PHASE --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--taskname p32-p16-p8x2 \
+--name new/$DATASET/$DIFFICULTY/otfnet
 
 #python manager.py slurm train.py --partition abc_a100 --mem '500GB' --gpus 4 --cpus 16 \
 #--task "--network opticalnet $PHASE --opt Adamw --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
