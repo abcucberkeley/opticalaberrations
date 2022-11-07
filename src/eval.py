@@ -1755,7 +1755,7 @@ def distheatmap(
     cbar.ax.yaxis.set_label_position('left')
 
     ax.set_xlabel(rf'Average distance to nearest neighbor (microns)')
-    ax.set_xlim(0, 8)
+    ax.set_xlim(0, 4)
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     ax.set_ylabel(

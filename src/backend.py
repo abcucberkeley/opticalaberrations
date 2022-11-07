@@ -70,7 +70,7 @@ logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 
 
-def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64)):
+def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64), **kwargs):
     with h5py.File(model_path, 'r') as file:
         psfgen = SyntheticPSF(
             dtype=np.array(file.get('psf_type')[:]),
@@ -80,6 +80,7 @@ def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64)):
             x_voxel_size=float(file.get('x_voxel_size')[()]),
             y_voxel_size=float(file.get('y_voxel_size')[()]),
             z_voxel_size=float(file.get('z_voxel_size')[()]),
+            **kwargs
         )
     return psfgen
 
@@ -1046,7 +1047,7 @@ def eval_sign(
         threshold=threshold,
         plot=plot
     )
-    if len(ys.shape) > 1:
+    if len(init_preds.shape) > 1:
         init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
     else:
         init_preds = np.abs(init_preds)[:ys.shape[-1]]
@@ -1075,7 +1076,7 @@ def eval_sign(
         threshold=threshold,
         desc=desc,
     )
-    if len(ys.shape) > 1:
+    if len(init_preds.shape) > 1:
         followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]
     else:
         followup_preds = np.abs(followup_preds)[:ys.shape[-1]]
@@ -1119,48 +1120,26 @@ def eval_sign(
 
 def predict(
     model: Path,
-    psf_type: str,
-    wavelength: float,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
-    max_jitter: float,
-    cpu_workers: int,
     input_coverage: float = 1.0,
-    no_phase: bool = False,
     radius: float = .4,
     psnr: int = 30
 ):
     m = load(model)
     m.summary()
 
-    modes = m.layers[-1].output_shape[-1]
-    input_shape = m.layers[0].input_shape[0][1:-1]
-
     for dist in ['powerlaw', 'dirichlet']:
         for amplitude_range in [(.1, .2), (.2, .3)]:
-            psfargs = dict(
-                dtype=psf_type,
-                order='ansi',
+            gen = load_metadata(
+                model,
                 snr=1000,
-                n_modes=modes,
-                distribution=dist,
-                gamma=.75,
                 bimodal=True,
-                lam_detection=wavelength,
-                amplitude_ranges=amplitude_range,
-                psf_shape=3 * [input_shape[-1]],
-                x_voxel_size=x_voxel_size,
-                y_voxel_size=y_voxel_size,
-                z_voxel_size=z_voxel_size,
                 batch_size=1,
-                max_jitter=max_jitter,
-                cpu_workers=cpu_workers,
+                amplitude_ranges=amplitude_range,
+                distribution=dist,
+                psf_shape=(64, 64, 64)
             )
-
-            gen = SyntheticPSF(**psfargs)
             for s, (psf, y, snr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True)):
-                waves = np.round(utils.microns2waves(amplitude_range[0], wavelength), 2)
+                waves = np.round(utils.microns2waves(amplitude_range[0], gen.lam_detection), 2)
                 psf = np.squeeze(psf)
 
                 for npoints in tqdm([1, 3, 5, 10, 15]):
@@ -1200,7 +1179,7 @@ def predict(
                     noisy_img /= np.max(noisy_img)
 
                     save_path = Path(
-                        f"{model}/samples/{dist}/c{input_coverage}/lambda-{waves}/npoints-{npoints}"
+                        f"{model.with_suffix('')}/samples/{dist}/c{input_coverage}/lambda-{waves}/npoints-{npoints}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
@@ -1218,11 +1197,11 @@ def predict(
                         plot=save_path / f'embeddings_{s}',
                     )
 
-                    p_wave = Wavefront(p, lam_detection=wavelength)
+                    p_wave = Wavefront(p, lam_detection=gen.lam_detection)
                     # logger.info('Prediction')
                     # pprint(p_wave.zernikes)
 
-                    y_wave = Wavefront(y.flatten(), lam_detection=wavelength)
+                    y_wave = Wavefront(y.flatten(), lam_detection=gen.lam_detection)
                     # logger.info('GT')
                     # pprint(y_wave.zernikes)
 
@@ -1240,7 +1219,7 @@ def predict(
                         gt_psf=gt_psf,
                         predicted_psf=p_psf,
                         corrected_psf=corrected_psf,
-                        wavelength=wavelength,
+                        wavelength=gen.lam_detection,
                         psnr=psnr,
                         maxcounts=maxcounts,
                         y=y_wave,
@@ -1626,7 +1605,7 @@ def save_metadata(
         except Exception as e:
             logger.error(e)
 
-    with h5py.File(f"{filepath}.h5", 'r+') as file:
+    with h5py.File(filepath if str(filepath).endswith('.h5') else f"{filepath}.h5", 'r+') as file:
         add_param(file, name='n_modes', data=n_modes)
         add_param(file, name='wavelength', data=wavelength)
         add_param(file, name='x_voxel_size', data=x_voxel_size)

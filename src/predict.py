@@ -28,34 +28,6 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--amplitude_range", default=.2, type=float, help='amplitude range for zernike modes in microns'
-    )
-
-    parser.add_argument(
-        "--max_jitter", default=1, type=float, help='randomly move the center point within a given limit (microns)'
-    )
-
-    parser.add_argument(
-        "--wavelength", default=.605, type=float, help='wavelength in microns'
-    )
-
-    parser.add_argument(
-        "--psf_type", default='widefield', help="type of the desired PSF"
-    )
-
-    parser.add_argument(
-        "--x_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
-    )
-
-    parser.add_argument(
-        "--y_voxel_size", default=.15, type=float, help='lateral voxel size in microns for Y'
-    )
-
-    parser.add_argument(
-        "--z_voxel_size", default=.6, type=float, help='axial voxel size in microns for Z'
-    )
-
-    parser.add_argument(
         "--psnr", default=100, type=float, help='peak signal-to-noise ratio'
     )
 
@@ -70,11 +42,6 @@ def parse_args(args):
     parser.add_argument(
         "--input_coverage", default=1.0, type=float, help='faction of the image to feed into the model '
                                                           '(then padded to keep the original image size)'
-    )
-
-    parser.add_argument(
-        '--no_phase', action='store_true',
-        help='toggle to use exclude phase from the model embeddings'
     )
 
     return parser.parse_args(args)
@@ -92,15 +59,8 @@ def main(args=None):
     if args.target == "random":
         backend.predict(
             model=args.model,
-            psf_type=args.psf_type,
-            wavelength=args.wavelength,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            max_jitter=args.max_jitter,
-            cpu_workers=args.cpu_workers,
             input_coverage=args.input_coverage,
-            no_phase=args.no_phase
+            psnr=args.psnr
         )
 
     elif args.target == "featuremaps":
