@@ -27,7 +27,7 @@ LAMBDA=.510
 NA=1.0
 
 DIFFICULTY='hard'
-DATASET='train'
+DATASET='test'
 SHAPE=64
 RCROP=32
 OUTDIR="/clusterfs/nvme/thayer/dataset/yumb/${DIFFICULTY}/${DATASET}"
@@ -60,8 +60,8 @@ if [ "$DATASET" = "train" ];then
   fi
 else
   TYPE=''
-  ITERS=10
-  OBJS=(1 5 10 15 20 25 30 35 40 50)
+  ITERS=20
+  OBJS=(1 2 3 4 5 10 15 20 25 30)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
   SAMPLES=($(seq 1 10 10))

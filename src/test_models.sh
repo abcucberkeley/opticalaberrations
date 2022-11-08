@@ -7,19 +7,29 @@ LAMBDA=.510
 SHAPE=64
 SAMPLES=25
 MAXAMP=.5
-MODES=15
+MODES=60
 
-DIFFICULTY='easy'
-DATASET='yumb_lattice_objects'
+DIFFICULTY='hard'
+DATASET='yumb'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/$DIFFICULTY/test/x108-y108-z200/"
 
 declare -a models=(
-'../models/new/yumb_lattice_objects/hard/opticaltransformer'
+'../models/new/yumb/hard/opticaltransformer'
+'../models/new/yumb/hard/otfnet'
 )
 
 for MODEL in "${models[@]}"
 do
+  for COV in 1.0 0.5
+  do
+    python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
+    --task "$MODEL --psf_type $PSF_TYPE --n_modes $MODES --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL metadata" \
+    --task "$MODEL --input_coverage $COV random" \
+    --taskname $COV \
+    --name $MODEL/samples
+  done
+
   for NA in 1. .9 .8
   do
     for COV in 1.0 0.5
@@ -55,13 +65,4 @@ do
       #--name $MODEL/distheatmaps_neighbor_${N}
     #done
   done
-
-  for COV in 1.0 0.5
-  do
-    python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
-    --task "$MODEL --psf_type $PSF_TYPE --input_coverage $COV --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL random" \
-    --taskname $COV \
-    --name $MODEL/samples
-  done
-
 done

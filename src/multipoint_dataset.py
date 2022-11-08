@@ -75,7 +75,7 @@ def sim(
             reference += rg.sphere(
                 shape=gen.psf_shape,
                 radius=sphere,
-                position=np.random.uniform(low=.1, high=.9, size=3)
+                position=np.random.uniform(low=.2, high=.8, size=3)
             ).astype(np.float) * np.random.random()
         else:
             reference[

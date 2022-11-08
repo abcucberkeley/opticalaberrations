@@ -28,7 +28,35 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--amplitude_range", default=.2, type=float, help='amplitude range for zernike modes in microns'
+    )
+
+    parser.add_argument(
+        "--wavelength", default=.510, type=float, help='wavelength in microns'
+    )
+
+    parser.add_argument(
+        "--psf_type", default='widefield', help="type of the desired PSF"
+    )
+
+    parser.add_argument(
+        "--x_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+
+    parser.add_argument(
+        "--y_voxel_size", default=.108, type=float, help='lateral voxel size in microns for Y'
+    )
+
+    parser.add_argument(
+        "--z_voxel_size", default=.2, type=float, help='axial voxel size in microns for Z'
+    )
+
+    parser.add_argument(
         "--psnr", default=100, type=float, help='peak signal-to-noise ratio'
+    )
+
+    parser.add_argument(
+        "--n_modes", default=60, type=int, help='number zernike modes'
     )
 
     parser.add_argument(
@@ -61,6 +89,17 @@ def main(args=None):
             model=args.model,
             input_coverage=args.input_coverage,
             psnr=args.psnr
+        )
+
+    elif args.target == "metadata":
+        backend.save_metadata(
+            filepath=args.model,
+            n_modes=args.n_modes,
+            wavelength=args.wavelength,
+            psf_type=args.psf_type,
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
         )
 
     elif args.target == "featuremaps":

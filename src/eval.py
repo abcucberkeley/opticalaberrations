@@ -1968,8 +1968,8 @@ def densityheatmap(
     cbar.ax.yaxis.set_label_position('left')
 
     ax.set_xlabel(rf'Number of points')
-    ax.set_xticks(np.arange(0, 55, 5))
-    ax.set_xlim(1, 50)
+    ax.set_xticks(np.arange(0, 35, 5))
+    ax.set_xlim(1, 30)
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     ax.set_ylabel(

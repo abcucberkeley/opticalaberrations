@@ -72,6 +72,9 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64), **kwargs):
+    if not str(model_path).endswith('.h5'):
+        model_path = list(model_path.rglob('*.h5'))[0]
+
     with h5py.File(model_path, 'r') as file:
         psfgen = SyntheticPSF(
             dtype=np.array(file.get('psf_type')[:]),
@@ -1611,7 +1614,8 @@ def save_metadata(
         except Exception as e:
             logger.error(e)
 
-    with h5py.File(filepath if str(filepath).endswith('.h5') else f"{filepath}.h5", 'r+') as file:
+    file = filepath if str(filepath).endswith('.h5') else list(filepath.rglob('*.h5'))[0]
+    with h5py.File(file, 'r+') as file:
         add_param(file, name='n_modes', data=n_modes)
         add_param(file, name='wavelength', data=wavelength)
         add_param(file, name='x_voxel_size', data=x_voxel_size)
