@@ -21,14 +21,10 @@ declare -a models=(
 
 for MODEL in "${models[@]}"
 do
-  for COV in 1.0 0.5
-  do
-    python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
-    --task "$MODEL --psf_type $PSF_TYPE --n_modes $MODES --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL metadata" \
-    --task "$MODEL --input_coverage $COV random" \
-    --taskname $COV \
-    --name $MODEL/samples
-  done
+  python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
+  --task "$MODEL --psf_type $PSF_TYPE --n_modes $MODES --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL metadata" \
+  --taskname metadata \
+  --name $MODEL/metadata
 
   for NA in 1. .9 .8
   do
@@ -65,4 +61,13 @@ do
       #--name $MODEL/distheatmaps_neighbor_${N}
     #done
   done
+
+  for COV in 1.0 0.5
+  do
+    python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
+    --task "$MODEL --input_coverage $COV random" \
+    --taskname $COV \
+    --name $MODEL/samples
+  done
+
 done
