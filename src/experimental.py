@@ -120,7 +120,7 @@ def detect_rois(
     matlab += f' -nodisplay'
     matlab += f' -nosplash'
     matlab += f' -nodesktop'
-    matlab += f' -nojvm -r '
+    matlab += f' -r '
 
     det = f"TA_PointDetection('{img}','{psf}',{lateral_voxel_size},{axial_voxel_size},{skew_angle},{sigma_xy},{sigma_z})"
     repo = Path(__file__).parent.parent.absolute()
@@ -137,7 +137,7 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
     matlab += f' -nodisplay'
     matlab += f' -nosplash'
     matlab += f' -nodesktop'
-    matlab += f' -nojvm -r '
+    matlab += f' -r '
 
     save_path = Path(f"{str(psf.with_suffix('')).replace('_psf', '')}_decon.tif")
     det = f"TA_Decon('{img}','{psf}',{iters}, '{save_path}')"
