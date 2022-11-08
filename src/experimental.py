@@ -84,7 +84,7 @@ def deskew(
     matlab += f' -nodisplay'
     matlab += f' -nosplash'
     matlab += f' -nodesktop'
-    matlab += f' -nojvm -r '
+    matlab += f' -r '
 
     flags = f"{lateral_voxel_size},{axial_voxel_size},"
     flags += f"'SkewAngle',{skew_angle},"
