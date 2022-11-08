@@ -2510,8 +2510,8 @@ def diagnosis(
     ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
 def prediction(
@@ -2572,8 +2572,8 @@ def prediction(
     slice(ax_pxy, ax_pxz, corrected_image, label='Corrected (MIP)', maxproj=True)
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
 def tiles(
@@ -2628,8 +2628,8 @@ def tiles(
         cbar.ax.set_yticks([])
         cbar.ax.set_xlabel(rf"$\gamma$={gamma}")
 
-        # plt.savefig(f'{save_path}_z{z}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{save_path}_z{z}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{save_path}_z{z}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
 def wavefronts(
@@ -2736,5 +2736,5 @@ def wavefronts(
         cbar.ax.set_yticks([])
         cbar.ax.set_title(f'$\lambda = {wavelength}~\mu m$')
 
-        # plt.savefig(f'{save_path}_z{z}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{save_path}_z{z}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{save_path}_z{z}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)

@@ -302,12 +302,12 @@ def predict(
 def predict_sample(
     img: Path,
     model: Path,
-    dm_pattern: Path,
+    dm_calibration: Path,
     dm_state: Path,
     axial_voxel_size: float,
     lateral_voxel_size: float,
     wavelength: float = .605,
-    scalar: float = 1,
+    dm_damping_scalar: float = 1,
     prediction_threshold: float = 0.0,
     sign_threshold: float = .4,
     verbose: bool = False,
@@ -360,19 +360,15 @@ def predict_sample(
         batch_size=batch_size,
         prev_pred=prev,
         estimate_sign_with_decon=estimate_sign_with_decon,
-        plot=Path(f"{img.with_suffix('')}_predictions") if plot else None,
+        plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
 
     dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
-    dm = pd.DataFrame(zernikies_to_actuators(p, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar))
-    dm.to_csv(f"{img.with_suffix('')}_predictions_corrected_actuators.csv", index=False, header=False)
+    dm = pd.DataFrame(zernikies_to_actuators(p, dm_pattern=dm_calibration, dm_state=dm_state, scalar=dm_damping_scalar))
+    dm.to_csv(f"{img.with_suffix('')}_sample_predictions_corrected_actuators.csv", index=False, header=False)
 
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
     std = Wavefront(std, order='ansi', lam_detection=wavelength)
-
-    if verbose:
-        logger.info('Prediction')
-        logger.info(p.zernikes)
 
     coffs = [
         {'n': z.n, 'm': z.m, 'amplitude': a}
@@ -380,13 +376,13 @@ def predict_sample(
     ]
     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
     coffs.index.name = 'ansi'
-    coffs.to_csv(f"{img.with_suffix('')}_predictions_zernike_coffs.csv")
+    coffs.to_csv(f"{img.with_suffix('')}_sample_predictions_zernike_coffs.csv")
 
     pupil_displacement = np.array(p.wave(size=100), dtype='float32')
-    imsave(f"{img.with_suffix('')}_predictions_pupil_displacement.tif", pupil_displacement)
+    imsave(f"{img.with_suffix('')}_sample_predictions_pupil_displacement.tif", pupil_displacement)
 
     psf = psfgen.single_psf(phi=p, normed=True, noise=False)
-    imsave(f"{img.with_suffix('')}_predictions_psf.tif", psf)
+    imsave(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
 
     if plot:
         vis.diagnosis(
@@ -395,7 +391,7 @@ def predict_sample(
             dm_before=dm_state,
             dm_after=dm.values[:, 0],
             wavelength=wavelength,
-            save_path=Path(f"{img.with_suffix('')}_predictions_diagnosis"),
+            save_path=Path(f"{img.with_suffix('')}_sample_predictions_diagnosis"),
         )
 
 
@@ -454,7 +450,7 @@ def predict_dataset(
 def predict_rois(
     img: Path,
     model: Path,
-    peaks: Any,
+    pois: Any,
     axial_voxel_size: float,
     lateral_voxel_size: float,
     wavelength: float = .605,
@@ -484,7 +480,7 @@ def predict_rois(
     rois = preprocessing.find_roi(
         sample,
         # savepath=outdir,
-        peaks=peaks,
+        peaks=pois,
         window_size=tuple(3*[window_size]),
         plot=f"{outdir}_predictions" if plot else None,
         num_peaks=num_rois,
@@ -584,7 +580,7 @@ def predict_tiles(
 def aggregate_predictions(
     model: Path,
     model_pred: Path,
-    dm_pattern: Path,
+    dm_calibration: Path,
     dm_state: Any,
     wavelength: float = .605,
     axial_voxel_size: float = .1,
@@ -594,7 +590,7 @@ def aggregate_predictions(
     max_percentile: int = 90,
     prediction_threshold: float = 0.,
     final_prediction: str = 'mean',
-    scalar: float = 1,
+    dm_damping_scalar: float = 1,
     plot: bool = False,
     ignore_tile: Any = None,
 ):
@@ -699,8 +695,8 @@ def aggregate_predictions(
                 axes.set_xlabel(f'Amplitudes ($\mu m$)')
 
             plt.tight_layout()
-            plt.savefig(f"{model_pred.with_suffix('')}_aggregated.png", bbox_inches='tight', dpi=300,
-                        pad_inches=.25)
+            plt.savefig(f"{model_pred.with_suffix('')}_aggregated.png", bbox_inches='tight', dpi=300, pad_inches=.25)
+            plt.savefig(f"{model_pred.with_suffix('')}_aggregated.svg", bbox_inches='tight', dpi=300, pad_inches=.25)
     else:
         logger.warning(f"No modes detected with the current configs")
         predictions['mean'] = predictions[pcols].mean(axis=1)
@@ -719,7 +715,7 @@ def aggregate_predictions(
 
     dm_state = np.zeros(69) if (dm_state is None or str(dm_state) == 'None') else pd.read_csv(dm_state, header=None).values[:, 0]
     dm = pd.DataFrame(zernikies_to_actuators(
-        predictions[final_prediction].values, dm_pattern=dm_pattern, dm_state=dm_state, scalar=scalar
+        predictions[final_prediction].values, dm_pattern=dm_calibration, dm_state=dm_state, scalar=dm_damping_scalar
     ))
     dm.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv", index=False, header=False)
 

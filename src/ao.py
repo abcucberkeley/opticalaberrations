@@ -55,10 +55,13 @@ def parse_args(args):
     predict_sample = subparsers.add_parser("predict_sample")
     predict_sample.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_sample.add_argument("input", type=Path, help="path to input .tif file")
-    predict_sample.add_argument("pattern", type=Path, help="path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv)")
     predict_sample.add_argument(
-        "--state", default=None, type=Path,
-        help="optional path to current DM state .csv file (Default: `blank mirror`)"
+        "dm_calibration", type=Path,
+        help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
+    )
+    predict_sample.add_argument(
+        "--current_dm", default=None, type=Path,
+        help="optional path to current DM .csv file (Default: `blank mirror`)"
     )
     predict_sample.add_argument(
         "--prev", default=None, type=Path,
@@ -75,7 +78,7 @@ def parse_args(args):
         help='wavelength in microns'
     )
     predict_sample.add_argument(
-        "--scalar", default=.75, type=float,
+        "--dm_damping_scalar", default=.75, type=float,
         help='scale DM actuators by an arbitrary multiplier'
     )
     predict_sample.add_argument(
@@ -105,7 +108,7 @@ def parse_args(args):
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_rois.add_argument("input", type=Path, help="path to input .tif file")
-    predict_rois.add_argument("peaks", type=Path, help="path to point detection results (.mat file)")
+    predict_rois.add_argument("pois", type=Path, help="path to point detection results (.mat file)")
 
     predict_rois.add_argument(
         "--batch_size", default=100, type=int, help='maximum batch size for the model'
@@ -228,12 +231,12 @@ def parse_args(args):
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
     aggregate_predictions.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     aggregate_predictions.add_argument("predictions", type=Path, help="path to csv file")
-    aggregate_predictions.add_argument("pattern", type=Path,
-                                       help="path DM pattern mapping matrix (eg. Zernike_Korra_Bax273.csv)")
+    aggregate_predictions.add_argument("dm_calibration", type=Path,
+                                       help="path DM calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)")
 
     aggregate_predictions.add_argument(
-        "--state", default=None, type=Path,
-        help="optional path to current DM state .csv file (Default: `blank mirror`)"
+        "--current_dm", default=None, type=Path,
+        help="optional path to current DM current_dm .csv file (Default: `blank mirror`)"
     )
     aggregate_predictions.add_argument(
         "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
@@ -246,7 +249,7 @@ def parse_args(args):
         help='wavelength in microns'
     )
     aggregate_predictions.add_argument(
-        "--scalar", default=.75, type=float,
+        "--dm_damping_scalar", default=.75, type=float,
         help='scale DM actuators by an arbitrary multiplier'
     )
     aggregate_predictions.add_argument(
@@ -322,13 +325,13 @@ def main(args=None):
         experimental.predict_sample(
             model=args.model,
             img=args.input,
-            dm_pattern=args.pattern,
-            dm_state=args.state,
+            dm_calibration=args.dm_calibration,
+            dm_state=args.current_dm,
             prev=args.prev,
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
             wavelength=args.wavelength,
-            scalar=args.scalar,
+            dm_damping_scalar=args.dm_damping_scalar,
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
             num_predictions=args.num_predictions,
@@ -341,7 +344,7 @@ def main(args=None):
         experimental.predict_rois(
             model=args.model,
             img=args.input,
-            peaks=args.peaks,
+            pois=args.pois,
             prev=args.prev,
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
@@ -377,8 +380,8 @@ def main(args=None):
         experimental.aggregate_predictions(
             model=args.model,
             model_pred=args.predictions,
-            dm_pattern=args.pattern,
-            dm_state=args.state,
+            dm_calibration=args.dm_calibration,
+            dm_state=args.current_dm,
             wavelength=args.wavelength,
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
@@ -388,7 +391,7 @@ def main(args=None):
             max_percentile=args.max_percentile,
             final_prediction=args.final_prediction,
             ignore_tile=args.ignore_tile,
-            scalar=args.scalar,
+            dm_damping_scalar=args.dm_damping_scalar,
             plot=args.plot,
         )
     else:

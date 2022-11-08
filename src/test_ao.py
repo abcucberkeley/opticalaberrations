@@ -14,10 +14,10 @@ if platform.system() == "Windows":
 
 
 n = 'single'                                            # The subfolder within /examples where the test data should exist.
-sample = repo/f'examples/{n}/{n}.tif'                   # Test image file
-points = repo/f'examples/{n}/results/Detection3D.mat'
+image = repo/f'examples/{n}/{n}.tif'                   # Test image file
+pois = repo/f'examples/{n}/results/Detection3D.mat'
 
-dm = repo/'examples/Zernike_Korra_Bax273.csv'           # Deformable Mirror offsets that produce the Zernike functions
+dm_calibration = repo/'examples/Zernike_Korra_Bax273.csv'           # Deformable Mirror offsets that produce the Zernike functions
 model = repo/'pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5'
 psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'    # excitation PSF being used.  This is sythesized.
 
@@ -27,9 +27,9 @@ psf = repo/'examples/psf.tif'
 
 # common flags
 prev = None
-state = None
+current_dm = None
 wavelength = .510
-scalar = .75
+dm_damping_scalar = .75
 lateral_voxel_size = .108
 axial_voxel_size = .1
 model_lateral_voxel_size = .108
@@ -65,7 +65,7 @@ decon_iters = 10
 ## Construct the commands as strings using the flags we assigned above
 
 deskew = f"{python} {script} deskew"
-deskew += f" {sample}"
+deskew += f" {image}"
 deskew += f" --skew_angle {skew_angle}"
 deskew += f" --lateral_voxel_size {lateral_voxel_size}"
 deskew += f" --axial_voxel_size {axial_voxel_size}"
@@ -73,16 +73,16 @@ deskew += f" --flipz" if flipz else ""
 
 
 detect_rois = f"{python} {script} detect_rois"
-detect_rois += f" {sample}"
+detect_rois += f" {image}"
 detect_rois += f" --psf {psf}"
 detect_rois += f" --lateral_voxel_size {lateral_voxel_size}"
 detect_rois += f" --axial_voxel_size {axial_voxel_size}"
 
 
 predict_sample = f"{python} {script} predict_sample"
-predict_sample += f" {model} {sample} {dm}"
-predict_sample += f" --state {state}"
-predict_sample += f" --scalar {scalar}"
+predict_sample += f" {model} {image} {dm_calibration}"
+predict_sample += f" --current_dm {current_dm}"
+predict_sample += f" --dm_damping_scalar {dm_damping_scalar}"
 predict_sample += f" --wavelength {wavelength}"
 predict_sample += f" --lateral_voxel_size {lateral_voxel_size}"
 predict_sample += f" --axial_voxel_size {axial_voxel_size}"
@@ -95,11 +95,11 @@ predict_sample += f" --plot" if plot else ""
 predict_sample += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
 prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
-# sample = repo/'data/agarose/exp1.tif'  # replace with second sample
+# image = repo/'data/agarose/exp1.tif'  # replace with second image
 predict_sample_signed = f"{predict_sample} --prev {prev}"
 
 predict_rois = f"{python} {script} predict_rois"
-predict_rois += f" {model} {sample} {points}"
+predict_rois += f" {model} {image} {pois}"
 predict_rois += f" --num_rois {num_rois}"
 predict_rois += f" --min_intensity {min_intensity}"
 predict_rois += f" --minimum_distance {minimum_distance}"
@@ -116,11 +116,11 @@ predict_rois += f" --plot" if plot else ""
 predict_rois += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
 prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
-# sample = repo/'data/agarose/exp1.tif'  # replace with second sample
+# image = repo/'data/agarose/exp1.tif'  # replace with second image
 predict_rois_signed = f"{predict_rois} --prev {prev}"
 
 predict_tiles = f"{python} {script} predict_tiles"
-predict_tiles += f" {model} {sample}"
+predict_tiles += f" {model} {image}"
 predict_tiles += f" --wavelength {wavelength}"
 predict_tiles += f" --lateral_voxel_size {lateral_voxel_size}"
 predict_tiles += f" --axial_voxel_size {axial_voxel_size}"
@@ -134,11 +134,11 @@ predict_tiles += f" --plot" if plot else ""
 predict_tiles += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
 prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
-# sample = repo/'data/agarose/exp1.tif'  # replace with second sample
+# image = repo/'data/agarose/exp1.tif'  # replace with second image
 predict_tiles_signed = f"{predict_tiles} --prev {prev}"
 
-aggregate_predictions_flags = f" --state {state}"
-aggregate_predictions_flags += f" --scalar {scalar}"
+aggregate_predictions_flags = f" --current_dm {current_dm}"
+aggregate_predictions_flags += f" --dm_damping_scalar {dm_damping_scalar}"
 aggregate_predictions_flags += f" --prediction_threshold {prediction_threshold}"
 aggregate_predictions_flags += f" --majority_threshold {majority_threshold}"
 aggregate_predictions_flags += f" --min_percentile {min_percentile}"
@@ -149,30 +149,30 @@ aggregate_predictions_flags += f" --axial_voxel_size {axial_voxel_size}"
 aggregate_predictions_flags += f" --wavelength {wavelength}"
 aggregate_predictions_flags += f" --plot" if plot else ""
 
-roi_predictions = f"{sample.with_suffix('')}_rois_predictions.csv"
-aggregate_roi_predictions = f"{python} {script} aggregate_predictions {model} {roi_predictions} {dm} {aggregate_predictions_flags}"
+roi_predictions = f"{image.with_suffix('')}_rois_predictions.csv"
+aggregate_roi_predictions = f"{python} {script} aggregate_predictions {model} {roi_predictions} {dm_calibration} {aggregate_predictions_flags}"
 
-tile_predictions = f"{sample.with_suffix('')}_tiles_predictions.csv"
-aggregate_tile_predictions = f"{python} {script} aggregate_predictions {model} {tile_predictions} {dm} {aggregate_predictions_flags}"
+tile_predictions = f"{image.with_suffix('')}_tiles_predictions.csv"
+aggregate_tile_predictions = f"{python} {script} aggregate_predictions {model} {tile_predictions} {dm_calibration} {aggregate_predictions_flags}"
 
 for tile in ignore_tiles:
     aggregate_tile_predictions += f" --ignore_tile {tile}"
 
 decon_sample_predictions = f"{python} {script} decon"
-decon_sample_predictions += f" {sample}"
-decon_sample_predictions += f" {sample.with_suffix('')}_predictions_psf.tif"
+decon_sample_predictions += f" {image}"
+decon_sample_predictions += f" {image.with_suffix('')}_sample_predictions_psf.tif"
 decon_sample_predictions += f" --iters {decon_iters}"
 decon_sample_predictions += f" --plot" if plot else ""
 
 decon_roi_predictions = f"{python} {script} decon"
-decon_roi_predictions += f" {sample}"
-decon_roi_predictions += f" {sample.with_suffix('')}_rois_predictions_aggregated_psf.tif"
+decon_roi_predictions += f" {image}"
+decon_roi_predictions += f" {image.with_suffix('')}_rois_predictions_aggregated_psf.tif"
 decon_roi_predictions += f" --iters {decon_iters}"
 decon_roi_predictions += f" --plot" if plot else ""
 
 decon_tiles_predictions = f"{python} {script} decon"
-decon_tiles_predictions += f" {sample}"
-decon_tiles_predictions += f" {sample.with_suffix('')}_tiles_predictions_aggregated_psf.tif"
+decon_tiles_predictions += f" {image}"
+decon_tiles_predictions += f" {image.with_suffix('')}_tiles_predictions_aggregated_psf.tif"
 decon_tiles_predictions += f" --iters {decon_iters}"
 decon_tiles_predictions += f" --plot" if plot else ""
 
@@ -185,7 +185,7 @@ decon_tiles_predictions += f" --plot" if plot else ""
 call(predict_sample, shell=True)
 call(decon_sample_predictions, shell=True)
 
-call(detect_rois, shell=True)
+# call(detect_rois, shell=True)
 call(predict_rois, shell=True)
 call(aggregate_roi_predictions, shell=True)
 call(decon_roi_predictions, shell=True)
