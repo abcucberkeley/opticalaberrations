@@ -463,9 +463,9 @@ def plot_shapes_embeddings(
         wavelength=.510,
         x_voxel_size=.108,
         y_voxel_size=.108,
-        z_voxel_size=.268,
+        z_voxel_size=.2,
         log10=False,
-        psf_type='../examples/lattice/lattice_PSF_simulation.mat',
+        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         savepath='../data/shapes_embeddings',
 ):
     def sphere(image_size, radius=.5, position=.5):

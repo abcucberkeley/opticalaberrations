@@ -46,7 +46,7 @@ def zernikies_to_actuators(
 
     coefficients = np.expand_dims(coefficients, axis=-1)
     offset = np.dot(dm_pattern, coefficients)[:, 0]
-    return dm_state + (offset * scalar)
+    return dm_state - (offset * scalar)
 
 
 def matlab_phase_retrieval(psf: Path, dx=.15, dz=.6, wavelength=.605, n_modes=60) -> list:
