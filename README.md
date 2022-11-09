@@ -42,7 +42,9 @@ Finally, clone the LLSM3D tools repository for additional functions such as `dec
 ```shell
 git clone --branch dev https://github.com/abcucberkeley/LLSM3DTools.git
 ```
-
+### Other prerequisites 
+- `MATLAB 2020b` or higher is required (for these additional functions).
+- NVIDIA GPU with driver >= 512.15
 
 ## Utilities
 
