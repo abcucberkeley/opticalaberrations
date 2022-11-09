@@ -93,7 +93,7 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                   |
 | `plot`                     | a toggle for plotting predictions                                                                                 |
 | `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                      |
-
+| `ignore_mode`              | ANSI index for mode you wish to ignore  (Default: [0, 1, 2, 4])                                                   |
 
 
 ### ROI-based predictions 
@@ -137,6 +137,7 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `batch_size`               | maximum batch size for the model (Default: `100`)                                                                 |
 | `plot`                     | a toggle for plotting predictions                                                                                 |
 | `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                      |
+| `ignore_mode`              | ANSI index for mode you wish to ignore  (Default: [0, 1, 2, 4])                                                   |
 
 
 
@@ -180,6 +181,7 @@ The script takes 2 positional arguments and a few optional ones described below.
 | `ignore_tile`              | IDs [e.g., "z0-y0-x0"] for tiles you wish to ignore  (Default: None)                                              |
 | `plot`                     | a toggle for plotting predictions                                                                                 |
 | `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                      |
+| `ignore_mode`              | ANSI index for mode you wish to ignore  (Default: [0, 1, 2, 4])                                                   |
 
 
 ### Aggregate predictions 

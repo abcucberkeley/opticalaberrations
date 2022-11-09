@@ -104,6 +104,10 @@ def parse_args(args):
         "--estimate_sign_with_decon", action='store_true',
         help='a toggle for estimating signs of each Zernike mode via decon'
     )
+    predict_sample.add_argument(
+        "--ignore_mode", action='append', default=[0, 1, 2, 4],
+        help='ANSI index for mode you wish to ignore'
+    )
 
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -172,6 +176,11 @@ def parse_args(args):
         "--estimate_sign_with_decon", action='store_true',
         help='a toggle for estimating signs of each Zernike mode via decon'
     )
+    predict_rois.add_argument(
+        "--ignore_mode", action='append', default=[0, 1, 2, 4],
+        help='ANSI index for modes you wish to ignore'
+    )
+
 
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -226,6 +235,10 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--estimate_sign_with_decon", action='store_true',
         help='a toggle for estimating signs of each Zernike mode via decon'
+    )
+    predict_tiles.add_argument(
+        "--ignore_mode", action='append', default=[0, 1, 2, 4],
+        help='ANSI index for mode you wish to ignore'
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
@@ -338,6 +351,7 @@ def main(args=None):
             plot=args.plot,
             batch_size=args.batch_size,
             estimate_sign_with_decon=args.estimate_sign_with_decon,
+            ignore_modes=args.ignore_mode
         )
 
     elif args.func == 'predict_rois':
@@ -359,6 +373,7 @@ def main(args=None):
             plot=args.plot,
             batch_size=args.batch_size,
             estimate_sign_with_decon=args.estimate_sign_with_decon,
+            ignore_modes=args.ignore_mode
         )
     elif args.func == 'predict_tiles':
         experimental.predict_tiles(
@@ -375,6 +390,7 @@ def main(args=None):
             plot=args.plot,
             batch_size=args.batch_size,
             estimate_sign_with_decon=args.estimate_sign_with_decon,
+            ignore_modes=args.ignore_mode
         )
     elif args.func == 'aggregate_predictions':
         experimental.aggregate_predictions(

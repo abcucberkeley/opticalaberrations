@@ -41,6 +41,7 @@ window_size = 64
 batch_size = 256
 plot = True
 estimate_sign_with_decon = False
+ignore_modes = [21, 27, 28, 35, 36, 44, 45, 54, 55]
 
 # extra `aggregate_predictions` flags
 majority_threshold = .5
@@ -94,6 +95,10 @@ predict_sample += f" --prev {prev}"
 predict_sample += f" --plot" if plot else ""
 predict_sample += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
+for mode in ignore_modes:
+    predict_sample += f" --ignore_mode {mode}"
+
+
 prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
 # image = repo/'data/agarose/exp1.tif'  # replace with second image
 predict_sample_signed = f"{predict_sample} --prev {prev}"
@@ -115,6 +120,10 @@ predict_rois += f" --prev {prev}"
 predict_rois += f" --plot" if plot else ""
 predict_rois += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
+for mode in ignore_modes:
+    predict_rois += f" --ignore_mode {mode}"
+
+
 prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
 # image = repo/'data/agarose/exp1.tif'  # replace with second image
 predict_rois_signed = f"{predict_rois} --prev {prev}"
@@ -132,6 +141,10 @@ predict_tiles += f" --batch_size {batch_size}"
 predict_tiles += f" --prev {prev}"
 predict_tiles += f" --plot" if plot else ""
 predict_tiles += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
+
+for mode in ignore_modes:
+    predict_tiles += f" --ignore_mode {mode}"
+
 
 prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
 # image = repo/'data/agarose/exp1.tif'  # replace with second image
@@ -183,13 +196,13 @@ decon_tiles_predictions += f" --plot" if plot else ""
 # call(deskew, shell=True)
 
 call(predict_sample, shell=True)
-call(decon_sample_predictions, shell=True)
+# call(decon_sample_predictions, shell=True)
 
-call(detect_rois, shell=True)
+# call(detect_rois, shell=True)
 call(predict_rois, shell=True)
-call(aggregate_roi_predictions, shell=True)
-call(decon_roi_predictions, shell=True)
+# call(aggregate_roi_predictions, shell=True)
+# call(decon_roi_predictions, shell=True)
 
 call(predict_tiles, shell=True)
-call(aggregate_tile_predictions, shell=True)
-call(decon_tiles_predictions, shell=True)
+# call(aggregate_tile_predictions, shell=True)
+# call(decon_tiles_predictions, shell=True)

@@ -209,6 +209,7 @@ def predict(
     mosaic: bool = True,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
+    ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.,
     sign_threshold: float = .4,
     num_predictions: int = 1,
@@ -278,6 +279,7 @@ def predict(
         modelgen=modelpsfgen,
         prev_pred=prev,
         estimate_sign_with_decon=estimate_sign_with_decon,
+        ignore_modes=ignore_modes,
         plot=Path(f"{data.with_suffix('')}_predictions") if plot else None,
     )
 
@@ -317,6 +319,7 @@ def predict_sample(
     mosaic: bool = True,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
+    ignore_modes: list = (0, 1, 2, 4),
 ):
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
@@ -360,6 +363,7 @@ def predict_sample(
         batch_size=batch_size,
         prev_pred=prev,
         estimate_sign_with_decon=estimate_sign_with_decon,
+        ignore_modes=ignore_modes,
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
 
@@ -465,6 +469,7 @@ def predict_rois(
     plot: bool = False,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
+    ignore_modes: list = (0, 1, 2, 4),
 ):
     sample = imread(img).astype(float)
     esnr = np.sqrt(sample.max()).astype(int)
@@ -510,7 +515,8 @@ def predict_rois(
         ztiles=1,
         nrows=ncols,
         ncols=nrows,
-        estimate_sign_with_decon=estimate_sign_with_decon
+        estimate_sign_with_decon=estimate_sign_with_decon,
+        ignore_modes=ignore_modes
     )
 
 
@@ -528,6 +534,7 @@ def predict_tiles(
     plot: bool = True,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
+    ignore_modes: list = (0, 1, 2, 4),
 ):
     modelpsfgen = backend.load_metadata(model)
 
@@ -565,7 +572,8 @@ def predict_tiles(
         ztiles=ztiles,
         nrows=nrows,
         ncols=ncols,
-        estimate_sign_with_decon=estimate_sign_with_decon
+        estimate_sign_with_decon=estimate_sign_with_decon,
+        ignore_modes=ignore_modes
     )
 
     if plot:

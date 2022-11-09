@@ -755,6 +755,7 @@ def bootstrap_predict(
     batch_size: int = 1,
     n_samples: int = 10,
     threshold: float = 0.1,
+    ignore_modes: list = (0, 1, 2, 4),
     verbose: bool = True,
     plot: Any = None,
     gamma: float = 1.0,
@@ -769,6 +770,7 @@ def bootstrap_predict(
         inputs: encoded tokens to be processed
         psfgen: Synthetic PSF object
         n_samples: number of predictions of average
+        ignore_modes: list of modes to ignore
         batch_size: number of samples per batch
         threshold: set predictions below threshold to zero (wavelength)
         desc: test to display for the progressbar
@@ -779,6 +781,8 @@ def bootstrap_predict(
         average prediction, stdev
     """
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
+    ignore_modes = list(map(int, ignore_modes))
+    logger.info(f"Ignoring modes: {ignore_modes}")
 
     # check z-axis to compute embeddings for fourier models
     if len(inputs.shape) == 3:
@@ -819,7 +823,7 @@ def bootstrap_predict(
     logger.info(f"[BS={batch_size}, n={n_samples}] {desc}")
     gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples)
     preds = model.predict(gen, batch_size=batch_size, verbose=verbose)
-    preds[:, [0, 1, 2, 4]] = 0.
+    preds[:, ignore_modes] = 0.
     preds[np.abs(preds) <= threshold] = 0.
     preds = np.stack(np.split(preds, n_samples), axis=-1)
 
@@ -947,6 +951,7 @@ def booststrap_predict_sign(
     sign_threshold: float = .4,
     n_samples: int = 1,
     batch_size: int = 1,
+    ignore_modes: list = (0, 1, 2, 4),
     prev_pred: Any = None,
     estimate_sign_with_decon: bool = False,
     decon_iters: int = 5
@@ -973,6 +978,7 @@ def booststrap_predict_sign(
         verbose=verbose,
         batch_size=batch_size,
         threshold=threshold,
+        ignore_modes=ignore_modes,
         # plot=plot
     )
     init_preds = np.abs(init_preds)
