@@ -211,6 +211,7 @@ def predict(
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.,
+    freq_strength_threshold: float = .01,
     sign_threshold: float = .4,
     num_predictions: int = 1,
     batch_size: int = 1,
@@ -280,6 +281,7 @@ def predict(
         prev_pred=prev,
         estimate_sign_with_decon=estimate_sign_with_decon,
         ignore_modes=ignore_modes,
+        freq_strength_threshold=freq_strength_threshold,
         plot=Path(f"{data.with_suffix('')}_predictions") if plot else None,
     )
 
@@ -311,6 +313,7 @@ def predict_sample(
     wavelength: float = .605,
     dm_damping_scalar: float = 1,
     prediction_threshold: float = 0.0,
+    freq_strength_threshold: float = .01,
     sign_threshold: float = .4,
     verbose: bool = False,
     plot: bool = False,
@@ -364,6 +367,7 @@ def predict_sample(
         prev_pred=prev,
         estimate_sign_with_decon=estimate_sign_with_decon,
         ignore_modes=ignore_modes,
+        freq_strength_threshold=freq_strength_threshold,
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
 
@@ -464,6 +468,7 @@ def predict_rois(
     num_rois: int = 10,
     min_intensity: int = 200,
     prediction_threshold: float = 0.,
+    freq_strength_threshold: float = .01,
     sign_threshold: float = .4,
     minimum_distance: float = 1.,
     plot: bool = False,
@@ -516,7 +521,8 @@ def predict_rois(
         nrows=ncols,
         ncols=nrows,
         estimate_sign_with_decon=estimate_sign_with_decon,
-        ignore_modes=ignore_modes
+        ignore_modes=ignore_modes,
+        freq_strength_threshold=freq_strength_threshold,
     )
 
 
@@ -530,6 +536,7 @@ def predict_tiles(
     batch_size: int = 1,
     window_size: int = 64,
     prediction_threshold: float = 0.,
+    freq_strength_threshold: float = .01,
     sign_threshold: float = .4,
     plot: bool = True,
     prev: Any = None,
@@ -573,7 +580,8 @@ def predict_tiles(
         nrows=nrows,
         ncols=ncols,
         estimate_sign_with_decon=estimate_sign_with_decon,
-        ignore_modes=ignore_modes
+        ignore_modes=ignore_modes,
+        freq_strength_threshold=freq_strength_threshold,
     )
 
     if plot:

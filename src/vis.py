@@ -336,7 +336,7 @@ def plot_embeddings(
         y_voxel_size=.108,
         z_voxel_size=.268,
         log10=False,
-        psf_type='../examples/lattice/lattice_PSF_simulation.mat',
+        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         savepath='../data/embeddings',
 ):
     savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"

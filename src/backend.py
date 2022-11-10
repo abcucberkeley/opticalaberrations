@@ -755,6 +755,7 @@ def bootstrap_predict(
     batch_size: int = 1,
     n_samples: int = 10,
     threshold: float = 0.1,
+    freq_strength_threshold: float = .01,
     ignore_modes: list = (0, 1, 2, 4),
     verbose: bool = True,
     plot: Any = None,
@@ -800,7 +801,8 @@ def bootstrap_predict(
                 plot=plot,
                 gamma=gamma,
                 no_phase=no_phase,
-                principle_planes=True
+                principle_planes=True,
+                freq_strength_threshold=freq_strength_threshold
             )
 
             if no_phase and model.input_shape[1] == 6:
@@ -948,6 +950,7 @@ def booststrap_predict_sign(
     plot: Any = None,
     verbose: bool = False,
     threshold: float = 0.,
+    freq_strength_threshold: float = .01,
     sign_threshold: float = .4,
     n_samples: int = 1,
     batch_size: int = 1,
@@ -979,6 +982,7 @@ def booststrap_predict_sign(
         batch_size=batch_size,
         threshold=threshold,
         ignore_modes=ignore_modes,
+        freq_strength_threshold=freq_strength_threshold,
         # plot=plot
     )
     init_preds = np.abs(init_preds)
@@ -1009,6 +1013,8 @@ def booststrap_predict_sign(
             verbose=False,
             batch_size=batch_size,
             threshold=threshold,
+            ignore_modes=ignore_modes,
+            freq_strength_threshold=freq_strength_threshold,
         )
         followup_preds = np.abs(followup_preds)
 

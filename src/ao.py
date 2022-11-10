@@ -82,6 +82,11 @@ def parse_args(args):
         help='scale DM actuators by an arbitrary multiplier'
     )
     predict_sample.add_argument(
+        "--freq_strength_threshold", default=.01, type=float,
+        help='minimum frequency threshold in fourier space '
+             '(percentages; values below that will be set to the desired minimum)'
+    )
+    predict_sample.add_argument(
         "--prediction_threshold", default=0., type=float,
         help='set predictions below threshold to zero (waves)'
     )
@@ -157,6 +162,11 @@ def parse_args(args):
         help='wavelength in microns'
     )
     predict_rois.add_argument(
+        "--freq_strength_threshold", default=.01, type=float,
+        help='minimum frequency threshold in fourier space '
+             '(percentages; values below that will be set to the desired minimum)'
+    )
+    predict_rois.add_argument(
         "--prediction_threshold", default=0., type=float,
         help='set predictions below threshold to zero (waves)'
     )
@@ -215,6 +225,11 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--wavelength", default=.510, type=float,
         help='wavelength in microns'
+    )
+    predict_tiles.add_argument(
+        "--freq_strength_threshold", default=.01, type=float,
+        help='minimum frequency threshold in fourier space '
+             '(percentages; values below that will be set to the desired minimum)'
     )
     predict_tiles.add_argument(
         "--prediction_threshold", default=0., type=float,
@@ -345,6 +360,7 @@ def main(args=None):
             lateral_voxel_size=args.lateral_voxel_size,
             wavelength=args.wavelength,
             dm_damping_scalar=args.dm_damping_scalar,
+            freq_strength_threshold=args.freq_strength_threshold,
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
             num_predictions=args.num_predictions,
@@ -367,6 +383,7 @@ def main(args=None):
             num_predictions=args.num_predictions,
             num_rois=args.num_rois,
             min_intensity=args.min_intensity,
+            freq_strength_threshold=args.freq_strength_threshold,
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
             minimum_distance=args.minimum_distance,
@@ -380,6 +397,7 @@ def main(args=None):
             model=args.model,
             img=args.input,
             prev=args.prev,
+            freq_strength_threshold=args.freq_strength_threshold,
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
             axial_voxel_size=args.axial_voxel_size,

@@ -81,21 +81,22 @@ The script takes 3 positional arguments and a few optional ones described below.
 
 #### Optional arguments:
 
-|                            | Description                                                                                                       |
-|----------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `help`                     | show this help message and exit                                                                                   |
-| `current_dm`               | optional path to current DM state .csv file (Default: `blank mirror`)                                             |
-| `prev`                     | previous predictions .csv file (Default: `None`)                                                                  |
-| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                            |
-| `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                |
-| `wavelength`               | wavelength in microns (Default: `0.51`)                                                                           |
-| `dm_damping_scalar`        | scale DM actuators by an arbitrary multiplier (Default: `0.75`)                                                   |
-| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                   |
-| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`) |
-| `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                   |
-| `plot`                     | a toggle for plotting predictions                                                                                 |
-| `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                      |
-| `ignore_mode`              | ANSI index for mode you wish to ignore  (Default: [0, 1, 2, 4])                                                   |
+|                            | Description                                                                                                                      |
+|----------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `help`                     | show this help message and exit                                                                                                  |
+| `current_dm`               | optional path to current DM state .csv file (Default: `blank mirror`)                                                            |
+| `prev`                     | previous predictions .csv file (Default: `None`)                                                                                 |
+| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                                           |
+| `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                               |
+| `wavelength`               | wavelength in microns (Default: `0.51`)                                                                                          |
+| `dm_damping_scalar`        | scale DM actuators by an arbitrary multiplier (Default: `0.75`)                                                                  |
+| `freq_strength_threshold`  | minimum frequency threshold in fourier space [fractional values below that will be set to the desired minimum] (Default: `0.01`) |
+| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                                  |
+| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`)                |
+| `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                                  |
+| `plot`                     | a toggle for plotting predictions                                                                                                |
+| `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                                     |
+| `ignore_mode`              | ANSI index for mode you wish to ignore  (Default: [0, 1, 2, 4])                                                                  |
 
 
 ### ROI-based predictions 
@@ -122,24 +123,25 @@ The script takes 3 positional arguments and a few optional ones described below.
 
 #### Optional arguments:
 
-|                            | Description                                                                                                       |
-|----------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `help`                     | show this help message and exit                                                                                   |
-| `window_size`              | size of the window to crop around each point of interest (Default: `64`)                                          |
-| `num_rois`                 | max number of detected points to use for estimating aberrations (Default: `10`)                                   |
-| `min_intensity`            | minimum intensity desired for detecting peaks of interest (Default: `200`)                                        |
-| `minimum_distance`         | minimum distance to the nearest neighbor (microns) (Default: `1.0`)                                               |
-| `prev`                     | previous predictions .csv file (Default: `None`)                                                                  |
-| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                            |
-| `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                |
-| `wavelength`               | wavelength in microns (Default: `0.51`)                                                                           |
-| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                   |
-| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`) |
-| `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                   |
-| `batch_size`               | maximum batch size for the model (Default: `100`)                                                                 |
-| `plot`                     | a toggle for plotting predictions                                                                                 |
-| `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                      |
-| `ignore_mode`              | ANSI index for mode you wish to ignore  (Default: [0, 1, 2, 4])                                                   |
+|                            | Description                                                                                                                      |
+|----------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `help`                     | show this help message and exit                                                                                                  |
+| `window_size`              | size of the window to crop around each point of interest (Default: `64`)                                                         |
+| `num_rois`                 | max number of detected points to use for estimating aberrations (Default: `10`)                                                  |
+| `min_intensity`            | minimum intensity desired for detecting peaks of interest (Default: `200`)                                                       |
+| `minimum_distance`         | minimum distance to the nearest neighbor (microns) (Default: `1.0`)                                                              |
+| `prev`                     | previous predictions .csv file (Default: `None`)                                                                                 |
+| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                                           |
+| `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                               |
+| `wavelength`               | wavelength in microns (Default: `0.51`)                                                                                          |
+| `freq_strength_threshold`  | minimum frequency threshold in fourier space [fractional values below that will be set to the desired minimum] (Default: `0.01`) |
+| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                                  |
+| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`)                |
+| `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                                  |
+| `batch_size`               | maximum batch size for the model (Default: `100`)                                                                                |
+| `plot`                     | a toggle for plotting predictions                                                                                                |
+| `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                                     |
+| `ignore_mode`              | ANSI index for mode you wish to ignore  (Default: [0, 1, 2, 4])                                                                  |
 
 
 
@@ -168,22 +170,23 @@ The script takes 2 positional arguments and a few optional ones described below.
 
 #### Optional arguments:
 
-|                            | Description                                                                                                       |
-|----------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `help`                     | show this help message and exit                                                                                   |
-| `window_size`              | size of the window to crop for each tile (Default: `64`)                                                          |
-| `prev`                     | previous predictions .csv file (Default: `None`)                                                                  |
-| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                            |
-| `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                |
-| `wavelength`               | wavelength in microns (Default: `0.51`)                                                                           |
-| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                   |
-| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`) |
-| `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                   |
-| `batch_size`               | maximum batch size for the model (Default: `100`)                                                                 |
-| `ignore_tile`              | IDs [e.g., "z0-y0-x0"] for tiles you wish to ignore  (Default: None)                                              |
-| `plot`                     | a toggle for plotting predictions                                                                                 |
-| `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                      |
-| `ignore_mode`              | ANSI index for mode you wish to ignore  (Default: [0, 1, 2, 4])                                                   |
+|                            | Description                                                                                                                      |
+|----------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `help`                     | show this help message and exit                                                                                                  |
+| `window_size`              | size of the window to crop for each tile (Default: `64`)                                                                         |
+| `prev`                     | previous predictions .csv file (Default: `None`)                                                                                 |
+| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                                           |
+| `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                               |
+| `wavelength`               | wavelength in microns (Default: `0.51`)                                                                                          |
+| `freq_strength_threshold`  | minimum frequency threshold in fourier space [fractional values below that will be set to the desired minimum] (Default: `0.01`) |
+| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                                  |
+| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`)                |
+| `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                                  |
+| `batch_size`               | maximum batch size for the model (Default: `100`)                                                                                |
+| `ignore_tile`              | IDs [e.g., "z0-y0-x0"] for tiles you wish to ignore  (Default: None)                                                             |
+| `plot`                     | a toggle for plotting predictions                                                                                                |
+| `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                                     |
+| `ignore_mode`              | ANSI index for mode you wish to ignore  (Default: [0, 1, 2, 4])                                                                  |
 
 
 ### Aggregate predictions 

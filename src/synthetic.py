@@ -111,7 +111,7 @@ class SyntheticPSF:
         )
 
         self.ipsf = self.theoretical_psf(normed=True, noise=False)
-        self.iotf, self.iphase = self.fft(self.ipsf, padsize=None)
+        self.iotf, self.iphase = self.fft(self.ipsf, padsize=None, freq_strength_threshold=0.)
 
     def _normal_noise(self, mean, sigma, size):
         return np.random.normal(loc=mean, scale=sigma, size=size).astype(np.float32)
@@ -222,7 +222,7 @@ class SyntheticPSF:
         psf /= np.max(psf) if normed else psf
         return psf
 
-    def fft(self, inputs, padsize=None, gaussian_filter=None):
+    def fft(self, inputs, padsize=None, gaussian_filter=None, freq_strength_threshold: float = 0.):
 
         if padsize is not None:
             shape = inputs.shape[1]
@@ -243,6 +243,7 @@ class SyntheticPSF:
 
         alpha /= np.nanpercentile(alpha, 99.99)
         alpha[alpha > 1] = 1
+        alpha[alpha < freq_strength_threshold] = 0.
         alpha = np.nan_to_num(alpha, nan=0)
 
         phi /= np.nanpercentile(phi, 99.99)
@@ -340,11 +341,16 @@ class SyntheticPSF:
         principle_planes: bool = True,
         gamma: float = 1.,
         no_phase: bool = False,
+        freq_strength_threshold: float = .01,
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
 
-        amp, phase = self.fft(psf, padsize=padsize)
+        amp, phase = self.fft(
+            psf,
+            padsize=padsize,
+            freq_strength_threshold=freq_strength_threshold
+        )
 
         if amp.shape != self.psf_shape:
             amp = transform.rescale(
