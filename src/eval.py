@@ -786,41 +786,71 @@ def convergence(
     )
 
 
-def eval_mode(phi, model, psfargs):
-    gen = SyntheticPSF(**psfargs)
+def eval_mode(
+    phi,
+    model,
+    psnr: tuple = (21, 30),
+    modes: int = 60,
+    psf_type: str = 'widefield',
+    radius: float = .45,
+):
+    gen = SyntheticPSF(
+        n_modes=modes,
+        amplitude_ranges=(-.25, .25),
+        psf_shape=(64, 64, 64),
+        dtype=psf_type,
+        lam_detection=.510,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.2,
+        batch_size=100,
+        snr=1000,
+        max_jitter=0,
+        cpu_workers=-1,
+    )
     model = backend.load(model)
-    input_shape = model.layers[0].output_shape[0][1:-1]
 
-    w = Wavefront(phi, order='ansi', lam_detection=gen.lam_detection)
-    abr = 0 if np.count_nonzero(phi) == 0 else round(utils.peak_aberration(phi))
+    snr = gen._randuniform(psnr)
+    reference = np.zeros(gen.psf_shape)
+    for i in range(num_neighbor):
+        reference[
+            np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+            np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+            np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+        ] = snr ** 2
+    reference *= snr ** 2
 
-    if input_shape[0] == 3:
-        inputs = gen.single_otf(
-            w, zplanes=0, normed=True, noise=True, na_mask=True, ratio=True, augmentation=True
+    rand_noise = gen._random_noise(
+        image=reference,
+        mean=gen.mean_background_noise,
+        sigma=gen.sigma_background_noise
+    )
+    reference += rand_noise
+    reference /= np.max(reference)
+    reference = reference[..., np.newaxis]
+
+    w = Wavefront(phi, lam_detection=gen.lam_detection)
+
+    for i in range(inputs.shape[0]):
+        kernel = gen.single_psf(
+            phi=w,
+            zplanes=0,
+            normed=True,
+            noise=False,
+            augmentation=False,
+            meta=False,
         )
-    else:
-        inputs = gen.single_psf(w, zplanes=0, normed=True, noise=True, augmentation=True)
+        inputs[i] = kernel[..., np.newaxis]
 
-    # fig, axes = plt.subplots(1, 3)
-    # img = inputs
-    # m = axes[0].imshow(np.max(img, axis=0), cmap='Spectral_r', vmin=0, vmax=1)
-    # axes[1].imshow(np.max(img, axis=1), cmap='Spectral_r', vmin=0, vmax=1)
-    # axes[2].imshow(np.max(img, axis=2).T, cmap='Spectral_r', vmin=0, vmax=1)
-    # cax = inset_axes(axes[2], width="10%", height="100%", loc='center right', borderpad=-3)
-    # cb = plt.colorbar(m, cax=cax)
-    # cax.yaxis.set_label_position("right")
-    # plt.show()
+    inputs = utils.fftconvolution(reference, inputs)
 
-    inputs = np.expand_dims(np.stack(inputs, axis=0), 0)
-    inputs = np.expand_dims(np.stack(inputs, axis=0), -1)
-
-    pred, stdev = backend.bootstrap_predict(
-        model,
-        inputs,
-        psfgen=gen,
-        batch_size=1,
-        n_samples=1,
-        desc=f"P2P({abr}), PSNR({int(psfargs['snr'])})"
+    pred = backend.eval_sign(
+        model=model,
+        inputs=inputs,
+        gen=gen,
+        ys=ys,
+        batch_size=100,
+        reference=reference,
     )
 
     phi = utils.peak_aberration(phi)
@@ -855,7 +885,7 @@ def evaluate_modes(
     residuals = {}
     waves = np.arange(0, .5, step=.05)
 
-    for i in range(5, n_modes):
+    for i in range(3, n_modes):
         residuals[i] = {}
         jobs = np.zeros((len(waves), n_modes))
         jobs[:, i] = waves
@@ -871,7 +901,7 @@ def evaluate_modes(
         logger.info(df)
 
         vis.plot_mode(
-            f'{model}/res_mode_{i}.png',
+            f'{model}/mode_{i}.png',
             df,
             mode_index=i,
             n_modes=n_modes,

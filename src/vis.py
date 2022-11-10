@@ -2372,7 +2372,13 @@ def diagnosis(
     threshold: float = .01,
     pred_std: Any = None
 ):
-    def wavefront(iax, phi, levels, label='', nas=(.75, .85, .95)):
+    def formatter(x, pos):
+        val_str = '{:.1g}'.format(x)
+        if np.abs(x) > 0 and np.abs(x) < 1:
+            return val_str.replace("0", "", 1)
+        else:
+            return val_str
+    def wavefront(iax, phi, levels, label='', nas=(.75, .95)):
         def na_mask(radius):
             center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
             Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
@@ -2400,24 +2406,15 @@ def diagnosis(
 
         circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
         iax.add_patch(circle)
-
-        divider = make_axes_locatable(iax)
-        top = divider.append_axes("top", size='30%', pad=0.2)
         phi = phi.flatten()
-        top.hist(phi, bins=60, color='grey')
 
         err = '\n'.join([
-            f'$P2P_{{NA={na}}}$={abs(p[1]-p[0]):.2f}\t[$P_{{05}}$={p[0]:.2f}, $P_{{95}}$={p[1]:.2f}]'
+            f'$NA_{{{na}}}$={abs(p[1]-p[0]):.2f}$\lambda$'
             for na, p in zip(nas, pcts)
         ])
-        top.set_title(f'{label}\n{err}')
-        top.set_yticks([])
-        top.xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
-        top.set_xlim((np.nanquantile(phi, 0.01), np.nanquantile(phi, 0.99)))
-        top.spines['right'].set_visible(False)
-        top.spines['top'].set_visible(False)
-        top.spines['left'].set_visible(False)
+        iax.set_title(f'{label}\n{err}')
         iax.axis('off')
+        iax.set_aspect("equal")
         return mat
 
     plt.rcParams.update({
@@ -2432,12 +2429,12 @@ def diagnosis(
 
     pred_wave = pred.wave(size=100)
 
-    fig = plt.figure(figsize=(10, 8))
+    fig = plt.figure()
     gs = fig.add_gridspec(4, 3)
 
     ax_acts = fig.add_subplot(gs[:2, :2])
     ax_wavefornt = fig.add_subplot(gs[:2, 2])
-    cax = inset_axes(ax_wavefornt, width="10%", height="100%", loc='center right', borderpad=-4)
+    cax = inset_axes(ax_wavefornt, width="10%", height="100%", loc='center right', borderpad=-1)
 
     ax_zcoff = fig.add_subplot(gs[-2:, :])
 
@@ -2466,17 +2463,8 @@ def diagnosis(
 
     mat = wavefront(ax_wavefornt, pred_wave, levels=mticks)
 
-    cbar = fig.colorbar(
-        mat,
-        cax=cax,
-        fraction=0.046,
-        pad=0.04,
-        extend='both',
-        format=FormatStrFormatter("%.2g"),
-        # spacing='proportional',
-    )
+    cbar = fig.colorbar(mat, cax=cax, extend='both', format=formatter)
     cbar.ax.set_title(r'$\lambda$')
-    cbar.ax.set_ylabel(f'$\lambda = {wavelength}~\mu m$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
@@ -2488,7 +2476,7 @@ def diagnosis(
     ax_acts.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
     ax_acts.axhline(0, ls='--', color='k', alpha=.5)
 
-    ax_zcoff.plot(pred.amplitudes_ansi_waves, color='dimgrey', label='Predictions')
+    ax_zcoff.plot(pred.amplitudes_ansi_waves, marker=".", markersize=5, color='dimgrey', label='Predictions')
     if pred_std is not None:
         ax_zcoff.fill_between(
             range(len(pred.amplitudes_ansi_waves)),
@@ -2500,7 +2488,7 @@ def diagnosis(
         )
 
     ax_zcoff.legend(frameon=False, loc='lower left', ncol=2)
-    ax_zcoff.set_ylabel(f'Amplitudes ($\lambda = {wavelength}~\mu m$)')
+    ax_zcoff.set_ylabel(f'Amplitudes ($\lambda = {int(wavelength*1000)}~nm$)')
     ax_zcoff.spines['top'].set_visible(False)
     ax_zcoff.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
     ax_zcoff.spines['top'].set_visible(False)
@@ -2509,9 +2497,9 @@ def diagnosis(
     ax_zcoff.set_xlim((0, len(pred.amplitudes_ansi_waves)))
     ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
 
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
+    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.1)
+    plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.1)
 
 
 def prediction(
