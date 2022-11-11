@@ -8,8 +8,10 @@ repo = Path('~/Github/opticalaberrations/')
 script = repo/'src/ao.py'
 
 if platform.system() == "Windows":
+    import win32api  # pip install pywin32
     python  = Path('python.exe')    # Where to find python
-    repo    = Path(r'C:\SPIM\Common\Calculations\Python\PHASER~2\opticalaberrations')  # Top folder of repo (path with spaces still fails.  use dir /x to find shortened name)
+    repo    = r'C:\SPIM\Common\Calculations\Python\Phase Retrieval ML\opticalaberrations'  # Top folder of repo (path with spaces still fails.
+    repo    = Path(win32api.GetShortPathName(repo))   # shorten name to get rid of spaces.
     script  = repo/'src/ao.py'  # Script to run
 
 
