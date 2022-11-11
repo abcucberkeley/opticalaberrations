@@ -53,7 +53,7 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
         else:
             return np.pad(np.squeeze(psf)[slicer], pad, **kwargs)[np.newaxis, ..., np.newaxis]
     else:
-        return np.pad(psf[slicer], pad, **kwargs)
+        return np.pad(psf[tuple(slicer)], pad, **kwargs)
 
 
 def resize(
