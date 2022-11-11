@@ -50,7 +50,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--z_voxel_size", default=.1, type=float, help='axial voxel size in microns for Z'
+        "--z_voxel_size", default=.2, type=float, help='axial voxel size in microns for Z'
     )
 
     parser.add_argument(
@@ -97,14 +97,7 @@ def main(args=None):
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
     if args.dtype == 'modes':
-        eval.evaluate_modes(
-            model=args.model,
-            wavelength=args.wavelength,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            psf_shape=args.psf_shape
-        )
+        eval.evaluate_modes(model=args.model)
 
     elif args.dtype == 'psnr':
         eval.evaluate_psnrs(

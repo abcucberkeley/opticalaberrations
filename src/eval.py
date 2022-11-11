@@ -15,11 +15,9 @@ import pandas as pd
 from tqdm import tqdm, trange
 from tifffile import imread
 import tensorflow as tf
-from skimage import transform, filters
-from tifffile import imsave
-from preprocessing import find_roi, resize_with_crop_or_pad
-from astropy import convolution
+from preprocessing import resize_with_crop_or_pad
 from scipy import stats as st
+import raster_geometry as rg
 
 import utils
 import vis
@@ -213,7 +211,7 @@ def evaluate_psnrs(
     plt.grid()
     plt.xlabel(
         'Peak-to-peak aberration $|P_{95} - P_{5}|$'
-        rf'($\lambda = {int(wavelength*1000)}~nm$)'
+        rf'($\lambda = {int(wavelength*10000)}~nm$)'
     )
     plt.ylabel(rf'Number of samples')
     plt.savefig(f'{save_path}/dist_peak2peak.png', dpi=300, bbox_inches='tight', pad_inches=.25)
@@ -507,7 +505,7 @@ def compare_models(
     plt.grid()
     plt.xlabel(
         'Peak-to-peak aberration $|P_{95} - P_{5}|$'
-        rf'($\lambda = {int(wavelength*1000)}~nm$)'
+        rf'($\lambda = {int(wavelength*10000)}~nm$)'
     )
     plt.ylabel(rf'Number of samples')
     plt.savefig(f'{modelsdir}/{eval_distribution}_peak2peak.png', dpi=300, bbox_inches='tight', pad_inches=.25)
@@ -786,127 +784,192 @@ def convergence(
     )
 
 
-def eval_mode(
-    phi,
-    model,
+def beads(
+    gen: SyntheticPSF,
+    kernel: np.ndarray,
     psnr: tuple = (21, 30),
-    modes: int = 60,
-    psf_type: str = 'widefield',
+    object_size: float = 0,
+    num_objs: int = 1,
     radius: float = .45,
 ):
-    gen = SyntheticPSF(
-        n_modes=modes,
-        amplitude_ranges=(-.25, .25),
-        psf_shape=(64, 64, 64),
-        dtype=psf_type,
-        lam_detection=.510,
-        x_voxel_size=.108,
-        y_voxel_size=.108,
-        z_voxel_size=.2,
-        batch_size=100,
-        snr=1000,
-        max_jitter=0,
-        cpu_workers=-1,
-    )
-    model = backend.load(model)
-
     snr = gen._randuniform(psnr)
     reference = np.zeros(gen.psf_shape)
-    for i in range(num_neighbor):
-        reference[
-            np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
-            np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
-            np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
-        ] = snr ** 2
-    reference *= snr ** 2
+
+    for i in range(num_objs):
+        if object_size > 0:
+            reference += rg.sphere(
+                shape=gen.psf_shape,
+                radius=object_size,
+                position=np.random.uniform(low=.2, high=.8, size=3)
+            ).astype(np.float) * np.random.random()
+        else:
+            reference[
+                np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+                np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+                np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+            ] += np.random.random()
+
+    reference /= np.max(reference)
+    img = utils.fftconvolution(reference, kernel)
+    snr = gen._randuniform(snr)
+    img *= snr ** 2
 
     rand_noise = gen._random_noise(
-        image=reference,
+        image=img,
         mean=gen.mean_background_noise,
         sigma=gen.sigma_background_noise
     )
-    reference += rand_noise
-    reference /= np.max(reference)
-    reference = reference[..., np.newaxis]
+    noisy_img = rand_noise + img
+    noisy_img /= np.max(noisy_img)
 
-    w = Wavefront(phi, lam_detection=gen.lam_detection)
-
-    for i in range(inputs.shape[0]):
-        kernel = gen.single_psf(
-            phi=w,
-            zplanes=0,
-            normed=True,
-            noise=False,
-            augmentation=False,
-            meta=False,
-        )
-        inputs[i] = kernel[..., np.newaxis]
-
-    inputs = utils.fftconvolution(reference, inputs)
-
-    pred = backend.eval_sign(
-        model=model,
-        inputs=inputs,
-        gen=gen,
-        ys=ys,
-        batch_size=100,
-        reference=reference,
-    )
-
-    phi = utils.peak_aberration(phi)
-    pred = utils.peak_aberration(pred)
-    residuals = np.abs(phi - pred)
-    return residuals
+    return noisy_img
 
 
-def evaluate_modes(
-        model,
-        wavelength=.605,
-        n_modes=60,
-        psf_shape=64,
-        psnr=30,
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+def eval_mode(
+    phi,
+    model,
+    npoints: int = 1,
+    n_samples: int = 10,
+    psnr: tuple = (21, 30),
+    na: float = 1.0
 ):
-    gen = dict(
-        amplitude_ranges=(-1, 1),
-        n_modes=n_modes,
-        lam_detection=wavelength,
-        psf_shape=tuple(3 * [psf_shape]),
-        x_voxel_size=x_voxel_size,
-        y_voxel_size=y_voxel_size,
-        z_voxel_size=z_voxel_size,
-        snr=psnr,
-        max_jitter=0,
-        cpu_workers=-1,
+    p2p = utils.peak_aberration(phi, na=na)
+    y_pred = pd.DataFrame([], columns=['sample'])
+    y_true = pd.DataFrame([], columns=['sample'])
+
+    gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
+    model = backend.load(model)
+    w = Wavefront(phi, lam_detection=gen.lam_detection)
+    kernel = gen.single_psf(
+        phi=w,
+        zplanes=0,
+        normed=True,
+        noise=False,
+        augmentation=False,
+        meta=False,
     )
 
-    residuals = {}
-    waves = np.arange(0, .5, step=.05)
+    k = np.where(phi > 0)[0]
+    for isize in tqdm([0, 1, 2, 3, 4, 5], desc=f"Evaluate different sizes [mode #{k}]"):
+        inputs = np.array([
+            beads(gen=gen, kernel=kernel, psnr=psnr, object_size=isize, num_objs=npoints)
+            for i in range(n_samples)
+        ])
 
-    for i in range(3, n_modes):
-        residuals[i] = {}
-        jobs = np.zeros((len(waves), n_modes))
-        jobs[:, i] = waves
-
-        res = utils.multiprocess(
-            partial(eval_mode, model=model, psfargs=gen),
-            jobs=list(jobs),
-            cores=1
+        preds, stdev = backend.bootstrap_predict(
+            model=model,
+            inputs=inputs,
+            psfgen=gen,
+            n_samples=10,
+            no_phase=True,
+            batch_size=100,
         )
 
-        residuals[i] = {round(utils.peak_aberration(jobs[k, :])): res[k] for k in range(len(waves))}
-        df = pd.DataFrame.from_dict(residuals[i], orient="index")
-        logger.info(df)
+        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['sample'])
+        y_pred = y_pred.append(p, ignore_index=True)
 
-        vis.plot_mode(
-            f'{model}/mode_{i}.png',
-            df,
-            mode_index=i,
-            n_modes=n_modes,
-            wavelength=wavelength
+        y = pd.DataFrame([p2p for i in preds], columns=['sample'])
+        y['object_size'] = isize
+        y_true = y_true.append(y, ignore_index=True)
+
+    return (y_pred, y_true)
+
+
+def evaluate_modes(model: Path, n_modes: int = 60):
+    outdir = model.with_suffix('') / 'modes'
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    waves = np.arange(1e-3, .25, step=.025)
+    aberrations = np.zeros((len(waves), n_modes))
+
+    for i in trange(5, n_modes):
+        savepath = outdir / f"m{i}"
+
+        classes = aberrations.copy()
+        classes[:, i] = waves
+
+        job = partial(eval_mode, model=model, npoints=1, n_samples=10)
+        preds, ys = zip(*utils.multiprocess(job, list(classes), cores=-1))
+        y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
+        y_pred = pd.DataFrame([], columns=['sample']).append(preds, ignore_index=True)
+
+        error = np.abs(y_true - y_pred)
+        error = pd.DataFrame(error, columns=['sample'])
+
+        bins = np.arange(0, 10.25, .25)
+        df = pd.DataFrame(
+            zip(y_true['sample'], error['sample'], y_true['object_size']),
+            columns=['aberration', 'error', 'object_size']
         )
+        df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+
+        means = pd.pivot_table(df, values='error', index='bins', columns='object_size', aggfunc=np.mean)
+        means = means.sort_index().interpolate()
+        logger.info(means)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        levels = [
+            0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
+            .5, .6, .7, .8, .9,
+            1, 1.25, 1.5, 1.75, 2., 2.5,
+            3., 4., 5.,
+        ]
+
+        vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
+        highcmap = plt.get_cmap('magma_r', 256)
+        lowcmap = plt.get_cmap('GnBu_r', 256)
+        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+        cmap = mcolors.ListedColormap(cmap)
+
+        contours = ax.contourf(
+            means.columns.values,
+            means.index.values,
+            means.values,
+            cmap=cmap,
+            levels=levels,
+            extend='max',
+            linewidths=2,
+            linestyles='dashed',
+        )
+        ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+
+        cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+        cbar = plt.colorbar(
+            contours,
+            cax=cax,
+            fraction=0.046,
+            pad=0.04,
+            extend='both',
+            spacing='proportional',
+            format=FormatStrFormatter("%.2f"),
+            ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
+        )
+
+        cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 510~nm$)')
+        cbar.ax.set_title(r'$\lambda$')
+        cbar.ax.yaxis.set_ticks_position('right')
+        cbar.ax.yaxis.set_label_position('left')
+
+        ax.set_xlabel(f'Radius of the simulated object (pixels)')
+        ax.set_xlim(0, 5)
+        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+        ax.set_ylabel(
+            'Average Peak-to-peak aberration $|P_{95} - P_{5}|$'
+            rf'($\lambda = 510~nm$)'
+        )
+        ax.set_yticks(np.arange(0, 6, .5), minor=True)
+        ax.set_yticks(np.arange(0, 6, 1))
+        ax.set_ylim(.25, 5)
+
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        plt.tight_layout()
+
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
 def eval_bin(
@@ -985,7 +1048,7 @@ def evalheatmap(
     x_voxel_size: float = .15,
     y_voxel_size: float = .15,
     z_voxel_size: float = .6,
-    wavelength: float = .605,
+    wavelength: float = .510,
     input_coverage: float = 1.0,
     no_phase: bool = False,
 ):
@@ -1087,7 +1150,7 @@ def evalheatmap(
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 605~nm$)')
+    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = {int(wavelength*1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
@@ -1098,7 +1161,7 @@ def evalheatmap(
 
     ax.set_ylabel(
         'Average Peak-to-peak aberration $|P_{95} - P_{5}|$'
-        rf'($\lambda = 605~nm$)'
+        rf'($\lambda = {int(wavelength*1000)}~nm$)'
     )
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
     ax.set_yticks(np.arange(0, 6, 1))
@@ -1218,7 +1281,7 @@ def iter_eval_bin_with_reference(
     x_voxel_size: float = .15,
     y_voxel_size: float = .15,
     z_voxel_size: float = .6,
-    wavelength: float = .605,
+    wavelength: float = .510,
     num_neighbor: int = 5,
     radius: float = .45,
     modes: int = 60,
@@ -1360,7 +1423,7 @@ def iterheatmap(
     x_voxel_size: float = .15,
     y_voxel_size: float = .15,
     z_voxel_size: float = .6,
-    wavelength: float = .605,
+    wavelength: float = .510,
     input_coverage: float = 1.0,
     no_phase: bool = False,
 ):
@@ -1503,7 +1566,7 @@ def iterheatmap(
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 605~nm$)')
+    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = {int(wavelength*1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
@@ -1515,7 +1578,7 @@ def iterheatmap(
 
     ax.set_ylabel(
         'Average Peak-to-peak aberration $|P_{95} - P_{5}|$ '
-        rf'($\lambda = 605~nm$)'
+        rf'($\lambda = {int(wavelength*1000)}~nm$)'
     )
 
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
@@ -1657,7 +1720,7 @@ def distheatmap(
     x_voxel_size: float = .15,
     y_voxel_size: float = .15,
     z_voxel_size: float = .6,
-    wavelength: float = .605,
+    wavelength: float = .510,
     no_phase: bool = False,
     psnr: tuple = (21, 30),
     num_neighbor: Any = None,
@@ -1779,7 +1842,7 @@ def distheatmap(
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 605~nm$)')
+    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = {int(wavelength*1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
@@ -1790,7 +1853,7 @@ def distheatmap(
 
     ax.set_ylabel(
         'Average Peak-to-peak aberration $|P_{95} - P_{5}|$'
-        rf'($\lambda = 605~nm$)'
+        rf'($\lambda = {int(wavelength*1000)}~nm$)'
     )
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
     ax.set_yticks(np.arange(0, 6, 1))
@@ -1884,7 +1947,7 @@ def densityheatmap(
     x_voxel_size: float = .15,
     y_voxel_size: float = .15,
     z_voxel_size: float = .6,
-    wavelength: float = .605,
+    wavelength: float = .510,
     no_phase: bool = False,
     psnr: tuple = (21, 30),
     samplelimit: Any = None,
@@ -1992,7 +2055,7 @@ def densityheatmap(
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 605~nm$)')
+    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = {int(wavelength*1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
@@ -2004,7 +2067,7 @@ def densityheatmap(
 
     ax.set_ylabel(
         'Average Peak-to-peak aberration $|P_{95} - P_{5}|$'
-        rf'($\lambda = 605~nm$)'
+        rf'($\lambda = {int(wavelength*1000)}~nm$)'
     )
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
     ax.set_yticks(np.arange(0, 6, 1))
@@ -2033,7 +2096,7 @@ def evalpoints(
     x_voxel_size: float = .15,
     y_voxel_size: float = .15,
     z_voxel_size: float = .6,
-    wavelength: float = .605,
+    wavelength: float = .510,
     input_coverage: float = 1.0,
     no_phase: bool = False,
 ):
@@ -2143,7 +2206,7 @@ def evalpoints(
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 605~nm$)')
+    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = {int(wavelength*1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
@@ -2155,7 +2218,7 @@ def evalpoints(
 
     ax.set_ylabel(
         'Average Peak-to-peak aberration $|P_{95} - P_{5}|$ '
-        rf'($\lambda = 605~nm$)'
+        rf'($\lambda = {int(wavelength*1000)}~nm$)'
     )
 
     ax.set_yticks(np.arange(0, 6, .5), minor=True)

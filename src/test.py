@@ -218,21 +218,6 @@ def main(args=None):
             input_coverage=args.input_coverage,
             no_phase=args.no_phase,
         )
-    else:
-        eval.evaluate(
-            model=args.model,
-            target=args.target,
-            wavelength=args.wavelength,
-            dist=args.dist,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            n_samples=args.n_samples,
-            batch_size=args.batch_size,
-            cpu_workers=args.cpu_workers,
-            plot=args.plot,
-            dominant_modes=args.dmodes,
-        )
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 
