@@ -3,9 +3,18 @@
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "configurations": [        
+    "configurations": [
         {
-            "name": "Python: testAO",
+            "name": "ao.py",
+            "type": "python",
+            "request": "launch",
+            "module": "ao",
+            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\src",
+            "args": ["predict_sample", "..\\pretrained_models\\z60_modes\\lattice_yumb\\x108-y108-z200\\opticaltransformer.h5", "..\\examples\\single\\single.tif", "..\\examples\\Zernike_Korra_Bax273.csv", "--current_dm=None", "--dm_damping_scalar=0.75", "--wavelength=0.51", "--lateral_voxel_size=0.108", "--axial_voxel_size=0.1", "--prediction_threshold=0.1", "--freq_strength_threshold=0.01", "--sign_threshold=0.5", "--num_predictions=10", "--batch_size=256", "--prev=None", "--plot"],
+            "justMyCode": true
+        },
+        {
+            "name": "test_ao.py",
             "type": "python",
             "request": "launch",
             "program": "test_ao.py",
