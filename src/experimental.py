@@ -33,20 +33,48 @@ logger = logging.getLogger('')
 
 def zernikies_to_actuators(
         coefficients: np.array,
-        dm_pattern: Path,
+        dm_calibration: Path,
         dm_state: np.array,
         scalar: float = 1
 ) -> np.ndarray:
-    dm_pattern = pd.read_csv(dm_pattern, header=None).values
+    dm_calibration = pd.read_csv(dm_calibration, header=None).values
 
-    if dm_pattern.shape[-1] > coefficients.size:
-        dm_pattern = dm_pattern[:, :coefficients.size]
+    if dm_calibration.shape[-1] > coefficients.size:
+        dm_calibration = dm_calibration[:, :coefficients.size]
     else:
-        coefficients = coefficients[:dm_pattern.shape[-1]]
+        coefficients = coefficients[:dm_calibration.shape[-1]]
 
     coefficients = np.expand_dims(coefficients, axis=-1)
-    offset = np.dot(dm_pattern, coefficients)[:, 0]
+    offset = np.dot(dm_calibration, coefficients)[:, 0]
     return dm_state - (offset * scalar)
+
+
+def load_dm(dm_state: Any) -> np.ndarray:
+    if isinstance(dm_state, np.ndarray):
+        assert len(dm_state) == 69
+    elif dm_state is None or str(dm_state) == 'None':
+        dm_state = np.zeros(69)
+    else:
+        dm_state = pd.read_csv(dm_state, header=None).values[:, 0]
+    return dm_state
+
+
+def estimate_and_save_new_dm(
+    savepath: Path,
+    coefficients: np.array,
+    dm_calibration: Path,
+    dm_state: np.array,
+    dm_damping_scalar: float = 1
+):
+    dm_state = load_dm(dm_state)
+    dm = pd.DataFrame(zernikies_to_actuators(
+        coefficients,
+        dm_calibration=dm_calibration,
+        dm_state=dm_state,
+        scalar=dm_damping_scalar
+    ))
+    dm.to_csv(savepath, index=False, header=False)
+    return dm
 
 
 def matlab_phase_retrieval(psf: Path, dx=.15, dz=.6, wavelength=.605, n_modes=60) -> list:
@@ -371,9 +399,14 @@ def predict_sample(
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
 
-    dm_state = np.zeros(69) if dm_state is None else pd.read_csv(dm_state, header=None).values[:, 0]
-    dm = pd.DataFrame(zernikies_to_actuators(p, dm_pattern=dm_calibration, dm_state=dm_state, scalar=dm_damping_scalar))
-    dm.to_csv(f"{img.with_suffix('')}_sample_predictions_corrected_actuators.csv", index=False, header=False)
+    dm_state = load_dm(dm_state)
+    dm = estimate_and_save_new_dm(
+        savepath=Path(f"{img.with_suffix('')}_sample_predictions_corrected_actuators.csv"),
+        coefficients=p,
+        dm_calibration=dm_calibration,
+        dm_state=dm_state,
+        dm_damping_scalar=dm_damping_scalar
+    )
 
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
     std = Wavefront(std, order='ansi', lam_detection=wavelength)
@@ -406,7 +439,7 @@ def predict_sample(
 def predict_dataset(
         dataset: Path,
         model: Path,
-        dm_pattern: Path,
+        dm_calibration: Path,
         dm_state: Any,
         axial_voxel_size: float,
         lateral_voxel_size: float,
@@ -424,7 +457,7 @@ def predict_dataset(
     func = partial(
         predict_sample,
         model=model,
-        dm_pattern=dm_pattern,
+        dm_calibration=dm_calibration,
         axial_voxel_size=axial_voxel_size,
         lateral_voxel_size=lateral_voxel_size,
         wavelength=wavelength,
@@ -729,11 +762,14 @@ def aggregate_predictions(
     predictions.index.name = 'ansi'
     predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated.csv")
 
-    dm_state = np.zeros(69) if (dm_state is None or str(dm_state) == 'None') else pd.read_csv(dm_state, header=None).values[:, 0]
-    dm = pd.DataFrame(zernikies_to_actuators(
-        predictions[final_prediction].values, dm_pattern=dm_calibration, dm_state=dm_state, scalar=dm_damping_scalar
-    ))
-    dm.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv", index=False, header=False)
+    dm_state = load_dm(dm_state)
+    dm = estimate_and_save_new_dm(
+        savepath=Path(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv"),
+        coefficients=predictions[final_prediction].values,
+        dm_calibration=dm_calibration,
+        dm_state=dm_state,
+        dm_damping_scalar=dm_damping_scalar
+    )
 
     p = Wavefront(predictions[final_prediction].values, order='ansi', lam_detection=wavelength)
     pred_std = Wavefront(predictions['std'].values, order='ansi', lam_detection=wavelength)

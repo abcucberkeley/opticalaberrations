@@ -866,7 +866,8 @@ def predict_sign(
 
     preds = init_preds.copy()
     pchange = pct_change(followup_preds, init_preds)
-    flips = np.stack(np.where(followup_preds > (sign_threshold * init_preds)), axis=0)
+    threshold = sign_threshold * init_preds
+    flips = np.stack(np.where(followup_preds > threshold), axis=0)
 
     if len(np.squeeze(preds).shape) == 1:
         preds[flips[0]] *= -1

@@ -96,7 +96,7 @@ def main(args=None):
         experimental.predict_dataset(
             dataset=args.input,
             model=args.model,
-            dm_pattern=args.pattern,
+            dm_calibration=args.pattern,
             dm_state=args.state,
             prev=args.prev,
             psf_type=args.psf_type,
@@ -115,7 +115,7 @@ def main(args=None):
         experimental.predict(
             model=args.model,
             img=args.input,
-            dm_pattern=args.pattern,
+            dm_calibration=args.pattern,
             dm_state=args.state,
             prev=args.prev,
             psf_type=args.psf_type,
@@ -223,7 +223,7 @@ def main_function(
             experimental.predict(
                 model=mymodel,
                 img=myinput,
-                dm_pattern=mypattern,
+                dm_calibration=mypattern,
                 dm_state=mystate,
                 prev=myprev,
                 psf_type=psf_type,

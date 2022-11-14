@@ -91,8 +91,8 @@ def parse_args(args):
         help='set predictions below threshold to zero (waves)'
     )
     predict_sample.add_argument(
-        "--sign_threshold", default=.4, type=float,
-        help='flip sign of modes above given threshold'
+        "--sign_threshold", default=.9, type=float,
+        help='flip sign of modes above given threshold relative to your initial prediction'
     )
     predict_sample.add_argument(
         "--plot", action='store_true',
@@ -171,8 +171,8 @@ def parse_args(args):
         help='set predictions below threshold to zero (waves)'
     )
     predict_rois.add_argument(
-        "--sign_threshold", default=.4, type=float,
-        help='flip sign of modes above given threshold'
+        "--sign_threshold", default=.9, type=float,
+        help='flip sign of modes above given threshold relative to your initial prediction'
     )
     predict_rois.add_argument(
         "--plot", action='store_true',
@@ -235,8 +235,8 @@ def parse_args(args):
         help='set predictions below threshold to zero (waves)'
     )
     predict_tiles.add_argument(
-        "--sign_threshold", default=.4, type=float,
-        help='flip sign of modes above given threshold'
+        "--sign_threshold", default=.9, type=float,
+        help='flip sign of modes above given threshold relative to your initial prediction'
     )
     predict_tiles.add_argument(
         "--plot", action='store_true',

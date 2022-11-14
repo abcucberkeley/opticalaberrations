@@ -91,8 +91,8 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `wavelength`               | wavelength in microns (Default: `0.51`)                                                                                          |
 | `dm_damping_scalar`        | scale DM actuators by an arbitrary multiplier (Default: `0.75`)                                                                  |
 | `freq_strength_threshold`  | minimum frequency threshold in fourier space [fractional values below that will be set to the desired minimum] (Default: `0.01`) |
-| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                                  |
-| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`)                |
+| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `.1`)                                                                  |
+| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `.9`)                |
 | `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                                  |
 | `plot`                     | a toggle for plotting predictions                                                                                                |
 | `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                                     |
@@ -136,7 +136,7 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `wavelength`               | wavelength in microns (Default: `0.51`)                                                                                          |
 | `freq_strength_threshold`  | minimum frequency threshold in fourier space [fractional values below that will be set to the desired minimum] (Default: `0.01`) |
 | `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                                  |
-| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`)                |
+| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `.9`)                |
 | `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                                  |
 | `batch_size`               | maximum batch size for the model (Default: `100`)                                                                                |
 | `plot`                     | a toggle for plotting predictions                                                                                                |
@@ -180,7 +180,7 @@ The script takes 2 positional arguments and a few optional ones described below.
 | `wavelength`               | wavelength in microns (Default: `0.51`)                                                                                          |
 | `freq_strength_threshold`  | minimum frequency threshold in fourier space [fractional values below that will be set to the desired minimum] (Default: `0.01`) |
 | `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                                  |
-| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `0.`)                |
+| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `.9`)                |
 | `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                                  |
 | `batch_size`               | maximum batch size for the model (Default: `100`)                                                                                |
 | `ignore_tile`              | IDs [e.g., "z0-y0-x0"] for tiles you wish to ignore  (Default: None)                                                             |
