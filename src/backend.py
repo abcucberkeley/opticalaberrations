@@ -845,7 +845,7 @@ def predict_sign(
     gen: SyntheticPSF,
     init_preds: np.ndarray,
     followup_preds: np.ndarray,
-    sign_threshold: float = .4,
+    sign_threshold: float = .9,
     plot: Any = None,
 ):
     def pct_change(cur, prev):
@@ -952,7 +952,7 @@ def booststrap_predict_sign(
     verbose: bool = False,
     threshold: float = 0.,
     freq_strength_threshold: float = .01,
-    sign_threshold: float = .4,
+    sign_threshold: float = .9,
     n_samples: int = 1,
     batch_size: int = 1,
     ignore_modes: list = (0, 1, 2, 4),
@@ -1056,7 +1056,7 @@ def eval_sign(
     reference: Any = None,
     plot: Any = None,
     threshold: float = 0.,
-    sign_threshold: float = .4,
+    sign_threshold: float = .9,
     desc: str = 'Eval',
 ):
     init_preds, stdev = bootstrap_predict(
