@@ -937,7 +937,7 @@ def predict_sign(
         axes[2].set_xticks(range(0, 61))
 
         plt.tight_layout()
-        plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{plot}_sign_correction.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return preds, pchange
 

@@ -879,7 +879,7 @@ def evaluate_modes(model: Path, n_modes: int = 60):
     outdir = model.with_suffix('') / 'modes'
     outdir.mkdir(parents=True, exist_ok=True)
 
-    waves = np.arange(1e-3, .25, step=.025)
+    waves = np.arange(1e-5, .25, step=.01)
     aberrations = np.zeros((len(waves), n_modes))
 
     for i in trange(5, n_modes):

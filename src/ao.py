@@ -191,7 +191,6 @@ def parse_args(args):
         help='ANSI index for modes you wish to ignore'
     )
 
-
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_tiles.add_argument("input", type=Path, help="path to input .tif file")
