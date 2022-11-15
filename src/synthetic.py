@@ -38,6 +38,7 @@ class SyntheticPSF:
         dtype='widefield',
         distribution='dirichlet',
         bimodal=False,
+        rotate=False,
         gamma=1.5,
         n_modes=60,
         order='ansi',
@@ -96,6 +97,7 @@ class SyntheticPSF:
         self.distribution = distribution
         self.gamma = gamma
         self.bimodal = bimodal
+        self.rotate = rotate
 
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
         self.theoretical_psf_shape = (2 * psf_shape[0], 2 * psf_shape[1], 2 * psf_shape[2])
@@ -537,7 +539,8 @@ class SyntheticPSF:
                 modes=self.n_modes,
                 gamma=self.gamma,
                 bimodal=self.bimodal,
-                lam_detection=self.lam_detection
+                rotate=self.rotate,
+                lam_detection=self.lam_detection,
             )
 
         psf = self.psfgen.incoherent_psf(phi) * snr**2

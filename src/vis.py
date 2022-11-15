@@ -55,6 +55,7 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
         dtype='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         distribution='powerlaw',
         bimodal=True,
+        rotate=True,
         gamma=.75,
         lam_detection=wavelength,
         amplitude_ranges=(0, 1),

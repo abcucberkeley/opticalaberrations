@@ -45,20 +45,22 @@ class Wavefront:
         distribution=None,
         gamma=.75,
         bimodal=True,
+        rotate=False
     ):
         self.ranges = amplitudes
         self.order = order
         self.lam_detection = lam_detection
-        self.prefixed = [0, 1, 2, 4] if order == 'ansi' else [0, 1, 2, 4]
+        self.prefixed = [0, 1, 2, 4] if order == 'ansi' else [0, 1, 2, 3]
         self.length = modes
         self.gamma = gamma
         self.bimodal = bimodal
+        self.rotate = rotate
 
         self.distribution = np.random.choice(['powerlaw', 'dirichlet'], size=1)[0] \
             if distribution == 'mixed' else distribution
 
         if np.isscalar(self.ranges) or isinstance(self.ranges, tuple):
-            lims = (self.ranges-.001, self.ranges+.001) if np.isscalar(self.ranges) else self.ranges
+            lims = (self.ranges-.0001, self.ranges+.0001) if np.isscalar(self.ranges) else self.ranges
 
             if self.distribution == 'single':
                 amplitudes = self._single(lims)
@@ -107,7 +109,17 @@ class Wavefront:
             self._dict_to_list({z.index_ansi: self._microns2waves(a) for z, a in self.zernikes.items()})
         )
 
+        if self.rotate:
+            fraction = np.random.uniform(low=0, high=1)
+            for j, a in amplitudes.items():
+                if a > 0:
+                    z = Zernike(j, order=order)
+                    twin = Zernike((z.n, z.m*-1), order=order)
+                    self.zernikes[z] = a * fraction
+                    self.zernikes[twin] = a * (1 - fraction)
+
         self.amplitudes = np.array([self.zernikes[k] for k in sorted(self.zernikes.keys())])
+
 
     def __len__(self):
         return len(self.zernikes)
@@ -137,7 +149,7 @@ class Wavefront:
             return self.amplitudes / other.amplitudes
 
     def _single(self, range_lims):
-        idx = np.random.randint(4, self.length)
+        idx = np.random.randint(3, self.length)
         amplitudes = np.zeros(self.length)
 
         if self.bimodal:

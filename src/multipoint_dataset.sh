@@ -102,6 +102,7 @@ do
             j="${j} --dist ${DIST}"
             j="${j} --iters ${ITERS}"
             j="${j} --bimodal"
+            j="${j} --rotate"
             j="${j} --noise"
             j="${j} --normalize"
             j="${j} --gamma .75"

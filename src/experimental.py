@@ -744,7 +744,6 @@ def aggregate_predictions(
                 axes.set_xlabel(f'Amplitudes ($\mu m$)')
 
             plt.tight_layout()
-            plt.savefig(f"{model_pred.with_suffix('')}_aggregated.png", bbox_inches='tight', dpi=300, pad_inches=.25)
             plt.savefig(f"{model_pred.with_suffix('')}_aggregated.svg", bbox_inches='tight', dpi=300, pad_inches=.25)
     else:
         logger.warning(f"No modes detected with the current configs")

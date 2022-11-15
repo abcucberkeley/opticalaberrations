@@ -137,6 +137,7 @@ def create_synthetic_sample(
     distribution: str,
     gamma: float,
     bimodal: bool,
+    rotate: bool,
     min_amplitude: float,
     max_amplitude: float,
     x_voxel_size: float,
@@ -164,6 +165,7 @@ def create_synthetic_sample(
         distribution=distribution,
         gamma=gamma,
         bimodal=bimodal,
+        rotate=rotate,
         amplitude_ranges=(min_amplitude, max_amplitude),
         lam_detection=lam_detection,
         psf_shape=3*[input_shape],
@@ -355,6 +357,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        '--rotate', action='store_true',
+        help='optional flag to introduce a random radial rotation to each zernike mode'
+    )
+
+    parser.add_argument(
         "--min_amplitude", default=0, type=float,
         help="min amplitude for the zernike coefficients"
     )
@@ -412,6 +419,7 @@ def main(args=None):
             random_crop=args.random_crop,
             gamma=args.gamma,
             bimodal=args.bimodal,
+            rotate=args.rotate,
             min_amplitude=args.min_amplitude,
             max_amplitude=args.max_amplitude,
             x_voxel_size=args.x_voxel_size,
