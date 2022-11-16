@@ -56,7 +56,7 @@ class Wavefront:
         self.bimodal = bimodal
         self.rotate = rotate
 
-        self.distribution = np.random.choice(['powerlaw', 'dirichlet'], size=1)[0] \
+        self.distribution = np.random.choice(['single', 'powerlaw', 'dirichlet'], size=1)[0] \
             if distribution == 'mixed' else distribution
 
         if np.isscalar(self.ranges) or isinstance(self.ranges, tuple):
@@ -115,8 +115,10 @@ class Wavefront:
                 if a > 0:
                     z = Zernike(j, order=order)
                     twin = Zernike((z.n, z.m*-1), order=order)
-                    self.zernikes[z] = a * fraction
-                    self.zernikes[twin] = a * (1 - fraction)
+
+                    if self.zernikes.get(twin) is not None:
+                        self.zernikes[z] = a * fraction
+                        self.zernikes[twin] = a * (1 - fraction)
 
         self.amplitudes = np.array([self.zernikes[k] for k in sorted(self.zernikes.keys())])
 

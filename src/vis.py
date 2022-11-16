@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
-def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
+def plot_training_dist(n_samples=1000, batch_size=100, wavelength=.510):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -53,7 +53,7 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     psfargs = dict(
         n_modes=60,
         dtype='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
-        distribution='powerlaw',
+        distribution='mixed',
         bimodal=True,
         rotate=True,
         gamma=.75,
@@ -93,11 +93,11 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
                 ignore_index=True
             )
             ps = list(peak2peak(ys))
-            logger.info(f'Range[{mina}, {maxa}]$\mu$m \t $\\bar{{p2p}}$={np.mean(ps).round(3)}$\\lambda$')
+            logger.info(rf'Range[{mina}, {maxa}]$\mu$m \t $\\bar{{p2p}}$={np.mean(ps).round(3)}$\\lambda$')
             peaks.extend(ps)
 
     logger.info(zernikes.round(2))
-    logger.info(f'Range[{min_amps[0]}, {max_amps[-1]}]$\mu$m \t $\\bar{{p2p}}$={np.mean(peaks).round(3)}$\\lambda$')
+    logger.info(rf'Range[{min_amps[0]}, {max_amps[-1]}]$\mu$m \t $\\bar{{p2p}}$={np.mean(peaks).round(3)}$\\lambda$')
 
     fig, (pax, cax, zax) = plt.subplots(1, 3, figsize=(16, 4))
 
