@@ -110,11 +110,11 @@ class Wavefront:
         )
 
         if self.rotate:
-            fraction = np.random.uniform(low=0, high=1)
             for j, a in amplitudes.items():
                 if a > 0:
                     z = Zernike(j, order=order)
                     twin = Zernike((z.n, z.m*-1), order=order)
+                    fraction = np.random.uniform(low=0, high=1)
 
                     if self.zernikes.get(twin) is not None:
                         self.zernikes[z] = a * fraction
