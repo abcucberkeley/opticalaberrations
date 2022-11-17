@@ -202,13 +202,13 @@ decon_tiles_predictions += f" --plot" if plot else ""
 # call(deskew, shell=True)
 
 call(predict_sample, shell=True)
-call(decon_sample_predictions, shell=True)
-
-# call(detect_rois, shell=True)
-call(predict_rois, shell=True)
-call(aggregate_roi_predictions, shell=True)
-call(decon_roi_predictions, shell=True)
-
-call(predict_tiles, shell=True)
-call(aggregate_tile_predictions, shell=True)
-call(decon_tiles_predictions, shell=True)
+# call(decon_sample_predictions, shell=True)
+#
+# # call(detect_rois, shell=True)
+# call(predict_rois, shell=True)
+# call(aggregate_roi_predictions, shell=True)
+# call(decon_roi_predictions, shell=True)
+#
+# call(predict_tiles, shell=True)
+# call(aggregate_tile_predictions, shell=True)
+# call(decon_tiles_predictions, shell=True)

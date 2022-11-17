@@ -869,10 +869,19 @@ def predict_sign(
     pchange = pct_change(followup_preds, init_preds)
 
     # flip signs and make any necessary adjustments to the amplitudes based on the followup predictions
-    adj = pchange.copy()
-    adj[np.where(pchange > 0)] = -200
-    adj[np.where(pchange < 0)] += 100
-    preds += preds * (adj/100)
+    # adj = pchange.copy()
+    # adj[np.where(pchange > 0)] = -200
+    # adj[np.where(pchange < 0)] += 100
+    # preds += preds * (adj/100)
+
+    # threshold-based sign prediction
+    threshold = sign_threshold * init_preds
+    flips = np.stack(np.where(followup_preds > threshold), axis=0)
+
+    if len(np.squeeze(preds).shape) == 1:
+        preds[flips[0]] *= -1
+    else:
+        preds[flips[0], flips[1]] *= -1
 
     if plot is not None:
         if len(np.squeeze(preds).shape) == 1:
