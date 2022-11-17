@@ -95,6 +95,18 @@ class Wavefront:
             for j, a in amplitudes.items()
         }
 
+        if self.rotate:
+            for j, a in amplitudes.items():
+                if a > 0:
+                    z = Zernike(j, order=order)
+                    twin = Zernike((z.n, z.m*-1), order=order)
+                    fraction = np.random.uniform(low=0, high=1)
+
+                    if z.m != 0 and self.zernikes.get(twin) is not None:
+                        a = self.zernikes[z] + self.zernikes[twin]
+                        self.zernikes[z] = a * fraction
+                        self.zernikes[twin] = a * (1 - fraction)
+
         self.amplitudes_noll = np.array(
             self._dict_to_list({z.index_noll: a for z, a in self.zernikes.items()})[1:]
         )
@@ -108,17 +120,6 @@ class Wavefront:
         self.amplitudes_ansi_waves = np.array(
             self._dict_to_list({z.index_ansi: self._microns2waves(a) for z, a in self.zernikes.items()})
         )
-
-        if self.rotate:
-            for j, a in amplitudes.items():
-                if a > 0:
-                    z = Zernike(j, order=order)
-                    twin = Zernike((z.n, z.m*-1), order=order)
-                    fraction = np.random.uniform(low=0, high=1)
-
-                    if z.m != 0 and self.zernikes.get(twin) is not None:
-                        self.zernikes[z] = a * fraction
-                        self.zernikes[twin] = a * (1 - fraction)
 
         self.amplitudes = np.array([self.zernikes[k] for k in sorted(self.zernikes.keys())])
 
