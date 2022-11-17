@@ -116,7 +116,7 @@ class Wavefront:
                     twin = Zernike((z.n, z.m*-1), order=order)
                     fraction = np.random.uniform(low=0, high=1)
 
-                    if self.zernikes.get(twin) is not None:
+                    if z.m != 0 and self.zernikes.get(twin) is not None:
                         self.zernikes[z] = a * fraction
                         self.zernikes[twin] = a * (1 - fraction)
 
