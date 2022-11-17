@@ -2366,10 +2366,8 @@ def plot_inputs(
 
 def diagnosis(
     pred: Wavefront,
-    dm_before: np.array,
-    dm_after: np.array,
     save_path: Path,
-    wavelength: float = .605,
+    wavelength: float = .510,
     threshold: float = .01,
     pred_std: Any = None
 ):
@@ -2379,7 +2377,8 @@ def diagnosis(
             return val_str.replace("0", "", 1)
         else:
             return val_str
-    def wavefront(iax, phi, levels, label='', nas=(.75, .95)):
+
+    def wavefront(iax, phi, levels, label='', nas=(.55, .65, .75, .85, .95)):
         def na_mask(radius):
             center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
             Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
@@ -2430,14 +2429,17 @@ def diagnosis(
 
     pred_wave = pred.wave(size=100)
 
-    fig = plt.figure()
-    gs = fig.add_gridspec(4, 3)
+    fig = plt.figure(figsize=(10, 6))
+    gs = fig.add_gridspec(1, 3)
+    ax_wavefornt = fig.add_subplot(gs[0, -1])
+    ax_zcoff = fig.add_subplot(gs[0, :-1])
+    cax = inset_axes(ax_wavefornt, width="10%", height="100%", loc='center right', borderpad=-2)
 
-    ax_acts = fig.add_subplot(gs[:2, :2])
-    ax_wavefornt = fig.add_subplot(gs[:2, 2])
-    cax = inset_axes(ax_wavefornt, width="10%", height="100%", loc='center right', borderpad=-1)
-
-    ax_zcoff = fig.add_subplot(gs[-2:, :])
+    # gs = fig.add_gridspec(4, 3)
+    # ax_acts = fig.add_subplot(gs[:2, :2])
+    # ax_wavefornt = fig.add_subplot(gs[:2, 2])
+    # cax = inset_axes(ax_wavefornt, width="10%", height="100%", loc='center right', borderpad=-1)
+    # ax_zcoff = fig.add_subplot(gs[-2:, :])
 
     step = .25
     vmax = round(np.max([
@@ -2462,22 +2464,15 @@ def diagnosis(
     ))
     wave_cmap = mcolors.ListedColormap(levels)
 
-    mat = wavefront(ax_wavefornt, pred_wave, levels=mticks)
+    mat = wavefront(ax_wavefornt, pred_wave, levels=mticks, label='Predicted')
+    # rmat = wavefront(rax_wavefornt, rpred_wave, levels=mticks, label='Residuals')
 
     cbar = fig.colorbar(mat, cax=cax, extend='both', format=formatter)
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
-    ax_acts.plot(dm_before, ls='--', color='C1', label='Current')
-    ax_acts.plot(dm_after, color='C0', label='Predictions')
-    ax_acts.set_xlim(0, 68)
-    ax_acts.set_title(f'DM actuators (volts)')
-    ax_acts.legend(frameon=False, loc='lower left', ncol=2)
-    ax_acts.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
-    ax_acts.axhline(0, ls='--', color='k', alpha=.5)
-
-    ax_zcoff.plot(pred.amplitudes_ansi_waves, marker=".", markersize=5, color='dimgrey', label='Predictions')
+    ax_zcoff.plot(pred.amplitudes_ansi_waves, marker=".", markersize=5, color='dimgrey', label=r'$\mu$')
     if pred_std is not None:
         ax_zcoff.fill_between(
             range(len(pred.amplitudes_ansi_waves)),
@@ -2488,14 +2483,15 @@ def diagnosis(
             alpha=0.33
         )
 
-    ax_zcoff.legend(frameon=False, loc='lower left', ncol=2)
+    ax_zcoff.legend(frameon=False, loc='upper right', ncol=2)
     ax_zcoff.set_ylabel(f'Amplitudes ($\lambda = {int(wavelength*1000)}~nm$)')
     ax_zcoff.spines['top'].set_visible(False)
+    ax_zcoff.spines['left'].set_visible(False)
+    ax_zcoff.spines['right'].set_visible(False)
     ax_zcoff.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-    ax_zcoff.spines['top'].set_visible(False)
     ax_zcoff.set_xticks(range(len(pred.amplitudes_ansi_waves)), minor=True)
     ax_zcoff.set_xticks(range(0, len(pred.amplitudes_ansi_waves)+5, 5), minor=False)
-    ax_zcoff.set_xlim((0, len(pred.amplitudes_ansi_waves)))
+    ax_zcoff.set_xlim((-.5, len(pred.amplitudes_ansi_waves)))
     ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
 
     plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)

@@ -847,6 +847,7 @@ def predict_sign(
     followup_preds: np.ndarray,
     sign_threshold: float = .9,
     plot: Any = None,
+    bar_width: float = .35
 ):
     def pct_change(cur, prev):
         t = utils.waves2microns(.05, wavelength=gen.lam_detection)
@@ -866,18 +867,20 @@ def predict_sign(
 
     preds = init_preds.copy()
     pchange = pct_change(followup_preds, init_preds)
-    threshold = sign_threshold * init_preds
-    flips = np.stack(np.where(followup_preds > threshold), axis=0)
 
-    if len(np.squeeze(preds).shape) == 1:
-        preds[flips[0]] *= -1
-    else:
-        preds[flips[0], flips[1]] *= -1
+    # flip signs and make any necessary adjustments to the amplitudes based on the followup predictions
+    adj = pchange.copy()
+    adj[np.where(pchange > 0)] = -200
+    adj[np.where(pchange < 0)] += 100
+    preds += preds * (adj/100)
 
     if plot is not None:
         if len(np.squeeze(preds).shape) == 1:
             init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            init_preds_wave_error = Wavefront(np.zeros_like(init_preds), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
             followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            followup_preds_wave_error = Wavefront(np.zeros_like(followup_preds), lam_detection=gen.lam_detection).amplitudes_ansi_waves
 
             preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
             preds_error = Wavefront(np.zeros_like(preds), lam_detection=gen.lam_detection).amplitudes_ansi_waves
@@ -885,22 +888,53 @@ def predict_sign(
             percent_changes = pchange
             percent_changes_error = np.zeros_like(pchange)
         else:
-            init_preds_wave = Wavefront(np.mean(init_preds, axis=0),
-                                        lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            followup_preds_wave = Wavefront(np.mean(followup_preds, axis=0),
-                                            lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            preds_error = Wavefront(np.mean(preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            init_preds_wave = Wavefront(np.mean(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            init_preds_wave_error = Wavefront(np.std(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
+            followup_preds_wave = Wavefront(np.mean(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            followup_preds_wave_error = Wavefront(np.std(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
 
             preds_wave = Wavefront(np.mean(preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            preds_error = Wavefront(np.std(preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+
             percent_changes = np.mean(pchange, axis=0)
             percent_changes_error = np.std(pchange, axis=0)
 
-        fig, axes = plt.subplots(3, 1, figsize=(24, 8))
-        axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Initial')
-        axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
+        fig, axes = plt.subplots(3, 1, figsize=(16, 8))
+
+        axes[0].bar(
+            np.arange(len(preds_wave)) - bar_width/2,
+            init_preds_wave,
+            yerr=init_preds_wave_error,
+            capsize=5,
+            alpha=.75,
+            color='C0',
+            align='center',
+            ecolor='grey',
+            label='Initial',
+            width=bar_width
+        )
+        axes[0].bar(
+            np.arange(len(preds_wave)) + bar_width/2,
+            followup_preds_wave,
+            yerr=followup_preds_wave_error,
+            capsize=5,
+            alpha=.75,
+            color='C1',
+            align='center',
+            ecolor='grey',
+            label='Followup',
+            width=bar_width
+        )
+
+
         axes[0].legend(frameon=False, loc='upper left')
-        axes[0].set_xlim((0, 60))
-        axes[0].set_xticks(range(0, 61))
+        axes[0].set_xlim((-1, len(preds_wave)))
+        axes[0].set_xticks(range(0, len(preds_wave)))
+        axes[0].spines.right.set_visible(False)
+        axes[0].spines.left.set_visible(False)
+        axes[0].spines.top.set_visible(False)
+        axes[0].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
 
         axes[1].plot(np.zeros_like(percent_changes), '--', color='lightgrey')
         axes[1].bar(
@@ -908,18 +942,22 @@ def predict_sign(
             percent_changes,
             yerr=percent_changes_error,
             capsize=10,
-            color='C1',
+            color='C2',
             alpha=.75,
             align='center',
-            ecolor='black',
+            ecolor='grey',
             label='Percent change',
         )
         axes[1].legend(frameon=False, loc='upper left')
-        axes[1].set_xlim((0, 60))
+        axes[1].set_xlim((-1, len(preds_wave)))
+        axes[1].set_xticks(range(0, len(preds_wave)))
         axes[1].set_ylim((-100, 100))
         axes[1].set_yticks(range(-100, 125, 25))
         axes[1].set_yticklabels(['-100+', '-75', '-50', '-25', '0', '25', '50', '75', '100+'])
-        axes[1].set_xticks(range(0, 61))
+        axes[1].spines.right.set_visible(False)
+        axes[1].spines.left.set_visible(False)
+        axes[1].spines.top.set_visible(False)
+        axes[1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
 
         axes[2].plot(np.zeros_like(preds_wave), '--', color='lightgrey')
         axes[2].bar(
@@ -928,14 +966,18 @@ def predict_sign(
             yerr=preds_error,
             capsize=10,
             alpha=.75,
-            color='C0',
+            color='dimgrey',
             align='center',
-            ecolor='black',
+            ecolor='grey',
             label='Predictions',
         )
         axes[2].legend(frameon=False, loc='upper left')
-        axes[2].set_xlim((0, 60))
-        axes[2].set_xticks(range(0, 61))
+        axes[2].set_xlim((-1, len(preds_wave)))
+        axes[2].set_xticks(range(0, len(preds_wave)))
+        axes[2].spines.right.set_visible(False)
+        axes[2].spines.left.set_visible(False)
+        axes[2].spines.top.set_visible(False)
+        axes[2].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
 
         plt.tight_layout()
         plt.savefig(f'{plot}_sign_correction.svg', dpi=300, bbox_inches='tight', pad_inches=.25)

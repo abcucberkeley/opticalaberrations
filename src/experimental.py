@@ -429,8 +429,6 @@ def predict_sample(
         vis.diagnosis(
             pred=p,
             pred_std=std,
-            dm_before=dm_state,
-            dm_after=dm.values[:, 0],
             wavelength=wavelength,
             save_path=Path(f"{img.with_suffix('')}_sample_predictions_diagnosis"),
         )
@@ -814,8 +812,6 @@ def aggregate_predictions(
         vis.diagnosis(
             pred=p,
             pred_std=pred_std,
-            dm_before=dm_state,
-            dm_after=dm.values[:, 0],
             wavelength=wavelength,
             save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis"),
         )

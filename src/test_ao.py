@@ -38,13 +38,13 @@ model_lateral_voxel_size = .108
 model_axial_voxel_size = .2
 sign_threshold = .9
 freq_strength_threshold = .01
-prediction_threshold = .1
+prediction_threshold = .25
 num_predictions = 10
 window_size = 64
 batch_size = 256
 plot = True
-estimate_sign_with_decon = False
-ignore_modes = [21, 27, 28, 35, 36, 44, 45, 54, 55]
+estimate_sign_with_decon = True
+ignore_modes = [44, 45, 54, 55]
 
 # extra `aggregate_predictions` flags
 majority_threshold = .5
@@ -204,7 +204,7 @@ decon_tiles_predictions += f" --plot" if plot else ""
 call(predict_sample, shell=True)
 call(decon_sample_predictions, shell=True)
 
-call(detect_rois, shell=True)
+# call(detect_rois, shell=True)
 call(predict_rois, shell=True)
 call(aggregate_roi_predictions, shell=True)
 call(decon_roi_predictions, shell=True)
