@@ -4,14 +4,12 @@ Copyright (c) 2020, Debayan Saha, Martin Weigert, Uwe Schmidt
 All rights reserved.
 """
 
-import matplotlib
-matplotlib.use('Agg')
-
 import logging
 import sys
 
 import numpy as np
 from zernike import Zernike
+from pprint import pprint
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -29,12 +27,6 @@ class Wavefront:
         :param order: string, Zernike nomenclature, eg noll or ansi, default is ansi
         :param lam_detection: wavelength in microns
     """
-    _prefixed = {
-        (0, 0):  0,
-        (1, -1): 0,
-        (1, 1):  0,
-        (2, 0):  0,
-    }
 
     def __init__(
         self,
@@ -63,18 +55,26 @@ class Wavefront:
             lims = (self.ranges-.0001, self.ranges+.0001) if np.isscalar(self.ranges) else self.ranges
 
             if self.distribution == 'single':
-                amplitudes = self._single(lims)
+                amps = self._single(lims)
 
             elif self.distribution == 'powerlaw':
-                amplitudes = self._powerlaw(lims)
+                amps = self._powerlaw(lims)
 
             elif self.distribution == 'dirichlet':
-                amplitudes = self._dirichlet(lims)
+                amps = self._dirichlet(lims)
 
             else:  # draw amplitude for each zernike mode from a uniform dist
-                amplitudes = np.random.uniform(*lims, size=self.length)
+                amps = np.random.uniform(*lims, size=self.length)
 
-        amplitudes[self.prefixed] = 0.
+            amplitudes = np.zeros(self.length)      # initialize modes
+            moi = self._pick_modes()                # pick modes of interest
+            amplitudes[moi] = amps[:len(moi)]       # assign amplitudes
+
+            # print(moi)
+            # print(amplitudes.round(4))
+            # print('-'*100)
+            # exit()
+
         amplitudes = self._formatter(amplitudes, order)
 
         self.zernikes = {
@@ -138,48 +138,62 @@ class Wavefront:
         else:
             return self.amplitudes / other.amplitudes
 
+    def _pick_modes(self):
+        modes = np.arange(self.length).astype(int)
+        modes = np.delete(modes, [0, 1, 2, 4])  # remove bias, tip, tilt, and defocus
+
+        probs = np.ones_like(modes).astype(float)
+        probs /= np.sum(probs)  # normalize probabilities for choosing any given mode
+
+        # probs[:15] = np.sum(probs)
+        # probs = np.arange(1, len(modes)+1)[::-1].astype(float)
+
+        options = np.random.choice(a=modes, p=probs, size=100)
+        u, picked = np.sort(np.unique(options,  return_index=True))
+        return options[picked]
+
     def _single(self, range_lims):
-        idx = np.random.randint(3, self.length)
         amplitudes = np.zeros(self.length)
 
         if self.bimodal:
-            amplitudes[idx] = np.random.choice([
+            amplitudes[0] = np.random.choice([
                 np.random.uniform(*range_lims),
                 np.random.uniform(*-np.array(range_lims))
             ])
         else:
-            amplitudes[idx] = np.random.uniform(*range_lims)
+            amplitudes[0] = np.random.uniform(*range_lims)
 
         return amplitudes
 
-    def _dirichlet(self, range_lims, length=None):
+    def _powerlaw(self, range_lims):
+        weights = np.random.pareto(self.gamma, size=self.length)
+        weights /= np.sum(weights)
+        weights = np.sort(weights)[::-1]
+        amplitudes = np.random.uniform(*range_lims) * weights
+
+        if self.bimodal:
+            amplitudes *= np.random.choice([-1, 1], size=self.length)
+
+        return amplitudes
+
+    def _dirichlet(self, range_lims):
         """ sum of the coefficients will add up to the desired peak2peak aberration """
-        length = self.length if length is None else length
         sign = 0 if self.bimodal else np.sum(np.sign(range_lims))
 
         # draw negative and positive random numbers that add up to 1
         if sign == 0:
-            pos_weights = np.random.dirichlet(np.ones(length), size=1)[0] * 2
-            neg_weights = np.random.dirichlet(np.ones(length), size=1)[0] * -1
+            pos_weights = np.random.dirichlet(np.ones(self.length), size=1)[0] * 2
+            neg_weights = np.random.dirichlet(np.ones(self.length), size=1)[0] * -1
             weights = pos_weights + neg_weights
             amplitudes = weights * np.random.choice([
                 np.random.uniform(*range_lims),
                 np.random.uniform(*-np.array(range_lims))
             ])
         else:
-            weights = np.random.dirichlet(np.ones(length), size=1)[0]
+            weights = np.random.dirichlet(np.ones(self.length), size=1)[0]
             amplitudes = weights * np.random.uniform(*range_lims)
 
-        return amplitudes
-
-    def _powerlaw(self, range_lims):
-        weights = np.random.pareto(self.gamma, size=self.length)
-        weights = weights / np.sum(weights)
-        amplitudes = np.random.uniform(*range_lims) * weights
-
-        if self.bimodal:
-            amplitudes *= np.random.choice([-1, 1], size=self.length)
-
+        amplitudes = np.sort(amplitudes)[::-1]
         return amplitudes
 
     def _waves2microns(self, w):

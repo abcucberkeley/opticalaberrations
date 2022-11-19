@@ -131,7 +131,10 @@ def main(args=None):
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
-    if args.target == 'evalheatmap':
+    if args.target == 'modes':
+        eval.evaluate_modes(args.model)
+
+    elif args.target == 'evalheatmap':
         eval.evalheatmap(
             modelpath=args.model,
             datadir=args.datadir,

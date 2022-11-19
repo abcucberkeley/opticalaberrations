@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
-def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
+def plot_training_dist(n_samples=25, batch_size=25, wavelength=.510):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -48,12 +48,11 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
         'legend.fontsize': 10,
     })
     from utils import peak2peak
-    from utils import microns2waves
 
     psfargs = dict(
         n_modes=55,
         dtype='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
-        distribution='dirichlet',
+        distribution='mixed', #dirichlet
         bimodal=True,
         rotate=True,
         gamma=.75,
@@ -74,21 +73,21 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
 
     ## Challenging dataset
-    difractionlimit = np.arange(0, 0.051, .002).round(3)  # 25 bins
-    small = np.arange(.05, .1, .0025).round(3)            # 20 bins
-    large = np.arange(.1, .15, .005).round(3)             # 10 bins
-    min_amps = np.concatenate([difractionlimit, small, large[:-1]])
-    max_amps = np.concatenate([difractionlimit[1:], small, large])
+    # difractionlimit = np.arange(0, 0.051, .002).round(3)  # 25 bins
+    # small = np.arange(.05, .1, .0025).round(3)            # 20 bins
+    # large = np.arange(.1, .15, .005).round(3)             # 10 bins
+    # min_amps = np.concatenate([difractionlimit, small, large[:-1]])
+    # max_amps = np.concatenate([difractionlimit[1:], small, large])
 
     ## Easy dataset
-    # min_amps = np.arange(0, .15, .01).round(3)
-    # max_amps = np.arange(.01, .16, .01).round(3)
+    min_amps = np.arange(0, .15, .01).round(3)
+    max_amps = np.arange(.01, .16, .01).round(3)
 
     for mina, maxa in zip(min_amps, max_amps):
         psfargs['amplitude_ranges'] = (mina, maxa)
         for _, (psfs, ys) in zip(range(n_batches), SyntheticPSF(**psfargs).generator()):
             zernikes = zernikes.append(
-                pd.DataFrame(microns2waves(ys, wavelength=wavelength), columns=range(1, psfargs['n_modes'] + 1)),
+                pd.DataFrame(ys, columns=range(1, psfargs['n_modes'] + 1)),
                 ignore_index=True
             )
             ps = list(peak2peak(ys))
@@ -102,43 +101,12 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     sns.histplot(peaks, kde=True, ax=pax, color='dimgrey')
 
     pax.set_xlabel(
-        'Peak-to-peak aberration $|P_{95} - P_{5}|$\n'
+        'Peak-to-peak aberration\n'
         rf'($\lambda = {int(wavelength*1000)}~nm$)'
     )
     pax.set_ylabel(rf'Samples')
-    # pax.set_xlim(0, 10)
-
-    # bars = sns.barplot(zernikes.columns.values, zernikes.mean(axis=0), ax=zax)
-    # for index, label in enumerate(bars.get_xticklabels()):
-    #     if index % int(.1 * zernikes.shape[1]) == 0:
-    #         label.set_visible(True)
-    #     else:
-    #         label.set_visible(False)
-    # zax.set_xlabel('Average amplitude per zernike mode')
 
     zernikes = np.abs(zernikes)
-    dlimit = wavelength/2
-    dmodes = (zernikes[zernikes > dlimit]).count(axis=1)
-    hist, bins = np.histogram(dmodes, bins=zernikes.columns.values)
-    hist = hist / hist.sum()
-    idx = (hist > 0).nonzero()
-
-    if len(idx[0]) != 0:
-        bars = sns.barplot(bins[idx], hist[idx], ax=cax)
-        for index, label in enumerate(bars.get_xticklabels()):
-            if index % 2 == 0:
-                label.set_visible(True)
-            else:
-                label.set_visible(False)
-
-    cax.set_xlabel(
-        f'Number of modes above diffraction limit\n'
-        r'$\alpha_i > \dfrac{\lambda}{2NA}$'
-    )
-
-
-    # pct = zernikes.astype(float).quantile(.9999, axis=1)
-    # dmodes = (zernikes[zernikes > pct]).count(axis=1)
     zernikes = zernikes.loc[(zernikes != 0).any(axis=1)]
     zernikes = zernikes.div(zernikes.sum(axis=1), axis=0)
     logger.info(zernikes.round(2))
@@ -149,17 +117,29 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     hist = hist / hist.sum()
 
     if len(idx[0]) != 0:
-        bars = sns.barplot(bins[idx], hist[idx], ax=zax, palette='Accent')
+        bars = sns.barplot(bins[idx], hist[idx], ax=cax, palette='Accent')
         for index, label in enumerate(bars.get_xticklabels()):
             if index % 2 == 0:
                 label.set_visible(True)
             else:
                 label.set_visible(False)
 
-    zax.set_xlabel(
+    cax.set_xlabel(
         f'Number of highly influential modes\n'
-        r'$\alpha_i / \sum_{{k=1}}^{{60}}{{\alpha_{{k}}}} > 5\%$'
+        rf'$\alpha_i / \sum_{{k=1}}^{{{psfargs["n_modes"]}}}{{\alpha_{{k}}}} > 5\%$'
     )
+
+    modes = zernikes.sum(axis=0)
+    modes /= modes.sum(axis=0)
+
+    bars = sns.barplot(modes.index-1, modes.values, ax=zax, palette='viridis')
+    for index, label in enumerate(bars.get_xticklabels()):
+        if index % 4 == 0:
+            label.set_visible(True)
+        else:
+            label.set_visible(False)
+
+    zax.set_xlabel(f'Influential modes (ANSI)')
 
     pax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
     cax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
@@ -914,7 +894,7 @@ def plot_signal(n_modes=60, wavelength=.605):
             axr.set_xlim((0, None))
             axr.set_ylim((0, 1))
             axr.set_xlabel(
-                'Peak-to-peak aberration $|P_{95} - P_{5}|$'
+                'Peak-to-peak aberration'
                 rf'($\lambda = {int(wavelength*1000)}~nm$)'
             )
             axr.set_ylabel('Percentage signal lost')
@@ -970,7 +950,7 @@ def plot_mode(savepath, df, mode_index, n_modes=60, wavelength=.605):
     ax.set_yscale('log')
     ax.set_ylim((10**-2, 10))
     ax.set_xlabel(
-        'Peak-to-peak aberration $|P_{95} - P_{5}|$'
+        'Peak-to-peak aberration'
         rf'($\lambda = {int(wavelength * 1000)}~nm$)'
     )
     ax.set_ylabel('Peak-to-peak residuals')
@@ -2052,7 +2032,7 @@ def plot_eval(means: pd.DataFrame, save_path, wavelength=.605, nsamples=100, lab
     )
 
     cbar.ax.set_ylabel(
-        'Peak-to-peak aberration $|P_{95} - P_{5}|$'
+        'Peak-to-peak aberration'
         rf'($\lambda = {int(wavelength*1000)}~nm$)'
     )
     cbar.ax.set_title(r'$\lambda$')
@@ -2068,7 +2048,7 @@ def plot_eval(means: pd.DataFrame, save_path, wavelength=.605, nsamples=100, lab
 
     if 'amplitude' in label:
         ax.set_ylabel(
-            'Peak-to-peak aberration $|P_{95} - P_{5}|$'
+            'Peak-to-peak aberration'
             rf'($\lambda = {int(wavelength*1000)}~nm$)'
         )
         ax.set_yticks(np.arange(0, 11, .5), minor=True)

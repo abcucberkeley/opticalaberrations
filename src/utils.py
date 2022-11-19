@@ -87,10 +87,7 @@ def peak_aberration(w, na: float = 1.0) -> float:
     dist_from_center = np.sqrt((X - center[0]) ** 2 + (Y - center[1]) ** 2)
     mask = dist_from_center <= radius
     phi = w * mask
-
-    mn = np.nanquantile(phi, .05)
-    mx = np.nanquantile(phi, .95)
-    return abs(mx-mn)
+    return abs(np.nanmax(phi) - np.nanmin(phi))
 
 
 def peak2peak(y: np.array, na: float = 1.0) -> np.array:
