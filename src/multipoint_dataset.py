@@ -67,14 +67,15 @@ def sim(
     normalize: bool = True,
     random_crop: Any = None,
     radius: float = .4,
-    sphere: float = 0,
 ):
     reference = np.zeros(gen.psf_shape)
     for i in range(npoints):
-        if sphere > 0:
+        sphere_radius = np.random.choice(np.arange(0, 1.25, step=.25))
+
+        if sphere_radius > 0:
             reference += rg.sphere(
                 shape=gen.psf_shape,
-                radius=sphere,
+                radius=sphere_radius,
                 position=np.random.uniform(low=.2, high=.8, size=3)
             ).astype(np.float) * np.random.random()
         else:
@@ -153,7 +154,6 @@ def create_synthetic_sample(
     noise: bool,
     normalize: bool,
     emb: bool,
-    sphere: int
 ):
     gen = SyntheticPSF(
         order='ansi',
@@ -205,7 +205,7 @@ def create_synthetic_sample(
                 augmentation=False,
                 meta=False,
             )
-            savepath = savepath / f"sphere_{sphere}" / f"npoints_{npoints}"
+            savepath = savepath / f"npoints_{npoints}"
             savepath.mkdir(exist_ok=True, parents=True)
             savepath = savepath / filename
 
@@ -219,7 +219,6 @@ def create_synthetic_sample(
                 emb=emb,
                 noise=noise,
                 normalize=normalize,
-                sphere=sphere,
             )
 
     else:
@@ -246,7 +245,7 @@ def create_synthetic_sample(
         savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
                               f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
-        savepath = savepath / f"sphere_{sphere}" / f"npoints_{npoints}"
+        savepath = savepath / f"npoints_{npoints}"
         savepath.mkdir(exist_ok=True, parents=True)
         savepath = savepath / filename
 
@@ -261,7 +260,6 @@ def create_synthetic_sample(
             random_crop=random_crop,
             noise=noise,
             normalize=normalize,
-            sphere=sphere
         )
 
 
@@ -377,11 +375,6 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--sphere", default=0, type=int,
-        help="Radius of the reference sphere objects"
-    )
-
-    parser.add_argument(
         "--na_detection", default=1.0, type=float,
         help="Numerical aperture"
     )
@@ -428,7 +421,6 @@ def main(args=None):
             min_psnr=args.min_psnr,
             max_psnr=args.max_psnr,
             lam_detection=args.lam_detection,
-            sphere=args.sphere,
             refractive_index=args.refractive_index,
             na_detection=args.na_detection,
             cpu_workers=args.cpu_workers,

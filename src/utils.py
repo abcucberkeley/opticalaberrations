@@ -105,11 +105,11 @@ def peak2peak_residuals(y: np.array, p: np.array, na: float = 1.0) -> np.array:
 
 
 def microns2waves(phi, wavelength):
-    return phi * (2 * np.pi / wavelength)
+    return phi/wavelength
 
 
 def waves2microns(phi, wavelength):
-    return phi / (2 * np.pi / wavelength)
+    return phi*wavelength
 
 
 def compute_signal_lost(phi, gen, res):

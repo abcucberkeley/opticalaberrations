@@ -1,7 +1,9 @@
 import matplotlib
+
 matplotlib.use('Agg')
 
 import numexpr
+
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
 import logging
@@ -647,83 +649,6 @@ def simple_predict(
             gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size)
 
         for batch in gen:
-            # if plot is not None:
-            #     img = np.squeeze(batch[0])
-            #     input_img = np.squeeze(inputs[0])
-            #
-            #     if img.shape[0] != img.shape[1]:
-            #         vmin, vmax, vcenter, step = 0, 2, 1, .1
-            #         highcmap = plt.get_cmap('YlOrRd', 256)
-            #         lowcmap = plt.get_cmap('YlGnBu_r', 256)
-            #         low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            #         high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            #         cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            #         cmap = mcolors.ListedColormap(cmap)
-            #
-            #         fig, axes = plt.subplots(3, 3)
-            #
-            #         if img.shape[0] == 6:
-            #             for t in range(3):
-            #                 inner = gridspec.GridSpecFromSubplotSpec(
-            #                     1, 2, subplot_spec=axes[0, t], wspace=0.1, hspace=0.1
-            #                 )
-            #                 ax = fig.add_subplot(inner[0])
-            #                 m = ax.imshow(img[t].T if t == 2 else img[t], cmap=cmap, vmin=vmin, vmax=vmax)
-            #                 ax.set_xticks([])
-            #                 ax.set_yticks([])
-            #                 ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-            #                 ax = fig.add_subplot(inner[1])
-            #                 ax.imshow(img[t+3].T if t == 2 else img[t+3], cmap='coolwarm', vmin=vmin, vmax=vmax)
-            #                 ax.set_xticks([])
-            #                 ax.set_yticks([])
-            #                 ax.set_xlabel(r'$\varphi = \angle \tau$')
-            #         else:
-            #             m = axes[0, 0].imshow(input_img[input_img.shape[0]//2, :, :], cmap='hot', vmin=0, vmax=1)
-            #             axes[0, 1].imshow(input_img[:, input_img.shape[1]//2, :], cmap='hot', vmin=0, vmax=1)
-            #             axes[0, 2].imshow(input_img[:, :, input_img.shape[2]//2].T, cmap='hot', vmin=0, vmax=1)
-            #             cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            #             cb = plt.colorbar(m, cax=cax)
-            #             cax.yaxis.set_label_position("right")
-            #             cax.set_ylabel('Input (middle)')
-            #
-            #         m = axes[1, 0].imshow(img[0], cmap=cmap, vmin=vmin, vmax=vmax)
-            #         axes[1, 1].imshow(img[1], cmap=cmap, vmin=vmin, vmax=vmax)
-            #         axes[1, 2].imshow(img[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
-            #         cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            #         cb = plt.colorbar(m, cax=cax)
-            #         cax.yaxis.set_label_position("right")
-            #         cax.set_ylabel(r'Embedding ($\alpha$)')
-            #
-            #         m = axes[2, 0].imshow(img[3], cmap='coolwarm', vmin=-1, vmax=1)
-            #         axes[2, 1].imshow(img[4], cmap='coolwarm', vmin=-1, vmax=1)
-            #         axes[2, 2].imshow(img[5].T, cmap='coolwarm', vmin=-1, vmax=1)
-            #         cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            #         cb = plt.colorbar(m, cax=cax)
-            #         cax.yaxis.set_label_position("right")
-            #         cax.set_ylabel(r'Embedding ($\varphi$)')
-            #
-            #         for ax in axes.flatten():
-            #             ax.axis('off')
-            #     else:
-            #         fig, axes = plt.subplots(1, 3)
-            #
-            #         axes[1].set_title(str(img.shape))
-            #         m = axes[0].imshow(np.max(img, axis=0), cmap='Spectral_r')
-            #         axes[1].imshow(np.max(img, axis=1), cmap='Spectral_r')
-            #         axes[2].imshow(np.max(img, axis=2).T, cmap='Spectral_r')
-            #
-            #         for ax in axes.flatten():
-            #             ax.axis('off')
-            #
-            #         cax = inset_axes(axes[2], width="10%", height="100%", loc='center right', borderpad=-3)
-            #         cb = plt.colorbar(m, cax=cax)
-            #         cax.yaxis.set_label_position("right")
-            #
-            #     if plot == True:
-            #         plt.show()
-            #     else:
-            #         plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
             p = model(batch, training=True).numpy()
 
             p[:, [0, 1, 2, 4]] = 0.
@@ -885,26 +810,27 @@ def predict_sign(
 
     if plot is not None:
         if len(np.squeeze(preds).shape) == 1:
-            init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            init_preds_wave_error = Wavefront(np.zeros_like(init_preds), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes
+            init_preds_wave_error = Wavefront(np.zeros_like(init_preds), lam_detection=gen.lam_detection).amplitudes
 
-            followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            followup_preds_wave_error = Wavefront(np.zeros_like(followup_preds), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes
+            followup_preds_wave_error = Wavefront(np.zeros_like(followup_preds),
+                                                  lam_detection=gen.lam_detection).amplitudes
 
-            preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            preds_error = Wavefront(np.zeros_like(preds), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes
+            preds_error = Wavefront(np.zeros_like(preds), lam_detection=gen.lam_detection).amplitudes
 
             percent_changes = pchange
             percent_changes_error = np.zeros_like(pchange)
         else:
-            init_preds_wave = Wavefront(np.mean(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            init_preds_wave_error = Wavefront(np.std(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            init_preds_wave = Wavefront(np.mean(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+            init_preds_wave_error = Wavefront(np.std(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
 
-            followup_preds_wave = Wavefront(np.mean(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            followup_preds_wave_error = Wavefront(np.std(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            followup_preds_wave = Wavefront(np.mean(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+            followup_preds_wave_error = Wavefront(np.std(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
 
-            preds_wave = Wavefront(np.mean(preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
-            preds_error = Wavefront(np.std(preds, axis=0), lam_detection=gen.lam_detection).amplitudes_ansi_waves
+            preds_wave = Wavefront(np.mean(preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+            preds_error = Wavefront(np.std(preds, axis=0), lam_detection=gen.lam_detection).amplitudes
 
             percent_changes = np.mean(pchange, axis=0)
             percent_changes_error = np.std(pchange, axis=0)
@@ -912,7 +838,7 @@ def predict_sign(
         fig, axes = plt.subplots(3, 1, figsize=(16, 8))
 
         axes[0].bar(
-            np.arange(len(preds_wave)) - bar_width/2,
+            np.arange(len(preds_wave)) - bar_width / 2,
             init_preds_wave,
             yerr=init_preds_wave_error,
             capsize=5,
@@ -924,7 +850,7 @@ def predict_sign(
             width=bar_width
         )
         axes[0].bar(
-            np.arange(len(preds_wave)) + bar_width/2,
+            np.arange(len(preds_wave)) + bar_width / 2,
             followup_preds_wave,
             yerr=followup_preds_wave_error,
             capsize=5,
@@ -936,7 +862,6 @@ def predict_sign(
             width=bar_width
         )
 
-
         axes[0].legend(frameon=False, loc='upper left')
         axes[0].set_xlim((-1, len(preds_wave)))
         axes[0].set_xticks(range(0, len(preds_wave)))
@@ -944,6 +869,7 @@ def predict_sign(
         axes[0].spines.left.set_visible(False)
         axes[0].spines.top.set_visible(False)
         axes[0].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+        axes[0].set_ylabel(r'Zernike coefficients ($\mu$m)')
 
         axes[1].plot(np.zeros_like(percent_changes), '--', color='lightgrey')
         axes[1].bar(
@@ -955,9 +881,7 @@ def predict_sign(
             alpha=.75,
             align='center',
             ecolor='grey',
-            label='Percent change',
         )
-        axes[1].legend(frameon=False, loc='upper left')
         axes[1].set_xlim((-1, len(preds_wave)))
         axes[1].set_xticks(range(0, len(preds_wave)))
         axes[1].set_ylim((-100, 100))
@@ -967,6 +891,7 @@ def predict_sign(
         axes[1].spines.left.set_visible(False)
         axes[1].spines.top.set_visible(False)
         axes[1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+        axes[1].set_ylabel(f'Percent change')
 
         axes[2].plot(np.zeros_like(preds_wave), '--', color='lightgrey')
         axes[2].bar(
@@ -980,13 +905,13 @@ def predict_sign(
             ecolor='grey',
             label='Predictions',
         )
-        axes[2].legend(frameon=False, loc='upper left')
         axes[2].set_xlim((-1, len(preds_wave)))
         axes[2].set_xticks(range(0, len(preds_wave)))
         axes[2].spines.right.set_visible(False)
         axes[2].spines.left.set_visible(False)
         axes[2].spines.top.set_visible(False)
         axes[2].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+        axes[2].set_ylabel(r'Zernike coefficients ($\mu$m)')
 
         plt.tight_layout()
         plt.savefig(f'{plot}_sign_correction.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
@@ -1165,10 +1090,10 @@ def eval_sign(
             preds[i, flips] *= -1
 
             if plot == True:
-                init_preds_wave = Wavefront(init_preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
-                followup_preds_wave = Wavefront(followup_preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
-                preds_wave = Wavefront(preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
-                ys_wave = Wavefront(ys[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
+                init_preds_wave = Wavefront(init_preds[i], lam_detection=gen.lam_detection).amplitudes
+                followup_preds_wave = Wavefront(followup_preds[i], lam_detection=gen.lam_detection).amplitudes
+                preds_wave = Wavefront(preds[i], lam_detection=gen.lam_detection).amplitudes
+                ys_wave = Wavefront(ys[i], lam_detection=gen.lam_detection).amplitudes
 
                 fig, axes = plt.subplots(2, 1, figsize=(24, 8))
                 axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')

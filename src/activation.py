@@ -23,10 +23,10 @@ class MaskedActivation(layers.Layer):
         mask_shape=64,
         na_det=1.0,
         psf_type='widefield',
-        lambda_det=.605,
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        lambda_det=.510,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.2,
         refractive_index=1.33,
         **kwargs
     ):

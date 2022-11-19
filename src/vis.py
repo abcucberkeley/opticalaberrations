@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
-def plot_training_dist(n_samples=1000, batch_size=100, wavelength=.510):
+def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -51,9 +51,9 @@ def plot_training_dist(n_samples=1000, batch_size=100, wavelength=.510):
     from utils import microns2waves
 
     psfargs = dict(
-        n_modes=60,
+        n_modes=55,
         dtype='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
-        distribution='mixed',
+        distribution='dirichlet',
         bimodal=True,
         rotate=True,
         gamma=.75,
@@ -74,12 +74,11 @@ def plot_training_dist(n_samples=1000, batch_size=100, wavelength=.510):
     zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
 
     ## Challenging dataset
-    difractionlimit = np.arange(0, 0.055, .005).round(3)  # 10 bins
+    difractionlimit = np.arange(0, 0.051, .002).round(3)  # 25 bins
     small = np.arange(.05, .1, .0025).round(3)            # 20 bins
-    large = np.arange(.1, .2, .005).round(3)              # 20 bins
-    extreme = np.arange(.2, .52, .02).round(3)            # 20 bins
-    min_amps = np.concatenate([difractionlimit, small, large, extreme[:-1]])
-    max_amps = np.concatenate([difractionlimit[1:], small, large, extreme])
+    large = np.arange(.1, .15, .005).round(3)             # 10 bins
+    min_amps = np.concatenate([difractionlimit, small, large[:-1]])
+    max_amps = np.concatenate([difractionlimit[1:], small, large])
 
     ## Easy dataset
     # min_amps = np.arange(0, .15, .01).round(3)
@@ -93,11 +92,10 @@ def plot_training_dist(n_samples=1000, batch_size=100, wavelength=.510):
                 ignore_index=True
             )
             ps = list(peak2peak(ys))
-            logger.info(rf'Range[{mina}, {maxa}]$\mu$m \t $\\bar{{p2p}}$={np.mean(ps).round(3)}$\\lambda$')
+            logger.info(f'Range[{mina}, {maxa}]')
             peaks.extend(ps)
 
     logger.info(zernikes.round(2))
-    logger.info(rf'Range[{min_amps[0]}, {max_amps[-1]}]$\mu$m \t $\\bar{{p2p}}$={np.mean(peaks).round(3)}$\\lambda$')
 
     fig, (pax, cax, zax) = plt.subplots(1, 3, figsize=(16, 4))
 
@@ -141,6 +139,7 @@ def plot_training_dist(n_samples=1000, batch_size=100, wavelength=.510):
 
     # pct = zernikes.astype(float).quantile(.9999, axis=1)
     # dmodes = (zernikes[zernikes > pct]).count(axis=1)
+    zernikes = zernikes.loc[(zernikes != 0).any(axis=1)]
     zernikes = zernikes.div(zernikes.sum(axis=1), axis=0)
     logger.info(zernikes.round(2))
 
@@ -879,7 +878,7 @@ def plot_signal(n_modes=60, wavelength=.605):
                 # vol = window ** .5
                 # vol = np.nan_to_num(vol)
                 #
-                # axes[k, 0].bar(range(n_modes), height=w.amplitudes_ansi_waves)
+                # axes[k, 0].bar(range(n_modes), height=w.amplitudes)
                 # m = axes[k, 1].imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
                 # axes[k, 2].imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
                 # axes[k, 3].imshow(np.max(vol, axis=2).T, cmap=psf_cmap, vmin=0, vmax=1)
@@ -1095,6 +1094,84 @@ def plot_psnr(psf_cmap='hot', gamma=.75):
     plt.savefig(f'../data/noise.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
+def plot_wavefront(iax, phi, label=None, nas=(.55, .65, .75, .85, .95), colorbar=True):
+    def formatter(x, pos):
+        val_str = '{:.1g}'.format(x)
+        if np.abs(x) > 0 and np.abs(x) < 1:
+            return val_str.replace("0", "", 1)
+        else:
+            return val_str
+
+    def na_mask(radius):
+        center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
+        Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
+        dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
+        mask = dist_from_center <= radius
+        return mask
+
+    vmin = np.round(np.nanmin(phi))
+    vmin = -.25 if vmin > -0.01 else vmin
+    vmax = np.round(np.nanmax(phi))
+    vmax = .25 if vmax < 0.01 else vmax
+    step = .25
+
+    highcmap = plt.get_cmap('magma_r', 256)
+    middlemap = plt.get_cmap('gist_gray', 256)
+    lowcmap = plt.get_cmap('gist_earth_r', 256)
+
+    ll = np.arange(vmin, -.25+step, step)
+    mm = [-.15, 0, .15]
+    hh = np.arange(.25, vmax+step, step)
+    levels = np.concatenate((ll, mm, hh))
+
+    wave_cmap = np.vstack((
+        lowcmap(.66 * ll / ll.min()),
+        middlemap([.85, .95, 1, .95, .85]),
+        highcmap(.66 * hh / hh.max())
+    ))
+    wave_cmap = mcolors.ListedColormap(wave_cmap)
+
+    mat = iax.contourf(
+        phi,
+        levels=levels,
+        cmap=wave_cmap,
+        vmin=np.min(levels),
+        vmax=np.max(levels),
+        extend='both',
+    )
+
+    pcts = []
+    for d in nas:
+        r = (d * phi.shape[0]) / 2
+        circle = patches.Circle((50, 50), r, ls='--', ec="dimgrey", fc="none", zorder=3)
+        iax.add_patch(circle)
+
+        mask = phi * na_mask(radius=r)
+        pcts.append((np.nanquantile(mask, .05), np.nanquantile(mask, .95)))
+
+    circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
+    iax.add_patch(circle)
+    phi = phi.flatten()
+
+    if label is not None:
+        err = '\n'.join([
+            f'$NA_{{{na}}}$={abs(p[1]-p[0]):.2f}$\lambda$'
+            for na, p in zip(nas, pcts)
+        ])
+        iax.set_title(f'{label}\n{err}')
+
+    iax.axis('off')
+    iax.set_aspect("equal")
+
+    if colorbar:
+        cax = inset_axes(iax, width="10%", height="100%", loc='center right', borderpad=-2)
+        cbar = plt.colorbar(mat, cax=cax, extend='both', format=formatter)
+        cbar.ax.set_title(r'$\lambda$', pad=10)
+        cbar.ax.yaxis.set_ticks_position('right')
+        cbar.ax.yaxis.set_label_position('left')
+    return mat
+
+
 def plot_dmodes(
     psf: np.array,
     gen: SyntheticPSF,
@@ -1219,7 +1296,7 @@ def plot_dmodes(
     wavefront(ax_w, y_wave, label='Ground truth', levels=mticks)
 
     k = 0
-    for i, w in enumerate(y.amplitudes_ansi_waves):
+    for i, w in enumerate(y.amplitudes):
         k += 1
         phi = np.zeros(60)
         phi[i] = w / (2 * np.pi / wavelength)
@@ -1235,13 +1312,13 @@ def plot_dmodes(
         wavefront(ax_w, phi.wave(100), label=f'Mode #{i}', levels=mticks)
 
     ax_zcoff = fig.add_subplot(gs[-1, :])
-    ax_zcoff.plot(pred.amplitudes_ansi_waves, '-o', color='C0', label='Predictions')
-    ax_zcoff.plot(y.amplitudes_ansi_waves, '-o', color='C1', label='Ground truth')
+    ax_zcoff.plot(pred.amplitudes, '-o', color='C0', label='Predictions')
+    ax_zcoff.plot(y.amplitudes, '-o', color='C1', label='Ground truth')
     ax_zcoff.legend(frameon=False, loc='upper center', bbox_to_anchor=(.1, 1))
-    ax_zcoff.set_xticks(range(len(pred.amplitudes_ansi_waves)))
-    ax_zcoff.set_ylabel(f'Amplitudes\n($\lambda = {wavelength}~\mu m$)')
+    ax_zcoff.set_xticks(range(len(pred.amplitudes)))
+    ax_zcoff.set_ylabel(r'Zernike coefficients ($\mu$m)')
     ax_zcoff.spines['top'].set_visible(False)
-    ax_zcoff.set_xlim((0, len(pred.amplitudes_ansi_waves)))
+    ax_zcoff.set_xlim((0, len(pred.amplitudes)))
     ax_zcoff.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
@@ -1334,7 +1411,7 @@ def diagnostic_assessment(
             ax.imshow(vol[3], cmap='coolwarm', vmin=-1, vmax=1)
             ax.set_xticks([])
             ax.set_yticks([])
-            ax.set_xlabel(r'$\varphi = \angle \tau$')
+            ax.set_xlabel(r'$\varpupil = \angle \tau$')
             xy.axis('off')
 
             inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=zx, wspace=0.1, hspace=0.1)
@@ -1348,7 +1425,7 @@ def diagnostic_assessment(
             ax.imshow(vol[4], cmap='coolwarm', vmin=-1, vmax=1)
             ax.set_xticks([])
             ax.set_yticks([])
-            ax.set_xlabel(r'$\varphi = \angle \tau$')
+            ax.set_xlabel(r'$\varpupil = \angle \tau$')
             zx.axis('off')
 
             inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=zy, wspace=0.1, hspace=0.1)
@@ -1362,7 +1439,7 @@ def diagnostic_assessment(
             ax.imshow(vol[5].T, cmap='coolwarm', vmin=-1, vmax=1)
             ax.set_xticks([])
             ax.set_yticks([])
-            ax.set_xlabel(r'$\varphi = \angle \tau$')
+            ax.set_xlabel(r'$\varpupil = \angle \tau$')
             zy.axis('off')
 
             cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
@@ -1499,12 +1576,12 @@ def diagnostic_assessment(
         psf_slice(ax_xygt, ax_xzgt, ax_yzgt, gt_psf, label='Validation')
 
     # ax_zcoff.set_title('Zernike modes')
-    ax_zcoff.plot(pred.amplitudes_ansi_waves, '-o', color='C0', label='Predictions')
-    ax_zcoff.plot(y.amplitudes_ansi_waves, '-o', color='C1', label='Ground truth')
+    ax_zcoff.plot(pred.amplitudes, '-o', color='C0', label='Predictions')
+    ax_zcoff.plot(y.amplitudes, '-o', color='C1', label='Ground truth')
     ax_zcoff.legend(frameon=False, loc='upper center', bbox_to_anchor=(.075, 1))
-    ax_zcoff.set_xticks(range(len(pred.amplitudes_ansi_waves)))
-    ax_zcoff.set_xlim((0, len(pred.amplitudes_ansi_waves)-1))
-    ax_zcoff.set_ylabel(f'Amplitudes\n($\lambda = {wavelength}~\mu m$)')
+    ax_zcoff.set_xticks(range(len(pred.amplitudes)))
+    ax_zcoff.set_xlim((0, len(pred.amplitudes)-1))
+    ax_zcoff.set_ylabel(r'Zernike coefficients ($\mu$m)')
     ax_zcoff.spines['top'].set_visible(False)
     ax_zcoff.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
 
@@ -1612,7 +1689,7 @@ def matlab_diagnostic_assessment(
             ax.imshow(vol[3], cmap='coolwarm', vmin=-1, vmax=1)
             ax.set_xticks([])
             ax.set_yticks([])
-            ax.set_xlabel(r'$\varphi = \angle \tau$')
+            ax.set_xlabel(r'$\varpupil = \angle \tau$')
             xy.axis('off')
 
             inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=zx, wspace=0.1, hspace=0.1)
@@ -1626,7 +1703,7 @@ def matlab_diagnostic_assessment(
             ax.imshow(vol[4], cmap='coolwarm', vmin=-1, vmax=1)
             ax.set_xticks([])
             ax.set_yticks([])
-            ax.set_xlabel(r'$\varphi = \angle \tau$')
+            ax.set_xlabel(r'$\varpupil = \angle \tau$')
             zx.axis('off')
 
             inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=zy, wspace=0.1, hspace=0.1)
@@ -1640,7 +1717,7 @@ def matlab_diagnostic_assessment(
             ax.imshow(vol[5].T, cmap='coolwarm', vmin=-1, vmax=1)
             ax.set_xticks([])
             ax.set_yticks([])
-            ax.set_xlabel(r'$\varphi = \angle \tau$')
+            ax.set_xlabel(r'$\varpupil = \angle \tau$')
             zy.axis('off')
 
             cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
@@ -1807,14 +1884,14 @@ def matlab_diagnostic_assessment(
     psf_slice(ax_mxy, ax_mxz, ax_myz, matlab_corrected_psf, label='Matlab')
 
     # ax_zcoff.set_title('Zernike modes')
-    ax_zcoff.plot(pred.amplitudes_ansi_waves, '-o', color='C0', label='Predictions')
-    ax_zcoff.plot(pred_matlab.amplitudes_ansi_waves, '-o', color='C1', label='Matlab')
-    ax_zcoff.plot(y.amplitudes_ansi_waves, '-o', color='dimgrey', label='Ground truth')
+    ax_zcoff.plot(pred.amplitudes, '-o', color='C0', label='Predictions')
+    ax_zcoff.plot(pred_matlab.amplitudes, '-o', color='C1', label='Matlab')
+    ax_zcoff.plot(y.amplitudes, '-o', color='dimgrey', label='Ground truth')
 
     ax_zcoff.legend(frameon=False, loc='upper center', bbox_to_anchor=(.075, 1))
-    ax_zcoff.set_xticks(range(len(pred.amplitudes_ansi_waves)))
-    ax_zcoff.set_xlim((0, len(pred.amplitudes_ansi_waves)-1))
-    ax_zcoff.set_ylabel(f'Amplitudes\n($\lambda = {wavelength}~\mu m$)')
+    ax_zcoff.set_xticks(range(len(pred.amplitudes)))
+    ax_zcoff.set_xlim((0, len(pred.amplitudes)-1))
+    ax_zcoff.set_ylabel(r'Zernike coefficients ($\mu$m)')
     ax_zcoff.spines['top'].set_visible(False)
     ax_zcoff.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
 
@@ -1913,7 +1990,7 @@ def plot_mae_amps(df: pd.DataFrame, save_path, wavelength=.605):
     ax.grid(True, which="major", axis='both', lw=1, ls='--', zorder=0)
     ax.legend(frameon=False, loc='upper right')
     ax.set_ylabel(f'MAE ($\lambda = {wavelength}~\mu m$)')
-    ax.set_xlabel(f'Amplitudes\n($\lambda = {wavelength}~\mu m$)')
+    ax.set_xlabel(r'Zernike coefficients ($\mu$m)')
 
     plt.tight_layout()
     plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
@@ -2354,9 +2431,9 @@ def plot_inputs(
         ax_ccuts.set_aspect('equal')
 
         # ax_zcoff.set_title('Zernike modes')
-        ax_zcoff.plot(w.amplitudes_ansi_waves, '-o', color='C0', label='Predictions')
-        ax_zcoff.set_xticks(range(len(w.amplitudes_ansi_waves)))
-        ax_zcoff.set_ylabel(f'Amplitudes\n($\lambda = {wavelength}~\mu m$)')
+        ax_zcoff.plot(w.amplitudes, '-o', color='C0', label='Predictions')
+        ax_zcoff.set_xticks(range(len(w.amplitudes)))
+        ax_zcoff.set_ylabel(r'Zernike coefficients ($\mu$m)')
         ax_zcoff.spines['top'].set_visible(False)
         ax_zcoff.grid()
 
@@ -2364,58 +2441,7 @@ def plot_inputs(
         plt.savefig(f'../data/inputs/{i}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
-def diagnosis(
-    pred: Wavefront,
-    save_path: Path,
-    wavelength: float = .510,
-    threshold: float = .01,
-    pred_std: Any = None
-):
-    def formatter(x, pos):
-        val_str = '{:.1g}'.format(x)
-        if np.abs(x) > 0 and np.abs(x) < 1:
-            return val_str.replace("0", "", 1)
-        else:
-            return val_str
-
-    def wavefront(iax, phi, levels, label='', nas=(.55, .65, .75, .85, .95)):
-        def na_mask(radius):
-            center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
-            Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
-            dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
-            mask = dist_from_center <= radius
-            return mask
-
-        mat = iax.contourf(
-            phi,
-            levels=levels,
-            cmap=wave_cmap,
-            vmin=np.min(levels),
-            vmax=np.max(levels),
-            extend='both',
-        )
-
-        pcts = []
-        for d in nas:
-            r = (d * phi.shape[0]) / 2
-            circle = patches.Circle((50, 50), r, ls='--', ec="dimgrey", fc="none", zorder=3)
-            iax.add_patch(circle)
-
-            mask = phi * na_mask(radius=r)
-            pcts.append((np.nanquantile(mask, .05), np.nanquantile(mask, .95)))
-
-        circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
-        iax.add_patch(circle)
-        phi = phi.flatten()
-
-        err = '\n'.join([
-            f'$NA_{{{na}}}$={abs(p[1]-p[0]):.2f}$\lambda$'
-            for na, p in zip(nas, pcts)
-        ])
-        iax.set_title(f'{label}\n{err}')
-        iax.axis('off')
-        iax.set_aspect("equal")
-        return mat
+def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None):
 
     plt.rcParams.update({
         'font.size': 10,
@@ -2423,7 +2449,6 @@ def diagnosis(
         'axes.labelsize': 12,
         'xtick.labelsize': 10,
         'ytick.labelsize': 10,
-        'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
 
@@ -2433,65 +2458,39 @@ def diagnosis(
     gs = fig.add_gridspec(1, 3)
     ax_wavefornt = fig.add_subplot(gs[0, -1])
     ax_zcoff = fig.add_subplot(gs[0, :-1])
-    cax = inset_axes(ax_wavefornt, width="10%", height="100%", loc='center right', borderpad=-2)
 
-    # gs = fig.add_gridspec(4, 3)
-    # ax_acts = fig.add_subplot(gs[:2, :2])
-    # ax_wavefornt = fig.add_subplot(gs[:2, 2])
-    # cax = inset_axes(ax_wavefornt, width="10%", height="100%", loc='center right', borderpad=-1)
-    # ax_zcoff = fig.add_subplot(gs[-2:, :])
+    plot_wavefront(ax_wavefornt, pred_wave, label='Predicted wavefront')
 
-    step = .25
-    vmax = round(np.max([
-        np.abs(round(np.nanquantile(pred_wave, .05), 2)),
-        np.abs(round(np.nanquantile(pred_wave, .95), 2))
-    ]) * 4) / 4
-    vmax = .25 if vmax < threshold else vmax
-
-    highcmap = plt.get_cmap('magma_r', 256)
-    middlemap = plt.get_cmap('gist_gray', 256)
-    lowcmap = plt.get_cmap('gist_earth_r', 256)
-
-    ll = np.arange(-vmax, -.25 + step, step)
-    mm = [-.15, 0, .15]
-    hh = np.arange(.25, vmax + step, step)
-    mticks = np.concatenate((ll, mm, hh))
-
-    levels = np.vstack((
-        lowcmap(.66 * ll / ll.min()),
-        middlemap([.85, .95, 1, .95, .85]),
-        highcmap(.66 * hh / hh.max())
-    ))
-    wave_cmap = mcolors.ListedColormap(levels)
-
-    mat = wavefront(ax_wavefornt, pred_wave, levels=mticks, label='Predicted')
-    # rmat = wavefront(rax_wavefornt, rpred_wave, levels=mticks, label='Residuals')
-
-    cbar = fig.colorbar(mat, cax=cax, extend='both', format=formatter)
-    cbar.ax.set_title(r'$\lambda$')
-    cbar.ax.yaxis.set_ticks_position('right')
-    cbar.ax.yaxis.set_label_position('left')
-
-    ax_zcoff.plot(pred.amplitudes_ansi_waves, marker=".", markersize=5, color='dimgrey', label=r'$\mu$')
     if pred_std is not None:
-        ax_zcoff.fill_between(
-            range(len(pred.amplitudes_ansi_waves)),
-            pred.amplitudes_ansi_waves - pred_std.amplitudes_ansi_waves,
-            pred.amplitudes_ansi_waves + pred_std.amplitudes_ansi_waves,
-            label=r'$\pm \sigma$',
-            color='gray',
-            alpha=0.33
+        ax_zcoff.bar(
+            range(len(pred.amplitudes)),
+            pred.amplitudes,
+            yerr=pred_std.amplitudes,
+            capsize=2,
+            color='dimgrey',
+            alpha=.75,
+            align='center',
+            ecolor='lightgrey',
+        )
+    else:
+        ax_zcoff.bar(
+            range(len(pred.amplitudes)),
+            pred.amplitudes,
+            capsize=2,
+            color='dimgrey',
+            alpha=.75,
+            align='center',
+            ecolor='k',
         )
 
-    ax_zcoff.legend(frameon=False, loc='upper right', ncol=2)
-    ax_zcoff.set_ylabel(f'Amplitudes ($\lambda = {int(wavelength*1000)}~nm$)')
+    ax_zcoff.set_ylabel(f'Zernike coefficients ($\mu$m)')
     ax_zcoff.spines['top'].set_visible(False)
     ax_zcoff.spines['left'].set_visible(False)
     ax_zcoff.spines['right'].set_visible(False)
     ax_zcoff.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-    ax_zcoff.set_xticks(range(len(pred.amplitudes_ansi_waves)), minor=True)
-    ax_zcoff.set_xticks(range(0, len(pred.amplitudes_ansi_waves)+5, 5), minor=False)
-    ax_zcoff.set_xlim((-.5, len(pred.amplitudes_ansi_waves)))
+    ax_zcoff.set_xticks(range(len(pred.amplitudes)), minor=True)
+    ax_zcoff.set_xticks(range(0, len(pred.amplitudes)+5, 5), minor=False)
+    ax_zcoff.set_xlim((-.5, len(pred.amplitudes)))
     ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
 
     plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
@@ -2536,7 +2535,6 @@ def prediction(
         'axes.labelsize': 12,
         'xtick.labelsize': 10,
         'ytick.labelsize': 10,
-        'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
 
@@ -2572,7 +2570,6 @@ def tiles(
         'axes.labelsize': 12,
         'xtick.labelsize': 10,
         'ytick.labelsize': 10,
-        'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
 
@@ -2624,36 +2621,6 @@ def wavefronts(
     threshold: float = .01,
     scale: str = 'mean',
 ):
-    def pupil(iax, phi, levels, label='', nas=(.50, .75, .85, .95)):
-        def na_mask(radius):
-            center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
-            Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
-            dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
-            mask = dist_from_center <= radius
-            return mask
-
-        mat = iax.contourf(
-            phi,
-            levels=levels,
-            cmap=wave_cmap,
-            vmin=np.min(levels),
-            vmax=np.max(levels),
-            extend='both'
-        )
-
-        pcts = []
-        for d in nas:
-            r = (d * phi.shape[0]) / 2
-            circle = patches.Circle((50, 50), r, ls='--', ec="dimgrey", fc="none", zorder=3)
-            iax.add_patch(circle)
-
-            mask = phi * na_mask(radius=r)
-            pcts.append((np.nanquantile(mask, .05), np.nanquantile(mask, .95)))
-
-        circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
-        iax.add_patch(circle)
-        iax.axis('off')
-        return mat
 
     plt.rcParams.update({
         'font.size': 10,
@@ -2661,34 +2628,12 @@ def wavefronts(
         'axes.labelsize': 12,
         'xtick.labelsize': 10,
         'ytick.labelsize': 10,
-        'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
     final_pred = Wavefront(predictions[scale].values, lam_detection=wavelength)
     pred_wave = final_pred.wave(size=100)
-
-    step = .25
-    vmax = round(np.max([
-        np.abs(round(np.nanquantile(pred_wave, .05), 2)),
-        np.abs(round(np.nanquantile(pred_wave, .95), 2))
-    ]) * 4) / 4
-    vmax = .25 if vmax < threshold else vmax
-
-    highcmap = plt.get_cmap('magma_r', 256)
-    middlemap = plt.get_cmap('gist_gray', 256)
-    lowcmap = plt.get_cmap('gist_earth_r', 256)
-
-    ll = np.arange(-vmax, -.25 + step, step)
-    mm = [-.15, 0, .15]
-    hh = np.arange(.25, vmax + step, step)
-    mticks = np.concatenate((ll, mm, hh))
-
-    levels = np.vstack((
-        lowcmap(.66 * ll / ll.min()),
-        middlemap([.85, .95, 1, .95, .85]),
-        highcmap(.66 * hh / hh.max())
-    ))
-    wave_cmap = mcolors.ListedColormap(levels)
+    fig, ax = plt.subplots()
+    mat = plot_wavefront(ax, pred_wave, colorbar=False)
 
     for z in range(ztiles):
         fig = plt.figure(figsize=(11, 8))
@@ -2708,7 +2653,7 @@ def wavefronts(
             for x in range(ncols):
                 pred = Wavefront(predictions[f"p-z{z}-y{y}-x{x}"].values, lam_detection=wavelength)
                 pred_wave = pred.wave(size=100)
-                mat = pupil(grid[i], pred_wave, levels=mticks)
+                plot_wavefront(grid[i], pred_wave, colorbar=False)
                 grid[i].set_title(f"z{z}-y{y}-x{x}", pad=1)
                 i += 1
 
@@ -2716,6 +2661,6 @@ def wavefronts(
         cbar.ax.xaxis.set_ticks_position('top')
         cbar.ax.xaxis.set_label_position('top')
         cbar.ax.set_yticks([])
-        cbar.ax.set_title(f'$\lambda = {wavelength}~\mu m$')
+        cbar.ax.set_title(f'$\lambda = {wavelength}~\mu$m')
 
         plt.savefig(f'{save_path}_z{z}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)

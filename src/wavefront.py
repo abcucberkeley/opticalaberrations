@@ -75,19 +75,6 @@ class Wavefront:
                 amplitudes = np.random.uniform(*lims, size=self.length)
 
         amplitudes[self.prefixed] = 0.
-
-        # import matplotlib.pyplot as plt
-        # import seaborn as sns
-        # fig, axes = plt.subplots(2, 1, figsize=(4, 8))
-        # sns.histplot(amplitudes, ax=axes[0], kde=True, color='dimgrey')
-        # axes[0].set_xlim(np.min(amplitudes), np.max(amplitudes))
-        # sns.barplot(x=np.arange(len(amplitudes)), y=amplitudes, ax=axes[1], palette='Accent')
-        # axes[1].set_ylim(np.min(amplitudes), np.max(amplitudes))
-        # axes[1].set_xlim(0, 60)
-        # axes[1].set_xticks(np.arange(0, 65, 5))
-        # axes[1].set_title(f"{round(self._microns2waves(sum(amplitudes)), 3)}$\lambda$")
-        # plt.show()
-
         amplitudes = self._formatter(amplitudes, order)
 
         self.zernikes = {
@@ -117,7 +104,7 @@ class Wavefront:
         self.amplitudes_ansi = np.array(
             self._dict_to_list({z.index_ansi: a for z, a in self.zernikes.items()})
         )
-        self.amplitudes_ansi_waves = np.array(
+        self.amplitudes = np.array(
             self._dict_to_list({z.index_ansi: self._microns2waves(a) for z, a in self.zernikes.items()})
         )
 
@@ -196,10 +183,10 @@ class Wavefront:
         return amplitudes
 
     def _waves2microns(self, w):
-        return (self.lam_detection / 2 * np.pi) * w
+        return w * self.lam_detection
 
     def _microns2waves(self, w):
-        return (2 * np.pi / self.lam_detection) * w
+        return w / self.lam_detection
 
     def _formatter(self, values, order):
         if isinstance(values, dict):
@@ -256,5 +243,5 @@ class Wavefront:
             axis=0
         )
 
-    def wave(self, size=55):
-        return np.flip(np.rot90(self.polynomial(size=size)), axis=0)
+    def wave(self, size=55, normed=True):
+        return np.flip(np.rot90(self.polynomial(size=size, normed=normed)), axis=0)

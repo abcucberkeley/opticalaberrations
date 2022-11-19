@@ -37,7 +37,7 @@ def nm_to_ansi(n, m):
 
 
 def nm_normalization(n, m):
-    """the norm of the zernike mode n,m in born/wolf convetion
+    """the norm of the zernike mode n,m in born/wolf convention
     i.e. sqrt( \int | z_nm |^2 )
     """
     return np.sqrt((1. + (m == 0)) / (2. * n + 2))
@@ -210,7 +210,7 @@ class Zernike:
             logging.error(AttributeError('Zernike is immutable'))
 
     def __repr__(self):
-        return f'Zernike(n={self.n}, m={self.m}, noll={self.index_noll:2}, ansi={self.index_ansi:2})'
+        return f'Zernike(n={self.n:2}, m={self.m:2}, noll={self.index_noll:2}, ansi={self.index_ansi:2})'
 
     @property
     def nm_pairs(self):

@@ -46,17 +46,16 @@ if [ "$DATASET" = "train" ];then
     amps2=($(seq .01 .01 .25))
     SAMPLES=($(seq 1 100 300))
   else
-    MODES=60
+    MODES=55
     SAMPLES=($(seq 1 100 300))
     difractionlimit=($(seq 0 .005 .05))
     small=($(seq .05 .0025 .1))
     large=($(seq .1 .005 .2))
-    extreme=($(seq .2 .02 .5))
-    amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
+    amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" )
     echo ${amps[@]}
     echo ${#amps[@]}
-    amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" "${extreme[@]:0:${#extreme[@]}-1}" )
-    amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" "${extreme[@]}" )
+    amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]:0:${#large[@]}-1}" )
+    amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" )
   fi
 else
   TYPE=''
@@ -68,12 +67,12 @@ else
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
-    amps1=($(seq 0 .025 .25))
-    amps2=($(seq .025 .025 .25))
+    amps1=($(seq 0 .01 .15))
+    amps2=($(seq .01 .01 .15))
   else
-    MODES=60
-    amps1=($(seq 0 .025 .5))
-    amps2=($(seq .025 .025 .5))
+    MODES=55
+    amps1=($(seq 0 .005 .15))
+    amps2=($(seq .005 .005 .15))
   fi
 fi
 
@@ -84,10 +83,8 @@ do
   do
     for AMP in `seq 1 ${#amps1[@]}`
     do
-      for R in 0 1
+      for N in `seq 1 ${#OBJS[@]}`
       do
-        for N in `seq 1 ${#OBJS[@]}`
-        do
           for S in `seq 1 ${#SAMPLES[@]}`
           do
             while [ $(squeue -u thayeralshaabi -h -t pending -r | wc -l) -gt 500 ]
@@ -97,7 +94,6 @@ do
 
             j="${ENV} multipoint_dataset.py ${TYPE}"
             j="${j} --npoints ${OBJS[$N-1]}"
-            j="${j} --sphere ${R}"
             j="${j} --psf_type ${PSF_TYPE}"
             j="${j} --dist ${DIST}"
             j="${j} --iters ${ITERS}"
@@ -153,7 +149,6 @@ do
 
           done
         done
-      done
     done
   done
 done

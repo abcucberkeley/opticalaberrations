@@ -429,7 +429,6 @@ def predict_sample(
         vis.diagnosis(
             pred=p,
             pred_std=std,
-            wavelength=wavelength,
             save_path=Path(f"{img.with_suffix('')}_sample_predictions_diagnosis"),
         )
 
@@ -736,10 +735,10 @@ def aggregate_predictions(
         if plot:
             if det_modes.shape[0] > 1:
                 axes[0].legend(ncol=2, frameon=False)
-                axes[-1].set_xlabel(f'Amplitudes ($\mu m$)')
+                axes[-1].set_xlabel(f'Zernike coefficients ($\mu$m)')
             else:
                 axes.legend(ncol=2, frameon=False)
-                axes.set_xlabel(f'Amplitudes ($\mu m$)')
+                axes.set_xlabel(f'Zernike coefficients ($\mu$m)')
 
             plt.tight_layout()
             plt.savefig(f"{model_pred.with_suffix('')}_aggregated.svg", bbox_inches='tight', dpi=300, pad_inches=.25)
@@ -812,6 +811,5 @@ def aggregate_predictions(
         vis.diagnosis(
             pred=p,
             pred_std=pred_std,
-            wavelength=wavelength,
             save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis"),
         )
