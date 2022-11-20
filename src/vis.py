@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
-def plot_training_dist(n_samples=25, batch_size=25, wavelength=.510):
+def plot_training_dist(n_samples=100, batch_size=100, wavelength=.510):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -132,7 +132,10 @@ def plot_training_dist(n_samples=25, batch_size=25, wavelength=.510):
     modes = zernikes.sum(axis=0)
     modes /= modes.sum(axis=0)
 
-    bars = sns.barplot(modes.index-1, modes.values, ax=zax, palette='viridis')
+    cmap = sns.color_palette("viridis", len(modes))
+    rank = modes.argsort().argsort()
+    bars = sns.barplot(modes.index-1, modes.values, ax=zax, palette=np.array(cmap[::-1])[rank])
+
     for index, label in enumerate(bars.get_xticklabels()):
         if index % 4 == 0:
             label.set_visible(True)

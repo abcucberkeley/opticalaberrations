@@ -210,7 +210,7 @@ class Zernike:
             logging.error(AttributeError('Zernike is immutable'))
 
     def __repr__(self):
-        return f'Zernike(n={self.n:2}, m={self.m:2}, noll={self.index_noll:2}, ansi={self.index_ansi:2})'
+        return f'Zernike(n:{self.n:2}, m:{self.m:2}, noll:{self.index_noll:2}, ansi:{self.index_ansi:2})'
 
     @property
     def nm_pairs(self):

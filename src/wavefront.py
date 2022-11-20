@@ -37,7 +37,8 @@ class Wavefront:
         distribution=None,
         gamma=.75,
         bimodal=True,
-        rotate=False
+        rotate=False,
+        weights='uniform'
     ):
         self.ranges = amplitudes
         self.order = order
@@ -47,6 +48,15 @@ class Wavefront:
         self.gamma = gamma
         self.bimodal = bimodal
         self.rotate = rotate
+
+        if weights == 'pyramid':
+            self.mode_weights = self._pyramid_weights(num_modes=self.length - len(self.prefixed))
+        elif weights == 'decay':
+            self.mode_weights = self._decayed_weights(num_modes=self.length - len(self.prefixed))
+        else:
+            self.mode_weights = self._uniform_weights(num_modes=self.length - len(self.prefixed))
+
+        # print(self.mode_weights)
 
         self.distribution = np.random.choice(['single', 'powerlaw', 'dirichlet'], size=1)[0] \
             if distribution == 'mixed' else distribution
@@ -69,11 +79,6 @@ class Wavefront:
             amplitudes = np.zeros(self.length)      # initialize modes
             moi = self._pick_modes()                # pick modes of interest
             amplitudes[moi] = amps[:len(moi)]       # assign amplitudes
-
-            # print(moi)
-            # print(amplitudes.round(4))
-            # print('-'*100)
-            # exit()
 
         amplitudes = self._formatter(amplitudes, order)
 
@@ -110,7 +115,6 @@ class Wavefront:
 
         self.amplitudes = np.array([self.zernikes[k] for k in sorted(self.zernikes.keys())])
 
-
     def __len__(self):
         return len(self.zernikes)
 
@@ -138,17 +142,37 @@ class Wavefront:
         else:
             return self.amplitudes / other.amplitudes
 
+    def _uniform_weights(self, num_modes):
+        weights = np.ones(num_modes).astype(float)
+        weights /= np.sum(weights)  # normalize probabilities for choosing any given mode
+        return weights
+
+    def _decayed_weights(self, num_modes):
+        weights = np.arange(1, num_modes + 1)[::-1].astype(float)
+        weights /= np.sum(weights)  # normalize probabilities for choosing any given mode
+        return weights
+
+    def _pyramid_weights(self, num_modes, starting_ansi_index=14):
+        hashtable = {
+            Zernike(j, order=self.order): a
+            for j, a in self._formatter(np.zeros(self.length), self.order).items()
+        }
+
+        i = starting_ansi_index - len(self.prefixed) if starting_ansi_index >= len(self.prefixed) else 0
+
+        weights = np.ones(num_modes)
+        for z, a in hashtable.items():
+            if z.index_ansi not in self.prefixed and z.index_ansi >= starting_ansi_index:
+                weights[i] /= abs(z.m) + 2
+                i += 1
+
+        weights /= np.sum(weights)
+        return weights
+
     def _pick_modes(self):
         modes = np.arange(self.length).astype(int)
-        modes = np.delete(modes, [0, 1, 2, 4])  # remove bias, tip, tilt, and defocus
-
-        probs = np.ones_like(modes).astype(float)
-        probs /= np.sum(probs)  # normalize probabilities for choosing any given mode
-
-        # probs[:15] = np.sum(probs)
-        # probs = np.arange(1, len(modes)+1)[::-1].astype(float)
-
-        options = np.random.choice(a=modes, p=probs, size=100)
+        modes = np.delete(modes, self.prefixed)  # remove bias, tip, tilt, and defocus
+        options = np.random.choice(a=modes, p=self.mode_weights, size=100)
         u, picked = np.sort(np.unique(options,  return_index=True))
         return options[picked]
 
