@@ -296,17 +296,17 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--x_voxel_size", default=.15, type=float,
+        "--x_voxel_size", default=.108, type=float,
         help='lateral voxel size in microns for X'
     )
 
     parser.add_argument(
-        "--y_voxel_size", default=.15, type=float,
+        "--y_voxel_size", default=.108, type=float,
         help='lateral voxel size in microns for Y'
     )
 
     parser.add_argument(
-        "--z_voxel_size", default=.6, type=float,
+        "--z_voxel_size", default=.2, type=float,
         help='axial voxel size in microns for Z'
     )
 
@@ -320,12 +320,12 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--modes", default=60, type=int,
+        "--modes", default=55, type=int,
         help="number of modes to describe aberration"
     )
 
     parser.add_argument(
-        "--min_psnr", default=10, type=int,
+        "--min_psnr", default=100, type=int,
         help="minimum PSNR for training samples"
     )
 
@@ -340,7 +340,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--dist", default='powerlaw', type=str,
+        "--dist", default='single', type=str,
         help="distribution of the zernike amplitudes"
     )
 
@@ -360,12 +360,12 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--min_amplitude", default=0, type=float,
+        "--min_amplitude", default=0.1, type=float,
         help="min amplitude for the zernike coefficients"
     )
 
     parser.add_argument(
-        "--max_amplitude", default=.25, type=float,
+        "--max_amplitude", default=.1, type=float,
         help="max amplitude for the zernike coefficients"
     )
 
@@ -380,12 +380,12 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--lam_detection", default=.605, type=float,
+        "--lam_detection", default=.510, type=float,
         help='wavelength in microns'
     )
 
     parser.add_argument(
-        "--cpu_workers", default=1, type=int,
+        "--cpu_workers", default=-1, type=int,
         help='number of CPU cores to use'
     )
 

@@ -62,7 +62,7 @@ class SyntheticPSF:
             dtype: widefield or confocal
             distribution: desired distribution for the amplitudes
             gamma: optional exponent of the powerlaw distribution
-            bimodal: optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes
+            bimodal: optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes, otherwise just positive amplitudes only
             n_modes: number of zernike modes to describe the aberration
             order: eg noll or ansi, default is ansi
             batch_size: number of samples per batch

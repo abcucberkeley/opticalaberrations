@@ -21,6 +21,16 @@
             "console": "integratedTerminal",
             "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\src",
             "justMyCode": true
+        },
+        {
+            "name": "data.py",
+            "type": "python",
+            "request": "launch",
+            "program": "data.py",
+            "console": "integratedTerminal",
+            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\src",
+            "args": ["dist"],
+            "justMyCode": true            
         }
     ]
 }
