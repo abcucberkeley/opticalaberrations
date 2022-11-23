@@ -70,7 +70,9 @@ def sim(
 ):
     reference = np.zeros(gen.psf_shape)
     for i in range(npoints):
-        sphere_radius = np.random.choice(np.arange(0, 1.25, step=.25))
+        s = [0, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2.]
+        p = [.8, .1, .05, .025, .0125, .00625, 0.003125, 0.0015625, 0.0015625]
+        sphere_radius = np.random.choice(s, p=p)
 
         if sphere_radius > 0:
             reference += rg.sphere(
@@ -136,6 +138,7 @@ def create_synthetic_sample(
     modes: int,
     psf_type: str,
     distribution: str,
+    mode_dist: str,
     gamma: float,
     bimodal: bool,
     rotate: bool,
@@ -163,6 +166,7 @@ def create_synthetic_sample(
         max_jitter=0,
         dtype=psf_type,
         distribution=distribution,
+        mode_weights=mode_dist,
         gamma=gamma,
         bimodal=bimodal,
         rotate=rotate,
@@ -345,6 +349,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--mode_dist", default='uniform', type=str,
+        help="distribution of the zernike modes"
+    )
+
+    parser.add_argument(
         "--gamma", default=.75, type=float,
         help="exponent for the powerlaw distribution"
     )
@@ -409,6 +418,7 @@ def main(args=None):
             input_shape=args.input_shape,
             psf_type=args.psf_type,
             distribution=args.dist,
+            mode_dist=args.mode_dist,
             random_crop=args.random_crop,
             gamma=args.gamma,
             bimodal=args.bimodal,

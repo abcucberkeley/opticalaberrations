@@ -31,12 +31,13 @@ DATASET='test'
 SHAPE=64
 RCROP=32
 OUTDIR="/clusterfs/nvme/thayer/dataset/yumb/${DIFFICULTY}/${DATASET}"
+MODE_DIST='pyramid'
 
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   ITERS=100
-  OBJS=($(seq 1 1 5))
+  OBJS=(1 2 5 10 25 50)
   mPSNR=($(seq 11 10 41))
   xPSNR=($(seq 20 10 50))
 
@@ -50,7 +51,7 @@ if [ "$DATASET" = "train" ];then
     SAMPLES=($(seq 1 100 300))
     difractionlimit=($(seq 0 .005 .05))
     small=($(seq .05 .0025 .1))
-    large=($(seq .1 .005 .2))
+    large=($(seq .1 .01 .25))
     amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" )
     echo ${amps[@]}
     echo ${#amps[@]}
@@ -71,8 +72,8 @@ else
     amps2=($(seq .01 .01 .15))
   else
     MODES=55
-    amps1=($(seq 0 .005 .15))
-    amps2=($(seq .005 .005 .15))
+    amps1=($(seq 0 .01 .25))
+    amps2=($(seq .01 .01 .25))
   fi
 fi
 
@@ -96,6 +97,7 @@ do
             j="${j} --npoints ${OBJS[$N-1]}"
             j="${j} --psf_type ${PSF_TYPE}"
             j="${j} --dist ${DIST}"
+            j="${j} --mode_dist ${MODE_DIST}"
             j="${j} --iters ${ITERS}"
             j="${j} --bimodal"
             j="${j} --rotate"

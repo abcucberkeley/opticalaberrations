@@ -38,7 +38,7 @@ class Wavefront:
         gamma=.75,
         bimodal=True,
         rotate=False,
-        weights='pyramid'
+        mode_weights='uniform'
     ):
         self.ranges = amplitudes
         self.order = order
@@ -49,9 +49,9 @@ class Wavefront:
         self.bimodal = bimodal
         self.rotate = rotate
 
-        if weights == 'pyramid':
+        if mode_weights == 'pyramid':
             self.mode_weights = self._pyramid_weights(num_modes=self.length - len(self.prefixed))
-        elif weights == 'decay':
+        elif mode_weights == 'decay':
             self.mode_weights = self._decayed_weights(num_modes=self.length - len(self.prefixed))
         else:
             self.mode_weights = self._uniform_weights(num_modes=self.length - len(self.prefixed))

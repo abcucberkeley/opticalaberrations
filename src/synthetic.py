@@ -37,6 +37,7 @@ class SyntheticPSF:
         amplitude_ranges=(-.1, .1),
         dtype='widefield',
         distribution='dirichlet',
+        mode_weights='uniform',
         bimodal=False,
         rotate=False,
         gamma=1.5,
@@ -95,6 +96,7 @@ class SyntheticPSF:
         self.snr = snr
         self.cpu_workers = cpu_workers
         self.distribution = distribution
+        self.mode_weights = mode_weights
         self.gamma = gamma
         self.bimodal = bimodal
         self.rotate = rotate
@@ -197,6 +199,7 @@ class SyntheticPSF:
             amplitudes=np.zeros(self.n_modes),
             order=self.order,
             distribution=self.distribution,
+            mode_weights=self.mode_weights,
             modes=self.n_modes,
             gamma=self.gamma,
             lam_detection=self.lam_detection
@@ -536,6 +539,7 @@ class SyntheticPSF:
             phi = Wavefront(
                 phi, order=self.order,
                 distribution=self.distribution,
+                mode_weights=self.mode_weights,
                 modes=self.n_modes,
                 gamma=self.gamma,
                 bimodal=self.bimodal,
