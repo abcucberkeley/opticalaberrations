@@ -178,91 +178,45 @@ def create_synthetic_sample(
         na_detection=na_detection,
     )
 
-    if distribution == 'single':
-        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
-        outdir = outdir / f"i{input_shape}"
+    # theoretical kernel without noise
+    kernel, amps, phi, _, _ = gen.single_psf(
+        phi=(min_amplitude, max_amplitude),
+        zplanes=0,
+        normed=True,
+        noise=False,
+        augmentation=False,
+        meta=True,
+    )
 
-        if distribution == 'powerlaw':
-            outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
-        else:
-            outdir = outdir / f"{distribution}"
+    outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
+    outdir = outdir / f"i{input_shape}"
 
-        outdir = outdir / f"z{modes}"
-        outdir = outdir / f"psnr_{min_psnr}-{max_psnr}"
-        outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-            f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
-
-        for i in range(5, modes):
-            savepath = outdir / f"m{i}"
-
-            phi = np.zeros(modes)
-            phi[i] = np.random.uniform(min_amplitude, max_amplitude)
-
-            # theoretical kernel without noise
-            kernel = gen.single_psf(
-                phi=phi,
-                zplanes=0,
-                normed=True,
-                noise=False,
-                augmentation=False,
-                meta=False,
-            )
-            savepath = savepath / f"npoints_{npoints}"
-            savepath.mkdir(exist_ok=True, parents=True)
-            savepath = savepath / filename
-
-            sim(
-                savepath=savepath,
-                gen=gen,
-                npoints=npoints,
-                kernel=kernel,
-                amps=phi,
-                snr=(min_psnr, max_psnr),
-                emb=emb,
-                noise=noise,
-                normalize=normalize,
-            )
-
+    if distribution == 'powerlaw':
+        outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
     else:
-        # theoretical kernel without noise
-        kernel, amps, phi, _, _ = gen.single_psf(
-            phi=(min_amplitude, max_amplitude),
-            zplanes=0,
-            normed=True,
-            noise=False,
-            augmentation=False,
-            meta=True,
-        )
+        outdir = outdir / f"{distribution}"
 
-        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
-        outdir = outdir / f"i{input_shape}"
+    savepath = outdir / f"z{modes}"
+    savepath = savepath / f"psnr_{min_psnr}-{max_psnr}"
+    savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                          f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
-        if distribution == 'powerlaw':
-            outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
-        else:
-            outdir = outdir / f"{distribution}"
+    savepath = savepath / f"npoints_{npoints}"
+    savepath.mkdir(exist_ok=True, parents=True)
+    savepath = savepath / filename
 
-        savepath = outdir / f"z{modes}"
-        savepath = savepath / f"psnr_{min_psnr}-{max_psnr}"
-        savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
-
-        savepath = savepath / f"npoints_{npoints}"
-        savepath.mkdir(exist_ok=True, parents=True)
-        savepath = savepath / filename
-
-        sim(
-            savepath=savepath,
-            gen=gen,
-            npoints=npoints,
-            kernel=kernel,
-            amps=amps,
-            snr=(min_psnr, max_psnr),
-            emb=emb,
-            random_crop=random_crop,
-            noise=noise,
-            normalize=normalize,
-        )
+    sim(
+        savepath=savepath,
+        gen=gen,
+        npoints=npoints,
+        kernel=kernel,
+        amps=amps,
+        snr=(min_psnr, max_psnr),
+        emb=emb,
+        random_crop=random_crop,
+        noise=noise,
+        normalize=normalize,
+    )
 
 
 def parse_args(args):
