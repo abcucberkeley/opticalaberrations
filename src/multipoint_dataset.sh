@@ -26,8 +26,8 @@ zVOXEL=.200
 LAMBDA=.510
 NA=1.0
 
-DIFFICULTY='hard'
-DATASET='test'
+DIFFICULTY='easy'
+DATASET='train'
 SHAPE=64
 RCROP=32
 OUTDIR="/clusterfs/nvme/thayer/dataset/yumb/${DIFFICULTY}/${DATASET}"
@@ -37,18 +37,17 @@ MODE_DIST='pyramid'
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   ITERS=100
-  OBJS=(1 2 5 10 25 50)
-  mPSNR=($(seq 11 10 41))
-  xPSNR=($(seq 20 10 50))
+  OBJS=(1 2 5 10 25)
+  mPSNR=($(seq 11 10 51))
+  xPSNR=($(seq 20 10 60))
+  SAMPLES=($(seq 1 100 500))
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
-    amps1=($(seq 0 .01 .25))
+    amps1=($(seq 0 .01 .24))
     amps2=($(seq .01 .01 .25))
-    SAMPLES=($(seq 1 100 300))
   else
     MODES=55
-    SAMPLES=($(seq 1 100 300))
     difractionlimit=($(seq 0 .005 .05))
     small=($(seq .05 .0025 .1))
     large=($(seq .1 .01 .25))
@@ -68,17 +67,17 @@ else
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
-    amps1=($(seq 0 .01 .15))
+    amps1=($(seq 0 .01 .14))
     amps2=($(seq .01 .01 .15))
   else
     MODES=55
-    amps1=($(seq 0 .01 .25))
-    amps2=($(seq .01 .01 .25))
+    amps1=($(seq 0 .01 .29))
+    amps2=($(seq .01 .01 .3))
   fi
 fi
 
 
-for DIST in powerlaw dirichlet
+for DIST in single powerlaw dirichlet
 do
   for SNR in `seq 1 ${#xPSNR[@]}`
   do

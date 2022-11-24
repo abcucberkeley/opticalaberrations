@@ -52,7 +52,7 @@ def plot_training_dist(n_samples=100, batch_size=100, wavelength=.510):
     psfargs = dict(
         n_modes=55,
         dtype='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
-        distribution='mixed',
+        distribution='single',
         mode_weights='pyramid',
         bimodal=True,
         rotate=True,

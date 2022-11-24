@@ -70,9 +70,7 @@ def sim(
 ):
     reference = np.zeros(gen.psf_shape)
     for i in range(npoints):
-        s = [0, .25, .5, .75, 1, 1.25, 1.5, 1.75, 2.]
-        p = [.8, .1, .05, .025, .0125, .00625, 0.003125, 0.0015625, 0.0015625]
-        sphere_radius = np.random.choice(s, p=p)
+        sphere_radius = np.random.choice([0, 1, 2], p=[.95, .04, .01])
 
         if sphere_radius > 0:
             reference += rg.sphere(
@@ -329,12 +327,12 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--min_psnr", default=100, type=int,
+        "--min_psnr", default=10, type=int,
         help="minimum PSNR for training samples"
     )
 
     parser.add_argument(
-        "--max_psnr", default=100, type=int,
+        "--max_psnr", default=50, type=int,
         help="maximum PSNR for training samples"
     )
 
@@ -369,12 +367,12 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--min_amplitude", default=0.1, type=float,
+        "--min_amplitude", default=0, type=float,
         help="min amplitude for the zernike coefficients"
     )
 
     parser.add_argument(
-        "--max_amplitude", default=.1, type=float,
+        "--max_amplitude", default=.25, type=float,
         help="max amplitude for the zernike coefficients"
     )
 
