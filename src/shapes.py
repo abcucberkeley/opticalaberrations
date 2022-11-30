@@ -261,7 +261,7 @@ def similarity(
     savepath.mkdir(exist_ok=True, parents=True)
 
     modelgen = SyntheticPSF(
-        n_modes=60,
+        n_modes=55,
         lam_detection=.605,
         psf_shape=(64, 64, 64),
         x_voxel_size=.15,
@@ -272,7 +272,7 @@ def similarity(
     )
 
     gen = SyntheticPSF(
-        n_modes=60,
+        n_modes=55,
         lam_detection=.605,
         psf_shape=image_size,
         z_voxel_size=reference_voxel_size[0],
@@ -282,7 +282,7 @@ def similarity(
         max_jitter=0,
     )
 
-    ys = np.zeros(60)
+    ys = np.zeros(55)
     ys[10] = .1
     kernel = gen.single_psf(
         phi=Wavefront(ys, lam_detection=.605),

@@ -128,7 +128,7 @@ def eval_mode(
     return (y_pred, y_true)
 
 
-def evaluate_modes(model: Path, n_modes: int = 60):
+def evaluate_modes(model: Path, n_modes: int = 55):
     outdir = model.with_suffix('') / 'modes'
     outdir.mkdir(parents=True, exist_ok=True)
 
@@ -295,7 +295,7 @@ def evalheatmap(
     distribution: str = '/',
     samplelimit: Any = None,
     max_amplitude: float = .25,
-    modes: int = 60,
+    modes: int = 55,
     na: float = 1.0,
     psf_type: str = 'widefield',
     x_voxel_size: float = .15,
@@ -537,7 +537,7 @@ def iter_eval_bin_with_reference(
     wavelength: float = .510,
     num_neighbor: int = 5,
     radius: float = .45,
-    modes: int = 60,
+    modes: int = 55,
     input_coverage: float = 1.0,
     no_phase: bool = False,
 ):
@@ -670,7 +670,7 @@ def iterheatmap(
     distribution: str = '/',
     samplelimit: Any = None,
     max_amplitude: float = .25,
-    modes: int = 60,
+    modes: int = 55,
     na: float = 1.0,
     psf_type: str = 'widefield',
     x_voxel_size: float = .15,
@@ -861,7 +861,7 @@ def eval_roi(
 ):
     model = backend.load(modelpath)
     gen = SyntheticPSF(
-        n_modes=60,
+        n_modes=55,
         dtype=psf_type,
         lam_detection=wavelength,
         psf_shape=[64, 64, 64],
@@ -901,7 +901,7 @@ def evaldistbin(
     samplelimit: Any = None,
     psnr: tuple = (21, 30),
     na: float = 1.0,
-    modes: int = 60,
+    modes: int = 55,
     psf_type: str = 'widefield',
     x_voxel_size: float = .15,
     y_voxel_size: float = .15,
@@ -968,7 +968,7 @@ def distheatmap(
     distribution: str = '/',
     max_amplitude: float = .25,
     na: float = 1.0,
-    modes: int = 60,
+    modes: int = 55,
     psf_type: str = 'widefield',
     x_voxel_size: float = .15,
     y_voxel_size: float = .15,
@@ -1127,7 +1127,7 @@ def evaldensitybin(
     samplelimit: Any = None,
     psnr: tuple = (21, 30),
     na: float = 1.0,
-    modes: int = 60,
+    modes: int = 55,
     psf_type: str = 'widefield',
     x_voxel_size: float = .15,
     y_voxel_size: float = .15,
@@ -1195,7 +1195,7 @@ def densityheatmap(
     distribution: str = '/',
     max_amplitude: float = .25,
     na: float = 1.0,
-    modes: int = 60,
+    modes: int = 55,
     psf_type: str = 'widefield',
     x_voxel_size: float = .15,
     y_voxel_size: float = .15,
@@ -1343,7 +1343,7 @@ def evalpoints(
     distribution: str = '/',
     samplelimit: Any = None,
     max_amplitude: float = .25,
-    modes: int = 60,
+    modes: int = 55,
     na: float = 1.0,
     psf_type: str = 'widefield',
     x_voxel_size: float = .15,

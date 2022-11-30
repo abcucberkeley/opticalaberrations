@@ -108,7 +108,7 @@ def download_data(savedir: Path, resolution: str, dtype: str = 'zarr'):
 
 def convolve(kernel, sample, sample_voxel_size, save_path, cuda=False):
     modelgen = SyntheticPSF(
-        n_modes=60,
+        n_modes=55,
         lam_detection=.605,
         psf_shape=(64, 64, 64),
         x_voxel_size=.15,

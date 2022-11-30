@@ -66,7 +66,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--modes", default=60, type=int, help="number of modes to describe aberration"
+        "--modes", default=55, type=int, help="number of modes to describe aberration"
     )
 
     train_parser.add_argument(

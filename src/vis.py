@@ -156,7 +156,7 @@ def plot_training_dist(n_samples=100, batch_size=100, wavelength=.510):
     )
 
 
-def plot_fov(n_modes=60, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_voxel_size=.15, z_voxel_size=.6):
+def plot_fov(n_modes=55, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_voxel_size=.15, z_voxel_size=.6):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -174,7 +174,7 @@ def plot_fov(n_modes=60, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
     logger.info(waves)
 
     for i in range(3, n_modes):
-        fig = plt.figure(figsize=(35, 60))
+        fig = plt.figure(figsize=(35, 55))
         gs = fig.add_gridspec(len(waves)*len(res), 8)
 
         grid = {}
@@ -350,7 +350,7 @@ def plot_embeddings(
     # waves = np.arange(-.075, .08, step=.015).round(3) ## small
     logger.info(waves)
 
-    fig = plt.figure(figsize=(25, 60))
+    fig = plt.figure(figsize=(25, 55))
     nrows = (n_modes-5) * 6
     gs = fig.add_gridspec(nrows, len(waves)+1)
 
@@ -483,7 +483,7 @@ def plot_shapes_embeddings(
     # waves = np.arange(-.075, .08, step=.015).round(3) ## small
     logger.info(waves)
 
-    fig = plt.figure(figsize=(25, 60))
+    fig = plt.figure(figsize=(25, 55))
     nrows = shapes * 6
     gs = fig.add_gridspec(nrows, len(waves)+1)
 
@@ -498,7 +498,7 @@ def plot_shapes_embeddings(
     gen = SyntheticPSF(
         dtype=psf_type,
         amplitude_ranges=(-1, 1),
-        n_modes=60,
+        n_modes=55,
         lam_detection=wavelength,
         psf_shape=3*[res],
         x_voxel_size=x_voxel_size,
@@ -522,7 +522,7 @@ def plot_shapes_embeddings(
         imsave(f"{outdir}/reference_{thickness}.tif", reference)
 
         for amp in waves:
-            phi = np.zeros(60)
+            phi = np.zeros(55)
             phi[mode] = amp
 
             abr = round(peak_aberration(phi) * np.sign(amp), 1)
@@ -626,7 +626,7 @@ def plot_gaussian_filters(
     waves = np.arange(-.08, .1, step=.02).round(3)
     logger.info(waves)
 
-    fig = plt.figure(figsize=(25, 60))
+    fig = plt.figure(figsize=(25, 55))
     nrows = (n_modes-5) * 6
     gs = fig.add_gridspec(nrows, len(waves)+1)
 
@@ -725,7 +725,7 @@ def plot_gaussian_filters(
 def plot_simulation(
         res=64,
         padsize=None,
-        n_modes=60,
+        n_modes=55,
         wavelength=.605,
         x_voxel_size=.15,
         y_voxel_size=.15,
@@ -808,7 +808,7 @@ def plot_simulation(
             imsave(f"{reals}/{str(abr).replace('.', 'p')}.tif", psf)
 
 
-def plot_signal(n_modes=60, wavelength=.605):
+def plot_signal(n_modes=55, wavelength=.605):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -934,7 +934,7 @@ def plot_signal(n_modes=60, wavelength=.605):
     signal.to_csv('../data/signal.csv')
 
 
-def plot_mode(savepath, df, mode_index, n_modes=60, wavelength=.605):
+def plot_mode(savepath, df, mode_index, n_modes=55, wavelength=.605):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -1282,7 +1282,7 @@ def plot_dmodes(
     k = 0
     for i, w in enumerate(y.amplitudes):
         k += 1
-        phi = np.zeros(60)
+        phi = np.zeros(55)
         phi[i] = w / (2 * np.pi / wavelength)
         phi = Wavefront(phi, order='ansi')
 
@@ -1359,7 +1359,7 @@ def diagnostic_assessment(
         divider = make_axes_locatable(iax)
         top = divider.append_axes("top", size='30%', pad=0.2)
         phi = phi.flatten()
-        top.hist(phi, bins=60, color='grey')
+        top.hist(phi, bins=55, color='grey')
 
         err = '\n'.join([
             f'$P2P_{{NA={na}}}$={abs(p[1]-p[0]):.2f}\t[$P_{{05}}$={p[0]:.2f}, $P_{{95}}$={p[1]:.2f}]'
@@ -1632,7 +1632,7 @@ def matlab_diagnostic_assessment(
         divider = make_axes_locatable(iax)
         top = divider.append_axes("top", size='30%', pad=0.2)
         phi = phi.flatten()
-        top.hist(phi, bins=60, color='grey')
+        top.hist(phi, bins=55, color='grey')
 
         if p2p:
             err = '\n'.join([

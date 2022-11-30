@@ -52,7 +52,7 @@ class FourierAttention(layers.Layer):
 
     def _theoretical_otf(self, psf_shape):
         psfgen = SyntheticPSF(
-            n_modes=60,
+            n_modes=55,
             amplitude_ranges=0,
             psf_shape=psf_shape,
             lam_detection=self.lambda_det,
@@ -64,7 +64,7 @@ class FourierAttention(layers.Layer):
         )
 
         otf = psfgen.single_otf(
-            phi=Wavefront(np.zeros(60), lam_detection=self.lambda_det),
+            phi=Wavefront(np.zeros(55), lam_detection=self.lambda_det),
             zplanes=0,
             normed=True,
             noise=False,

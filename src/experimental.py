@@ -77,7 +77,7 @@ def estimate_and_save_new_dm(
     return dm
 
 
-def matlab_phase_retrieval(psf: Path, dx=.15, dz=.6, wavelength=.605, n_modes=60) -> list:
+def matlab_phase_retrieval(psf: Path, dx=.15, dz=.6, wavelength=.605, n_modes=55) -> list:
     try:
         import matlab.engine
         matlab = matlab.engine.start_matlab()
@@ -445,7 +445,7 @@ def predict_dataset(
         prediction_threshold: float = 0.0,
         verbose: bool = False,
         plot: bool = False,
-        n_modes: int = 60,
+        n_modes: int = 55,
         num_predictions: int = 1,
         batch_size: int = 1,
         mosaic: bool = False,

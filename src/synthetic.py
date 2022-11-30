@@ -41,7 +41,7 @@ class SyntheticPSF:
         bimodal=False,
         rotate=False,
         gamma=1.5,
-        n_modes=60,
+        n_modes=55,
         order='ansi',
         batch_size=100,
         psf_shape=(64, 64, 64),

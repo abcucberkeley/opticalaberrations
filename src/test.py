@@ -82,7 +82,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--modes", default=60, type=int, help="number of modes to describe aberration"
+        "--modes", default=55, type=int, help="number of modes to describe aberration"
     )
 
     parser.add_argument(
