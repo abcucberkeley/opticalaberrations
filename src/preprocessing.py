@@ -140,7 +140,7 @@ def resize(
         if debug == True:
             plt.show()
         else:
-            plt.savefig(f'{debug}_rescaling.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return resized_vol
 
@@ -288,7 +288,7 @@ def find_roi(
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         plt.tight_layout()
-        plt.savefig(f'{plot}_detected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+        plt.savefig(f'{plot}_detected_points.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     if min_dist is not None:
         peaks = peaks[peaks['dist'] >= min_dist]
@@ -328,7 +328,7 @@ def find_roi(
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         plt.tight_layout()
-        plt.savefig(f'{plot}_selected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+        plt.savefig(f'{plot}_selected_points.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     peaks = peaks.head(num_peaks)
     peaks.to_csv(f"{plot}_stats.csv")
@@ -371,7 +371,7 @@ def find_roi(
                     axes[ax].set_title('XZ')
 
         plt.tight_layout()
-        plt.savefig(f'{plot}_mips.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+        plt.savefig(f'{plot}_mips.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     rois = []
     logger.info(f"Locating ROIs: {[peaks.shape[0]]}")

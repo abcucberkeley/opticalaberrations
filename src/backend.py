@@ -561,7 +561,6 @@ def train(
                 metadata,
                 earlystopping,
                 defibrillator,
-                # features,
                 lrscheduler,
             ],
         )
@@ -1678,5 +1677,4 @@ def kernels(modelpath: Path, activation='relu'):
         ax.set_aspect('equal')
         ax.axis('off')
 
-        plt.savefig(f'{modelpath}/kernels_{layer.name}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{modelpath}/kernels_{layer.name}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{modelpath}/kernels_{layer.name}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
