@@ -74,7 +74,8 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64), **kwargs):
-    if not str(model_path).endswith('.h5'):
+    # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
+    if not model_path.suffix == '.h5':       
         model_path = list(model_path.rglob('*.h5'))[0]
 
     with h5py.File(model_path, 'r') as file:
@@ -126,9 +127,9 @@ def load(model_path: Path, mosaic=False):
 
     if mosaic:
         if model_path.is_file() and model_path.suffix == '.h5':
-            model_path = str(model_path)
+            model_path = Path(model_path)
         else:
-            model_path = str(list(model_path.rglob('*.h5'))[0])
+            model_path = Path(list(model_path.rglob('*.h5'))[0])
 
         model = load_model(model_path, custom_objects=custom_objects)
         return model
