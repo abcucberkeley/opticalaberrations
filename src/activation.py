@@ -62,7 +62,7 @@ class MaskedActivation(layers.Layer):
 
     def _theoretical_mask(self, mask_shape, planes):
         psfgen = SyntheticPSF(
-            n_modes=60,
+            n_modes=55,
             amplitude_ranges=0,
             psf_shape=mask_shape,
             dtype=self.psf_type,

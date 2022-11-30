@@ -141,7 +141,7 @@ def split_channels(
 
 def convolve(kernel, sample, sample_voxel_size, psf_shape, save_path, sample_name, cuda=False, embeddings=False):
     modelgen = SyntheticPSF(
-        n_modes=60,
+        n_modes=55,
         lam_detection=.605,
         # dtype='confocal',
         psf_shape=psf_shape,

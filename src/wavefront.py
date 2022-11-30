@@ -32,7 +32,7 @@ class Wavefront:
         self,
         amplitudes,
         order='ansi',
-        modes=60,
+        modes=55,
         lam_detection=.605,
         distribution=None,
         gamma=.75,

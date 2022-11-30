@@ -562,7 +562,6 @@ def train(
                 metadata,
                 earlystopping,
                 defibrillator,
-                # features,
                 lrscheduler,
             ],
         )
@@ -1102,13 +1101,13 @@ def eval_sign(
                 axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
                 axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
                 axes[0].legend(frameon=False, loc='upper left')
-                axes[0].set_xlim((0, 60))
+                axes[0].set_xlim((0, 55))
                 axes[0].set_xticks(range(0, 61))
 
                 axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
                 axes[1].plot(ys_wave, '-o', color='C1', label='Ground truth')
                 axes[1].legend(frameon=False, loc='upper left')
-                axes[1].set_xlim((0, 60))
+                axes[1].set_xlim((0, 55))
                 axes[1].set_xticks(range(0, 61))
 
                 plt.tight_layout()
@@ -1679,5 +1678,4 @@ def kernels(modelpath: Path, activation='relu'):
         ax.set_aspect('equal')
         ax.axis('off')
 
-        plt.savefig(f'{modelpath}/kernels_{layer.name}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{modelpath}/kernels_{layer.name}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{modelpath}/kernels_{layer.name}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)

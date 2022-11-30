@@ -56,7 +56,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--n_modes", default=60, type=int, help='number zernike modes'
+        "--n_modes", default=55, type=int, help='number zernike modes'
     )
 
     parser.add_argument(
