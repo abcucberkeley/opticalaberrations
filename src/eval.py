@@ -20,13 +20,11 @@ from scipy import stats as st
 import raster_geometry as rg
 
 import utils
-import vis
 import data_utils
 import backend
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
-from zernike import Zernike
 
 logging.basicConfig(
     stream=sys.stdout,

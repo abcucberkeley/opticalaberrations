@@ -52,7 +52,7 @@ def plot_training_dist(n_samples=100, batch_size=100, wavelength=.510):
     psfargs = dict(
         n_modes=55,
         psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
-        distribution='single',
+        distribution='mixed',
         mode_weights='pyramid',
         bimodal=True,
         rotate=True,
@@ -73,16 +73,16 @@ def plot_training_dist(n_samples=100, batch_size=100, wavelength=.510):
     peaks = []
     zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
 
-    ## Challenging dataset
+    ## Training dataset
     difractionlimit = np.arange(0, 0.051, .002).round(3)  # 25 bins
     small = np.arange(.05, .1, .0025).round(3)            # 20 bins
     large = np.arange(.1, .25, .01).round(3)              # 15 bins
     min_amps = np.concatenate([difractionlimit, small, large[:-1]])
     max_amps = np.concatenate([difractionlimit[1:], small, large])
 
-    ## Easy dataset
-    # min_amps = np.arange(0, .15, .01).round(3)
-    # max_amps = np.arange(.01, .16, .01).round(3)
+    ## Testing dataset
+    # min_amps = np.arange(0, .50, .01).round(3)
+    # max_amps = np.arange(.01, .51, .01).round(3)
 
     for mina, maxa in zip(min_amps, max_amps):
         psfargs['amplitude_ranges'] = (mina, maxa)

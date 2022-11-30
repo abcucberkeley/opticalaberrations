@@ -59,7 +59,7 @@ if [ "$DATASET" = "train" ];then
   fi
 else
   TYPE=''
-  ITERS=20
+  ITERS=25
   OBJS=(1 2 3 4 5 10 15 20 25 30)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
@@ -67,12 +67,12 @@ else
 
   if [ "$DIFFICULTY" = "easy" ];then
     MODES=15
-    amps1=($(seq 0 .01 .14))
-    amps2=($(seq .01 .01 .15))
-  else
-    MODES=55
     amps1=($(seq 0 .01 .29))
     amps2=($(seq .01 .01 .3))
+  else
+    MODES=55
+    amps1=($(seq 0 .01 .49))
+    amps2=($(seq .01 .01 .5))
   fi
 fi
 
