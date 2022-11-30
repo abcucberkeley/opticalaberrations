@@ -22,7 +22,7 @@ def parse_args(args):
     parser = cli.argparser()
 
     subparsers = parser.add_subparsers(
-        help="Arguments for specific action.", dest="dtype"
+        help="Arguments for specific action.", dest="cmd"
     )
     subparsers.required = True
 
@@ -62,43 +62,43 @@ def main(args=None):
        
     Path('../data/').mkdir(parents=True, exist_ok=True) # add output directory if it doesn't exist
 
-    if args.dtype == "shapes":
+    if args.cmd == "shapes":
         shapes.simobjects()
 
-    elif args.dtype == "inputs":
+    elif args.cmd == "inputs":
         vis.plot_inputs()
 
-    elif args.dtype == "dist":
+    elif args.cmd == "dist":
         vis.plot_training_dist()
 
-    elif args.dtype == "signal":
+    elif args.cmd == "signal":
         vis.plot_signal()
 
-    elif args.dtype == "fov":
+    elif args.cmd == "fov":
         vis.plot_fov()
 
-    elif args.dtype == "embeddings":
+    elif args.cmd == "embeddings":
         vis.plot_embeddings()
 
-    elif args.dtype == "shapes_embeddings":
+    elif args.cmd == "shapes_embeddings":
         vis.plot_shapes_embeddings()
 
-    elif args.dtype == "gaussian":
+    elif args.cmd == "gaussian":
         vis.plot_gaussian_filters()
 
-    elif args.dtype == "simulation":
+    elif args.cmd == "simulation":
         vis.plot_simulation()
 
-    elif args.dtype == "aberration":
+    elif args.cmd == "aberration":
         vis.plot_aberrations()
 
-    elif args.dtype == "psnr":
+    elif args.cmd == "psnr":
         vis.plot_psnr()
 
-    elif args.dtype == "similarity":
+    elif args.cmd == "similarity":
         shapes.similarity()
 
-    elif args.dtype == "check":
+    elif args.cmd == "check":
         data_utils.check_dataset(args.datadir)
 
     else:

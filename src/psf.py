@@ -25,7 +25,7 @@ class PsfGenerator3D:
     3D PSF generator, courtesy of Martin Weigert (https://github.com/maweigert)
     """
 
-    def __init__(self, psf_shape, units, lam_detection, n, na_detection, dtype='widefield'):
+    def __init__(self, psf_shape, units, lam_detection, n, na_detection, psf_type='widefield'):
         """
         Args:
             psf_shape: tuple, psf shape as (z,y,x), e.g. (64,64,64)
@@ -33,7 +33,7 @@ class PsfGenerator3D:
             lam_detection: scalar, wavelength in microns, e.g. 0.5
             n: scalar, refractive index, eg 1.33
             na_detection: scalar, numerical aperture of detection objective, eg 1.1
-            dtype: widefield or confocal
+            psf_type: widefield or confocal
         """
 
         psf_shape = tuple(psf_shape)
@@ -58,7 +58,7 @@ class PsfGenerator3D:
         idx = np.arange(self.Nz) - self.Nz // 2
         kz = self.dz * idx
         self.theoretical_psf(kx=kx, ky=ky, kz=kz)
-        self.dtype = dtype
+        self.psf_type = psf_type
 
     def theoretical_psf(self, kx, ky, kz):
         KZ3, KY3, KX3 = np.meshgrid(kz, ky, kx, indexing="ij")
@@ -116,18 +116,18 @@ class PsfGenerator3D:
         _psf = np.fft.fftshift(_psf)
         _psf /= np.max(_psf)
 
-        if self.dtype == 'widefield':
+        if self.psf_type == 'widefield':
             return _psf
-        elif self.dtype == 'confocal':
+        elif self.psf_type == 'confocal':
             _psf = _psf**2
             _psf /= np.max(_psf)
             return _psf
         else:
-            if isinstance(self.dtype, str) or isinstance(self.dtype, Path):
-                with h5py.File(self.dtype, 'r') as file:
+            if isinstance(self.psf_type, str) or isinstance(self.psf_type, Path):
+                with h5py.File(self.psf_type, 'r') as file:
                     lattice = file.get('DitheredxzPSFCrossSection')[:, 0]
             else:
-                lattice = self.dtype
+                lattice = self.psf_type
 
             lattice = rescale(
                 lattice,

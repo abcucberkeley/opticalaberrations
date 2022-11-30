@@ -15,7 +15,7 @@ def parse_args(args):
     parser = cli.argparser()
 
     subparsers = parser.add_subparsers(
-        help="Arguments for specific action.", dest="dtype"
+        help="Arguments for specific action.", dest="cmd"
     )
     subparsers.required = True
 
@@ -140,7 +140,7 @@ def main(args=None):
     outdir.mkdir(exist_ok=True, parents=True)
     profiler = f"/usr/bin/time -v -o {outdir}/{args.script.split('.')[0]}_profile.log "
 
-    if args.dtype == 'slurm':
+    if args.cmd == 'slurm':
         sjob = '/usr/bin/sbatch '
         sjob += f' --qos={args.qos} '
         sjob += f' --partition={args.partition} '
@@ -162,7 +162,7 @@ def main(args=None):
         sjob += args.job
         call([sjob], shell=True)
 
-    elif args.dtype == 'default':
+    elif args.cmd == 'default':
         sjob = f"{args.python} "
         sjob += f"{args.script} "
         sjob += f" --outdir {args.outdir} {args.flags} 2>&1 | tee {outdir}/{args.name.replace('/', '_')}.log"
@@ -172,7 +172,7 @@ def main(args=None):
         print(args.flags)
         call([sjob], shell=True)
 
-    elif args.dtype == 'threads':
+    elif args.cmd == 'threads':
 
         for amp1, amp2 in zip(np.arange(0, .3, .05), np.arange(.05, .35, .05)):
 
@@ -199,7 +199,7 @@ def main(args=None):
             jobs = list(map(str, range(10**3)))
             multiprocess(worker, jobs, desc=f"AMPS [{round(amp1, 2)} :: {round(amp2, 2)}]", cores=-1)
 
-    elif args.dtype == 'test':
+    elif args.cmd == 'test':
 
         for mpsnr, xpsnr in zip(range(1, 100, 10), range(10, 110, 10)):
             for amp1, amp2 in zip(np.arange(0, .3, .05), np.arange(.05, .35, .05)):

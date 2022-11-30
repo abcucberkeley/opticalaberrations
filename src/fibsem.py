@@ -62,7 +62,7 @@ def parse_args(args):
     parser = cli.argparser()
 
     subparsers = parser.add_subparsers(
-        help="Arguments for specific action.", dest="dtype"
+        help="Arguments for specific action.", dest="cmd"
     )
     subparsers.required = True
 
@@ -206,10 +206,10 @@ def main(args=None):
 
     mp.set_start_method('spawn', force=True)
 
-    if args.dtype == "dataset":
+    if args.cmd == "dataset":
         create_dataset(savedir=args.savedir, kernels=args.kernels, samples=args.samples)
 
-    elif args.dtype == "download":
+    elif args.cmd == "download":
         download_data(savedir=args.savedir, resolution=args.resolution)
 
     else:

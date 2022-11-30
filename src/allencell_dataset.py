@@ -149,7 +149,7 @@ def create_synthetic_sample(
         n_modes=modes,
         max_jitter=0,
         snr=1000,
-        dtype=psf_type,
+        psf_type=psf_type,
         distribution=distribution,
         gamma=gamma,
         bimodal=bimodal,

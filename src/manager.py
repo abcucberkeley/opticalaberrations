@@ -11,7 +11,7 @@ def parse_args(args):
     parser = cli.argparser()
 
     subparsers = parser.add_subparsers(
-        help="Arguments for specific action.", dest="dtype"
+        help="Arguments for specific action.", dest="cmd"
     )
     subparsers.required = True
 
@@ -119,14 +119,14 @@ def main(args=None):
     outdir.mkdir(exist_ok=True, parents=True)
     profiler = f"/usr/bin/time -v -o {outdir}/{args.script.split('.')[0]}_profile.log "
 
-    if args.dtype == 'default':
+    if args.cmd == 'default':
         sjob = profiler
         sjob += f"{args.python} "
         sjob += f"{args.script} "
         sjob += f" --outdir {outdir} {args.flags} 2>&1 | tee {outdir}/{args.script.split('.')[0]}.log"
         call([sjob], shell=True)
 
-    elif args.dtype == 'slurm':
+    elif args.cmd == 'slurm':
         sjob = '/usr/bin/sbatch '
         sjob += f' --qos={args.qos} '
         sjob += f' --partition={args.partition} '

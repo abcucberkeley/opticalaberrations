@@ -275,7 +275,7 @@ def predict(
     model = backend.load(model, mosaic=mosaic)
 
     psfgen = SyntheticPSF(
-        dtype=modelpsfgen.dtype,
+        psf_type=modelpsfgen.psf_type,
         snr=100,
         psf_shape=modelpsfgen.psf_shape,
         n_modes=model.output_shape[1],
@@ -362,7 +362,7 @@ def predict_sample(
     model = backend.load(model, mosaic=mosaic)
 
     psfgen = SyntheticPSF(
-        dtype=modelpsfgen.dtype,
+        psf_type=modelpsfgen.psf_type,
         snr=100,
         psf_shape=modelpsfgen.psf_shape,
         n_modes=model.output_shape[1],
@@ -782,7 +782,7 @@ def aggregate_predictions(
     imsave(f"{model_pred.with_suffix('')}_aggregated_pupil_displacement.tif", pupil_displacement)
 
     psfgen = SyntheticPSF(
-        dtype=modelpsfgen.dtype,
+        psf_type=modelpsfgen.psf_type,
         snr=100,
         psf_shape=modelpsfgen.psf_shape,
         n_modes=predictions[final_prediction].shape[0],

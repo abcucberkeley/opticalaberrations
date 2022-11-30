@@ -162,7 +162,7 @@ def create_synthetic_sample(
         n_modes=modes,
         snr=1000,
         max_jitter=0,
-        dtype=psf_type,
+        psf_type=psf_type,
         distribution=distribution,
         mode_weights=mode_dist,
         gamma=gamma,

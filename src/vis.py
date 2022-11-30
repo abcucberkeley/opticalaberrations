@@ -51,7 +51,7 @@ def plot_training_dist(n_samples=100, batch_size=100, wavelength=.510):
 
     psfargs = dict(
         n_modes=55,
-        dtype='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         distribution='single',
         mode_weights='pyramid',
         bimodal=True,
@@ -363,7 +363,7 @@ def plot_embeddings(
                 grid[(mode, k, w)] = fig.add_subplot(gs[ax+k, j+1])
 
     gen = SyntheticPSF(
-        dtype=psf_type,
+        psf_type=psf_type,
         amplitude_ranges=(-1, 1),
         n_modes=n_modes,
         lam_detection=wavelength,
@@ -496,7 +496,7 @@ def plot_shapes_embeddings(
                 grid[(th, k, w)] = fig.add_subplot(gs[ax+k, j+1])
 
     gen = SyntheticPSF(
-        dtype=psf_type,
+        psf_type=psf_type,
         amplitude_ranges=(-1, 1),
         n_modes=55,
         lam_detection=wavelength,

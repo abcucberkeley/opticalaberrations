@@ -79,7 +79,7 @@ def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64), **kwargs):
 
     with h5py.File(model_path, 'r') as file:
         psfgen = SyntheticPSF(
-            dtype=np.array(file.get('psf_type')[:]),
+            psf_type=np.array(file.get('psf_type')[:]),
             psf_shape=psf_shape,
             n_modes=int(file.get('n_modes')[()]),
             lam_detection=float(file.get('wavelength')[()]),
@@ -409,7 +409,7 @@ def train(
     if dataset is None:
 
         config = dict(
-            dtype=psf_type,
+            psf_type=psf_type,
             psf_shape=inputs,
             snr=(min_psnr, max_psnr),
             max_jitter=1,
@@ -1443,7 +1443,7 @@ def featuremaps(
 
     psfargs = dict(
         n_modes=modes,
-        dtype=psf_type,
+        psf_type=psf_type,
         psf_shape=3 * [input_shape[1]],
         distribution='single',
         lam_detection=wavelength,

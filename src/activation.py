@@ -65,7 +65,7 @@ class MaskedActivation(layers.Layer):
             n_modes=55,
             amplitude_ranges=0,
             psf_shape=mask_shape,
-            dtype=self.psf_type,
+            psf_type=self.psf_type,
             lam_detection=self.lambda_det,
             x_voxel_size=self.x_voxel_size,
             y_voxel_size=self.y_voxel_size,
