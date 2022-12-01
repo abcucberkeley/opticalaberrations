@@ -242,7 +242,7 @@ def evaluate_modes(model: Path, n_modes: int = 55):
         ax_xy.imshow(emb[0], vmin=0, vmax=2, cmap='Spectral_r')
         ax_xz.imshow(emb[1], vmin=0, vmax=2, cmap='Spectral_r')
         ax_yz.imshow(emb[2], vmin=0, vmax=2, cmap='Spectral_r')
-        ax_wavevfront.imshow(w.wave(size=100), vmin=0, vmax=1, cmap='Spectral_r')
+        ax_wavevfront.imshow(w.wave(size=100), vmin=-1, vmax=1, cmap='Spectral_r')
 
         for a, t in zip([ax_xy, ax_xz, ax_yz, ax_wavevfront], ['XY', 'XZ', 'YZ', 'Wavefront']):
             a.axis('off')
