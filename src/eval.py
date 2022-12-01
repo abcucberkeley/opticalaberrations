@@ -120,7 +120,7 @@ def eval_mode(
         y_pred = y_pred.append(p, ignore_index=True)
 
         y = pd.DataFrame([p2p for i in preds], columns=['sample'])
-        y['object_size'] = isize
+        y['object_size'] = 1 if isize == 0 else isize * 2
         y_true = y_true.append(y, ignore_index=True)
 
     return (y_pred, y_true)
@@ -130,7 +130,7 @@ def evaluate_modes(model: Path, n_modes: int = 55):
     outdir = model.with_suffix('') / 'modes'
     outdir.mkdir(parents=True, exist_ok=True)
 
-    waves = np.arange(1e-5, .25, step=.01)
+    waves = np.arange(1e-5, .75, step=.05)
     aberrations = np.zeros((len(waves), n_modes))
 
     for i in trange(5, n_modes):
@@ -139,7 +139,7 @@ def evaluate_modes(model: Path, n_modes: int = 55):
         classes = aberrations.copy()
         classes[:, i] = waves
 
-        job = partial(eval_mode, model=model, npoints=1, n_samples=10)
+        job = partial(eval_mode, model=model, npoints=1, n_samples=5)
         preds, ys = zip(*utils.multiprocess(job, list(classes), cores=-1))
         y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
         y_pred = pd.DataFrame([], columns=['sample']).append(preds, ignore_index=True)
@@ -158,7 +158,14 @@ def evaluate_modes(model: Path, n_modes: int = 55):
         means = means.sort_index().interpolate()
         logger.info(means)
 
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig = plt.figure(figsize=(8, 8))
+        gs = fig.add_gridspec(4, 4)
+        ax_xy = fig.add_subplot(gs[0, 0])
+        ax_xz = fig.add_subplot(gs[0, 1])
+        ax_yz = fig.add_subplot(gs[0, 2])
+        ax_wavevfront = fig.add_subplot(gs[0, -1])
+        ax = fig.add_subplot(gs[1:, :])
+
         levels = [
             0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
             .5, .6, .7, .8, .9,
@@ -186,7 +193,7 @@ def evaluate_modes(model: Path, n_modes: int = 55):
         )
         ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
-        cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+        cax = fig.add_axes([1.01, 0.08, 0.03, 0.7])
         cbar = plt.colorbar(
             contours,
             cax=cax,
@@ -203,13 +210,13 @@ def evaluate_modes(model: Path, n_modes: int = 55):
         cbar.ax.yaxis.set_ticks_position('right')
         cbar.ax.yaxis.set_label_position('left')
 
-        ax.set_xlabel(f'Radius of the simulated object (pixels)')
-        ax.set_xlim(0, 5)
+        ax.set_xlabel(f'Diameter of the simulated object (pixels)')
+        ax.set_xlim(1, 10)
         ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         ax.set_ylabel(
             'Average Peak-to-peak aberration'
-            rf'($\lambda = 510~nm$)'
+            rf' ($\lambda = 510~nm$)'
         )
         ax.set_yticks(np.arange(0, 6, .5), minor=True)
         ax.set_yticks(np.arange(0, 6, 1))
@@ -217,6 +224,30 @@ def evaluate_modes(model: Path, n_modes: int = 55):
 
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
+
+        phi = np.zeros_like(classes[-1, :])
+        phi[i] = .2
+        gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
+        w = Wavefront(phi, lam_detection=gen.lam_detection)
+        kernel = gen.single_psf(
+            phi=w,
+            zplanes=0,
+            normed=True,
+            noise=False,
+            augmentation=False,
+            meta=False,
+        )
+        emb = gen.embedding(psf=kernel, principle_planes=True, no_phase=True)
+
+        ax_xy.imshow(emb[0], vmin=0, vmax=2, cmap='Spectral_r')
+        ax_xz.imshow(emb[1], vmin=0, vmax=2, cmap='Spectral_r')
+        ax_yz.imshow(emb[2], vmin=0, vmax=2, cmap='Spectral_r')
+        ax_wavevfront.imshow(w.wave(size=100), vmin=0, vmax=1, cmap='Spectral_r')
+
+        for a, t in zip([ax_xy, ax_xz, ax_yz, ax_wavevfront], ['XY', 'XZ', 'YZ', 'Wavefront']):
+            a.axis('off')
+            a.set_title(t)
+
         plt.tight_layout()
 
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)

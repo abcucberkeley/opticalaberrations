@@ -8,7 +8,6 @@ SHAPE=64
 SAMPLES=100
 MAXAMP=.5
 MODES=60
-
 DIFFICULTY='hard'
 DATASET='yumb'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
