@@ -67,6 +67,8 @@ def sim(
     normalize: bool = True,
     random_crop: Any = None,
     radius: float = .4,
+    alpha_val: str = 'abs',
+    phi_val: str = 'angle',
 ):
     reference = np.zeros(gen.psf_shape)
     for i in range(npoints):
@@ -116,7 +118,13 @@ def sim(
         noisy_img /= np.max(noisy_img)
 
     if emb:
-        noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
+        noisy_img = gen.embedding(
+            psf=noisy_img,
+            principle_planes=True,
+            alpha_val=alpha_val,
+            phi_val=phi_val,
+            plot=f"{savepath}_embedding"
+        )
 
     save_synthetic_sample(
         savepath,
@@ -155,6 +163,8 @@ def create_synthetic_sample(
     noise: bool,
     normalize: bool,
     emb: bool,
+    alpha_val: str = 'abs',
+    phi_val: str = 'angle',
 ):
     gen = SyntheticPSF(
         order='ansi',
@@ -216,6 +226,8 @@ def create_synthetic_sample(
         random_crop=random_crop,
         noise=noise,
         normalize=normalize,
+        alpha_val=alpha_val,
+        phi_val=phi_val,
     )
 
 
@@ -346,6 +358,16 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--alpha_val", default='abs', type=str,
+        help="values to use for the `alpha` embedding [options: real, abs]"
+    )
+
+    parser.add_argument(
+        "--phi_val", default='angle', type=str,
+        help="values to use for the `phi` embedding [options: angle, imag, abs]"
+    )
+
+    parser.add_argument(
         "--cpu_workers", default=-1, type=int,
         help='number of CPU cores to use'
     )
@@ -362,6 +384,8 @@ def main(args=None):
         return create_synthetic_sample(
             filename=f"{int(args.filename)+k}",
             emb=args.emb,
+            alpha_val=args.alpha_val,
+            phi_val=args.phi_val,
             npoints=args.npoints,
             outdir=args.outdir,
             noise=args.noise,

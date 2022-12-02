@@ -7,7 +7,6 @@ from typing import Any
 
 import numpy as np
 from skimage import transform
-from skimage.filters import gaussian
 from functools import partial
 import multiprocessing as mp
 from typing import Iterable
@@ -16,6 +15,7 @@ import matplotlib.colors as mcolors
 from tifffile import imsave
 from tqdm import trange
 from skimage.filters import window
+from skimage.restoration import unwrap_phase
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from numpy.lib.stride_tricks import sliding_window_view
 
@@ -115,7 +115,7 @@ class SyntheticPSF:
         )
 
         self.ipsf = self.theoretical_psf(normed=True, noise=False)
-        self.iotf, self.iphase = self.fft(self.ipsf, padsize=None, freq_strength_threshold=0.)
+        self.iotf = self.fft(self.ipsf, padsize=None)
 
     def _normal_noise(self, mean, sigma, size):
         return np.random.normal(loc=mean, scale=sigma, size=size).astype(np.float32)
@@ -227,41 +227,21 @@ class SyntheticPSF:
         psf /= np.max(psf) if normed else psf
         return psf
 
-    def fft(self, inputs, padsize=None, gaussian_filter=None, freq_strength_threshold: float = 0.):
-
+    def fft(self, inputs, padsize=None,):
         if padsize is not None:
             shape = inputs.shape[1]
             size = shape * (padsize / shape)
             pad = int((size - shape)//2)
             inputs = np.pad(inputs, ((pad, pad), (pad, pad), (pad, pad)), 'constant', constant_values=0)
 
-        otf = np.fft.fftn(inputs)
+        otf = np.fft.ifftshift(inputs)
+        otf = np.fft.fftn(otf)
         otf = np.fft.fftshift(otf)
-
-        phi = np.angle(otf)
-        phi = np.unwrap(phi)
-        alpha = np.abs(otf)
-
-        if gaussian_filter is not None:
-            alpha = gaussian(alpha, gaussian_filter)
-            phi = gaussian(phi, gaussian_filter)
-
-        alpha /= np.nanpercentile(alpha, 99.99)
-        alpha[alpha > 1] = 1
-        alpha[alpha < freq_strength_threshold] = 0.
-        alpha = np.nan_to_num(alpha, nan=0)
-
-        phi /= np.nanpercentile(phi, 99.99)
-        phi[phi > 1] = 1
-        phi[phi < -1] = -1
-        phi = np.nan_to_num(phi, nan=0)
-
-        return alpha, phi
+        return otf
 
     def na_mask(self):
-        mask = self.iotf
+        mask = np.abs(self.iotf)
         threshold = np.nanpercentile(mask.flatten(), 65)
-        # logger.info(f'NA-threshold: {threshold}')
         mask = np.where(mask < threshold, mask, 1.)
         mask = np.where(mask >= threshold, mask, 0.)
         return mask
@@ -272,7 +252,6 @@ class SyntheticPSF:
         emb: np.array,
         save_path: Any,
         no_phase: bool = False,
-        log10: bool = False,
     ):
         plt.rcParams.update({
             'font.size': 10,
@@ -285,17 +264,37 @@ class SyntheticPSF:
         })
         # plt.style.use("dark_background")
 
-        if log10:
-            vmin, vmax, vcenter, step = -2, 2, 0, .1
-        else:
-            vmin, vmax, vcenter, step = 0, 3, 1, .1
+        step = .1
+        vmin = -1 if np.any(emb[0] < 0) else 0
+        vmax = 1 if vmin < 0 else 3
 
-        highcmap = plt.get_cmap('YlOrRd', 256)
-        lowcmap = plt.get_cmap('terrain', 256)
-        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+        p_vmin = -1 if np.any(emb[3] < 0) else 0
+        p_vmax = 1 if p_vmin < 0 else 3
+
+        vcenter = 1 if vmin == 0 else 0
+        p_vcenter = 1 if p_vmin == 0 else 0
+
+        cmap = np.vstack((
+            plt.get_cmap('terrain' if vmin == 0 else 'GnBu_r', 256)(
+                np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+            ),
+            [1, 1, 1, 1],
+            plt.get_cmap('YlOrRd' if vmax == 3 else 'OrRd', 256)(
+                np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+            )
+        ))
         cmap = mcolors.ListedColormap(cmap)
+
+        p_cmap = np.vstack((
+            plt.get_cmap('terrain' if p_vmin == 0 else 'GnBu_r', 256)(
+                np.linspace(0, 1 - step, int(abs(p_vcenter - p_vmin) / step))
+            ),
+            [1, 1, 1, 1],
+            plt.get_cmap('YlOrRd' if p_vmax == 3 else 'OrRd', 256)(
+                np.linspace(0, 1 + step, int(abs(p_vcenter - p_vmax) / step))
+            )
+        ))
+        p_cmap = mcolors.ListedColormap(p_cmap)
 
         if no_phase:
             fig, axes = plt.subplots(2, 3, figsize=(8, 8))
@@ -319,9 +318,9 @@ class SyntheticPSF:
         cax.set_ylabel(r'Embedding ($\alpha$)')
 
         if not no_phase:
-            m = axes[-1, 0].imshow(emb[3], cmap='coolwarm', vmin=-.5, vmax=.5)
-            axes[-1, 1].imshow(emb[4], cmap='coolwarm', vmin=-.5, vmax=.5)
-            axes[-1, 2].imshow(emb[5].T, cmap='coolwarm', vmin=-.5, vmax=.5)
+            m = axes[-1, 0].imshow(emb[3], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
+            axes[-1, 1].imshow(emb[4], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
+            axes[-1, 2].imshow(emb[5].T, cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
             cax = inset_axes(axes[-1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
             cax.yaxis.set_label_position("right")
@@ -340,89 +339,127 @@ class SyntheticPSF:
         psf: np.array,
         na_mask: bool = True,
         ratio: bool = True,
+        norm: bool = True,
         padsize: Any = None,
+        no_phase: bool = False,
+        alpha_val: str = 'abs',
+        phi_val: str = 'angle',
         plot: Any = None,
         log10: bool = False,
         principle_planes: bool = True,
         gamma: float = 1.,
-        no_phase: bool = False,
-        freq_strength_threshold: float = .01,
+        freq_strength_threshold: float = 0.01,
     ):
         if psf.ndim == 4:
             psf = np.squeeze(psf)
 
-        amp, phase = self.fft(
-            psf,
-            padsize=padsize,
-            freq_strength_threshold=freq_strength_threshold
-        )
+        otf = self.fft(psf, padsize=padsize)
 
-        if amp.shape != self.psf_shape:
-            amp = transform.rescale(
-                amp,
+        if alpha_val == 'real':
+            alpha = np.real(otf)
+            iotf = np.real(self.iotf)
+        else:
+            alpha = np.abs(otf)
+            iotf = np.abs(self.iotf)
+
+        if phi_val == 'imag':
+            phi = np.imag(otf)
+        elif phi_val == 'angle':
+            phi = np.angle(otf)
+            phi = unwrap_phase(phi)
+        else:
+            phi = np.abs(otf)
+
+        if norm:
+            iotf /= np.nanpercentile(np.abs(iotf), 99.99)
+            iotf[iotf > 1] = 1
+            iotf[iotf < -1] = -1
+            iotf = np.nan_to_num(iotf, nan=0)
+
+            alpha /= np.nanpercentile(np.abs(otf), 99.99)
+            alpha[alpha > 1] = 1
+            alpha[alpha < -1] = -1
+            alpha = np.nan_to_num(alpha, nan=0)
+
+            phi /= np.nanpercentile(np.abs(otf), 99.99)
+            phi[phi > 1] = 1
+            phi[phi < -1] = -1
+            phi = np.nan_to_num(phi, nan=0)
+
+        if freq_strength_threshold != 0.:
+            alpha[(alpha > 0) * (alpha < freq_strength_threshold)] = 0.
+            alpha[(alpha < 0) * (alpha > -1 * freq_strength_threshold)] = 0.
+
+            phi[(phi > 0) * (phi < freq_strength_threshold)] = 0.
+            phi[(phi < 0) * (phi > -1 * freq_strength_threshold)] = 0.
+
+        if alpha.shape != self.psf_shape:
+            alpha = transform.rescale(
+                alpha,
                 (
-                    self.psf_shape[0] / amp.shape[0],
-                    self.psf_shape[1] / amp.shape[1],
-                    self.psf_shape[2] / amp.shape[2],
+                    self.psf_shape[0] / alpha.shape[0],
+                    self.psf_shape[1] / alpha.shape[1],
+                    self.psf_shape[2] / alpha.shape[2],
                 ),
                 order=3,
                 anti_aliasing=True,
             )
 
-        if phase.shape != self.psf_shape:
-            phase = transform.rescale(
-                phase,
+        if phi.shape != self.psf_shape:
+            phi = transform.rescale(
+                phi,
                 (
-                    self.psf_shape[0] / phase.shape[0],
-                    self.psf_shape[1] / phase.shape[1],
-                    self.psf_shape[2] / phase.shape[2],
+                    self.psf_shape[0] / phi.shape[0],
+                    self.psf_shape[1] / phi.shape[1],
+                    self.psf_shape[2] / phi.shape[2],
                 ),
                 order=3,
                 anti_aliasing=True,
             )
 
         if ratio:
-            amp = amp ** gamma
-            amp /= self.iotf
-            amp = np.nan_to_num(amp, nan=0)
-            # phase /= self.iphase
-            # phase = np.nan_to_num(phase, nan=0)
+            alpha = alpha ** gamma
+            alpha /= iotf
+            alpha = np.nan_to_num(alpha, nan=0)
+
+            phi /= iotf
+            phi = np.nan_to_num(phi, nan=0)
 
         if na_mask:
             mask = self.na_mask()
-            amp *= mask
-            phase *= mask
+            alpha *= mask
+            phi *= mask
 
         if log10:
-            amp = np.log10(amp)
-            amp = np.nan_to_num(amp, nan=0, posinf=0, neginf=0)
+            alpha = np.log10(alpha)
+            alpha = np.nan_to_num(alpha, nan=0, posinf=0, neginf=0)
 
-            phase = np.log10(phase)
-            phase = np.nan_to_num(phase, nan=0, posinf=0, neginf=0)
+            phi = np.log10(phi)
+            phi = np.nan_to_num(phi, nan=0, posinf=0, neginf=0)
 
         if principle_planes:
             if no_phase:
                 emb = np.stack([
-                    amp[amp.shape[0] // 2, :, :],
-                    amp[:, amp.shape[1] // 2, :],
-                    amp[:, :, amp.shape[2] // 2],
+                    alpha[alpha.shape[0] // 2, :, :],
+                    alpha[:, alpha.shape[1] // 2, :],
+                    alpha[:, :, alpha.shape[2] // 2],
                 ], axis=0)
             else:
                 emb = np.stack([
-                    amp[amp.shape[0] // 2, :, :],
-                    amp[:, amp.shape[1] // 2, :],
-                    amp[:, :, amp.shape[2] // 2],
-                    phase[phase.shape[0] // 2, :, :],
-                    phase[:, phase.shape[1] // 2, :],
-                    phase[:, :, phase.shape[2] // 2],
+                    alpha[alpha.shape[0] // 2, :, :],
+                    alpha[:, alpha.shape[1] // 2, :],
+                    alpha[:, :, alpha.shape[2] // 2],
+                    phi[phi.shape[0] // 2, :, :],
+                    phi[:, phi.shape[1] // 2, :],
+                    phi[:, :, phi.shape[2] // 2],
                 ], axis=0)
         else:
-            emb = np.stack([amp, phase], axis=0)
-            imsave(f"{plot}_alpha.tif", amp)
-            imsave(f"{plot}_phi.tif", phase)
+            emb = np.stack([alpha, phi], axis=0)
+            imsave(f"{plot}_alpha.tif", alpha)
+            imsave(f"{plot}_phi.tif", phi)
 
         if plot is not None and principle_planes:
-            self.plot_embeddings(psf=psf, emb=emb, save_path=plot, log10=log10, no_phase=no_phase)
+            self.plot_embeddings(psf=psf, emb=emb, save_path=plot, no_phase=no_phase)
 
         if psf.ndim == 4:
             return np.expand_dims(emb, axis=-1)

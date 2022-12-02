@@ -32,6 +32,8 @@ SHAPE=64
 RCROP=32
 OUTDIR="/clusterfs/nvme/thayer/dataset/yumb/${DIFFICULTY}/${DATASET}"
 MODE_DIST='pyramid'
+ALPHA='abs'
+PHI='angle'
 
 
 if [ "$DATASET" = "train" ];then
@@ -95,6 +97,8 @@ do
             j="${ENV} multipoint_dataset.py ${TYPE}"
             j="${j} --npoints ${OBJS[$N-1]}"
             j="${j} --psf_type ${PSF_TYPE}"
+            j="${j} --alpha_val ${ALPHA}"
+            j="${j} --phi_val ${PHI}"
             j="${j} --dist ${DIST}"
             j="${j} --mode_dist ${MODE_DIST}"
             j="${j} --iters ${ITERS}"
