@@ -422,7 +422,7 @@ def predict_sample(
     pupil_displacement = np.array(p.wave(size=100), dtype='float32')
     imsave(f"{img.with_suffix('')}_sample_predictions_pupil_displacement.tif", pupil_displacement)
 
-    psf = psfgen.single_psf(phi=p, normed=True, noise=False)
+    psf = psfgen.single_psf(phi=p, normed=True, noise=False, zplanes=0)
     imsave(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
 
     if plot:
@@ -792,7 +792,7 @@ def aggregate_predictions(
         z_voxel_size=axial_voxel_size,
     )
 
-    psf = psfgen.single_psf(phi=p, normed=True, noise=False)
+    psf = psfgen.single_psf(phi=p, normed=True, noise=False, zplanes=0)
     imsave(f"{model_pred.with_suffix('')}_aggregated_psf.tif", psf)
 
     _, ztiles, nrows, ncols = [c.split('-') for c in pcols][-1]

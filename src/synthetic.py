@@ -88,8 +88,8 @@ class SyntheticPSF:
         self.batch_size = batch_size
         self.mean_background_noise = mean_background_noise
         self.sigma_background_noise = sigma_background_noise
-        self.max_jitter = max_jitter
-        self.x_voxel_size = x_voxel_size
+        self.max_jitter = max_jitter        # in microns
+        self.x_voxel_size = x_voxel_size    # desired voxel size
         self.y_voxel_size = y_voxel_size
         self.z_voxel_size = z_voxel_size
         self.voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
@@ -102,7 +102,7 @@ class SyntheticPSF:
         self.rotate = rotate
 
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
-        self.theoretical_psf_shape = (2 * psf_shape[0], 2 * psf_shape[1], 2 * psf_shape[2])
+        self.theoretical_psf_shape = (2 * psf_shape[0], 2 * psf_shape[1], 2 * psf_shape[2]) # 2x larger fov psf shape
         self.amplitude_ranges = amplitude_ranges
 
         self.psfgen = PsfGenerator3D(
@@ -112,10 +112,10 @@ class SyntheticPSF:
             n=self.refractive_index,
             na_detection=self.na_detection,
             psf_type=psf_type
-        )
+        )                                                               # generates 2x larger fov psf
 
-        self.ipsf = self.theoretical_psf(normed=True, noise=False)
-        self.iotf = self.fft(self.ipsf, padsize=None)
+        self.ipsf = self.theoretical_psf(normed=True, noise=False)      # ipsf = ideal psf (theoretical, no noise)
+        self.iotf = self.fft(self.ipsf, padsize=None)                   # iotf = ideal otf
 
     def _normal_noise(self, mean, sigma, size):
         return np.random.normal(loc=mean, scale=sigma, size=size).astype(np.float32)
@@ -124,8 +124,18 @@ class SyntheticPSF:
         return np.random.poisson(lam=image).astype(np.float32) - image
 
     def _randuniform(self, var):
+        """Returns a random number (uniform chance) in the range provided by var. If var is a scalar, var is simply returned.
+
+        Args:
+            var : (as scalar) Returned as is.
+            var : (as list) Range to provide a random number
+
+        Returns:
+            _type_: ndarray or scalar. Random sample from the range provided.
+
+        """
         var = (var, var) if np.isscalar(var) else var
-        return np.random.uniform(*var)
+        return np.random.uniform(*var)                  # star unpacks a list, so that var's values become the separate arguments here.
 
     def _random_noise(self, image, mean, sigma):
         normal_noise_img = self._normal_noise(mean=mean, sigma=sigma, size=image.shape)
@@ -134,13 +144,13 @@ class SyntheticPSF:
         return noise
 
     def _crop(self, psf: np.array, voxel_size: tuple, jitter: bool = False):
-        centroid = np.array([i // 2 for i in psf.shape])
-        mz, my, mx = self.psf_shape[0] // 2, self.psf_shape[1] // 2, self.psf_shape[2] // 2
+        centroid = np.array([i // 2 for i in psf.shape])    # (64,64,64) the coordinate of the 2x larger fov psf center
+        mz, my, mx = self.psf_shape[0] // 2, self.psf_shape[1] // 2, self.psf_shape[2] // 2 # (32,32,32) the coordinates of the desired self.psf center
 
         if jitter and self.max_jitter != 0:
-            centroid += np.array([np.random.randint(-self.max_jitter / s, self.max_jitter / s) for s in voxel_size])
+            centroid += np.array([np.random.randint(-self.max_jitter / s, self.max_jitter / s) for s in voxel_size])    # max.jitter is in microns
 
-        # wrap edges
+        # if the jitter moves us past the border, we should reset the start (lz,ly,lx) and recompute end (hz,hy,hx) based upon valid start. Or just do an NN interpolation with a shifted set of coordinates.
         lz = mz if (centroid[0] - mz) < 0 else centroid[0] - mz
         ly = my if (centroid[1] - my) < 0 else centroid[1] - my
         lx = mx if (centroid[2] - mx) < 0 else centroid[2] - mx
@@ -150,7 +160,7 @@ class SyntheticPSF:
         hx = psf.shape[2]-mx if (centroid[2] + mx) > psf.shape[2] else centroid[2] + mx
 
         cropped_psf = psf[lz:hz, ly:hy, lx:hx]
-        cropped_psf = transform.resize(cropped_psf, self.psf_shape, order=3)
+        cropped_psf = transform.resize(cropped_psf, self.psf_shape, order=3) # should be a no-op. this code exists probably because of the bug above existed.
         return cropped_psf
 
     def _axial_resample(
@@ -159,8 +169,19 @@ class SyntheticPSF:
         lateral_voxel_size: float,
         zplanes: Any,
     ):
-        step = int(np.round(axial_voxel_size / lateral_voxel_size, 0))
-        indices = np.arange(self.theoretical_psf_shape[0])
+        """_summary_
+
+        Args:
+            vol (np.array): 2x larger fov psf (e.g. 128x128x128 if you desire 64x64x64 PSF)
+            axial_voxel_size (float): desired voxel size in microns (e.g. 0.200 microns)
+            lateral_voxel_size (float): desired lateral voxel size in microns (e.g. 0.108 microns)
+            zplanes (Any): flag to do data augmentation (random things). zplanes=0 makes this a no operation. zplanes=None 
+
+        Returns:
+            _type_: desired PSF with the desired shape and voxel size
+        """
+        step = int(np.round(axial_voxel_size / lateral_voxel_size, 0)) 
+        indices = np.arange(self.theoretical_psf_shape[0])  # indices of the input vol (2x larger fov psf)
 
         if zplanes is None:
             start = np.random.randint(step)
@@ -169,7 +190,7 @@ class SyntheticPSF:
             np.put(mask, targets, np.ones_like(targets))
 
         elif np.isscalar(zplanes) and zplanes == 0:
-            mask = np.ones_like(indices)
+            mask = np.ones_like(indices)                    # use all planes to do resampling, which makes this whole function a "no-operation"
 
         else:
             if zplanes.ndim > 1:
@@ -190,9 +211,19 @@ class SyntheticPSF:
         return scaled_psf, mask
 
     def theoretical_psf(self, normed: bool = True, snr: int = 1000, noise: bool = False):
-        x_voxel_size = self._randuniform(self.x_voxel_size)
-        y_voxel_size = self._randuniform(self.y_voxel_size)
-        z_voxel_size = self._randuniform(self.z_voxel_size)
+        """Generates an unabberated PSF of the "desired" PSF shape and voxel size, centered.
+
+        Args:
+            normed (bool, optional): normalized will set maximum to 1. Defaults to True.
+            snr (int, optional):  Defaults to 1000.
+            noise (bool, optional): Defaults to False.
+
+        Returns:
+            _type_: 3D PSF
+        """
+        x_voxel_size = self.x_voxel_size
+        y_voxel_size = self.y_voxel_size
+        z_voxel_size = self.z_voxel_size
         voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
 
         phi = Wavefront(
@@ -206,7 +237,7 @@ class SyntheticPSF:
         )
 
         if noise:
-            psf = self.psfgen.incoherent_psf(phi) * snr * self.mean_background_noise
+            psf = self.psfgen.incoherent_psf(phi) * snr * self.mean_background_noise    # 2x larger fov psf
             rand_noise = self._random_noise(
                 image=psf,
                 mean=self.mean_background_noise,
@@ -214,16 +245,17 @@ class SyntheticPSF:
             )
             psf = rand_noise + psf if noise else psf
         else:
-            psf = self.psfgen.incoherent_psf(phi)
+            psf = self.psfgen.incoherent_psf(phi)       # 2x larger fov psf
 
+        # I think this axial_resample does nothing here. and should go to the trash.
         psf, zplanes = self._axial_resample(
             psf,
             axial_voxel_size=z_voxel_size,
             lateral_voxel_size=max([x_voxel_size, y_voxel_size]),
             zplanes=0
-        )
+        )   # zplanes=0 disables some data augmentation randomness
 
-        psf = self._crop(psf, voxel_size=voxel_size)
+        psf = self._crop(psf, voxel_size=voxel_size, jitter=False)
         psf /= np.max(psf) if normed else psf
         return psf
 
@@ -350,6 +382,26 @@ class SyntheticPSF:
         gamma: float = 1.,
         freq_strength_threshold: float = 0.01,
     ):
+        """Gives the "lower dimension" representation of the data that will be shown to the model.
+        Mostly this is used to return the three principle planes from the 3D OTF.
+
+        Args:
+            psf (np.array): 3D PSF.
+            na_mask (bool, optional): _description_. Defaults to True.
+            ratio (bool, optional): Returns ratio of data to ideal PSF, which helps put all the FFT voxels on a similiar scale. Otherwise straight values. Defaults ratio=True.
+            norm (bool, optional): _description_. Defaults to True.
+            padsize (Any, optional): _description_. Defaults to None.
+            no_phase (bool, optional): _description_. Defaults to False.
+            alpha_val (str, optional): _description_. Defaults to 'abs'.
+            phi_val (str, optional): show the FFT phase in unwrapped radians 'angle' or the imaginary portion 'imag'. Defaults to 'angle'.
+            plot (Any, optional): _description_. Defaults to None.
+            log10 (bool, optional): _description_. Defaults to False.
+            principle_planes (bool, optional): _description_. Defaults to True.         
+            freq_strength_threshold (float, optional): _description_. Defaults to 0.01.
+
+        Returns:
+            _type_: _description_
+        """
         if psf.ndim == 4:
             psf = np.squeeze(psf)
 
@@ -363,7 +415,7 @@ class SyntheticPSF:
             iotf = np.abs(self.iotf)
 
         if phi_val == 'imag':
-            phi = np.imag(otf)
+            phi = np.imag(otf) # imag = imaginary
         elif phi_val == 'angle':
             phi = np.angle(otf)
             phi = unwrap_phase(phi)
@@ -418,7 +470,6 @@ class SyntheticPSF:
             )
 
         if ratio:
-            alpha = alpha ** gamma
             alpha /= iotf
             alpha = np.nan_to_num(alpha, nan=0)
 
