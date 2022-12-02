@@ -189,9 +189,8 @@ def create_synthetic_sample(
     )
 
     # theoretical kernel without noise
-    kernel, amps, phi, _, _ = gen.single_psf(
+    kernel, amps, phi, maxcounts = gen.single_psf(
         phi=(min_amplitude, max_amplitude),
-        zplanes=0,
         normed=True,
         noise=False,
         augmentation=False,

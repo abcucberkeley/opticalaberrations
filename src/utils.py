@@ -112,7 +112,7 @@ def waves2microns(phi, wavelength):
 def compute_signal_lost(phi, gen, res):
     hashtbl = {}
     w = Wavefront(phi, order='ansi')
-    psf = gen.single_psf(w, zplanes=0, normed=True, noise=False)
+    psf = gen.single_psf(w, normed=True, noise=False)
     abr = 0 if np.count_nonzero(phi) == 0 else round(peak_aberration(phi))
 
     for k, r in enumerate(res):
@@ -132,7 +132,7 @@ def compute_error(y_true: pd.DataFrame, y_pred: pd.DataFrame, axis=None) -> pd.D
 
 
 def eval(k: tuple, psfargs: dict):
-    psf, y, pred, path, psnr, zplanes, maxcounts = k
+    psf, y, pred, path, psnr, maxcounts = k
 
     if psf.ndim == 5:
         psf = np.squeeze(psf, axis=0)
@@ -146,9 +146,9 @@ def eval(k: tuple, psfargs: dict):
     diff = Wavefront(diff)
 
     psf_gen = SyntheticPSF(**psfargs)
-    p_psf = psf_gen.single_psf(pred, zplanes=zplanes)
-    gt_psf = psf_gen.single_psf(y, zplanes=zplanes)
-    corrected_psf = psf_gen.single_psf(diff, zplanes=zplanes)
+    p_psf = psf_gen.single_psf(pred)
+    gt_psf = psf_gen.single_psf(y)
+    corrected_psf = psf_gen.single_psf(diff)
 
     vis.diagnostic_assessment(
         psf=psf,

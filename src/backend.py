@@ -580,7 +580,6 @@ def simple_predict(
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
     plot: Any = None,
-    gamma: float = 1.0,
     no_phase: bool = False
 ):
     """
@@ -595,7 +594,6 @@ def simple_predict(
         threshold: set predictions below threshold to zero (wavelength)
         desc: test to display for the progressbar
         verbose: a toggle for progress bar
-        gamma: apply a gamma to the embeddings
 
     Returns:
         average prediction, stdev
@@ -614,7 +612,6 @@ def simple_predict(
             emb = psfgen.embedding(
                 psf=np.squeeze(i),
                 plot=plot,
-                gamma=gamma,
                 no_phase=no_phase,
                 principle_planes=True
             )
@@ -684,7 +681,6 @@ def bootstrap_predict(
     ignore_modes: list = (0, 1, 2, 4),
     verbose: bool = True,
     plot: Any = None,
-    gamma: float = 1.0,
     no_phase: bool = False,
     desc: str = 'MiniBatch-probabilistic-predictions',
 ):
@@ -701,7 +697,6 @@ def bootstrap_predict(
         threshold: set predictions below threshold to zero (wavelength)
         desc: test to display for the progressbar
         verbose: a toggle for progress bar
-        gamma: apply a gamma to the embeddings
 
     Returns:
         average prediction, stdev
@@ -724,7 +719,6 @@ def bootstrap_predict(
             emb = psfgen.embedding(
                 psf=np.squeeze(i),
                 plot=plot,
-                gamma=gamma,
                 no_phase=no_phase,
                 principle_planes=True,
                 freq_strength_threshold=freq_strength_threshold
@@ -967,7 +961,7 @@ def booststrap_predict_sign(
     if estimate_sign_with_decon:
         logger.info(f"Estimating signs w/ Decon")
         abrs = range(init_preds.shape[0]) if len(init_preds.shape) > 1 else range(1)
-        make_psf = partial(gen.single_psf, zplanes=0, normed=True, noise=False)
+        make_psf = partial(gen.single_psf, normed=True, noise=False)
         psfs = np.stack(gen.batch(
             make_psf,
             [Wavefront(init_preds[i], lam_detection=gen.lam_detection) for i in abrs]
@@ -1053,7 +1047,6 @@ def eval_sign(
     res = ys - init_preds
     g = partial(
         gen.single_psf,
-        zplanes=0,
         normed=True,
         noise=False if reference is not None else True,
         augmentation=False if reference is not None else True,
@@ -1137,7 +1130,7 @@ def predict(
                 distribution=dist,
                 psf_shape=(64, 64, 64)
             )
-            for s, (psf, y, snr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True)):
+            for s, (psf, y, snr, maxcounts) in zip(range(10), gen.generator(debug=True)):
                 waves = np.round(utils.microns2waves(amplitude_range[0], gen.lam_detection), 2)
                 psf = np.squeeze(psf)
 
@@ -1206,9 +1199,9 @@ def predict(
 
                     diff = y_wave - p_wave
 
-                    p_psf = gen.single_psf(p_wave, zplanes=0)
-                    gt_psf = gen.single_psf(y_wave, zplanes=0)
-                    corrected_psf = gen.single_psf(diff, zplanes=0)
+                    p_psf = gen.single_psf(p_wave)
+                    gt_psf = gen.single_psf(y_wave)
+                    corrected_psf = gen.single_psf(diff)
 
                     imsave(save_path / f'psf_{s}.tif', noisy_img)
                     imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
@@ -1266,7 +1259,7 @@ def compare(
 
             gen = SyntheticPSF(**psfargs)
 
-            for i, (psf, y, psnr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True)):
+            for i, (psf, y, psnr, maxcounts) in zip(range(10), gen.generator(debug=True)):
                 # rotate to match matlab and DM
                 psf = np.squeeze(psf[0], axis=-1)
 
@@ -1287,8 +1280,8 @@ def compare(
 
                 diff = Wavefront(y - p, lam_detection=wavelength)
 
-                p_psf = gen.single_psf(p, zplanes=0)
-                corrected_psf = gen.single_psf(diff, zplanes=0)
+                p_psf = gen.single_psf(p)
+                corrected_psf = gen.single_psf(diff)
 
                 model_input = np.squeeze(model_input[0], axis=-1)
                 waves = np.round(utils.microns2waves(amplitude_range[1], wavelength), 2)
@@ -1313,7 +1306,7 @@ def compare(
                 pred_matlab[:m_amps.shape[0]] = m_amps
                 pred_matlab = Wavefront(pred_matlab.flatten(), lam_detection=wavelength)
                 matlab_diff = Wavefront(y - pred_matlab, lam_detection=wavelength)
-                matlab_corrected_psf = gen.single_psf(matlab_diff, zplanes=0)
+                matlab_corrected_psf = gen.single_psf(matlab_diff)
                 imsave(save_path / f'matlab_corrected_psf_{i}.tif', matlab_corrected_psf)
                 pprint(pred_matlab.zernikes)
 
@@ -1366,7 +1359,7 @@ def deconstruct(
             cpu_workers=cpu_workers,
         )
         gen = SyntheticPSF(**psfargs)
-        psf, y, psnr, zplanes, maxcounts = next(gen.generator(debug=True))
+        psf, y, psnr, maxcounts = next(gen.generator(debug=True))
         p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1)
 
         p = Wavefront(p, lam_detection=wavelength)
@@ -1378,10 +1371,9 @@ def deconstruct(
         pprint(y.zernikes)
 
         diff = Wavefront(y - p, lam_detection=wavelength)
-
-        p_psf = gen.single_psf(p, zplanes=0)
-        gt_psf = gen.single_psf(y, zplanes=0)
-        corrected_psf = gen.single_psf(diff, zplanes=0)
+        p_psf = gen.single_psf(p)
+        gt_psf = gen.single_psf(y)
+        corrected_psf = gen.single_psf(diff)
 
         psf = np.squeeze(psf[0], axis=-1)
         save_path = Path(f'{model}/deconstruct/{eval_distribution}/')
@@ -1462,7 +1454,6 @@ def featuremaps(
     if input_shape[0] == 3 or input_shape[0] == 6:
         inputs = gen.single_otf(
             amplitude_range,
-            zplanes=0,
             normed=True,
             noise=True,
             na_mask=True,
@@ -1470,7 +1461,7 @@ def featuremaps(
             augmentation=True
         )
     else:
-        inputs = gen.single_psf(amplitude_range, zplanes=0, normed=True, noise=True, augmentation=True)
+        inputs = gen.single_psf(amplitude_range, normed=True, noise=True, augmentation=True)
 
     inputs = np.expand_dims(np.stack(inputs, axis=0), 0)
     inputs = np.expand_dims(np.stack(inputs, axis=0), -1)

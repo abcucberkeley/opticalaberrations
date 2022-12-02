@@ -204,7 +204,7 @@ def plot_fov(n_modes=55, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
                     max_jitter=0,
                     cpu_workers=-1,
                 )
-                window = gen.single_psf(w, zplanes=0, normed=True, noise=False)
+                window = gen.single_psf(w, normed=True, noise=False)
                 #window = center_crop(psf, crop_shape=tuple(3 * [r]))
 
                 fft = np.fft.fftn(window)
@@ -216,7 +216,7 @@ def plot_fov(n_modes=55, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
                 # fft = np.log10(fft)
                 fft /= np.max(fft)
 
-                perfect_psf = gen.single_psf(phi=Wavefront(np.zeros(n_modes)), zplanes=0)
+                perfect_psf = gen.single_psf(phi=Wavefront(np.zeros(n_modes)))
                 perfect_fft = np.fft.fftn(perfect_psf)
                 perfect_fft = np.fft.fftshift(perfect_fft)
                 perfect_fft = np.abs(perfect_fft)
@@ -381,9 +381,8 @@ def plot_embeddings(
             phi = np.zeros(n_modes)
             phi[mode] = amp
 
-            window, amps, snr, zplanes, maxcounts = gen.single_otf(
+            window, amps, snr, maxcounts = gen.single_otf(
                 phi=phi,
-                zplanes=0,
                 normed=True,
                 noise=True,
                 augmentation=True,
@@ -530,7 +529,6 @@ def plot_shapes_embeddings(
 
             kernel = gen.single_psf(
                 phi=phi,
-                zplanes=0,
                 normed=True,
                 noise=False,
                 augmentation=False,
@@ -656,9 +654,8 @@ def plot_gaussian_filters(
             phi = np.zeros(n_modes)
             phi[mode] = amp
 
-            window, amps, snr, zplanes, maxcounts = gen.single_otf(
+            window, amps, snr, maxcounts = gen.single_otf(
                 phi=phi,
-                zplanes=0,
                 normed=True,
                 noise=True,
                 augmentation=True,
@@ -764,24 +761,8 @@ def plot_simulation(
 
             abr = round(peak_aberration(phi) * np.sign(amp), 1)
 
-            # otf = gen.single_otf(
-            #     phi=phi,
-            #     zplanes=0,
-            #     normed=True,
-            #     noise=True,
-            #     augmentation=True,
-            #     na_mask=True,
-            #     ratio=False,
-            #     padsize=padsize,
-            # )
-            #
-            # amps = Path(f'{outdir}/mode_{mode}/amps')
-            # amps.mkdir(exist_ok=True, parents=True)
-            # imsave(f"{amps}/{str(abr).replace('.', 'p')}.tif", otf)
-
             embedding = gen.single_otf(
                 phi=phi,
-                zplanes=0,
                 normed=True,
                 noise=True,
                 augmentation=True,
@@ -796,7 +777,6 @@ def plot_simulation(
 
             psf = gen.single_psf(
                 phi=phi,
-                zplanes=0,
                 normed=True,
                 noise=True,
                 augmentation=True,
@@ -850,7 +830,7 @@ def plot_signal(n_modes=55, wavelength=.605):
             abr = 0 if j == 0 else round(peak_aberration(phi))
             signal[i][abr] = {}
 
-            psf = gen.single_psf(w, zplanes=0, normed=True, noise=False)
+            psf = gen.single_psf(w, normed=True, noise=False)
 
             # psf_cmap = 'hot'
             # fig, axes = plt.subplots(len(res), 4)
@@ -1056,7 +1036,7 @@ def plot_psnr(psf_cmap='hot', gamma=.75):
             max_jitter=0,
             cpu_workers=-1,
         )
-        psfs, ys, psnrs, zplanes, maxcounts = next(SyntheticPSF(**psfargs).generator(debug=True))
+        psfs, ys, psnrs, maxcounts = next(SyntheticPSF(**psfargs).generator(debug=True))
         target_psnr = np.ceil(np.nanquantile(psnrs, .95))
 
         psf_slice(
@@ -1256,7 +1236,7 @@ def plot_dmodes(
     fig = plt.figure(figsize=(15, 200))
     gs = fig.add_gridspec(64, 4)
 
-    p_psf = gen.single_psf(pred, zplanes=0)
+    p_psf = gen.single_psf(pred)
     ax_xy = fig.add_subplot(gs[0, 0])
     ax_xz = fig.add_subplot(gs[0, 1])
     ax_yz = fig.add_subplot(gs[0, 2])
@@ -1286,7 +1266,7 @@ def plot_dmodes(
         phi[i] = w / (2 * np.pi / wavelength)
         phi = Wavefront(phi, order='ansi')
 
-        psf = gen.single_psf(phi, zplanes=0)
+        psf = gen.single_psf(phi)
         otf = gen.embedding(psf)
         ax_xy = fig.add_subplot(gs[2+k, 0])
         ax_xz = fig.add_subplot(gs[2+k, 1])
@@ -2271,9 +2251,6 @@ def plot_inputs(
             m = xy.imshow(vol[:, :, 0], cmap=psf_cmap, vmin=0, vmax=1)
             zx.imshow(vol[:, :, 1], cmap=psf_cmap, vmin=0, vmax=1)
             zy.imshow(vol[:, :, 2], cmap=psf_cmap, vmin=0, vmax=1)
-        else:
-            #vol = vol ** gamma
-            #vol = np.nan_to_num(vol)
 
             if maxproj:
                 m = xy.imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
@@ -2322,8 +2299,8 @@ def plot_inputs(
             cpu_workers=-1,
         )
 
-        inputs = gen.single_otf(w, zplanes=0, normed=True, noise=False)
-        psf = gen.single_psf(w, zplanes=0, normed=True, noise=False)
+        inputs = gen.single_otf(w, normed=True, noise=False)
+        psf = gen.single_psf(w, normed=True, noise=False)
 
         otf = np.fft.fftn(psf)
         otf = np.fft.fftshift(otf)
@@ -2546,7 +2523,6 @@ def tiles(
     save_path: Path,
     strides: int = 64,
     window_size: int = 64,
-    gamma: float = 1.,
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -2556,8 +2532,6 @@ def tiles(
         'ytick.labelsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
-
-    data = data ** gamma
     ztiles = np.array_split(range(data.shape[0]), data.shape[0]//window_size)
 
     for z, idx in enumerate(ztiles):

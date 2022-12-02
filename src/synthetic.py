@@ -18,6 +18,7 @@ from skimage.filters import window
 from skimage.restoration import unwrap_phase
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from numpy.lib.stride_tricks import sliding_window_view
+from scipy.interpolate import RegularGridInterpolator
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -143,72 +144,33 @@ class SyntheticPSF:
         noise = normal_noise_img + poisson_noise_img
         return noise
 
-    def _crop(self, psf: np.array, voxel_size: tuple, jitter: bool = False):
-        centroid = np.array([i // 2 for i in psf.shape])    # (64,64,64) the coordinate of the 2x larger fov psf center
-        mz, my, mx = self.psf_shape[0] // 2, self.psf_shape[1] // 2, self.psf_shape[2] // 2 # (32,32,32) the coordinates of the desired self.psf center
+    def _crop(self, psf: np.array, jitter: bool = False):
+        # the coordinate of the 2x larger fov psf center
+        centroid = np.array([i // 2 for i in psf.shape]) - 1
 
+        # width of the desired psf
+        wz, wy, wx = self.psf_shape[0] // 2, self.psf_shape[1] // 2, self.psf_shape[2] // 2
+
+        z = np.arange(0, psf.shape[0], dtype=int)
+        y = np.arange(0, psf.shape[1], dtype=int)
+        x = np.arange(0, psf.shape[2], dtype=int)
+
+        # Add a random offset to the center
         if jitter and self.max_jitter != 0:
-            centroid += np.array([np.random.randint(-self.max_jitter / s, self.max_jitter / s) for s in voxel_size])    # max.jitter is in microns
+            centroid += np.array([
+                np.random.randint(-self.max_jitter / s, self.max_jitter / s)  # max.jitter is in microns
+                for s in self.voxel_size
+            ])
 
-        # if the jitter moves us past the border, we should reset the start (lz,ly,lx) and recompute end (hz,hy,hx) based upon valid start. Or just do an NN interpolation with a shifted set of coordinates.
-        lz = mz if (centroid[0] - mz) < 0 else centroid[0] - mz
-        ly = my if (centroid[1] - my) < 0 else centroid[1] - my
-        lx = mx if (centroid[2] - mx) < 0 else centroid[2] - mx
+        # figure out the coordinates of the cropped image
+        cz = np.arange(centroid[0]-wz, centroid[0]+wz, dtype=int)
+        cy = np.arange(centroid[1]-wy, centroid[1]+wy, dtype=int)
+        cx = np.arange(centroid[2]-wx, centroid[2]+wx, dtype=int)
+        cz, cy, cx = np.meshgrid(cz, cy, cx)
 
-        hz = psf.shape[0]-mz if (centroid[0] + mz) > psf.shape[0] else centroid[0] + mz
-        hy = psf.shape[1]-my if (centroid[1] + my) > psf.shape[1] else centroid[1] + my
-        hx = psf.shape[2]-mx if (centroid[2] + mx) > psf.shape[2] else centroid[2] + mx
-
-        cropped_psf = psf[lz:hz, ly:hy, lx:hx]
-        cropped_psf = transform.resize(cropped_psf, self.psf_shape, order=3) # should be a no-op. this code exists probably because of the bug above existed.
+        interp = RegularGridInterpolator((z, y, x), psf)
+        cropped_psf = interp((cz, cy, cx))
         return cropped_psf
-
-    def _axial_resample(
-        self, vol: np.array,
-        axial_voxel_size: float,
-        lateral_voxel_size: float,
-        zplanes: Any,
-    ):
-        """_summary_
-
-        Args:
-            vol (np.array): 2x larger fov psf (e.g. 128x128x128 if you desire 64x64x64 PSF)
-            axial_voxel_size (float): desired voxel size in microns (e.g. 0.200 microns)
-            lateral_voxel_size (float): desired lateral voxel size in microns (e.g. 0.108 microns)
-            zplanes (Any): flag to do data augmentation (random things). zplanes=0 makes this a no operation. zplanes=None 
-
-        Returns:
-            _type_: desired PSF with the desired shape and voxel size
-        """
-        step = int(np.round(axial_voxel_size / lateral_voxel_size, 0)) 
-        indices = np.arange(self.theoretical_psf_shape[0])  # indices of the input vol (2x larger fov psf)
-
-        if zplanes is None:
-            start = np.random.randint(step)
-            targets = np.arange(vol.shape[0])[start::step]
-            mask = np.zeros_like(indices)
-            np.put(mask, targets, np.ones_like(targets))
-
-        elif np.isscalar(zplanes) and zplanes == 0:
-            mask = np.ones_like(indices)                    # use all planes to do resampling, which makes this whole function a "no-operation"
-
-        else:
-            if zplanes.ndim > 1:
-                zplanes = zplanes.reshape(len(indices), )
-
-            if np.any(zplanes > 1):
-                mask = np.zeros_like(indices)
-                np.put(mask, zplanes, np.ones_like(zplanes))
-            else:
-                mask = zplanes
-
-        vol = vol[indices[np.where(mask)], :, :]
-        scaled_psf = transform.resize(
-            vol,
-            self.theoretical_psf_shape,
-            order=3,
-        )
-        return scaled_psf, mask
 
     def theoretical_psf(self, normed: bool = True, snr: int = 1000, noise: bool = False):
         """Generates an unabberated PSF of the "desired" PSF shape and voxel size, centered.
@@ -221,11 +183,6 @@ class SyntheticPSF:
         Returns:
             _type_: 3D PSF
         """
-        x_voxel_size = self.x_voxel_size
-        y_voxel_size = self.y_voxel_size
-        z_voxel_size = self.z_voxel_size
-        voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
-
         phi = Wavefront(
             amplitudes=np.zeros(self.n_modes),
             order=self.order,
@@ -247,15 +204,7 @@ class SyntheticPSF:
         else:
             psf = self.psfgen.incoherent_psf(phi)       # 2x larger fov psf
 
-        # I think this axial_resample does nothing here. and should go to the trash.
-        psf, zplanes = self._axial_resample(
-            psf,
-            axial_voxel_size=z_voxel_size,
-            lateral_voxel_size=max([x_voxel_size, y_voxel_size]),
-            zplanes=0
-        )   # zplanes=0 disables some data augmentation randomness
-
-        psf = self._crop(psf, voxel_size=voxel_size, jitter=False)
+        psf = self._crop(psf, jitter=False)
         psf /= np.max(psf) if normed else psf
         return psf
 
@@ -379,7 +328,6 @@ class SyntheticPSF:
         plot: Any = None,
         log10: bool = False,
         principle_planes: bool = True,
-        gamma: float = 1.,
         freq_strength_threshold: float = 0.01,
     ):
         """Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -601,7 +549,6 @@ class SyntheticPSF:
     def single_psf(
         self,
         phi: Any = None,
-        zplanes: Any = None,
         normed: bool = True,
         noise: bool = False,
         augmentation: bool = False,
@@ -611,17 +558,12 @@ class SyntheticPSF:
         """
         Args:
             phi: wavefront object
-            zplanes: one-hot encoded mask for target indices
             normed: a toggle to normalize PSF
             noise: a toggle to add noise
             augmentation: a toggle for data augmentation
             meta: return extra variables for debugging
         """
         snr = self._randuniform(self.snr)
-        x_voxel_size = self._randuniform(self.x_voxel_size)
-        y_voxel_size = self._randuniform(self.y_voxel_size)
-        z_voxel_size = self._randuniform(self.z_voxel_size)
-        voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
 
         if not isinstance(phi, Wavefront):
             phi = Wavefront(
@@ -646,18 +588,10 @@ class SyntheticPSF:
         psnr = np.sqrt(np.max(noisy_psf))
         maxcount = np.max(noisy_psf)
 
-        noisy_psf, zplanes = self._axial_resample(
-            noisy_psf,
-            axial_voxel_size=z_voxel_size,
-            lateral_voxel_size=max([x_voxel_size, y_voxel_size]),
-            zplanes=zplanes
-        )
-
         if augmentation:
-            noisy_psf = self._crop(noisy_psf, voxel_size=voxel_size, jitter=True)
-            # noisy_psf = noisy_psf ** np.random.uniform(low=.25, high=1.25)
+            noisy_psf = self._crop(noisy_psf, jitter=True)
         else:
-            noisy_psf = self._crop(noisy_psf, voxel_size=voxel_size)
+            noisy_psf = self._crop(noisy_psf)
 
         noisy_psf /= np.max(noisy_psf) if normed else noisy_psf
 
@@ -665,14 +599,13 @@ class SyntheticPSF:
             if no_phase:
                 phi.amplitudes = np.abs(phi.amplitudes)
 
-            return noisy_psf, phi.amplitudes, psnr, zplanes, maxcount
+            return noisy_psf, phi.amplitudes, psnr, maxcount
         else:
             return noisy_psf
 
     def single_otf(
         self,
         phi: Any = None,
-        zplanes: Any = None,
         normed: bool = True,
         noise: bool = False,
         augmentation: bool = False,
@@ -687,7 +620,6 @@ class SyntheticPSF:
 
         psf = self.single_psf(
             phi=phi,
-            zplanes=zplanes,
             normed=normed,
             noise=noise,
             augmentation=augmentation,
@@ -696,7 +628,7 @@ class SyntheticPSF:
         )
 
         if meta:
-            psf, y, psnr, zplanes, maxcount = psf
+            psf, y, psnr, maxcount = psf
 
         emb = self.embedding(
             psf,
@@ -712,7 +644,7 @@ class SyntheticPSF:
             if no_phase:
                 y = np.abs(y)
 
-            return emb, y, psnr, zplanes, maxcount
+            return emb, y, psnr, maxcount
         else:
             return emb
 
@@ -740,7 +672,6 @@ class SyntheticPSF:
         if otf:
             gen = partial(
                 self.single_otf,
-                zplanes=0,
                 normed=True,
                 noise=True,
                 augmentation=True,
@@ -752,7 +683,6 @@ class SyntheticPSF:
         else:
             gen = partial(
                 self.single_psf,
-                zplanes=0,
                 meta=True,
                 normed=True,
                 noise=True,
@@ -760,18 +690,16 @@ class SyntheticPSF:
             )
 
         while True:
-            inputs, amplitudes, psnrs, zplanes, maxcounts = zip(
+            inputs, amplitudes, psnrs, maxcounts = zip(
                 *self.batch(gen, [self.amplitude_ranges]*self.batch_size)
             )
 
             x = np.expand_dims(np.stack(inputs, axis=0), -1)
-
             y = np.stack(amplitudes, axis=0)
             psnrs = np.stack(psnrs, axis=0)
-            zplanes = np.stack(zplanes, axis=0)
             maxcounts = np.stack(maxcounts, axis=0)
 
             if debug:
-                yield x, y, psnrs, zplanes, maxcounts
+                yield x, y, psnrs, maxcounts
             else:
                 yield x, y

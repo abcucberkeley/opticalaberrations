@@ -93,7 +93,6 @@ def eval_mode(
     w = Wavefront(phi, lam_detection=gen.lam_detection)
     kernel = gen.single_psf(
         phi=w,
-        zplanes=0,
         normed=True,
         noise=False,
         augmentation=False,
@@ -231,7 +230,6 @@ def evaluate_modes(model: Path, n_modes: int = 55):
         w = Wavefront(phi, lam_detection=gen.lam_detection)
         kernel = gen.single_psf(
             phi=w,
-            zplanes=0,
             normed=True,
             noise=False,
             augmentation=False,
@@ -539,7 +537,6 @@ def iter_eval_bin(
         res = ys - preds
         g = partial(
             gen.single_psf,
-            zplanes=0,
             normed=True,
             noise=True,
             augmentation=True,
@@ -624,7 +621,6 @@ def iter_eval_bin_with_reference(
     for i in range(inputs.shape[0]):
         kernel = gen.single_psf(
             phi=Wavefront(ys[i], lam_detection=wavelength),
-            zplanes=0,
             normed=True,
             noise=False,
             augmentation=False,
@@ -676,7 +672,6 @@ def iter_eval_bin_with_reference(
         res = ys - preds
         g = partial(
             gen.single_psf,
-            zplanes=0,
             normed=True,
             noise=False,
             augmentation=False,

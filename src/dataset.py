@@ -112,9 +112,8 @@ def create_synthetic_sample(
             phi[i] = np.random.uniform(min_amplitude, max_amplitude)
 
             if emb:
-                inputs, amps, snr, zplanes, maxcounts = gen.single_otf(
+                inputs, amps, snr, maxcounts = gen.single_otf(
                     phi=phi,
-                    zplanes=0,
                     normed=True,
                     noise=noise,
                     augmentation=noise,
@@ -125,9 +124,8 @@ def create_synthetic_sample(
                     plot=f"{savepath}_embedding"
                 )
             else:
-                inputs, amps, snr, zplanes, maxcounts = gen.single_psf(
+                inputs, amps, snr, maxcounts = gen.single_psf(
                     phi=phi,
-                    zplanes=0,
                     normed=True,
                     noise=noise,
                     augmentation=noise,
@@ -144,9 +142,8 @@ def create_synthetic_sample(
         savepath = savepath / filename
 
         if emb:
-            inputs, amps, snr, zplanes, maxcounts = gen.single_otf(
+            inputs, amps, snr, maxcounts = gen.single_otf(
                 phi=(min_amplitude, max_amplitude),
-                zplanes=0,
                 normed=True,
                 noise=True,
                 augmentation=True,
@@ -157,9 +154,8 @@ def create_synthetic_sample(
                 plot=f"{savepath}_embedding"
             )
         else:
-            inputs, amps, snr, zplanes, maxcounts = gen.single_psf(
+            inputs, amps, snr, maxcounts = gen.single_psf(
                 phi=(min_amplitude, max_amplitude),
-                zplanes=0,
                 normed=True,
                 noise=True,
                 augmentation=True,

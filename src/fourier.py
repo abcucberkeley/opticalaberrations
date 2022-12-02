@@ -65,7 +65,6 @@ class FourierAttention(layers.Layer):
 
         otf = psfgen.single_otf(
             phi=Wavefront(np.zeros(55), lam_detection=self.lambda_det),
-            zplanes=0,
             normed=True,
             noise=False,
             augmentation=False,
