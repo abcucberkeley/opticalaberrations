@@ -5,7 +5,7 @@ import logging
 import multiprocessing as mp
 import sys
 from functools import partial
-from typing import Any, List
+from typing import Union, Any, List, Generator
 
 import io
 import numpy as np
@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def multiprocess(func: Any, jobs: List, desc: str = 'Processing', cores: int = -1):
+def multiprocess(func: Any, jobs: Union[Generator, List, np.ndarray], desc: str = 'Processing', cores: int = -1):
     """ Multiprocess a generic function
     Args:
         func: a python function

@@ -8,17 +8,17 @@ import logging
 import sys
 import time
 import ujson
+from functools import partial
 from typing import Any
 from pathlib import Path
-from tifffile import imread, imsave
+from tifffile import imsave
 import numpy as np
 import scipy.stats as st
 import raster_geometry as rg
-from tqdm import trange
 
 import cli
 from preprocessing import resize_with_crop_or_pad
-from utils import peak_aberration, fftconvolution
+from utils import peak_aberration, fftconvolution, multiprocess
 from synthetic import SyntheticPSF
 
 logging.basicConfig(
@@ -99,8 +99,6 @@ def sim(
             sigma=gen.sigma_background_noise
         )
         noisy_img = rand_noise + img
-        # noisy_img = noisy_img ** np.random.uniform(low=.25, high=1.25)
-
         psnr = np.sqrt(np.max(noisy_img))
         maxcounts = np.max(noisy_img)
     else:
@@ -379,41 +377,39 @@ def main(args=None):
     args = parse_args(args)
     logger.info(args)
 
-    def sample(k):
-        return create_synthetic_sample(
-            filename=f"{int(args.filename)+k}",
-            emb=args.emb,
-            alpha_val=args.alpha_val,
-            phi_val=args.phi_val,
-            npoints=args.npoints,
-            outdir=args.outdir,
-            noise=args.noise,
-            normalize=args.normalize,
-            modes=args.modes,
-            input_shape=args.input_shape,
-            psf_type=args.psf_type,
-            distribution=args.dist,
-            mode_dist=args.mode_dist,
-            random_crop=args.random_crop,
-            gamma=args.gamma,
-            bimodal=args.bimodal,
-            rotate=args.rotate,
-            min_amplitude=args.min_amplitude,
-            max_amplitude=args.max_amplitude,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            min_psnr=args.min_psnr,
-            max_psnr=args.max_psnr,
-            lam_detection=args.lam_detection,
-            refractive_index=args.refractive_index,
-            na_detection=args.na_detection,
-            cpu_workers=args.cpu_workers,
-        )
+    sample = partial(
+        create_synthetic_sample,
+        emb=args.emb,
+        alpha_val=args.alpha_val,
+        phi_val=args.phi_val,
+        npoints=args.npoints,
+        outdir=args.outdir,
+        noise=args.noise,
+        normalize=args.normalize,
+        modes=args.modes,
+        input_shape=args.input_shape,
+        psf_type=args.psf_type,
+        distribution=args.dist,
+        mode_dist=args.mode_dist,
+        random_crop=args.random_crop,
+        gamma=args.gamma,
+        bimodal=args.bimodal,
+        rotate=args.rotate,
+        min_amplitude=args.min_amplitude,
+        max_amplitude=args.max_amplitude,
+        x_voxel_size=args.x_voxel_size,
+        y_voxel_size=args.y_voxel_size,
+        z_voxel_size=args.z_voxel_size,
+        min_psnr=args.min_psnr,
+        max_psnr=args.max_psnr,
+        lam_detection=args.lam_detection,
+        refractive_index=args.refractive_index,
+        na_detection=args.na_detection,
+        cpu_workers=args.cpu_workers,
+    )
 
-    for i in trange(args.iters):
-        sample(k=i)
-
+    jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]
+    multiprocess(sample, jobs=jobs, cores=args.cpu_workers)
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 
