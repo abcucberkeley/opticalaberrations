@@ -77,24 +77,6 @@ def estimate_and_save_new_dm(
     return dm
 
 
-def matlab_phase_retrieval(psf: Path, dx=.15, dz=.6, wavelength=.605, n_modes=55) -> list:
-    try:
-        import matlab.engine
-        matlab = matlab.engine.start_matlab()
-        matlab.addpath(matlab.genpath('phase_retrieval'), nargout=0)
-
-        zcoffs = matlab.PhaseRetrieval(str(psf), dx, dz, wavelength)
-        zcoffs = np.array(zcoffs._data).flatten()[:n_modes]
-        zcoffs = utils.waves2microns(zcoffs, wavelength=wavelength)
-        return list(zcoffs)
-
-    except Exception:
-        logger.error(
-            'Matlab-python engine is not installed! See'
-            'https://www.mathworks.com/help/matlab/matlab_external/call-user-script-and-function-from-python.html'
-        )
-
-
 def percentile_filter(data: np.ndarray, min_pct: int = 5, max_pct: int = 95) -> np.ndarray:
     minval, maxval = np.percentile(data, [min_pct, max_pct])
     return (data < minval) | (data > maxval)
