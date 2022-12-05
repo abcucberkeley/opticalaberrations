@@ -7,14 +7,18 @@ LAMBDA=.510
 SHAPE=64
 SAMPLES=100
 MAXAMP=.5
-MODES=55
 DIFFICULTY='hard'
 DATASET='yumb'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/$DIFFICULTY/test/x108-y108-z200/"
 
+if [ "$DIFFICULTY" = "easy" ];then
+  MODES=15
+else
+  MODES=55
+fi
 
-for M in opticalnet otfnet
+for M in opticalnet
 do
   MODEL="../models/new/$DATASET/$DIFFICULTY/$M"
   echo $MODEL
