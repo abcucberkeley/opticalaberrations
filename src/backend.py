@@ -202,8 +202,8 @@ def train(
             psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
 
     if network == 'opticalnet':
-        model = opticaltransformer.OpticalTransformer(
-            name='OpticalNet',
+        model = opticalnet.OpticalTransformer(
+            name='OpticalTransformer',
             roi=roi,
             patches=patch_size,
             modes=pmodes,
