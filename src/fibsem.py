@@ -115,7 +115,6 @@ def convolve(kernel, sample, sample_voxel_size, save_path, cuda=False):
         y_voxel_size=.15,
         z_voxel_size=.6,
         snr=100,
-        max_jitter=0,
     )
 
     ker = imread(kernel)

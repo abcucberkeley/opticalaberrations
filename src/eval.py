@@ -17,7 +17,6 @@ from tifffile import imread
 import tensorflow as tf
 from preprocessing import resize_with_crop_or_pad
 from scipy import stats as st
-import raster_geometry as rg
 
 import utils
 import data_utils
@@ -33,47 +32,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
-
-
-def beads(
-    gen: SyntheticPSF,
-    kernel: np.ndarray,
-    psnr: tuple = (21, 30),
-    object_size: float = 0,
-    num_objs: int = 1,
-    radius: float = .45,
-):
-    snr = gen._randuniform(psnr)
-    reference = np.zeros(gen.psf_shape)
-
-    for i in range(num_objs):
-        if object_size > 0:
-            reference += rg.sphere(
-                shape=gen.psf_shape,
-                radius=object_size,
-                position=np.random.uniform(low=.2, high=.8, size=3)
-            ).astype(np.float) * np.random.random()
-        else:
-            reference[
-                np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
-                np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
-                np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
-            ] += np.random.random()
-
-    reference /= np.max(reference)
-    img = utils.fftconvolution(reference, kernel)
-    snr = gen._randuniform(snr)
-    img *= snr ** 2
-
-    rand_noise = gen._random_noise(
-        image=img,
-        mean=gen.mean_background_noise,
-        sigma=gen.sigma_background_noise
-    )
-    noisy_img = rand_noise + img
-    noisy_img /= np.max(noisy_img)
-
-    return noisy_img
 
 
 def eval_mode(
@@ -95,14 +53,13 @@ def eval_mode(
         phi=w,
         normed=True,
         noise=False,
-        augmentation=False,
         meta=False,
     )
 
     k = np.where(phi > 0)[0]
     for isize in tqdm([0, 1, 2, 3, 4, 5], desc=f"Evaluate different sizes [mode #{k}]"):
         inputs = np.array([
-            beads(gen=gen, kernel=kernel, psnr=psnr, object_size=isize, num_objs=npoints)
+            backend.beads(gen=gen, kernel=kernel, psnr=psnr, object_size=isize, num_objs=npoints)
             for i in range(n_samples)
         ])
 
@@ -232,7 +189,6 @@ def evaluate_modes(model: Path, n_modes: int = 55):
             phi=w,
             normed=True,
             noise=False,
-            augmentation=False,
             meta=False,
         )
         emb = gen.embedding(psf=kernel, principle_planes=True, no_phase=True)
@@ -278,7 +234,6 @@ def eval_bin(
         z_voxel_size=z_voxel_size,
         batch_size=100,
         snr=100,
-        max_jitter=0,
         cpu_workers=-1,
     )
 
@@ -484,7 +439,6 @@ def iter_eval_bin(
         z_voxel_size=z_voxel_size,
         batch_size=100,
         snr=psnr,
-        max_jitter=0,
         cpu_workers=-1,
     )
 
@@ -539,7 +493,6 @@ def iter_eval_bin(
             gen.single_psf,
             normed=True,
             noise=True,
-            augmentation=True,
             meta=False
         )
         inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
@@ -579,7 +532,6 @@ def iter_eval_bin_with_reference(
         z_voxel_size=z_voxel_size,
         batch_size=100,
         snr=psnr,
-        max_jitter=0,
         cpu_workers=-1,
     )
     if num_neighbor is None:
@@ -623,7 +575,6 @@ def iter_eval_bin_with_reference(
             phi=Wavefront(ys[i], lam_detection=wavelength),
             normed=True,
             noise=False,
-            augmentation=False,
             meta=False,
         )
         inputs[i] = kernel[..., np.newaxis]
@@ -674,7 +625,6 @@ def iter_eval_bin_with_reference(
             gen.single_psf,
             normed=True,
             noise=False,
-            augmentation=False,
             meta=False
         )
 
@@ -894,7 +844,6 @@ def eval_roi(
         x_voxel_size=z_voxel_size,
         batch_size=100,
         snr=psnr,
-        max_jitter=0,
         cpu_workers=-1,
     )
 
@@ -947,7 +896,6 @@ def evaldistbin(
         z_voxel_size=z_voxel_size,
         batch_size=100,
         snr=psnr,
-        max_jitter=0,
         cpu_workers=-1,
     )
 
@@ -1173,7 +1121,6 @@ def evaldensitybin(
         z_voxel_size=z_voxel_size,
         batch_size=100,
         snr=psnr,
-        max_jitter=0,
         cpu_workers=-1,
     )
 

@@ -1,18 +1,17 @@
 import matplotlib
-
 matplotlib.use('Agg')
 
 import numexpr
-
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
 import logging
 import sys
+import os
 import h5py
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
-from typing import Any
+from typing import Any, Union
 from functools import partial
 
 import pandas as pd
@@ -25,6 +24,7 @@ import numpy as np
 import scipy as sp
 from tqdm import tqdm
 from tifffile import imsave
+import raster_geometry as rg
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -44,7 +44,6 @@ from callbacks import TensorBoardCallback
 import utils
 import vis
 import data_utils
-import experimental
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
@@ -73,16 +72,17 @@ logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 
 
-def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64), **kwargs):
+def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64), n_modes=None, **kwargs):
     # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
     if not model_path.suffix == '.h5':       
         model_path = list(model_path.rglob('*.h5'))[0]
 
     with h5py.File(model_path, 'r') as file:
+        print(int(file.get('n_modes')[()]))
         psfgen = SyntheticPSF(
             psf_type=np.array(file.get('psf_type')[:]),
             psf_shape=psf_shape,
-            n_modes=int(file.get('n_modes')[()]),
+            n_modes=int(file.get('n_modes')[()]) if n_modes is None else n_modes,
             lam_detection=float(file.get('wavelength')[()]),
             x_voxel_size=float(file.get('x_voxel_size')[()]),
             y_voxel_size=float(file.get('y_voxel_size')[()]),
@@ -413,7 +413,6 @@ def train(
             psf_type=psf_type,
             psf_shape=inputs,
             snr=(min_psnr, max_psnr),
-            max_jitter=1,
             n_modes=modes,
             distribution=distribution,
             amplitude_ranges=(-max_amplitude, max_amplitude),
@@ -813,7 +812,7 @@ def predict_sign(
     return preds, pchange
 
 
-def booststrap_predict_sign(
+def dual_stage_prediction(
     model: tf.keras.Model,
     inputs: np.array,
     gen: SyntheticPSF,
@@ -854,7 +853,6 @@ def booststrap_predict_sign(
         threshold=threshold,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
-        # plot=plot
     )
     init_preds = np.abs(init_preds)
 
@@ -948,8 +946,7 @@ def eval_sign(
     g = partial(
         gen.single_psf,
         normed=True,
-        noise=False if reference is not None else True,
-        augmentation=False if reference is not None else True,
+        noise=False,
         meta=False
     )
     followup_inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
@@ -1009,20 +1006,61 @@ def eval_sign(
     return preds
 
 
-def predict(
-    model: Path,
-    input_coverage: float = 1.0,
-    radius: float = .4,
-    psnr: int = 30
+def beads(
+    gen: SyntheticPSF,
+    kernel: np.ndarray,
+    psnr: Union[tuple, int] = (21, 30),
+    object_size: float = 0,
+    num_objs: int = 1,
+    radius: float = .45,
 ):
+    snr = gen._randuniform(psnr)
+    reference = np.zeros(gen.psf_shape)
+    np.random.seed(os.getpid())
+
+    for i in range(num_objs):
+        if object_size > 0:
+            reference += rg.sphere(
+                shape=gen.psf_shape,
+                radius=object_size,
+                position=np.random.uniform(low=.2, high=.8, size=3)
+            ).astype(np.float) * np.random.random()
+        else:
+            if radius > 0:
+                reference[
+                    np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+                ] += np.random.random()
+            else:
+                reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] += np.random.random()
+
+    reference /= np.max(reference)
+    img = utils.fftconvolution(reference, kernel)
+    snr = gen._randuniform(snr)
+    img *= snr ** 2
+
+    rand_noise = gen._random_noise(
+        image=img,
+        mean=gen.mean_background_noise,
+        sigma=gen.sigma_background_noise
+    )
+    noisy_img = rand_noise + img
+    noisy_img /= np.max(noisy_img)
+
+    return noisy_img
+
+
+def predict(model: Path, input_coverage: float = 1.0, psnr: int = 30):
     m = load(model)
     m.summary()
 
     for dist in ['powerlaw', 'dirichlet']:
-        for amplitude_range in [(.1, .2), (.2, .3)]:
+        for amplitude_range in [(.1, .3), (.3, .5)]:
             gen = load_metadata(
                 model,
                 snr=1000,
+                # n_modes=55,
                 bimodal=True,
                 rotate=True,
                 batch_size=1,
@@ -1031,47 +1069,13 @@ def predict(
                 psf_shape=(64, 64, 64)
             )
             for s, (psf, y, snr, maxcounts) in zip(range(10), gen.generator(debug=True)):
-                waves = np.round(utils.microns2waves(amplitude_range[0], gen.lam_detection), 2)
                 psf = np.squeeze(psf)
 
                 for npoints in tqdm([1, 3, 5, 10, 15]):
-                    if npoints > 1:
-                        img = np.zeros([3 * s for s in gen.psf_shape])
-                        width = [(i // 2) for i in gen.psf_shape]
-                        center = gen.psf_shape
-
-                        for i in range(npoints):
-                            p = [
-                                np.random.randint(int(gen.psf_shape[0] * (.5 - radius)),
-                                                  int(gen.psf_shape[0] * (.5 + radius))),
-                                np.random.randint(int(gen.psf_shape[1] * (.5 - radius)),
-                                                  int(gen.psf_shape[1] * (.5 + radius))),
-                                np.random.randint(int(gen.psf_shape[2] * (.5 - radius)),
-                                                  int(gen.psf_shape[2] * (.5 + radius)))
-                            ]
-
-                            img[
-                                (p[0] + center[0]) - width[0]:(p[0] + center[0]) + width[0],
-                                (p[1] + center[1]) - width[1]:(p[1] + center[1]) + width[1],
-                                (p[2] + center[2]) - width[2]:(p[2] + center[2]) + width[2],
-                            ] += psf
-
-                        img = resize_with_crop_or_pad(img, crop_shape=gen.psf_shape)
-                    else:
-                        img = psf
-
-                    img[img < 0] = 0
-                    img = np.nan_to_num(img, nan=0)
-                    rand_noise = gen._random_noise(
-                        image=img,
-                        mean=gen.mean_background_noise,
-                        sigma=gen.sigma_background_noise
-                    )
-                    noisy_img = rand_noise + (img * psnr**2)
-                    noisy_img /= np.max(noisy_img)
+                    noisy_img = beads(gen=gen, kernel=psf, psnr=psnr, object_size=0, num_objs=npoints)
 
                     save_path = Path(
-                        f"{model.with_suffix('')}/samples/{dist}/c{input_coverage}/lambda-{waves}/npoints-{npoints}"
+                        f"{model.with_suffix('')}/samples/{dist}/c{input_coverage}/um-{amplitude_range[-1]}/npoints-{npoints}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
@@ -1086,7 +1090,7 @@ def predict(
                         gen=gen,
                         ys=y,
                         batch_size=1,
-                        plot=save_path / f'embeddings_{s}',
+                        # plot=save_path / f'embeddings_{s}',
                     )
 
                     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
@@ -1123,7 +1127,6 @@ def predict(
 
 def deconstruct(
         model: Path,
-        max_jitter: float = 1,
         cpu_workers: int = -1,
         x_voxel_size: float = .15,
         y_voxel_size: float = .15,
@@ -1149,7 +1152,6 @@ def deconstruct(
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
             batch_size=1,
-            max_jitter=max_jitter,
             cpu_workers=cpu_workers,
         )
         gen = SyntheticPSF(**psfargs)
@@ -1240,7 +1242,6 @@ def featuremaps(
         z_voxel_size=z_voxel_size,
         batch_size=1,
         snr=psnr,
-        max_jitter=1,
         cpu_workers=cpu_workers,
     )
     gen = SyntheticPSF(**psfargs)
@@ -1252,10 +1253,9 @@ def featuremaps(
             noise=True,
             na_mask=True,
             ratio=True,
-            augmentation=True
         )
     else:
-        inputs = gen.single_psf(amplitude_range, normed=True, noise=True, augmentation=True)
+        inputs = gen.single_psf(amplitude_range, normed=True, noise=True)
 
     inputs = np.expand_dims(np.stack(inputs, axis=0), 0)
     inputs = np.expand_dims(np.stack(inputs, axis=0), -1)
@@ -1387,6 +1387,12 @@ def save_metadata(
         try:
             if name not in h5file.keys():
                 h5file.create_dataset(name, data=data)
+            else:
+                del h5file[name]
+                h5file.create_dataset(name, data=data)
+
+            assert np.allclose(h5file[name].value, data), f"Failed to write {name}"
+
         except Exception as e:
             logger.error(e)
 
@@ -1399,7 +1405,7 @@ def save_metadata(
         add_param(file, name='z_voxel_size', data=z_voxel_size)
 
         if isinstance(psf_type, str) or isinstance(psf_type, Path):
-            with h5py.File(psf_type, 'r') as f:
+            with h5py.File(psf_type, 'r+') as f:
                 add_param(file, name='psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
 
 

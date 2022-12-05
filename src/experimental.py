@@ -278,7 +278,7 @@ def predict(
     rois = np.array(utils.multiprocess(load, rois, desc='Processing ROIs'))
     logger.info(rois.shape)
 
-    preds, stds, pchange = backend.booststrap_predict_sign(
+    preds, stds, pchange = backend.dual_stage_prediction(
         model,
         batch_size=batch_size,
         inputs=rois[..., np.newaxis],
@@ -364,7 +364,7 @@ def predict_sample(
 
     inputs = np.expand_dims(inputs, axis=0)
 
-    p, std, pchange = backend.booststrap_predict_sign(
+    p, std, pchange = backend.dual_stage_prediction(
         model,
         inputs=inputs,
         threshold=prediction_threshold,

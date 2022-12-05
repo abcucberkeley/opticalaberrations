@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
-def plot_training_dist(n_samples=100, batch_size=100, wavelength=.510):
+def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -65,7 +65,6 @@ def plot_training_dist(n_samples=100, batch_size=100, wavelength=.510):
         z_voxel_size=.2,
         batch_size=batch_size,
         snr=30,
-        max_jitter=1,
         cpu_workers=-1,
     )
 
@@ -201,7 +200,6 @@ def plot_fov(n_modes=55, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
                     y_voxel_size=y_voxel_size,
                     z_voxel_size=z_voxel_size,
                     snr=100,
-                    max_jitter=0,
                     cpu_workers=-1,
                 )
                 window = gen.single_psf(w, normed=True, noise=False)
@@ -372,7 +370,6 @@ def plot_embeddings(
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
         snr=20,
-        max_jitter=0,
         cpu_workers=-1,
     )
 
@@ -385,7 +382,6 @@ def plot_embeddings(
                 phi=phi,
                 normed=True,
                 noise=True,
-                augmentation=True,
                 meta=True,
                 na_mask=True,
                 ratio=True,
@@ -504,7 +500,6 @@ def plot_shapes_embeddings(
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
         snr=100,
-        max_jitter=0,
         cpu_workers=-1,
     )
     mode = 6
@@ -531,7 +526,6 @@ def plot_shapes_embeddings(
                 phi=phi,
                 normed=True,
                 noise=False,
-                augmentation=False,
             )
             inputs = convolution.convolve_fft(reference, kernel, allow_huge=True)
             inputs /= np.nanmax(inputs)
@@ -645,7 +639,6 @@ def plot_gaussian_filters(
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
         snr=20,
-        max_jitter=0,
         cpu_workers=-1,
     )
 
@@ -658,7 +651,6 @@ def plot_gaussian_filters(
                 phi=phi,
                 normed=True,
                 noise=True,
-                augmentation=True,
                 meta=True,
                 na_mask=True,
                 ratio=True,
@@ -744,7 +736,6 @@ def plot_simulation(
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
         snr=100,
-        max_jitter=0,
         cpu_workers=-1,
     )
 
@@ -765,7 +756,6 @@ def plot_simulation(
                 phi=phi,
                 normed=True,
                 noise=True,
-                augmentation=True,
                 na_mask=True,
                 ratio=True,
                 padsize=padsize,
@@ -779,7 +769,6 @@ def plot_simulation(
                 phi=phi,
                 normed=True,
                 noise=True,
-                augmentation=True,
                 meta=False,
             )
 
@@ -813,7 +802,6 @@ def plot_signal(n_modes=55, wavelength=.605):
         y_voxel_size=.1,
         z_voxel_size=.1,
         snr=100,
-        max_jitter=0,
         cpu_workers=-1,
 
     )
@@ -1033,7 +1021,6 @@ def plot_psnr(psf_cmap='hot', gamma=.75):
             z_voxel_size=.1,
             batch_size=10,
             snr=snr,
-            max_jitter=0,
             cpu_workers=-1,
         )
         psfs, ys, psnrs, maxcounts = next(SyntheticPSF(**psfargs).generator(debug=True))
@@ -2295,7 +2282,6 @@ def plot_inputs(
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
             snr=psnr,
-            max_jitter=0,
             cpu_workers=-1,
         )
 

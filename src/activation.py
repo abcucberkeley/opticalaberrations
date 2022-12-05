@@ -71,7 +71,6 @@ class MaskedActivation(layers.Layer):
             y_voxel_size=self.y_voxel_size,
             z_voxel_size=self.z_voxel_size,
             snr=1000,
-            max_jitter=0,
         )
 
         mask = psfgen.na_mask()

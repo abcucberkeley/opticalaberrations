@@ -60,14 +60,12 @@ class FourierAttention(layers.Layer):
             y_voxel_size=self.y_voxel_size,
             z_voxel_size=self.z_voxel_size,
             snr=1000,
-            max_jitter=0,
         )
 
         otf = psfgen.single_otf(
             phi=Wavefront(np.zeros(55), lam_detection=self.lambda_det),
             normed=True,
             noise=False,
-            augmentation=False,
             na_mask=False,
             padsize=None
         )

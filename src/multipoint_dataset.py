@@ -1,3 +1,4 @@
+
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
@@ -6,6 +7,7 @@ matplotlib.use('Agg')
 
 import logging
 import sys
+import os
 import time
 import ujson
 from functools import partial
@@ -59,8 +61,6 @@ def sim(
     savepath: Path,
     gen: SyntheticPSF,
     npoints: int,
-    kernel: np.array,
-    amps: np.array,
     snr: tuple,
     emb: bool = True,
     noise: bool = True,
@@ -70,7 +70,17 @@ def sim(
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
 ):
+    np.random.seed(os.getpid())
     reference = np.zeros(gen.psf_shape)
+
+    # aberrated PSF without noise
+    kernel, amps, phi, maxcounts = gen.single_psf(
+        phi=gen.amplitude_ranges,
+        normed=True,
+        noise=False,
+        meta=True,
+    )
+
     for i in range(npoints):
         sphere_radius = np.random.choice([0, 1, 2], p=[.95, .04, .01])
 
@@ -81,11 +91,14 @@ def sim(
                 position=np.random.uniform(low=.2, high=.8, size=3)
             ).astype(np.float) * np.random.random()
         else:
-            reference[
-                np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
-                np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
-                np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
-            ] += np.random.random()
+            if radius > 0:
+                reference[
+                    np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+                ] += np.random.random()
+            else:
+                reference[gen.psf_shape[0] // 2, gen.psf_shape[1] // 2, gen.psf_shape[2] // 2] += np.random.random()
 
     reference /= np.max(reference)
     img = fftconvolution(reference, kernel)
@@ -169,7 +182,6 @@ def create_synthetic_sample(
         cpu_workers=cpu_workers,
         n_modes=modes,
         snr=1000,
-        max_jitter=0,
         psf_type=psf_type,
         distribution=distribution,
         mode_weights=mode_dist,
@@ -184,15 +196,6 @@ def create_synthetic_sample(
         z_voxel_size=z_voxel_size,
         refractive_index=refractive_index,
         na_detection=na_detection,
-    )
-
-    # theoretical kernel without noise
-    kernel, amps, phi, maxcounts = gen.single_psf(
-        phi=(min_amplitude, max_amplitude),
-        normed=True,
-        noise=False,
-        augmentation=False,
-        meta=True,
     )
 
     outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
@@ -216,8 +219,6 @@ def create_synthetic_sample(
         savepath=savepath,
         gen=gen,
         npoints=npoints,
-        kernel=kernel,
-        amps=amps,
         snr=(min_psnr, max_psnr),
         emb=emb,
         random_crop=random_crop,

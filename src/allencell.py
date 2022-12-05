@@ -148,7 +148,6 @@ def convolve(kernel, sample, sample_voxel_size, psf_shape, save_path, sample_nam
         y_voxel_size=.15,
         z_voxel_size=.6,
         snr=1000,
-        max_jitter=0,
         na_detection=1.0,
     )
 

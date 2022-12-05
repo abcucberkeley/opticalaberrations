@@ -147,7 +147,6 @@ def create_synthetic_sample(
         order='ansi',
         cpu_workers=cpu_workers,
         n_modes=modes,
-        max_jitter=0,
         snr=1000,
         psf_type=psf_type,
         distribution=distribution,
@@ -186,7 +185,6 @@ def create_synthetic_sample(
                 phi=phi,
                 normed=True,
                 noise=False,
-                augmentation=True,
                 meta=True
             )
             savepath = savepath / sample.stem
@@ -210,7 +208,6 @@ def create_synthetic_sample(
             phi=(min_amplitude, max_amplitude),
             normed=True,
             noise=False,
-            augmentation=True,
             meta=True
         )
 

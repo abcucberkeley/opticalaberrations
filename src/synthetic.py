@@ -55,7 +55,6 @@ class SyntheticPSF:
         snr=(10, 50),
         mean_background_noise=100,
         sigma_background_noise=4,
-        max_jitter=0,
         cpu_workers=-1
     ):
         """
@@ -76,7 +75,6 @@ class SyntheticPSF:
             lam_detection: wavelength in microns
             refractive_index: refractive index
             snr: scalar or range for a uniform signal-to-noise ratio dist
-            max_jitter: randomly move the center point within a given limit (microns)
             cpu_workers: number of CPU threads to use for generating PSFs
         """
 
@@ -89,7 +87,6 @@ class SyntheticPSF:
         self.batch_size = batch_size
         self.mean_background_noise = mean_background_noise
         self.sigma_background_noise = sigma_background_noise
-        self.max_jitter = max_jitter        # in microns
         self.x_voxel_size = x_voxel_size    # desired voxel size
         self.y_voxel_size = y_voxel_size
         self.z_voxel_size = z_voxel_size
@@ -103,20 +100,19 @@ class SyntheticPSF:
         self.rotate = rotate
 
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
-        self.theoretical_psf_shape = (2 * psf_shape[0], 2 * psf_shape[1], 2 * psf_shape[2]) # 2x larger fov psf shape
         self.amplitude_ranges = amplitude_ranges
 
         self.psfgen = PsfGenerator3D(
-            psf_shape=self.theoretical_psf_shape,
+            psf_shape=self.psf_shape,
             units=self.voxel_size,
             lam_detection=self.lam_detection,
             n=self.refractive_index,
             na_detection=self.na_detection,
             psf_type=psf_type
-        )                                                               # generates 2x larger fov psf
+        )
 
-        self.ipsf = self.theoretical_psf(normed=True, noise=False)      # ipsf = ideal psf (theoretical, no noise)
-        self.iotf = self.fft(self.ipsf, padsize=None)                   # iotf = ideal otf
+        self.ipsf = self.theoretical_psf(normed=True)      # ipsf = ideal psf (theoretical, no noise)
+        self.iotf = self.fft(self.ipsf, padsize=None)      # iotf = ideal otf
 
     def _normal_noise(self, mean, sigma, size):
         return np.random.normal(loc=mean, scale=sigma, size=size).astype(np.float32)
@@ -136,7 +132,9 @@ class SyntheticPSF:
 
         """
         var = (var, var) if np.isscalar(var) else var
-        return np.random.uniform(*var)                  # star unpacks a list, so that var's values become the separate arguments here.
+
+        # star unpacks a list, so that var's values become the separate arguments here
+        return np.random.uniform(*var)
 
     def _random_noise(self, image, mean, sigma):
         normal_noise_img = self._normal_noise(mean=mean, sigma=sigma, size=image.shape)
@@ -144,7 +142,7 @@ class SyntheticPSF:
         noise = normal_noise_img + poisson_noise_img
         return noise
 
-    def _crop(self, psf: np.array, jitter: bool = False):
+    def _crop(self, psf: np.array, jitter: float = 0.):
         # the coordinate of the 2x larger fov psf center
         centroid = np.array([i // 2 for i in psf.shape]) - 1
 
@@ -156,9 +154,9 @@ class SyntheticPSF:
         x = np.arange(0, psf.shape[2], dtype=int)
 
         # Add a random offset to the center
-        if jitter and self.max_jitter != 0:
+        if jitter:
             centroid += np.array([
-                np.random.randint(-self.max_jitter / s, self.max_jitter / s)  # max.jitter is in microns
+                np.random.randint(-jitter/s, jitter/s)  # max.jitter is in microns
                 for s in self.voxel_size
             ])
 
@@ -166,19 +164,17 @@ class SyntheticPSF:
         cz = np.arange(centroid[0]-wz, centroid[0]+wz, dtype=int)
         cy = np.arange(centroid[1]-wy, centroid[1]+wy, dtype=int)
         cx = np.arange(centroid[2]-wx, centroid[2]+wx, dtype=int)
-        cz, cy, cx = np.meshgrid(cz, cy, cx)
+        cz, cy, cx = np.meshgrid(cz, cy, cx, indexing='ij')
 
         interp = RegularGridInterpolator((z, y, x), psf)
         cropped_psf = interp((cz, cy, cx))
         return cropped_psf
 
-    def theoretical_psf(self, normed: bool = True, snr: int = 1000, noise: bool = False):
+    def theoretical_psf(self, normed: bool = True):
         """Generates an unabberated PSF of the "desired" PSF shape and voxel size, centered.
 
         Args:
             normed (bool, optional): normalized will set maximum to 1. Defaults to True.
-            snr (int, optional):  Defaults to 1000.
-            noise (bool, optional): Defaults to False.
 
         Returns:
             _type_: 3D PSF
@@ -193,18 +189,7 @@ class SyntheticPSF:
             lam_detection=self.lam_detection
         )
 
-        if noise:
-            psf = self.psfgen.incoherent_psf(phi) * snr * self.mean_background_noise    # 2x larger fov psf
-            rand_noise = self._random_noise(
-                image=psf,
-                mean=self.mean_background_noise,
-                sigma=self.sigma_background_noise,
-            )
-            psf = rand_noise + psf if noise else psf
-        else:
-            psf = self.psfgen.incoherent_psf(phi)       # 2x larger fov psf
-
-        psf = self._crop(psf, jitter=False)
+        psf = self.psfgen.incoherent_psf(phi)
         psf /= np.max(psf) if normed else psf
         return psf
 
@@ -248,12 +233,7 @@ class SyntheticPSF:
         step = .1
         vmin = -1 if np.any(emb[0] < 0) else 0
         vmax = 1 if vmin < 0 else 3
-
-        p_vmin = -1 if np.any(emb[3] < 0) else 0
-        p_vmax = 1 if p_vmin < 0 else 3
-
         vcenter = 1 if vmin == 0 else 0
-        p_vcenter = 1 if p_vmin == 0 else 0
 
         cmap = np.vstack((
             plt.get_cmap('terrain' if vmin == 0 else 'GnBu_r', 256)(
@@ -265,17 +245,6 @@ class SyntheticPSF:
             )
         ))
         cmap = mcolors.ListedColormap(cmap)
-
-        p_cmap = np.vstack((
-            plt.get_cmap('terrain' if p_vmin == 0 else 'GnBu_r', 256)(
-                np.linspace(0, 1 - step, int(abs(p_vcenter - p_vmin) / step))
-            ),
-            [1, 1, 1, 1],
-            plt.get_cmap('YlOrRd' if p_vmax == 3 else 'OrRd', 256)(
-                np.linspace(0, 1 + step, int(abs(p_vcenter - p_vmax) / step))
-            )
-        ))
-        p_cmap = mcolors.ListedColormap(p_cmap)
 
         if no_phase:
             fig, axes = plt.subplots(2, 3, figsize=(8, 8))
@@ -299,6 +268,21 @@ class SyntheticPSF:
         cax.set_ylabel(r'Embedding ($\alpha$)')
 
         if not no_phase:
+            p_vmin = -1 if np.any(emb[3] < 0) else 0
+            p_vmax = 1 if p_vmin < 0 else 3
+            p_vcenter = 1 if p_vmin == 0 else 0
+
+            p_cmap = np.vstack((
+                plt.get_cmap('terrain' if p_vmin == 0 else 'GnBu_r', 256)(
+                    np.linspace(0, 1 - step, int(abs(p_vcenter - p_vmin) / step))
+                ),
+                [1, 1, 1, 1],
+                plt.get_cmap('YlOrRd' if p_vmax == 3 else 'OrRd', 256)(
+                    np.linspace(0, 1 + step, int(abs(p_vcenter - p_vmax) / step))
+                )
+            ))
+            p_cmap = mcolors.ListedColormap(p_cmap)
+
             m = axes[-1, 0].imshow(emb[3], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
             axes[-1, 1].imshow(emb[4], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
             axes[-1, 2].imshow(emb[5].T, cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
@@ -551,7 +535,6 @@ class SyntheticPSF:
         phi: Any = None,
         normed: bool = True,
         noise: bool = False,
-        augmentation: bool = False,
         meta: bool = False,
         no_phase: bool = False,
     ):
@@ -560,7 +543,6 @@ class SyntheticPSF:
             phi: wavefront object
             normed: a toggle to normalize PSF
             noise: a toggle to add noise
-            augmentation: a toggle for data augmentation
             meta: return extra variables for debugging
         """
         snr = self._randuniform(self.snr)
@@ -588,11 +570,6 @@ class SyntheticPSF:
         psnr = np.sqrt(np.max(noisy_psf))
         maxcount = np.max(noisy_psf)
 
-        if augmentation:
-            noisy_psf = self._crop(noisy_psf, jitter=True)
-        else:
-            noisy_psf = self._crop(noisy_psf)
-
         noisy_psf /= np.max(noisy_psf) if normed else noisy_psf
 
         if meta:
@@ -608,7 +585,6 @@ class SyntheticPSF:
         phi: Any = None,
         normed: bool = True,
         noise: bool = False,
-        augmentation: bool = False,
         meta: bool = False,
         na_mask: bool = False,
         ratio: bool = False,
@@ -622,7 +598,6 @@ class SyntheticPSF:
             phi=phi,
             normed=normed,
             noise=noise,
-            augmentation=augmentation,
             meta=meta,
             no_phase=no_phase
         )
@@ -674,7 +649,6 @@ class SyntheticPSF:
                 self.single_otf,
                 normed=True,
                 noise=True,
-                augmentation=True,
                 meta=True,
                 na_mask=True,
                 ratio=True,
@@ -686,7 +660,6 @@ class SyntheticPSF:
                 meta=True,
                 normed=True,
                 noise=True,
-                augmentation=True
             )
 
         while True:

@@ -268,7 +268,6 @@ def similarity(
         y_voxel_size=.15,
         z_voxel_size=.6,
         snr=100,
-        max_jitter=0,
     )
 
     gen = SyntheticPSF(
@@ -279,7 +278,6 @@ def similarity(
         y_voxel_size=reference_voxel_size[1],
         x_voxel_size=reference_voxel_size[2],
         snr=100,
-        max_jitter=0,
     )
 
     ys = np.zeros(55)
@@ -288,7 +286,6 @@ def similarity(
         phi=Wavefront(ys, lam_detection=.605),
         normed=True,
         noise=False,
-        augmentation=False,
         meta=False
     )
     imsave(savepath / f'kernel.tif', kernel)
