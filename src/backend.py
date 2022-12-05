@@ -78,7 +78,6 @@ def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64), n_modes=Non
         model_path = list(model_path.rglob('*.h5'))[0]
 
     with h5py.File(model_path, 'r') as file:
-        print(int(file.get('n_modes')[()]))
         psfgen = SyntheticPSF(
             psf_type=np.array(file.get('psf_type')[:]),
             psf_shape=psf_shape,
@@ -935,7 +934,6 @@ def eval_sign(
         n_samples=1,
         no_phase=True,
         threshold=threshold,
-        plot=plot
     )
     if len(init_preds.shape) > 1:
         init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
@@ -969,39 +967,13 @@ def eval_sign(
     else:
         followup_preds = np.abs(followup_preds)[:ys.shape[-1]]
 
-    preds = init_preds.copy()
-
-    if ys.shape[0] == 1:
-        flips = np.where(followup_preds > (sign_threshold * init_preds))[0]
-        preds[flips] *= -1
-    else:
-        for i in range(ys.shape[0]):
-            flips = np.where(followup_preds[i] > (sign_threshold * init_preds[i]))[0]
-            preds[i, flips] *= -1
-
-            if plot == True:
-                init_preds_wave = Wavefront(init_preds[i], lam_detection=gen.lam_detection).amplitudes
-                followup_preds_wave = Wavefront(followup_preds[i], lam_detection=gen.lam_detection).amplitudes
-                preds_wave = Wavefront(preds[i], lam_detection=gen.lam_detection).amplitudes
-                ys_wave = Wavefront(ys[i], lam_detection=gen.lam_detection).amplitudes
-
-                fig, axes = plt.subplots(2, 1, figsize=(24, 8))
-                axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
-                axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
-                axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
-                axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
-                axes[0].legend(frameon=False, loc='upper left')
-                axes[0].set_xlim((0, 55))
-                axes[0].set_xticks(range(0, 61))
-
-                axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
-                axes[1].plot(ys_wave, '-o', color='C1', label='Ground truth')
-                axes[1].legend(frameon=False, loc='upper left')
-                axes[1].set_xlim((0, 55))
-                axes[1].set_xticks(range(0, 61))
-
-                plt.tight_layout()
-                plt.show()
+    preds, pchanges = predict_sign(
+        gen=gen,
+        init_preds=init_preds,
+        followup_preds=followup_preds,
+        sign_threshold=sign_threshold,
+        plot=plot
+    )
 
     return preds
 
@@ -1060,7 +1032,6 @@ def predict(model: Path, input_coverage: float = 1.0, psnr: int = 30):
             gen = load_metadata(
                 model,
                 snr=1000,
-                # n_modes=55,
                 bimodal=True,
                 rotate=True,
                 batch_size=1,
@@ -1090,7 +1061,7 @@ def predict(model: Path, input_coverage: float = 1.0, psnr: int = 30):
                         gen=gen,
                         ys=y,
                         batch_size=1,
-                        # plot=save_path / f'embeddings_{s}',
+                        plot=save_path / f'embeddings_{s}',
                     )
 
                     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
