@@ -19,7 +19,6 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from line_profiler_pycharm import profile
 
-import ao
 import utils
 import vis
 import backend
@@ -27,6 +26,7 @@ import preprocessing
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from data_utils import get_image
+from preloaded import Preloadedmodelclass
 
 import logging
 logger = logging.getLogger('')
@@ -238,7 +238,7 @@ def predict(
     ztiles: int = 1,
     nrows: int = 1,
     ncols: int = 1,
-    preloaded : ao.Preloadedmodelclass = None,
+    preloaded : Preloadedmodelclass = None,
 ):
     def summarize_predictions(data):
         columns = []
@@ -326,7 +326,7 @@ def preloadmodel(modelpath: Path):
     preloadedmodel = backend.load(Path(modelpath), mosaic=True)    
     return preloadedmodel, preloadedmodelpsfgen
 
-def reloadmodel_if_needed(preloaded: ao.Preloadedmodelclass, modelpath):
+def reloadmodel_if_needed(preloaded: Preloadedmodelclass, modelpath):
     if preloaded is None:
         logger.info("Loading new model")
         model, modelpsfgen = preloadmodel(modelpath) 
@@ -359,7 +359,7 @@ def predict_sample(
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
-    preloaded: ao.Preloadedmodelclass = None
+    preloaded: Preloadedmodelclass = None
 ):
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
@@ -511,7 +511,7 @@ def predict_rois(
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
-    preloaded: ao.Preloadedmodelclass = None  
+    preloaded: Preloadedmodelclass = None  
 ):
     sample = imread(img).astype(float)
     esnr = np.sqrt(sample.max()).astype(int)
@@ -581,7 +581,7 @@ def predict_tiles(
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),    
-    preloaded: ao.Preloadedmodelclass = None
+    preloaded: Preloadedmodelclass = None
 ):
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(preloaded, model)
@@ -653,7 +653,7 @@ def aggregate_predictions(
     dm_damping_scalar: float = 1,
     plot: bool = False,
     ignore_tile: Any = None,
-    preloaded: ao.Preloadedmodelclass = None
+    preloaded: Preloadedmodelclass = None
 ):
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1

@@ -6,15 +6,7 @@ import time
 from pathlib import Path
 import cli
 import experimental
-
-
-class Preloadedmodelclass:
-    """ A class that LabVIEW can use to keep the model in memory to prevent reloading it each time.
-    """
-    def __init__(self, modelpath=Path):
-        self.modelpath = modelpath
-        print(f"Loading model from : {modelpath}")
-        self.model, self.modelpsfgen = experimental.preloadmodel(Path(modelpath))
+from preloaded import Preloadedmodelclass
 
 def parse_args(args):
     parser = cli.argparser()
