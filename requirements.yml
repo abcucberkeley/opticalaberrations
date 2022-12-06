@@ -24,3 +24,4 @@ dependencies:
   - pip:
       - raster_geometry
       - astropy
+      - line-profiler-pycharm

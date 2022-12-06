@@ -19,6 +19,7 @@ from skimage.restoration import unwrap_phase
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from numpy.lib.stride_tricks import sliding_window_view
 from scipy.interpolate import RegularGridInterpolator
+from line_profiler_pycharm import profile
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -142,6 +143,7 @@ class SyntheticPSF:
         noise = normal_noise_img + poisson_noise_img
         return noise
 
+    @profile
     def _crop(self, psf: np.array, jitter: float = 0.):
         # the coordinate of the 2x larger fov psf center
         centroid = np.array([i // 2 for i in psf.shape]) - 1
@@ -170,6 +172,7 @@ class SyntheticPSF:
         cropped_psf = interp((cz, cy, cx))
         return cropped_psf
 
+    @profile
     def theoretical_psf(self, normed: bool = True):
         """Generates an unabberated PSF of the "desired" PSF shape and voxel size, centered.
 
@@ -193,6 +196,7 @@ class SyntheticPSF:
         psf /= np.max(psf) if normed else psf
         return psf
 
+    @profile
     def fft(self, inputs, padsize=None,):
         if padsize is not None:
             shape = inputs.shape[1]
@@ -205,6 +209,7 @@ class SyntheticPSF:
         otf = np.fft.fftshift(otf)
         return otf
 
+    @profile
     def na_mask(self):
         mask = np.abs(self.iotf)
         threshold = np.nanpercentile(mask.flatten(), 65)
@@ -212,6 +217,7 @@ class SyntheticPSF:
         mask = np.where(mask >= threshold, mask, 0.)
         return mask
 
+    @profile
     def plot_embeddings(
         self,
         psf: np.array,
@@ -299,7 +305,7 @@ class SyntheticPSF:
         else:
             plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-
+    @profile
     def _normalize(self, emb, otf, freq_strength_threshold: float = 0.):
         emb /= np.nanpercentile(np.abs(otf), 99.99)
         emb[emb > 1] = 1
@@ -311,6 +317,7 @@ class SyntheticPSF:
             emb[(emb < 0) * (emb > -1 * freq_strength_threshold)] = 0.
         return emb
 
+    @profile
     def compute_emb(
         self,
         otf: np.ndarray,
@@ -371,6 +378,7 @@ class SyntheticPSF:
 
         return emb
 
+    @profile
     def embedding(
         self,
         psf: np.array,
@@ -455,6 +463,7 @@ class SyntheticPSF:
         else:
             return emb
 
+    @profile
     def rolling_embedding(
         self,
         psf: np.array,
@@ -536,6 +545,7 @@ class SyntheticPSF:
 
         return emb
 
+    @profile
     def single_psf(
         self,
         phi: Any = None,
@@ -586,6 +596,7 @@ class SyntheticPSF:
         else:
             return noisy_psf
 
+    @profile
     def single_otf(
         self,
         phi: Any = None,

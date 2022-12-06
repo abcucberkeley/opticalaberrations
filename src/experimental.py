@@ -1,8 +1,7 @@
-import re
-
 import matplotlib
 matplotlib.use('Agg')
 
+import re
 import time
 from functools import partial
 from pathlib import Path
@@ -18,6 +17,7 @@ from tifffile import imread, imsave
 import seaborn as sns
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from line_profiler_pycharm import profile
 
 import utils
 import vis
@@ -31,6 +31,7 @@ import logging
 logger = logging.getLogger('')
 
 
+@profile
 def zernikies_to_actuators(
         coefficients: np.array,
         dm_calibration: Path,
@@ -49,6 +50,7 @@ def zernikies_to_actuators(
     return dm_state - (offset * scalar)
 
 
+@profile
 def load_dm(dm_state: Any) -> np.ndarray:
     if isinstance(dm_state, np.ndarray):
         assert len(dm_state) == 69
@@ -59,6 +61,7 @@ def load_dm(dm_state: Any) -> np.ndarray:
     return dm_state
 
 
+@profile
 def estimate_and_save_new_dm(
     savepath: Path,
     coefficients: np.array,
@@ -77,11 +80,13 @@ def estimate_and_save_new_dm(
     return dm
 
 
+@profile
 def percentile_filter(data: np.ndarray, min_pct: int = 5, max_pct: int = 95) -> np.ndarray:
     minval, maxval = np.percentile(data, [min_pct, max_pct])
     return (data < minval) | (data > maxval)
 
 
+@profile
 def deskew(
     img: Path,
     axial_voxel_size: float,
@@ -114,6 +119,7 @@ def deskew(
     call(job, shell=True)
 
 
+@profile
 def detect_rois(
     img: Path,
     axial_voxel_size: float,
@@ -141,6 +147,7 @@ def detect_rois(
     call(job, shell=True)
 
 
+@profile
 def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
     matlab = 'matlab '
     matlab += f' -wait'
@@ -171,7 +178,7 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
             save_path=f"{save_path.with_suffix('')}_correction"
         )
 
-
+@profile
 def load_sample(
     data: Path,
     model_voxel_size: tuple,
@@ -209,6 +216,7 @@ def load_sample(
         logger.warning(e)
 
 
+@profile
 def predict(
     rois: list,
     data: Path,
@@ -312,7 +320,7 @@ def predict(
             save_path=Path(f"{data.with_suffix('')}_predictions_wavefronts"),
         )
 
-
+@profile
 def predict_sample(
     img: Path,
     model: Path,
@@ -415,6 +423,7 @@ def predict_sample(
         )
 
 
+@profile
 def predict_dataset(
         dataset: Path,
         model: Path,
@@ -467,6 +476,7 @@ def predict_dataset(
                 time.sleep(10)
 
 
+@profile
 def predict_rois(
     img: Path,
     model: Path,
@@ -538,6 +548,7 @@ def predict_rois(
     )
 
 
+@profile
 def predict_tiles(
     img: Path,
     model: Path,
@@ -605,6 +616,7 @@ def predict_tiles(
         )
 
 
+@profile
 def aggregate_predictions(
     model: Path,
     model_pred: Path,
