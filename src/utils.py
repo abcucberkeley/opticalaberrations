@@ -6,6 +6,7 @@ import multiprocessing as mp
 import sys
 from functools import partial
 from typing import Union, Any, List, Generator
+from line_profiler_pycharm import profile
 
 import io
 import numpy as np
@@ -30,6 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@profile
 def multiprocess(func: Any, jobs: Union[Generator, List, np.ndarray], desc: str = 'Processing', cores: int = -1):
     """ Multiprocess a generic function
     Args:
@@ -78,6 +80,7 @@ def mape(y: np.array, p: np.array, axis=0) -> np.array:
     return 100 * np.mean(error[np.isfinite(error)], axis=axis)
 
 
+@profile
 def peak_aberration(w, na: float = 1.0) -> float:
     w = Wavefront(w).wave(100)
     radius = (na * w.shape[0]) / 2
@@ -186,6 +189,7 @@ def plot_to_image(figure):
     return image
 
 
+@profile
 def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
     peaks = peak_local_max(
         sample,
@@ -228,6 +232,7 @@ def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
     return np.round(np.mean(dists), 1)
 
 
+@profile
 def fftconvolution(sample, kernel, plot=False):
     if len(kernel.shape) > 4:
         conv = []

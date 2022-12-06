@@ -31,7 +31,7 @@ psf = repo/'examples/psf.tif'
 prev = None
 current_dm = None
 wavelength = .510
-dm_damping_scalar = .75
+dm_damping_scalar = .9
 lateral_voxel_size = .108
 axial_voxel_size = .1
 model_lateral_voxel_size = .108
@@ -43,8 +43,8 @@ num_predictions = 10
 window_size = 64
 batch_size = 256
 plot = True
-estimate_sign_with_decon = True
-ignore_modes = [44, 45, 54, 55]
+estimate_sign_with_decon = False
+ignore_modes = [44, 45, 54]
 
 # extra `aggregate_predictions` flags
 majority_threshold = .5

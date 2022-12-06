@@ -23,6 +23,7 @@ import matplotlib.patches as patches
 from astropy import convolution
 import tensorflow as tf
 from tensorflow_addons.image import gaussian_filter2d
+from line_profiler_pycharm import profile
 
 from wavefront import Wavefront
 from zernike import Zernike
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
+@profile
 def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     plt.rcParams.update({
         'font.size': 10,
@@ -2388,6 +2390,7 @@ def plot_inputs(
         plt.savefig(f'../data/inputs/{i}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
+@profile
 def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None):
 
     plt.rcParams.update({
@@ -2444,6 +2447,7 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None):
     plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.1)
 
 
+@profile
 def prediction(
     original_image,
     corrected_image,
@@ -2504,11 +2508,13 @@ def prediction(
     plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
+@profile
 def tiles(
     data: np.ndarray,
     save_path: Path,
     strides: int = 64,
     window_size: int = 64,
+    gamma: float = .5,
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -2555,6 +2561,7 @@ def tiles(
         plt.savefig(f'{save_path}_z{z}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
+@profile
 def wavefronts(
     predictions: pd.DataFrame,
     ztiles: int,

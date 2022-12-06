@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from line_profiler_pycharm import profile
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -30,6 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@profile
 def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
     rank = len(crop_shape)
     psf_shape = psf.shape[1:-1] if len(psf.shape) == 5 else psf.shape
@@ -56,6 +58,7 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
         return np.pad(psf[tuple(slicer)], pad, **kwargs)
 
 
+@profile
 def resize(
     vol,
     voxel_size: Sequence,
@@ -144,7 +147,7 @@ def resize(
 
     return resized_vol
 
-
+@profile
 def prep_sample(
     sample: np.array,
     sample_voxel_size: tuple,
@@ -197,6 +200,7 @@ def prep_sample(
         return sample
 
 
+@profile
 def find_roi(
     path: Union[Path, np.array],
     window_size: tuple = (64, 64, 64),
@@ -397,6 +401,7 @@ def find_roi(
     return rois
 
 
+@profile
 def get_tiles(
     path: Union[Path, np.array],
     window_size: tuple = (64, 64, 64),

@@ -13,6 +13,7 @@ from pathlib import Path
 from pprint import pprint
 from typing import Any, Union
 from functools import partial
+from line_profiler_pycharm import profile
 
 import pandas as pd
 from scipy import stats as st
@@ -72,6 +73,7 @@ logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 
 
+@profile
 def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64), n_modes=None, **kwargs):
     # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
     if not model_path.suffix == '.h5':       
@@ -91,6 +93,7 @@ def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64), n_modes=Non
     return psfgen
 
 
+@profile
 def load(model_path: Path, mosaic=False):
     model_path = Path(model_path)
 
@@ -155,6 +158,886 @@ def load(model_path: Path, mosaic=False):
         except Exception as e:
             logger.exception(e)
             exit()
+
+
+@profile
+def bootstrap_predict(
+    model: tf.keras.Model,
+    inputs: np.array,
+    psfgen: SyntheticPSF,
+    batch_size: int = 1,
+    n_samples: int = 10,
+    threshold: float = 0.1,
+    freq_strength_threshold: float = .01,
+    ignore_modes: list = (0, 1, 2, 4),
+    verbose: bool = True,
+    plot: Any = None,
+    no_phase: bool = False,
+    desc: str = 'MiniBatch-probabilistic-predictions',
+):
+    """
+    Average predictions and compute stdev
+
+    Args:
+        model: pre-trained keras model
+        inputs: encoded tokens to be processed
+        psfgen: Synthetic PSF object
+        n_samples: number of predictions of average
+        ignore_modes: list of modes to ignore
+        batch_size: number of samples per batch
+        threshold: set predictions below threshold to zero (wavelength)
+        desc: test to display for the progressbar
+        verbose: a toggle for progress bar
+
+    Returns:
+        average prediction, stdev
+    """
+    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
+    ignore_modes = list(map(int, ignore_modes))
+    logger.info(f"Ignoring modes: {ignore_modes}")
+
+    # check z-axis to compute embeddings for fourier models
+    if len(inputs.shape) == 3:
+        emb = model.input_shape[1] == inputs.shape[0]
+    else:
+        emb = model.input_shape[1] == inputs.shape[1]
+
+    if not emb:
+        logger.info(f"Generating embeddings")
+
+        model_inputs = []
+        for i in inputs:
+            emb = psfgen.embedding(
+                psf=np.squeeze(i),
+                plot=plot,
+                no_phase=no_phase,
+                principle_planes=True,
+                freq_strength_threshold=freq_strength_threshold
+            )
+
+            if no_phase and model.input_shape[1] == 6:
+                phase_mask = np.zeros((3, model.input_shape[2], model.input_shape[3]))
+                emb = np.concatenate([emb, phase_mask], axis=0)
+            elif model.input_shape[1] == 3:
+                emb = emb[:3]
+
+            model_inputs.append(emb)
+
+        model_inputs = np.stack(model_inputs, axis=0)
+    else:
+        # pass raw PSFs to the model
+        model_inputs = inputs
+
+    model_inputs = np.nan_to_num(model_inputs, nan=0, posinf=0, neginf=0)
+    model_inputs = model_inputs[..., np.newaxis] if model_inputs.shape[-1] != 1 else model_inputs
+    features = np.array([np.count_nonzero(s) for s in inputs])
+
+    logger.info(f"[BS={batch_size}, n={n_samples}] {desc}")
+    gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples)
+    preds = model.predict(gen, batch_size=batch_size, verbose=verbose)
+    preds[:, ignore_modes] = 0.
+    preds[np.abs(preds) <= threshold] = 0.
+    preds = np.stack(np.split(preds, n_samples), axis=-1)
+
+    mu = np.mean(preds, axis=-1)
+    mu = mu.flatten() if mu.shape[0] == 1 else mu
+
+    sigma = np.std(preds, axis=-1)
+    sigma = sigma.flatten() if sigma.shape[0] == 1 else sigma
+
+    mu[np.where(features == 0)[0]] = np.zeros_like(mu[0])
+    sigma[np.where(features == 0)[0]] = np.zeros_like(sigma[0])
+
+    return mu, sigma
+
+
+@profile
+def predict_sign(
+    gen: SyntheticPSF,
+    init_preds: np.ndarray,
+    followup_preds: np.ndarray,
+    sign_threshold: float = .9,
+    plot: Any = None,
+    bar_width: float = .35
+):
+    def pct_change(cur, prev):
+        t = utils.waves2microns(.05, wavelength=gen.lam_detection)
+        cur[cur < t] = 0
+        prev[prev < t] = 0
+
+        if np.array_equal(cur, prev):
+            return np.zeros_like(prev)
+
+        pct = ((cur - prev) / (prev+1e-6)) * 100.0
+        pct[pct > 100] = 100
+        pct[pct < -100] = -100
+        return pct
+
+    init_preds = np.abs(init_preds)
+    followup_preds = np.abs(followup_preds)
+
+    preds = init_preds.copy()
+    pchange = pct_change(followup_preds, init_preds)
+
+    # flip signs and make any necessary adjustments to the amplitudes based on the followup predictions
+    # adj = pchange.copy()
+    # adj[np.where(pchange > 0)] = -200
+    # adj[np.where(pchange < 0)] += 100
+    # preds += preds * (adj/100)
+
+    # threshold-based sign prediction
+    threshold = sign_threshold * init_preds
+    flips = np.stack(np.where(followup_preds > threshold), axis=0)
+
+    if len(np.squeeze(preds).shape) == 1:
+        preds[flips[0]] *= -1
+    else:
+        preds[flips[0], flips[1]] *= -1
+
+    if plot is not None:
+        if len(np.squeeze(preds).shape) == 1:
+            init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes
+            init_preds_wave_error = Wavefront(np.zeros_like(init_preds), lam_detection=gen.lam_detection).amplitudes
+
+            followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes
+            followup_preds_wave_error = Wavefront(np.zeros_like(followup_preds),
+                                                  lam_detection=gen.lam_detection).amplitudes
+
+            preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes
+            preds_error = Wavefront(np.zeros_like(preds), lam_detection=gen.lam_detection).amplitudes
+
+            percent_changes = pchange
+            percent_changes_error = np.zeros_like(pchange)
+        else:
+            init_preds_wave = Wavefront(np.mean(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+            init_preds_wave_error = Wavefront(np.std(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+
+            followup_preds_wave = Wavefront(np.mean(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+            followup_preds_wave_error = Wavefront(np.std(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+
+            preds_wave = Wavefront(np.mean(preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+            preds_error = Wavefront(np.std(preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+
+            percent_changes = np.mean(pchange, axis=0)
+            percent_changes_error = np.std(pchange, axis=0)
+
+        fig, axes = plt.subplots(3, 1, figsize=(16, 8))
+
+        axes[0].bar(
+            np.arange(len(preds_wave)) - bar_width / 2,
+            init_preds_wave,
+            yerr=init_preds_wave_error,
+            capsize=5,
+            alpha=.75,
+            color='C0',
+            align='center',
+            ecolor='grey',
+            label='Initial',
+            width=bar_width
+        )
+        axes[0].bar(
+            np.arange(len(preds_wave)) + bar_width / 2,
+            followup_preds_wave,
+            yerr=followup_preds_wave_error,
+            capsize=5,
+            alpha=.75,
+            color='C1',
+            align='center',
+            ecolor='grey',
+            label='Followup',
+            width=bar_width
+        )
+
+        axes[0].legend(frameon=False, loc='upper left')
+        axes[0].set_xlim((-1, len(preds_wave)))
+        axes[0].set_xticks(range(0, len(preds_wave)))
+        axes[0].spines.right.set_visible(False)
+        axes[0].spines.left.set_visible(False)
+        axes[0].spines.top.set_visible(False)
+        axes[0].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+        axes[0].set_ylabel(r'Zernike coefficients ($\mu$m)')
+
+        axes[1].plot(np.zeros_like(percent_changes), '--', color='lightgrey')
+        axes[1].bar(
+            range(gen.n_modes),
+            percent_changes,
+            yerr=percent_changes_error,
+            capsize=10,
+            color='C2',
+            alpha=.75,
+            align='center',
+            ecolor='grey',
+        )
+        axes[1].set_xlim((-1, len(preds_wave)))
+        axes[1].set_xticks(range(0, len(preds_wave)))
+        axes[1].set_ylim((-100, 100))
+        axes[1].set_yticks(range(-100, 125, 25))
+        axes[1].set_yticklabels(['-100+', '-75', '-50', '-25', '0', '25', '50', '75', '100+'])
+        axes[1].spines.right.set_visible(False)
+        axes[1].spines.left.set_visible(False)
+        axes[1].spines.top.set_visible(False)
+        axes[1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+        axes[1].set_ylabel(f'Percent change')
+
+        axes[2].plot(np.zeros_like(preds_wave), '--', color='lightgrey')
+        axes[2].bar(
+            range(gen.n_modes),
+            preds_wave,
+            yerr=preds_error,
+            capsize=10,
+            alpha=.75,
+            color='dimgrey',
+            align='center',
+            ecolor='grey',
+            label='Predictions',
+        )
+        axes[2].set_xlim((-1, len(preds_wave)))
+        axes[2].set_xticks(range(0, len(preds_wave)))
+        axes[2].spines.right.set_visible(False)
+        axes[2].spines.left.set_visible(False)
+        axes[2].spines.top.set_visible(False)
+        axes[2].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+        axes[2].set_ylabel(r'Zernike coefficients ($\mu$m)')
+
+        plt.tight_layout()
+        plt.savefig(f'{plot}_sign_correction.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    return preds, pchange
+
+@profile
+def dual_stage_prediction(
+    model: tf.keras.Model,
+    inputs: np.array,
+    gen: SyntheticPSF,
+    modelgen: SyntheticPSF,
+    plot: Any = None,
+    verbose: bool = False,
+    threshold: float = 0.,
+    freq_strength_threshold: float = .01,
+    sign_threshold: float = .9,
+    n_samples: int = 1,
+    batch_size: int = 1,
+    ignore_modes: list = (0, 1, 2, 4),
+    prev_pred: Any = None,
+    estimate_sign_with_decon: bool = False,
+    decon_iters: int = 5
+):
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    prev_pred = None if (prev_pred is None or str(prev_pred) == 'None') else prev_pred
+
+    init_preds, stdev = bootstrap_predict(
+        model,
+        inputs,
+        psfgen=modelgen,
+        n_samples=n_samples,
+        no_phase=True,
+        verbose=verbose,
+        batch_size=batch_size,
+        threshold=threshold,
+        ignore_modes=ignore_modes,
+        freq_strength_threshold=freq_strength_threshold,
+    )
+    init_preds = np.abs(init_preds)
+
+    if estimate_sign_with_decon:
+        logger.info(f"Estimating signs w/ Decon")
+        abrs = range(init_preds.shape[0]) if len(init_preds.shape) > 1 else range(1)
+        make_psf = partial(gen.single_psf, normed=True, noise=False)
+        psfs = np.stack(gen.batch(
+            make_psf,
+            [Wavefront(init_preds[i], lam_detection=gen.lam_detection) for i in abrs]
+        ), axis=0)
+
+        with sp.fft.set_workers(-1):
+            followup_inputs = richardson_lucy(np.squeeze(inputs), np.squeeze(psfs), num_iter=decon_iters)
+
+        if len(followup_inputs.shape) == 3:
+            followup_inputs = followup_inputs[np.newaxis, ..., np.newaxis]
+        else:
+            followup_inputs = followup_inputs[..., np.newaxis]
+
+        followup_preds, stdev = bootstrap_predict(
+            model,
+            followup_inputs,
+            psfgen=modelgen,
+            n_samples=n_samples,
+            no_phase=True,
+            verbose=False,
+            batch_size=batch_size,
+            threshold=threshold,
+            ignore_modes=ignore_modes,
+            freq_strength_threshold=freq_strength_threshold,
+        )
+        followup_preds = np.abs(followup_preds)
+
+        preds, pchanges = predict_sign(
+            gen=gen,
+            init_preds=init_preds,
+            followup_preds=followup_preds,
+            sign_threshold=sign_threshold,
+            plot=plot
+        )
+
+    elif prev_pred is not None:
+        logger.info(f"Evaluating signs")
+        followup_preds = init_preds.copy()
+        init_preds = np.abs(pd.read_csv(prev_pred, header=0)['amplitude'].values)
+
+        preds, pchanges = predict_sign(
+            gen=gen,
+            init_preds=init_preds,
+            followup_preds=followup_preds,
+            sign_threshold=sign_threshold,
+            plot=plot
+        )
+
+    else:
+        preds = init_preds
+        pchanges = np.zeros_like(preds)
+
+    return preds, stdev, pchanges
+
+
+@profile
+def eval_sign(
+    model: tf.keras.Model,
+    inputs: np.array,
+    gen: SyntheticPSF,
+    ys: np.array,
+    batch_size: int,
+    reference: Any = None,
+    plot: Any = None,
+    threshold: float = 0.,
+    sign_threshold: float = .9,
+    desc: str = 'Eval',
+):
+    init_preds, stdev = bootstrap_predict(
+        model,
+        inputs,
+        psfgen=gen,
+        batch_size=batch_size,
+        n_samples=1,
+        no_phase=True,
+        threshold=threshold,
+    )
+    if len(init_preds.shape) > 1:
+        init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
+    else:
+        init_preds = np.abs(init_preds)[:ys.shape[-1]]
+
+    res = ys - init_preds
+    g = partial(
+        gen.single_psf,
+        normed=True,
+        noise=False,
+        meta=False
+    )
+    followup_inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
+
+    if reference is not None:
+        followup_inputs = utils.fftconvolution(reference, followup_inputs)
+
+    followup_preds, stdev = bootstrap_predict(
+        model,
+        followup_inputs,
+        psfgen=gen,
+        batch_size=batch_size,
+        n_samples=1,
+        no_phase=True,
+        threshold=threshold,
+        desc=desc,
+    )
+    if len(init_preds.shape) > 1:
+        followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]
+    else:
+        followup_preds = np.abs(followup_preds)[:ys.shape[-1]]
+
+    preds, pchanges = predict_sign(
+        gen=gen,
+        init_preds=init_preds,
+        followup_preds=followup_preds,
+        sign_threshold=sign_threshold,
+        plot=plot
+    )
+
+    return preds
+
+
+@profile
+def beads(
+    gen: SyntheticPSF,
+    kernel: np.ndarray,
+    psnr: Union[tuple, int] = (21, 30),
+    object_size: float = 0,
+    num_objs: int = 1,
+    radius: float = .45,
+):
+    snr = gen._randuniform(psnr)
+    reference = np.zeros(gen.psf_shape)
+    np.random.seed(os.getpid())
+
+    for i in range(num_objs):
+        if object_size > 0:
+            reference += rg.sphere(
+                shape=gen.psf_shape,
+                radius=object_size,
+                position=np.random.uniform(low=.2, high=.8, size=3)
+            ).astype(np.float) * np.random.random()
+        else:
+            if radius > 0:
+                reference[
+                    np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+                ] += np.random.random()
+            else:
+                reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] += np.random.random()
+
+    reference /= np.max(reference)
+    img = utils.fftconvolution(reference, kernel)
+    snr = gen._randuniform(snr)
+    img *= snr ** 2
+
+    rand_noise = gen._random_noise(
+        image=img,
+        mean=gen.mean_background_noise,
+        sigma=gen.sigma_background_noise
+    )
+    noisy_img = rand_noise + img
+    noisy_img /= np.max(noisy_img)
+
+    return noisy_img
+
+
+@profile
+def predict(model: Path, input_coverage: float = 1.0, psnr: int = 30):
+    m = load(model)
+    m.summary()
+
+    for dist in ['powerlaw', 'dirichlet']:
+        for amplitude_range in [(.1, .3), (.3, .5)]:
+            gen = load_metadata(
+                model,
+                snr=1000,
+                bimodal=True,
+                rotate=True,
+                batch_size=1,
+                amplitude_ranges=amplitude_range,
+                distribution=dist,
+                psf_shape=(64, 64, 64)
+            )
+            for s, (psf, y, snr, maxcounts) in zip(range(10), gen.generator(debug=True)):
+                psf = np.squeeze(psf)
+
+                for npoints in tqdm([1, 3, 5, 10, 15]):
+                    noisy_img = beads(gen=gen, kernel=psf, psnr=psnr, object_size=0, num_objs=npoints)
+
+                    save_path = Path(
+                        f"{model.with_suffix('')}/samples/{dist}/c{input_coverage}/um-{amplitude_range[-1]}/npoints-{npoints}"
+                    )
+                    save_path.mkdir(exist_ok=True, parents=True)
+
+                    if input_coverage != 1.:
+                        mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
+                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
+                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
+
+                    p = eval_sign(
+                        model=m,
+                        inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
+                        gen=gen,
+                        ys=y,
+                        batch_size=1,
+                        plot=save_path / f'embeddings_{s}',
+                    )
+
+                    p_wave = Wavefront(p, lam_detection=gen.lam_detection)
+                    # logger.info('Prediction')
+                    # pprint(p_wave.zernikes)
+
+                    y_wave = Wavefront(y.flatten(), lam_detection=gen.lam_detection)
+                    # logger.info('GT')
+                    # pprint(y_wave.zernikes)
+
+                    diff = y_wave - p_wave
+
+                    p_psf = gen.single_psf(p_wave)
+                    gt_psf = gen.single_psf(y_wave)
+                    corrected_psf = gen.single_psf(diff)
+
+                    imsave(save_path / f'psf_{s}.tif', noisy_img)
+                    imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
+
+                    vis.diagnostic_assessment(
+                        psf=noisy_img,
+                        gt_psf=gt_psf,
+                        predicted_psf=p_psf,
+                        corrected_psf=corrected_psf,
+                        wavelength=gen.lam_detection,
+                        psnr=psnr,
+                        maxcounts=maxcounts,
+                        y=y_wave,
+                        pred=p_wave,
+                        save_path=save_path / f'{s}',
+                        display=False
+                    )
+
+
+def deconstruct(
+        model: Path,
+        cpu_workers: int = -1,
+        x_voxel_size: float = .15,
+        y_voxel_size: float = .15,
+        z_voxel_size: float = .6,
+        wavelength: float = .605,
+        eval_distribution: str = 'powerlaw'
+):
+    m = load(model)
+    m.summary()
+
+    modes = m.layers[-1].output_shape[-1]
+    input_shape = m.layers[0].input_shape[0][1:-1]
+
+    for i in range(6):
+        psfargs = dict(
+            snr=100,
+            n_modes=modes,
+            distribution=eval_distribution,
+            lam_detection=wavelength,
+            amplitude_ranges=((.05*i), (.05*(i+1))),
+            psf_shape=3 * [input_shape[-1]],
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            batch_size=1,
+            cpu_workers=cpu_workers,
+        )
+        gen = SyntheticPSF(**psfargs)
+        psf, y, psnr, maxcounts = next(gen.generator(debug=True))
+        p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1)
+
+        p = Wavefront(p, lam_detection=wavelength)
+        logger.info('Prediction')
+        pprint(p.zernikes)
+
+        logger.info('GT')
+        y = Wavefront(y, lam_detection=wavelength)
+        pprint(y.zernikes)
+
+        diff = Wavefront(y - p, lam_detection=wavelength)
+        p_psf = gen.single_psf(p)
+        gt_psf = gen.single_psf(y)
+        corrected_psf = gen.single_psf(diff)
+
+        psf = np.squeeze(psf[0], axis=-1)
+        save_path = Path(f'{model}/deconstruct/{eval_distribution}/')
+        save_path.mkdir(exist_ok=True, parents=True)
+
+        vis.diagnostic_assessment(
+            psf=psf,
+            gt_psf=gt_psf,
+            predicted_psf=p_psf,
+            corrected_psf=corrected_psf,
+            psnr=psnr,
+            maxcounts=maxcounts,
+            wavelength=wavelength,
+            y=y,
+            pred=p,
+            save_path=save_path / f'{i}',
+            display=False
+        )
+
+        vis.plot_dmodes(
+            psf=psf,
+            gen=gen,
+            y=y,
+            pred=p,
+            save_path=save_path / f'{i}_dmodes',
+        )
+
+
+def save_metadata(
+    filepath: Path,
+    wavelength: float,
+    psf_type: str,
+    x_voxel_size: float,
+    y_voxel_size: float,
+    z_voxel_size: float,
+    n_modes: int,
+):
+    def add_param(h5file, name, data):
+        try:
+            if name not in h5file.keys():
+                h5file.create_dataset(name, data=data)
+            else:
+                del h5file[name]
+                h5file.create_dataset(name, data=data)
+
+            assert np.allclose(h5file[name].value, data), f"Failed to write {name}"
+
+        except Exception as e:
+            logger.error(e)
+
+    file = filepath if str(filepath).endswith('.h5') else list(filepath.rglob('*.h5'))[0]
+    with h5py.File(file, 'r+') as file:
+        add_param(file, name='n_modes', data=n_modes)
+        add_param(file, name='wavelength', data=wavelength)
+        add_param(file, name='x_voxel_size', data=x_voxel_size)
+        add_param(file, name='y_voxel_size', data=y_voxel_size)
+        add_param(file, name='z_voxel_size', data=z_voxel_size)
+
+        if isinstance(psf_type, str) or isinstance(psf_type, Path):
+            with h5py.File(psf_type, 'r+') as f:
+                add_param(file, name='psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
+
+
+def kernels(modelpath: Path, activation='relu'):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    def factorization(n):
+        """Calculates kernel grid dimensions."""
+        for i in range(int(np.sqrt(float(n))), 0, -1):
+            if n % i == 0:
+                return i, n // i
+
+    logger.info(f"Model: {modelpath}")
+    model = load(modelpath)
+    layers = [layer for layer in model.layers if str(layer.name).startswith('conv')]
+
+    if isinstance(activation, str):
+        activation = tf.keras.layers.Activation(activation)
+
+    logger.info("Plotting learned kernels")
+    for i, layer in enumerate(layers):
+        fig, ax = plt.subplots(figsize=(8, 11))
+        grid, biases = layer.get_weights()
+        logger.info(f"Layer [{layer.name}]: {layer.output_shape}, {grid.shape}")
+
+        grid = activation(grid)
+        grid = np.squeeze(grid, axis=0)
+
+        with tf.name_scope(layer.name):
+            low, high = tf.reduce_min(grid), tf.reduce_max(grid)
+            grid = (grid - low) / (high - low)
+            grid = tf.pad(grid, ((1, 1), (1, 1), (0, 0), (0, 0)))
+
+            r, c, chan_in, chan_out = grid.shape
+            grid_r, grid_c = factorization(chan_out)
+
+            grid = tf.transpose(grid, (3, 0, 1, 2))
+            grid = tf.reshape(grid, tf.stack([grid_c, r * grid_r, c, chan_in]))
+            grid = tf.transpose(grid, (0, 2, 1, 3))
+            grid = tf.reshape(grid, tf.stack([1, c * grid_c, r * grid_r, chan_in]))
+            grid = tf.transpose(grid, (0, 2, 1, 3))
+
+            while grid.shape[3] > 4:
+                a, b = tf.split(grid, 2, axis=3)
+                grid = tf.concat([a, b], axis=0)
+
+            _, a, b, channels = grid.shape
+            if channels == 2:
+                grid = tf.concat([grid, tf.zeros((1, a, b, 1))], axis=3)
+
+        img = grid[-1, :, :, 0]
+        ax.imshow(img)
+        ax.set_aspect('equal')
+        ax.axis('off')
+
+        plt.savefig(f'{modelpath}/kernels_{layer.name}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+def featuremaps(
+        modelpath: Path,
+        amplitude_range: float,
+        wavelength: float,
+        psf_type: str,
+        x_voxel_size: float,
+        y_voxel_size: float,
+        z_voxel_size: float,
+        cpu_workers: int,
+        psnr: int,
+):
+    plt.rcParams.update({
+        'font.size': 25,
+        'axes.titlesize': 30,
+        'xtick.labelsize': 20,
+        'ytick.labelsize': 20,
+        'legend.fontsize': 20,
+    })
+
+    logger.info(f"Models: {modelpath}")
+    model = load(modelpath)
+
+    input_shape = model.layers[1].output_shape[1:-1]
+    modes = model.layers[-1].output_shape[-1]
+    model = Model(
+        inputs=model.input,
+        outputs=[layer.output for layer in model.layers],
+    )
+    phi = np.zeros(modes)
+    phi[10] = amplitude_range
+    amplitude_range = Wavefront(phi, lam_detection=wavelength)
+
+    psfargs = dict(
+        n_modes=modes,
+        psf_type=psf_type,
+        psf_shape=3 * [input_shape[1]],
+        distribution='single',
+        lam_detection=wavelength,
+        amplitude_ranges=amplitude_range,
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
+        batch_size=1,
+        snr=psnr,
+        cpu_workers=cpu_workers,
+    )
+    gen = SyntheticPSF(**psfargs)
+
+    if input_shape[0] == 3 or input_shape[0] == 6:
+        inputs = gen.single_otf(
+            amplitude_range,
+            normed=True,
+            noise=True,
+            na_mask=True,
+            ratio=True,
+        )
+    else:
+        inputs = gen.single_psf(amplitude_range, normed=True, noise=True)
+
+    inputs = np.expand_dims(np.stack(inputs, axis=0), 0)
+    inputs = np.expand_dims(np.stack(inputs, axis=0), -1)
+
+    layers = [layer.name for layer in model.layers[1:25]]
+    maps = model.predict(inputs)[1:25]
+    nrows = sum([1 for fmap in maps if len(fmap.shape[1:]) >= 3])
+
+    fig = plt.figure(figsize=(150, 600))
+    gs = fig.add_gridspec((nrows * input_shape[0]) + 1, 8)
+
+    i = 0
+    logger.info('Plotting featuremaps...')
+    for name, fmap in zip(layers, maps):
+        logger.info(f"Layer {name}: {fmap.shape}")
+        fmap = fmap[0]
+
+        if fmap.ndim < 2:
+            continue
+
+        if layers[0] == 'patchify':
+            patches = fmap.shape[-2]
+            features = fmap.shape[-1]
+            fmap_size = patches // int(np.sqrt(maps[0].shape[-2]))
+            fmap = np.reshape(fmap, (fmap.shape[0], fmap_size, fmap_size, features))
+
+        if len(fmap.shape) == 4:
+            if input_shape[0] == 3 or input_shape[0] == 6:
+
+                i += 1
+                features = fmap.shape[-1]
+                window = fmap.shape[1], fmap.shape[2]
+                grid = np.zeros((window[0] * input_shape[0], window[1] * features))
+
+                for j in range(input_shape[0]):
+                    for f in range(features):
+                        vol = fmap[j, :, :, f]
+                        grid[
+                            j * window[0]:(j + 1) * window[0],
+                            f * window[1]:(f + 1) * window[1]
+                        ] = vol
+
+                space = grid.flatten()
+                vmin = np.nanquantile(space, .02)
+                vmax = np.nanquantile(space, .98)
+                vcenter = (vmin + vmax)/2
+                step = .01
+
+                highcmap = plt.get_cmap('YlOrRd', 256)
+                lowcmap = plt.get_cmap('terrain', 256)
+                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+                cmap = mcolors.ListedColormap(cmap)
+
+                ax = fig.add_subplot(gs[i, :])
+                ax.set_title(f"{name.upper()} {fmap.shape}")
+                m = ax.imshow(grid, cmap=cmap, vmin=vmin, vmax=vmax)
+                ax.set_aspect('equal')
+                ax.axis('off')
+
+                cax = inset_axes(ax, width="1%", height="100%", loc='center right', borderpad=-3)
+                cb = plt.colorbar(m, cax=cax)
+                cax.yaxis.set_label_position("right")
+            else:
+                for j in range(3):
+                    i += 1
+                    features = fmap.shape[-1]
+                    if j == 0:
+                        window = fmap.shape[1], fmap.shape[2]
+                    elif j == 1:
+                        window = fmap.shape[0], fmap.shape[2]
+                    else:
+                        window = fmap.shape[0], fmap.shape[1]
+
+                    grid = np.zeros((window[0], window[1] * features))
+
+                    for f in range(features):
+                        vol = np.max(fmap[:, :, :, f], axis=j)
+                        grid[:, f * window[1]:(f + 1) * window[1]] = vol
+
+                    ax = fig.add_subplot(gs[i, :])
+
+                    if j == 0:
+                        ax.set_title(f"{name.upper()} {fmap.shape}")
+
+                    ax.imshow(grid, cmap='hot', vmin=0, vmax=1)
+                    ax.set_aspect('equal')
+                    ax.axis('off')
+        else:
+            i += 1
+            features = fmap.shape[-1]
+            window = fmap.shape[0], fmap.shape[1]
+            grid = np.zeros((window[0], window[1] * features))
+
+            for f in range(features):
+                vol = fmap[:, :, f]
+                # vol = (vol - vol.min()) / (vol.max() - vol.min())
+                grid[:, f * window[1]:(f + 1) * window[1]] = vol
+
+            # from tifffile import imsave
+            # imsave(f'{modelpath}/{name.upper()}_{i}.tif', grid)
+
+            ax = fig.add_subplot(gs[i, :])
+            ax.set_title(f"{name.upper()} {fmap.shape}")
+            m = ax.imshow(grid, cmap='Spectral_r')
+            ax.set_aspect('equal')
+            ax.axis('off')
+
+            cax = inset_axes(ax, width="1%", height="100%", loc='center right', borderpad=-3)
+            cb = plt.colorbar(m, cax=cax)
+            cax.yaxis.set_label_position("right")
+
+    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
+    plt.savefig(f'{modelpath}/featuremaps.pdf', bbox_inches='tight', pad_inches=.25)
+    return fig
 
 
 def train(
@@ -566,878 +1449,3 @@ def train(
     except tf.errors.ResourceExhaustedError as e:
         logger.error(e)
         sys.exit(1)
-
-
-def bootstrap_predict(
-    model: tf.keras.Model,
-    inputs: np.array,
-    psfgen: SyntheticPSF,
-    batch_size: int = 1,
-    n_samples: int = 10,
-    threshold: float = 0.1,
-    freq_strength_threshold: float = .01,
-    ignore_modes: list = (0, 1, 2, 4),
-    verbose: bool = True,
-    plot: Any = None,
-    no_phase: bool = False,
-    desc: str = 'MiniBatch-probabilistic-predictions',
-):
-    """
-    Average predictions and compute stdev
-
-    Args:
-        model: pre-trained keras model
-        inputs: encoded tokens to be processed
-        psfgen: Synthetic PSF object
-        n_samples: number of predictions of average
-        ignore_modes: list of modes to ignore
-        batch_size: number of samples per batch
-        threshold: set predictions below threshold to zero (wavelength)
-        desc: test to display for the progressbar
-        verbose: a toggle for progress bar
-
-    Returns:
-        average prediction, stdev
-    """
-    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
-    ignore_modes = list(map(int, ignore_modes))
-    logger.info(f"Ignoring modes: {ignore_modes}")
-
-    # check z-axis to compute embeddings for fourier models
-    if len(inputs.shape) == 3:
-        emb = model.input_shape[1] == inputs.shape[0]
-    else:
-        emb = model.input_shape[1] == inputs.shape[1]
-
-    if not emb:
-        logger.info(f"Generating embeddings")
-
-        model_inputs = []
-        for i in inputs:
-            emb = psfgen.embedding(
-                psf=np.squeeze(i),
-                plot=plot,
-                no_phase=no_phase,
-                principle_planes=True,
-                freq_strength_threshold=freq_strength_threshold
-            )
-
-            if no_phase and model.input_shape[1] == 6:
-                phase_mask = np.zeros((3, model.input_shape[2], model.input_shape[3]))
-                emb = np.concatenate([emb, phase_mask], axis=0)
-            elif model.input_shape[1] == 3:
-                emb = emb[:3]
-
-            model_inputs.append(emb)
-
-        model_inputs = np.stack(model_inputs, axis=0)
-    else:
-        # pass raw PSFs to the model
-        model_inputs = inputs
-
-    model_inputs = np.nan_to_num(model_inputs, nan=0, posinf=0, neginf=0)
-    model_inputs = model_inputs[..., np.newaxis] if model_inputs.shape[-1] != 1 else model_inputs
-    features = np.array([np.count_nonzero(s) for s in inputs])
-
-    logger.info(f"[BS={batch_size}, n={n_samples}] {desc}")
-    gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples)
-    preds = model.predict(gen, batch_size=batch_size, verbose=verbose)
-    preds[:, ignore_modes] = 0.
-    preds[np.abs(preds) <= threshold] = 0.
-    preds = np.stack(np.split(preds, n_samples), axis=-1)
-
-    mu = np.mean(preds, axis=-1)
-    mu = mu.flatten() if mu.shape[0] == 1 else mu
-
-    sigma = np.std(preds, axis=-1)
-    sigma = sigma.flatten() if sigma.shape[0] == 1 else sigma
-
-    mu[np.where(features == 0)[0]] = np.zeros_like(mu[0])
-    sigma[np.where(features == 0)[0]] = np.zeros_like(sigma[0])
-
-    return mu, sigma
-
-
-def predict_sign(
-    gen: SyntheticPSF,
-    init_preds: np.ndarray,
-    followup_preds: np.ndarray,
-    sign_threshold: float = .9,
-    plot: Any = None,
-    bar_width: float = .35
-):
-    def pct_change(cur, prev):
-        t = utils.waves2microns(.05, wavelength=gen.lam_detection)
-        cur[cur < t] = 0
-        prev[prev < t] = 0
-
-        if np.array_equal(cur, prev):
-            return np.zeros_like(prev)
-
-        pct = ((cur - prev) / (prev+1e-6)) * 100.0
-        pct[pct > 100] = 100
-        pct[pct < -100] = -100
-        return pct
-
-    init_preds = np.abs(init_preds)
-    followup_preds = np.abs(followup_preds)
-
-    preds = init_preds.copy()
-    pchange = pct_change(followup_preds, init_preds)
-
-    # flip signs and make any necessary adjustments to the amplitudes based on the followup predictions
-    # adj = pchange.copy()
-    # adj[np.where(pchange > 0)] = -200
-    # adj[np.where(pchange < 0)] += 100
-    # preds += preds * (adj/100)
-
-    # threshold-based sign prediction
-    threshold = sign_threshold * init_preds
-    flips = np.stack(np.where(followup_preds > threshold), axis=0)
-
-    if len(np.squeeze(preds).shape) == 1:
-        preds[flips[0]] *= -1
-    else:
-        preds[flips[0], flips[1]] *= -1
-
-    if plot is not None:
-        if len(np.squeeze(preds).shape) == 1:
-            init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes
-            init_preds_wave_error = Wavefront(np.zeros_like(init_preds), lam_detection=gen.lam_detection).amplitudes
-
-            followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes
-            followup_preds_wave_error = Wavefront(np.zeros_like(followup_preds),
-                                                  lam_detection=gen.lam_detection).amplitudes
-
-            preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes
-            preds_error = Wavefront(np.zeros_like(preds), lam_detection=gen.lam_detection).amplitudes
-
-            percent_changes = pchange
-            percent_changes_error = np.zeros_like(pchange)
-        else:
-            init_preds_wave = Wavefront(np.mean(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
-            init_preds_wave_error = Wavefront(np.std(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
-
-            followup_preds_wave = Wavefront(np.mean(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
-            followup_preds_wave_error = Wavefront(np.std(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
-
-            preds_wave = Wavefront(np.mean(preds, axis=0), lam_detection=gen.lam_detection).amplitudes
-            preds_error = Wavefront(np.std(preds, axis=0), lam_detection=gen.lam_detection).amplitudes
-
-            percent_changes = np.mean(pchange, axis=0)
-            percent_changes_error = np.std(pchange, axis=0)
-
-        fig, axes = plt.subplots(3, 1, figsize=(16, 8))
-
-        axes[0].bar(
-            np.arange(len(preds_wave)) - bar_width / 2,
-            init_preds_wave,
-            yerr=init_preds_wave_error,
-            capsize=5,
-            alpha=.75,
-            color='C0',
-            align='center',
-            ecolor='grey',
-            label='Initial',
-            width=bar_width
-        )
-        axes[0].bar(
-            np.arange(len(preds_wave)) + bar_width / 2,
-            followup_preds_wave,
-            yerr=followup_preds_wave_error,
-            capsize=5,
-            alpha=.75,
-            color='C1',
-            align='center',
-            ecolor='grey',
-            label='Followup',
-            width=bar_width
-        )
-
-        axes[0].legend(frameon=False, loc='upper left')
-        axes[0].set_xlim((-1, len(preds_wave)))
-        axes[0].set_xticks(range(0, len(preds_wave)))
-        axes[0].spines.right.set_visible(False)
-        axes[0].spines.left.set_visible(False)
-        axes[0].spines.top.set_visible(False)
-        axes[0].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-        axes[0].set_ylabel(r'Zernike coefficients ($\mu$m)')
-
-        axes[1].plot(np.zeros_like(percent_changes), '--', color='lightgrey')
-        axes[1].bar(
-            range(gen.n_modes),
-            percent_changes,
-            yerr=percent_changes_error,
-            capsize=10,
-            color='C2',
-            alpha=.75,
-            align='center',
-            ecolor='grey',
-        )
-        axes[1].set_xlim((-1, len(preds_wave)))
-        axes[1].set_xticks(range(0, len(preds_wave)))
-        axes[1].set_ylim((-100, 100))
-        axes[1].set_yticks(range(-100, 125, 25))
-        axes[1].set_yticklabels(['-100+', '-75', '-50', '-25', '0', '25', '50', '75', '100+'])
-        axes[1].spines.right.set_visible(False)
-        axes[1].spines.left.set_visible(False)
-        axes[1].spines.top.set_visible(False)
-        axes[1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-        axes[1].set_ylabel(f'Percent change')
-
-        axes[2].plot(np.zeros_like(preds_wave), '--', color='lightgrey')
-        axes[2].bar(
-            range(gen.n_modes),
-            preds_wave,
-            yerr=preds_error,
-            capsize=10,
-            alpha=.75,
-            color='dimgrey',
-            align='center',
-            ecolor='grey',
-            label='Predictions',
-        )
-        axes[2].set_xlim((-1, len(preds_wave)))
-        axes[2].set_xticks(range(0, len(preds_wave)))
-        axes[2].spines.right.set_visible(False)
-        axes[2].spines.left.set_visible(False)
-        axes[2].spines.top.set_visible(False)
-        axes[2].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-        axes[2].set_ylabel(r'Zernike coefficients ($\mu$m)')
-
-        plt.tight_layout()
-        plt.savefig(f'{plot}_sign_correction.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-    return preds, pchange
-
-
-def dual_stage_prediction(
-    model: tf.keras.Model,
-    inputs: np.array,
-    gen: SyntheticPSF,
-    modelgen: SyntheticPSF,
-    plot: Any = None,
-    verbose: bool = False,
-    threshold: float = 0.,
-    freq_strength_threshold: float = .01,
-    sign_threshold: float = .9,
-    n_samples: int = 1,
-    batch_size: int = 1,
-    ignore_modes: list = (0, 1, 2, 4),
-    prev_pred: Any = None,
-    estimate_sign_with_decon: bool = False,
-    decon_iters: int = 5
-):
-
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-
-    prev_pred = None if (prev_pred is None or str(prev_pred) == 'None') else prev_pred
-
-    init_preds, stdev = bootstrap_predict(
-        model,
-        inputs,
-        psfgen=modelgen,
-        n_samples=n_samples,
-        no_phase=True,
-        verbose=verbose,
-        batch_size=batch_size,
-        threshold=threshold,
-        ignore_modes=ignore_modes,
-        freq_strength_threshold=freq_strength_threshold,
-    )
-    init_preds = np.abs(init_preds)
-
-    if estimate_sign_with_decon:
-        logger.info(f"Estimating signs w/ Decon")
-        abrs = range(init_preds.shape[0]) if len(init_preds.shape) > 1 else range(1)
-        make_psf = partial(gen.single_psf, normed=True, noise=False)
-        psfs = np.stack(gen.batch(
-            make_psf,
-            [Wavefront(init_preds[i], lam_detection=gen.lam_detection) for i in abrs]
-        ), axis=0)
-
-        with sp.fft.set_workers(-1):
-            followup_inputs = richardson_lucy(np.squeeze(inputs), np.squeeze(psfs), num_iter=decon_iters)
-
-        if len(followup_inputs.shape) == 3:
-            followup_inputs = followup_inputs[np.newaxis, ..., np.newaxis]
-        else:
-            followup_inputs = followup_inputs[..., np.newaxis]
-
-        followup_preds, stdev = bootstrap_predict(
-            model,
-            followup_inputs,
-            psfgen=modelgen,
-            n_samples=n_samples,
-            no_phase=True,
-            verbose=False,
-            batch_size=batch_size,
-            threshold=threshold,
-            ignore_modes=ignore_modes,
-            freq_strength_threshold=freq_strength_threshold,
-        )
-        followup_preds = np.abs(followup_preds)
-
-        preds, pchanges = predict_sign(
-            gen=gen,
-            init_preds=init_preds,
-            followup_preds=followup_preds,
-            sign_threshold=sign_threshold,
-            plot=plot
-        )
-
-    elif prev_pred is not None:
-        logger.info(f"Evaluating signs")
-        followup_preds = init_preds.copy()
-        init_preds = np.abs(pd.read_csv(prev_pred, header=0)['amplitude'].values)
-
-        preds, pchanges = predict_sign(
-            gen=gen,
-            init_preds=init_preds,
-            followup_preds=followup_preds,
-            sign_threshold=sign_threshold,
-            plot=plot
-        )
-
-    else:
-        preds = init_preds
-        pchanges = np.zeros_like(preds)
-
-    return preds, stdev, pchanges
-
-
-def eval_sign(
-    model: tf.keras.Model,
-    inputs: np.array,
-    gen: SyntheticPSF,
-    ys: np.array,
-    batch_size: int,
-    reference: Any = None,
-    plot: Any = None,
-    threshold: float = 0.,
-    sign_threshold: float = .9,
-    desc: str = 'Eval',
-):
-    init_preds, stdev = bootstrap_predict(
-        model,
-        inputs,
-        psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
-        no_phase=True,
-        threshold=threshold,
-    )
-    if len(init_preds.shape) > 1:
-        init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
-    else:
-        init_preds = np.abs(init_preds)[:ys.shape[-1]]
-
-    res = ys - init_preds
-    g = partial(
-        gen.single_psf,
-        normed=True,
-        noise=False,
-        meta=False
-    )
-    followup_inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
-
-    if reference is not None:
-        followup_inputs = utils.fftconvolution(reference, followup_inputs)
-
-    followup_preds, stdev = bootstrap_predict(
-        model,
-        followup_inputs,
-        psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
-        no_phase=True,
-        threshold=threshold,
-        desc=desc,
-    )
-    if len(init_preds.shape) > 1:
-        followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]
-    else:
-        followup_preds = np.abs(followup_preds)[:ys.shape[-1]]
-
-    preds, pchanges = predict_sign(
-        gen=gen,
-        init_preds=init_preds,
-        followup_preds=followup_preds,
-        sign_threshold=sign_threshold,
-        plot=plot
-    )
-
-    return preds
-
-
-def beads(
-    gen: SyntheticPSF,
-    kernel: np.ndarray,
-    psnr: Union[tuple, int] = (21, 30),
-    object_size: float = 0,
-    num_objs: int = 1,
-    radius: float = .45,
-):
-    snr = gen._randuniform(psnr)
-    reference = np.zeros(gen.psf_shape)
-    np.random.seed(os.getpid())
-
-    for i in range(num_objs):
-        if object_size > 0:
-            reference += rg.sphere(
-                shape=gen.psf_shape,
-                radius=object_size,
-                position=np.random.uniform(low=.2, high=.8, size=3)
-            ).astype(np.float) * np.random.random()
-        else:
-            if radius > 0:
-                reference[
-                    np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
-                    np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
-                    np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
-                ] += np.random.random()
-            else:
-                reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] += np.random.random()
-
-    reference /= np.max(reference)
-    img = utils.fftconvolution(reference, kernel)
-    snr = gen._randuniform(snr)
-    img *= snr ** 2
-
-    rand_noise = gen._random_noise(
-        image=img,
-        mean=gen.mean_background_noise,
-        sigma=gen.sigma_background_noise
-    )
-    noisy_img = rand_noise + img
-    noisy_img /= np.max(noisy_img)
-
-    return noisy_img
-
-
-def predict(model: Path, input_coverage: float = 1.0, psnr: int = 30):
-    m = load(model)
-    m.summary()
-
-    for dist in ['powerlaw', 'dirichlet']:
-        for amplitude_range in [(.1, .3), (.3, .5)]:
-            gen = load_metadata(
-                model,
-                snr=1000,
-                bimodal=True,
-                rotate=True,
-                batch_size=1,
-                amplitude_ranges=amplitude_range,
-                distribution=dist,
-                psf_shape=(64, 64, 64)
-            )
-            for s, (psf, y, snr, maxcounts) in zip(range(10), gen.generator(debug=True)):
-                psf = np.squeeze(psf)
-
-                for npoints in tqdm([1, 3, 5, 10, 15]):
-                    noisy_img = beads(gen=gen, kernel=psf, psnr=psnr, object_size=0, num_objs=npoints)
-
-                    save_path = Path(
-                        f"{model.with_suffix('')}/samples/{dist}/c{input_coverage}/um-{amplitude_range[-1]}/npoints-{npoints}"
-                    )
-                    save_path.mkdir(exist_ok=True, parents=True)
-
-                    if input_coverage != 1.:
-                        mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
-                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
-                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
-
-                    p = eval_sign(
-                        model=m,
-                        inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
-                        gen=gen,
-                        ys=y,
-                        batch_size=1,
-                        plot=save_path / f'embeddings_{s}',
-                    )
-
-                    p_wave = Wavefront(p, lam_detection=gen.lam_detection)
-                    # logger.info('Prediction')
-                    # pprint(p_wave.zernikes)
-
-                    y_wave = Wavefront(y.flatten(), lam_detection=gen.lam_detection)
-                    # logger.info('GT')
-                    # pprint(y_wave.zernikes)
-
-                    diff = y_wave - p_wave
-
-                    p_psf = gen.single_psf(p_wave)
-                    gt_psf = gen.single_psf(y_wave)
-                    corrected_psf = gen.single_psf(diff)
-
-                    imsave(save_path / f'psf_{s}.tif', noisy_img)
-                    imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
-
-                    vis.diagnostic_assessment(
-                        psf=noisy_img,
-                        gt_psf=gt_psf,
-                        predicted_psf=p_psf,
-                        corrected_psf=corrected_psf,
-                        wavelength=gen.lam_detection,
-                        psnr=psnr,
-                        maxcounts=maxcounts,
-                        y=y_wave,
-                        pred=p_wave,
-                        save_path=save_path / f'{s}',
-                        display=False
-                    )
-
-
-def deconstruct(
-        model: Path,
-        cpu_workers: int = -1,
-        x_voxel_size: float = .15,
-        y_voxel_size: float = .15,
-        z_voxel_size: float = .6,
-        wavelength: float = .605,
-        eval_distribution: str = 'powerlaw'
-):
-    m = load(model)
-    m.summary()
-
-    modes = m.layers[-1].output_shape[-1]
-    input_shape = m.layers[0].input_shape[0][1:-1]
-
-    for i in range(6):
-        psfargs = dict(
-            snr=100,
-            n_modes=modes,
-            distribution=eval_distribution,
-            lam_detection=wavelength,
-            amplitude_ranges=((.05*i), (.05*(i+1))),
-            psf_shape=3 * [input_shape[-1]],
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            batch_size=1,
-            cpu_workers=cpu_workers,
-        )
-        gen = SyntheticPSF(**psfargs)
-        psf, y, psnr, maxcounts = next(gen.generator(debug=True))
-        p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1)
-
-        p = Wavefront(p, lam_detection=wavelength)
-        logger.info('Prediction')
-        pprint(p.zernikes)
-
-        logger.info('GT')
-        y = Wavefront(y, lam_detection=wavelength)
-        pprint(y.zernikes)
-
-        diff = Wavefront(y - p, lam_detection=wavelength)
-        p_psf = gen.single_psf(p)
-        gt_psf = gen.single_psf(y)
-        corrected_psf = gen.single_psf(diff)
-
-        psf = np.squeeze(psf[0], axis=-1)
-        save_path = Path(f'{model}/deconstruct/{eval_distribution}/')
-        save_path.mkdir(exist_ok=True, parents=True)
-
-        vis.diagnostic_assessment(
-            psf=psf,
-            gt_psf=gt_psf,
-            predicted_psf=p_psf,
-            corrected_psf=corrected_psf,
-            psnr=psnr,
-            maxcounts=maxcounts,
-            wavelength=wavelength,
-            y=y,
-            pred=p,
-            save_path=save_path / f'{i}',
-            display=False
-        )
-
-        vis.plot_dmodes(
-            psf=psf,
-            gen=gen,
-            y=y,
-            pred=p,
-            save_path=save_path / f'{i}_dmodes',
-        )
-
-
-def featuremaps(
-        modelpath: Path,
-        amplitude_range: float,
-        wavelength: float,
-        psf_type: str,
-        x_voxel_size: float,
-        y_voxel_size: float,
-        z_voxel_size: float,
-        cpu_workers: int,
-        psnr: int,
-):
-    plt.rcParams.update({
-        'font.size': 25,
-        'axes.titlesize': 30,
-        'xtick.labelsize': 20,
-        'ytick.labelsize': 20,
-        'legend.fontsize': 20,
-    })
-
-    logger.info(f"Models: {modelpath}")
-    model = load(modelpath)
-
-    input_shape = model.layers[1].output_shape[1:-1]
-    modes = model.layers[-1].output_shape[-1]
-    model = Model(
-        inputs=model.input,
-        outputs=[layer.output for layer in model.layers],
-    )
-    phi = np.zeros(modes)
-    phi[10] = amplitude_range
-    amplitude_range = Wavefront(phi, lam_detection=wavelength)
-
-    psfargs = dict(
-        n_modes=modes,
-        psf_type=psf_type,
-        psf_shape=3 * [input_shape[1]],
-        distribution='single',
-        lam_detection=wavelength,
-        amplitude_ranges=amplitude_range,
-        x_voxel_size=x_voxel_size,
-        y_voxel_size=y_voxel_size,
-        z_voxel_size=z_voxel_size,
-        batch_size=1,
-        snr=psnr,
-        cpu_workers=cpu_workers,
-    )
-    gen = SyntheticPSF(**psfargs)
-
-    if input_shape[0] == 3 or input_shape[0] == 6:
-        inputs = gen.single_otf(
-            amplitude_range,
-            normed=True,
-            noise=True,
-            na_mask=True,
-            ratio=True,
-        )
-    else:
-        inputs = gen.single_psf(amplitude_range, normed=True, noise=True)
-
-    inputs = np.expand_dims(np.stack(inputs, axis=0), 0)
-    inputs = np.expand_dims(np.stack(inputs, axis=0), -1)
-
-    layers = [layer.name for layer in model.layers[1:25]]
-    maps = model.predict(inputs)[1:25]
-    nrows = sum([1 for fmap in maps if len(fmap.shape[1:]) >= 3])
-
-    fig = plt.figure(figsize=(150, 600))
-    gs = fig.add_gridspec((nrows * input_shape[0]) + 1, 8)
-
-    i = 0
-    logger.info('Plotting featuremaps...')
-    for name, fmap in zip(layers, maps):
-        logger.info(f"Layer {name}: {fmap.shape}")
-        fmap = fmap[0]
-
-        if fmap.ndim < 2:
-            continue
-
-        if layers[0] == 'patchify':
-            patches = fmap.shape[-2]
-            features = fmap.shape[-1]
-            fmap_size = patches // int(np.sqrt(maps[0].shape[-2]))
-            fmap = np.reshape(fmap, (fmap.shape[0], fmap_size, fmap_size, features))
-
-        if len(fmap.shape) == 4:
-            if input_shape[0] == 3 or input_shape[0] == 6:
-
-                i += 1
-                features = fmap.shape[-1]
-                window = fmap.shape[1], fmap.shape[2]
-                grid = np.zeros((window[0] * input_shape[0], window[1] * features))
-
-                for j in range(input_shape[0]):
-                    for f in range(features):
-                        vol = fmap[j, :, :, f]
-                        grid[
-                            j * window[0]:(j + 1) * window[0],
-                            f * window[1]:(f + 1) * window[1]
-                        ] = vol
-
-                space = grid.flatten()
-                vmin = np.nanquantile(space, .02)
-                vmax = np.nanquantile(space, .98)
-                vcenter = (vmin + vmax)/2
-                step = .01
-
-                highcmap = plt.get_cmap('YlOrRd', 256)
-                lowcmap = plt.get_cmap('terrain', 256)
-                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-                cmap = mcolors.ListedColormap(cmap)
-
-                ax = fig.add_subplot(gs[i, :])
-                ax.set_title(f"{name.upper()} {fmap.shape}")
-                m = ax.imshow(grid, cmap=cmap, vmin=vmin, vmax=vmax)
-                ax.set_aspect('equal')
-                ax.axis('off')
-
-                cax = inset_axes(ax, width="1%", height="100%", loc='center right', borderpad=-3)
-                cb = plt.colorbar(m, cax=cax)
-                cax.yaxis.set_label_position("right")
-            else:
-                for j in range(3):
-                    i += 1
-                    features = fmap.shape[-1]
-                    if j == 0:
-                        window = fmap.shape[1], fmap.shape[2]
-                    elif j == 1:
-                        window = fmap.shape[0], fmap.shape[2]
-                    else:
-                        window = fmap.shape[0], fmap.shape[1]
-
-                    grid = np.zeros((window[0], window[1] * features))
-
-                    for f in range(features):
-                        vol = np.max(fmap[:, :, :, f], axis=j)
-                        grid[:, f * window[1]:(f + 1) * window[1]] = vol
-
-                    ax = fig.add_subplot(gs[i, :])
-
-                    if j == 0:
-                        ax.set_title(f"{name.upper()} {fmap.shape}")
-
-                    ax.imshow(grid, cmap='hot', vmin=0, vmax=1)
-                    ax.set_aspect('equal')
-                    ax.axis('off')
-        else:
-            i += 1
-            features = fmap.shape[-1]
-            window = fmap.shape[0], fmap.shape[1]
-            grid = np.zeros((window[0], window[1] * features))
-
-            for f in range(features):
-                vol = fmap[:, :, f]
-                # vol = (vol - vol.min()) / (vol.max() - vol.min())
-                grid[:, f * window[1]:(f + 1) * window[1]] = vol
-
-            # from tifffile import imsave
-            # imsave(f'{modelpath}/{name.upper()}_{i}.tif', grid)
-
-            ax = fig.add_subplot(gs[i, :])
-            ax.set_title(f"{name.upper()} {fmap.shape}")
-            m = ax.imshow(grid, cmap='Spectral_r')
-            ax.set_aspect('equal')
-            ax.axis('off')
-
-            cax = inset_axes(ax, width="1%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_label_position("right")
-
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{modelpath}/featuremaps.pdf', bbox_inches='tight', pad_inches=.25)
-    return fig
-
-
-def save_metadata(
-    filepath: Path,
-    wavelength: float,
-    psf_type: str,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
-    n_modes: int,
-):
-    def add_param(h5file, name, data):
-        try:
-            if name not in h5file.keys():
-                h5file.create_dataset(name, data=data)
-            else:
-                del h5file[name]
-                h5file.create_dataset(name, data=data)
-
-            assert np.allclose(h5file[name].value, data), f"Failed to write {name}"
-
-        except Exception as e:
-            logger.error(e)
-
-    file = filepath if str(filepath).endswith('.h5') else list(filepath.rglob('*.h5'))[0]
-    with h5py.File(file, 'r+') as file:
-        add_param(file, name='n_modes', data=n_modes)
-        add_param(file, name='wavelength', data=wavelength)
-        add_param(file, name='x_voxel_size', data=x_voxel_size)
-        add_param(file, name='y_voxel_size', data=y_voxel_size)
-        add_param(file, name='z_voxel_size', data=z_voxel_size)
-
-        if isinstance(psf_type, str) or isinstance(psf_type, Path):
-            with h5py.File(psf_type, 'r+') as f:
-                add_param(file, name='psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
-
-
-def kernels(modelpath: Path, activation='relu'):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-
-    def factorization(n):
-        """Calculates kernel grid dimensions."""
-        for i in range(int(np.sqrt(float(n))), 0, -1):
-            if n % i == 0:
-                return i, n // i
-
-    logger.info(f"Model: {modelpath}")
-    model = load(modelpath)
-    layers = [layer for layer in model.layers if str(layer.name).startswith('conv')]
-
-    if isinstance(activation, str):
-        activation = tf.keras.layers.Activation(activation)
-
-    logger.info("Plotting learned kernels")
-    for i, layer in enumerate(layers):
-        fig, ax = plt.subplots(figsize=(8, 11))
-        grid, biases = layer.get_weights()
-        logger.info(f"Layer [{layer.name}]: {layer.output_shape}, {grid.shape}")
-
-        grid = activation(grid)
-        grid = np.squeeze(grid, axis=0)
-
-        with tf.name_scope(layer.name):
-            low, high = tf.reduce_min(grid), tf.reduce_max(grid)
-            grid = (grid - low) / (high - low)
-            grid = tf.pad(grid, ((1, 1), (1, 1), (0, 0), (0, 0)))
-
-            r, c, chan_in, chan_out = grid.shape
-            grid_r, grid_c = factorization(chan_out)
-
-            grid = tf.transpose(grid, (3, 0, 1, 2))
-            grid = tf.reshape(grid, tf.stack([grid_c, r * grid_r, c, chan_in]))
-            grid = tf.transpose(grid, (0, 2, 1, 3))
-            grid = tf.reshape(grid, tf.stack([1, c * grid_c, r * grid_r, chan_in]))
-            grid = tf.transpose(grid, (0, 2, 1, 3))
-
-            while grid.shape[3] > 4:
-                a, b = tf.split(grid, 2, axis=3)
-                grid = tf.concat([a, b], axis=0)
-
-            _, a, b, channels = grid.shape
-            if channels == 2:
-                grid = tf.concat([grid, tf.zeros((1, a, b, 1))], axis=3)
-
-        img = grid[-1, :, :, 0]
-        ax.imshow(img)
-        ax.set_aspect('equal')
-        ax.axis('off')
-
-        plt.savefig(f'{modelpath}/kernels_{layer.name}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
