@@ -318,6 +318,8 @@ def predict(
             wavelength=wavelength,
             save_path=Path(f"{data.with_suffix('')}_predictions_wavefronts"),
         )
+
+
 @profile
 def predict_sample(
     img: Path,
@@ -401,9 +403,6 @@ def predict_sample(
     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
     coffs.index.name = 'ansi'
     coffs.to_csv(f"{img.with_suffix('')}_sample_predictions_zernike_coffs.csv")
-
-    pupil_displacement = np.array(p.wave(size=100), dtype='float32')
-    imsave(f"{img.with_suffix('')}_sample_predictions_pupil_displacement.tif", pupil_displacement)
 
     psf = psfgen.single_psf(phi=p, normed=True, noise=False)
     imsave(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
@@ -766,9 +765,6 @@ def aggregate_predictions(
     coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
     coffs.index.name = 'ansi'
     coffs.to_csv(f"{model_pred.with_suffix('')}_aggregated_zernike_coffs.csv")
-
-    pupil_displacement = np.array(p.wave(size=100), dtype='float32')
-    imsave(f"{model_pred.with_suffix('')}_aggregated_pupil_displacement.tif", pupil_displacement)
 
     psfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,

@@ -158,7 +158,7 @@ class SyntheticPSF:
         # Add a random offset to the center
         if jitter:
             centroid += np.array([
-                np.random.randint(-jitter/s, jitter/s)  # max.jitter is in microns
+                np.random.randint(-jitter//s, jitter//s)  # max.jitter is in microns
                 for s in self.voxel_size
             ])
 
@@ -408,7 +408,7 @@ class SyntheticPSF:
             phi_val (str, optional): show the FFT phase in unwrapped radians 'angle' or the imaginary portion 'imag'. Defaults to 'angle'.
             plot (Any, optional): _description_. Defaults to None.
             log10 (bool, optional): _description_. Defaults to False.
-            principle_planes (bool, optional): _description_. Defaults to True.         
+            principle_planes (bool, optional): _description_. Defaults to True.
             freq_strength_threshold (float, optional): _description_. Defaults to 0.01.
 
         Returns:

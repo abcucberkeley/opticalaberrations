@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 from skimage.transform import rescale
+from line_profiler_pycharm import profile
 import h5py
 
 logging.basicConfig(
@@ -60,6 +61,7 @@ class PsfGenerator3D:
         self.theoretical_psf(kx=kx, ky=ky, kz=kz)
         self.psf_type = psf_type
 
+    @profile
     def theoretical_psf(self, kx, ky, kz):
         KZ3, KY3, KX3 = np.meshgrid(kz, ky, kx, indexing="ij")
         KR3 = np.sqrt(KX3 ** 2 + KY3 ** 2)
@@ -80,6 +82,7 @@ class PsfGenerator3D:
         self.kphi = np.arctan2(KY2, KX2)
         self.kmask2 = (KR2 <= self.kcut)
 
+    @profile
     def masked_phase_array(self, phi, normed=True):
         """
         Returns masked Zernike polynomial for back focal plane, masked according to the setup
@@ -90,6 +93,7 @@ class PsfGenerator3D:
         """
         return self.kmask2 * phi.phase(self.krho, self.kphi, normed=normed, outside=None)
 
+    @profile
     def coherent_psf(self, phi):
         """
         Returns the coherent psf for a given wavefront phi
@@ -102,6 +106,7 @@ class PsfGenerator3D:
         res = np.fft.ifftn(ku, axes=(1, 2))
         return np.fft.fftshift(res, axes=(0,))
 
+    @profile
     def incoherent_psf(self, phi):
         """
         Returns the incoherent psf for a given wavefront phi

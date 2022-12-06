@@ -1066,16 +1066,14 @@ def plot_wavefront(iax, phi, label=None, nas=(.55, .65, .75, .85, .95), colorbar
     vmin = -.25 if vmin > -0.01 else vmin
     vmax = np.round(np.nanmax(phi))
     vmax = .25 if vmax < 0.01 else vmax
-    step = .25
+    step = .1
 
     highcmap = plt.get_cmap('magma_r', 256)
     middlemap = plt.get_cmap('gist_gray', 256)
     lowcmap = plt.get_cmap('gist_earth_r', 256)
 
     ll = np.arange(vmin, -.25+step, step)
-    mm = [-.15, 0, .15]
     hh = np.arange(.25, vmax+step, step)
-    levels = np.concatenate((ll, mm, hh))
 
     wave_cmap = np.vstack((
         lowcmap(.66 * ll / ll.min()),
@@ -1084,13 +1082,11 @@ def plot_wavefront(iax, phi, label=None, nas=(.55, .65, .75, .85, .95), colorbar
     ))
     wave_cmap = mcolors.ListedColormap(wave_cmap)
 
-    mat = iax.contourf(
+    mat = iax.imshow(
         phi,
-        levels=levels,
         cmap=wave_cmap,
-        vmin=np.min(levels),
-        vmax=np.max(levels),
-        extend='both',
+        vmin=ll.min(),
+        vmax=hh.max(),
     )
 
     pcts = []
@@ -1117,7 +1113,7 @@ def plot_wavefront(iax, phi, label=None, nas=(.55, .65, .75, .85, .95), colorbar
     iax.set_aspect("equal")
 
     if colorbar:
-        cax = inset_axes(iax, width="10%", height="100%", loc='center right', borderpad=-2)
+        cax = inset_axes(iax, width="10%", height="100%", loc='center right', borderpad=-3)
         cbar = plt.colorbar(mat, cax=cax, extend='both', format=formatter)
         cbar.ax.set_title(r'$\lambda$', pad=10)
         cbar.ax.yaxis.set_ticks_position('right')
@@ -2433,7 +2429,7 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None):
             ecolor='k',
         )
 
-    ax_zcoff.set_ylabel(f'Zernike coefficients ($\mu$m)')
+    ax_zcoff.set_ylabel(f'Zernike coefficients ($\mu$m RMS)')
     ax_zcoff.spines['top'].set_visible(False)
     ax_zcoff.spines['left'].set_visible(False)
     ax_zcoff.spines['right'].set_visible(False)
