@@ -206,18 +206,12 @@ def load_sample(
             path = Path(str(data))
             img = get_image(path).astype(float)
 
-        if remove_background:
-            mode = st.mode(img[img < np.quantile(img, .99)], axis=None).mode[0]
-            img -= mode
-            img[img < 0] = 0
-
-        if normalize:
-            img /= np.nanmax(img)
-
         img = preprocessing.prep_sample(
             np.squeeze(img),
             model_voxel_size=model_voxel_size,
             sample_voxel_size=sample_voxel_size,
+            remove_background=remove_background,
+            normalize=normalize
         )
 
         return img
@@ -234,7 +228,6 @@ def predict(
     axial_voxel_size: float,
     lateral_voxel_size: float,
     wavelength: float = .605,
-    mosaic: bool = True,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
@@ -342,7 +335,6 @@ def predict_sample(
     plot: bool = False,
     num_predictions: int = 1,
     batch_size: int = 1,
-    mosaic: bool = True,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
@@ -440,7 +432,6 @@ def predict_dataset(
         n_modes: int = 55,
         num_predictions: int = 1,
         batch_size: int = 1,
-        mosaic: bool = False,
         prev: Any = None
 ):
     func = partial(
@@ -455,7 +446,6 @@ def predict_dataset(
         verbose=verbose,
         plot=plot,
         n_modes=n_modes,
-        mosaic=mosaic,
         num_predictions=num_predictions,
         batch_size=batch_size,
         prev=prev,
@@ -539,7 +529,6 @@ def predict_rois(
         num_predictions=num_predictions,
         batch_size=batch_size,
         wavelength=wavelength,
-        mosaic=True,
         prev=prev,
         ztiles=1,
         nrows=ncols,
@@ -601,7 +590,6 @@ def predict_tiles(
         num_predictions=num_predictions,
         batch_size=batch_size,
         wavelength=wavelength,
-        mosaic=True,
         prev=prev,
         plot=plot,
         ztiles=ztiles,

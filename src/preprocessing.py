@@ -154,18 +154,20 @@ def prep_sample(
     model_voxel_size: tuple,
     debug: Any = None,
     remove_background: bool = True,
+    normalize: bool = True,
 ):
     if len(np.squeeze(sample).shape) == 4:
         samples = []
         for i in range(sample.shape[0]):
             s = sample[i]
-            mode = int(st.mode(s[s < np.quantile(s, .99)], axis=None).mode[0])
 
             if remove_background:
+                mode = int(st.mode(s[s < np.quantile(s, .99)], axis=None).mode[0])
                 s -= mode
                 s[s < 0] = 0
 
-            s /= np.nanmax(s)
+            if normalize:
+                s /= np.nanmax(s)
 
             if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
                 s = resize(
@@ -180,13 +182,13 @@ def prep_sample(
         return np.array(samples)
 
     else:
-        mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
-
         if remove_background:
+            mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
             sample -= mode
             sample[sample < 0] = 0
 
-        sample = sample / np.nanmax(sample)
+        if normalize:
+            sample /= np.nanmax(sample)
 
         if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
             sample = resize(
