@@ -8,7 +8,7 @@ from pathlib import Path
 from subprocess import call
 import multiprocessing as mp
 import tensorflow as tf
-from tensorflow import config as tfc
+
 from typing import Any, Sequence, Union
 import numpy as np
 from scipy import stats as st
@@ -21,15 +21,24 @@ from line_profiler_pycharm import profile
 
 import utils
 import vis
-import backend
 import preprocessing
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
+from backend import load_metadata, dual_stage_prediction
 
 import logging
 logger = logging.getLogger('')
+
+
+@profile
+def reloadmodel_if_needed(preloaded: Preloadedmodelclass, modelpath):
+    if preloaded is None:
+        logger.info("Loading new model")
+        preloaded = Preloadedmodelclass(modelpath)
+
+    return preloaded.model, preloaded.modelpsfgen
 
 
 @profile
@@ -238,7 +247,7 @@ def predict(
     ztiles: int = 1,
     nrows: int = 1,
     ncols: int = 1,
-    preloaded : Preloadedmodelclass = None,
+    preloaded: Preloadedmodelclass = None,
 ):
     def summarize_predictions(data):
         columns = []
@@ -283,7 +292,7 @@ def predict(
     rois = np.array(utils.multiprocess(load, rois, desc='Processing ROIs'))
     logger.info(rois.shape)
 
-    preds, stds, pchange = backend.dual_stage_prediction(
+    preds, stds, pchange = dual_stage_prediction(
         model,
         batch_size=batch_size,
         inputs=rois[..., np.newaxis],
@@ -316,28 +325,6 @@ def predict(
             wavelength=wavelength,
             save_path=Path(f"{data.with_suffix('')}_predictions_wavefronts"),
         )
-
-def preloadmodel(modelpath: Path):
-    physical_devices = tfc.list_physical_devices('GPU')
-    for gpu_instance in physical_devices:
-        tfc.experimental.set_memory_growth(gpu_instance, True)
-
-    preloadedmodelpsfgen = backend.load_metadata(Path(modelpath))
-    preloadedmodel = backend.load(Path(modelpath), mosaic=True)    
-    return preloadedmodel, preloadedmodelpsfgen
-
-def reloadmodel_if_needed(preloaded: Preloadedmodelclass, modelpath):
-    if preloaded is None:
-        logger.info("Loading new model")
-        model, modelpsfgen = preloadmodel(modelpath) 
-        
-    else:
-        logger.info("Reusing loaded model")
-        model       = preloaded.model
-        modelpsfgen = preloaded.modelpsfgen
-        
-    return model, modelpsfgen
-
 @profile
 def predict_sample(
     img: Path,
@@ -386,7 +373,7 @@ def predict_sample(
 
     inputs = np.expand_dims(inputs, axis=0)
 
-    p, std, pchange = backend.dual_stage_prediction(
+    p, std, pchange = dual_stage_prediction(
         model,
         inputs=inputs,
         threshold=prediction_threshold,
@@ -585,11 +572,10 @@ def predict_tiles(
 ):
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(preloaded, model)
-    modelpsfgen = premodelpsfgen
 
     sample = load_sample(
         img,
-        model_voxel_size=modelpsfgen.voxel_size,
+        model_voxel_size=premodelpsfgen.voxel_size,
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
         remove_background=True,
         normalize=True,
@@ -608,8 +594,8 @@ def predict_tiles(
         rois=windows,
         data=outdir,
         model=model,
-        axial_voxel_size=modelpsfgen.z_voxel_size,
-        lateral_voxel_size=modelpsfgen.x_voxel_size,
+        axial_voxel_size=premodelpsfgen.z_voxel_size,
+        lateral_voxel_size=premodelpsfgen.x_voxel_size,
         prediction_threshold=prediction_threshold,
         sign_threshold=sign_threshold,
         num_predictions=num_predictions,
@@ -658,7 +644,7 @@ def aggregate_predictions(
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
 
-    modelpsfgen = backend.load_metadata(model) if preloaded is None else preloaded.modelpsfgen
+    modelpsfgen = load_metadata(model) if preloaded is None else preloaded.modelpsfgen
 
     predictions = pd.read_csv(
         model_pred,
