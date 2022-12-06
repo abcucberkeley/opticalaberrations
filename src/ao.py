@@ -8,6 +8,14 @@ import cli
 import experimental
 
 
+class Preloadedmodelclass:
+    """ A class that LabVIEW can use to keep the model in memory to prevent reloading it each time.
+    """
+    def __init__(self, modelpath=Path):
+        self.modelpath = modelpath
+        print(f"Loading model from : {modelpath}")
+        self.model, self.modelpsfgen = experimental.preloadmodel(Path(modelpath))
+
 def parse_args(args):
     parser = cli.argparser()
     subparsers = parser.add_subparsers(
@@ -311,7 +319,7 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
-def main(args=None):
+def main(args=None, preloaded: Preloadedmodelclass = None):
 
     timeit = time.time()
     args = parse_args(args)
@@ -366,7 +374,8 @@ def main(args=None):
             plot=args.plot,
             batch_size=args.batch_size,
             estimate_sign_with_decon=args.estimate_sign_with_decon,
-            ignore_modes=args.ignore_mode
+            ignore_modes=args.ignore_mode,
+            preloaded=preloaded
         )
 
     elif args.func == 'predict_rois':
@@ -389,7 +398,8 @@ def main(args=None):
             plot=args.plot,
             batch_size=args.batch_size,
             estimate_sign_with_decon=args.estimate_sign_with_decon,
-            ignore_modes=args.ignore_mode
+            ignore_modes=args.ignore_mode,
+            preloaded=preloaded
         )
     elif args.func == 'predict_tiles':
         experimental.predict_tiles(
@@ -407,7 +417,8 @@ def main(args=None):
             plot=args.plot,
             batch_size=args.batch_size,
             estimate_sign_with_decon=args.estimate_sign_with_decon,
-            ignore_modes=args.ignore_mode
+            ignore_modes=args.ignore_mode,
+            preloaded=preloaded
         )
     elif args.func == 'aggregate_predictions':
         experimental.aggregate_predictions(
@@ -426,6 +437,7 @@ def main(args=None):
             ignore_tile=args.ignore_tile,
             dm_damping_scalar=args.dm_damping_scalar,
             plot=args.plot,
+            preloaded=preloaded
         )
     else:
         logger.error(f"Error")

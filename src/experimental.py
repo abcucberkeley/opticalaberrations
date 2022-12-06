@@ -19,6 +19,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+import ao
 import utils
 import vis
 import backend
@@ -229,6 +230,7 @@ def predict(
     ztiles: int = 1,
     nrows: int = 1,
     ncols: int = 1,
+    preloaded : ao.Preloadedmodelclass = None,
 ):
     def summarize_predictions(data):
         columns = []
@@ -249,13 +251,8 @@ def predict(
         df.index.name = 'ansi'
         return df
 
-    physical_devices = tfc.list_physical_devices('GPU')
-    for gpu_instance in physical_devices:
-        tfc.experimental.set_memory_growth(gpu_instance, True)
-
-    modelpsfgen = backend.load_metadata(model)
-    model = backend.load(model, mosaic=mosaic)
-
+    model, modelpsfgen = reloadmodel_if_needed(preloaded, model)
+    
     psfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
         snr=100,
@@ -312,6 +309,27 @@ def predict(
             save_path=Path(f"{data.with_suffix('')}_predictions_wavefronts"),
         )
 
+def preloadmodel(modelpath: Path):
+    physical_devices = tfc.list_physical_devices('GPU')
+    for gpu_instance in physical_devices:
+        tfc.experimental.set_memory_growth(gpu_instance, True)
+
+    preloadedmodelpsfgen = backend.load_metadata(Path(modelpath))
+    preloadedmodel = backend.load(Path(modelpath), mosaic=True)    
+    return preloadedmodel, preloadedmodelpsfgen
+
+def reloadmodel_if_needed(preloaded: ao.Preloadedmodelclass, modelpath):
+    if preloaded is None:
+        logger.info("Loading new model")
+        model, modelpsfgen = preloadmodel(modelpath) 
+        
+    else:
+        logger.info("Reusing loaded model")
+        model       = preloaded.model
+        modelpsfgen = preloaded.modelpsfgen
+        
+    return model, modelpsfgen
+
 
 def predict_sample(
     img: Path,
@@ -333,15 +351,11 @@ def predict_sample(
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
+    preloaded: ao.Preloadedmodelclass = None
 ):
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
-    physical_devices = tfc.list_physical_devices('GPU')
-    for gpu_instance in physical_devices:
-        tfc.experimental.set_memory_growth(gpu_instance, True)
-
-    modelpsfgen = backend.load_metadata(model)
-    model = backend.load(model, mosaic=mosaic)
+    model, modelpsfgen = reloadmodel_if_needed(preloaded, model)
 
     psfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
@@ -487,6 +501,7 @@ def predict_rois(
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
+    preloaded: ao.Preloadedmodelclass = None  
 ):
     sample = imread(img).astype(float)
     esnr = np.sqrt(sample.max()).astype(int)
@@ -535,6 +550,7 @@ def predict_rois(
         estimate_sign_with_decon=estimate_sign_with_decon,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
+        preloaded=preloaded
     )
 
 
@@ -553,9 +569,12 @@ def predict_tiles(
     plot: bool = True,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
-    ignore_modes: list = (0, 1, 2, 4),
+    ignore_modes: list = (0, 1, 2, 4),    
+    preloaded: ao.Preloadedmodelclass = None
 ):
-    modelpsfgen = backend.load_metadata(model)
+
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(preloaded, model)
+    modelpsfgen = premodelpsfgen
 
     sample = load_sample(
         img,
@@ -594,6 +613,7 @@ def predict_tiles(
         estimate_sign_with_decon=estimate_sign_with_decon,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
+        preloaded=preloaded
     )
 
     if plot:
@@ -621,11 +641,12 @@ def aggregate_predictions(
     dm_damping_scalar: float = 1,
     plot: bool = False,
     ignore_tile: Any = None,
+    preloaded: ao.Preloadedmodelclass = None
 ):
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
 
-    modelpsfgen = backend.load_metadata(model)
+    modelpsfgen = backend.load_metadata(model) if preloaded is None else preloaded.modelpsfgen
 
     predictions = pd.read_csv(
         model_pred,
