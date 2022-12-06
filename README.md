@@ -38,6 +38,11 @@ conda env create -f requirements.yml
 conda activate ml
 ```
 
+....to later update to the latest packages in requirements.yml:
+```shell 
+conda env update --file requirements.yml 
+```
+
 Finally, clone the LLSM3D tools repository for additional functions such as `decon`, `deskew` and `point detection`
 ```shell
 git clone --branch dev https://github.com/abcucberkeley/LLSM3DTools.git
