@@ -299,6 +299,78 @@ class SyntheticPSF:
         else:
             plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
+
+    def _normalize(self, emb, otf, freq_strength_threshold: float = 0.):
+        emb /= np.nanpercentile(np.abs(otf), 99.99)
+        emb[emb > 1] = 1
+        emb[emb < -1] = -1
+        emb = np.nan_to_num(emb, nan=0)
+
+        if freq_strength_threshold != 0.:
+            emb[(emb > 0) * (emb < freq_strength_threshold)] = 0.
+            emb[(emb < 0) * (emb > -1 * freq_strength_threshold)] = 0.
+        return emb
+
+    def compute_emb(
+        self,
+        otf: np.ndarray,
+        val: str,
+        ratio: bool,
+        norm: bool,
+        na_mask: bool,
+        log10: bool,
+        principle_planes: bool,
+        freq_strength_threshold: float
+    ):
+        mask = self.na_mask()
+        iotf = np.abs(self.iotf)
+
+        if val == 'real':
+            emb = np.real(otf)
+        elif val == 'imag':
+            emb = np.imag(otf)
+        elif val == 'angle':
+            emb = np.angle(otf)
+            emb = unwrap_phase(emb)
+        else:
+            emb = np.abs(otf)
+
+        if norm:
+            iotf = self._normalize(iotf, iotf)
+            emb = self._normalize(emb, otf, freq_strength_threshold=freq_strength_threshold)
+
+        if emb.shape != self.psf_shape:
+            emb = transform.rescale(
+                emb,
+                (
+                    self.psf_shape[0] / emb.shape[0],
+                    self.psf_shape[1] / emb.shape[1],
+                    self.psf_shape[2] / emb.shape[2],
+                ),
+                order=3,
+                anti_aliasing=True,
+            )
+
+        if ratio:
+            emb /= iotf
+            emb = np.nan_to_num(emb, nan=0)
+
+        if na_mask:
+            emb *= mask
+
+        if log10:
+            emb = np.log10(emb)
+            emb = np.nan_to_num(emb, nan=0, posinf=0, neginf=0)
+
+        if principle_planes:
+            emb = np.stack([
+                emb[emb.shape[0] // 2, :, :],
+                emb[:, emb.shape[1] // 2, :],
+                emb[:, :, emb.shape[2] // 2],
+            ], axis=0)
+
+        return emb
+
     def embedding(
         self,
         psf: np.array,
@@ -339,107 +411,41 @@ class SyntheticPSF:
 
         otf = self.fft(psf, padsize=padsize)
 
-        if alpha_val == 'real':
-            alpha = np.real(otf)
-            iotf = np.real(self.iotf)
+        if no_phase:
+            emb = self.compute_emb(
+                otf,
+                val=alpha_val,
+                ratio=ratio,
+                na_mask=na_mask,
+                norm=norm,
+                log10=log10,
+                principle_planes=principle_planes,
+                freq_strength_threshold=freq_strength_threshold,
+            )
         else:
-            alpha = np.abs(otf)
-            iotf = np.abs(self.iotf)
-
-        if phi_val == 'imag':
-            phi = np.imag(otf) # imag = imaginary
-        elif phi_val == 'angle':
-            phi = np.angle(otf)
-            phi = unwrap_phase(phi)
-        else:
-            phi = np.abs(otf)
-
-        if norm:
-            iotf /= np.nanpercentile(np.abs(iotf), 99.99)
-            iotf[iotf > 1] = 1
-            iotf[iotf < -1] = -1
-            iotf = np.nan_to_num(iotf, nan=0)
-
-            alpha /= np.nanpercentile(np.abs(otf), 99.99)
-            alpha[alpha > 1] = 1
-            alpha[alpha < -1] = -1
-            alpha = np.nan_to_num(alpha, nan=0)
-
-            phi /= np.nanpercentile(np.abs(otf), 99.99)
-            phi[phi > 1] = 1
-            phi[phi < -1] = -1
-            phi = np.nan_to_num(phi, nan=0)
-
-        if freq_strength_threshold != 0.:
-            alpha[(alpha > 0) * (alpha < freq_strength_threshold)] = 0.
-            alpha[(alpha < 0) * (alpha > -1 * freq_strength_threshold)] = 0.
-
-            phi[(phi > 0) * (phi < freq_strength_threshold)] = 0.
-            phi[(phi < 0) * (phi > -1 * freq_strength_threshold)] = 0.
-
-        if alpha.shape != self.psf_shape:
-            alpha = transform.rescale(
-                alpha,
-                (
-                    self.psf_shape[0] / alpha.shape[0],
-                    self.psf_shape[1] / alpha.shape[1],
-                    self.psf_shape[2] / alpha.shape[2],
-                ),
-                order=3,
-                anti_aliasing=True,
+            alpha = self.compute_emb(
+                otf,
+                val=alpha_val,
+                ratio=ratio,
+                na_mask=na_mask,
+                norm=norm,
+                log10=log10,
+                principle_planes=principle_planes,
+                freq_strength_threshold=freq_strength_threshold,
             )
 
-        if phi.shape != self.psf_shape:
-            phi = transform.rescale(
-                phi,
-                (
-                    self.psf_shape[0] / phi.shape[0],
-                    self.psf_shape[1] / phi.shape[1],
-                    self.psf_shape[2] / phi.shape[2],
-                ),
-                order=3,
-                anti_aliasing=True,
+            phi = self.compute_emb(
+                otf,
+                val=phi_val,
+                ratio=ratio,
+                na_mask=na_mask,
+                norm=norm,
+                log10=log10,
+                principle_planes=principle_planes,
+                freq_strength_threshold=freq_strength_threshold,
             )
 
-        if ratio:
-            alpha /= iotf
-            alpha = np.nan_to_num(alpha, nan=0)
-
-            phi /= iotf
-            phi = np.nan_to_num(phi, nan=0)
-
-        if na_mask:
-            mask = self.na_mask()
-            alpha *= mask
-            phi *= mask
-
-        if log10:
-            alpha = np.log10(alpha)
-            alpha = np.nan_to_num(alpha, nan=0, posinf=0, neginf=0)
-
-            phi = np.log10(phi)
-            phi = np.nan_to_num(phi, nan=0, posinf=0, neginf=0)
-
-        if principle_planes:
-            if no_phase:
-                emb = np.stack([
-                    alpha[alpha.shape[0] // 2, :, :],
-                    alpha[:, alpha.shape[1] // 2, :],
-                    alpha[:, :, alpha.shape[2] // 2],
-                ], axis=0)
-            else:
-                emb = np.stack([
-                    alpha[alpha.shape[0] // 2, :, :],
-                    alpha[:, alpha.shape[1] // 2, :],
-                    alpha[:, :, alpha.shape[2] // 2],
-                    phi[phi.shape[0] // 2, :, :],
-                    phi[:, phi.shape[1] // 2, :],
-                    phi[:, :, phi.shape[2] // 2],
-                ], axis=0)
-        else:
-            emb = np.stack([alpha, phi], axis=0)
-            imsave(f"{plot}_alpha.tif", alpha)
-            imsave(f"{plot}_phi.tif", phi)
+            emb = np.concatenate([alpha, phi], axis=0)
 
         if plot is not None and principle_planes:
             self.plot_embeddings(psf=psf, emb=emb, save_path=plot, no_phase=no_phase)

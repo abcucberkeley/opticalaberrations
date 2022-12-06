@@ -2509,6 +2509,7 @@ def tiles(
     save_path: Path,
     strides: int = 64,
     window_size: int = 64,
+    gamma: float = .5,
 ):
     plt.rcParams.update({
         'font.size': 10,
