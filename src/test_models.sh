@@ -33,6 +33,11 @@ do
   --taskname 'test' \
   --name $MODEL/evalmodes
 
+  python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
+  --task "$MODEL random" \
+  --taskname $COV \
+  --name $MODEL/samples
+
   for NA in 1. .9 .8
   do
     for COV in 1.0 0.5
@@ -67,14 +72,6 @@ do
       #--taskname $NA \
       #--name $MODEL/distheatmaps_neighbor_${N}
     #done
-  done
-
-  for COV in 1.0 0.5
-  do
-    python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
-    --task "$MODEL --input_coverage $COV random" \
-    --taskname $COV \
-    --name $MODEL/samples
   done
 
 done

@@ -101,7 +101,7 @@ def sim(
                 reference[gen.psf_shape[0] // 2, gen.psf_shape[1] // 2, gen.psf_shape[2] // 2] += np.random.random()
 
     reference /= np.max(reference)
-    img = fftconvolution(reference, kernel)
+    img = fftconvolution(sample=reference, kernel=kernel)
     snr = gen._randuniform(snr)
     img *= snr ** 2
 

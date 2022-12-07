@@ -42,6 +42,26 @@ def eval_mode(
     psnr: tuple = (21, 30),
     na: float = 1.0
 ):
+    def sim_beads(ker):
+        snr = gen._randuniform(psnr)
+        ref = backend.beads(
+            gen=gen,
+            object_size=isize,
+            num_objs=npoints
+        )
+
+        img = utils.fftconvolution(sample=ref, kernel=ker)
+        img *= snr ** 2
+
+        rand_noise = gen._random_noise(
+            image=img,
+            mean=gen.mean_background_noise,
+            sigma=gen.sigma_background_noise
+        )
+        noisy_img = rand_noise + img
+        noisy_img /= np.max(noisy_img)
+        return noisy_img
+
     p2p = utils.peak_aberration(phi, na=na)
     y_pred = pd.DataFrame([], columns=['sample'])
     y_true = pd.DataFrame([], columns=['sample'])
@@ -58,10 +78,7 @@ def eval_mode(
 
     k = np.where(phi > 0)[0]
     for isize in tqdm([0, 1, 2, 3, 4, 5], desc=f"Evaluate different sizes [mode #{k}]"):
-        inputs = np.array([
-            backend.beads(gen=gen, kernel=kernel, psnr=psnr, object_size=isize, num_objs=npoints)
-            for i in range(n_samples)
-        ])
+        inputs = np.array([sim_beads(kernel) for i in range(n_samples)])
 
         preds, stdev = backend.bootstrap_predict(
             model=model,
@@ -579,7 +596,7 @@ def iter_eval_bin_with_reference(
         )
         inputs[i] = kernel[..., np.newaxis]
 
-    inputs = utils.fftconvolution(reference, inputs)
+    inputs = utils.fftconvolution(sample=reference, kernel=inputs)
 
     y_pred = pd.DataFrame.from_dict({
         'id': np.arange(inputs.shape[0], dtype=int),
@@ -629,7 +646,7 @@ def iter_eval_bin_with_reference(
         )
 
         inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
-        inputs = utils.fftconvolution(reference, inputs)
+        inputs = utils.fftconvolution(sample=reference, kernel=inputs)
         ys = res
 
     return (y_pred, y_true)

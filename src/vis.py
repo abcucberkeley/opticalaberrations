@@ -1292,7 +1292,7 @@ def diagnostic_assessment(
         threshold: float = .01,
 ):
 
-    def wavefront(iax, phi, levels, label='', nas=(.5, .75, .9, .95, .99)):
+    def wavefront(iax, phi, label='', nas=(.5, .75, .9, .95, .99)):
         def na_mask(radius):
             center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
             Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
@@ -1300,13 +1300,11 @@ def diagnostic_assessment(
             mask = dist_from_center <= radius
             return mask
 
-        mat = iax.contourf(
+        mat = iax.imshow(
             phi,
-            levels=levels,
             cmap=wave_cmap,
-            vmin=np.min(levels),
-            vmax=np.max(levels),
-            extend='both'
+            vmin=vmin,
+            vmax=vmax,
         )
 
         pcts = []
@@ -1467,21 +1465,18 @@ def diagnostic_assessment(
 
     ax_zcoff = fig.add_subplot(gs[-1, :])
 
-    step = .25
-    vmax = round(np.max([
-        np.abs(round(np.nanquantile(y_wave, .05), 2)),
-        np.abs(round(np.nanquantile(y_wave, .95), 2))
-    ]) * 4) / 4
+    vmin = np.round(np.nanmin(y_wave))
+    vmin = -.25 if vmin > -1 * threshold else vmin
+    vmax = np.round(np.nanmax(y_wave))
     vmax = .25 if vmax < threshold else vmax
+    step = .1
 
     highcmap = plt.get_cmap('magma_r', 256)
     middlemap = plt.get_cmap('gist_gray', 256)
     lowcmap = plt.get_cmap('gist_earth_r', 256)
 
-    ll = np.arange(-vmax, -.25 + step, step)
-    mm = [-.15, 0, .15]
+    ll = np.arange(vmin, -.25 + step, step)
     hh = np.arange(.25, vmax + step, step)
-    mticks = np.concatenate((ll, mm, hh))
 
     levels = np.vstack((
         lowcmap(.66 * ll / ll.min()),
@@ -1490,9 +1485,9 @@ def diagnostic_assessment(
     ))
     wave_cmap = mcolors.ListedColormap(levels)
 
-    mat = wavefront(ax_gt, y_wave, label='Ground truth', levels=mticks)
-    wavefront(ax_pred, pred_wave, label='Predicted', levels=mticks)
-    wavefront(ax_diff, diff, label='Residuals', levels=mticks)
+    mat = wavefront(ax_gt, y_wave, label='Ground truth')
+    wavefront(ax_pred, pred_wave, label='Predicted')
+    wavefront(ax_diff, diff, label='Residuals')
 
     cbar = fig.colorbar(
         mat,
@@ -1535,316 +1530,6 @@ def diagnostic_assessment(
     ax_zcoff.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
 
     for ax in [ax_gt, ax_pred, ax_diff]:
-        ax.axis('off')
-
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-    if display:
-        plt.tight_layout()
-        plt.show()
-
-
-def matlab_diagnostic_assessment(
-        psf: np.array,
-        gt_psf: np.array,
-        predicted_psf: np.array,
-        corrected_psf: np.array,
-        matlab_corrected_psf: np.array,
-        psnr: Any,
-        maxcounts: Any,
-        y: Wavefront,
-        pred: Wavefront,
-        pred_matlab: Wavefront,
-        save_path: Path,
-        wavelength: float = .605,
-        display: bool = False,
-        psf_cmap: str = 'hot',
-        gamma: float = .5,
-        threshold: float = .01,
-):
-
-    def wavefront(iax, phi, levels, label='', nas=(.5, .75, .9, .95, .99), p2p=False):
-        def na_mask(radius):
-            center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
-            Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
-            dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
-            mask = dist_from_center <= radius
-            return mask
-
-        mat = iax.contourf(
-            phi,
-            levels=levels,
-            cmap=wave_cmap,
-            vmin=np.min(levels),
-            vmax=np.max(levels),
-            extend='both'
-        )
-
-        pcts = []
-        for d in nas:
-            r = (d * phi.shape[0]) / 2
-            circle = patches.Circle((50, 50), r, ls='--', ec="dimgrey", fc="none", zorder=3)
-            iax.add_patch(circle)
-
-            mask = phi * na_mask(radius=r)
-            pcts.append((np.nanquantile(mask, .05), np.nanquantile(mask, .95)))
-
-        circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
-        iax.add_patch(circle)
-
-        divider = make_axes_locatable(iax)
-        top = divider.append_axes("top", size='30%', pad=0.2)
-        phi = phi.flatten()
-        top.hist(phi, bins=55, color='grey')
-
-        if p2p:
-            err = '\n'.join([
-                f'$P2P_{{NA={na}}}$={abs(p[1]-p[0]):.2f}\t[$P_{{05}}$={p[0]:.2f}, $P_{{95}}$={p[1]:.2f}]'
-                for na, p in zip(nas, pcts)
-            ])
-
-            top.set_title(f'{label}\n{err}')
-        else:
-            top.set_title(label)
-
-        top.set_yticks([])
-        top.xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
-        top.set_xlim((np.nanquantile(phi, 0.01), np.nanquantile(phi, 0.99)))
-        top.spines['right'].set_visible(False)
-        top.spines['top'].set_visible(False)
-        top.spines['left'].set_visible(False)
-        return mat
-
-    def psf_slice(xy, zx, zy, vol, label=''):
-        if vol.shape[0] == 6:
-            vmin, vmax, vcenter, step = 0, 2, 1, .1
-            highcmap = plt.get_cmap('YlOrRd', 256)
-            lowcmap = plt.get_cmap('YlGnBu_r', 256)
-            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            cmap = mcolors.ListedColormap(cmap)
-
-            inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=xy, wspace=0.1, hspace=0.1)
-            ax = fig.add_subplot(inner[0])
-            ax.imshow(vol[0], cmap=cmap, vmin=vmin, vmax=vmax)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_ylabel('Input')
-            ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-            ax = fig.add_subplot(inner[1])
-            ax.imshow(vol[3], cmap='coolwarm', vmin=-1, vmax=1)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xlabel(r'$\varpupil = \angle \tau$')
-            xy.axis('off')
-
-            inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=zx, wspace=0.1, hspace=0.1)
-            ax = fig.add_subplot(inner[0])
-            ax.imshow(vol[1], cmap=cmap, vmin=vmin, vmax=vmax)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-
-            ax = fig.add_subplot(inner[1])
-            ax.imshow(vol[4], cmap='coolwarm', vmin=-1, vmax=1)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xlabel(r'$\varpupil = \angle \tau$')
-            zx.axis('off')
-
-            inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=zy, wspace=0.1, hspace=0.1)
-            ax = fig.add_subplot(inner[0])
-            m = ax.imshow(vol[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-
-            ax = fig.add_subplot(inner[1])
-            ax.imshow(vol[5].T, cmap='coolwarm', vmin=-1, vmax=1)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xlabel(r'$\varpupil = \angle \tau$')
-            zy.axis('off')
-
-            cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-            cax.yaxis.set_label_position("right")
-
-        elif vol.shape[0] == 3:
-            m = xy.imshow(vol[0], cmap='Spectral_r', vmin=0, vmax=1)
-            zx.imshow(vol[1], cmap='Spectral_r', vmin=0, vmax=1)
-            zy.imshow(vol[2].T, cmap='Spectral_r', vmin=0, vmax=1)
-        else:
-            vol = vol ** gamma
-            vol = np.nan_to_num(vol)
-
-            m = xy.imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
-            zx.imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
-            zy.imshow(np.max(vol, axis=2).T, cmap=psf_cmap, vmin=0, vmax=1)
-
-            cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-            cax.set_ylabel(f"$\gamma$: {gamma:.2f}")
-            cax.yaxis.set_label_position("right")
-
-        xy.set_ylabel(label)
-        return m
-
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-    # plt.style.use("dark_background")
-
-    if len(psf.shape) > 3:
-        psf = np.squeeze(psf, axis=-1)
-        psf = np.squeeze(psf, axis=0)
-
-    if not np.isscalar(psnr):
-        psnr = psnr[0]
-
-    if not np.isscalar(maxcounts):
-        maxcounts = maxcounts[0]
-
-    y_wave = y.wave(size=100)
-    pred_wave = pred.wave(size=100)
-    pred_matlab_wave = pred_matlab.wave(size=100)
-    diff = y_wave - pred_wave
-    matlab_diff = y_wave - pred_matlab_wave
-
-    fig = plt.figure(figsize=(20, 35))
-    gs = fig.add_gridspec(10, 3)
-
-    ax_gt = fig.add_subplot(gs[:2, 0])
-    ax_pred = fig.add_subplot(gs[:2, 1])
-    ax_diff = fig.add_subplot(gs[:2, 2])
-    cax = fig.add_axes([.99, 0.6, 0.02, .35])
-
-    max_gt = fig.add_subplot(gs[2:4, 0])
-    max_pred = fig.add_subplot(gs[2:4, 1])
-    max_diff = fig.add_subplot(gs[2:4, 2])
-
-    # input
-    ax_xy = fig.add_subplot(gs[4, 0])
-    ax_xz = fig.add_subplot(gs[4, 1])
-    ax_yz = fig.add_subplot(gs[4, 2])
-
-    # GT
-    ax_xygt = fig.add_subplot(gs[5, 0])
-    ax_xzgt = fig.add_subplot(gs[5, 1])
-    ax_yzgt = fig.add_subplot(gs[5, 2])
-
-    # predictions
-    ax_pxy = fig.add_subplot(gs[-4, 0])
-    ax_pxz = fig.add_subplot(gs[-4, 1])
-    ax_pyz = fig.add_subplot(gs[-4, 2])
-
-    # corrected
-    ax_cxy = fig.add_subplot(gs[-3, 0])
-    ax_cxz = fig.add_subplot(gs[-3, 1])
-    ax_cyz = fig.add_subplot(gs[-3, 2])
-
-    # matlab
-    ax_mxy = fig.add_subplot(gs[-2, 0])
-    ax_mxz = fig.add_subplot(gs[-2, 1])
-    ax_myz = fig.add_subplot(gs[-2, 2])
-
-    ax_zcoff = fig.add_subplot(gs[-1, :])
-
-    step = .25
-    vmax = round(np.max([
-        np.abs(round(np.nanquantile(y_wave, .05), 2)),
-        np.abs(round(np.nanquantile(y_wave, .95), 2))
-    ]) * 4) / 4
-    vmax = .25 if vmax < threshold else vmax
-
-    highcmap = plt.get_cmap('magma_r', 256)
-    middlemap = plt.get_cmap('gist_gray', 256)
-    lowcmap = plt.get_cmap('gist_earth_r', 256)
-
-    ll = np.arange(-vmax, -.25 + step, step)
-    mm = [-.15, 0, .15]
-    hh = np.arange(.25, vmax + step, step)
-    mticks = np.concatenate((ll, mm, hh))
-
-    levels = np.vstack((
-        lowcmap(.66 * ll / ll.min()),
-        middlemap([.85, .95, 1, .95, .85]),
-        highcmap(.66 * hh / hh.max())
-    ))
-    wave_cmap = mcolors.ListedColormap(levels)
-
-    mat = wavefront(ax_gt, y_wave, label='Ground truth', levels=mticks, p2p=True)
-    wavefront(ax_pred, pred_wave, label='Predicted', levels=mticks, p2p=True)
-    wavefront(ax_diff, diff, label='Residuals', levels=mticks, p2p=True)
-
-    cbar = fig.colorbar(
-        mat,
-        cax=cax,
-        fraction=0.046,
-        pad=0.04,
-        extend='both',
-        format=FormatStrFormatter("%.2g"),
-        # spacing='proportional',
-    )
-    cbar.ax.set_title(r'$\lambda$')
-    cbar.ax.set_ylabel(f'$\lambda = {wavelength}~\mu m$')
-    cbar.ax.yaxis.set_ticks_position('right')
-    cbar.ax.yaxis.set_label_position('left')
-
-    mat = wavefront(max_gt, y_wave, label='Ground truth', levels=mticks)
-    wavefront(max_pred, pred_matlab_wave, label='Matlab', levels=mticks)
-    wavefront(max_diff, matlab_diff, label='Residuals', levels=mticks)
-
-    cbar = fig.colorbar(
-        mat,
-        cax=cax,
-        fraction=0.046,
-        pad=0.04,
-        extend='both',
-        format=FormatStrFormatter("%.2g"),
-        # spacing='proportional',
-    )
-    cbar.ax.set_title(r'$\lambda$')
-    cbar.ax.set_ylabel(f'$\lambda = {wavelength}~\mu m$')
-    cbar.ax.yaxis.set_ticks_position('right')
-    cbar.ax.yaxis.set_label_position('left')
-
-    ax_xy.set_title('XY')
-    ax_xz.set_title('XZ')
-    ax_yz.set_title('YZ')
-    ax_xz.set_ylabel(f"PSNR: {psnr:.2f}")
-    ax_yz.set_ylabel(f"Max photon count: {maxcounts:.0f}")
-
-    psf_slice(ax_xy, ax_xz, ax_yz, psf, label='Input')
-    psf_slice(ax_xygt, ax_xzgt, ax_yzgt, gt_psf, label='Input PSF (MIP)')
-    psf_slice(ax_pxy, ax_pxz, ax_pyz, predicted_psf, label='Predicted')
-    psf_slice(ax_cxy, ax_cxz, ax_cyz, corrected_psf, label='Corrected')
-    psf_slice(ax_mxy, ax_mxz, ax_myz, matlab_corrected_psf, label='Matlab')
-
-    # ax_zcoff.set_title('Zernike modes')
-    ax_zcoff.plot(pred.amplitudes, '-o', color='C0', label='Predictions')
-    ax_zcoff.plot(pred_matlab.amplitudes, '-o', color='C1', label='Matlab')
-    ax_zcoff.plot(y.amplitudes, '-o', color='dimgrey', label='Ground truth')
-
-    ax_zcoff.legend(frameon=False, loc='upper center', bbox_to_anchor=(.075, 1))
-    ax_zcoff.set_xticks(range(len(pred.amplitudes)))
-    ax_zcoff.set_xlim((0, len(pred.amplitudes)-1))
-    ax_zcoff.set_ylabel(r'Zernike coefficients ($\mu$m)')
-    ax_zcoff.spines['top'].set_visible(False)
-    ax_zcoff.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
-
-    for ax in [ax_gt, ax_pred, ax_diff, max_gt, max_pred, max_diff,]:
         ax.axis('off')
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)

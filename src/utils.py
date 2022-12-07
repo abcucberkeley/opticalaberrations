@@ -233,37 +233,15 @@ def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
 
 
 @profile
-def fftconvolution(sample, kernel, plot=False):
-    if len(kernel.shape) > 4:
-        conv = []
-        for k in kernel:
-            c = convolution.convolve_fft(sample, k, allow_huge=True)
-            c /= np.nanmax(c)
-            conv.append(c)
+def fftconvolution(kernel, sample):
+    if kernel.shape[0] == 1 or kernel.shape[-1] == 1:
+        kernel = np.squeeze(kernel)
 
-            if plot:
-                fig, axes = plt.subplots(3, 3, figsize=(24, 12))
-                for ax in range(3):
-                    axes[0, ax].imshow(np.max(sample, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-                    axes[1, ax].imshow(np.max(k, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-                    axes[2, ax].imshow(np.max(c, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-                plt.tight_layout()
-                plt.show()
+    if sample.shape[0] == 1 or sample.shape[-1] == 1:
+        sample = np.squeeze(sample)
 
-        conv = np.array(conv)
-    else:
-        conv = convolution.convolve_fft(sample, kernel, allow_huge=True)
-        conv /= np.nanmax(conv)
-
-        if plot:
-            fig, axes = plt.subplots(3, 3, figsize=(24, 12))
-            for ax in range(3):
-                axes[0, ax].imshow(np.max(sample, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-                axes[1, ax].imshow(np.max(kernel, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-                axes[2, ax].imshow(np.max(conv, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-            plt.tight_layout()
-            plt.show()
-
+    conv = convolution.convolve_fft(sample, kernel, allow_huge=True)
+    conv /= np.nanmax(conv)
     conv = np.nan_to_num(conv, nan=0, neginf=0, posinf=0)
     conv[conv < 0] = 0
     return conv

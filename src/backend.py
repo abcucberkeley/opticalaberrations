@@ -518,7 +518,7 @@ def eval_sign(
     reference: Any = None,
     plot: Any = None,
     threshold: float = 0.,
-    sign_threshold: float = .9,
+    sign_threshold: float = .95,
     desc: str = 'Eval',
 ):
     init_preds, stdev = bootstrap_predict(
@@ -545,7 +545,8 @@ def eval_sign(
     followup_inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
 
     if reference is not None:
-        followup_inputs = utils.fftconvolution(reference, followup_inputs)
+        conv = partial(utils.fftconvolution, sample=reference)
+        followup_inputs = np.array(utils.multiprocess(conv, followup_inputs))
 
     followup_preds, stdev = bootstrap_predict(
         model,
@@ -576,13 +577,11 @@ def eval_sign(
 @profile
 def beads(
     gen: SyntheticPSF,
-    kernel: np.ndarray,
-    psnr: Union[tuple, int] = (21, 30),
     object_size: float = 0,
     num_objs: int = 1,
     radius: float = .45,
 ):
-    snr = gen._randuniform(psnr)
+    np.random.seed(os.getpid())
     reference = np.zeros(gen.psf_shape)
     np.random.seed(os.getpid())
 
@@ -604,28 +603,16 @@ def beads(
                 reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] += np.random.random()
 
     reference /= np.max(reference)
-    img = utils.fftconvolution(reference, kernel)
-    snr = gen._randuniform(snr)
-    img *= snr ** 2
-
-    rand_noise = gen._random_noise(
-        image=img,
-        mean=gen.mean_background_noise,
-        sigma=gen.sigma_background_noise
-    )
-    noisy_img = rand_noise + img
-    noisy_img /= np.max(noisy_img)
-
-    return noisy_img
+    return reference
 
 
 @profile
-def predict(model: Path, input_coverage: float = 1.0, psnr: int = 30):
+def predict(model: Path, psnr: int = 30):
     m = load(model)
     m.summary()
 
-    for dist in ['powerlaw', 'dirichlet']:
-        for amplitude_range in [(.1, .3), (.3, .5)]:
+    for dist in ['single', 'powerlaw', 'dirichlet']:
+        for amplitude_range in [(.05, .1), (.1, .3)]:
             gen = load_metadata(
                 model,
                 snr=1000,
@@ -639,22 +626,33 @@ def predict(model: Path, input_coverage: float = 1.0, psnr: int = 30):
             for s, (psf, y, snr, maxcounts) in zip(range(10), gen.generator(debug=True)):
                 psf = np.squeeze(psf)
 
-                for npoints in tqdm([1, 3, 5, 10, 15]):
-                    noisy_img = beads(gen=gen, kernel=psf, psnr=psnr, object_size=0, num_objs=npoints)
+                for npoints in tqdm([1, 2, 5, 10]):
+                    reference = beads(
+                        gen=gen,
+                        object_size=0,
+                        num_objs=npoints
+                    )
+
+                    img = utils.fftconvolution(sample=reference, kernel=psf)
+                    img *= psnr ** 2
+
+                    rand_noise = gen._random_noise(
+                        image=img,
+                        mean=gen.mean_background_noise,
+                        sigma=gen.sigma_background_noise
+                    )
+                    noisy_img = rand_noise + img
+                    noisy_img /= np.max(noisy_img)
 
                     save_path = Path(
-                        f"{model.with_suffix('')}/samples/{dist}/c{input_coverage}/um-{amplitude_range[-1]}/npoints-{npoints}"
+                        f"{model.with_suffix('')}/samples/{dist}/um-{amplitude_range[-1]}/npoints-{npoints}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
-
-                    if input_coverage != 1.:
-                        mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
-                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
-                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
 
                     p = eval_sign(
                         model=m,
                         inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
+                        reference=reference,
                         gen=gen,
                         ys=y,
                         batch_size=1,
@@ -662,13 +660,7 @@ def predict(model: Path, input_coverage: float = 1.0, psnr: int = 30):
                     )
 
                     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
-                    # logger.info('Prediction')
-                    # pprint(p_wave.zernikes)
-
                     y_wave = Wavefront(y.flatten(), lam_detection=gen.lam_detection)
-                    # logger.info('GT')
-                    # pprint(y_wave.zernikes)
-
                     diff = y_wave - p_wave
 
                     p_psf = gen.single_psf(p_wave)
