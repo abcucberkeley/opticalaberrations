@@ -67,11 +67,6 @@ def parse_args(args):
         "--gpu_workers", default=1, type=int, help='number of GPUs to use'
     )
 
-    parser.add_argument(
-        "--input_coverage", default=1.0, type=float, help='faction of the image to feed into the model '
-                                                          '(then padded to keep the original image size)'
-    )
-
     return parser.parse_args(args)
 
 
@@ -87,7 +82,6 @@ def main(args=None):
     if args.target == "random":
         backend.predict(
             model=args.model,
-            input_coverage=args.input_coverage,
             psnr=args.psnr
         )
 

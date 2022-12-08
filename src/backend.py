@@ -16,7 +16,6 @@ from functools import partial
 from line_profiler_pycharm import profile
 
 import pandas as pd
-from scipy import stats as st
 from skimage.restoration import richardson_lucy
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -74,7 +73,7 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 @profile
-def load_metadata(model_path: Path, psf_shape: tuple = (64, 64, 64), n_modes=None, **kwargs):
+def load_metadata(model_path: Path, psf_shape: Union[tuple, list] = (64, 64, 64), n_modes=None, **kwargs):
     # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
     if not model_path.suffix == '.h5':       
         model_path = list(model_path.rglob('*.h5'))[0]
@@ -542,15 +541,14 @@ def eval_sign(
         noise=False,
         meta=False
     )
-    followup_inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
+    followup_inputs = np.stack(gen.batch(g, res), axis=0)
 
     if reference is not None:
-        conv = partial(utils.fftconvolution, sample=reference)
-        followup_inputs = np.array(utils.multiprocess(conv, followup_inputs))
+        followup_inputs = np.array([utils.fftconvolution(kernel=k, sample=reference) for k in followup_inputs])
 
     followup_preds, stdev = bootstrap_predict(
         model,
-        followup_inputs,
+        followup_inputs[..., np.newaxis],
         psfgen=gen,
         batch_size=batch_size,
         n_samples=1,
