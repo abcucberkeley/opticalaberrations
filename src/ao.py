@@ -309,6 +309,11 @@ def parse_args(args):
         help='IDs [e.g., "z0-y0-x0"] for tiles you wish to ignore'
     )
 
+    eval_dataset = subparsers.add_parser("eval_single_mode_dataset")
+    eval_dataset.add_argument("model", type=Path, help="path to pretrained tensorflow model")
+    eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
+    eval_dataset.add_argument("--amp", type=float, default=.1, help="ground truth amplitude in microns")
+
     return parser.parse_args(args)
 
 
@@ -399,7 +404,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             model=args.model,
             img=args.input,
             prev=args.prev,
-            freq_strength_threshold=args.freq_strength_threshold,
+            freq_strength_thrdetect_roiseshold=args.freq_strength_threshold,
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
             axial_voxel_size=args.axial_voxel_size,
@@ -431,6 +436,12 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             dm_damping_scalar=args.dm_damping_scalar,
             plot=args.plot,
             preloaded=preloaded
+        )
+    elif args.func == 'eval_single_mode_dataset':
+        experimental.eval_single_mode_dataset(
+            model=args.model,
+            datadir=args.datadir,
+            amp=args.amp,
         )
     else:
         logger.error(f"Error")

@@ -798,3 +798,72 @@ def aggregate_predictions(
             pred_std=pred_std,
             save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis"),
         )
+
+
+def eval_mode(input_path: Path, prediction_path: Path, model_path: Path, ground_truth: np.ndarray):
+    noisy_img = np.squeeze(get_image(input_path).astype(float))
+    p = pd.read_csv(prediction_path, header=0)['amplitude'].values
+
+    maxcounts = np.max(noisy_img)
+    psnr = np.sqrt(maxcounts)
+    gen = load_metadata(
+        model_path,
+        snr=psnr,
+        psf_shape=noisy_img.shape
+    )
+
+    p_wave = Wavefront(p, lam_detection=gen.lam_detection)
+    y_wave = Wavefront(ground_truth, lam_detection=gen.lam_detection)
+    diff = y_wave - p_wave
+
+    p_psf = gen.single_psf(p_wave)
+    gt_psf = gen.single_psf(y_wave)
+    corrected_psf = gen.single_psf(diff)
+
+    vis.diagnostic_assessment(
+        psf=noisy_img/maxcounts,
+        gt_psf=gt_psf,
+        predicted_psf=p_psf,
+        corrected_psf=corrected_psf,
+        wavelength=gen.lam_detection,
+        psnr=psnr,
+        maxcounts=maxcounts,
+        y=y_wave,
+        pred=p_wave,
+        save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_eval'),
+        display=False
+    )
+
+
+@profile
+def eval_single_mode_dataset(
+    model: Path,
+    datadir: Path,
+    amp: float,
+):
+    func = partial(eval_mode, model_path=model)
+
+    jobs = []
+    for file in datadir.glob('ansi_z*.tif'):
+        mode = int(''.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')))
+
+        try:
+            prediction_path = list(datadir.rglob(f'ansi_z{mode:02d}*_sample_predictions_zernike_coffs.csv'))[0]
+        except IndexError:
+            logger.warning(f'Prediction not found for: {file}')
+            continue
+
+        ground_truth = np.zeros(55)
+        ground_truth[mode] = amp
+
+        worker = partial(func, prediction_path=prediction_path, ground_truth=ground_truth)
+        p = mp.Process(target=worker, args=(file,))
+        p.start()
+        jobs.append(p)
+        print(f"Evaluating: {file}")
+
+        while len(jobs) >= 15:
+            for p in jobs:
+                if not p.is_alive():
+                    jobs.remove(p)
+            time.sleep(10)
