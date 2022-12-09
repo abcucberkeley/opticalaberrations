@@ -800,7 +800,14 @@ def aggregate_predictions(
         )
 
 
-def eval_mode(input_path: Path, prediction_path: Path, model_path: Path, ground_truth: np.ndarray):
+def eval_mode(
+    input_path: Path,
+    prediction_path: Path,
+    model_path: Path,
+    ground_truth: np.ndarray,
+    normalize: bool = True,
+    remove_background: bool = True,
+):
     noisy_img = np.squeeze(get_image(input_path).astype(float))
     p = pd.read_csv(prediction_path, header=0)['amplitude'].values
 
@@ -820,8 +827,16 @@ def eval_mode(input_path: Path, prediction_path: Path, model_path: Path, ground_
     gt_psf = gen.single_psf(y_wave)
     corrected_psf = gen.single_psf(diff)
 
+    if remove_background:
+        mode = int(st.mode(noisy_img[noisy_img < np.quantile(noisy_img, .99)], axis=None).mode[0])
+        noisy_img -= mode
+        noisy_img[noisy_img < 0] = 0
+
+    if normalize:
+        noisy_img /= np.nanmax(noisy_img)
+
     vis.diagnostic_assessment(
-        psf=noisy_img/maxcounts,
+        psf=noisy_img,
         gt_psf=gt_psf,
         predicted_psf=p_psf,
         corrected_psf=corrected_psf,
