@@ -810,7 +810,10 @@ def eval_mode(
 ):
     noisy_img = np.squeeze(get_image(input_path).astype(float))
     p = pd.read_csv(prediction_path, header=0)['amplitude'].values
-    y = pd.read_csv(gt_path, header=0)['amplitude'].values
+    try:
+        y = pd.read_csv(gt_path, header=0)['amplitude'].values
+    except KeyError:
+        y = pd.read_csv(gt_path, header=0).iloc[:, -1].values
 
     maxcounts = np.max(noisy_img)
     psnr = np.sqrt(maxcounts)
@@ -857,9 +860,11 @@ def eval_single_mode_dataset(model: Path, datadir: Path):
 
     jobs = []
     for file in datadir.glob('ansi_z*.tif'):
-        mode = int(''.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')))
+        modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
+        modes = [m for m in modes if m]
 
         try:
+            mode = int(modes[0])
             prediction_path = list(datadir.rglob(f'ansi_z{mode:02d}*_sample_predictions_zernike_coffs.csv'))[0]
             gt_path = list(datadir.rglob(f'ansi_z{mode:02d}*_ground_truth_zernike_coffs.csv'))[0]
         except IndexError:
