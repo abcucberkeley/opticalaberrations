@@ -309,7 +309,7 @@ def parse_args(args):
         help='IDs [e.g., "z0-y0-x0"] for tiles you wish to ignore'
     )
 
-    eval_dataset = subparsers.add_parser("eval_single_mode_dataset")
+    eval_dataset = subparsers.add_parser("eval_dataset")
     eval_dataset.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
 
@@ -436,8 +436,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             plot=args.plot,
             preloaded=preloaded
         )
-    elif args.func == 'eval_single_mode_dataset':
-        experimental.eval_single_mode_dataset(
+    elif args.func == 'eval_dataset':
+        experimental.eval_dataset(
             model=args.model,
             datadir=args.datadir,
         )

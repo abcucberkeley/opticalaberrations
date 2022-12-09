@@ -324,8 +324,8 @@ def predict(
 def predict_sample(
     img: Path,
     model: Path,
-    dm_calibration: Path,
-    dm_state: Path,
+    dm_calibration: Any,
+    dm_state: Any,
     axial_voxel_size: float,
     lateral_voxel_size: float,
     wavelength: float = .605,
@@ -384,14 +384,15 @@ def predict_sample(
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
 
-    dm_state = load_dm(dm_state)
-    dm = estimate_and_save_new_dm(
-        savepath=Path(f"{img.with_suffix('')}_sample_predictions_corrected_actuators.csv"),
-        coefficients=p,
-        dm_calibration=dm_calibration,
-        dm_state=dm_state,
-        dm_damping_scalar=dm_damping_scalar
-    )
+    if dm_calibration is not None:
+        dm_state = load_dm(dm_state)
+        estimate_and_save_new_dm(
+            savepath=Path(f"{img.with_suffix('')}_sample_predictions_corrected_actuators.csv"),
+            coefficients=p,
+            dm_calibration=dm_calibration,
+            dm_state=dm_state,
+            dm_damping_scalar=dm_damping_scalar
+        )
 
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
     std = Wavefront(std, order='ansi', lam_detection=wavelength)
@@ -413,57 +414,6 @@ def predict_sample(
             pred_std=std,
             save_path=Path(f"{img.with_suffix('')}_sample_predictions_diagnosis"),
         )
-
-
-@profile
-def predict_dataset(
-        dataset: Path,
-        model: Path,
-        dm_calibration: Path,
-        dm_state: Any,
-        axial_voxel_size: float,
-        lateral_voxel_size: float,
-        wavelength: float = .605,
-        scalar: float = 1,
-        prediction_threshold: float = 0.0,
-        verbose: bool = False,
-        plot: bool = False,
-        n_modes: int = 55,
-        num_predictions: int = 1,
-        batch_size: int = 1,
-        prev: Any = None
-):
-    func = partial(
-        predict_sample,
-        model=model,
-        dm_calibration=dm_calibration,
-        axial_voxel_size=axial_voxel_size,
-        lateral_voxel_size=lateral_voxel_size,
-        wavelength=wavelength,
-        scalar=scalar,
-        threshold=prediction_threshold,
-        verbose=verbose,
-        plot=plot,
-        n_modes=n_modes,
-        num_predictions=num_predictions,
-        batch_size=batch_size,
-        prev=prev,
-    )
-
-    jobs = []
-    for file in dataset.rglob('*.tif'):
-        if '_' not in file.stem:
-            worker = partial(func, dm_state=f"{file.parent}/DM{file.stem}.csv")
-            p = mp.Process(target=worker, args=(file,))
-            p.start()
-            jobs.append(p)
-            print(f"Evaluating: {file}")
-
-            while len(jobs) >= 6:
-                for p in jobs:
-                    if not p.is_alive():
-                        jobs.remove(p)
-                time.sleep(10)
 
 
 @profile
@@ -809,12 +759,6 @@ def eval_mode(
     remove_background: bool = True,
 ):
     noisy_img = np.squeeze(get_image(input_path).astype(float))
-    p = pd.read_csv(prediction_path, header=0)['amplitude'].values
-    try:
-        y = pd.read_csv(gt_path, header=0)['amplitude'].values
-    except KeyError:
-        y = pd.read_csv(gt_path, header=0).iloc[:, -1].values
-
     maxcounts = np.max(noisy_img)
     psnr = np.sqrt(maxcounts)
     gen = load_metadata(
@@ -822,6 +766,27 @@ def eval_mode(
         snr=psnr,
         psf_shape=noisy_img.shape
     )
+
+    if prediction_path is None:
+        predict_sample(
+            img=input_path,
+            model=model_path,
+            wavelength=gen.lam_detection,
+            axial_voxel_size=gen.z_voxel_size,
+            lateral_voxel_size=gen.x_voxel_size,
+            prev=None,
+            dm_state=None,
+            dm_calibration=None,
+            prediction_threshold=0.,
+        )
+        prediction_path = Path(f"{input_path.with_suffix('')}_sample_predictions_zernike_coffs.csv")
+
+    p = pd.read_csv(prediction_path, header=0)['amplitude'].values
+
+    try:
+        y = pd.read_csv(gt_path, header=0)['amplitude'].values
+    except KeyError:
+        y = pd.read_csv(gt_path, header=0).iloc[:, -1].values
 
     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
     y_wave = Wavefront(y, lam_detection=gen.lam_detection)
@@ -855,21 +820,21 @@ def eval_mode(
 
 
 @profile
-def eval_single_mode_dataset(model: Path, datadir: Path):
+def eval_dataset(model: Path, datadir: Path):
     func = partial(eval_mode, model_path=model)
 
     jobs = []
     for file in datadir.glob('ansi_z*.tif'):
         modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
         modes = [m for m in modes if m]
+        mode = int(modes[0])
+        gt_path = list(datadir.rglob(f'ansi_z{mode:02d}*_ground_truth_zernike_coffs.csv'))[0]
 
         try:
-            mode = int(modes[0])
             prediction_path = list(datadir.rglob(f'ansi_z{mode:02d}*_sample_predictions_zernike_coffs.csv'))[0]
-            gt_path = list(datadir.rglob(f'ansi_z{mode:02d}*_ground_truth_zernike_coffs.csv'))[0]
         except IndexError:
             logger.warning(f'Prediction not found for: {file}')
-            continue
+            prediction_path = None
 
         worker = partial(func, prediction_path=prediction_path, gt_path=gt_path)
         p = mp.Process(target=worker, args=(file,))
