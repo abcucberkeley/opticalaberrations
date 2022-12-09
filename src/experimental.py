@@ -803,13 +803,14 @@ def aggregate_predictions(
 def eval_mode(
     input_path: Path,
     prediction_path: Path,
+    gt_path: Path,
     model_path: Path,
-    ground_truth: np.ndarray,
     normalize: bool = True,
     remove_background: bool = True,
 ):
     noisy_img = np.squeeze(get_image(input_path).astype(float))
     p = pd.read_csv(prediction_path, header=0)['amplitude'].values
+    y = pd.read_csv(gt_path, header=0)['amplitude'].values
 
     maxcounts = np.max(noisy_img)
     psnr = np.sqrt(maxcounts)
@@ -820,7 +821,7 @@ def eval_mode(
     )
 
     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
-    y_wave = Wavefront(ground_truth, lam_detection=gen.lam_detection)
+    y_wave = Wavefront(y, lam_detection=gen.lam_detection)
     diff = y_wave - p_wave
 
     p_psf = gen.single_psf(p_wave)
@@ -851,11 +852,7 @@ def eval_mode(
 
 
 @profile
-def eval_single_mode_dataset(
-    model: Path,
-    datadir: Path,
-    amp: float,
-):
+def eval_single_mode_dataset(model: Path, datadir: Path):
     func = partial(eval_mode, model_path=model)
 
     jobs = []
@@ -864,20 +861,18 @@ def eval_single_mode_dataset(
 
         try:
             prediction_path = list(datadir.rglob(f'ansi_z{mode:02d}*_sample_predictions_zernike_coffs.csv'))[0]
+            gt_path = list(datadir.rglob(f'ansi_z{mode:02d}*_ground_truth_zernike_coffs.csv'))[0]
         except IndexError:
             logger.warning(f'Prediction not found for: {file}')
             continue
 
-        ground_truth = np.zeros(55)
-        ground_truth[mode] = amp
-
-        worker = partial(func, prediction_path=prediction_path, ground_truth=ground_truth)
+        worker = partial(func, prediction_path=prediction_path, gt_path=gt_path)
         p = mp.Process(target=worker, args=(file,))
         p.start()
         jobs.append(p)
         print(f"Evaluating: {file}")
 
-        while len(jobs) >= 15:
+        while len(jobs) >= 30:
             for p in jobs:
                 if not p.is_alive():
                     jobs.remove(p)

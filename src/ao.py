@@ -312,7 +312,6 @@ def parse_args(args):
     eval_dataset = subparsers.add_parser("eval_single_mode_dataset")
     eval_dataset.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
-    eval_dataset.add_argument("--amp", type=float, default=.1, help="ground truth amplitude in microns")
 
     return parser.parse_args(args)
 
@@ -441,7 +440,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         experimental.eval_single_mode_dataset(
             model=args.model,
             datadir=args.datadir,
-            amp=args.amp,
         )
     else:
         logger.error(f"Error")
