@@ -842,7 +842,7 @@ def eval_dataset(model: Path, datadir: Path):
         jobs.append(p)
         print(f"Evaluating: {file}")
 
-        while len(jobs) >= 30:
+        while len(jobs) >= 55:
             for p in jobs:
                 if not p.is_alive():
                     jobs.remove(p)

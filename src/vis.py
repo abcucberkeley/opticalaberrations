@@ -1292,7 +1292,7 @@ def diagnostic_assessment(
         threshold: float = .01,
 ):
 
-    def wavefront(iax, phi, label='', nas=(.5, .75, .9, .95, .99)):
+    def wavefront(iax, phi, label='', nas=(.65, .75, .85, .95, .99)):
         def na_mask(radius):
             center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
             Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
@@ -1314,7 +1314,7 @@ def diagnostic_assessment(
             iax.add_patch(circle)
 
             mask = phi * na_mask(radius=r)
-            pcts.append((np.nanquantile(mask, .05), np.nanquantile(mask, .95)))
+            pcts.append((np.nanmin(mask), np.nanmax(mask)))
 
         circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
         iax.add_patch(circle)
@@ -1325,7 +1325,7 @@ def diagnostic_assessment(
         top.hist(phi, bins=55, color='grey')
 
         err = '\n'.join([
-            f'$P2P_{{NA={na}}}$={abs(p[1]-p[0]):.2f}\t[$P_{{05}}$={p[0]:.2f}, $P_{{95}}$={p[1]:.2f}]'
+            f'$P2P ({{NA={na:.2f}}})$:\t{abs(p[1]-p[0]):.2f} $\lambda$'
             for na, p in zip(nas, pcts)
         ])
         top.set_title(f'{label}\n{err}')
@@ -1525,7 +1525,7 @@ def diagnostic_assessment(
     ax_zcoff.legend(frameon=False, loc='upper center', bbox_to_anchor=(.075, 1))
     ax_zcoff.set_xticks(range(len(pred.amplitudes)))
     ax_zcoff.set_xlim((0, len(pred.amplitudes)-1))
-    ax_zcoff.set_ylabel(r'Zernike coefficients ($\mu$m)')
+    ax_zcoff.set_ylabel(r'Zernike coefficients ($\mu$m RMS)')
     ax_zcoff.spines['top'].set_visible(False)
     ax_zcoff.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
 
