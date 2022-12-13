@@ -1,3 +1,5 @@
+from functools import partial
+
 import matplotlib
 matplotlib.use('Agg')
 
@@ -1300,13 +1302,18 @@ def diagnostic_assessment(
         y: Wavefront,
         pred: Wavefront,
         save_path: Path,
-        wavelength: float = .605,
         display: bool = False,
         psf_cmap: str = 'hot',
         gamma: float = .5,
         threshold: float = .01,
-        bar_width: float = .35
+        bar_width: float = .35,
+        dxy: float = .108,
+        dz: float = .2,
 ):
+
+    def formatter(x, pos, dd):
+        val_str = np.ceil(x * dd).astype(int)
+        return f'{val_str:1d}'
 
     def wavefront(iax, phi, label='', nas=(.65, .75, .85, .95, .99)):
         def na_mask(radius):
@@ -1418,16 +1425,22 @@ def diagnostic_assessment(
             cax.yaxis.set_label_position("left")
 
         xy.yaxis.set_ticks_position('right')
-        xy.set_xticks(range(0, vol.shape[0]+10, vol.shape[0]//4))
-        xy.set_yticks(range(0, vol.shape[1]+10, vol.shape[1]//4))
+        xy.set_xticks(range(0, vol.shape[0]+10, vol.shape[0] // 4))
+        xy.set_yticks(range(0, vol.shape[1]+10, vol.shape[1] // 4))
+        xy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
+        xy.yaxis.set_major_formatter(partial(formatter, dd=dxy))
 
         zx.yaxis.set_ticks_position('right')
-        zx.set_xticks(range(0, vol.shape[1]+10, vol.shape[0]//4))
-        zx.set_yticks(range(0, vol.shape[0]+10, vol.shape[-1]//4))
+        zx.set_xticks(range(0, vol.shape[1] + 10, vol.shape[0] // 4))
+        zx.set_yticks(range(0, vol.shape[-1] + 10, vol.shape[-1] // 4))
+        zx.xaxis.set_major_formatter(partial(formatter, dd=dxy))
+        zx.yaxis.set_major_formatter(partial(formatter, dd=dz))
 
         zy.yaxis.set_ticks_position('right')
         zy.set_xticks(range(0, vol.shape[1]+10, vol.shape[1]//4))
-        zy.set_yticks(range(0, vol.shape[0]+10, vol.shape[-1]//4))
+        zy.set_yticks(range(0, vol.shape[-1]+10, vol.shape[-1]//4))
+        zy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
+        zy.yaxis.set_major_formatter(partial(formatter, dd=dz))
 
         return m
 
@@ -1516,9 +1529,9 @@ def diagnostic_assessment(
     cbar.ax.set_title(r'$\lambda$', pad=20)
     cbar.ax.yaxis.set_ticks_position('left')
 
-    ax_xy.set_title('XY')
-    ax_xz.set_title('XZ')
-    ax_yz.set_title('YZ')
+    ax_xy.set_title('XY ($\mu$m)')
+    ax_xz.set_title('XZ ($\mu$m)')
+    ax_yz.set_title('YZ ($\mu$m)')
     ax_xz.set_ylabel(f"PSNR: {psnr:.2f}")
     ax_yz.set_ylabel(f"Max photon count: {maxcounts:.0f}")
 

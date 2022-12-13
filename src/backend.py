@@ -609,7 +609,6 @@ def beads(
 
 @profile
 def predict(model: Path, psnr: int = 30):
-    plt.style.use("dark_background")
     m = load(model)
     m.summary()
 
@@ -693,17 +692,31 @@ def predict(model: Path, psnr: int = 30):
                     imsave(save_path / f'psf_{s}.tif', noisy_img)
                     imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
 
+                    plt.style.use("default")
                     vis.diagnostic_assessment(
                         psf=noisy_img,
                         gt_psf=gt_psf,
                         predicted_psf=p_psf,
                         corrected_psf=corrected_noisy_img,
-                        wavelength=gen.lam_detection,
                         psnr=psnr,
                         maxcounts=maxcounts,
                         y=y_wave,
                         pred=p_wave,
                         save_path=save_path / f'{s}',
+                        display=False
+                    )
+
+                    plt.style.use('dark_background')
+                    vis.diagnostic_assessment(
+                        psf=noisy_img,
+                        gt_psf=gt_psf,
+                        predicted_psf=p_psf,
+                        corrected_psf=corrected_noisy_img,
+                        psnr=psnr,
+                        maxcounts=maxcounts,
+                        y=y_wave,
+                        pred=p_wave,
+                        save_path=save_path / f'{s}_db',
                         display=False
                     )
 
@@ -765,7 +778,6 @@ def deconstruct(
             corrected_psf=corrected_psf,
             psnr=psnr,
             maxcounts=maxcounts,
-            wavelength=wavelength,
             y=y,
             pred=p,
             save_path=save_path / f'{i}',

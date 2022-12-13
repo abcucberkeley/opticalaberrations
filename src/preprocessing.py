@@ -165,7 +165,7 @@ def prep_sample(
 
             if remove_background:
                 mode = int(st.mode(s[s < np.quantile(s, .99)], axis=None).mode[0])
-                s -= mode
+                s -= mode + background_mode_offset
                 s[s < 0] = 0
 
             if normalize:

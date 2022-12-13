@@ -870,18 +870,36 @@ def eval_mode(
     dm_wavefront = Path(prediction_path.parent/f"{input_path.with_suffix('')}_dm_wavefront.png")
     plot_dm_actuators(dm_path=dm_path, gt_path=gt_path, save_path=dm_wavefront)
 
+    plt.style.use("default")
     vis.diagnostic_assessment(
         psf=noisy_img,
         gt_psf=gt_psf,
         predicted_psf=p_psf,
         corrected_psf=corrected_psf,
-        wavelength=gen.lam_detection,
         psnr=psnr,
         maxcounts=maxcounts,
         y=y_wave,
         pred=p_wave,
         save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_eval'),
-        display=False
+        display=False,
+        dxy=gen.x_voxel_size,
+        dz=gen.z_voxel_size
+    )
+
+    plt.style.use("dark_background")
+    vis.diagnostic_assessment(
+        psf=noisy_img,
+        gt_psf=gt_psf,
+        predicted_psf=p_psf,
+        corrected_psf=corrected_psf,
+        psnr=psnr,
+        maxcounts=maxcounts,
+        y=y_wave,
+        pred=p_wave,
+        save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_eval_db'),
+        display=False,
+        dxy=gen.x_voxel_size,
+        dz=gen.z_voxel_size
     )
 
 
