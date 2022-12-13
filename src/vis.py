@@ -1290,6 +1290,7 @@ def diagnostic_assessment(
         psf_cmap: str = 'hot',
         gamma: float = .5,
         threshold: float = .01,
+        bar_width: float = .35
 ):
 
     def wavefront(iax, phi, label='', nas=(.65, .75, .85, .95, .99)):
@@ -1319,22 +1320,11 @@ def diagnostic_assessment(
         circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
         iax.add_patch(circle)
 
-        divider = make_axes_locatable(iax)
-        top = divider.append_axes("top", size='30%', pad=0.2)
-        phi = phi.flatten()
-        top.hist(phi, bins=55, color='grey')
-
         err = '\n'.join([
             f'$P2P ({{NA={na:.2f}}})$:\t{abs(p[1]-p[0]):.2f} $\lambda$'
             for na, p in zip(nas, pcts)
         ])
-        top.set_title(f'{label}\n{err}')
-        top.set_yticks([])
-        top.xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
-        top.set_xlim((np.nanquantile(phi, 0.01), np.nanquantile(phi, 0.99)))
-        top.spines['right'].set_visible(False)
-        top.spines['top'].set_visible(False)
-        top.spines['left'].set_visible(False)
+        iax.set_title(f'{label}\n{err}')
         return mat
 
     def psf_slice(xy, zx, zy, vol, label=''):
@@ -1377,13 +1367,13 @@ def diagnostic_assessment(
 
             inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=zy, wspace=0.1, hspace=0.1)
             ax = fig.add_subplot(inner[0])
-            m = ax.imshow(vol[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
+            m = ax.imshow(vol[2], cmap=cmap, vmin=vmin, vmax=vmax)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
 
             ax = fig.add_subplot(inner[1])
-            ax.imshow(vol[5].T, cmap='coolwarm', vmin=-1, vmax=1)
+            ax.imshow(vol[5], cmap='coolwarm', vmin=-1, vmax=1)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.set_xlabel(r'$\varpupil = \angle \tau$')
@@ -1397,22 +1387,24 @@ def diagnostic_assessment(
         elif vol.shape[0] == 3:
             m = xy.imshow(vol[0], cmap='Spectral_r', vmin=0, vmax=1)
             zx.imshow(vol[1], cmap='Spectral_r', vmin=0, vmax=1)
-            zy.imshow(vol[2].T, cmap='Spectral_r', vmin=0, vmax=1)
+            zy.imshow(vol[2], cmap='Spectral_r', vmin=0, vmax=1)
         else:
             vol = vol ** gamma
             vol = np.nan_to_num(vol)
 
             m = xy.imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
             zx.imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
-            zy.imshow(np.max(vol, axis=2).T, cmap=psf_cmap, vmin=0, vmax=1)
+            zy.imshow(np.max(vol, axis=2), cmap=psf_cmap, vmin=0, vmax=1)
 
-            cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
+            cax = inset_axes(xy, width="10%", height="100%", loc='center left', borderpad=-5)
             cb = plt.colorbar(m, cax=cax)
             cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-            cax.set_ylabel(f"$\gamma$: {gamma:.2f}")
-            cax.yaxis.set_label_position("right")
+            cax.set_ylabel(f"{label} ($\gamma$={gamma:.2f})")
+            cax.yaxis.set_label_position("left")
 
-        xy.set_ylabel(label)
+        xy.yaxis.set_ticks_position('right')
+        zx.yaxis.set_ticks_position('right')
+        zy.yaxis.set_ticks_position('right')
         return m
 
     plt.rcParams.update({
@@ -1424,7 +1416,6 @@ def diagnostic_assessment(
         'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
-    # plt.style.use("dark_background")
 
     if len(psf.shape) > 3:
         psf = np.squeeze(psf, axis=-1)
@@ -1440,13 +1431,13 @@ def diagnostic_assessment(
     pred_wave = pred.wave(size=100)
     diff = y_wave - pred_wave
 
-    fig = plt.figure(figsize=(13, 20))
-    gs = fig.add_gridspec(6 if gt_psf is None else 7, 3)
+    fig = plt.figure(figsize=(15, 15))
+    gs = fig.add_gridspec(5 if gt_psf is None else 6, 4)
 
     ax_gt = fig.add_subplot(gs[:2, 0])
     ax_pred = fig.add_subplot(gs[:2, 1])
     ax_diff = fig.add_subplot(gs[:2, 2])
-    cax = fig.add_axes([.99, 0.725, 0.02, .175])
+    cax = fig.add_axes([0.1, 0.725, 0.02, .175])
 
     # input
     ax_xy = fig.add_subplot(gs[2, 0])
@@ -1454,16 +1445,16 @@ def diagnostic_assessment(
     ax_yz = fig.add_subplot(gs[2, 2])
 
     # predictions
-    ax_pxy = fig.add_subplot(gs[-3, 0])
-    ax_pxz = fig.add_subplot(gs[-3, 1])
-    ax_pyz = fig.add_subplot(gs[-3, 2])
+    ax_pxy = fig.add_subplot(gs[-2, 0])
+    ax_pxz = fig.add_subplot(gs[-2, 1])
+    ax_pyz = fig.add_subplot(gs[-2, 2])
 
     # corrected
-    ax_cxy = fig.add_subplot(gs[-2, 0])
-    ax_cxz = fig.add_subplot(gs[-2, 1])
-    ax_cyz = fig.add_subplot(gs[-2, 2])
+    ax_cxy = fig.add_subplot(gs[-1, 0])
+    ax_cxz = fig.add_subplot(gs[-1, 1])
+    ax_cyz = fig.add_subplot(gs[-1, 2])
 
-    ax_zcoff = fig.add_subplot(gs[-1, :])
+    ax_zcoff = fig.add_subplot(gs[:, -1])
 
     vmin = np.round(np.nanmin(y_wave))
     vmin = -.25 if vmin > -1 * threshold else vmin
@@ -1498,10 +1489,8 @@ def diagnostic_assessment(
         format=FormatStrFormatter("%.2g"),
         # spacing='proportional',
     )
-    cbar.ax.set_title(r'$\lambda$')
-    cbar.ax.set_ylabel(f'$\lambda = {wavelength}~\mu m$')
-    cbar.ax.yaxis.set_ticks_position('right')
-    cbar.ax.yaxis.set_label_position('left')
+    cbar.ax.set_title(r'$\lambda$', pad=20)
+    cbar.ax.yaxis.set_ticks_position('left')
 
     ax_xy.set_title('XY')
     ax_xz.set_title('XZ')
@@ -1519,20 +1508,41 @@ def diagnostic_assessment(
         ax_yzgt = fig.add_subplot(gs[3, 2])
         psf_slice(ax_xygt, ax_xzgt, ax_yzgt, gt_psf, label='Validation')
 
-    # ax_zcoff.set_title('Zernike modes')
-    ax_zcoff.plot(pred.amplitudes, '-o', color='C0', label='Predictions')
-    ax_zcoff.plot(y.amplitudes, '-o', color='C1', label='Ground truth')
-    ax_zcoff.legend(frameon=False, loc='upper center', bbox_to_anchor=(.075, 1))
-    ax_zcoff.set_xticks(range(len(pred.amplitudes)))
-    ax_zcoff.set_xlim((0, len(pred.amplitudes)-1))
-    ax_zcoff.set_ylabel(r'Zernike coefficients ($\mu$m RMS)')
-    ax_zcoff.spines['top'].set_visible(False)
-    ax_zcoff.grid(True, which="both", axis='both', lw=1, ls='--', zorder=0)
+    ax_zcoff.barh(
+        np.arange(len(pred.amplitudes)) - bar_width / 2,
+        pred.amplitudes,
+        capsize=10,
+        alpha=.75,
+        color='C0',
+        align='center',
+        ecolor='C0',
+        label='Predictions',
+        height=bar_width
+    )
+    ax_zcoff.barh(
+        np.arange(len(y.amplitudes)) + bar_width / 2,
+        y.amplitudes,
+        capsize=10,
+        alpha=.75,
+        color='C1',
+        align='center',
+        ecolor='C1',
+        label='Ground truth',
+        height=bar_width
+    )
+    ax_zcoff.set_ylim((-1, len(pred.amplitudes)))
+    ax_zcoff.set_yticks(range(0, len(pred.amplitudes)))
+    ax_zcoff.spines.right.set_visible(False)
+    ax_zcoff.spines.left.set_visible(False)
+    ax_zcoff.spines.top.set_visible(False)
+    ax_zcoff.grid(True, which="both", axis='x', lw=1, ls='--', zorder=0)
+    ax_zcoff.set_xlabel(r'Zernike coefficients ($\mu$m RMS)')
+    ax_zcoff.legend(frameon=False, loc='upper center', bbox_to_anchor=(.075, 1.05))
 
     for ax in [ax_gt, ax_pred, ax_diff]:
         ax.axis('off')
 
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
+    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2, hspace=.2)
     # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 

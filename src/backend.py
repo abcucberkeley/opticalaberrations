@@ -609,6 +609,7 @@ def beads(
 
 @profile
 def predict(model: Path, psnr: int = 30):
+    plt.style.use("dark_background")
     m = load(model)
     m.summary()
 
