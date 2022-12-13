@@ -613,7 +613,7 @@ def predict(model: Path, psnr: int = 30):
     m.summary()
 
     for dist in ['single', 'powerlaw', 'dirichlet']:
-        for amplitude_range in [(.05, .1), (.1, .3)]:
+        for amplitude_range in [(.1, .2), (.2, .3)]:
             gen = load_metadata(
                 model,
                 snr=100,
@@ -662,7 +662,7 @@ def predict(model: Path, psnr: int = 30):
                     noisy_img /= np.max(noisy_img)
 
                     save_path = Path(
-                        f"{model.with_suffix('')}/random/{dist}/um-{amplitude_range[-1]}/npoints-{npoints}"
+                        f"{model.with_suffix('')}/samples/{dist}/um-{amplitude_range[-1]}/npoints-{npoints}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
