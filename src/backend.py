@@ -295,27 +295,26 @@ def predict_sign(
 
     if plot is not None:
         if len(np.squeeze(preds).shape) == 1:
-            init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes
-            init_preds_wave_error = Wavefront(np.zeros_like(init_preds), lam_detection=gen.lam_detection).amplitudes
+            init_preds_wave = np.squeeze(init_preds)
+            init_preds_wave_error = np.zeros_like(init_preds_wave)
 
-            followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes
-            followup_preds_wave_error = Wavefront(np.zeros_like(followup_preds),
-                                                  lam_detection=gen.lam_detection).amplitudes
+            followup_preds_wave = np.squeeze(followup_preds)
+            followup_preds_wave_error = np.zeros_like(followup_preds_wave)
 
-            preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes
-            preds_error = Wavefront(np.zeros_like(preds), lam_detection=gen.lam_detection).amplitudes
+            preds_wave = np.squeeze(preds)
+            preds_error = np.zeros_like(preds_wave)
 
-            percent_changes = pchange
-            percent_changes_error = np.zeros_like(pchange)
+            percent_changes = np.squeeze(pchange)
+            percent_changes_error = np.zeros_like(percent_changes)
         else:
-            init_preds_wave = Wavefront(np.mean(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
-            init_preds_wave_error = Wavefront(np.std(init_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+            init_preds_wave = np.mean(init_preds, axis=0)
+            init_preds_wave_error = np.std(init_preds, axis=0)
 
-            followup_preds_wave = Wavefront(np.mean(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
-            followup_preds_wave_error = Wavefront(np.std(followup_preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+            followup_preds_wave = np.mean(followup_preds, axis=0)
+            followup_preds_wave_error = np.std(followup_preds, axis=0)
 
-            preds_wave = Wavefront(np.mean(preds, axis=0), lam_detection=gen.lam_detection).amplitudes
-            preds_error = Wavefront(np.std(preds, axis=0), lam_detection=gen.lam_detection).amplitudes
+            preds_wave = np.mean(preds, axis=0)
+            preds_error = np.std(preds, axis=0)
 
             percent_changes = np.mean(pchange, axis=0)
             percent_changes_error = np.std(pchange, axis=0)
@@ -396,7 +395,7 @@ def predict_sign(
         axes[2].spines.left.set_visible(False)
         axes[2].spines.top.set_visible(False)
         axes[2].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-        axes[2].set_ylabel(r'Zernike coefficients ($\mu$m)')
+        axes[2].set_ylabel(r'Zernike coefficients ($\mu$m RMS)')
 
         plt.tight_layout()
         plt.savefig(f'{plot}_sign_correction.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
@@ -517,9 +516,12 @@ def eval_sign(
     reference: Any = None,
     plot: Any = None,
     threshold: float = 0.,
-    sign_threshold: float = .95,
+    sign_threshold: float = 1.,
     desc: str = 'Eval',
 ):
+    if len(ys.shape) == 1:
+        ys = ys[np.newaxis, :]
+
     init_preds, stdev = bootstrap_predict(
         model,
         inputs,
@@ -532,8 +534,9 @@ def eval_sign(
     if len(init_preds.shape) > 1:
         init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
     else:
-        init_preds = np.abs(init_preds)[:ys.shape[-1]]
+        init_preds = np.abs(init_preds)[np.newaxis, :ys.shape[-1]]
 
+    init_preds = np.abs(init_preds)
     res = ys - init_preds
     g = partial(
         gen.single_psf,
@@ -556,10 +559,11 @@ def eval_sign(
         threshold=threshold,
         desc=desc,
     )
-    if len(init_preds.shape) > 1:
+
+    if len(followup_preds.shape) > 1:
         followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]
     else:
-        followup_preds = np.abs(followup_preds)[:ys.shape[-1]]
+        followup_preds = np.abs(followup_preds)[np.newaxis, :ys.shape[-1]]
 
     preds, pchanges = predict_sign(
         gen=gen,
@@ -579,9 +583,8 @@ def beads(
     num_objs: int = 1,
     radius: float = .45,
 ):
-    np.random.seed(os.getpid())
+    np.random.seed(np.random.randint(1000) * os.getpid())
     reference = np.zeros(gen.psf_shape)
-    np.random.seed(os.getpid())
 
     for i in range(num_objs):
         if object_size > 0:
@@ -606,24 +609,24 @@ def beads(
 
 @profile
 def predict(model: Path, psnr: int = 30):
+    plt.style.use("dark_background")
     m = load(model)
     m.summary()
 
     for dist in ['single', 'powerlaw', 'dirichlet']:
-        for amplitude_range in [(.05, .1), (.1, .3)]:
+        for amplitude_range in [(.1, .2), (.2, .3)]:
             gen = load_metadata(
                 model,
-                snr=1000,
-                bimodal=True,
-                rotate=True,
+                snr=100,
                 batch_size=1,
                 amplitude_ranges=amplitude_range,
                 distribution=dist,
+                bimodal=False,
+                rotate=True,
+                mode_weights='pyramid',
                 psf_shape=(64, 64, 64)
             )
-            for s, (psf, y, snr, maxcounts) in zip(range(10), gen.generator(debug=True)):
-                psf = np.squeeze(psf)
-
+            for s in range(10):
                 for npoints in tqdm([1, 2, 5, 10]):
                     reference = beads(
                         gen=gen,
@@ -631,12 +634,29 @@ def predict(model: Path, psnr: int = 30):
                         num_objs=npoints
                     )
 
+                    phi = Wavefront(
+                        amplitude_range,
+                        distribution=dist,
+                        bimodal=False,
+                        rotate=True,
+                        mode_weights='pyramid',
+                        lam_detection=gen.lam_detection,
+                    )
+
+                    # aberrated PSF without noise
+                    psf, y, snr, maxcounts = gen.single_psf(
+                        phi=phi,
+                        normed=True,
+                        noise=False,
+                        meta=True,
+                    )
+
                     img = utils.fftconvolution(sample=reference, kernel=psf)
                     img *= psnr ** 2
 
                     rand_noise = gen._random_noise(
                         image=img,
-                        mean=gen.mean_background_noise,
+                        mean=0,
                         sigma=gen.sigma_background_noise
                     )
                     noisy_img = rand_noise + img
@@ -663,7 +683,12 @@ def predict(model: Path, psnr: int = 30):
 
                     p_psf = gen.single_psf(p_wave)
                     gt_psf = gen.single_psf(y_wave)
+
                     corrected_psf = gen.single_psf(diff)
+                    corrected_noisy_img = utils.fftconvolution(sample=reference, kernel=corrected_psf)
+                    corrected_noisy_img *= psnr ** 2
+                    corrected_noisy_img = rand_noise + corrected_noisy_img
+                    corrected_noisy_img /= np.max(corrected_noisy_img)
 
                     imsave(save_path / f'psf_{s}.tif', noisy_img)
                     imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
@@ -672,7 +697,7 @@ def predict(model: Path, psnr: int = 30):
                         psf=noisy_img,
                         gt_psf=gt_psf,
                         predicted_psf=p_psf,
-                        corrected_psf=corrected_psf,
+                        corrected_psf=corrected_noisy_img,
                         wavelength=gen.lam_detection,
                         psnr=psnr,
                         maxcounts=maxcounts,

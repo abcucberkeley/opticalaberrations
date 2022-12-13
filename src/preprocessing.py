@@ -147,6 +147,7 @@ def resize(
 
     return resized_vol
 
+
 @profile
 def prep_sample(
     sample: np.array,
@@ -155,6 +156,7 @@ def prep_sample(
     debug: Any = None,
     remove_background: bool = True,
     normalize: bool = True,
+    background_mode_offset: int = 0
 ):
     if len(np.squeeze(sample).shape) == 4:
         samples = []
@@ -184,7 +186,7 @@ def prep_sample(
     else:
         if remove_background:
             mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
-            sample -= mode
+            sample -= mode + background_mode_offset
             sample[sample < 0] = 0
 
         if normalize:
