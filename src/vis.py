@@ -1399,21 +1399,30 @@ def diagnostic_assessment(
             cax = inset_axes(xy, width="10%", height="100%", loc='center left', borderpad=-5)
             cb = plt.colorbar(m, cax=cax)
             cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-            cax.set_ylabel(f"{label} ($\gamma$={gamma:.2f})")
+            cax.set_ylabel(f"{label} [$\gamma$={gamma:.2f}]")
             cax.yaxis.set_label_position("left")
 
         xy.yaxis.set_ticks_position('right')
+        xy.set_xticks(range(0, vol.shape[0]+10, vol.shape[0]//4))
+        xy.set_yticks(range(0, vol.shape[1]+10, vol.shape[1]//4))
+
         zx.yaxis.set_ticks_position('right')
+        zx.set_xticks(range(0, vol.shape[1]+10, vol.shape[0]//4))
+        zx.set_yticks(range(0, vol.shape[0]+10, vol.shape[-1]//4))
+
         zy.yaxis.set_ticks_position('right')
+        zy.set_xticks(range(0, vol.shape[1]+10, vol.shape[1]//4))
+        zy.set_yticks(range(0, vol.shape[0]+10, vol.shape[-1]//4))
+
         return m
 
     plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
+        'font.size': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12,
         'axes.autolimit_mode': 'round_numbers'
     })
 
@@ -1537,7 +1546,7 @@ def diagnostic_assessment(
     ax_zcoff.spines.top.set_visible(False)
     ax_zcoff.grid(True, which="both", axis='x', lw=1, ls='--', zorder=0)
     ax_zcoff.set_xlabel(r'Zernike coefficients ($\mu$m RMS)')
-    ax_zcoff.legend(frameon=False, loc='upper center', bbox_to_anchor=(.075, 1.05))
+    ax_zcoff.legend(frameon=False, loc='upper center', bbox_to_anchor=(.5, 1.05))
 
     for ax in [ax_gt, ax_pred, ax_diff]:
         ax.axis('off')
