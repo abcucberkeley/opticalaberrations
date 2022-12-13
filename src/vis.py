@@ -449,6 +449,20 @@ def plot_shapes_embeddings(
         psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         savepath='../data/shapes_embeddings',
 ):
+    """ Plot the embeddings for different puncta sizes (aka different "shapes")
+
+    Args:
+        res (int, optional): resolution. Defaults to 64.
+        padsize (_type_, optional): Uh, doesn't get used here.  It will appear in the name of the folder path. Defaults to None.
+        shapes (int, optional): Number of puncta sizes to test. Defaults to 5 different sizes (aka thicknesses)
+        wavelength (float, optional):   Defaults to .510 microns
+        x_voxel_size (float, optional): Defaults to .108 microns
+        y_voxel_size (float, optional): Defaults to .108 microns
+        z_voxel_size (float, optional): Defaults to .2   microns
+        log10 (bool, optional): Changes the color scale, doesn't change the data. Defaults to False.
+        psf_type (str, optional): Defaults to '../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'.
+        savepath (str, optional): Defaults to '../data/shapes_embeddings'.
+    """
     def sphere(image_size, radius=.5, position=.5):
         img = rg.sphere(shape=image_size, radius=radius, position=position)
         return img.astype(np.float)
@@ -476,14 +490,15 @@ def plot_shapes_embeddings(
     cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
     cmap = mcolors.ListedColormap(cmap)
 
-    waves = np.arange(-.3, .35, step=.05).round(3)
+    waves = np.arange(-.3, .35, step=.05).round(3)                      # array of aberration amounts to use (in waves)
     # waves = np.arange(-.075, .08, step=.015).round(3) ## small
     logger.info(waves)
 
     fig = plt.figure(figsize=(25, 55))
-    nrows = shapes * 6
-    gs = fig.add_gridspec(nrows, len(waves)+1)
+    nrows = shapes * 6                                                  # 3 principle planes * 2 (for amplitudes & phases) = 6 rows for each 
+    gs = fig.add_gridspec(nrows, len(waves)+1)                          # plot for each abberation amount and +1 for pupil example
 
+    logger.info(f'Building {nrows*len(waves)+1} subplots, going to be a minute...')
     grid = {}
     for th, ax in zip(range(shapes), np.round(np.arange(0, nrows, step=6))):
         for k in range(6):
@@ -504,14 +519,14 @@ def plot_shapes_embeddings(
         snr=100,
         cpu_workers=-1,
     )
-    mode = 6
+    mode = 6                                            # The single Zernike mode to use
 
-    for thickness in trange(shapes):
+    for thickness in trange(shapes):                    # thickness = radius of puncta (e.g. from diffraction limited to ...)
         if thickness == 0:
             reference = np.zeros(gen.psf_shape)
-            reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] = 1
+            reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] = 1    # single voxel
         else:
-            reference = sphere(image_size=gen.psf_shape, radius=thickness, position=.5)
+            reference = sphere(image_size=gen.psf_shape, radius=thickness, position=.5)     # sphere of voxels
 
         outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}')
         outdir.mkdir(exist_ok=True, parents=True)
@@ -529,7 +544,7 @@ def plot_shapes_embeddings(
                 normed=True,
                 noise=False,
             )
-            inputs = convolution.convolve_fft(reference, kernel, allow_huge=True)
+            inputs = convolution.convolve_fft(reference, kernel, allow_huge=True)           # inputs = detected signal, given by convolving reference (puncta) with kernel (abberated psf)
             inputs /= np.nanmax(inputs)
 
             outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}/convolved/')
