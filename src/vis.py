@@ -1312,8 +1312,7 @@ def diagnostic_assessment(
 ):
 
     def formatter(x, pos, dd):
-        val_str = np.ceil(x * dd).astype(int)
-        return f'{val_str:1d}'
+        return f'{np.ceil(x * dd).astype(int):1d}'
 
     def wavefront(iax, phi, label='', nas=(.65, .75, .85, .95, .99)):
         def na_mask(radius):
@@ -1425,22 +1424,22 @@ def diagnostic_assessment(
             cax.yaxis.set_label_position("left")
 
         xy.yaxis.set_ticks_position('right')
-        xy.set_xticks(range(0, vol.shape[0]+10, vol.shape[0] // 4))
-        xy.set_yticks(range(0, vol.shape[1]+10, vol.shape[1] // 4))
         xy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
         xy.yaxis.set_major_formatter(partial(formatter, dd=dxy))
+        xy.xaxis.set_major_locator(plt.MaxNLocator(6))
+        xy.yaxis.set_major_locator(plt.MaxNLocator(6))
 
         zx.yaxis.set_ticks_position('right')
-        zx.set_xticks(range(0, vol.shape[1] + 10, vol.shape[0] // 4))
-        zx.set_yticks(range(0, vol.shape[-1] + 10, vol.shape[-1] // 4))
         zx.xaxis.set_major_formatter(partial(formatter, dd=dxy))
         zx.yaxis.set_major_formatter(partial(formatter, dd=dz))
+        zx.xaxis.set_major_locator(plt.MaxNLocator(6))
+        zx.yaxis.set_major_locator(plt.MaxNLocator(6))
 
         zy.yaxis.set_ticks_position('right')
-        zy.set_xticks(range(0, vol.shape[1]+10, vol.shape[1]//4))
-        zy.set_yticks(range(0, vol.shape[-1]+10, vol.shape[-1]//4))
         zy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
         zy.yaxis.set_major_formatter(partial(formatter, dd=dz))
+        zy.xaxis.set_major_locator(plt.MaxNLocator(6))
+        zy.yaxis.set_major_locator(plt.MaxNLocator(6))
 
         return m
 
@@ -1468,7 +1467,7 @@ def diagnostic_assessment(
     pred_wave = pred.wave(size=100)
     diff = y_wave - pred_wave
 
-    fig = plt.figure(figsize=(15, 15))
+    fig = plt.figure(figsize=(17, 15))
     gs = fig.add_gridspec(5 if gt_psf is None else 6, 4)
 
     ax_gt = fig.add_subplot(gs[:2, 0])
@@ -1529,11 +1528,11 @@ def diagnostic_assessment(
     cbar.ax.set_title(r'$\lambda$', pad=20)
     cbar.ax.yaxis.set_ticks_position('left')
 
-    ax_xy.set_title('XY ($\mu$m)')
-    ax_xz.set_title('XZ ($\mu$m)')
-    ax_yz.set_title('YZ ($\mu$m)')
-    ax_xz.set_ylabel(f"PSNR: {psnr:.2f}")
-    ax_yz.set_ylabel(f"Max photon count: {maxcounts:.0f}")
+    ax_cxy.set_xlabel('XY ($\mu$m)')
+    ax_cxz.set_xlabel('XZ ($\mu$m)')
+    ax_cyz.set_xlabel('YZ ($\mu$m)')
+    ax_xz.set_title(f"PSNR: {psnr:.2f}")
+    ax_yz.set_title(f"Max photon count: {maxcounts:.0f}")
 
     psf_slice(ax_xy, ax_xz, ax_yz, psf, label='Input (MIP)')
     psf_slice(ax_pxy, ax_pxz, ax_pyz, predicted_psf, label='Predicted')
