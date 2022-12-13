@@ -583,7 +583,7 @@ def beads(
     num_objs: int = 1,
     radius: float = .45,
 ):
-    np.random.seed(os.getpid())
+    np.random.seed(np.random.randint(1000) * os.getpid())
     reference = np.zeros(gen.psf_shape)
 
     for i in range(num_objs):
@@ -620,23 +620,23 @@ def predict(model: Path, psnr: int = 30):
                 batch_size=1,
                 amplitude_ranges=amplitude_range,
                 distribution=dist,
-                bimodal=True,
+                bimodal=False,
                 rotate=True,
                 mode_weights='pyramid',
                 psf_shape=(64, 64, 64)
             )
-            for npoints in tqdm([1, 2, 5, 10]):
-                reference = beads(
-                    gen=gen,
-                    object_size=0,
-                    num_objs=npoints
-                )
+            for s in range(10):
+                for npoints in tqdm([1, 2, 5, 10]):
+                    reference = beads(
+                        gen=gen,
+                        object_size=0,
+                        num_objs=npoints
+                    )
 
-                for s in range(10):
                     phi = Wavefront(
                         amplitude_range,
                         distribution=dist,
-                        bimodal=True,
+                        bimodal=False,
                         rotate=True,
                         mode_weights='pyramid',
                         lam_detection=gen.lam_detection,
@@ -662,7 +662,7 @@ def predict(model: Path, psnr: int = 30):
                     noisy_img /= np.max(noisy_img)
 
                     save_path = Path(
-                        f"{model.with_suffix('')}/samples/{dist}/um-{amplitude_range[-1]}/npoints-{npoints}"
+                        f"{model.with_suffix('')}/random/{dist}/um-{amplitude_range[-1]}/npoints-{npoints}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
@@ -682,7 +682,12 @@ def predict(model: Path, psnr: int = 30):
 
                     p_psf = gen.single_psf(p_wave)
                     gt_psf = gen.single_psf(y_wave)
+
                     corrected_psf = gen.single_psf(diff)
+                    corrected_noisy_img = utils.fftconvolution(sample=reference, kernel=corrected_psf)
+                    corrected_noisy_img *= psnr ** 2
+                    corrected_noisy_img = rand_noise + corrected_noisy_img
+                    corrected_noisy_img /= np.max(corrected_noisy_img)
 
                     imsave(save_path / f'psf_{s}.tif', noisy_img)
                     imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
@@ -691,7 +696,7 @@ def predict(model: Path, psnr: int = 30):
                         psf=noisy_img,
                         gt_psf=gt_psf,
                         predicted_psf=p_psf,
-                        corrected_psf=corrected_psf,
+                        corrected_psf=corrected_noisy_img,
                         wavelength=gen.lam_detection,
                         psnr=psnr,
                         maxcounts=maxcounts,
