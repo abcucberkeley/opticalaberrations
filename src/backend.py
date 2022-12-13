@@ -166,7 +166,7 @@ def bootstrap_predict(
     psfgen: SyntheticPSF,
     batch_size: int = 1,
     n_samples: int = 10,
-    threshold: float = 0.1,
+    threshold: float = 0.05,
     freq_strength_threshold: float = .01,
     ignore_modes: list = (0, 1, 2, 4),
     verbose: bool = True,
@@ -252,18 +252,12 @@ def bootstrap_predict(
 
 @profile
 def predict_sign(
-    gen: SyntheticPSF,
     init_preds: np.ndarray,
     followup_preds: np.ndarray,
-    sign_threshold: float = .9,
+    sign_threshold: float = .99,
     plot: Any = None,
-    bar_width: float = .35
 ):
     def pct_change(cur, prev):
-        t = utils.waves2microns(.05, wavelength=gen.lam_detection)
-        cur[cur < t] = 0
-        prev[prev < t] = 0
-
         if np.array_equal(cur, prev):
             return np.zeros_like(prev)
 
@@ -271,9 +265,6 @@ def predict_sign(
         pct[pct > 100] = 100
         pct[pct < -100] = -100
         return pct
-
-    init_preds = np.abs(init_preds)
-    followup_preds = np.abs(followup_preds)
 
     preds = init_preds.copy()
     pchange = pct_change(followup_preds, init_preds)
@@ -285,13 +276,16 @@ def predict_sign(
     # preds += preds * (adj/100)
 
     # threshold-based sign prediction
-    threshold = sign_threshold * init_preds
-    flips = np.stack(np.where(followup_preds > threshold), axis=0)
+    # threshold = sign_threshold * init_preds
+    # flips = np.stack(np.where(followup_preds > threshold), axis=0)
 
-    if len(np.squeeze(preds).shape) == 1:
-        preds[flips[0]] *= -1
-    else:
-        preds[flips[0], flips[1]] *= -1
+    # if len(np.squeeze(preds).shape) == 1:
+    #     preds[flips[0]] *= -1
+    # else:
+    #     preds[flips[0], flips[1]] *= -1
+
+    # flip sign only if amplitudes increased on the followup predictions
+    preds[pchange > 0.] *= -1
 
     if plot is not None:
         if len(np.squeeze(preds).shape) == 1:
@@ -319,88 +313,34 @@ def predict_sign(
             percent_changes = np.mean(pchange, axis=0)
             percent_changes_error = np.std(pchange, axis=0)
 
-        fig, axes = plt.subplots(3, 1, figsize=(16, 8))
-
-        axes[0].bar(
-            np.arange(len(preds_wave)) - bar_width / 2,
+        plt.style.use("default")
+        vis.plot_sign_correction(
             init_preds_wave,
-            yerr=init_preds_wave_error,
-            capsize=5,
-            alpha=.75,
-            color='C0',
-            align='center',
-            ecolor='grey',
-            label='Initial',
-            width=bar_width
-        )
-        axes[0].bar(
-            np.arange(len(preds_wave)) + bar_width / 2,
+            init_preds_wave_error,
             followup_preds_wave,
-            yerr=followup_preds_wave_error,
-            capsize=5,
-            alpha=.75,
-            color='C1',
-            align='center',
-            ecolor='grey',
-            label='Followup',
-            width=bar_width
-        )
-
-        axes[0].legend(frameon=False, loc='upper left')
-        axes[0].set_xlim((-1, len(preds_wave)))
-        axes[0].set_xticks(range(0, len(preds_wave)))
-        axes[0].spines.right.set_visible(False)
-        axes[0].spines.left.set_visible(False)
-        axes[0].spines.top.set_visible(False)
-        axes[0].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-        axes[0].set_ylabel(r'Zernike coefficients ($\mu$m)')
-
-        axes[1].plot(np.zeros_like(percent_changes), '--', color='lightgrey')
-        axes[1].bar(
-            range(gen.n_modes),
-            percent_changes,
-            yerr=percent_changes_error,
-            capsize=10,
-            color='C2',
-            alpha=.75,
-            align='center',
-            ecolor='grey',
-        )
-        axes[1].set_xlim((-1, len(preds_wave)))
-        axes[1].set_xticks(range(0, len(preds_wave)))
-        axes[1].set_ylim((-100, 100))
-        axes[1].set_yticks(range(-100, 125, 25))
-        axes[1].set_yticklabels(['-100+', '-75', '-50', '-25', '0', '25', '50', '75', '100+'])
-        axes[1].spines.right.set_visible(False)
-        axes[1].spines.left.set_visible(False)
-        axes[1].spines.top.set_visible(False)
-        axes[1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-        axes[1].set_ylabel(f'Percent change')
-
-        axes[2].plot(np.zeros_like(preds_wave), '--', color='lightgrey')
-        axes[2].bar(
-            range(gen.n_modes),
+            followup_preds_wave_error,
             preds_wave,
-            yerr=preds_error,
-            capsize=10,
-            alpha=.75,
-            color='dimgrey',
-            align='center',
-            ecolor='grey',
-            label='Predictions',
+            preds_error,
+            percent_changes,
+            percent_changes_error,
+            savepath=f'{plot}_sign_correction.svg'
         )
-        axes[2].set_xlim((-1, len(preds_wave)))
-        axes[2].set_xticks(range(0, len(preds_wave)))
-        axes[2].spines.right.set_visible(False)
-        axes[2].spines.left.set_visible(False)
-        axes[2].spines.top.set_visible(False)
-        axes[2].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-        axes[2].set_ylabel(r'Zernike coefficients ($\mu$m RMS)')
 
-        plt.tight_layout()
-        plt.savefig(f'{plot}_sign_correction.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.style.use("dark_background")
+        vis.plot_sign_correction(
+            init_preds_wave,
+            init_preds_wave_error,
+            followup_preds_wave,
+            followup_preds_wave_error,
+            preds_wave,
+            preds_error,
+            percent_changes,
+            percent_changes_error,
+            savepath=f'{plot}_sign_correction_db.svg'
+        )
 
     return preds, pchange
+
 
 @profile
 def dual_stage_prediction(
@@ -479,7 +419,6 @@ def dual_stage_prediction(
         followup_preds = np.abs(followup_preds)
 
         preds, pchanges = predict_sign(
-            gen=gen,
             init_preds=init_preds,
             followup_preds=followup_preds,
             sign_threshold=sign_threshold,
@@ -492,7 +431,6 @@ def dual_stage_prediction(
         init_preds = np.abs(pd.read_csv(prev_pred, header=0)['amplitude'].values)
 
         preds, pchanges = predict_sign(
-            gen=gen,
             init_preds=init_preds,
             followup_preds=followup_preds,
             sign_threshold=sign_threshold,
@@ -566,7 +504,6 @@ def eval_sign(
         followup_preds = np.abs(followup_preds)[np.newaxis, :ys.shape[-1]]
 
     preds, pchanges = predict_sign(
-        gen=gen,
         init_preds=init_preds,
         followup_preds=followup_preds,
         sign_threshold=sign_threshold,
@@ -612,8 +549,8 @@ def predict(model: Path, psnr: int = 30):
     m = load(model)
     m.summary()
 
-    for dist in ['single', 'powerlaw', 'dirichlet']:
-        for amplitude_range in [(.1, .2), (.2, .3)]:
+    for dist in ['powerlaw', 'dirichlet', 'single']:
+        for amplitude_range in [(.1, .2), (.2, .3), (.3, .4)]:
             gen = load_metadata(
                 model,
                 snr=100,

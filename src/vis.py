@@ -852,7 +852,7 @@ def plot_signal(n_modes=55, wavelength=.605):
                 # axes[k, 0].bar(range(n_modes), height=w.amplitudes)
                 # m = axes[k, 1].imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
                 # axes[k, 2].imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
-                # axes[k, 3].imshow(np.max(vol, axis=2).T, cmap=psf_cmap, vmin=0, vmax=1)
+                # axes[k, 3].imshow(np.max(vol, axis=2), cmap=psf_cmap, vmin=0, vmax=1)
 
         # plt.tight_layout()
         # plt.show()
@@ -1013,12 +1013,12 @@ def plot_psnr(psf_cmap='hot', gamma=.75):
 
         # m = xy.imshow(vol[mid_plane, :, :], cmap=psf_cmap, vmin=0, vmax=1)
         # zx.imshow(vol[:, mid_plane, :], cmap=psf_cmap, vmin=0, vmax=1)
-        # zy.imshow(vol[:, :, mid_plane].T, cmap=psf_cmap, vmin=0, vmax=1)
+        # zy.imshow(vol[:, :, mid_plane], cmap=psf_cmap, vmin=0, vmax=1)
 
         levels = np.arange(0, 1.01, .01)
         m = xy.contourf(vol[mid_plane, :, :], cmap=psf_cmap, levels=levels, vmin=0, vmax=1)
         zx.contourf(vol[:, mid_plane, :], cmap=psf_cmap, levels=levels, vmin=0, vmax=1)
-        zy.contourf(vol[:, :, mid_plane].T, cmap=psf_cmap, levels=levels, vmin=0, vmax=1)
+        zy.contourf(vol[:, :, mid_plane], cmap=psf_cmap, levels=levels, vmin=0, vmax=1)
 
         cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-2)
         cb = plt.colorbar(m, cax=cax)
@@ -1182,11 +1182,11 @@ def plot_dmodes(
         if vol.shape[0] == 3:
             m = xy.imshow(vol[0], cmap='Spectral_r', vmin=0, vmax=1)
             zx.imshow(vol[1], cmap='Spectral_r', vmin=0, vmax=1)
-            zy.imshow(vol[2].T, cmap='Spectral_r', vmin=0, vmax=1)
+            zy.imshow(vol[2], cmap='Spectral_r', vmin=0, vmax=1)
         else:
             m = xy.imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
             zx.imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
-            zy.imshow(np.max(vol, axis=2).T, cmap=psf_cmap, vmin=0, vmax=1)
+            zy.imshow(np.max(vol, axis=2), cmap=psf_cmap, vmin=0, vmax=1)
 
         cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
@@ -1575,6 +1575,7 @@ def diagnostic_assessment(
     ax_zcoff.grid(True, which="both", axis='x', lw=1, ls='--', zorder=0)
     ax_zcoff.set_xlabel(r'Zernike coefficients ($\mu$m RMS)')
     ax_zcoff.legend(frameon=False, loc='upper center', bbox_to_anchor=(.5, 1.05))
+    ax_zcoff.xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
 
     for ax in [ax_gt, ax_pred, ax_diff]:
         ax.axis('off')
@@ -2343,3 +2344,107 @@ def wavefronts(
         cbar.ax.set_title(f'$\lambda = {wavelength}~\mu$m')
 
         plt.savefig(f'{save_path}_z{z}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+def plot_sign_correction(
+    init_preds_wave,
+    init_preds_wave_error,
+    followup_preds_wave,
+    followup_preds_wave_error,
+    preds_wave,
+    preds_error,
+    percent_changes,
+    percent_changes_error,
+    savepath,
+    bar_width: float = .35
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    fig, axes = plt.subplots(3, 1, figsize=(16, 8))
+
+    axes[0].bar(
+        np.arange(len(preds_wave)) - bar_width / 2,
+        init_preds_wave,
+        yerr=init_preds_wave_error,
+        capsize=5,
+        alpha=.75,
+        color='C0',
+        align='center',
+        ecolor='grey',
+        label='Initial',
+        width=bar_width
+    )
+    axes[0].bar(
+        np.arange(len(preds_wave)) + bar_width / 2,
+        followup_preds_wave,
+        yerr=followup_preds_wave_error,
+        capsize=5,
+        alpha=.75,
+        color='C1',
+        align='center',
+        ecolor='grey',
+        label='Followup',
+        width=bar_width
+    )
+
+    axes[0].legend(frameon=False, loc='upper left')
+    axes[0].set_xlim((-1, len(preds_wave)))
+    axes[0].set_xticks(range(0, len(preds_wave)))
+    axes[0].spines.right.set_visible(False)
+    axes[0].spines.left.set_visible(False)
+    axes[0].spines.top.set_visible(False)
+    axes[0].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+    axes[0].set_ylabel(r'Zernike coefficients ($\mu$m RMS)')
+
+    axes[1].plot(np.zeros_like(percent_changes), '--', color='lightgrey')
+    axes[1].bar(
+        range(len(preds_wave)),
+        percent_changes,
+        yerr=percent_changes_error,
+        capsize=10,
+        color='C2',
+        alpha=.75,
+        align='center',
+        ecolor='grey',
+    )
+    axes[1].set_xlim((-1, len(preds_wave)))
+    axes[1].set_xticks(range(0, len(preds_wave)))
+    axes[1].set_ylim((-100, 100))
+    axes[1].set_yticks(range(-100, 125, 25))
+    axes[1].set_yticklabels(['-100+', '-75', '-50', '-25', '0', '25', '50', '75', '100+'])
+    axes[1].spines.right.set_visible(False)
+    axes[1].spines.left.set_visible(False)
+    axes[1].spines.top.set_visible(False)
+    axes[1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+    axes[1].set_ylabel(f'Percent change')
+
+    axes[2].plot(np.zeros_like(preds_wave), '--', color='lightgrey')
+    axes[2].bar(
+        range(len(preds_wave)),
+        preds_wave,
+        yerr=preds_error,
+        capsize=10,
+        alpha=.75,
+        color='dimgrey',
+        align='center',
+        ecolor='grey',
+        label='Predictions',
+    )
+    axes[2].set_xlim((-1, len(preds_wave)))
+    axes[2].set_xticks(range(0, len(preds_wave)))
+    axes[2].spines.right.set_visible(False)
+    axes[2].spines.left.set_visible(False)
+    axes[2].spines.top.set_visible(False)
+    axes[2].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+    axes[2].set_ylabel(r'Zernike coefficients ($\mu$m RMS)')
+
+    plt.tight_layout()
+    plt.savefig(savepath, dpi=300, bbox_inches='tight', pad_inches=.25)

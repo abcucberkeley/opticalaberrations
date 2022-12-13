@@ -42,7 +42,7 @@ class SyntheticPSF:
         mode_weights='uniform',
         bimodal=False,
         rotate=False,
-        gamma=1.5,
+        gamma=.75,
         n_modes=55,
         order='ansi',
         batch_size=100,
@@ -220,7 +220,7 @@ class SyntheticPSF:
     @profile
     def plot_embeddings(
         self,
-        psf: np.array,
+        inputs: np.array,
         emb: np.array,
         save_path: Any,
         no_phase: bool = False,
@@ -257,9 +257,9 @@ class SyntheticPSF:
         else:
             fig, axes = plt.subplots(3, 3, figsize=(8, 8))
 
-        m = axes[0, 0].imshow(np.max(psf, axis=0)**.5, cmap='hot', vmin=0, vmax=1)
-        axes[0, 1].imshow(np.max(psf, axis=1)**.5, cmap='hot', vmin=0, vmax=1)
-        axes[0, 2].imshow(np.max(psf, axis=2).T**.5, cmap='hot', vmin=0, vmax=1)
+        m = axes[0, 0].imshow(np.max(inputs, axis=0)**.5, cmap='hot', vmin=0, vmax=1)
+        axes[0, 1].imshow(np.max(inputs, axis=1)**.5, cmap='hot', vmin=0, vmax=1)
+        axes[0, 2].imshow(np.max(inputs, axis=2)**.5, cmap='hot', vmin=0, vmax=1)
         cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
@@ -267,7 +267,7 @@ class SyntheticPSF:
 
         m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
         axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
-        axes[1, 2].imshow(emb[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
+        axes[1, 2].imshow(emb[2], cmap=cmap, vmin=vmin, vmax=vmax)
         cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
@@ -291,7 +291,7 @@ class SyntheticPSF:
 
             m = axes[-1, 0].imshow(emb[3], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
             axes[-1, 1].imshow(emb[4], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
-            axes[-1, 2].imshow(emb[5].T, cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
+            axes[-1, 2].imshow(emb[5], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
             cax = inset_axes(axes[-1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
             cb = plt.colorbar(m, cax=cax)
             cax.yaxis.set_label_position("right")
@@ -456,7 +456,7 @@ class SyntheticPSF:
             emb = np.concatenate([alpha, phi], axis=0)
 
         if plot is not None and principle_planes:
-            self.plot_embeddings(psf=psf, emb=emb, save_path=plot, no_phase=no_phase)
+            self.plot_embeddings(inputs=psf, emb=emb, save_path=plot, no_phase=no_phase)
 
         if psf.ndim == 4:
             return np.expand_dims(emb, axis=-1)
@@ -541,7 +541,7 @@ class SyntheticPSF:
             imsave(f"{plot}_phi.tif", emb[1])
 
         if plot is not None and principle_planes:
-            self.plot_embeddings(psf=psf, emb=emb, save_path=plot)
+            self.plot_embeddings(inputs=psf, emb=emb, save_path=plot)
 
         return emb
 
