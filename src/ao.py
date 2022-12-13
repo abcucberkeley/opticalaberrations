@@ -312,6 +312,7 @@ def parse_args(args):
     eval_dataset = subparsers.add_parser("eval_dataset")
     eval_dataset.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
+    eval_dataset.add_argument("flat", type=Path, help="path to the flat DM acts file")
 
     return parser.parse_args(args)
 
@@ -440,6 +441,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         experimental.eval_dataset(
             model=args.model,
             datadir=args.datadir,
+            flat=args.flat,
         )
     else:
         logger.error(f"Error")

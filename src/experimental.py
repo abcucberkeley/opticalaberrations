@@ -752,7 +752,7 @@ def aggregate_predictions(
         )
 
 
-def plot_dm_actuators(dm_path: Path, gt_path: Path, save_path: Path):
+def plot_dm_actuators(dm_path: Path, flat_path: Path, save_path: Path):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -767,12 +767,15 @@ def plot_dm_actuators(dm_path: Path, gt_path: Path, save_path: Path):
         offsets = json.load(f)
         f.close()
 
-    with open(gt_path) as f:
-        flat_offsets = json.load(f)
-        f.close()
-
     offsets = np.array(offsets["ALPAO_Offsets"])
-    flat_offsets = np.array(flat_offsets["ALPAO_Offsets"])
+
+    if flat_path.suffix == '.json':
+        with open(flat_path) as f:
+            flat_offsets = json.load(f)
+            f.close()
+        flat_offsets = np.array(flat_offsets["ALPAO_Offsets"])
+    else:
+        flat_offsets = pd.read_csv(flat_path, header=None).iloc[:, 0].values
 
     mask = np.ones((9, 9))
     dm = np.zeros((9, 9))
@@ -812,6 +815,7 @@ def eval_mode(
     input_path: Path,
     prediction_path: Path,
     gt_path: Path,
+    flat_path: Path,
     model_path: Path,
     normalize: bool = True,
     remove_background: bool = True,
@@ -841,10 +845,13 @@ def eval_mode(
 
     p = pd.read_csv(prediction_path, header=0)['amplitude'].values
 
-    try:
-        y = pd.read_csv(gt_path, header=0)['amplitude'].values
-    except KeyError:
-        y = pd.read_csv(gt_path, header=0).iloc[:, -1].values
+    if gt_path is None:
+        y = np.zeros_like(p)
+    else:
+        try:
+            y = pd.read_csv(gt_path, header=0)['amplitude'].values
+        except KeyError:
+            y = pd.read_csv(gt_path, header=0).iloc[:, -1].values
 
     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
     y_wave = Wavefront(y, lam_detection=gen.lam_detection)
@@ -866,9 +873,8 @@ def eval_mode(
 
     json_path = f"{str(prediction_path.name).replace('_sample_predictions_zernike_coffs.csv', '')}"
     dm_path = Path(str(list(input_path.parent.glob(f"{json_path}*_JSONsettings.json"))[0]))
-    gt_path = Path(str(list(input_path.parent.parent.parent.glob(f"Groundtruth_JSONsettings.json"))[0]))
     dm_wavefront = Path(prediction_path.parent/f"{input_path.with_suffix('')}_dm_wavefront.png")
-    plot_dm_actuators(dm_path=dm_path, gt_path=gt_path, save_path=dm_wavefront)
+    plot_dm_actuators(dm_path=dm_path, flat_path=flat_path, save_path=dm_wavefront)
 
     plt.style.use("default")
     vis.diagnostic_assessment(
@@ -904,27 +910,43 @@ def eval_mode(
 
 
 @profile
-def eval_dataset(model: Path, datadir: Path):
-    func = partial(eval_mode, model_path=model)
+def eval_dataset(model: Path, datadir: Path, flat: Path):
+    func = partial(eval_mode, model_path=model, flat_path=flat)
 
     jobs = []
     for file in datadir.glob('ansi_z*.tif'):
         modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
         modes = [m for m in modes if m]
-        mode = int(modes[0])
-        gt_path = list(datadir.rglob(f'ansi_z{mode:02d}*_ground_truth_zernike_coffs.csv'))[0]
+        logger.info(modes)
+        logger.info(f"Input: {file.name[:75]}....tif")
+
+        if len(modes) > 1:
+            prefix = f"ansi_"
+            for m in modes:
+                prefix += f"z{m}*"
+        else:
+            mode = int(modes[0])
+            prefix = f"ansi_z{mode}*"
 
         try:
-            prediction_path = list(datadir.rglob(f'ansi_z{mode:02d}*_sample_predictions_zernike_coffs.csv'))[0]
+            gt_path = list(datadir.rglob(f'{prefix}_ground_truth_zernike_coffs.csv'))[0]
+            logger.info(f"GT: {gt_path.name}")
+        except IndexError:
+            logger.warning(f'GT not found for: {file}')
+            continue
+
+        try:
+            prediction_path = list(datadir.rglob(f'{prefix}_sample_predictions_zernike_coffs.csv'))[0]
+            logger.info(f"Pred: {prediction_path.name}")
         except IndexError:
             logger.warning(f'Prediction not found for: {file}')
-            prediction_path = None
+            continue
 
         worker = partial(func, prediction_path=prediction_path, gt_path=gt_path)
         p = mp.Process(target=worker, args=(file,))
         p.start()
         jobs.append(p)
-        print(f"Evaluating: {file}")
+        logger.info(f'-'*50)
 
         while len(jobs) >= 55:
             for p in jobs:
