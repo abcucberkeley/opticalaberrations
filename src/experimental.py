@@ -2,6 +2,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 import re
+import json
 import time
 from functools import partial
 from pathlib import Path
@@ -27,6 +28,7 @@ from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
 from backend import load_metadata, dual_stage_prediction
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 import logging
 logger = logging.getLogger('')
@@ -750,6 +752,62 @@ def aggregate_predictions(
         )
 
 
+def plot_dm_actuators(dm_path: Path, gt_path: Path, save_path: Path):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    with open(dm_path) as f:
+        offsets = json.load(f)
+        f.close()
+
+    with open(gt_path) as f:
+        flat_offsets = json.load(f)
+        f.close()
+
+    offsets = np.array(offsets["ALPAO_Offsets"])
+    flat_offsets = np.array(flat_offsets["ALPAO_Offsets"])
+
+    mask = np.ones((9, 9))
+    dm = np.zeros((9, 9))
+
+    for x, y in [
+        (0, 0),
+        (1, 0), (0, 1),
+        (7, 0), (0, 7),
+        (8, 0), (0, 8),
+        (8, 1), (1, 8),
+        (7, 8), (8, 7),
+        (8, 8)
+    ]:
+        mask[x, y] = 0
+
+    dm[mask.astype(bool)] = offsets - flat_offsets
+
+    fig = plt.figure(figsize=(11, 4))
+    gs = fig.add_gridspec(1, 3)
+    ax1 = fig.add_subplot(gs[0, -1])
+    ax2 = fig.add_subplot(gs[0, :-1])
+
+    m = ax1.imshow(dm.T, cmap='Spectral_r', vmin=-1*dm.max(), vmax=dm.max())
+    ax1.set_xticks(range(9))
+    ax1.set_yticks(range(9))
+    cax = inset_axes(ax1, width="10%", height="100%", loc='center right', borderpad=-3)
+    cb = plt.colorbar(m, cax=cax)
+    cax.yaxis.set_label_position("right")
+
+    ax2.plot(flat_offsets, label='Flat')
+    ax2.plot(offsets, label='Offset')
+    ax2.legend(ncol=2)
+    plt.savefig(save_path)
+
+
 def eval_mode(
     input_path: Path,
     prediction_path: Path,
@@ -796,13 +854,21 @@ def eval_mode(
     gt_psf = gen.single_psf(y_wave)
     corrected_psf = gen.single_psf(diff)
 
-    if remove_background:
-        mode = int(st.mode(noisy_img[noisy_img < np.quantile(noisy_img, .99)], axis=None).mode[0])
-        noisy_img -= mode
-        noisy_img[noisy_img < 0] = 0
+    noisy_img = preprocessing.prep_sample(
+        noisy_img,
+        normalize=normalize,
+        # background_mode_offset=20,
+        remove_background=remove_background,
+        sample_voxel_size=gen.voxel_size,
+        model_voxel_size=gen.voxel_size,
+        debug=Path(f'{prediction_path.parent}/{prediction_path.stem}_resize'),
+    )
 
-    if normalize:
-        noisy_img /= np.nanmax(noisy_img)
+    json_path = f"{str(prediction_path.name).replace('_sample_predictions_zernike_coffs.csv', '')}"
+    dm_path = Path(str(list(input_path.parent.glob(f"{json_path}*_JSONsettings.json"))[0]))
+    gt_path = Path(str(list(input_path.parent.parent.parent.glob(f"Groundtruth_JSONsettings.json"))[0]))
+    dm_wavefront = Path(prediction_path.parent/f"{input_path.with_suffix('')}_dm_wavefront.png")
+    plot_dm_actuators(dm_path=dm_path, gt_path=gt_path, save_path=dm_wavefront)
 
     vis.diagnostic_assessment(
         psf=noisy_img,

@@ -52,7 +52,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--psnr", default=100, type=float, help='peak signal-to-noise ratio'
+        "--psnr", default=30, type=float, help='peak signal-to-noise ratio'
     )
 
     parser.add_argument(
