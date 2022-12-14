@@ -73,20 +73,27 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 @profile
-def load_metadata(model_path: Path, psf_shape: Union[tuple, list] = (64, 64, 64), n_modes=None, **kwargs):
+def load_metadata(
+        model_path: Path,
+        psf_shape: Union[tuple, list] = (64, 64, 64),
+        psf_type=None,
+        n_modes=None,
+        z_voxel_size=None,
+        **kwargs
+):
     # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
     if not model_path.suffix == '.h5':       
         model_path = list(model_path.rglob('*.h5'))[0]
 
     with h5py.File(model_path, 'r') as file:
         psfgen = SyntheticPSF(
-            psf_type=np.array(file.get('psf_type')[:]),
+            psf_type=np.array(file.get('psf_type')[:]) if psf_type is None else psf_type,
             psf_shape=psf_shape,
             n_modes=int(file.get('n_modes')[()]) if n_modes is None else n_modes,
             lam_detection=float(file.get('wavelength')[()]),
             x_voxel_size=float(file.get('x_voxel_size')[()]),
             y_voxel_size=float(file.get('y_voxel_size')[()]),
-            z_voxel_size=float(file.get('z_voxel_size')[()]),
+            z_voxel_size=float(file.get('z_voxel_size')[()]) if z_voxel_size is None else z_voxel_size,
             **kwargs
         )
     return psfgen

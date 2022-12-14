@@ -752,7 +752,12 @@ def aggregate_predictions(
         )
 
 
-def plot_dm_actuators(dm_path: Path, flat_path: Path, save_path: Path):
+def plot_dm_actuators(
+    dm_path: Path,
+    flat_path: Path,
+    save_path: Path,
+    pred_path: Any = None
+):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -776,6 +781,11 @@ def plot_dm_actuators(dm_path: Path, flat_path: Path, save_path: Path):
         flat_offsets = np.array(flat_offsets["ALPAO_Offsets"])
     else:
         flat_offsets = pd.read_csv(flat_path, header=None).iloc[:, 0].values
+
+    if pred_path is not None:
+        pred_offsets = pd.read_csv(pred_path, header=None).iloc[:, 0].values
+    else:
+        pred_offsets = None
 
     mask = np.ones((9, 9))
     dm = np.zeros((9, 9))
@@ -805,9 +815,14 @@ def plot_dm_actuators(dm_path: Path, flat_path: Path, save_path: Path):
     cb = plt.colorbar(m, cax=cax)
     cax.yaxis.set_label_position("right")
 
-    ax2.plot(flat_offsets, label='Flat')
-    ax2.plot(offsets, label='Offset')
-    ax2.legend(ncol=2)
+    ax2.plot(flat_offsets, '--', label='Flat')
+    ax2.plot(offsets, label='DM')
+
+    if pred_offsets is not None:
+        ax2.plot(pred_offsets, ':', label='Predictions')
+
+    ax2.grid(True, which="both", axis='both', lw=.1, ls='--', zorder=0)
+    ax2.legend(frameon=False, ncol=2, loc='upper right')
     plt.savefig(save_path)
 
 
@@ -817,16 +832,21 @@ def eval_mode(
     gt_path: Path,
     flat_path: Path,
     model_path: Path,
+    postfix: str = '',
     normalize: bool = True,
     remove_background: bool = True,
 ):
+    save_postfix = 'pr' if postfix.startswith('matlab') else 'ml'
+
     noisy_img = np.squeeze(get_image(input_path).astype(float))
     maxcounts = np.max(noisy_img)
     psnr = np.sqrt(maxcounts)
     gen = load_metadata(
         model_path,
         snr=psnr,
-        psf_shape=noisy_img.shape
+        psf_shape=noisy_img.shape,
+        psf_type='widefield' if save_postfix == 'pr' else None,
+        z_voxel_size=.1 if save_postfix == 'pr' else None,
     )
 
     if prediction_path is None:
@@ -843,7 +863,10 @@ def eval_mode(
         )
         prediction_path = Path(f"{input_path.with_suffix('')}_sample_predictions_zernike_coffs.csv")
 
-    p = pd.read_csv(prediction_path, header=0)['amplitude'].values
+    try:
+        p = pd.read_csv(prediction_path, header=0)['amplitude'].values
+    except KeyError:
+        p = pd.read_csv(prediction_path, header=None).iloc[:, 0].values
 
     if gt_path is None:
         y = np.zeros_like(p)
@@ -871,10 +894,15 @@ def eval_mode(
         debug=Path(f'{prediction_path.parent}/{prediction_path.stem}_resize'),
     )
 
-    json_path = f"{str(prediction_path.name).replace('_sample_predictions_zernike_coffs.csv', '')}"
-    dm_path = Path(str(list(input_path.parent.glob(f"{json_path}*_JSONsettings.json"))[0]))
+    datadir = f"{str(prediction_path.name).replace(postfix, '')}"
+    dm_path = Path(str(list(input_path.parent.glob(f"{datadir}*_JSONsettings.json"))[0]))
     dm_wavefront = Path(prediction_path.parent/f"{input_path.with_suffix('')}_dm_wavefront.png")
-    plot_dm_actuators(dm_path=dm_path, flat_path=flat_path, save_path=dm_wavefront)
+
+    plot_dm_actuators(
+        dm_path=dm_path,
+        flat_path=flat_path,
+        save_path=dm_wavefront
+    )
 
     plt.style.use("default")
     vis.diagnostic_assessment(
@@ -886,7 +914,7 @@ def eval_mode(
         maxcounts=maxcounts,
         y=y_wave,
         pred=p_wave,
-        save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_eval'),
+        save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval'),
         display=False,
         dxy=gen.x_voxel_size,
         dz=gen.z_voxel_size
@@ -902,7 +930,7 @@ def eval_mode(
         maxcounts=maxcounts,
         y=y_wave,
         pred=p_wave,
-        save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_eval_db'),
+        save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval_db'),
         display=False,
         dxy=gen.x_voxel_size,
         dz=gen.z_voxel_size
@@ -910,8 +938,19 @@ def eval_mode(
 
 
 @profile
-def eval_dataset(model: Path, datadir: Path, flat: Path):
-    func = partial(eval_mode, model_path=model, flat_path=flat)
+def eval_dataset(
+    model: Path,
+    datadir: Path,
+    flat: Path,
+    postfix: str = 'sample_predictions_zernike_coffs.csv'
+    # postfix: str = 'matlab_zernike_coffs.csv'
+):
+    func = partial(
+        eval_mode,
+        model_path=model,
+        flat_path=flat,
+        postfix=postfix,
+    )
 
     jobs = []
     for file in datadir.glob('ansi_z*.tif'):
@@ -928,21 +967,23 @@ def eval_dataset(model: Path, datadir: Path, flat: Path):
             for m in modes:
                 prefix += f"z{m}*"
         else:
-            mode = int(modes[0])
+            mode = modes[0]
             prefix = f"ansi_z{mode}*"
+
+        logger.info(f"Looking for: {prefix}")
 
         try:
             gt_path = list(datadir.rglob(f'{prefix}_ground_truth_zernike_coffs.csv'))[0]
             logger.info(f"GT: {gt_path.name}")
         except IndexError:
-            logger.warning(f'GT not found for: {file}')
+            logger.warning(f'GT not found for: {file.name}')
             continue
 
         try:
-            prediction_path = list(datadir.rglob(f'{prefix}_sample_predictions_zernike_coffs.csv'))[0]
+            prediction_path = list(datadir.rglob(f'{prefix}_{postfix}'))[0]
             logger.info(f"Pred: {prediction_path.name}")
         except IndexError:
-            logger.warning(f'Prediction not found for: {file}')
+            logger.warning(f'Prediction not found for: {file.name}')
             continue
 
         worker = partial(func, prediction_path=prediction_path, gt_path=gt_path)
