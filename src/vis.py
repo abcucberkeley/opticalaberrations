@@ -1079,22 +1079,23 @@ def plot_wavefront(iax, phi, label=None, nas=(.55, .65, .75, .85, .95), colorbar
         mask = dist_from_center <= radius
         return mask
 
+    dlimit = .1
     vmin = np.round(np.nanmin(phi))
-    vmin = -.25 if vmin > -0.01 else vmin
+    vmin = -1*dlimit if vmin > -0.01 else vmin
     vmax = np.round(np.nanmax(phi))
-    vmax = .25 if vmax < 0.01 else vmax
+    vmax = dlimit if vmax < 0.01 else vmax
     step = .1
 
     highcmap = plt.get_cmap('magma_r', 256)
     middlemap = plt.get_cmap('gist_gray', 256)
     lowcmap = plt.get_cmap('gist_earth_r', 256)
 
-    ll = np.arange(vmin, -.25+step, step)
-    hh = np.arange(.25, vmax+step, step)
+    ll = np.arange(vmin, -1*dlimit+step, step)
+    hh = np.arange(dlimit, vmax+step, step)
 
     wave_cmap = np.vstack((
         lowcmap(.66 * ll / ll.min()),
-        middlemap([.85, .95, 1, .95, .85]),
+        middlemap([.9, 1, .9]),
         highcmap(.66 * hh / hh.max())
     ))
     wave_cmap = mcolors.ListedColormap(wave_cmap)
@@ -1420,7 +1421,7 @@ def diagnostic_assessment(
             cax = inset_axes(xy, width="10%", height="100%", loc='center left', borderpad=-5)
             cb = plt.colorbar(m, cax=cax)
             cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-            cax.set_ylabel(f"{label} [$\gamma$={gamma:.2f}]")
+            cax.set_ylabel(f"{label}")
             cax.yaxis.set_label_position("left")
 
         xy.yaxis.set_ticks_position('right')
@@ -1492,22 +1493,23 @@ def diagnostic_assessment(
 
     ax_zcoff = fig.add_subplot(gs[:, -1])
 
+    dlimit = .1
     vmin = np.round(np.nanmin(y_wave))
-    vmin = -.25 if vmin > -1 * threshold else vmin
+    vmin = -1*dlimit if vmin > -1 * threshold else vmin
     vmax = np.round(np.nanmax(y_wave))
-    vmax = .25 if vmax < threshold else vmax
+    vmax = dlimit if vmax < threshold else vmax
     step = .1
 
     highcmap = plt.get_cmap('magma_r', 256)
     middlemap = plt.get_cmap('gist_gray', 256)
     lowcmap = plt.get_cmap('gist_earth_r', 256)
 
-    ll = np.arange(vmin, -.25 + step, step)
-    hh = np.arange(.25, vmax + step, step)
+    ll = np.arange(vmin, -1*dlimit + step, step)
+    hh = np.arange(dlimit, vmax + step, step)
 
     levels = np.vstack((
         lowcmap(.66 * ll / ll.min()),
-        middlemap([.85, .95, 1, .95, .85]),
+        middlemap([.9, 1, .9]),
         highcmap(.66 * hh / hh.max())
     ))
     wave_cmap = mcolors.ListedColormap(levels)
@@ -1531,6 +1533,7 @@ def diagnostic_assessment(
     ax_cxy.set_xlabel('XY ($\mu$m)')
     ax_cxz.set_xlabel('XZ ($\mu$m)')
     ax_cyz.set_xlabel('YZ ($\mu$m)')
+    ax_xy.set_title(f"$\gamma$: {gamma:.2f}")
     ax_xz.set_title(f"PSNR: {psnr:.2f}")
     ax_yz.set_title(f"Max photon count: {maxcounts:.0f}")
 

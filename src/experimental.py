@@ -915,6 +915,9 @@ def eval_dataset(model: Path, datadir: Path, flat: Path):
 
     jobs = []
     for file in datadir.glob('ansi_z*.tif'):
+        if 'CamB' in str(file):
+            continue
+
         modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
         modes = [m for m in modes if m]
         logger.info(modes)
