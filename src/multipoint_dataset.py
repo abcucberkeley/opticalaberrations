@@ -70,7 +70,7 @@ def sim(
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
 ):
-    np.random.seed(os.getpid())
+    np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
     reference = np.zeros(gen.psf_shape)
 
     # aberrated PSF without noise
