@@ -27,6 +27,7 @@ LAMBDA=.510
 NA=1.0
 ALPHA='abs'
 PHI='angle'
+CPUS=1
 
 SHAPE=64
 RCROP=32
@@ -112,6 +113,7 @@ do
             j="${j} --z_voxel_size ${zVOXEL}"
             j="${j} --na_detection ${NA}"
             j="${j} --lam_detection ${LAMBDA}"
+            j="${j} --cpu_workers ${CPUS}"
 
             if [ "$DATASET" = "train" ];then
               j="${j} --random_crop ${RCROP}"
@@ -132,7 +134,7 @@ do
               task="${task} --partition=abc"
             fi
 
-            task="${task} --cpus-per-task=1"
+            task="${task} --cpus-per-task=${CPUS}"
             task="${task} --mem=15G"
             task="${task} --job-name=psnr#${SNR}-amp#${AMP}-iter#${S}"
             task="${task} --time=1:00:00"
