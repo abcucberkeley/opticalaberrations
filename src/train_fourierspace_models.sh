@@ -9,39 +9,34 @@ zVOXEL=.200
 SHAPE=64
 LAMBDA=.510
 PHASE='--no_phase'
-DATASET='yumb'
+DATASET='yumb_four_dists'
 MAXAMP=.5
+DATA="/clusterfs/nvme/thayer/dataset/$DATASET/train/x108-y108-z200/"
 
 
-BATCH=1024
-DIFFICULTY='easy'
 MODES=15
-DATA="/clusterfs/nvme/thayer/dataset/$DATASET/$DIFFICULTY/train/x108-y108-z200/"
-
+BATCH=1024
 #python manager.py slurm train.py --partition abc --constraint 'titan' --mem '500GB' --gpus 4 --cpus 16 \
 #--task "--network otfnet $PHASE --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 #--taskname otfnet \
-#--name new/$DATASET/$DIFFICULTY/otfnet
+#--name new/$DATASET/z$MODES/otfnet
 
 python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 2 --gpus 4 --cpus 16 \
 --task "--network opticalnet --multinode $PHASE --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname opticalnet \
---name new/$DATASET/$DIFFICULTY/opticalnet
+--name new/$DATASET/z$MODES/opticalnet
 
-BATCH=2048
-DIFFICULTY='hard'
 MODES=55
-DATA="/clusterfs/nvme/thayer/dataset/$DATASET/$DIFFICULTY/train/x108-y108-z200/"
-
+BATCH=2048
 #python manager.py slurm train.py --partition abc --constraint 'titan' --mem '500GB' --gpus 4 --cpus 16 \
 #--task "--network otfnet $PHASE --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 #--taskname otfnet \
-#--name new/$DATASET/$DIFFICULTY/otfnet
+#--name new/$DATASET/z$MODES/otfnet
 
 python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 2 --gpus 4 --cpus 16 \
 --task "--network opticalnet --multinode $PHASE --patch_size '32-16-8-8' --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE --input_shape $SHAPE --depth_scalar $DEPTH --modes $MODES --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
 --taskname opticalnet \
---name new/$DATASET/$DIFFICULTY/opticalnet
+--name new/$DATASET/z$MODES/opticalnet
 
 
 #python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \

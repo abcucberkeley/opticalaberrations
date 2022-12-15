@@ -391,6 +391,7 @@ def dual_stage_prediction(
         threshold=threshold,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
+        plot=plot
     )
     init_preds = np.abs(init_preds)
 
@@ -475,6 +476,7 @@ def eval_sign(
         n_samples=1,
         no_phase=True,
         threshold=threshold,
+        plot=plot
     )
     if len(init_preds.shape) > 1:
         init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
@@ -556,8 +558,8 @@ def predict(model: Path, psnr: int = 30):
     m = load(model)
     m.summary()
 
-    for dist in ['powerlaw', 'dirichlet', 'single']:
-        for amplitude_range in [(.1, .2), (.2, .3), (.3, .4)]:
+    for dist in ['single', 'dual', 'powerlaw', 'dirichlet']:
+        for amplitude_range in [(.05, .1), (.1, .2), (.2, .3), (.3, .4)]:
             gen = load_metadata(
                 model,
                 snr=100,
@@ -617,7 +619,7 @@ def predict(model: Path, psnr: int = 30):
                         gen=gen,
                         ys=y,
                         batch_size=1,
-                        plot=save_path / f'embeddings_{s}',
+                        plot=save_path / f'{s}',
                     )
 
                     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
@@ -1282,6 +1284,7 @@ def train(
     else:
         train_data = data_utils.collect_dataset(
             dataset,
+            modes=modes,
             distribution=distribution,
             samplelimit=samplelimit,
             max_amplitude=max_amplitude,

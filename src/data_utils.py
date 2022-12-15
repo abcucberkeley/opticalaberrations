@@ -124,6 +124,7 @@ def collect_dataset(
     split=None,
     multiplier=1,
     distribution='/',
+    modes=55,
     samplelimit=None,
     max_amplitude=1.,
     no_phase=False,
@@ -135,6 +136,7 @@ def collect_dataset(
             if c.is_dir()
                and len(list(c.glob('*.tif'))) > 0
                and distribution in str(c)
+               and f"z{int(modes)}" in str(c)
                and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
         ]
 

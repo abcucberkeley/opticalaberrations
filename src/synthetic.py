@@ -234,7 +234,6 @@ class SyntheticPSF:
             'legend.fontsize': 10,
             'axes.autolimit_mode': 'round_numbers'
         })
-        # plt.style.use("dark_background")
 
         step = .1
         vmin = -1 if np.any(emb[0] < 0) else 0
@@ -303,7 +302,7 @@ class SyntheticPSF:
         if save_path == True:
             plt.show()
         else:
-            plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{save_path}_embeddings.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     @profile
     def _normalize(self, emb, otf, freq_strength_threshold: float = 0.):
@@ -456,6 +455,7 @@ class SyntheticPSF:
             emb = np.concatenate([alpha, phi], axis=0)
 
         if plot is not None and principle_planes:
+            plt.style.use("default")
             self.plot_embeddings(inputs=psf, emb=emb, save_path=plot, no_phase=no_phase)
 
         if psf.ndim == 4:

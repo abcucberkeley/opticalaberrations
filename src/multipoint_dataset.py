@@ -134,7 +134,7 @@ def sim(
             principle_planes=True,
             alpha_val=alpha_val,
             phi_val=phi_val,
-            plot=f"{savepath}_embedding"
+            plot=f"{savepath}"
         )
 
     save_synthetic_sample(
@@ -200,23 +200,23 @@ def create_synthetic_sample(
 
     outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
     outdir = outdir / f"i{input_shape}"
+    outdir = outdir / f"z{modes}"
 
     if distribution == 'powerlaw':
         outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
     else:
         outdir = outdir / f"{distribution}"
 
-    savepath = outdir / f"z{modes}"
-    savepath = savepath / f"psnr_{min_psnr}-{max_psnr}"
-    savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+    outdir = outdir / f"psnr_{min_psnr}-{max_psnr}"
+    outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
                           f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
-    savepath = savepath / f"npoints_{npoints}"
-    savepath.mkdir(exist_ok=True, parents=True)
-    savepath = savepath / filename
+    outdir = outdir / f"npoints_{npoints}"
+    outdir.mkdir(exist_ok=True, parents=True)
+    outdir = outdir / filename
 
     sim(
-        savepath=savepath,
+        savepath=outdir,
         gen=gen,
         npoints=npoints,
         snr=(min_psnr, max_psnr),

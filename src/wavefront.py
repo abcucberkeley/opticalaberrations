@@ -60,9 +60,7 @@ class Wavefront:
         else:
             self.mode_weights = self._uniform_weights(num_modes=self.length - len(self.prefixed))
 
-        # print(self.mode_weights)
-
-        self.distribution = np.random.choice(['single', 'powerlaw', 'dirichlet'], size=1)[0] \
+        self.distribution = np.random.choice(['single', 'dual', 'powerlaw', 'dirichlet'], size=1)[0] \
             if distribution == 'mixed' else distribution
 
         if np.isscalar(self.ranges) or isinstance(self.ranges, tuple):
@@ -70,7 +68,11 @@ class Wavefront:
 
             ## amps is an array with size matched to self.length (e.g. 55).
             if self.distribution == 'single':
-                amps = self._single(lims)           #  The first element has an random value picked from the range given by "lims", all others zeros
+                #  The first element has a random value picked from the range given by "lims", all others zeros
+                amps = self._single(lims)
+
+            elif self.distribution == 'dual':
+                amps = self._dual(lims)
 
             elif self.distribution == 'powerlaw':
                 amps = self._powerlaw(lims)
@@ -99,15 +101,10 @@ class Wavefront:
                     twin = Zernike((z.n, z.m*-1), order=order)
 
                     if z.m != 0 and self.zernikes.get(twin) is not None:
-                        a = np.sqrt(self.zernikes[z]**2 + self.zernikes[twin]**2)
-                        if self.bimodal:
-                            randomangle = np.random.uniform(low=0, high=2*np.pi)
-                            self.zernikes[z] = a * np.cos(randomangle)
-                            self.zernikes[twin] = a * np.sin(randomangle)
-                        else:
-                            frac = np.random.uniform(low=0, high=1)
-                            self.zernikes[z] = a * frac
-                            self.zernikes[twin] = a * (1-frac)
+                        a = self.zernikes[z]
+                        randomangle = np.random.uniform(low=0, high=2 * np.pi)
+                        self.zernikes[z] = a * np.cos(randomangle)**2
+                        self.zernikes[twin] += a * np.sin(randomangle)**2
 
         self.amplitudes_noll = np.array(
             self._dict_to_list({z.index_noll: a for z, a in self.zernikes.items()})[1:]
@@ -186,19 +183,36 @@ class Wavefront:
         modes = np.delete(modes, self.prefixed)  # remove bias, tip, tilt, and defocus from being selected
         options = np.random.choice(a=modes, p=self.mode_weights, size=1000) # we need to draw self.length number of unique modes.  If we draw a mode that is already picked, we just throw that result away and redraw.  To do this we just draw a lot (e.g. 1000 times), and remove duplicates.
         u, picked = np.sort(np.unique(options,  return_index=True))         # remove duplicates, and by just retaining the first occurances (np.unique's return_index array) but it's ordered by u, so we just sort.
-        return options[picked]  
+        return options[picked]
 
     def _single(self, range_lims):
         amplitudes = np.zeros(self.length)
 
         if self.bimodal:
-            amplitudes[0] = np.random.choice([
+            amp = np.random.choice([
                 np.random.uniform(*range_lims),
                 np.random.uniform(*-np.array(range_lims))
             ])
         else:
-            amplitudes[0] = np.random.uniform(*range_lims)
+            amp = np.random.uniform(*range_lims)
 
+        amplitudes[0] = amp
+        return amplitudes
+
+    def _dual(self, range_lims):
+        amplitudes = np.zeros(self.length)
+
+        if self.bimodal:
+            a = np.random.choice([
+                np.random.uniform(*range_lims),
+                np.random.uniform(*-np.array(range_lims))
+            ])
+        else:
+            a = np.random.uniform(*range_lims)
+
+        frac = np.random.uniform(low=0, high=1)
+        amplitudes[0] = a * frac
+        amplitudes[1] = a * (1 - frac)
         return amplitudes
 
     def _powerlaw(self, range_lims):

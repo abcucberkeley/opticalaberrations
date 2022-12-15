@@ -25,16 +25,19 @@ yVOXEL=.108
 zVOXEL=.200
 LAMBDA=.510
 NA=1.0
-
-DIFFICULTY='easy'
-DATASET='train'
-SHAPE=64
-RCROP=32
-OUTDIR="/clusterfs/nvme/thayer/dataset/yumb/${DIFFICULTY}/${DATASET}"
-MODE_DIST='pyramid'
 ALPHA='abs'
 PHI='angle'
 
+SHAPE=64
+RCROP=32
+
+MODES=15
+TITLE='yumb_four_dists'
+DATASET='train'
+
+MODE_DIST='pyramid'
+SAMPLES_PER_BIN=500
+OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
@@ -42,44 +45,33 @@ if [ "$DATASET" = "train" ];then
   OBJS=(1 2 5 10 25)
   mPSNR=($(seq 11 10 51))
   xPSNR=($(seq 20 10 60))
-  SAMPLES=($(seq 1 100 500))
+  SAMPLES=($(seq 1 $ITERS $SAMPLES_PER_BIN))
+  amps1=($(seq 0 .01 .29))
+  amps2=($(seq .01 .01 .3))
 
-  if [ "$DIFFICULTY" = "easy" ];then
-    MODES=15
-    amps1=($(seq 0 .01 .24))
-    amps2=($(seq .01 .01 .25))
-  else
-    MODES=55
-    difractionlimit=($(seq 0 .005 .05))
-    small=($(seq .05 .0025 .1))
-    large=($(seq .1 .01 .25))
-    amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" )
-    echo ${amps[@]}
-    echo ${#amps[@]}
-    amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]:0:${#large[@]}-1}" )
-    amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" )
-  fi
+  #  difractionlimit=($(seq 0 .005 .05))
+  #  small=($(seq .05 .0025 .1))
+  #  large=($(seq .1 .01 .25))
+  #  amps=( "${difractionlimit[@]}" "${small[@]}" "${large[@]}" )
+  #  echo ${amps[@]}
+  #  echo ${#amps[@]}
+  #  amps1=( "${difractionlimit[@]}" "${small[@]}" "${large[@]:0:${#large[@]}-1}" )
+  #  amps2=( "${difractionlimit[@]:1}" "${small[@]}" "${large[@]}" )
+
 else
   TYPE=''
-  ITERS=25
+  ITERS=10
+  TOTAL=20
   OBJS=(1 2 3 4 5 10 15 20 25 30)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
-  SAMPLES=($(seq 1 10 10))
-
-  if [ "$DIFFICULTY" = "easy" ];then
-    MODES=15
-    amps1=($(seq 0 .01 .29))
-    amps2=($(seq .01 .01 .3))
-  else
-    MODES=55
-    amps1=($(seq 0 .01 .49))
-    amps2=($(seq .01 .01 .5))
-  fi
+  SAMPLES=($(seq 1 $ITERS $TOTAL))
+  amps1=($(seq 0 .01 .49))
+  amps2=($(seq .01 .01 .50))
 fi
 
 
-for DIST in single powerlaw dirichlet
+for DIST in single dual powerlaw dirichlet
 do
   for SNR in `seq 1 ${#xPSNR[@]}`
   do

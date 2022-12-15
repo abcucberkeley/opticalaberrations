@@ -53,110 +53,111 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     })
     from utils import peak2peak
 
-    psfargs = dict(
-        n_modes=55,
-        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
-        distribution='mixed',
-        mode_weights='pyramid',
-        bimodal=True,
-        rotate=True,
-        gamma=.75,
-        lam_detection=wavelength,
-        amplitude_ranges=(0, 1),
-        psf_shape=(32, 32, 32),
-        x_voxel_size=.108,
-        y_voxel_size=.108,
-        z_voxel_size=.2,
-        batch_size=batch_size,
-        snr=30,
-        cpu_workers=-1,
-    )
+    for dist in ['single', 'dual', 'powerlaw', 'dirichlet', 'mixed']:
+        psfargs = dict(
+            n_modes=55,
+            psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+            distribution=dist,
+            mode_weights='pyramid',
+            bimodal=True,
+            rotate=True,
+            gamma=.75,
+            lam_detection=wavelength,
+            amplitude_ranges=(0, 1),
+            psf_shape=(32, 32, 32),
+            x_voxel_size=.108,
+            y_voxel_size=.108,
+            z_voxel_size=.2,
+            batch_size=batch_size,
+            snr=30,
+            cpu_workers=-1,
+        )
 
-    n_batches = n_samples // batch_size
-    peaks = []
-    zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
+        n_batches = n_samples // batch_size
+        peaks = []
+        zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
 
-    ## Training dataset
-    difractionlimit = np.arange(0, 0.051, .002).round(3)  # 25 bins
-    small = np.arange(.05, .1, .0025).round(3)            # 20 bins
-    large = np.arange(.1, .25, .01).round(3)              # 15 bins
-    min_amps = np.concatenate([difractionlimit, small, large[:-1]])
-    max_amps = np.concatenate([difractionlimit[1:], small, large])
+        ## Training dataset
+        # difractionlimit = np.arange(0, 0.05, .01).round(3)  # 5 bins
+        # small = np.arange(.05, .1, .002).round(3)           # 25 bins
+        # large = np.arange(.1, .3, .01).round(3)             # 20 bins
+        # min_amps = np.concatenate([difractionlimit, small, large[:-1]])
+        # max_amps = np.concatenate([difractionlimit[1:], small, large])
 
-    ## Testing dataset
-    # min_amps = np.arange(0, .50, .01).round(3)
-    # max_amps = np.arange(.01, .51, .01).round(3)
+        ## Testing dataset
+        min_amps = np.arange(0, .30, .01).round(3)
+        max_amps = np.arange(.01, .31, .01).round(3)
 
-    for mina, maxa in zip(min_amps, max_amps):
-        psfargs['amplitude_ranges'] = (mina, maxa)
-        for _, (psfs, ys) in zip(range(n_batches), SyntheticPSF(**psfargs).generator()):
-            zernikes = zernikes.append(
-                pd.DataFrame(ys, columns=range(1, psfargs['n_modes'] + 1)),
-                ignore_index=True
-            )
-            ps = list(peak2peak(ys))
-            logger.info(f'Range[{mina}, {maxa}]')
-            peaks.extend(ps)
+        for mina, maxa in zip(min_amps, max_amps):
+            psfargs['amplitude_ranges'] = (mina, maxa)
+            for _, (psfs, ys) in zip(range(n_batches), SyntheticPSF(**psfargs).generator()):
+                zernikes = zernikes.append(
+                    pd.DataFrame(ys, columns=range(1, psfargs['n_modes'] + 1)),
+                    ignore_index=True
+                )
+                ps = list(peak2peak(ys))
+                logger.info(f'Range[{mina}, {maxa}]')
+                peaks.extend(ps)
 
-    logger.info(zernikes.round(2))
+        logger.info(zernikes.round(2))
 
-    fig, (pax, cax, zax) = plt.subplots(1, 3, figsize=(16, 4))
+        fig, (pax, cax, zax) = plt.subplots(1, 3, figsize=(16, 4))
 
-    sns.histplot(peaks, kde=True, ax=pax, color='dimgrey')
+        sns.histplot(peaks, kde=True, ax=pax, color='dimgrey')
 
-    pax.set_xlabel(
-        'Peak-to-peak aberration\n'
-        rf'($\lambda = {int(wavelength*1000)}~nm$)'
-    )
-    pax.set_ylabel(rf'Samples')
+        pax.set_xlabel(
+            'Peak-to-peak aberration\n'
+            rf'($\lambda = {int(wavelength*1000)}~nm$)'
+        )
+        pax.set_ylabel(rf'Samples')
 
-    zernikes = np.abs(zernikes)
-    zernikes = zernikes.loc[(zernikes != 0).any(axis=1)]
-    zernikes = zernikes.div(zernikes.sum(axis=1), axis=0)
-    logger.info(zernikes.round(2))
+        zernikes = np.abs(zernikes)
+        zernikes = zernikes.loc[(zernikes != 0).any(axis=1)]
+        zernikes = zernikes.div(zernikes.sum(axis=1), axis=0)
+        logger.info(zernikes.round(2))
 
-    dmodes = (zernikes[zernikes > .05]).count(axis=1)
-    hist, bins = np.histogram(dmodes, bins=zernikes.columns.values)
-    idx = (hist > 0).nonzero()
-    hist = hist / hist.sum()
+        dmodes = (zernikes[zernikes > .05]).count(axis=1)
+        hist, bins = np.histogram(dmodes, bins=zernikes.columns.values)
+        idx = (hist > 0).nonzero()
+        hist = hist / hist.sum()
 
-    if len(idx[0]) != 0:
-        bars = sns.barplot(bins[idx], hist[idx], ax=cax, palette='Accent')
+        if len(idx[0]) != 0:
+            bars = sns.barplot(bins[idx], hist[idx], ax=cax, palette='Accent')
+            for index, label in enumerate(bars.get_xticklabels()):
+                if index % 2 == 0:
+                    label.set_visible(True)
+                else:
+                    label.set_visible(False)
+
+        cax.set_xlabel(
+            f'Number of highly influential modes\n'
+            rf'$\alpha_i / \sum_{{k=1}}^{{{psfargs["n_modes"]}}}{{\alpha_{{k}}}} > 5\%$'
+        )
+
+        modes = zernikes.sum(axis=0)
+        modes /= modes.sum(axis=0)
+
+        cmap = sns.color_palette("viridis", len(modes))
+        rank = modes.argsort().argsort()
+        bars = sns.barplot(modes.index-1, modes.values, ax=zax, palette=np.array(cmap[::-1])[rank])
+
         for index, label in enumerate(bars.get_xticklabels()):
-            if index % 2 == 0:
+            if index % 4 == 0:
                 label.set_visible(True)
             else:
                 label.set_visible(False)
 
-    cax.set_xlabel(
-        f'Number of highly influential modes\n'
-        rf'$\alpha_i / \sum_{{k=1}}^{{{psfargs["n_modes"]}}}{{\alpha_{{k}}}} > 5\%$'
-    )
+        zax.set_xlabel(f'Influential modes (ANSI)')
 
-    modes = zernikes.sum(axis=0)
-    modes /= modes.sum(axis=0)
+        pax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
+        cax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
+        zax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
 
-    cmap = sns.color_palette("viridis", len(modes))
-    rank = modes.argsort().argsort()
-    bars = sns.barplot(modes.index-1, modes.values, ax=zax, palette=np.array(cmap[::-1])[rank])
-
-    for index, label in enumerate(bars.get_xticklabels()):
-        if index % 4 == 0:
-            label.set_visible(True)
-        else:
-            label.set_visible(False)
-
-    zax.set_xlabel(f'Influential modes (ANSI)')
-
-    pax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
-    cax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
-    zax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
-
-    name = f'{psfargs["distribution"]}_{psfargs["n_modes"]}modes_gamma_{str(psfargs["gamma"]).replace(".", "p")}'
-    plt.savefig(
-        f'../data/{name}.png',
-        dpi=300, bbox_inches='tight', pad_inches=.25
-    )
+        name = f'{psfargs["distribution"]}_{psfargs["n_modes"]}modes_gamma_{str(psfargs["gamma"]).replace(".", "p")}'
+        plt.savefig(
+            f'../data/{name}.png',
+            dpi=300, bbox_inches='tight', pad_inches=.25
+        )
 
 
 def plot_fov(n_modes=55, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_voxel_size=.15, z_voxel_size=.6):
@@ -1493,19 +1494,20 @@ def diagnostic_assessment(
 
     ax_zcoff = fig.add_subplot(gs[:, -1])
 
-    dlimit = .1
+    dlimit = .25
     vmin = np.round(np.nanmin(y_wave))
-    vmin = -1*dlimit if vmin > -1 * threshold else vmin
-    vmax = np.round(np.nanmax(y_wave))
-    vmax = dlimit if vmax < threshold else vmax
-    step = .1
+    vmin = -1*dlimit if np.abs(vmin) == 0 else vmin
 
+    vmax = np.round(np.nanmax(y_wave))
+    vmax = dlimit if np.abs(vmax) == 0 else vmax
+
+    step = .05
     highcmap = plt.get_cmap('magma_r', 256)
     middlemap = plt.get_cmap('gist_gray', 256)
     lowcmap = plt.get_cmap('gist_earth_r', 256)
 
-    ll = np.arange(vmin, -1*dlimit + step, step)
-    hh = np.arange(dlimit, vmax + step, step)
+    ll = np.arange(vmin, -.1 + step, step)
+    hh = np.arange(.1, vmax + step, step)
 
     levels = np.vstack((
         lowcmap(.66 * ll / ll.min()),
