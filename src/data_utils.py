@@ -1,6 +1,7 @@
 import logging
 import sys
 from functools import partial
+from line_profiler_pycharm import profile
 
 import pandas as pd
 from tifffile import TiffFile
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 
 
+@profile
 def get_image(path):
     with TiffFile(path) as tif:
         img = tif.asarray()
@@ -33,6 +35,7 @@ def get_image(path):
     return img
 
 
+@profile
 def get_sample(path, no_phase=False):
     try:
         if isinstance(path, tf.Tensor):
@@ -57,14 +60,13 @@ def get_sample(path, no_phase=False):
         logger.warning(f"Corrupted file {path}: {e}")
 
 
+@profile
 def check_sample(path):
     try:
         with open(path.with_suffix('.json')) as f:
-            ujson.load(f)
             f.close()
 
         with TiffFile(path) as tif:
-            tif.asarray()
             tif.close()
         return 1
 
@@ -73,6 +75,7 @@ def check_sample(path):
         return path
 
 
+@profile
 def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
     files = []
     for i, p in enumerate(Path(datadir).rglob('*.tif')):
@@ -109,6 +112,7 @@ def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
         return ds
 
 
+@profile
 def check_dataset(datadir):
     jobs = multiprocess(check_sample, list(Path(datadir).rglob('*.tif')), cores=-1)
     corrupted = [j for j in jobs if j != 1]
@@ -119,6 +123,7 @@ def check_dataset(datadir):
     return corrupted
 
 
+@profile
 def collect_dataset(
     datadir,
     split=None,
@@ -172,6 +177,7 @@ def collect_dataset(
         return data
 
 
+@profile
 def create_dataset(config, split=None):
     master = tf.data.Dataset.from_tensor_slices([f'generator{i}' for i in range(4)])
 

@@ -1013,6 +1013,7 @@ def featuremaps(
     return fig
 
 
+@profile
 def train(
         dataset: Path,
         outdir: Path,

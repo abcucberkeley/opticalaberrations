@@ -101,10 +101,13 @@ class Wavefront:
                     twin = Zernike((z.n, z.m*-1), order=order)
 
                     if z.m != 0 and self.zernikes.get(twin) is not None:
-                        a = self.zernikes[z]
-                        randomangle = np.random.uniform(low=0, high=2 * np.pi)
-                        self.zernikes[z] = a * np.cos(randomangle)**2
-                        self.zernikes[twin] += a * np.sin(randomangle)**2
+                        a = np.sqrt(self.zernikes[z] ** 2 + self.zernikes[twin] ** 2)
+                        randomangle = np.random.uniform(
+                            low=0,
+                            high=2 * np.pi if self.bimodal else np.pi/2
+                        )
+                        self.zernikes[z] = a * np.cos(randomangle)
+                        self.zernikes[twin] = a * np.sin(randomangle)
 
         self.amplitudes_noll = np.array(
             self._dict_to_list({z.index_noll: a for z, a in self.zernikes.items()})[1:]
