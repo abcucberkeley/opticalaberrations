@@ -37,7 +37,7 @@ class Wavefront:
         amplitudes,
         order='ansi',
         modes=55,
-        lam_detection=.605,
+        lam_detection=.510,
         distribution=None,
         gamma=.75,
         bimodal=True,

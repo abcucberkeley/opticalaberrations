@@ -118,7 +118,7 @@ class Zernike:
         :param order: string, defines the Zernike nomenclature if index is an integer, eg noll or ansi, default is noll
     """
 
-    _nm_pairs = set((n, m) for n in range(200) for m in range(-n, n + 1, 2))
+    _nm_pairs = set((n, m) for n in range(11) for m in range(-n, n + 1, 2))
     _noll_to_nm = dict(zip((nm_to_noll(*nm) for nm in _nm_pairs), _nm_pairs))
     _ansi_to_nm = dict(zip((nm_to_ansi(*nm) for nm in _nm_pairs), _nm_pairs))
 

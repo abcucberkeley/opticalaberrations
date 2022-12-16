@@ -51,7 +51,7 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
         'ytick.labelsize': 10,
         'legend.fontsize': 10,
     })
-    from utils import peak2peak
+    from utils import peak2valley
 
     for dist in ['single', 'dual', 'powerlaw', 'dirichlet', 'mixed']:
         psfargs = dict(
@@ -95,7 +95,7 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
                     pd.DataFrame(ys, columns=range(1, psfargs['n_modes'] + 1)),
                     ignore_index=True
                 )
-                ps = list(peak2peak(ys))
+                ps = [peak2valley(p, na=1.0, wavelength=wavelength) for p in ys]
                 logger.info(f'Range[{mina}, {maxa}]')
                 peaks.extend(ps)
 
@@ -169,7 +169,7 @@ def plot_fov(n_modes=55, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
         'ytick.labelsize': 10,
         'legend.fontsize': 10,
     })
-    from utils import peak_aberration
+    from utils import peak2valley
 
     waves = np.round(np.arange(0, .5, step=.1), 2)
     res = [128, 64, 32]
@@ -300,7 +300,7 @@ def plot_fov(n_modes=55, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
                 grid[(amp, r, 7)].axis('off')
                 grid[(amp, r, 7)].set_aspect('equal')
 
-                grid[(amp, r, 7)].set_title(f'{round(peak_aberration(phi))} waves')
+                grid[(amp, r, 7)].set_title(f'{round(peak2valley(phi, wavelength=gen.lam_detection))} waves')
                 grid[(amp, r, 0)].set_title('XY')
                 grid[(amp, r, 3)].set_title('XY')
 
@@ -335,7 +335,7 @@ def plot_embeddings(
         'ytick.labelsize': 10,
         'legend.fontsize': 10,
     })
-    from utils import peak_aberration
+    from utils import peak2valley
 
     if log10:
         vmin, vmax, vcenter, step = -2, 2, 0, .1
@@ -394,7 +394,7 @@ def plot_embeddings(
                 log10=log10
             )
 
-            abr = round(peak_aberration(phi) * np.sign(amp), 1)
+            abr = round(peak2valley(phi, wavelength=gen.lam_detection) * np.sign(amp), 1)
             grid[(mode, 0, amp)].set_title(f'{abr}$\\lambda$')
 
             outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/ratios/')
@@ -479,7 +479,7 @@ def plot_shapes_embeddings(
         'ytick.labelsize': 10,
         'legend.fontsize': 10,
     })
-    from utils import peak_aberration
+    from utils import peak2valley
 
     if log10:
         vmin, vmax, vcenter, step = -2, 2, 0, .1
@@ -539,7 +539,7 @@ def plot_shapes_embeddings(
             phi = np.zeros(55)
             phi[mode] = amp
 
-            abr = round(peak_aberration(phi) * np.sign(amp), 1)
+            abr = round(peak2valley(phi, wavelength=gen.lam_detection) * np.sign(amp), 1)
             grid[(thickness, 0, amp)].set_title(f'{abr}$\\lambda$')
 
             kernel = gen.single_psf(
@@ -619,7 +619,7 @@ def plot_gaussian_filters(
         'ytick.labelsize': 10,
         'legend.fontsize': 10,
     })
-    from utils import peak_aberration
+    from utils import peak2valley
 
     vmin, vmax, vcenter, step = 0, 2, 1, .1
     highcmap = plt.get_cmap('YlOrRd', 256)
@@ -677,7 +677,7 @@ def plot_gaussian_filters(
                 padsize=padsize
             )
 
-            abr = round(peak_aberration(phi) * np.sign(amp), 1)
+            abr = round(peak2valley(phi, wavelength=gen.lam_detection) * np.sign(amp), 1)
             grid[(mode, 0, amp)].set_title(f'{abr}$\\lambda$')
 
             for ax in range(6):
@@ -742,7 +742,7 @@ def plot_simulation(
         #savepath='../data/embeddings/seminar/x100-y100-z100',
         savepath='../data/embeddings/seminar/x150-y150-z600',
 ):
-    from utils import peak_aberration
+    from utils import peak2valley
 
     waves = np.round([-.2, -.1, -.05, .05, .1, .2], 3)
     logger.info(waves)
@@ -770,7 +770,7 @@ def plot_simulation(
             phi = np.zeros(n_modes)
             phi[mode] = amp
 
-            abr = round(peak_aberration(phi) * np.sign(amp), 1)
+            abr = round(peak2valley(phi, wavelength=gen.lam_detection) * np.sign(amp), 1)
 
             embedding = gen.single_otf(
                 phi=phi,
@@ -807,7 +807,7 @@ def plot_signal(n_modes=55, wavelength=.605):
         'legend.fontsize': 10,
     })
     from preprocessing import resize_with_crop_or_pad
-    from utils import peak_aberration
+    from utils import peak2valley
 
     waves = np.arange(0, .5, step=.05)
     res = [32, 64, 96, 128, 192, 256]
@@ -835,7 +835,7 @@ def plot_signal(n_modes=55, wavelength=.605):
             phi[i] = a
             w = Wavefront(phi, order='ansi', lam_detection=wavelength)
 
-            abr = 0 if j == 0 else round(peak_aberration(phi))
+            abr = 0 if j == 0 else round(peak2valley(phi, wavelength=gen.lam_detection))
             signal[i][abr] = {}
 
             psf = gen.single_psf(w, normed=True, noise=False)
@@ -1316,7 +1316,7 @@ def diagnostic_assessment(
     def formatter(x, pos, dd):
         return f'{np.ceil(x * dd).astype(int):1d}'
 
-    def wavefront(iax, phi, label='', nas=(.65, .75, .85, .95, .99)):
+    def wavefront(iax, phi, label='', nas=(.65, .75, .85, .95)):
         def na_mask(radius):
             center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
             Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
@@ -1338,16 +1338,14 @@ def diagnostic_assessment(
             iax.add_patch(circle)
 
             mask = phi * na_mask(radius=r)
-            pcts.append((np.nanmin(mask), np.nanmax(mask)))
+            pcts.append(abs(np.nanmin(mask) - np.nanmax(mask)))
 
         circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
         iax.add_patch(circle)
 
-        err = '\n'.join([
-            f'$P2P ({{NA={na:.2f}}})$:\t{abs(p[1]-p[0]):.2f} $\lambda$'
-            for na, p in zip(nas, pcts)
-        ])
-        iax.set_title(f'{label}\n{err}')
+        p2v = abs(np.nanmin(phi) - np.nanmax(phi))
+        err = '\n'.join([f'$P2V ({{NA={na:.2f}}})$:\t{p:.2f} $\lambda$' for na, p in zip(nas, pcts)])
+        iax.set_title(f'{label} [{p2v:.2f} $\lambda$]\n{err}')
         return mat
 
     def psf_slice(xy, zx, zy, vol, label=''):

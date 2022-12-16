@@ -20,7 +20,7 @@ import raster_geometry as rg
 
 import cli
 from preprocessing import resize_with_crop_or_pad
-from utils import peak_aberration, fftconvolution, multiprocess
+from utils import peak2valley, fftconvolution, multiprocess
 from synthetic import SyntheticPSF
 
 logging.basicConfig(
@@ -31,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, npoints=1):
+def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, npoints=1):
 
     logger.info(f"Saved: {savepath}")
     imsave(f"{savepath}.tif", inputs)
@@ -44,7 +44,7 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, npoints=1):
             shape=inputs.shape,
             maxcounts=int(maxcounts),
             npoints=int(npoints),
-            peak2peak=float(peak_aberration(amps))
+            peak2peak=float(p2v)
         )
 
         ujson.dump(
@@ -144,6 +144,7 @@ def sim(
         snr=psnr,
         maxcounts=maxcounts,
         npoints=npoints,
+        p2v=peak2valley(amps, wavelength=gen.lam_detection)
     )
 
 

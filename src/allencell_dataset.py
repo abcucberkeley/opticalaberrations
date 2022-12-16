@@ -11,7 +11,7 @@ from skimage.filters import threshold_otsu
 
 import cli
 from preprocessing import resize
-from utils import peak_aberration
+from utils import peak2valley
 from synthetic import SyntheticPSF
 
 logging.basicConfig(
@@ -22,7 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_synthetic_sample(savepath, inputs, kernel, amps, snr, maxcounts, save_kernel=False):
+def save_synthetic_sample(savepath, inputs, kernel, amps, snr, maxcounts, p2v, save_kernel=False):
 
     logger.info(f"Saved: {savepath}")
     imsave(f"{savepath}.tif", inputs)
@@ -36,7 +36,7 @@ def save_synthetic_sample(savepath, inputs, kernel, amps, snr, maxcounts, save_k
             snr=int(snr),
             shape=inputs.shape,
             maxcounts=int(maxcounts),
-            peak2peak=float(peak_aberration(amps))
+            peak2peak=float(p2v)
         )
 
         ujson.dump(
@@ -118,7 +118,8 @@ def convolve(
         amps=amps,
         snr=snr,
         maxcounts=maxcounts,
-        save_kernel=save_kernel
+        save_kernel=save_kernel,
+        p2v=peak2valley(amps, wavelength=gen.lam_detection)
     )
 
 

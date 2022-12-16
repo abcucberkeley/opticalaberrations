@@ -12,6 +12,7 @@ import io
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from scipy.special import binom
 import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
 from scipy.spatial import KDTree
@@ -60,6 +61,14 @@ def multiprocess(func: Any, jobs: Union[Generator, List, np.ndarray], desc: str 
     return logs
 
 
+def microns2waves(a, wavelength):
+    return a/wavelength
+
+
+def waves2microns(a, wavelength):
+    return a*wavelength
+
+
 def mae(y: np.array, p: np.array, axis=0) -> np.array:
     error = np.abs(y - p)
     return np.mean(error[np.isfinite(error)], axis=axis)
@@ -81,42 +90,61 @@ def mape(y: np.array, p: np.array, axis=0) -> np.array:
 
 
 @profile
-def peak_aberration(w, na: float = 1.0) -> float:
-    w = Wavefront(w).wave(100)
-    radius = (na * w.shape[0]) / 2
+def p2v(zernikes, wavelength=.510, na=1.0):
+    grid = 100
+    r = np.linspace(-1, 1, grid)
+    X, Y = np.meshgrid(r, r, indexing='ij')
+    rho = np.hypot(X, Y)
+    theta = np.arctan2(Y, X)
+
+    Y, X = np.ogrid[:grid, :grid]
+    dist_from_center = np.sqrt((X - grid//2) ** 2 + (Y - grid//2) ** 2)
+    na_mask = dist_from_center <= (na * grid) / 2
+
+    nm_pairs = set((n, m) for n in range(11) for m in range(-n, n + 1, 2))
+    ansi_to_nm = dict(zip(((n * (n + 2) + m) // 2 for n, m in nm_pairs), nm_pairs))
+
+    polynomials = []
+    for ansi, a in enumerate(zernikes):
+        n, m = ansi_to_nm[ansi]
+        m0 = abs(m)
+
+        radial = 0
+        for k in range((n - m0) // 2 + 1):
+            radial += (-1.) ** k * binom(n - k, k) * binom(n - 2 * k, (n - m0) // 2 - k) * rho ** (n - 2 * k)
+
+        radial *= (rho <= 1.)
+        prefac = 1. / np.sqrt((1. + (m == 0)) / (2. * n + 2))
+
+        if (n - m) % 2 == 1:
+            polynomials.append(0)
+        elif m >= 0:
+            polynomials.append(microns2waves(a, wavelength=wavelength) * prefac * radial * np.cos(m0 * theta))
+        else:
+            polynomials.append(microns2waves(a, wavelength=wavelength) * prefac * radial * np.sin(m0 * theta))
+
+    wavefront = np.sum(np.array(polynomials), axis=0) * na_mask
+    return abs(np.nanmax(wavefront) - np.nanmin(wavefront))
+
+
+@profile
+def peak2valley(w, wavelength: float = .510, na: float = 1.0) -> float:
+    if not isinstance(w, Wavefront):
+        w = Wavefront(w, lam_detection=wavelength).wave(100)
 
     center = (int(w.shape[0] / 2), int(w.shape[1] / 2))
     Y, X = np.ogrid[:w.shape[0], :w.shape[1]]
     dist_from_center = np.sqrt((X - center[0]) ** 2 + (Y - center[1]) ** 2)
-    mask = dist_from_center <= radius
+    mask = dist_from_center <= (na * w.shape[0]) / 2
     phi = w * mask
     return abs(np.nanmax(phi) - np.nanmin(phi))
-
-
-def peak2peak(y: np.array, na: float = 1.0) -> np.array:
-    p2p = partial(peak_aberration, na=na)
-    return np.array(multiprocess(p2p, list(y), desc='Compute peak2peak aberrations'))
-
-
-def peak2peak_residuals(y: np.array, p: np.array, na: float = 1.0) -> np.array:
-    p2p = partial(peak_aberration, na=na)
-    error = np.abs(p2p(y) - p2p(p))
-    return error
-
-
-def microns2waves(phi, wavelength):
-    return phi/wavelength
-
-
-def waves2microns(phi, wavelength):
-    return phi*wavelength
 
 
 def compute_signal_lost(phi, gen, res):
     hashtbl = {}
     w = Wavefront(phi, order='ansi')
     psf = gen.single_psf(w, normed=True, noise=False)
-    abr = 0 if np.count_nonzero(phi) == 0 else round(peak_aberration(phi))
+    abr = 0 if np.count_nonzero(phi) == 0 else round(peak2valley(phi, wavelength=gen.lam_detection))
 
     for k, r in enumerate(res):
         window = resize_with_crop_or_pad(psf, crop_shape=tuple(3*[r]))

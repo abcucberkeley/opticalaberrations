@@ -61,12 +61,12 @@ def eval_mode(
         noisy_img /= np.max(noisy_img)
         return noisy_img
 
-    p2p = utils.peak_aberration(phi, na=na)
-    y_pred = pd.DataFrame([], columns=['sample'])
-    y_true = pd.DataFrame([], columns=['sample'])
-
     model = backend.load(modelpath)
     gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]])
+
+    p2v = utils.peak2valley(phi, na=na, wavelength=gen.lam_detection)
+    y_pred = pd.DataFrame([], columns=['sample'])
+    y_true = pd.DataFrame([], columns=['sample'])
 
     w = Wavefront(phi, lam_detection=gen.lam_detection)
     kernel = gen.single_psf(
@@ -89,10 +89,10 @@ def eval_mode(
             batch_size=batch_size,
         )
 
-        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['sample'])
+        p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds], columns=['sample'])
         y_pred = y_pred.append(p, ignore_index=True)
 
-        y = pd.DataFrame([p2p for i in preds], columns=['sample'])
+        y = pd.DataFrame([p2v for i in preds], columns=['sample'])
         y['object_size'] = 1 if isize == 0 else isize * 2
         y_true = y_true.append(y, ignore_index=True)
 
@@ -266,10 +266,10 @@ def eval_bin(
             desc=f"Predictions for ({datapath})"
         )
 
-        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['sample'])
+        p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds], columns=['sample'])
         y_pred = y_pred.append(p, ignore_index=True)
 
-        y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys.numpy()], columns=['sample'])
+        y = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys.numpy()], columns=['sample'])
         y['snr'] = int(np.mean(list(
             map(int, str([s for s in datapath.parts if s.startswith('psnr_')][0]).lstrip('psnr_').split('-'))
         )))
@@ -447,7 +447,7 @@ def eval_roi(
             n_samples=1,
         )
 
-        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['sample'])
+        p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds], columns=['sample'])
         y_pred = y_pred.append(p, ignore_index=True)
 
     return y_pred
@@ -494,10 +494,10 @@ def evaldistbin(
             desc=f"Predictions for ({datapath})"
         )
 
-        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['sample'])
+        p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds], columns=['sample'])
         y_pred = y_pred.append(p, ignore_index=True)
 
-        y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys.numpy()], columns=['sample'])
+        y = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys.numpy()], columns=['sample'])
         y['dist'] = [
             utils.mean_min_distance(np.squeeze(i), voxel_size=gen.voxel_size)
             for i in inputs
@@ -703,10 +703,10 @@ def evaldensitybin(
             desc=f"Predictions for ({datapath})"
         )
 
-        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['sample'])
+        p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds], columns=['sample'])
         y_pred = y_pred.append(p, ignore_index=True)
 
-        y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys.numpy()], columns=['sample'])
+        y = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys.numpy()], columns=['sample'])
         y['dist'] = [
             utils.mean_min_distance(np.squeeze(i), voxel_size=gen.voxel_size)
             for i in inputs
@@ -898,7 +898,7 @@ def iter_eval_bin_with_reference(
     y_true = pd.DataFrame.from_dict({
         'id': np.arange(ys.shape[0], dtype=int),
         'niter': np.zeros(ys.shape[0], dtype=int),
-        'residuals': [utils.peak_aberration(i, na=na) for i in ys]
+        'residuals': [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys]
     })
 
     reference = backend.beads(
@@ -943,12 +943,12 @@ def iter_eval_bin_with_reference(
             desc=f"Predictions for ({datapath})"
         )
 
-        p = pd.DataFrame([utils.peak_aberration(i, na=na) for i in preds], columns=['residuals'])
+        p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds], columns=['residuals'])
         p['niter'] = k
         p['id'] = np.arange(inputs.shape[0], dtype=int)
         y_pred = y_pred.append(p, ignore_index=True)
 
-        y = pd.DataFrame([utils.peak_aberration(i, na=na) for i in ys], columns=['residuals'])
+        y = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys], columns=['residuals'])
         y['niter'] = k
         y['id'] = np.arange(inputs.shape[0], dtype=int)
         y_true = y_true.append(y, ignore_index=True)
