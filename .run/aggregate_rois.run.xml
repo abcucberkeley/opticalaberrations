@@ -1,0 +1,25 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="aggregate_rois" type="PythonConfigurationType" factoryName="Python" folderName="AO">
+    <module name="opticalaberrations" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+    </envs>
+    <option name="SDK_HOME" value="$USER_HOME$/anaconda3/envs/deep/bin/python" />
+    <option name="SDK_NAME" value="Python 3.9 (deep)" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+    <option name="IS_MODULE_SDK" value="false" />
+    <option name="ADD_CONTENT_ROOTS" value="true" />
+    <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
+    <option name="PARAMETERS" value="aggregate_predictions ../pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5 ../examples/single/single_rois_predictions.csv ../examples/Zernike_Korra_Bax273.csv --current_dm None --dm_damping_scalar 1. --prediction_threshold 0.25 --majority_threshold 0.5 --min_percentile 1 --max_percentile 99 --final_prediction mean --lateral_voxel_size 0.108 --axial_voxel_size 0.1 --wavelength 0.51 --plot" />
+    <option name="SHOW_COMMAND_LINE" value="false" />
+    <option name="EMULATE_TERMINAL" value="false" />
+    <option name="MODULE_MODE" value="false" />
+    <option name="REDIRECT_INPUT" value="false" />
+    <option name="INPUT_FILE" value="" />
+    <method v="2" />
+  </configuration>
+</component>

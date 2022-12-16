@@ -1,0 +1,25 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="predict_tiles" type="PythonConfigurationType" factoryName="Python" folderName="AO">
+    <module name="opticalaberrations" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+    </envs>
+    <option name="SDK_HOME" value="$USER_HOME$/anaconda3/envs/deep/bin/python" />
+    <option name="SDK_NAME" value="Python 3.9 (deep)" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+    <option name="IS_MODULE_SDK" value="false" />
+    <option name="ADD_CONTENT_ROOTS" value="true" />
+    <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
+    <option name="PARAMETERS" value="predict_tiles ../pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5 ../examples/single/single.tif --wavelength 0.51 --lateral_voxel_size 0.108 --axial_voxel_size 0.1 --window_size 64 --prediction_threshold 0. --freq_strength_threshold 0.01 --sign_threshold 0.9 --num_predictions 10 --batch_size 256 --prev None --plot --ignore_mode 44 --ignore_mode 45 --ignore_mode 54" />
+    <option name="SHOW_COMMAND_LINE" value="false" />
+    <option name="EMULATE_TERMINAL" value="false" />
+    <option name="MODULE_MODE" value="false" />
+    <option name="REDIRECT_INPUT" value="false" />
+    <option name="INPUT_FILE" value="" />
+    <method v="2" />
+  </configuration>
+</component>
