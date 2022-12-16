@@ -553,6 +553,7 @@ class SyntheticPSF:
         noise: bool = False,
         meta: bool = False,
         no_phase: bool = False,
+        snr_post_aberration: bool = True
     ):
         """
         Args:
@@ -561,7 +562,6 @@ class SyntheticPSF:
             noise: a toggle to add noise
             meta: return extra variables for debugging
         """
-        snr = self._randuniform(self.snr)
 
         if not isinstance(phi, Wavefront):
             phi = Wavefront(
@@ -575,26 +575,38 @@ class SyntheticPSF:
                 lam_detection=self.lam_detection,
             )
 
-        psf = self.psfgen.incoherent_psf(phi) * snr**2
+        psf = self.psfgen.incoherent_psf(phi)
+        snr = self._randuniform(self.snr)
 
-        rand_noise = self._random_noise(
-            image=psf,
-            mean=self.mean_background_noise,
-            sigma=self.sigma_background_noise,
-        )
-        noisy_psf = rand_noise + psf if noise else psf
-        psnr = np.sqrt(np.max(noisy_psf))
-        maxcount = np.max(noisy_psf)
+        if snr_post_aberration:
+            psf *= snr**2
+        else:
+            total_counts_ideal = np.sum(self.ipsf)
+            total_counts = total_counts_ideal * snr**2
+            total_counts_abr = np.sum(psf)
+            psf *= total_counts/total_counts_abr
 
-        noisy_psf /= np.max(noisy_psf) if normed else noisy_psf
+        if noise:
+            rand_noise = self._random_noise(
+                image=psf,
+                mean=self.mean_background_noise,
+                sigma=self.sigma_background_noise,
+            )
+            psf += rand_noise
+
+        psnr = np.sqrt(np.max(psf))
+        maxcount = np.max(psf)
+
+        if normed:
+            psf /= np.max(psf)
 
         if meta:
             if no_phase:
                 phi.amplitudes = np.abs(phi.amplitudes)
 
-            return noisy_psf, phi.amplitudes, psnr, maxcount
+            return psf, phi.amplitudes, psnr, maxcount
         else:
-            return noisy_psf
+            return psf
 
     @profile
     def single_otf(

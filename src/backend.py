@@ -559,10 +559,10 @@ def predict(model: Path, psnr: int = 30):
     m.summary()
 
     for dist in ['single', 'dual', 'powerlaw', 'dirichlet']:
-        for amplitude_range in [(.05, .1), (.1, .2), (.2, .3), (.3, .4)]:
+        for amplitude_range in [(.01, .01), (.05, .1), (.1, .2), (.2, .3), (.3, .4)]:
             gen = load_metadata(
                 model,
-                snr=100,
+                snr=psnr,
                 batch_size=1,
                 amplitude_ranges=amplitude_range,
                 distribution=dist,

@@ -1544,7 +1544,7 @@ def diagnostic_assessment(
         ax_xygt = fig.add_subplot(gs[3, 0])
         ax_xzgt = fig.add_subplot(gs[3, 1])
         ax_yzgt = fig.add_subplot(gs[3, 2])
-        psf_slice(ax_xygt, ax_xzgt, ax_yzgt, gt_psf, label='Validation')
+        psf_slice(ax_xygt, ax_xzgt, ax_yzgt, gt_psf, label='Simulated')
 
     ax_zcoff.barh(
         np.arange(len(pred.amplitudes)) - bar_width / 2,

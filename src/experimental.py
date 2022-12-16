@@ -847,7 +847,6 @@ def eval_mode(
         psf_shape=noisy_img.shape,
         psf_type='widefield' if save_postfix == 'pr' else None,
         z_voxel_size=.1 if save_postfix == 'pr' else None,
-        mean_background_noise=0,
     )
 
     if prediction_path is None:
@@ -881,18 +880,19 @@ def eval_mode(
     y_wave = Wavefront(y, lam_detection=gen.lam_detection)
     diff = y_wave - p_wave
 
-    noisy_img = preprocessing.prep_sample(
-        noisy_img,
+    prep = partial(
+        preprocessing.prep_sample,
         normalize=normalize,
-        # background_mode_offset=20,
+        background_mode_offset=gen.sigma_background_noise,
         remove_background=remove_background,
         sample_voxel_size=gen.voxel_size,
         model_voxel_size=gen.voxel_size,
     )
 
-    p_psf = gen.single_psf(p_wave, normed=True, noise=True)
-    gt_psf = gen.single_psf(y_wave, normed=True, noise=True)
-    corrected_psf = gen.single_psf(diff, normed=True, noise=True)
+    noisy_img = prep(noisy_img)
+    p_psf = prep(gen.single_psf(p_wave, normed=False, noise=True))
+    gt_psf = prep(gen.single_psf(y_wave, normed=False, noise=True))
+    corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True))
 
     datadir = f"{str(prediction_path.name).replace(postfix, '')}"
     dm_path = Path(str(list(input_path.parent.glob(f"{datadir}*_JSONsettings.json"))[0]))
