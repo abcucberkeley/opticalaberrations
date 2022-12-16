@@ -569,7 +569,8 @@ def predict(model: Path, psnr: int = 30):
                 bimodal=False,
                 rotate=True,
                 mode_weights='pyramid',
-                psf_shape=(64, 64, 64)
+                psf_shape=(64, 64, 64),
+                mean_background_noise=0,
             )
             for s in range(10):
                 for npoints in tqdm([1, 2, 5, 10]):
@@ -581,6 +582,7 @@ def predict(model: Path, psnr: int = 30):
 
                     phi = Wavefront(
                         amplitude_range,
+                        modes=gen.n_modes,
                         distribution=dist,
                         bimodal=False,
                         rotate=True,
@@ -626,8 +628,8 @@ def predict(model: Path, psnr: int = 30):
                     y_wave = Wavefront(y.flatten(), lam_detection=gen.lam_detection)
                     diff = y_wave - p_wave
 
-                    p_psf = gen.single_psf(p_wave)
-                    gt_psf = gen.single_psf(y_wave)
+                    p_psf = gen.single_psf(p_wave, normed=True, noise=True)
+                    gt_psf = gen.single_psf(y_wave, normed=True, noise=True)
 
                     corrected_psf = gen.single_psf(diff)
                     corrected_noisy_img = utils.fftconvolution(sample=reference, kernel=corrected_psf)

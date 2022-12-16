@@ -1307,7 +1307,6 @@ def diagnostic_assessment(
         display: bool = False,
         psf_cmap: str = 'hot',
         gamma: float = .5,
-        threshold: float = .01,
         bar_width: float = .35,
         dxy: float = .108,
         dz: float = .2,
