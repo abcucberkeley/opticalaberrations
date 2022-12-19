@@ -561,6 +561,8 @@ class SyntheticPSF:
             normed: a toggle to normalize PSF
             noise: a toggle to add noise
             meta: return extra variables for debugging
+            no_phase: used only when meta=true.
+            snr_post_aberration: increase photons in abberated psf to match snr of ideal psf
         """
 
         if not isinstance(phi, Wavefront):
@@ -581,10 +583,10 @@ class SyntheticPSF:
         if snr_post_aberration:
             psf *= snr**2
         else:
-            total_counts_ideal = np.sum(self.ipsf)
-            total_counts = total_counts_ideal * snr**2
-            total_counts_abr = np.sum(psf)
-            psf *= total_counts/total_counts_abr
+            total_counts_ideal = np.sum(self.ipsf)      # peak value of ideal psf is 1, self.ipsf = 1
+            total_counts = total_counts_ideal * snr**2  # total photons of ideal psf with desired SNR
+            total_counts_abr = np.sum(psf)              # total photons in abberated psf
+            psf *= total_counts/total_counts_abr        # scale abberated psf to have the same number of photons as ideal psf (e.g. abberation doesn't destroy/create light)
 
         if noise:
             rand_noise = self._random_noise(
@@ -594,7 +596,7 @@ class SyntheticPSF:
             )
             psf += rand_noise
 
-        psnr = np.sqrt(np.max(psf))
+        psnr = np.sqrt(np.max(psf))                     # peak snr will drop as abberation smooshes psf
         maxcount = np.max(psf)
 
         if normed:
