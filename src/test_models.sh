@@ -7,22 +7,16 @@ LAMBDA=.510
 SHAPE=64
 SAMPLES=100
 MAXAMP=.5
-DIFFICULTY='hard'
-DATASET='yumb'
+MODES=15
+DATASET='yumb_four_dists'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
-DATA="/clusterfs/nvme/thayer/dataset/$DATASET/$DIFFICULTY/test/x108-y108-z200/"
+DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/x108-y108-z200/"
 
 
 # save metadata
 #for M in opticalnet
 #do
-#  if [ "$DIFFICULTY" = "easy" ];then
-#  MODES=15
-#  else
-#    MODES=55
-#  fi
-#
-#  MODEL="../models/new/$DATASET/$DIFFICULTY/$M"
+#  MODEL="../models/new/$DATASET/z$MODES/$M"
 #  echo $MODEL
 #
 #  python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
@@ -34,7 +28,7 @@ DATA="/clusterfs/nvme/thayer/dataset/$DATASET/$DIFFICULTY/test/x108-y108-z200/"
 
 for M in opticalnet
 do
-  MODEL="../models/new/$DATASET/$DIFFICULTY/$M"
+  MODEL="../models/new/$DATASET/z$MODES/$M"
 
   python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
   --task "$MODEL modes" \
@@ -53,22 +47,22 @@ do
       #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
       #python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
       python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-      --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  --max_amplitude $MAXAMP evalheatmap" \
+      --task "$MODEL --datadir $DATA/i$SHAPE --n_modes $MODES --input_coverage $COV --n_samples $SAMPLES --na $NA  --max_amplitude $MAXAMP evalheatmap" \
       --taskname $NA \
       --name $MODEL/evalheatmaps_${COV}
 
       python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-      --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  --max_amplitude $MAXAMP distheatmap" \
+      --task "$MODEL --datadir $DATA/i$SHAPE --n_modes $MODES --input_coverage $COV --n_samples $SAMPLES --na $NA  --max_amplitude $MAXAMP distheatmap" \
       --taskname $NA \
       --name $MODEL/distheatmaps_${COV}
 
       python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-      --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  --max_amplitude $MAXAMP densityheatmap" \
+      --task "$MODEL --datadir $DATA/i$SHAPE --n_modes $MODES --input_coverage $COV --n_samples $SAMPLES --na $NA  --max_amplitude $MAXAMP densityheatmap" \
       --taskname $NA \
       --name $MODEL/densityheatmaps_${COV}
 
       python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-      --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  --max_amplitude $MAXAMP iterheatmap" \
+      --task "$MODEL --datadir $DATA/i$SHAPE --n_modes $MODES --input_coverage $COV --n_samples $SAMPLES --na $NA  --max_amplitude $MAXAMP iterheatmap" \
       --taskname $NA \
       --name $MODEL/iterheatmap_${COV}
     done

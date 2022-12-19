@@ -30,6 +30,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--n_modes", default=55, type=int, help="number of modes to describe aberration"
+    )
+
+    parser.add_argument(
         "--outdir", default="../models", type=Path, help='path to save eval'
     )
 
@@ -102,6 +106,7 @@ def main(args=None):
         eval.evalheatmap(
             modelpath=args.model,
             datadir=args.datadir,
+            n_modes=args.n_modes,
             distribution=args.dist,
             samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,
@@ -114,6 +119,7 @@ def main(args=None):
         eval.distheatmap(
             modelpath=args.model,
             datadir=args.datadir,
+            n_modes=args.n_modes,
             distribution=args.dist,
             samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,
@@ -127,6 +133,7 @@ def main(args=None):
         eval.densityheatmap(
             modelpath=args.model,
             datadir=args.datadir,
+            n_modes=args.n_modes,
             distribution=args.dist,
             samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,
@@ -139,6 +146,7 @@ def main(args=None):
         eval.iterheatmap(
             modelpath=args.model,
             datadir=args.datadir,
+            n_modes=args.n_modes,
             distribution=args.dist,
             samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,

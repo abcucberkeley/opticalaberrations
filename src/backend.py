@@ -1062,7 +1062,7 @@ def train(
 
     if network == 'opticalnet':
         model = opticalnet.OpticalTransformer(
-            name='OpticalTransformer',
+            name='OpticalNet',
             roi=roi,
             patches=patch_size,
             modes=pmodes,

@@ -281,6 +281,7 @@ def eval_bin(
 def evalheatmap(
     modelpath: Path,
     datadir: Path,
+    n_modes: int = 55,
     distribution: str = '/',
     samplelimit: Any = None,
     max_amplitude: float = .25,
@@ -320,6 +321,7 @@ def evalheatmap(
         if c.is_dir()
            and len(list(c.glob('*.tif'))) > 0
            and distribution in str(c)
+           and f"z{int(n_modes)}" in str(c)
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
     logger.info(f"BINs: {[len(classes)]}")
@@ -511,6 +513,7 @@ def distheatmap(
     modelpath: Path,
     datadir: Path,
     distribution: str = '/',
+    n_modes: int = 55,
     max_amplitude: float = .25,
     na: float = 1.0,
     no_phase: bool = False,
@@ -557,6 +560,7 @@ def distheatmap(
                and len(list(c.glob('*.tif'))) > 0
                and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
                and distribution in str(c)
+               and f"z{int(n_modes)}" in str(c)
                and f"npoints_{num_neighbor}" in str(c)
                and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
         ])
@@ -720,6 +724,7 @@ def evaldensitybin(
 def densityheatmap(
     modelpath: Path,
     datadir: Path,
+    n_modes: int = 55,
     distribution: str = '/',
     max_amplitude: float = .25,
     na: float = 1.0,
@@ -760,6 +765,7 @@ def densityheatmap(
            and len(list(c.glob('*.tif'))) > 0
            and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
            and distribution in str(c)
+           and f"z{int(n_modes)}" in str(c)
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
     logger.info(f"BINs: {[len(classes)]}")
@@ -965,6 +971,7 @@ def iterheatmap(
     datadir: Path,
     psnr: tuple = (21, 30),
     niter: int = 5,
+    n_modes: int = 55,
     distribution: str = '/',
     samplelimit: Any = None,
     max_amplitude: float = .25,
@@ -995,6 +1002,7 @@ def iterheatmap(
            and len(list(c.glob('*.tif'))) > 0
            and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
            and distribution in str(c)
+           and f"z{int(n_modes)}" in str(c)
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
 
