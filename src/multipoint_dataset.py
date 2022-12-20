@@ -67,6 +67,7 @@ def sim(
     normalize: bool = True,
     random_crop: Any = None,
     radius: float = .4,
+    emb_option: str = 'principle_planes',
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
 ):
@@ -131,7 +132,7 @@ def sim(
     if emb:
         noisy_img = gen.embedding(
             psf=noisy_img,
-            principle_planes=True,
+            emb_option=emb_option,
             alpha_val=alpha_val,
             phi_val=phi_val,
             plot=f"{savepath}"
@@ -175,6 +176,7 @@ def create_synthetic_sample(
     noise: bool,
     normalize: bool,
     emb: bool,
+    emb_option: str = 'principle_planes',
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
 ):
@@ -222,6 +224,7 @@ def create_synthetic_sample(
         npoints=npoints,
         snr=(min_psnr, max_psnr),
         emb=emb,
+        emb_option=emb_option,
         random_crop=random_crop,
         noise=noise,
         normalize=normalize,
@@ -240,6 +243,11 @@ def parse_args(args):
     parser.add_argument(
         '--emb', action='store_true',
         help='toggle to save embeddings only'
+    )
+
+    parser.add_argument(
+        "--emb_option", default='principle_planes', type=str,
+        help='type of embedding to use: ["principle_planes", "rotary_slices", "spatially_variant_quadrants"]'
     )
 
     parser.add_argument(
@@ -382,6 +390,7 @@ def main(args=None):
     sample = partial(
         create_synthetic_sample,
         emb=args.emb,
+        emb_option=args.emb_option,
         alpha_val=args.alpha_val,
         phi_val=args.phi_val,
         npoints=args.npoints,

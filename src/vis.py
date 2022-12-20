@@ -554,7 +554,7 @@ def plot_shapes_embeddings(
             outdir.mkdir(exist_ok=True, parents=True)
             imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", inputs)
 
-            emb = gen.embedding(psf=inputs, principle_planes=True)
+            emb = gen.embedding(psf=inputs)
 
             outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}/ratios/')
             outdir.mkdir(exist_ok=True, parents=True)

@@ -208,7 +208,7 @@ def evaluate_modes(model: Path, n_modes: int = 55):
             noise=False,
             meta=False,
         )
-        emb = gen.embedding(psf=kernel, principle_planes=True, no_phase=True)
+        emb = gen.embedding(psf=kernel, no_phase=True)
 
         ax_xy.imshow(emb[0], vmin=0, vmax=2, cmap='Spectral_r')
         ax_xz.imshow(emb[1], vmin=0, vmax=2, cmap='Spectral_r')

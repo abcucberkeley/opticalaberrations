@@ -61,7 +61,6 @@ def convolve(
     strides: int,
     log10: bool = True,
     apodization: bool = True,
-    principle_planes: bool = True,
     rolling_embedding: bool = True,
     debug: bool = False,
 ):
@@ -100,14 +99,12 @@ def convolve(
             log10=log10,
             apodization=apodization,
             strides=strides,
-            principle_planes=principle_planes,
             plot=f"{savepath}_embedding" if debug else None
         )
     else:
         emb = gen.embedding(
             psf=conv,
             log10=log10,
-            principle_planes=principle_planes,
             plot=f"{savepath}_embedding" if debug else None
         )
 

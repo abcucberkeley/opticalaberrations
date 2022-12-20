@@ -12,12 +12,8 @@ import multiprocessing as mp
 from typing import Iterable
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from tifffile import imsave
-from tqdm import trange
-from skimage.filters import window
 from skimage.restoration import unwrap_phase
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from numpy.lib.stride_tricks import sliding_window_view
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
 
@@ -212,7 +208,10 @@ class SyntheticPSF:
     @profile
     def na_mask(self):
         mask = np.abs(self.iotf)
-        threshold = np.nanpercentile(mask.flatten(), 65)
+        kmax = self.refractive_index / (2 * np.pi / self.lam_detection)
+        dkx = (2 * np.pi / self.x_voxel_size) / self.iotf.shape[-1]
+        threshold = kmax/dkx
+        # threshold = np.nanpercentile(mask.flatten(), 65)
         mask = np.where(mask < threshold, mask, 1.)
         mask = np.where(mask >= threshold, mask, 0.)
         return mask
@@ -325,9 +324,26 @@ class SyntheticPSF:
         norm: bool,
         na_mask: bool,
         log10: bool,
-        principle_planes: bool,
-        freq_strength_threshold: float
+        freq_strength_threshold: float,
+        emb_option: str = 'principle_planes'
     ):
+        """
+        Gives the "lower dimension" representation of the data that will be shown to the model.
+
+        Args:
+            otf: fft of the input data.
+            val: optional toggle to apply the NA mask
+            ratio: optional toggle to return ratio of data to ideal OTF
+            norm: optional toggle to normalize the data [0, 1]
+            na_mask: optional toggle to apply the NA mask
+            log10: optional toggle to take log10 of the FFT
+            freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
+            emb_option: type of embedding to use
+                (`principle_planes`,  'pp'): return principle planes only (middle planes)
+                (`rotary_slices`,     'rs'): return three radial slices
+                (`spatial_quadrants`, 'sq'): return four different spatial planes in each quadrant
+                 or just return the full stack if nothing is passed
+        """
         mask = self.na_mask()
         iotf = np.abs(self.iotf)
 
@@ -368,14 +384,95 @@ class SyntheticPSF:
             emb = np.log10(emb)
             emb = np.nan_to_num(emb, nan=0, posinf=0, neginf=0)
 
-        if principle_planes:
-            emb = np.stack([
+        if emb_option.lower() == 'principle_planes' or emb_option.lower() == 'pp':
+            return np.stack([
                 emb[emb.shape[0] // 2, :, :],
                 emb[:, emb.shape[1] // 2, :],
                 emb[:, :, emb.shape[2] // 2],
             ], axis=0)
 
-        return emb
+        elif emb_option.lower() == 'rotary_slices' or emb_option.lower() == 'rs':
+            z = np.linspace(-1, 1, emb.shape[0])
+            y = np.linspace(-1, 1, emb.shape[1])
+            x = np.linspace(-1, 1, emb.shape[2])  # grid vectors with 0,0,0 at the center
+            interp = RegularGridInterpolator((z, y, x), emb)
+
+            # match desired X output size. Might want to go to k_max instead of 1 (the border)?
+            rho = np.linspace(0, 1, emb.shape[0])
+
+            # cut "rotary_slices" number of planes from 0 to 90 degrees.
+            angles = np.linspace(0, np.pi / 2, 3)
+
+            # meshgrid with each "slice" being a rotary cut, z being the vertical axis, and rho being the horizontal axis.
+            hz = np.linspace(0, 1, emb.shape[0])
+            m_angles, m_z, m_rho = np.meshgrid(angles, hz, rho, indexing='ij')
+
+            m_x = m_rho * np.cos(m_angles)  # the slice coords in cartesian coordinates
+            m_y = m_rho * np.sin(m_angles)
+
+            return interp((m_z, m_y, m_x))  # 3D interpolate
+
+        elif emb_option.lower() == 'spatial_quadrants' or emb_option.lower() == 'sq':
+            # get quadrants for each axis by doing two consecutive splits
+            zquadrants = [q for half in np.split(emb, 2, axis=1) for q in np.split(half, 2, axis=2)]
+            yquadrants = [q for half in np.split(emb, 2, axis=0) for q in np.split(half, 2, axis=2)]
+            xquadrants = [q for half in np.split(emb, 2, axis=0) for q in np.split(half, 2, axis=1)]
+
+            cz, cy, cx = [s // 2 for s in emb.shape]  # indices for the principle planes
+            planes = [0, .1, .2, .3]  # offsets of the desired planes starting from the principle planes
+
+            '''
+                0: top-left quadrant
+                1: top-right quadrant
+                2: bottom-left quadrant
+                3: bottom-right quadrant
+            '''
+            placement = [
+                3, 2,  # first row
+                1, 0,  # second row
+            ]
+
+            # figure out indices for the desired planes
+            zplanes = [np.ceil(cz + (cz * p)).astype(int) for p in planes]
+            xy = np.concatenate([  # combine vertical quadrants (columns)
+                np.concatenate([  # combine horizontal quadrants (rows)
+                    zquadrants[placement[0]][zplanes[0], :, :],
+                    zquadrants[placement[1]][zplanes[1], :, :]
+                ], axis=1),
+                np.concatenate([  # combine horizontal quadrants (rows)
+                    zquadrants[placement[2]][zplanes[2], :, :],
+                    zquadrants[placement[3]][zplanes[3], :, :]
+                ], axis=1)
+            ], axis=0)
+
+            yplanes = [int(cy + (cy * p)) for p in planes]
+            xz = np.concatenate([
+                np.concatenate([
+                    yquadrants[placement[0]][:, yplanes[0], :],
+                    yquadrants[placement[1]][:, yplanes[1], :]
+                ], axis=1),
+                np.concatenate([
+                    yquadrants[placement[2]][:, yplanes[2], :],
+                    yquadrants[placement[3]][:, yplanes[3], :]
+                ], axis=1)
+            ], axis=0)
+
+            xplanes = [int(cx + (cx * p)) for p in planes]
+            yz = np.concatenate([
+                np.concatenate([
+                    xquadrants[placement[0]][:, :, xplanes[0]],
+                    xquadrants[placement[1]][:, :, xplanes[1]]
+                ], axis=1),
+                np.concatenate([
+                    xquadrants[placement[2]][:, :, xplanes[2]],
+                    xquadrants[placement[3]][:, :, xplanes[3]]
+                ], axis=1)
+            ], axis=0)
+
+            return np.stack([xy, xz, yz], axis=0)
+
+        else:
+            return emb
 
     @profile
     def embedding(
@@ -390,28 +487,33 @@ class SyntheticPSF:
         phi_val: str = 'angle',
         plot: Any = None,
         log10: bool = False,
-        principle_planes: bool = True,
         freq_strength_threshold: float = 0.01,
+        emb_option: str = 'principle_planes',
     ):
-        """Gives the "lower dimension" representation of the data that will be shown to the model.
-        Mostly this is used to return the three principle planes from the 3D OTF.
+        """
+        Gives the "lower dimension" representation of the data that will be shown to the model.
 
         Args:
-            psf (np.array): 3D PSF.
-            na_mask (bool, optional): _description_. Defaults to True.
-            ratio (bool, optional): Returns ratio of data to ideal PSF, which helps put all the FFT voxels on a similiar scale. Otherwise straight values. Defaults ratio=True.
-            norm (bool, optional): _description_. Defaults to True.
-            padsize (Any, optional): _description_. Defaults to None.
-            no_phase (bool, optional): _description_. Defaults to False.
-            alpha_val (str, optional): _description_. Defaults to 'abs'.
-            phi_val (str, optional): show the FFT phase in unwrapped radians 'angle' or the imaginary portion 'imag'. Defaults to 'angle'.
-            plot (Any, optional): _description_. Defaults to None.
-            log10 (bool, optional): _description_. Defaults to False.
-            principle_planes (bool, optional): _description_. Defaults to True.
-            freq_strength_threshold (float, optional): _description_. Defaults to 0.01.
-
-        Returns:
-            _type_: _description_
+            psf: 3D array.
+            na_mask: optional toggle to apply the NA mask
+            ratio: Returns ratio of data to ideal PSF,
+                which helps put all the FFT voxels on a similar scale. Otherwise, straight values.
+            norm: optional toggle to normalize the data [0, 1]
+            padsize: pad the input to the desired size for the FFT
+            no_phase: ignore/drop the phase component of the FFT
+            alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
+            phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
+            plot: optional toggle to visualize embeddings
+            log10: optional toggle to take log10 of the FFT
+            freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
+            emb_option: type of embedding to use
+                Capitalizing on the radial symmetry of the FFT,
+                we have a few options to minimize the size of the embedding:
+                    (`principle_planes`,  'pp'): return principle planes only (middle planes)
+                    (`rotary_slices`,     'rs'): return three radial slices
+                    (`spatial_quadrants`, 'sq'): return four different spatial planes in each quadrant
+                    or just return the full stack if nothing is passed
+                    (Only one of these options can be selected)
         """
         if psf.ndim == 4:
             psf = np.squeeze(psf)
@@ -426,7 +528,7 @@ class SyntheticPSF:
                 na_mask=na_mask,
                 norm=norm,
                 log10=log10,
-                principle_planes=principle_planes,
+                emb_option=emb_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
         else:
@@ -437,7 +539,7 @@ class SyntheticPSF:
                 na_mask=na_mask,
                 norm=norm,
                 log10=log10,
-                principle_planes=principle_planes,
+                emb_option=emb_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
 
@@ -448,13 +550,13 @@ class SyntheticPSF:
                 na_mask=na_mask,
                 norm=norm,
                 log10=log10,
-                principle_planes=principle_planes,
+                emb_option=emb_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
 
             emb = np.concatenate([alpha, phi], axis=0)
 
-        if plot is not None and principle_planes:
+        if plot is not None:
             plt.style.use("default")
             self.plot_embeddings(inputs=psf, emb=emb, save_path=plot, no_phase=no_phase)
 
@@ -462,88 +564,6 @@ class SyntheticPSF:
             return np.expand_dims(emb, axis=-1)
         else:
             return emb
-
-    @profile
-    def rolling_embedding(
-        self,
-        psf: np.array,
-        na_mask: bool = True,
-        apodization: bool = True,
-        ratio: bool = True,
-        strides: int = 32,
-        padsize: Any = None,
-        plot: Any = None,
-        log10: bool = False,
-        principle_planes: bool = False,
-    ):
-        if psf.ndim == 4:
-            psf = np.squeeze(psf)
-
-        windows = np.reshape(
-            sliding_window_view(psf, window_shape=self.psf_shape)[::strides, ::strides, ::strides],
-            (-1, *self.psf_shape)  # stack windows
-        )
-
-        embeddings = []
-        for w in trange(windows.shape[0], desc='Sliding windows'):
-            inputs = windows[w]
-            inputs /= np.nanpercentile(inputs, 99.99)
-            inputs[inputs > 1] = 1
-            inputs = np.nan_to_num(inputs, nan=0)
-
-            if apodization:
-                circular_mask = window(('general_gaussian', 10 / 3, 2.5 * 10), inputs.shape)
-                inputs *= circular_mask
-
-                # corner_mask = np.zeros_like(inputs, dtype=int)
-                # corner_mask[1:-1, 1:-1, 1:-1] = 1.
-                # corner_mask = distance_transform_edt(corner_mask, return_distances=True)
-                # corner_mask = .5 - (.5 * np.cos((np.pi*corner_mask)/apodization_dist))
-                # corner_mask[
-                #     apodization_dist:inputs.shape[0] - apodization_dist,
-                #     apodization_dist:inputs.shape[1] - apodization_dist,
-                #     apodization_dist:inputs.shape[2] - apodization_dist,
-                # ] = 1.
-                # # corner_mask = gaussian(corner_mask, sigma=2)
-                #
-                # import matplotlib.pyplot as plt
-                # fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-                # axes[0].imshow(circular_mask[circular_mask.shape[0]//2, :, :], cmap='magma')
-                # axes[0].set_title('Circular mask')
-                # axes[1].imshow(corner_mask[corner_mask.shape[0]//2, :, :], cmap='magma')
-                # axes[1].set_title('Corner mask')
-                # plt.show()
-
-            embeddings.append(
-                self.embedding(
-                    psf=inputs,
-                    na_mask=na_mask,
-                    ratio=ratio,
-                    padsize=padsize,
-                    log10=log10,
-                    principle_planes=principle_planes,
-                    plot=f"{plot}_window_{w}"
-                )
-            )
-
-        if principle_planes:
-            embeddings = np.array(embeddings)
-            emb = np.vstack([np.nanmax(embeddings[:, :3], axis=0), np.nanmean(embeddings[:, 3:], axis=0)])
-        else:
-            embeddings = np.array(embeddings)
-            alpha = np.nanmax(embeddings[:, 0], axis=0)
-            phi = embeddings[:, 1]
-            phi_pos = np.nanmax(phi*(phi >= 0), axis=0)
-            phi_neg = np.nanmin(phi*(phi < 0), axis=0)
-            emb = np.stack([alpha, phi_pos+phi_neg])
-
-            imsave(f"{plot}_alpha.tif", emb[0])
-            imsave(f"{plot}_phi.tif", emb[1])
-
-        if plot is not None and principle_planes:
-            self.plot_embeddings(inputs=psf, emb=emb, save_path=plot)
-
-        return emb
 
     @profile
     def single_psf(

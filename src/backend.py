@@ -217,7 +217,6 @@ def bootstrap_predict(
                 psf=np.squeeze(i),
                 plot=plot,
                 no_phase=no_phase,
-                principle_planes=True,
                 freq_strength_threshold=freq_strength_threshold
             )
 
