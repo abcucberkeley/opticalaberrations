@@ -100,7 +100,7 @@ def eval_mode(
 
 
 def evaluate_modes(model: Path, n_modes: int = 55):
-    outdir = model.with_suffix('') / 'modes'
+    outdir = model.with_suffix('') / 'evalmodes'
     outdir.mkdir(parents=True, exist_ok=True)
 
     waves = np.arange(1e-5, .75, step=.05)

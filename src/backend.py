@@ -50,7 +50,6 @@ from wavefront import Wavefront
 
 from tensorflow.keras import Model
 from phasenet import PhaseNet
-from preprocessing import resize_with_crop_or_pad
 
 from stem import Stem
 from activation import MaskedActivation
@@ -558,7 +557,7 @@ def predict(model: Path, psnr: int = 30):
     m.summary()
 
     for dist in ['single', 'dual', 'powerlaw', 'dirichlet']:
-        for amplitude_range in [(.01, .01), (.05, .1), (.1, .2), (.2, .3), (.3, .4)]:
+        for amplitude_range in [(.05, .1), (.1, .2), (.2, .3), (.3, .4)]:
             gen = load_metadata(
                 model,
                 snr=psnr,

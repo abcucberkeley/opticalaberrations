@@ -37,7 +37,7 @@ do
 
   python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
   --task "$MODEL random" \
-  --taskname $COV \
+  --taskname random \
   --name $MODEL/samples
 
   for NA in 1. .9 .8
