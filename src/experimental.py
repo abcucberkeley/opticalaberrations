@@ -832,9 +832,10 @@ def eval_mode(
     gt_path: Path,
     flat_path: Path,
     model_path: Path,
-    postfix: str = '',
     normalize: bool = True,
     remove_background: bool = True,
+    postfix: str = '',
+    gt_postfix: str = ''
 ):
     save_postfix = 'pr' if postfix.startswith('matlab') else 'ml'
 
@@ -861,7 +862,9 @@ def eval_mode(
             dm_calibration=None,
             prediction_threshold=0.,
         )
-        prediction_path = Path(f"{input_path.with_suffix('')}_sample_predictions_zernike_coffs.csv")
+        prediction_path = Path(
+            f"{str(gt_path.with_suffix('')).replace(f'_{gt_postfix}', '')}_sample_predictions_zernike_coffs.csv"
+        )
 
     try:
         p = pd.read_csv(prediction_path, header=0)['amplitude'].values
@@ -872,9 +875,9 @@ def eval_mode(
         y = np.zeros_like(p)
     else:
         try:
-            y = pd.read_csv(gt_path, header=0)['amplitude'].values
+            y = pd.read_csv(gt_path, header=0)['amplitude'].values[:len(p)]
         except KeyError:
-            y = pd.read_csv(gt_path, header=0).iloc[:, -1].values
+            y = pd.read_csv(gt_path, header=0).iloc[:, -1].values[:len(p)]
 
     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
     y_wave = Wavefront(y, lam_detection=gen.lam_detection)
@@ -894,9 +897,9 @@ def eval_mode(
     gt_psf = prep(gen.single_psf(y_wave, normed=False, noise=True))
     corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True))
 
-    datadir = f"{str(prediction_path.name).replace(postfix, '')}"
-    dm_path = Path(str(list(input_path.parent.glob(f"{datadir}*_JSONsettings.json"))[0]))
-    dm_wavefront = Path(prediction_path.parent/f"{input_path.with_suffix('')}_dm_wavefront.png")
+    rfilter = f"{str(gt_path.name).replace(gt_postfix, '')}"
+    dm_path = Path(str(list(input_path.parent.glob(f"{rfilter}*_JSONsettings.json"))[0]))
+    dm_wavefront = Path(gt_path.parent/f"{rfilter}_dm_wavefront.svg")
 
     plot_dm_actuators(
         dm_path=dm_path,
@@ -942,6 +945,7 @@ def eval_dataset(
     model: Path,
     datadir: Path,
     flat: Path,
+    gt_postfix: str = 'ground_truth_zernike_coffs.csv',
     postfix: str = 'sample_predictions_zernike_coffs.csv'
     # postfix: str = 'matlab_zernike_coffs.csv'
 ):
@@ -950,10 +954,11 @@ def eval_dataset(
         model_path=model,
         flat_path=flat,
         postfix=postfix,
+        gt_postfix=gt_postfix,
     )
 
     jobs = []
-    for file in datadir.glob('ansi_z*.tif'):
+    for file in sorted(datadir.glob('ansi_z*.tif')):
         if 'CamB' in str(file):
             continue
 
@@ -984,7 +989,7 @@ def eval_dataset(
             logger.info(f"Pred: {prediction_path.name}")
         except IndexError:
             logger.warning(f'Prediction not found for: {file.name}')
-            continue
+            prediction_path = None
 
         worker = partial(func, prediction_path=prediction_path, gt_path=gt_path)
         p = mp.Process(target=worker, args=(file,))
@@ -992,7 +997,7 @@ def eval_dataset(
         jobs.append(p)
         logger.info(f'-'*50)
 
-        while len(jobs) >= 55:
+        while len(jobs) >= 10:
             for p in jobs:
                 if not p.is_alive():
                     jobs.remove(p)

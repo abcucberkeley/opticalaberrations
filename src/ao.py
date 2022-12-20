@@ -153,12 +153,6 @@ def parse_args(args):
         "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
     )
     predict_rois.add_argument(
-        "--model_lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
-    )
-    predict_rois.add_argument(
-        "--model_axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
-    )
-    predict_rois.add_argument(
         "--wavelength", default=.510, type=float,
         help='wavelength in microns'
     )
@@ -215,12 +209,6 @@ def parse_args(args):
     )
     predict_tiles.add_argument(
         "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
-    )
-    predict_tiles.add_argument(
-        "--model_lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
-    )
-    predict_tiles.add_argument(
-        "--model_axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
     )
     predict_tiles.add_argument(
         "--wavelength", default=.510, type=float,
@@ -404,7 +392,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             model=args.model,
             img=args.input,
             prev=args.prev,
-            freq_strength_thrdetect_roiseshold=args.freq_strength_threshold,
+            freq_strength_threshold=args.freq_strength_threshold,
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
             axial_voxel_size=args.axial_voxel_size,
