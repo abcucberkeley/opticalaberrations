@@ -78,6 +78,7 @@ def load_metadata(
         psf_type=None,
         n_modes=None,
         z_voxel_size=None,
+        ideal_empirical_psf=None,
         **kwargs
 ):
     # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
@@ -93,6 +94,7 @@ def load_metadata(
             x_voxel_size=float(file.get('x_voxel_size')[()]),
             y_voxel_size=float(file.get('y_voxel_size')[()]),
             z_voxel_size=float(file.get('z_voxel_size')[()]) if z_voxel_size is None else z_voxel_size,
+            ipsf=ideal_empirical_psf,
             **kwargs
         )
     return psfgen

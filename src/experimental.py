@@ -35,10 +35,13 @@ logger = logging.getLogger('')
 
 
 @profile
-def reloadmodel_if_needed(preloaded: Preloadedmodelclass, modelpath, **kwargs):
-    if preloaded is None:
-        logger.info("Loading new model")
-        preloaded = Preloadedmodelclass(modelpath, **kwargs)
+def reloadmodel_if_needed(preloaded: Preloadedmodelclass, modelpath, ideal_empirical_psf=None):
+    if preloaded is None or preloaded.ideal_empirical_psf != ideal_empirical_psf:
+        if preloaded is None:
+            logger.info("Loading new model, because model didn't exist")
+        elif preloaded.ideal_empirical_psf != ideal_empirical_psf:
+            logger.info("Loading new model, because ideal_empirical_psf changed")
+        preloaded = Preloadedmodelclass(modelpath, ideal_empirical_psf=ideal_empirical_psf)
 
     return preloaded.model, preloaded.modelpsfgen
 
@@ -349,7 +352,7 @@ def predict_sample(
 ):
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
-    model, modelpsfgen = reloadmodel_if_needed(preloaded, model, ipsf=ideal_empirical_psf)
+    model, modelpsfgen = reloadmodel_if_needed(preloaded, model, ideal_empirical_psf=ideal_empirical_psf)
 
     psfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
