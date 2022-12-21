@@ -35,10 +35,10 @@ logger = logging.getLogger('')
 
 
 @profile
-def reloadmodel_if_needed(preloaded: Preloadedmodelclass, modelpath):
+def reloadmodel_if_needed(preloaded: Preloadedmodelclass, modelpath, **kwargs):
     if preloaded is None:
         logger.info("Loading new model")
-        preloaded = Preloadedmodelclass(modelpath)
+        preloaded = Preloadedmodelclass(modelpath, **kwargs)
 
     return preloaded.model, preloaded.modelpsfgen
 
@@ -243,6 +243,7 @@ def predict(
     nrows: int = 1,
     ncols: int = 1,
     preloaded: Preloadedmodelclass = None,
+    ideal_empirical_psf: Any = None,
 ):
     def summarize_predictions(data):
         columns = []
@@ -263,7 +264,7 @@ def predict(
         df.index.name = 'ansi'
         return df
 
-    model, modelpsfgen = reloadmodel_if_needed(preloaded, model)
+    model, modelpsfgen = reloadmodel_if_needed(preloaded, model, ipsf=ideal_empirical_psf)
     
     psfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
@@ -274,6 +275,7 @@ def predict(
         x_voxel_size=lateral_voxel_size,
         y_voxel_size=lateral_voxel_size,
         z_voxel_size=axial_voxel_size,
+        ipsf=ideal_empirical_psf
     )
 
     load = partial(
@@ -342,11 +344,12 @@ def predict_sample(
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
-    preloaded: Preloadedmodelclass = None
+    preloaded: Preloadedmodelclass = None,
+    ideal_empirical_psf: Any = None,
 ):
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
-    model, modelpsfgen = reloadmodel_if_needed(preloaded, model)
+    model, modelpsfgen = reloadmodel_if_needed(preloaded, model, ipsf=ideal_empirical_psf)
 
     psfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
@@ -357,6 +360,7 @@ def predict_sample(
         x_voxel_size=lateral_voxel_size,
         y_voxel_size=lateral_voxel_size,
         z_voxel_size=axial_voxel_size,
+        ipsf=ideal_empirical_psf
     )
 
     inputs = load_sample(
@@ -439,7 +443,8 @@ def predict_rois(
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
-    preloaded: Preloadedmodelclass = None  
+    preloaded: Preloadedmodelclass = None,
+    ideal_empirical_psf: Any = None,
 ):
     sample = imread(img).astype(float)
     esnr = np.sqrt(sample.max()).astype(int)
@@ -487,7 +492,8 @@ def predict_rois(
         estimate_sign_with_decon=estimate_sign_with_decon,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
-        preloaded=preloaded
+        preloaded=preloaded,
+        ideal_empirical_psf=ideal_empirical_psf
     )
 
 
@@ -508,10 +514,11 @@ def predict_tiles(
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),    
-    preloaded: Preloadedmodelclass = None
+    preloaded: Preloadedmodelclass = None,
+    ideal_empirical_psf: Any = None,
 ):
 
-    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(preloaded, model)
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(preloaded, model, ipsf=ideal_empirical_psf)
 
     sample = load_sample(
         img,
@@ -549,7 +556,8 @@ def predict_tiles(
         estimate_sign_with_decon=estimate_sign_with_decon,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
-        preloaded=preloaded
+        preloaded=preloaded,
+        ideal_empirical_psf=ideal_empirical_psf
     )
 
     if plot:

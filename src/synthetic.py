@@ -16,6 +16,8 @@ from skimage.restoration import unwrap_phase
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
+from tifffile import TiffFile
+from scipy import stats as st
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -34,7 +36,7 @@ class SyntheticPSF:
         self,
         amplitude_ranges=(-.1, .1),
         psf_type='widefield',
-        distribution='dirichlet',
+        distribution='single',
         mode_weights='uniform',
         bimodal=False,
         rotate=False,
@@ -52,7 +54,8 @@ class SyntheticPSF:
         snr=(10, 50),
         mean_background_noise=100,
         sigma_background_noise=4,
-        cpu_workers=-1
+        cpu_workers=-1,
+        ipsf=None
     ):
         """
         Args:
@@ -73,6 +76,7 @@ class SyntheticPSF:
             refractive_index: refractive index
             snr: scalar or range for a uniform signal-to-noise ratio dist
             cpu_workers: number of CPU threads to use for generating PSFs
+            ipsf: ideal empirical PSF to use for computing the embeddings
         """
 
         self.n_modes = n_modes
@@ -108,8 +112,13 @@ class SyntheticPSF:
             psf_type=psf_type
         )
 
-        self.ipsf = self.theoretical_psf(normed=True)      # ipsf = ideal psf (theoretical, no noise)
-        self.iotf = self.fft(self.ipsf, padsize=None)      # iotf = ideal otf
+        # ideal psf (theoretical, no noise)
+        if ipsf is None:
+            self.ipsf = self.theoretical_psf(normed=True)
+        else:
+            self.ipsf = self.load_empirical_psf(remove_background=True, normed=True)
+
+        self.iotf = self.fft(self.ipsf, padsize=None)
 
     def _normal_noise(self, mean, sigma, size):
         return np.random.normal(loc=mean, scale=sigma, size=size).astype(np.float32)
@@ -169,6 +178,25 @@ class SyntheticPSF:
         return cropped_psf
 
     @profile
+    def load_empirical_psf(self, data, remove_background: bool = True, normed: bool = True):
+        if isinstance(data, np.ndarray):
+            return data
+        else:
+            with TiffFile(data) as tif:
+                ipsf = tif.asarray()
+                tif.close()
+
+            if remove_background:
+                mode = int(st.mode(ipsf[ipsf < np.quantile(ipsf, .99)], axis=None).mode[0])
+                ipsf -= mode
+                ipsf[ipsf < 0] = 0
+
+            if normed:
+                ipsf /= np.nanmax(ipsf)
+
+            return ipsf
+
+    @profile
     def theoretical_psf(self, normed: bool = True):
         """Generates an unabberated PSF of the "desired" PSF shape and voxel size, centered.
 
@@ -189,7 +217,10 @@ class SyntheticPSF:
         )
 
         psf = self.psfgen.incoherent_psf(phi)
-        psf /= np.max(psf) if normed else psf
+
+        if normed:
+            psf /= np.max(psf)
+
         return psf
 
     @profile
@@ -319,24 +350,27 @@ class SyntheticPSF:
     def compute_emb(
         self,
         otf: np.ndarray,
+        iotf: np.ndarray,
         val: str,
         ratio: bool,
         norm: bool,
         na_mask: bool,
         log10: bool,
-        freq_strength_threshold: float,
-        emb_option: str = 'principle_planes'
+        freq_strength_threshold: float = 0.,
+        emb_option: str = 'principle_planes',
     ):
         """
         Gives the "lower dimension" representation of the data that will be shown to the model.
 
         Args:
-            otf: fft of the input data.
+            otf: fft of the input data
+            iotf: ideal OTF
             val: optional toggle to apply the NA mask
             ratio: optional toggle to return ratio of data to ideal OTF
             norm: optional toggle to normalize the data [0, 1]
             na_mask: optional toggle to apply the NA mask
             log10: optional toggle to take log10 of the FFT
+            iotf: ideal empirical OTF
             freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
             emb_option: type of embedding to use
                 (`principle_planes`,  'pp'): return principle planes only (middle planes)
@@ -345,7 +379,6 @@ class SyntheticPSF:
                  or just return the full stack if nothing is passed
         """
         mask = self.na_mask()
-        iotf = np.abs(self.iotf)
 
         if val == 'real':
             emb = np.real(otf)
@@ -487,6 +520,7 @@ class SyntheticPSF:
         phi_val: str = 'angle',
         plot: Any = None,
         log10: bool = False,
+        ipsf: Any = None,
         freq_strength_threshold: float = 0.01,
         emb_option: str = 'principle_planes',
     ):
@@ -505,6 +539,7 @@ class SyntheticPSF:
             phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
             plot: optional toggle to visualize embeddings
             log10: optional toggle to take log10 of the FFT
+            ipsf: ideal empirical PSF
             freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
             emb_option: type of embedding to use
                 Capitalizing on the radial symmetry of the FFT,
@@ -518,11 +553,31 @@ class SyntheticPSF:
         if psf.ndim == 4:
             psf = np.squeeze(psf)
 
+        if ipsf is not None:
+            ipsf = self.load_empirical_psf(ipsf, remove_background=True, normed=True)
+            iotf = np.abs(self.fft(ipsf, padsize=padsize))
+
+            if iotf.shape != self.psf_shape:
+                iotf = transform.rescale(
+                    iotf,
+                    (
+                        self.psf_shape[0] / iotf.shape[0],
+                        self.psf_shape[1] / iotf.shape[1],
+                        self.psf_shape[2] / iotf.shape[2],
+                    ),
+                    order=3,
+                    anti_aliasing=True,
+                )
+
+        else:
+            iotf = np.abs(self.iotf)
+
         otf = self.fft(psf, padsize=padsize)
 
         if no_phase:
             emb = self.compute_emb(
                 otf,
+                iotf=iotf,
                 val=alpha_val,
                 ratio=ratio,
                 na_mask=na_mask,
@@ -534,6 +589,7 @@ class SyntheticPSF:
         else:
             alpha = self.compute_emb(
                 otf,
+                iotf=iotf,
                 val=alpha_val,
                 ratio=ratio,
                 na_mask=na_mask,
@@ -545,6 +601,7 @@ class SyntheticPSF:
 
             phi = self.compute_emb(
                 otf,
+                iotf=iotf,
                 val=phi_val,
                 ratio=ratio,
                 na_mask=na_mask,
