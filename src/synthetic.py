@@ -116,7 +116,7 @@ class SyntheticPSF:
         if ipsf is None:
             self.ipsf = self.theoretical_psf(normed=True)
         else:
-            self.ipsf = self.load_empirical_psf(remove_background=True, normed=True)
+            self.ipsf = self.load_empirical_psf(ipsf, remove_background=True, normed=True)
 
         self.iotf = self.fft(self.ipsf, padsize=None)
 
