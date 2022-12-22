@@ -128,6 +128,14 @@ class SyntheticPSF:
         remove_background: bool = True,
         normalize: bool = True
     ):
+        """ 
+
+        Args:
+            ideal_empirical_psf (Union[Path, np.ndarray]): _description_
+            voxel_size (tuple, optional): voxel size of empirical data. Defaults to (.2, .108, .108).
+            remove_background (bool, optional): _description_. Defaults to True.
+            normalize (bool, optional): _description_. Defaults to True.
+        """
         logger.info(f"Updating ideal PSF with empirical PSF")
 
         if isinstance(ideal_empirical_psf, np.ndarray):
@@ -263,10 +271,12 @@ class SyntheticPSF:
 
     @profile
     def na_mask(self):
-        mask = np.abs(self.iotf)
-        # kmax = self.refractive_index / (2 * np.pi / self.lam_detection)
-        # dkx = (2 * np.pi / self.x_voxel_size) / self.iotf.shape[-1]
-        # threshold = kmax/dkx
+        """
+        OTF Mask is going to be binary thresholded ideal theoretical OTF
+        """
+        ipsf = self.theoretical_psf(normed=True)
+        mask = np.abs(self.fft(ipsf, padsize=None))
+
         threshold = np.nanpercentile(mask.flatten(), 65)
         mask = np.where(mask < threshold, mask, 1.)
         mask = np.where(mask >= threshold, mask, 0.)

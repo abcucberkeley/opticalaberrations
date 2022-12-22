@@ -39,20 +39,24 @@ def reloadmodel_if_needed(
     preloaded: Preloadedmodelclass,
     modelpath: Path,
     ideal_empirical_psf: Any = None,
-    ideal_empirical_psf_voxel_size: tuple = (.2, .108, .108)
+    ideal_empirical_psf_voxel_size: Any = None
 ):
     if preloaded is None:
         logger.info("Loading new model, because model didn't exist")
+        preloaded = Preloadedmodelclass(modelpath, ideal_empirical_psf, ideal_empirical_psf_voxel_size)
+
+    if ideal_empirical_psf is None and preloaded.ideal_empirical_psf is not None:
+        logger.info("Loading new model, because ideal_empirical_psf has been removed")
         preloaded = Preloadedmodelclass(modelpath)
 
-    if preloaded.ideal_empirical_psf != ideal_empirical_psf or preloaded.modelpsfgen.voxel_size != ideal_empirical_psf_voxel_size:       
+
+    elif preloaded.ideal_empirical_psf != ideal_empirical_psf:
         preloaded.modelpsfgen.update_ideal_psf_with_empirical(
             ideal_empirical_psf=ideal_empirical_psf,
             voxel_size=ideal_empirical_psf_voxel_size,
             remove_background=True,
             normalize=True,
         )
-        # //TODO #4 need to cover if ideal_empirical_psf goes from a .tif/np.array back to None.
 
     return preloaded.model, preloaded.modelpsfgen
 
