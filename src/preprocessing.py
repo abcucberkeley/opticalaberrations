@@ -33,6 +33,17 @@ logger = logging.getLogger(__name__)
 
 @profile
 def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
+    """Crops or pads array.  Output will have dimensions "crop_shape". No interpolation. Padding type
+    can be customized with **kwargs, like "reflect" to get mirror pad.
+
+    Args:
+        psf (np.array): N-dim array
+        crop_shape (Sequence): desired output dimensions
+        **kwargs: arguments to pass to np.pad
+
+    Returns:
+        N-dim array with desired output shape
+    """
     rank = len(crop_shape)
     psf_shape = psf.shape[1:-1] if len(psf.shape) == 5 else psf.shape
     index = [[0, psf_shape[d]] for d in range(rank)]
@@ -66,6 +77,16 @@ def resize(
     minimum_shape: tuple = (64, 64, 64),
     debug: Any = None
 ):
+    """ Up/down-scales volume to output voxel size using 3rd order interpolation. 
+    Output volume is padded if array has fewer voxels than "minimum_shape". 
+
+    Args:
+        vol (_type_): 3D volume
+        voxel_size (3 element Sequence): Output voxel size
+        sample_voxel_size (3 element Sequence, optional): Input voxel size. Defaults to (.1, .1, .1).
+        minimum_shape (tuple, optional): Pad array if vol (after resizing) is too small. Defaults to (64, 64, 64).
+        debug : "True" to show figure, "not None" will write {debug}_rescaling.svg file. Defaults to None.
+    """
     def plot(cls, img):
         if img.shape[0] == 6:
             vmin, vmax, vcenter, step = 0, 2, 1, .1
@@ -158,6 +179,25 @@ def prep_sample(
     normalize: bool = True,
     background_mode_offset: int = 0
 ):
+    """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
+
+    Background subtraction (mode of voxels below 99th percentile + background_mode_offset)
+    Normalization to 0-1
+    Resample to model_voxel_size
+    Transpose
+
+    Args:
+        sample (np.array): Input 3D array (or series of 3D arrays)
+        sample_voxel_size (tuple): 
+        model_voxel_size (tuple): 
+        debug (Any, optional): plot or save .svg's. Defaults to None.
+        remove_background (bool, optional): Defaults to True.
+        normalize (bool, optional): Defaults to True.
+        background_mode_offset (int, optional): >0 gives more aggressive background subtraction. Defaults to 0.
+
+    Returns:
+        _type_: 3D array (or series of 3D arrays)
+    """
     if len(np.squeeze(sample).shape) == 4:
         samples = []
         for i in range(sample.shape[0]):
