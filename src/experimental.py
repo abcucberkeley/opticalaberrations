@@ -35,13 +35,24 @@ logger = logging.getLogger('')
 
 
 @profile
-def reloadmodel_if_needed(preloaded: Preloadedmodelclass, modelpath, ideal_empirical_psf=None):
-    if preloaded is None or preloaded.ideal_empirical_psf != ideal_empirical_psf:
-        if preloaded is None:
-            logger.info("Loading new model, because model didn't exist")
-        elif preloaded.ideal_empirical_psf != ideal_empirical_psf:
-            logger.info("Loading new model, because ideal_empirical_psf changed")
-        preloaded = Preloadedmodelclass(modelpath, ideal_empirical_psf=ideal_empirical_psf)
+def reloadmodel_if_needed(
+    preloaded: Preloadedmodelclass,
+    modelpath: Path,
+    ideal_empirical_psf: Any = None,
+    ideal_empirical_psf_voxel_size: tuple = (.2, .108, .108)
+):
+    if preloaded is None:
+        logger.info("Loading new model, because model didn't exist")
+        preloaded = Preloadedmodelclass(modelpath)
+
+    if preloaded.ideal_empirical_psf != ideal_empirical_psf:
+        logger.info("Loading new model, because ideal_empirical_psf changed")
+        preloaded.modelpsfgen.update_ideal_psf_with_empirical(
+            ideal_empirical_psf=ideal_empirical_psf,
+            voxel_size=ideal_empirical_psf_voxel_size,
+            remove_background=True,
+            normalize=True,
+        )
 
     return preloaded.model, preloaded.modelpsfgen
 
@@ -193,6 +204,7 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
             save_path=f"{save_path.with_suffix('')}_correction"
         )
 
+
 @profile
 def load_sample(
     data: Path,
@@ -267,7 +279,12 @@ def predict(
         df.index.name = 'ansi'
         return df
 
-    model, modelpsfgen = reloadmodel_if_needed(preloaded, model, ipsf=ideal_empirical_psf)
+    model, modelpsfgen = reloadmodel_if_needed(
+        preloaded,
+        model,
+        ideal_empirical_psf=ideal_empirical_psf,
+        ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+    )
     
     psfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
@@ -278,7 +295,6 @@ def predict(
         x_voxel_size=lateral_voxel_size,
         y_voxel_size=lateral_voxel_size,
         z_voxel_size=axial_voxel_size,
-        ipsf=ideal_empirical_psf
     )
 
     load = partial(
@@ -352,7 +368,12 @@ def predict_sample(
 ):
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
-    model, modelpsfgen = reloadmodel_if_needed(preloaded, model, ideal_empirical_psf=ideal_empirical_psf)
+    model, modelpsfgen = reloadmodel_if_needed(
+        preloaded,
+        model,
+        ideal_empirical_psf=ideal_empirical_psf,
+        ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+    )
 
     psfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
@@ -362,8 +383,7 @@ def predict_sample(
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
         y_voxel_size=lateral_voxel_size,
-        z_voxel_size=axial_voxel_size,
-        ipsf=ideal_empirical_psf
+        z_voxel_size=axial_voxel_size
     )
 
     inputs = load_sample(
@@ -521,7 +541,12 @@ def predict_tiles(
     ideal_empirical_psf: Any = None,
 ):
 
-    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(preloaded, model, ipsf=ideal_empirical_psf)
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
+        preloaded,
+        model,
+        ideal_empirical_psf=ideal_empirical_psf,
+        ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+    )
 
     sample = load_sample(
         img,

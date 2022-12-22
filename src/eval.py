@@ -321,6 +321,7 @@ def evalheatmap(
         if c.is_dir()
            and len(list(c.glob('*.tif'))) > 0
            and distribution in str(c)
+           and gen.embedding_option in str(c)
            and f"z{int(n_modes)}" in str(c)
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
@@ -415,44 +416,6 @@ def evalheatmap(
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     return fig
-
-
-def eval_roi(
-    rois: np.array,
-    modelpath: Path,
-    na: float = 1.0,
-    avg_dist: int = 10,
-    batch_size: int = 100
-):
-    model = backend.load(modelpath)
-    gen = backend.load_metadata(
-        modelpath,
-        snr=1000,
-        bimodal=True,
-        rotate=True,
-        batch_size=batch_size,
-        psf_shape=3*[model.input_shape[2]]
-    )
-
-    y_pred = pd.DataFrame([], columns=['sample'])
-
-    for w in tqdm(range(rois.shape[0]), total=rois.shape[0], desc=f"ROIs[d{avg_dist}]"):
-        reference = rois[w]
-        inputs = reference / np.nanpercentile(reference, 99.99)
-        inputs[inputs > 1] = 1
-
-        preds, stdev = backend.bootstrap_predict(
-            model,
-            inputs[np.newaxis, :, :, :, np.newaxis],
-            psfgen=gen,
-            batch_size=1,
-            n_samples=1,
-        )
-
-        p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds], columns=['sample'])
-        y_pred = y_pred.append(p, ignore_index=True)
-
-    return y_pred
 
 
 def evaldistbin(
@@ -560,6 +523,7 @@ def distheatmap(
                and len(list(c.glob('*.tif'))) > 0
                and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
                and distribution in str(c)
+               and gen.embedding_option in str(c)
                and f"z{int(n_modes)}" in str(c)
                and f"npoints_{num_neighbor}" in str(c)
                and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
@@ -571,6 +535,7 @@ def distheatmap(
                and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
                and len(list(c.glob('*.tif'))) > 0
                and distribution in str(c)
+               and gen.embedding_option in str(c)
                and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
         ])
     logger.info(f"BINs: {[len(classes)]}")
@@ -765,6 +730,7 @@ def densityheatmap(
            and len(list(c.glob('*.tif'))) > 0
            and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
            and distribution in str(c)
+           and gen.embedding_option in str(c)
            and f"z{int(n_modes)}" in str(c)
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])
@@ -1002,6 +968,7 @@ def iterheatmap(
            and len(list(c.glob('*.tif'))) > 0
            and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
            and distribution in str(c)
+           and gen.embedding_option in str(c)
            and f"z{int(n_modes)}" in str(c)
            and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
     ])

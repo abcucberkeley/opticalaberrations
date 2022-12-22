@@ -50,6 +50,14 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--dist", default='/', type=str, help='distribution to evaluate'
+    )
+
+    parser.add_argument(
+        "--embedding", default='', type=str, help="embedding option to use for evaluation"
+    )
+
+    parser.add_argument(
         "--max_amplitude", default=.5, type=float, help="max amplitude for the zernike coefficients"
     )
 
@@ -108,6 +116,7 @@ def main(args=None):
             datadir=args.datadir,
             n_modes=args.n_modes,
             distribution=args.dist,
+            embedding=args.embedding,
             samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,
             input_coverage=args.input_coverage,
@@ -121,6 +130,7 @@ def main(args=None):
             datadir=args.datadir,
             n_modes=args.n_modes,
             distribution=args.dist,
+            embedding=args.embedding,
             samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,
             num_neighbor=args.num_neighbor,
@@ -135,6 +145,7 @@ def main(args=None):
             datadir=args.datadir,
             n_modes=args.n_modes,
             distribution=args.dist,
+            embedding=args.embedding,
             samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,
             input_coverage=args.input_coverage,
@@ -148,6 +159,7 @@ def main(args=None):
             datadir=args.datadir,
             n_modes=args.n_modes,
             distribution=args.dist,
+            embedding=args.embedding,
             samplelimit=args.n_samples,
             max_amplitude=args.max_amplitude,
             input_coverage=args.input_coverage,

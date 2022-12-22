@@ -9,8 +9,8 @@ class Preloadedmodelclass:
     """
     def __init__(self, modelpath: Path, ideal_empirical_psf=None):
         
-        if ideal_empirical_psf=="None":
-            self.ideal_empirical_psf=None
+        if ideal_empirical_psf == "None":
+            self.ideal_empirical_psf = None
         else:
             self.ideal_empirical_psf = ideal_empirical_psf
 
@@ -20,6 +20,5 @@ class Preloadedmodelclass:
         for gpu_instance in physical_devices:
             tfc.experimental.set_memory_growth(gpu_instance, True)
 
-        self.modelpsfgen = load_metadata(self.modelpath, ideal_empirical_psf=self.ideal_empirical_psf)
+        self.modelpsfgen = load_metadata(self.modelpath)
         self.model = load(self.modelpath, mosaic=True)
-        

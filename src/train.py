@@ -86,6 +86,10 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
+        "--embedding", default='', type=str, help="embedding option to use for training"
+    )
+
+    train_parser.add_argument(
         "--samplelimit", default=None, type=int, help="max number of files to load from a dataset [per bin/class]"
     )
 
@@ -191,6 +195,7 @@ def main(args=None):
         backend.train(
             epochs=args.epochs,
             dataset=args.dataset,
+            embedding=args.embedding,
             outdir=args.outdir,
             network=args.network,
             input_shape=args.input_shape,

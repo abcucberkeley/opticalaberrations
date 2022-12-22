@@ -3,9 +3,10 @@ matplotlib.use('Agg')
 
 import logging
 import sys
-from typing import Any
+from typing import Any, Union
 
 import numpy as np
+from pathlib import Path
 from skimage import transform
 from functools import partial
 import multiprocessing as mp
@@ -17,10 +18,10 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
 from tifffile import TiffFile
-from scipy import stats as st
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
+from preprocessing import prep_sample
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -37,6 +38,7 @@ class SyntheticPSF:
         amplitude_ranges=(-.1, .1),
         psf_type='widefield',
         distribution='single',
+        embedding_option='principle_planes',
         mode_weights='uniform',
         bimodal=False,
         rotate=False,
@@ -52,10 +54,9 @@ class SyntheticPSF:
         lam_detection=.510,
         refractive_index=1.33,
         snr=(10, 50),
-        mean_background_noise=100,
-        sigma_background_noise=4,
-        cpu_workers=-1,
-        ipsf=None
+        mean_background_noise=0,
+        sigma_background_noise=(4, 8),
+        cpu_workers=-1
     ):
         """
         Args:
@@ -63,7 +64,8 @@ class SyntheticPSF:
             psf_type: widefield or confocal
             distribution: desired distribution for the amplitudes
             gamma: optional exponent of the powerlaw distribution
-            bimodal: optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes, otherwise just positive amplitudes only
+            bimodal: optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes,
+                otherwise just positive amplitudes only
             n_modes: number of zernike modes to describe the aberration
             order: eg noll or ansi, default is ansi
             batch_size: number of samples per batch
@@ -76,7 +78,7 @@ class SyntheticPSF:
             refractive_index: refractive index
             snr: scalar or range for a uniform signal-to-noise ratio dist
             cpu_workers: number of CPU threads to use for generating PSFs
-            ipsf: ideal empirical PSF to use for computing the embeddings
+            embedding_option: type of fourier embedding to use
         """
 
         self.n_modes = n_modes
@@ -99,6 +101,7 @@ class SyntheticPSF:
         self.gamma = gamma
         self.bimodal = bimodal
         self.rotate = rotate
+        self.embedding_option = embedding_option
 
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
         self.amplitude_ranges = amplitude_ranges
@@ -113,18 +116,51 @@ class SyntheticPSF:
         )
 
         # ideal psf (theoretical, no noise)
-        if ipsf is None:
-            self.ipsf = self.theoretical_psf(normed=True)
+        self.ipsf = self.theoretical_psf(normed=True)
+        self.iotf = np.abs(self.fft(self.ipsf, padsize=None))
+        self.iotf = self._normalize(self.iotf, self.iotf)
+
+    @profile
+    def update_ideal_psf_with_empirical(
+        self,
+        ideal_empirical_psf: Union[Path, np.ndarray],
+        voxel_size: tuple = (.2, .108, .108),
+        remove_background: bool = True,
+        normalize: bool = True
+    ):
+        logger.info(f"Updating ideal PSF with empirical PSF")
+
+        if isinstance(ideal_empirical_psf, np.ndarray):
+            # assume PSF has been pre-processed already
+            self.ipsf = ideal_empirical_psf
         else:
-            self.ipsf = self.load_empirical_psf(ipsf, remove_background=True, normed=True)
+            with TiffFile(ideal_empirical_psf) as tif:
+                self.ipsf = tif.asarray()
+                tif.close()
 
-        self.iotf = self.fft(self.ipsf, padsize=None)
+            self.ipsf = prep_sample(
+                np.squeeze(self.ipsf),
+                model_voxel_size=self.voxel_size,
+                sample_voxel_size=voxel_size,
+                remove_background=remove_background,
+                normalize=normalize
+            )
 
-    def _normal_noise(self, mean, sigma, size):
-        return np.random.normal(loc=mean, scale=sigma, size=size).astype(np.float32)
+        self.iotf = np.abs(self.fft(self.ipsf, padsize=None))
+        self.iotf = np.nan_to_num(self.iotf, nan=0)
 
-    def _poisson_noise(self, image):
-        return np.random.poisson(lam=image).astype(np.float32) - image
+        if self.iotf.shape != self.psf_shape:
+            self.iotf = transform.rescale(
+                self.iotf,
+                (
+                    self.psf_shape[0] / self.iotf.shape[0],
+                    self.psf_shape[1] / self.iotf.shape[1],
+                    self.psf_shape[2] / self.iotf.shape[2],
+                ),
+                order=3,
+                anti_aliasing=True,
+            )
+        self.iotf = self._normalize(self.iotf, self.iotf)
 
     def _randuniform(self, var):
         """Returns a random number (uniform chance) in the range provided by var. If var is a scalar, var is simply returned.
@@ -141,6 +177,14 @@ class SyntheticPSF:
 
         # star unpacks a list, so that var's values become the separate arguments here
         return np.random.uniform(*var)
+
+    def _normal_noise(self, mean, sigma, size):
+        mean = self._randuniform(mean)
+        sigma = self._randuniform(sigma)
+        return np.random.normal(loc=mean, scale=sigma, size=size).astype(np.float32)
+
+    def _poisson_noise(self, image):
+        return np.random.poisson(lam=image).astype(np.float32) - image
 
     def _random_noise(self, image, mean, sigma):
         normal_noise_img = self._normal_noise(mean=mean, sigma=sigma, size=image.shape)
@@ -176,25 +220,6 @@ class SyntheticPSF:
         interp = RegularGridInterpolator((z, y, x), psf)
         cropped_psf = interp((cz, cy, cx))
         return cropped_psf
-
-    @profile
-    def load_empirical_psf(self, data, remove_background: bool = True, normed: bool = True):
-        if isinstance(data, np.ndarray):
-            return data
-        else:
-            with TiffFile(data) as tif:
-                ipsf = tif.asarray()
-                tif.close()
-
-            if remove_background:
-                mode = int(st.mode(ipsf[ipsf < np.quantile(ipsf, .99)], axis=None).mode[0])
-                ipsf -= mode
-                ipsf[ipsf < 0] = 0
-
-            if normed:
-                ipsf /= np.nanmax(ipsf)
-
-            return ipsf
 
     @profile
     def theoretical_psf(self, normed: bool = True):
@@ -239,10 +264,10 @@ class SyntheticPSF:
     @profile
     def na_mask(self):
         mask = np.abs(self.iotf)
-        kmax = self.refractive_index / (2 * np.pi / self.lam_detection)
-        dkx = (2 * np.pi / self.x_voxel_size) / self.iotf.shape[-1]
-        threshold = kmax/dkx
-        # threshold = np.nanpercentile(mask.flatten(), 65)
+        # kmax = self.refractive_index / (2 * np.pi / self.lam_detection)
+        # dkx = (2 * np.pi / self.x_voxel_size) / self.iotf.shape[-1]
+        # threshold = kmax/dkx
+        threshold = np.nanpercentile(mask.flatten(), 65)
         mask = np.where(mask < threshold, mask, 1.)
         mask = np.where(mask >= threshold, mask, 0.)
         return mask
@@ -347,6 +372,96 @@ class SyntheticPSF:
         return emb
 
     @profile
+    def principle_planes(self, emb):
+        return np.stack([
+                emb[emb.shape[0] // 2, :, :],
+                emb[:, emb.shape[1] // 2, :],
+                emb[:, :, emb.shape[2] // 2],
+            ], axis=0)
+
+    @profile
+    def rotary_slices(self, emb):
+        z = np.linspace(-1, 1, emb.shape[0])
+        y = np.linspace(-1, 1, emb.shape[1])
+        x = np.linspace(-1, 1, emb.shape[2])  # grid vectors with 0,0,0 at the center
+        interp = RegularGridInterpolator((z, y, x), emb)
+
+        # match desired X output size. Might want to go to k_max instead of 1 (the border)?
+        rho = np.linspace(0, 1, emb.shape[0])
+
+        # cut "rotary_slices" number of planes from 0 to 90 degrees.
+        angles = np.linspace(0, np.pi / 2, 3)
+
+        # meshgrid with each "slice" being a rotary cut, z being the vertical axis, and rho being the horizontal axis.
+        hz = np.linspace(0, 1, emb.shape[0])
+        m_angles, m_z, m_rho = np.meshgrid(angles, hz, rho, indexing='ij')
+
+        m_x = m_rho * np.cos(m_angles)  # the slice coords in cartesian coordinates
+        m_y = m_rho * np.sin(m_angles)
+
+        return interp((m_z, m_y, m_x))  # 3D interpolate
+
+    @profile
+    def spatial_quadrants(self, emb):
+        # get quadrants for each axis by doing two consecutive splits
+        zquadrants = [q for half in np.split(emb, 2, axis=1) for q in np.split(half, 2, axis=2)]
+        yquadrants = [q for half in np.split(emb, 2, axis=0) for q in np.split(half, 2, axis=2)]
+        xquadrants = [q for half in np.split(emb, 2, axis=0) for q in np.split(half, 2, axis=1)]
+
+        cz, cy, cx = [s // 2 for s in emb.shape]  # indices for the principle planes
+        planes = [0, .1, .2, .3]  # offsets of the desired planes starting from the principle planes
+
+        '''
+            0: top-left quadrant
+            1: top-right quadrant
+            2: bottom-left quadrant
+            3: bottom-right quadrant
+        '''
+        placement = [
+            3, 2,  # first row
+            1, 0,  # second row
+        ]
+
+        # figure out indices for the desired planes
+        zplanes = [np.ceil(cz + (cz * p)).astype(int) for p in planes]
+        xy = np.concatenate([  # combine vertical quadrants (columns)
+            np.concatenate([  # combine horizontal quadrants (rows)
+                zquadrants[placement[0]][zplanes[0], :, :],
+                zquadrants[placement[1]][zplanes[1], :, :]
+            ], axis=1),
+            np.concatenate([  # combine horizontal quadrants (rows)
+                zquadrants[placement[2]][zplanes[2], :, :],
+                zquadrants[placement[3]][zplanes[3], :, :]
+            ], axis=1)
+        ], axis=0)
+
+        yplanes = [int(cy + (cy * p)) for p in planes]
+        xz = np.concatenate([
+            np.concatenate([
+                yquadrants[placement[0]][:, yplanes[0], :],
+                yquadrants[placement[1]][:, yplanes[1], :]
+            ], axis=1),
+            np.concatenate([
+                yquadrants[placement[2]][:, yplanes[2], :],
+                yquadrants[placement[3]][:, yplanes[3], :]
+            ], axis=1)
+        ], axis=0)
+
+        xplanes = [int(cx + (cx * p)) for p in planes]
+        yz = np.concatenate([
+            np.concatenate([
+                xquadrants[placement[0]][:, :, xplanes[0]],
+                xquadrants[placement[1]][:, :, xplanes[1]]
+            ], axis=1),
+            np.concatenate([
+                xquadrants[placement[2]][:, :, xplanes[2]],
+                xquadrants[placement[3]][:, :, xplanes[3]]
+            ], axis=1)
+        ], axis=0)
+
+        return np.stack([xy, xz, yz], axis=0)
+
+    @profile
     def compute_emb(
         self,
         otf: np.ndarray,
@@ -356,8 +471,8 @@ class SyntheticPSF:
         norm: bool,
         na_mask: bool,
         log10: bool,
+        embedding_option: Any,
         freq_strength_threshold: float = 0.,
-        emb_option: str = 'principle_planes',
     ):
         """
         Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -372,7 +487,7 @@ class SyntheticPSF:
             log10: optional toggle to take log10 of the FFT
             iotf: ideal empirical OTF
             freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
-            emb_option: type of embedding to use
+            embedding_option: type of embedding to use
                 (`principle_planes`,  'pp'): return principle planes only (middle planes)
                 (`rotary_slices`,     'rs'): return three radial slices
                 (`spatial_quadrants`, 'sq'): return four different spatial planes in each quadrant
@@ -391,7 +506,6 @@ class SyntheticPSF:
             emb = np.abs(otf)
 
         if norm:
-            iotf = self._normalize(iotf, iotf)
             emb = self._normalize(emb, otf, freq_strength_threshold=freq_strength_threshold)
 
         if emb.shape != self.psf_shape:
@@ -417,93 +531,12 @@ class SyntheticPSF:
             emb = np.log10(emb)
             emb = np.nan_to_num(emb, nan=0, posinf=0, neginf=0)
 
-        if emb_option.lower() == 'principle_planes' or emb_option.lower() == 'pp':
-            return np.stack([
-                emb[emb.shape[0] // 2, :, :],
-                emb[:, emb.shape[1] // 2, :],
-                emb[:, :, emb.shape[2] // 2],
-            ], axis=0)
-
-        elif emb_option.lower() == 'rotary_slices' or emb_option.lower() == 'rs':
-            z = np.linspace(-1, 1, emb.shape[0])
-            y = np.linspace(-1, 1, emb.shape[1])
-            x = np.linspace(-1, 1, emb.shape[2])  # grid vectors with 0,0,0 at the center
-            interp = RegularGridInterpolator((z, y, x), emb)
-
-            # match desired X output size. Might want to go to k_max instead of 1 (the border)?
-            rho = np.linspace(0, 1, emb.shape[0])
-
-            # cut "rotary_slices" number of planes from 0 to 90 degrees.
-            angles = np.linspace(0, np.pi / 2, 3)
-
-            # meshgrid with each "slice" being a rotary cut, z being the vertical axis, and rho being the horizontal axis.
-            hz = np.linspace(0, 1, emb.shape[0])
-            m_angles, m_z, m_rho = np.meshgrid(angles, hz, rho, indexing='ij')
-
-            m_x = m_rho * np.cos(m_angles)  # the slice coords in cartesian coordinates
-            m_y = m_rho * np.sin(m_angles)
-
-            return interp((m_z, m_y, m_x))  # 3D interpolate
-
-        elif emb_option.lower() == 'spatial_quadrants' or emb_option.lower() == 'sq':
-            # get quadrants for each axis by doing two consecutive splits
-            zquadrants = [q for half in np.split(emb, 2, axis=1) for q in np.split(half, 2, axis=2)]
-            yquadrants = [q for half in np.split(emb, 2, axis=0) for q in np.split(half, 2, axis=2)]
-            xquadrants = [q for half in np.split(emb, 2, axis=0) for q in np.split(half, 2, axis=1)]
-
-            cz, cy, cx = [s // 2 for s in emb.shape]  # indices for the principle planes
-            planes = [0, .1, .2, .3]  # offsets of the desired planes starting from the principle planes
-
-            '''
-                0: top-left quadrant
-                1: top-right quadrant
-                2: bottom-left quadrant
-                3: bottom-right quadrant
-            '''
-            placement = [
-                3, 2,  # first row
-                1, 0,  # second row
-            ]
-
-            # figure out indices for the desired planes
-            zplanes = [np.ceil(cz + (cz * p)).astype(int) for p in planes]
-            xy = np.concatenate([  # combine vertical quadrants (columns)
-                np.concatenate([  # combine horizontal quadrants (rows)
-                    zquadrants[placement[0]][zplanes[0], :, :],
-                    zquadrants[placement[1]][zplanes[1], :, :]
-                ], axis=1),
-                np.concatenate([  # combine horizontal quadrants (rows)
-                    zquadrants[placement[2]][zplanes[2], :, :],
-                    zquadrants[placement[3]][zplanes[3], :, :]
-                ], axis=1)
-            ], axis=0)
-
-            yplanes = [int(cy + (cy * p)) for p in planes]
-            xz = np.concatenate([
-                np.concatenate([
-                    yquadrants[placement[0]][:, yplanes[0], :],
-                    yquadrants[placement[1]][:, yplanes[1], :]
-                ], axis=1),
-                np.concatenate([
-                    yquadrants[placement[2]][:, yplanes[2], :],
-                    yquadrants[placement[3]][:, yplanes[3], :]
-                ], axis=1)
-            ], axis=0)
-
-            xplanes = [int(cx + (cx * p)) for p in planes]
-            yz = np.concatenate([
-                np.concatenate([
-                    xquadrants[placement[0]][:, :, xplanes[0]],
-                    xquadrants[placement[1]][:, :, xplanes[1]]
-                ], axis=1),
-                np.concatenate([
-                    xquadrants[placement[2]][:, :, xplanes[2]],
-                    xquadrants[placement[3]][:, :, xplanes[3]]
-                ], axis=1)
-            ], axis=0)
-
-            return np.stack([xy, xz, yz], axis=0)
-
+        if embedding_option.lower() == 'principle_planes' or embedding_option.lower() == 'pp':
+            return self.principle_planes(emb)
+        elif embedding_option.lower() == 'rotary_slices' or embedding_option.lower() == 'rs':
+            return self.rotary_slices(emb)
+        elif embedding_option.lower() == 'spatial_quadrants' or embedding_option.lower() == 'sq':
+            return self.spatial_quadrants(emb)
         else:
             return emb
 
@@ -520,9 +553,8 @@ class SyntheticPSF:
         phi_val: str = 'angle',
         plot: Any = None,
         log10: bool = False,
-        ipsf: Any = None,
         freq_strength_threshold: float = 0.01,
-        emb_option: str = 'principle_planes',
+        embedding_option: Any = None,
     ):
         """
         Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -539,12 +571,11 @@ class SyntheticPSF:
             phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
             plot: optional toggle to visualize embeddings
             log10: optional toggle to take log10 of the FFT
-            ipsf: ideal empirical PSF
             freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
-            emb_option: type of embedding to use
+            embedding_option: type of embedding to use
                 Capitalizing on the radial symmetry of the FFT,
                 we have a few options to minimize the size of the embedding:
-                    (`principle_planes`,  'pp'): return principle planes only (middle planes)
+                    Default: (`principle_planes`,  'pp'): return principle planes only (middle planes)
                     (`rotary_slices`,     'rs'): return three radial slices
                     (`spatial_quadrants`, 'sq'): return four different spatial planes in each quadrant
                     or just return the full stack if nothing is passed
@@ -553,25 +584,7 @@ class SyntheticPSF:
         if psf.ndim == 4:
             psf = np.squeeze(psf)
 
-        if ipsf is not None:
-            ipsf = self.load_empirical_psf(ipsf, remove_background=True, normed=True)
-            iotf = np.abs(self.fft(ipsf, padsize=padsize))
-
-            if iotf.shape != self.psf_shape:
-                iotf = transform.rescale(
-                    iotf,
-                    (
-                        self.psf_shape[0] / iotf.shape[0],
-                        self.psf_shape[1] / iotf.shape[1],
-                        self.psf_shape[2] / iotf.shape[2],
-                    ),
-                    order=3,
-                    anti_aliasing=True,
-                )
-
-        else:
-            iotf = np.abs(self.iotf)
-
+        iotf = self.iotf
         otf = self.fft(psf, padsize=padsize)
 
         if no_phase:
@@ -583,7 +596,7 @@ class SyntheticPSF:
                 na_mask=na_mask,
                 norm=norm,
                 log10=log10,
-                emb_option=emb_option,
+                embedding_option=self.embedding_option if embedding_option is None else embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
         else:
@@ -595,7 +608,7 @@ class SyntheticPSF:
                 na_mask=na_mask,
                 norm=norm,
                 log10=log10,
-                emb_option=emb_option,
+                embedding_option=self.embedding_option if embedding_option is None else embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
 
@@ -607,7 +620,7 @@ class SyntheticPSF:
                 na_mask=na_mask,
                 norm=norm,
                 log10=log10,
-                emb_option=emb_option,
+                embedding_option=self.embedding_option if embedding_option is None else embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
 
@@ -663,7 +676,10 @@ class SyntheticPSF:
             total_counts_ideal = np.sum(self.ipsf)      # peak value of ideal psf is 1, self.ipsf = 1
             total_counts = total_counts_ideal * snr**2  # total photons of ideal psf with desired SNR
             total_counts_abr = np.sum(psf)              # total photons in abberated psf
-            psf *= total_counts/total_counts_abr        # scale abberated psf to have the same number of photons as ideal psf (e.g. abberation doesn't destroy/create light)
+
+            # scale abberated psf to have the same number of photons as ideal psf
+            # (e.g. abberation doesn't destroy/create light)
+            psf *= total_counts/total_counts_abr
 
         if noise:
             rand_noise = self._random_noise(

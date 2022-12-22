@@ -78,7 +78,6 @@ def load_metadata(
         psf_type=None,
         n_modes=None,
         z_voxel_size=None,
-        ideal_empirical_psf=None,
         **kwargs
 ):
     # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
@@ -86,6 +85,12 @@ def load_metadata(
         model_path = list(model_path.rglob('*.h5'))[0]
 
     with h5py.File(model_path, 'r') as file:
+
+        try:
+            embedding_option = str(file.get('embedding_option')[()])
+        except TypeError:
+            embedding_option = 'principle_planes'
+
         psfgen = SyntheticPSF(
             psf_type=np.array(file.get('psf_type')[:]) if psf_type is None else psf_type,
             psf_shape=psf_shape,
@@ -94,7 +99,7 @@ def load_metadata(
             x_voxel_size=float(file.get('x_voxel_size')[()]),
             y_voxel_size=float(file.get('y_voxel_size')[()]),
             z_voxel_size=float(file.get('z_voxel_size')[()]) if z_voxel_size is None else z_voxel_size,
-            ipsf=ideal_empirical_psf,
+            embedding_option=embedding_option,
             **kwargs
         )
     return psfgen
@@ -749,6 +754,7 @@ def save_metadata(
     y_voxel_size: float,
     z_voxel_size: float,
     n_modes: int,
+    embedding_option: str = 'principle_planes'
 ):
     def add_param(h5file, name, data):
         try:
@@ -770,6 +776,7 @@ def save_metadata(
         add_param(file, name='x_voxel_size', data=x_voxel_size)
         add_param(file, name='y_voxel_size', data=y_voxel_size)
         add_param(file, name='z_voxel_size', data=z_voxel_size)
+        add_param(file, name='embedding_option', data=embedding_option)
 
         if isinstance(psf_type, str) or isinstance(psf_type, Path):
             with h5py.File(psf_type, 'r+') as f:

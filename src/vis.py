@@ -321,7 +321,7 @@ def plot_embeddings(
         wavelength=.510,
         x_voxel_size=.108,
         y_voxel_size=.108,
-        z_voxel_size=.268,
+        z_voxel_size=.2,
         log10=False,
         psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         savepath='../data/embeddings',
@@ -340,7 +340,7 @@ def plot_embeddings(
     if log10:
         vmin, vmax, vcenter, step = -2, 2, 0, .1
     else:
-        vmin, vmax, vcenter, step = 0, 2, 1, .1
+        vmin, vmax, vcenter, step = 0, 3, 1, .1
 
     highcmap = plt.get_cmap('YlOrRd', 256)
     lowcmap = plt.get_cmap('YlGnBu_r', 256)
@@ -374,7 +374,7 @@ def plot_embeddings(
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
-        snr=20,
+        snr=30,
         cpu_workers=-1,
     )
 
@@ -451,6 +451,7 @@ def plot_shapes_embeddings(
         log10=False,
         psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         savepath='../data/shapes_embeddings',
+        n_modes=55
 ):
     """ Plot the embeddings for different puncta sizes (aka different "shapes")
 
@@ -484,7 +485,7 @@ def plot_shapes_embeddings(
     if log10:
         vmin, vmax, vcenter, step = -2, 2, 0, .1
     else:
-        vmin, vmax, vcenter, step = 0, 2, 1, .1
+        vmin, vmax, vcenter, step = 0, 3, 1, .1
 
     highcmap = plt.get_cmap('YlOrRd', 256)
     lowcmap = plt.get_cmap('YlGnBu_r', 256)
@@ -497,106 +498,106 @@ def plot_shapes_embeddings(
     # waves = np.arange(-.075, .08, step=.015).round(3) ## small
     logger.info(waves)
 
-    fig = plt.figure(figsize=(25, 55))
-    nrows = shapes * 6                                                  # 3 principle planes * 2 (for amplitudes & phases) = 6 rows for each 
-    gs = fig.add_gridspec(nrows, len(waves)+1)                          # plot for each abberation amount and +1 for pupil example
+    for mode in trange(5, n_modes):
+        fig = plt.figure(figsize=(25, 55))
+        nrows = shapes * 6                                                  # 3 principle planes * 2 (for amplitudes & phases) = 6 rows for each
+        gs = fig.add_gridspec(nrows, len(waves)+1)                          # plot for each abberation amount and +1 for pupil example
 
-    logger.info(f'Building {nrows*len(waves)+1} subplots, going to be a minute...')
-    grid = {}
-    for th, ax in zip(range(shapes), np.round(np.arange(0, nrows, step=6))):
-        for k in range(6):
-            grid[(th, k, 'wavefront')] = fig.add_subplot(gs[ax + k, 0])
+        logger.info(f'Building {nrows*len(waves)+1} subplots, going to be a minute...')
+        grid = {}
+        for th, ax in zip(range(shapes), np.round(np.arange(0, nrows, step=6))):
+            for k in range(6):
+                grid[(th, k, 'wavefront')] = fig.add_subplot(gs[ax + k, 0])
 
-            for j, w in enumerate(waves):
-                grid[(th, k, w)] = fig.add_subplot(gs[ax+k, j+1])
+                for j, w in enumerate(waves):
+                    grid[(th, k, w)] = fig.add_subplot(gs[ax+k, j+1])
 
-    gen = SyntheticPSF(
-        psf_type=psf_type,
-        amplitude_ranges=(-1, 1),
-        n_modes=55,
-        lam_detection=wavelength,
-        psf_shape=3*[res],
-        x_voxel_size=x_voxel_size,
-        y_voxel_size=y_voxel_size,
-        z_voxel_size=z_voxel_size,
-        snr=100,
-        cpu_workers=-1,
-    )
-    mode = 6                                            # The single Zernike mode to use
+        gen = SyntheticPSF(
+            psf_type=psf_type,
+            amplitude_ranges=(-1, 1),
+            n_modes=55,
+            lam_detection=wavelength,
+            psf_shape=3*[res],
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            snr=30,
+            cpu_workers=-1,
+        )
 
-    for thickness in trange(shapes):                    # thickness = radius of puncta (e.g. from diffraction limited to ...)
-        if thickness == 0:
-            reference = np.zeros(gen.psf_shape)
-            reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] = 1    # single voxel
-        else:
-            reference = sphere(image_size=gen.psf_shape, radius=thickness, position=.5)     # sphere of voxels
+        for thickness in trange(shapes):                    # thickness = radius of puncta (e.g. from diffraction limited to ...)
+            if thickness == 0:
+                reference = np.zeros(gen.psf_shape)
+                reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] = 1    # single voxel
+            else:
+                reference = sphere(image_size=gen.psf_shape, radius=thickness, position=.5)     # sphere of voxels
 
-        outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}')
-        outdir.mkdir(exist_ok=True, parents=True)
-        imsave(f"{outdir}/reference_{thickness}.tif", reference)
-
-        for amp in waves:
-            phi = np.zeros(55)
-            phi[mode] = amp
-
-            abr = round(peak2valley(phi, wavelength=gen.lam_detection) * np.sign(amp), 1)
-            grid[(thickness, 0, amp)].set_title(f'{abr}$\\lambda$')
-
-            kernel = gen.single_psf(
-                phi=phi,
-                normed=True,
-                noise=False,
-            )
-            inputs = convolution.convolve_fft(reference, kernel, allow_huge=True)           # inputs = detected signal, given by convolving reference (puncta) with kernel (abberated psf)
-            inputs /= np.nanmax(inputs)
-
-            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}/convolved/')
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}')
             outdir.mkdir(exist_ok=True, parents=True)
-            imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", inputs)
+            imsave(f"{outdir}/reference_{thickness}.tif", reference)
 
-            emb = gen.embedding(psf=inputs)
+            for amp in waves:
+                phi = np.zeros(55)
+                phi[mode] = amp
 
-            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}/ratios/')
-            outdir.mkdir(exist_ok=True, parents=True)
-            imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
+                abr = round(peak2valley(phi, wavelength=gen.lam_detection) * np.sign(amp), 1)
+                grid[(thickness, 0, amp)].set_title(f'{abr}$\\lambda$')
 
-            for ax in range(6):
-                if amp == waves[-1]:
-                    mat = grid[(thickness, ax, 'wavefront')].contourf(
-                        Wavefront(phi, lam_detection=wavelength).wave(100),
-                        levels=np.arange(-10, 10, step=1),
-                        cmap='Spectral_r',
-                        extend='both'
+                kernel = gen.single_psf(
+                    phi=phi,
+                    normed=True,
+                    noise=False,
+                )
+                inputs = convolution.convolve_fft(reference, kernel, allow_huge=True)           # inputs = detected signal, given by convolving reference (puncta) with kernel (abberated psf)
+                inputs /= np.nanmax(inputs)
+
+                outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}/convolved/')
+                outdir.mkdir(exist_ok=True, parents=True)
+                imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", inputs)
+
+                emb = gen.embedding(psf=inputs)
+
+                outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/{thickness}/ratios/')
+                outdir.mkdir(exist_ok=True, parents=True)
+                imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
+
+                for ax in range(6):
+                    if amp == waves[-1]:
+                        mat = grid[(thickness, ax, 'wavefront')].contourf(
+                            Wavefront(phi, lam_detection=wavelength).wave(100),
+                            levels=np.arange(-10, 10, step=1),
+                            cmap='Spectral_r',
+                            extend='both'
+                        )
+                        grid[(thickness, ax, 'wavefront')].axis('off')
+                        grid[(thickness, ax, 'wavefront')].set_aspect('equal')
+
+                    if emb.shape[0] == 6:
+                        vol = emb[ax, :, :]
+                    else:
+                        vol = np.max(emb, axis=ax)
+
+                    m = grid[(thickness, ax, amp)].imshow(
+                        vol,
+                        cmap=cmap if ax < 3 else 'Spectral_r',
+                        vmin=vmin if ax < 3 else -1,
+                        vmax=vmax if ax < 3 else 1,
                     )
-                    grid[(thickness, ax, 'wavefront')].axis('off')
-                    grid[(thickness, ax, 'wavefront')].set_aspect('equal')
+                    grid[(thickness, ax, amp)].set_aspect('equal')
+                    grid[(thickness, ax, amp)].axis('off')
 
-                if emb.shape[0] == 6:
-                    vol = emb[ax, :, :]
-                else:
-                    vol = np.max(emb, axis=ax)
+                    cax = inset_axes(
+                        grid[(thickness, ax, waves[-1])],
+                        width="10%",
+                        height="100%",
+                        loc='center right',
+                        borderpad=-3
+                    )
+                    cb = plt.colorbar(m, cax=cax)
+                    cax.yaxis.set_label_position("right")
 
-                m = grid[(thickness, ax, amp)].imshow(
-                    vol,
-                    cmap=cmap if ax < 3 else 'Spectral_r',
-                    vmin=vmin if ax < 3 else -1,
-                    vmax=vmax if ax < 3 else 1,
-                )
-                grid[(thickness, ax, amp)].set_aspect('equal')
-                grid[(thickness, ax, amp)].axis('off')
-
-                cax = inset_axes(
-                    grid[(thickness, ax, waves[-1])],
-                    width="10%",
-                    height="100%",
-                    loc='center right',
-                    borderpad=-3
-                )
-                cb = plt.colorbar(m, cax=cax)
-                cax.yaxis.set_label_position("right")
-
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{savepath}/i{res}_pad{padsize}_lattice.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
+        plt.savefig(f'{savepath}/mode_{mode}_i{res}_pad{padsize}_lattice.pdf', bbox_inches='tight', pad_inches=.25)
 
 
 def plot_gaussian_filters(

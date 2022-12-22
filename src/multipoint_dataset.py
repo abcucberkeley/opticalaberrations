@@ -58,7 +58,8 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, npoints=1
 
 
 def sim(
-    savepath: Path,
+    filename: str,
+    outdir: Path,
     gen: SyntheticPSF,
     npoints: int,
     snr: tuple,
@@ -67,7 +68,7 @@ def sim(
     normalize: bool = True,
     random_crop: Any = None,
     radius: float = .4,
-    emb_option: str = 'principle_planes',
+    embedding_option: list = (),
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
 ):
@@ -130,23 +131,37 @@ def sim(
         noisy_img /= np.max(noisy_img)
 
     if emb:
-        noisy_img = gen.embedding(
-            psf=noisy_img,
-            emb_option=emb_option,
-            alpha_val=alpha_val,
-            phi_val=phi_val,
-            plot=f"{savepath}"
-        )
+        for e in set(embedding_option):
+            odir = outdir/e
+            odir.mkdir(exist_ok=True, parents=True)
 
-    save_synthetic_sample(
-        savepath,
-        noisy_img,
-        amps=amps,
-        snr=psnr,
-        maxcounts=maxcounts,
-        npoints=npoints,
-        p2v=peak2valley(amps, wavelength=gen.lam_detection)
-    )
+            embeddings = gen.embedding(
+                psf=noisy_img,
+                embedding_option=e,
+                alpha_val=alpha_val,
+                phi_val=phi_val,
+                plot=odir/filename
+            )
+
+            save_synthetic_sample(
+                odir/filename,
+                embeddings,
+                amps=amps,
+                snr=psnr,
+                maxcounts=maxcounts,
+                npoints=npoints,
+                p2v=peak2valley(amps, wavelength=gen.lam_detection)
+            )
+    else:
+        save_synthetic_sample(
+            outdir/filename,
+            noisy_img,
+            amps=amps,
+            snr=psnr,
+            maxcounts=maxcounts,
+            npoints=npoints,
+            p2v=peak2valley(amps, wavelength=gen.lam_detection)
+        )
 
 
 def create_synthetic_sample(
@@ -176,7 +191,7 @@ def create_synthetic_sample(
     noise: bool,
     normalize: bool,
     emb: bool,
-    emb_option: str = 'principle_planes',
+    embedding_option: list,
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
 ):
@@ -216,15 +231,15 @@ def create_synthetic_sample(
 
     outdir = outdir / f"npoints_{npoints}"
     outdir.mkdir(exist_ok=True, parents=True)
-    outdir = outdir / filename
 
     sim(
-        savepath=outdir,
+        filename=filename,
+        outdir=outdir,
         gen=gen,
         npoints=npoints,
         snr=(min_psnr, max_psnr),
         emb=emb,
-        emb_option=emb_option,
+        embedding_option=embedding_option,
         random_crop=random_crop,
         noise=noise,
         normalize=normalize,
@@ -246,8 +261,8 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--emb_option", default='principle_planes', type=str,
-        help='type of embedding to use: ["principle_planes", "rotary_slices", "spatially_variant_quadrants"]'
+        "--embedding_option", action='append', default=['principle_planes'],
+        help='type of embedding to use: ["principle_planes", "rotary_slices", "spatial_quadrants"]'
     )
 
     parser.add_argument(
@@ -390,7 +405,7 @@ def main(args=None):
     sample = partial(
         create_synthetic_sample,
         emb=args.emb,
-        emb_option=args.emb_option,
+        embedding_option=args.embedding_option,
         alpha_val=args.alpha_val,
         phi_val=args.phi_val,
         npoints=args.npoints,

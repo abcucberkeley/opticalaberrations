@@ -96,6 +96,7 @@ predict_sample += f" --batch_size {batch_size}"
 predict_sample += f" --prev {prev}"
 predict_sample += f" --plot" if plot else ""
 predict_sample += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
+# predict_sample += f" --ideal_empirical_psf {image}"
 
 for mode in ignore_modes:
     predict_sample += f" --ignore_mode {mode}"

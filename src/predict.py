@@ -28,6 +28,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--embedding", default='principle_planes', type=str, help="embedding option to use for evaluation"
+    )
+
+    parser.add_argument(
         "--amplitude_range", default=.2, type=float, help='amplitude range for zernike modes in microns'
     )
 
@@ -94,6 +98,7 @@ def main(args=None):
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
+            embedding_option=args.embedding
         )
 
     elif args.target == "featuremaps":
