@@ -80,9 +80,23 @@ def load_metadata(
         z_voxel_size=None,
         **kwargs
 ):
+    """ The model .h5, HDF5 file, is also used to store metadata parameters (wavelength, x_voxel_size, etc) that 
+    the model was trained with.  The metadata is read from file and is returned within the returned SyntheticPSF class.
+
+    Args:
+        model_path (Path): path to .h5 model, or path to the containing folder.
+        psf_shape (Union[tuple, list], optional): dimensions of the SyntheticPSF to return. Defaults to (64, 64, 64).
+        psf_type (str, optional): "widefield" or "confocal". Defaults to None which reads the value from the .h5 file.
+        n_modes (int, optional): # of Zernike modes to describe abberation. Defaults to None which reads the value from the .h5 file.
+        z_voxel_size (float, optional):  Defaults to None which reads the value from the .h5 file.
+        **kwargs:  Get passed into SyntheticPSF generator.
+
+    Returns:
+        SyntheticPSF class: ideal PSF that the model was trained on.
+    """
     # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
     if not model_path.suffix == '.h5':       
-        model_path = list(model_path.rglob('*.h5'))[0]
+        model_path = list(model_path.rglob('*.h5'))[0]  # locate the model if the parent folder path is given
 
     with h5py.File(model_path, 'r') as file:
 
