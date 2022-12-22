@@ -306,7 +306,7 @@ class SyntheticPSF:
         vcenter = 1 if vmin == 0 else 0
 
         cmap = np.vstack((
-            plt.get_cmap('terrain' if vmin == 0 else 'GnBu_r', 256)(
+            plt.get_cmap('GnBu_r' if vmin == 0 else 'GnBu_r', 256)(
                 np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
             ),
             [1, 1, 1, 1],
@@ -343,7 +343,7 @@ class SyntheticPSF:
             p_vcenter = 1 if p_vmin == 0 else 0
 
             p_cmap = np.vstack((
-                plt.get_cmap('terrain' if p_vmin == 0 else 'GnBu_r', 256)(
+                plt.get_cmap('GnBu_r' if p_vmin == 0 else 'GnBu_r', 256)(
                     np.linspace(0, 1 - step, int(abs(p_vcenter - p_vmin) / step))
                 ),
                 [1, 1, 1, 1],
@@ -387,6 +387,14 @@ class SyntheticPSF:
                 emb[emb.shape[0] // 2, :, :],
                 emb[:, emb.shape[1] // 2, :],
                 emb[:, :, emb.shape[2] // 2],
+            ], axis=0)
+
+    @profile
+    def average_planes(self, emb):
+        return np.stack([
+                np.mean(emb, axis=0),
+                np.mean(emb, axis=1),
+                np.mean(emb, axis=2),
             ], axis=0)
 
     @profile
@@ -475,7 +483,6 @@ class SyntheticPSF:
     def compute_emb(
         self,
         otf: np.ndarray,
-        iotf: np.ndarray,
         val: str,
         ratio: bool,
         norm: bool,
@@ -489,7 +496,6 @@ class SyntheticPSF:
 
         Args:
             otf: fft of the input data
-            iotf: ideal OTF
             val: optional toggle to apply the NA mask
             ratio: optional toggle to return ratio of data to ideal OTF
             norm: optional toggle to normalize the data [0, 1]
@@ -499,6 +505,7 @@ class SyntheticPSF:
             freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
             embedding_option: type of embedding to use
                 (`principle_planes`,  'pp'): return principle planes only (middle planes)
+                (`average_planes`,    'ap'): return average of each axis
                 (`rotary_slices`,     'rs'): return three radial slices
                 (`spatial_quadrants`, 'sq'): return four different spatial planes in each quadrant
                  or just return the full stack if nothing is passed
@@ -531,7 +538,7 @@ class SyntheticPSF:
             )
 
         if ratio:
-            emb /= iotf
+            emb /= self.iotf
             emb = np.nan_to_num(emb, nan=0)
 
         if na_mask:
@@ -543,6 +550,8 @@ class SyntheticPSF:
 
         if embedding_option.lower() == 'principle_planes' or embedding_option.lower() == 'pp':
             return self.principle_planes(emb)
+        elif embedding_option.lower() == 'average_planes' or embedding_option.lower() == 'ap':
+            return self.average_planes(emb)
         elif embedding_option.lower() == 'rotary_slices' or embedding_option.lower() == 'rs':
             return self.rotary_slices(emb)
         elif embedding_option.lower() == 'spatial_quadrants' or embedding_option.lower() == 'sq':
@@ -582,25 +591,18 @@ class SyntheticPSF:
             plot: optional toggle to visualize embeddings
             log10: optional toggle to take log10 of the FFT
             freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
-            embedding_option: type of embedding to use
+            embedding_option: type of embedding to use.
                 Capitalizing on the radial symmetry of the FFT,
-                we have a few options to minimize the size of the embedding:
-                    Default: (`principle_planes`,  'pp'): return principle planes only (middle planes)
-                    (`rotary_slices`,     'rs'): return three radial slices
-                    (`spatial_quadrants`, 'sq'): return four different spatial planes in each quadrant
-                    or just return the full stack if nothing is passed
-                    (Only one of these options can be selected)
+                we have a few options to minimize the size of the embedding.
         """
         if psf.ndim == 4:
             psf = np.squeeze(psf)
 
-        iotf = self.iotf
         otf = self.fft(psf, padsize=padsize)
 
         if no_phase:
             emb = self.compute_emb(
                 otf,
-                iotf=iotf,
                 val=alpha_val,
                 ratio=ratio,
                 na_mask=na_mask,
@@ -612,7 +614,6 @@ class SyntheticPSF:
         else:
             alpha = self.compute_emb(
                 otf,
-                iotf=iotf,
                 val=alpha_val,
                 ratio=ratio,
                 na_mask=na_mask,
@@ -624,7 +625,6 @@ class SyntheticPSF:
 
             phi = self.compute_emb(
                 otf,
-                iotf=iotf,
                 val=phi_val,
                 ratio=ratio,
                 na_mask=na_mask,
