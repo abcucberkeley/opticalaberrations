@@ -134,19 +134,19 @@ def collect_dataset(
     samplelimit=None,
     max_amplitude=1.,
     no_phase=False,
-): 
-    if split is not None:
-        train_data, val_data = None, None
-        classes = [
-            c for c in Path(datadir).rglob('*/')
-            if c.is_dir()
-               and len(list(c.glob('*.tif'))) > 0
-               and distribution in str(c)
-               and embedding in str(c)
-               and f"z{int(modes)}" in str(c)
-               and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
-        ]
+):
+    train_data, val_data = None, None
+    classes = [
+        c for c in Path(datadir).rglob('*/')
+        if c.is_dir()
+           and len(list(c.glob('*.tif'))) > 0
+           and distribution in str(c)
+           and embedding in str(c)
+           and f"z{int(modes)}" in str(c)
+           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
+    ]
 
+    if split is not None:
         for c in classes:
             t, v = load_dataset(c, multiplier=multiplier, split=split, samplelimit=samplelimit)
             train_data = t if train_data is None else train_data.concatenate(t)
@@ -166,9 +166,12 @@ def collect_dataset(
         return train, val
 
     else:
+        for c in classes:
+            t = load_dataset(c, multiplier=multiplier, split=split, samplelimit=samplelimit)
+            train_data = t if train_data is None else train_data.concatenate(t)
+
         func = partial(get_sample, no_phase=no_phase)
-        data = load_dataset(datadir, multiplier=multiplier, samplelimit=samplelimit)
-        data = data.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
+        data = train_data.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
 
         for img, y in data.take(1):
             logger.info(f"Input: {img.numpy().shape}")

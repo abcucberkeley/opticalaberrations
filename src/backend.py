@@ -1042,6 +1042,7 @@ def train(
         outdir: Path,
         network: str,
         distribution: str,
+        embedding: str,
         samplelimit: int,
         max_amplitude: float,
         input_shape: int,
@@ -1250,18 +1251,6 @@ def train(
         ) if epoch % 50 == 0 else epoch
     )
 
-    metadata = LambdaCallback(
-        on_train_end=lambda logs: save_metadata(
-            filepath=outdir,
-            n_modes=pmodes,
-            psf_type=psf_type,
-            wavelength=wavelength,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-        )
-    )
-
     tensorboard = TensorBoardCallback(
         log_dir=outdir,
         profile_batch='500,520',
@@ -1294,6 +1283,7 @@ def train(
             snr=(min_psnr, max_psnr),
             n_modes=modes,
             distribution=distribution,
+            embedding_option=embedding,
             amplitude_ranges=(-max_amplitude, max_amplitude),
             lam_detection=wavelength,
             batch_size=batch_size,
@@ -1310,6 +1300,7 @@ def train(
             dataset,
             modes=modes,
             distribution=distribution,
+            embedding=embedding,
             samplelimit=samplelimit,
             max_amplitude=max_amplitude,
             no_phase=no_phase
@@ -1364,67 +1355,51 @@ def train(
         logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
 
         if plot_patches:
-            img = np.expand_dims(img[0], axis=0)
-            original = np.squeeze(img[0, 1])
+            for k, label in enumerate(['xy', 'xz', 'yz']):
+                img = np.expand_dims(img[0], axis=0)
+                original = np.squeeze(img[0, k])
 
-            vmin = np.min(original)
-            vmax = np.max(original)
-            vcenter = (vmin + vmax) / 2
-            step = .01
-            print(vmin, vmax, vcenter)
+                vmin = np.min(original)
+                vmax = np.max(original)
+                vcenter = (vmin + vmax) / 2
+                step = .01
 
-            highcmap = plt.get_cmap('YlOrRd', 256)
-            lowcmap = plt.get_cmap('YlGnBu_r', 256)
-            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            cmap = mcolors.ListedColormap(cmap)
-
-            plt.figure(figsize=(4, 4))
-            plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
-            plt.axis("off")
-            plt.title('Original')
-
-            for p in patch_size:
-                sample = Stem(
-                    kernel_size=3,
-                    activation=activation,
-                    mask_shape=input_shape,
-                    refractive_index=refractive_index,
-                    lambda_det=wavelength,
-                    psf_type=psf_type,
-                    x_voxel_size=x_voxel_size,
-                    y_voxel_size=y_voxel_size,
-                    z_voxel_size=z_voxel_size,
-                    mul=mul,
-                    no_phase=no_phase
-                )(img)
-
-                if roi is not None:
-                    sample = ROI(crop_shape=roi)(sample)
-
-                patches = opticaltransformer.Patchify(patch_size=p)(sample)
-                merged = opticaltransformer.Merge(patch_size=p)(patches)
-                print(patches.shape)
-                print(merged.shape)
-
-                patches = patches[0, 1]
-                merged = np.squeeze(merged[0, 1])
+                highcmap = plt.get_cmap('YlOrRd', 256)
+                lowcmap = plt.get_cmap('YlGnBu_r', 256)
+                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+                cmap = mcolors.ListedColormap(cmap)
 
                 plt.figure(figsize=(4, 4))
-                plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
+                plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
                 plt.axis("off")
-                plt.title('Merged')
+                plt.title('Original')
+                plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-                n = int(np.sqrt(patches.shape[0]))
-                plt.figure(figsize=(4, 4))
-                plt.title('Patches')
-                for i, patch in enumerate(patches):
-                    ax = plt.subplot(n, n, i + 1)
-                    patch_img = tf.reshape(patch, (p, p)).numpy()
-                    ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
-                    ax.axis("off")
-            plt.show()
+                for p in patch_size:
+                    patches = opticalnet.Patchify(patch_size=p)(img)
+                    merged = opticalnet.Merge(patch_size=p)(patches)
+
+                    patches = patches[0, k]
+                    merged = np.squeeze(merged[0, k])
+
+                    plt.figure(figsize=(4, 4))
+                    plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
+                    plt.axis("off")
+                    plt.title('Merged')
+                    plt.savefig(f'{outdir}/{label}_merged.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+                    n = int(np.sqrt(patches.shape[0]))
+                    plt.figure(figsize=(4, 4))
+                    plt.title('Patches')
+                    for i, patch in enumerate(patches):
+                        ax = plt.subplot(n, n, i + 1)
+                        patch_img = tf.reshape(patch, (p, p)).numpy()
+                        ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
+                        ax.axis("off")
+
+                    plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     try:
         model.fit(
@@ -1438,7 +1413,6 @@ def train(
                 tensorboard,
                 pb_checkpoints,
                 h5_checkpoints,
-                metadata,
                 earlystopping,
                 defibrillator,
                 lrscheduler,
