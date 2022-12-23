@@ -9,7 +9,7 @@ zVOXEL=.200
 SHAPE=64
 LAMBDA=.510
 PHASE='--no_phase'
-DATASET='yumb_new_embeddings'
+DATASET='new_embeddings'
 MAXAMP=.5
 DATA='/clusterfs/nvme/thayer/dataset/$DATASET/train/x108-y108-z200/'
 

@@ -33,9 +33,8 @@ SHAPE=64
 RCROP=32
 
 MODES=15
-TITLE='yumb_new_embeddings'
+TITLE='new_embeddings'
 DATASET='train'
-EMBEDDINGS = ["principle_planes", "rotary_slices", "spatial_quadrants"]
 
 MODE_DIST='pyramid'
 SAMPLES_PER_BIN=500
@@ -116,8 +115,10 @@ do
             j="${j} --lam_detection ${LAMBDA}"
             j="${j} --cpu_workers ${CPUS}"
 
-            for e in EMBEDDINGS:
+            for e in principle_planes rotary_slices spatial_quadrants
+            do
               j="${j} --embedding_option ${e}"
+            done
 
             if [ "$DATASET" = "train" ];then
               j="${j} --random_crop ${RCROP}"
