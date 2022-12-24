@@ -30,7 +30,7 @@ def parse_args(args):
     subparsers.add_parser("fov")
     subparsers.add_parser("dist")
     subparsers.add_parser("signal")
-    subparsers.add_parser("aberration")
+    subparsers.add_parser("zernikes")
     subparsers.add_parser("psnr")
     subparsers.add_parser("embeddings")
     subparsers.add_parser("shapes_embeddings")
@@ -89,8 +89,8 @@ def main(args=None):
     elif args.cmd == "simulation":
         vis.plot_simulation()
 
-    elif args.cmd == "aberration":
-        vis.plot_aberrations()
+    elif args.cmd == "zernikes":
+        vis.plot_zernike_pyramid()
 
     elif args.cmd == "psnr":
         vis.plot_psnr()

@@ -21,6 +21,7 @@ dependencies:
   - ujson
   - tifffile
   - zarr
+  - scikit-spatial
   - pip:
       - raster_geometry
       - astropy

@@ -18,6 +18,8 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
 from tifffile import TiffFile
+from skimage.feature import peak_local_max
+from skspatial.objects import Plane, Points
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -301,8 +303,8 @@ class SyntheticPSF:
         })
 
         step = .1
-        vmin = -1 if np.any(emb[0] < 0) else 0
-        vmax = 1 if vmin < 0 else 3
+        vmin = int(np.floor(np.percentile(emb[0], 1))) if np.any(emb[0] < 0) else 0
+        vmax = int(np.ceil(np.percentile(emb[0], 99))) if vmin < 0 else 3
         vcenter = 1 if vmin == 0 else 0
 
         cmap = np.vstack((
@@ -338,9 +340,9 @@ class SyntheticPSF:
         cax.set_ylabel(r'Embedding ($\alpha$)')
 
         if not no_phase:
-            p_vmin = -1 if np.any(emb[3] < 0) else 0
-            p_vmax = 1 if p_vmin < 0 else 3
-            p_vcenter = 1 if p_vmin == 0 else 0
+            p_vmin = int(np.floor(np.percentile(emb[3], 1)))
+            p_vmax = int(np.ceil(np.percentile(emb[3], 99)))
+            p_vcenter = 0
 
             p_cmap = np.vstack((
                 plt.get_cmap('GnBu_r' if p_vmin == 0 else 'GnBu_r', 256)(
@@ -480,6 +482,34 @@ class SyntheticPSF:
         return np.stack([xy, xz, yz], axis=0)
 
     @profile
+    def remove_phase_ramp(self, masked_phase, plot=False):
+        fig, axes = plt.subplots(3, 3)
+
+        for i in range(masked_phase.shape[0]):
+            phase_slice = masked_phase[i].copy()
+            x = y = np.arange(0, phase_slice.shape[0])
+            X, Y = np.meshgrid(x, y)
+
+            points = [(x, y, v) for x, y, v in zip(X.ravel(), Y.ravel(), phase_slice.ravel()) if v != 0]
+            points = Points(points)
+            plane = Plane.best_fit(points)
+            X, Y, Z = plane.to_mesh((x - plane.point[0]), y - plane.point[1])
+            Z[phase_slice == 0] = 0.
+            masked_phase[i] -= Z
+
+            if plot:
+                axes[i, 0].set_title(f"phase_slice")
+                axes[i, 0].imshow(phase_slice, vmin=-1, vmax=10, cmap='coolwarm')
+                axes[i, 1].set_title(f"Z")
+                axes[i, 1].imshow(Z, vmin=-1, vmax=10, cmap='coolwarm')
+                axes[i, 2].set_title(f"emb[{i}] - Z")
+                axes[i, 2].imshow(masked_phase[i], vmin=-1, vmax=10, cmap='coolwarm')
+                axes[i, 2].axis('off')
+                plt.savefig("test.png")
+
+        return masked_phase
+
+    @profile
     def compute_emb(
         self,
         otf: np.ndarray,
@@ -510,7 +540,30 @@ class SyntheticPSF:
                 (`spatial_quadrants`, 'sq'): return four different spatial planes in each quadrant
                  or just return the full stack if nothing is passed
         """
-        mask = self.na_mask()
+        mask = self.na_mask().astype(bool)
+
+        if otf.shape != self.psf_shape:
+            real = transform.rescale(
+                np.real(otf),
+                (
+                    self.psf_shape[0] / otf.shape[0],
+                    self.psf_shape[1] / otf.shape[1],
+                    self.psf_shape[2] / otf.shape[2],
+                ),
+                order=3,
+                anti_aliasing=True,
+            )
+            imag = transform.rescale(
+                np.imag(otf),
+                (
+                    self.psf_shape[0] / otf.shape[0],
+                    self.psf_shape[1] / otf.shape[1],
+                    self.psf_shape[2] / otf.shape[2],
+                ),
+                order=3,
+                anti_aliasing=True,
+            )
+            otf = real + 1j * imag
 
         if val == 'real':
             emb = np.real(otf)
@@ -518,30 +571,21 @@ class SyntheticPSF:
             emb = np.imag(otf)
         elif val == 'angle':
             emb = np.angle(otf)
+            emb = np.ma.masked_array(emb, mask=~mask, fill_value=0)
             emb = unwrap_phase(emb)
+            emb = emb.filled(0)
+            emb /= 2 * np.pi
         else:
             emb = np.abs(otf)
 
-        if norm:
+        if norm and val != 'angle':
             emb = self._normalize(emb, otf, freq_strength_threshold=freq_strength_threshold)
 
-        if emb.shape != self.psf_shape:
-            emb = transform.rescale(
-                emb,
-                (
-                    self.psf_shape[0] / emb.shape[0],
-                    self.psf_shape[1] / emb.shape[1],
-                    self.psf_shape[2] / emb.shape[2],
-                ),
-                order=3,
-                anti_aliasing=True,
-            )
-
-        if ratio:
+        if ratio and val != 'angle':
             emb /= self.iotf
             emb = np.nan_to_num(emb, nan=0)
 
-        if na_mask:
+        if na_mask and val != 'angle':
             emb *= mask
 
         if log10:
@@ -549,7 +593,8 @@ class SyntheticPSF:
             emb = np.nan_to_num(emb, nan=0, posinf=0, neginf=0)
 
         if embedding_option.lower() == 'principle_planes' or embedding_option.lower() == 'pp':
-            return self.principle_planes(emb)
+            emb = self.principle_planes(emb)
+            return self.remove_phase_ramp(emb) if val == 'angle' else emb
         elif embedding_option.lower() == 'average_planes' or embedding_option.lower() == 'ap':
             return self.average_planes(emb)
         elif embedding_option.lower() == 'rotary_slices' or embedding_option.lower() == 'rs':
@@ -573,6 +618,8 @@ class SyntheticPSF:
         plot: Any = None,
         log10: bool = False,
         freq_strength_threshold: float = 0.01,
+        phase_shift: bool = True,
+        plot_phase_shift: bool = False,
         embedding_option: Any = None,
     ):
         """
@@ -612,6 +659,49 @@ class SyntheticPSF:
                 freq_strength_threshold=freq_strength_threshold,
             )
         else:
+            if phase_shift:
+                beads = peak_local_max(
+                    psf,
+                    min_distance=5,
+                    threshold_rel=.33,
+                    exclude_border=False,
+                    p_norm=2,
+                    num_peaks=100
+                ).astype(np.float64)
+
+                center = [(i - 1) / 2 for i in psf.shape]
+                shift = np.mean(beads, axis=0) - center
+
+                z = np.arange(0, psf.shape[0])
+                y = np.arange(0, psf.shape[1])
+                x = np.arange(0, psf.shape[2])
+                Z, Y, X = np.meshgrid(z, y, x, indexing='ij')
+
+                slope = [(shift[i] * 2 * np.pi) / psf.shape[i] for i in range(3)]
+                otf *= np.e ** (1j * (Z * slope[0] + Y * slope[1] + X * slope[2]))
+
+                if plot_phase_shift:
+                    shifted = np.fft.fftshift(otf)
+                    shifted = np.fft.ifftn(shifted)
+                    shifted = np.abs(np.fft.ifftshift(shifted))
+
+                    fig, axes = plt.subplots(1, 3, figsize=(8, 4), sharey=False, sharex=False)
+                    for ax in range(3):
+                        axes[ax].imshow(np.nanmax(shifted, axis=ax), aspect='equal', cmap='Greys_r')
+
+                        for p in range(beads.shape[0]):
+                            if ax == 0:
+                                axes[ax].plot(beads[p, 2], beads[p, 1], marker='.', ls='', color=f'C{p}')
+                            elif ax == 1:
+                                axes[ax].plot(beads[p, 2], beads[p, 0], marker='.', ls='', color=f'C{p}')
+                            elif ax == 2:
+                                axes[ax].plot(beads[p, 1], beads[p, 0], marker='.', ls='', color=f'C{p}')
+
+                        axes[ax].axis('off')
+
+                    plt.tight_layout()
+                    plt.savefig(f'{plot}_phase_shift.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+
             alpha = self.compute_emb(
                 otf,
                 val=alpha_val,
@@ -631,7 +721,7 @@ class SyntheticPSF:
                 norm=norm,
                 log10=log10,
                 embedding_option=self.embedding_option if embedding_option is None else embedding_option,
-                freq_strength_threshold=freq_strength_threshold,
+                freq_strength_threshold=0.,
             )
 
             emb = np.concatenate([alpha, phi], axis=0)

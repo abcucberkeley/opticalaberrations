@@ -15,7 +15,6 @@ from typing import Any
 from pathlib import Path
 from tifffile import imsave
 import numpy as np
-import scipy.stats as st
 import raster_geometry as rg
 
 import cli
@@ -122,10 +121,8 @@ def sim(
         noisy_img = img
 
     if random_crop is not None:
-        mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
         crop = int(np.random.uniform(low=random_crop, high=gen.psf_shape[0]+1))
         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[crop]*3)
-        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
 
     if normalize:
         noisy_img /= np.max(noisy_img)

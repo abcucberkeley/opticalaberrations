@@ -42,6 +42,57 @@ warnings.filterwarnings('ignore')
 
 
 @profile
+def plot_zernike_pyramid(nth_order=10, amp=.1, wavelength=.510):
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12,
+    })
+
+    for i, savepath in enumerate([
+        f'../data/zernike_pyramid.png',
+        f'../data/zernike_pyramid_db.png'
+    ]):
+        if i == 0:
+            plt.style.use('default')
+        else:
+            plt.style.use('dark_background')
+
+        fig = plt.figure(figsize=(25, 20))
+        gs = fig.add_gridspec(nth_order+1, 2*nth_order+1)
+
+        for n in range(nth_order+1):
+            for i, m in enumerate(range(-nth_order, nth_order+1)):
+                ax = fig.add_subplot(gs[n, i])
+                ax.axis('off')
+
+                if (n == 0 and m == 0) or (n > 0):
+                    try:
+                        z = Zernike((n, m))
+                        w = Wavefront({z.index_ansi: amp}, lam_detection=wavelength).wave(size=100)
+                        mat = ax.imshow(w, cmap='Spectral_r', vmin=-.5, vmax=.5)
+
+                        if n == 0 and m == 0:
+                            mode = f"$\lambda$ = {wavelength} $\mu$m\n" \
+                                   f"Amplitude={amp} $\mu$m RMS\n\n"\
+                                   f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$\n" \
+                                   f"P2V={round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$"
+                        else:
+                            mode = f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$\n" \
+                                   f"P2V={round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$"
+
+                        ax.set_title(mode)
+                    except ValueError:
+                        continue
+
+        plt.tight_layout()
+    plt.savefig(savepath, bbox_inches='tight', pad_inches=.25)
+
+
+@profile
 def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     plt.rcParams.update({
         'font.size': 10,
@@ -970,32 +1021,6 @@ def plot_mode(savepath, df, mode_index, n_modes=55, wavelength=.605):
 
     plt.tight_layout()
     plt.savefig(savepath, dpi=300, bbox_inches='tight', pad_inches=.25)
-
-
-def plot_aberrations():
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-    })
-
-    fig, axes = plt.subplots(4, 4, figsize=(10, 8))
-    axes = axes.flatten()
-
-    for i in range(15):
-        ax = axes[i]
-        idx = i
-        w = Wavefront({idx: 1})
-        ax.set_title(f"{Zernike(idx).ansi_to_nm(idx)}")
-        mat = ax.imshow(w.wave(size=100), cmap='Spectral_r')
-        ax.axis('off')
-
-    plt.tight_layout()
-    plt.colorbar(mat)
-    plt.show()
 
 
 def plot_psnr(psf_cmap='hot', gamma=.75):
