@@ -82,7 +82,7 @@ do
       do
           for S in `seq 1 ${#SAMPLES[@]}`
           do
-            while [ $(squeue -u thayeralshaabi -h -t pending -r | wc -l) -gt 500 ]
+            while [ $(squeue -u thayeralshaabi -h -t pending -r | wc -l) -gt 300 ]
             do
               sleep 10s
             done
@@ -125,7 +125,7 @@ do
             fi
 
             task="/usr/bin/sbatch"
-            task="${task} --qos=abc_normal"
+            task="${task} --qos=abc_normal --nice=1111111111"
 
             if [ "$NODES" = "all" ];then
               if [ $(squeue -u thayeralshaabi -h -t pending -r -p dgx | wc -l) -lt 128 ];then
