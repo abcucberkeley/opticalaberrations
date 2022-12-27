@@ -46,7 +46,8 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--psf_type", default='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat', help="type of the desired PSF"
+        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        help="type of the desired PSF"
     )
 
     train_parser.add_argument(
@@ -58,7 +59,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--z_voxel_size", default=.268, type=float, help='axial voxel size in microns for Z'
+        "--z_voxel_size", default=.2, type=float, help='axial voxel size in microns for Z'
     )
 
     train_parser.add_argument(
