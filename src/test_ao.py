@@ -3,7 +3,7 @@ from subprocess import call
 import platform
 
 # required flags
-python = Path('~/anaconda3/envs/deep/bin/python')
+python = Path('~/anaconda3/envs/ml/bin/python')
 repo = Path('~/Github/opticalaberrations/')
 script = repo/'src/ao.py'
 

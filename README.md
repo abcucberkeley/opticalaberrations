@@ -24,32 +24,48 @@ to install the required packages for running our models.
 > **Note:** Please make sure you have Git LFS installed to download our pretrained models:
 https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage
 
-### For `Linux` or `Windows`: 
 
 Once you have Anaconda installed on your system, clone the repo using the following commands:
 ```shell
 git clone https://github.com/abcucberkeley/opticalaberrations.git
 ```
 
+### For `Linux`
 Create a new `conda` environment using the following commands (will create an environment named "ml"):
 ```shell
 cd opticalaberrations
-conda env create -f requirements.yml
+conda env create -f linux.yml
 conda activate ml
 ```
 
-....to later update to the latest packages in requirements.yml:
+....to later update to the latest packages in `*.yml`:
 ```shell 
-conda env update --file requirements.yml 
+conda env update --file windows.yml 
 ```
 
-Finally, clone the LLSM3D tools repository for additional functions such as `decon`, `deskew` and `point detection`
+### For `Windows`
+Create a new `conda` environment using the following commands (will create an environment named "ml"):
+```shell
+cd opticalaberrations
+conda env create -f windows.yml
+conda activate ml
+```
+
+....to later update to the latest packages in `*.yml`:
+```shell 
+conda env update --file windows.yml 
+```
+
+
+### Other prerequisites 
+Clone the LLSM3D tools repository for additional functions such as `decon`, `deskew` and `point detection`
 ```shell
 git clone --branch dev https://github.com/abcucberkeley/LLSM3DTools.git
 ```
-### Other prerequisites 
+
 - `MATLAB 2020b` or higher is required (for these additional functions).
 - NVIDIA GPU with driver >= 512.15
+
 
 ## Utilities
 
