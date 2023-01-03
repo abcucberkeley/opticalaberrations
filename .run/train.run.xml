@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="train" type="PythonConfigurationType" factoryName="Python" folderName="Utils">
+  <configuration default="false" name="train" type="PythonConfigurationType" factoryName="Python" folderName="tests">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />

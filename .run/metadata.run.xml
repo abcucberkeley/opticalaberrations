@@ -1,17 +1,20 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="test_tiles" type="PythonConfigurationType" factoryName="Python" folderName="Tests">
+  <configuration default="false" name="metadata" type="PythonConfigurationType" factoryName="Python" folderName="utils">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
       <env name="PYTHONUNBUFFERED" value="1" />
     </envs>
+    <option name="SDK_HOME" value="$USER_HOME$/anaconda3/envs/deep/bin/python" />
+    <option name="SDK_NAME" value="Python 3.9 (deep)" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+    <option name="IS_MODULE_SDK" value="false" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="-h" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/predict.py" />
+    <option name="PARAMETERS" value="../pretrained_models/z15_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5 --psf_type ../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat --n_modes 15 --wavelength .510 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --embedding_option 'principle_planes' metadata" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

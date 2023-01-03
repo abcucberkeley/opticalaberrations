@@ -42,7 +42,7 @@ warnings.filterwarnings('ignore')
 
 
 @profile
-def plot_zernike_pyramid(nth_order=10, amp=.1, wavelength=.510):
+def plot_zernike_pyramid(amp=.1, wavelength=.510):
     plt.rcParams.update({
         'font.size': 12,
         'axes.titlesize': 14,
@@ -52,44 +52,45 @@ def plot_zernike_pyramid(nth_order=10, amp=.1, wavelength=.510):
         'legend.fontsize': 12,
     })
 
-    for i, savepath in enumerate([
-        f'../data/zernike_pyramid.png',
-        f'../data/zernike_pyramid_db.png'
-    ]):
-        if i == 0:
-            plt.style.use('default')
-        else:
-            plt.style.use('dark_background')
+    for nth_order in range(1, 11):
+        for k, savepath in enumerate([
+            f'../data/zernikes/{nth_order}th_zernike_pyramid.png',
+            f'../data/zernikes/{nth_order}th_zernike_pyramid_db.png'
+        ]):
+            if k == 0:
+                plt.style.use('default')
+            else:
+                plt.style.use('dark_background')
 
-        fig = plt.figure(figsize=(25, 20))
-        gs = fig.add_gridspec(nth_order+1, 2*nth_order+1)
+            fig = plt.figure(figsize=(3*nth_order, 2*nth_order))
+            gs = fig.add_gridspec(nth_order+1, 2*nth_order+1)
 
-        for n in range(nth_order+1):
-            for i, m in enumerate(range(-nth_order, nth_order+1)):
-                ax = fig.add_subplot(gs[n, i])
-                ax.axis('off')
+            for n in range(nth_order+1):
+                for i, m in enumerate(range(-nth_order, nth_order+1)):
+                    ax = fig.add_subplot(gs[n, i])
+                    ax.axis('off')
 
-                if (n == 0 and m == 0) or (n > 0):
-                    try:
-                        z = Zernike((n, m))
-                        w = Wavefront({z.index_ansi: amp}, lam_detection=wavelength).wave(size=100)
-                        mat = ax.imshow(w, cmap='Spectral_r', vmin=-.5, vmax=.5)
+                    if (n == 0 and m == 0) or (n > 0):
+                        try:
+                            z = Zernike((n, m))
+                            w = Wavefront({z.index_ansi: amp}, lam_detection=wavelength).wave(size=100)
+                            mat = ax.imshow(w, cmap='Spectral_r', vmin=-.5, vmax=.5)
 
-                        if n == 0 and m == 0:
-                            mode = f"$\lambda$ = {wavelength} $\mu$m\n" \
-                                   f"Amplitude={amp} $\mu$m RMS\n\n"\
-                                   f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$\n" \
-                                   f"P2V={round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$"
-                        else:
-                            mode = f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$\n" \
-                                   f"P2V={round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$"
+                            if n == 0 and m == 0:
+                                mode = f"$\lambda$ = {wavelength} $\mu$m\n" \
+                                       f"Amplitude={amp} $\mu$m RMS\n\n"\
+                                       f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$\n" \
+                                       f"P2V={round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$"
+                            else:
+                                mode = f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$\n" \
+                                       f"P2V={round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$"
 
-                        ax.set_title(mode)
-                    except ValueError:
-                        continue
+                            ax.set_title(mode)
+                        except ValueError:
+                            continue
 
-        plt.tight_layout()
-    plt.savefig(savepath, bbox_inches='tight', pad_inches=.25)
+            plt.tight_layout()
+            plt.savefig(savepath, bbox_inches='tight', pad_inches=.25)
 
 
 @profile

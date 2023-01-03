@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="aggregate_tiles" type="PythonConfigurationType" factoryName="Python" folderName="ao">
+  <configuration default="false" name="eval_dataset" type="PythonConfigurationType" factoryName="Python" folderName="tests">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -14,7 +14,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="aggregate_predictions ../pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5 ../examples/single/single_tiles_predictions.csv ../examples/Zernike_Korra_Bax273.csv --current_dm None --dm_damping_scalar 0.9 --prediction_threshold 0.25 --majority_threshold 0.5 --min_percentile 1 --max_percentile 99 --final_prediction mean --lateral_voxel_size 0.108 --axial_voxel_size 0.1 --wavelength 0.51 --plot --ignore_tile z0-y0-x0 --ignore_tile z0-y0-x3 --ignore_tile z0-y3-x0 --ignore_tile z0-y3-x3 --ignore_tile z0-y3-x2 --ignore_tile z1-y0-x3" />
+    <option name="PARAMETERS" value="eval_dataset ../pretrained_models/z15_modes/lattice_yumb/x108-y108-z200/opticalnet.h5 $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20221220/amp_0p1/ $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20221220/ALPAO_Flatten.csv" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
