@@ -76,18 +76,46 @@ def check_sample(path):
 
 
 @profile
-def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
-    files = []
-    for i, p in enumerate(Path(datadir).rglob('*.tif')):
-        if samplelimit is None or i < samplelimit:
-            if 'kernel' in str(p):
-                continue
-            else:
-                check = check_sample(p)
-                if check == 1:
-                    files.append(str(p))
-        else:
-            break
+def check_criteria(
+    file,
+    distribution='/',
+    embedding='',
+    modes='',
+    max_amplitude=1.,
+):
+    path = str(file)
+    amp = float(str([s for s in file.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.'))
+    if distribution in path \
+            and embedding in path \
+            and f"z{modes}" in path \
+            and amp <= max_amplitude \
+            and check_sample(file) == 1:
+        return path
+
+
+@profile
+def load_dataset(
+    datadir,
+    split=None,
+    multiplier=1,
+    samplelimit=None,
+    distribution='/',
+    embedding='',
+    modes='',
+    max_amplitude=1.,
+):
+    check = partial(
+        check_criteria,
+        distribution=distribution,
+        embedding=embedding,
+        modes=modes,
+        max_amplitude=max_amplitude
+    )
+    files = multiprocess(check, Path(datadir).rglob('*.tif'), cores=-1, desc='Loading dataset hashtable')
+    files = [f for f in files if f is not None]
+
+    if samplelimit is not None:
+        files = np.random.choice(files, samplelimit, replace=False).tolist()
 
     dataset_size = len(files) * multiplier
     ds = tf.data.Dataset.from_tensor_slices(files)
@@ -114,7 +142,7 @@ def load_dataset(datadir, split=None, multiplier=1, samplelimit=None):
 
 @profile
 def check_dataset(datadir):
-    jobs = multiprocess(check_sample, list(Path(datadir).rglob('*.tif')), cores=-1)
+    jobs = multiprocess(check_sample, Path(datadir).rglob('*.tif'), cores=-1)
     corrupted = [j for j in jobs if j != 1]
     corrupted = pd.DataFrame(corrupted, columns=['path'])
     logger.info(f"Corrupted files [{corrupted.index.shape[0]}]")
@@ -130,27 +158,23 @@ def collect_dataset(
     multiplier=1,
     distribution='/',
     embedding='',
-    modes=55,
+    modes='',
     samplelimit=None,
     max_amplitude=1.,
     no_phase=False,
 ):
-    train_data, val_data = None, None
-    classes = [
-        c for c in Path(datadir).rglob('*/')
-        if c.is_dir()
-           and len(list(c.glob('*.tif'))) > 0
-           and distribution in str(c)
-           and embedding in str(c)
-           and f"z{int(modes)}" in str(c)
-           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
-    ]
 
     if split is not None:
-        for c in classes:
-            t, v = load_dataset(c, multiplier=multiplier, split=split, samplelimit=samplelimit)
-            train_data = t if train_data is None else train_data.concatenate(t)
-            val_data = v if val_data is None else val_data.concatenate(v)
+        train_data, val_data = load_dataset(
+            datadir,
+            split=split,
+            modes=modes,
+            multiplier=multiplier,
+            samplelimit=samplelimit,
+            embedding=embedding,
+            distribution=distribution,
+            max_amplitude=max_amplitude,
+        )
 
         func = partial(get_sample, no_phase=no_phase)
         train = train_data.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
@@ -166,10 +190,15 @@ def collect_dataset(
         return train, val
 
     else:
-        for c in classes:
-            t = load_dataset(c, multiplier=multiplier, split=split, samplelimit=samplelimit)
-            train_data = t if train_data is None else train_data.concatenate(t)
-
+        train_data = load_dataset(
+            datadir,
+            modes=modes,
+            multiplier=multiplier,
+            samplelimit=samplelimit,
+            embedding=embedding,
+            distribution=distribution,
+            max_amplitude=max_amplitude,
+        )
         func = partial(get_sample, no_phase=no_phase)
         data = train_data.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
 

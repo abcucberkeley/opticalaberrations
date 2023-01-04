@@ -113,7 +113,7 @@ def evaluate_modes(model: Path, n_modes: int = 55):
         classes[:, i] = waves
 
         job = partial(eval_mode, modelpath=model, npoints=1, n_samples=5)
-        preds, ys = zip(*utils.multiprocess(job, list(classes), cores=-1))
+        preds, ys = zip(*utils.multiprocess(job, classes, cores=-1))
         y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
         y_pred = pd.DataFrame([], columns=['sample']).append(preds, ignore_index=True)
 
@@ -244,9 +244,13 @@ def eval_bin(
         psf_shape=3*[model.input_shape[2]]
     )
 
-    val = data_utils.load_dataset(datapath, samplelimit=samplelimit)
-    func = partial(data_utils.get_sample, no_phase=no_phase)
-    val = val.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
+    val = data_utils.collect_dataset(
+        datapath,
+        samplelimit=samplelimit,
+        no_phase=no_phase,
+        modes=gen.n_modes,
+        embedding=gen.embedding_option,
+    )
 
     y_pred = pd.DataFrame([], columns=['sample'])
     y_true = pd.DataFrame([], columns=['sample'])
@@ -437,9 +441,13 @@ def evaldistbin(
         psf_shape=3*[model.input_shape[2]]
     )
 
-    val = data_utils.load_dataset(datapath, samplelimit=samplelimit)
-    func = partial(data_utils.get_sample, no_phase=no_phase)
-    val = val.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
+    val = data_utils.collect_dataset(
+        datapath,
+        samplelimit=samplelimit,
+        no_phase=no_phase,
+        modes=gen.n_modes,
+        embedding=gen.embedding_option,
+    )
 
     y_true = pd.DataFrame([], columns=['dist', 'sample'])
     y_pred = pd.DataFrame([], columns=['dist', 'sample'])
@@ -650,9 +658,13 @@ def evaldensitybin(
         psf_shape=3*[model.input_shape[2]]
     )
 
-    val = data_utils.load_dataset(datapath, samplelimit=samplelimit)
-    func = partial(data_utils.get_sample, no_phase=no_phase)
-    val = val.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
+    val = data_utils.collect_dataset(
+        datapath,
+        samplelimit=samplelimit,
+        no_phase=no_phase,
+        modes=gen.n_modes,
+        embedding=gen.embedding_option,
+    )
 
     y_true = pd.DataFrame([], columns=['neighbors', 'dist', 'sample'])
     y_pred = pd.DataFrame([], columns=['neighbors', 'dist', 'sample'])
@@ -853,9 +865,13 @@ def iter_eval_bin_with_reference(
         psf_shape=3*[model.input_shape[2]]
     )
 
-    val = data_utils.load_dataset(datapath, samplelimit=samplelimit)
-    func = partial(data_utils.get_sample, no_phase=no_phase)
-    val = val.map(lambda x: tf.py_function(func, [x], [tf.float32, tf.float32]))
+    val = data_utils.collect_dataset(
+        datapath,
+        samplelimit=samplelimit,
+        no_phase=no_phase,
+        modes=gen.n_modes,
+        embedding=gen.embedding_option,
+    )
     val = np.array(list(val.take(-1)))
 
     inputs = np.array([i.numpy() for i in val[:, 0]])

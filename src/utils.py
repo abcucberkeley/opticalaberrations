@@ -4,7 +4,6 @@ matplotlib.use('Agg')
 import logging
 import multiprocessing as mp
 import sys
-from functools import partial
 from typing import Union, Any, List, Generator
 from line_profiler_pycharm import profile
 

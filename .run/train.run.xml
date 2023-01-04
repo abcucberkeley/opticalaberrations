@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/train.py" />
-    <option name="PARAMETERS" value="--no_phase --batch_size 64 --modes 15 --network opticalnet --epochs 5 --outdir ../models/opticalnet --dataset ../dataset/x108-y108-z200/i64/ --samplelimit 1000 --embedding principle_planes" />
+    <option name="PARAMETERS" value="--no_phase --batch_size 64 --modes 15 --network opticalnet --epochs 5 --outdir ../models/opticalnet --dataset ../dataset/x108-y108-z200/i64/z15 --embedding principle_planes --samplelimit 500" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
