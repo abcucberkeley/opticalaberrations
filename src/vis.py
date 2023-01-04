@@ -74,22 +74,23 @@ def plot_zernike_pyramid(amp=.1, wavelength=.510):
                         try:
                             z = Zernike((n, m))
                             w = Wavefront({z.index_ansi: amp}, lam_detection=wavelength).wave(size=100)
-                            mat = ax.imshow(w, cmap='Spectral_r', vmin=-.5, vmax=.5)
 
                             if n == 0 and m == 0:
                                 mode = f"$\lambda$ = {wavelength} $\mu$m\n" \
                                        f"Amplitude={amp} $\mu$m RMS\n\n"\
-                                       f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$\n" \
-                                       f"P2V={round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$"
+                                       f"{round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$\n" \
+                                       f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$"
                             else:
-                                mode = f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$\n" \
-                                       f"P2V={round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$"
+                                mode = f"{round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$\n" \
+                                       f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$"
 
+                            mat = plot_wavefront(ax, w, label=None, nas=(), vmin=-.5, vmax=.5, hcolorbar=True)
                             ax.set_title(mode)
+
                         except ValueError:
                             continue
 
-            plt.tight_layout()
+            plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
             plt.savefig(savepath, bbox_inches='tight', pad_inches=.25)
 
 
@@ -1092,7 +1093,16 @@ def plot_psnr(psf_cmap='hot', gamma=.75):
     plt.savefig(f'../data/noise.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
-def plot_wavefront(iax, phi, label=None, nas=(.55, .65, .75, .85, .95), colorbar=True):
+def plot_wavefront(
+    iax,
+    phi,
+    label=None,
+    nas=(.55, .65, .75, .85, .95),
+    vcolorbar=False,
+    hcolorbar=False,
+    vmin=None,
+    vmax=None,
+):
     def formatter(x, pos):
         val_str = '{:.1g}'.format(x)
         if np.abs(x) > 0 and np.abs(x) < 1:
@@ -1108,11 +1118,15 @@ def plot_wavefront(iax, phi, label=None, nas=(.55, .65, .75, .85, .95), colorbar
         return mask
 
     dlimit = .1
-    vmin = np.round(np.nanmin(phi))
-    vmin = -1*dlimit if vmin > -0.01 else vmin
-    vmax = np.round(np.nanmax(phi))
-    vmax = dlimit if vmax < 0.01 else vmax
     step = .1
+
+    if vmin is None:
+        vmin = np.round(np.nanmin(phi))
+        vmin = -1*dlimit if vmin > -0.01 else vmin
+
+    if vmax is None:
+        vmax = np.round(np.nanmax(phi))
+        vmax = dlimit if vmax < 0.01 else vmax
 
     highcmap = plt.get_cmap('magma_r', 256)
     middlemap = plt.get_cmap('gist_gray', 256)
@@ -1144,8 +1158,6 @@ def plot_wavefront(iax, phi, label=None, nas=(.55, .65, .75, .85, .95), colorbar
         mask = phi * na_mask(radius=r)
         pcts.append((np.nanquantile(mask, .05), np.nanquantile(mask, .95)))
 
-    circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
-    iax.add_patch(circle)
     phi = phi.flatten()
 
     if label is not None:
@@ -1158,12 +1170,19 @@ def plot_wavefront(iax, phi, label=None, nas=(.55, .65, .75, .85, .95), colorbar
     iax.axis('off')
     iax.set_aspect("equal")
 
-    if colorbar:
+    if vcolorbar:
         cax = inset_axes(iax, width="10%", height="100%", loc='center right', borderpad=-3)
         cbar = plt.colorbar(mat, cax=cax, extend='both', format=formatter)
         cbar.ax.set_title(r'$\lambda$', pad=10)
         cbar.ax.yaxis.set_ticks_position('right')
         cbar.ax.yaxis.set_label_position('left')
+
+    if hcolorbar:
+        cax = inset_axes(iax, width="100%", height="10%", loc='lower center', borderpad=-1)
+        cbar = plt.colorbar(mat, cax=cax, extend='both', format=formatter, orientation='horizontal')
+        cbar.ax.xaxis.set_ticks_position('bottom')
+        cbar.ax.xaxis.set_label_position('top')
+
     return mat
 
 
@@ -2166,7 +2185,7 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None):
     ax_wavefornt = fig.add_subplot(gs[0, -1])
     ax_zcoff = fig.add_subplot(gs[0, :-1])
 
-    plot_wavefront(ax_wavefornt, pred_wave, label='Predicted wavefront')
+    plot_wavefront(ax_wavefornt, pred_wave, label='Predicted wavefront', vcolorbar=True)
 
     if pred_std is not None:
         ax_zcoff.bar(
@@ -2341,7 +2360,7 @@ def wavefronts(
     final_pred = Wavefront(predictions[scale].values, lam_detection=wavelength)
     pred_wave = final_pred.wave(size=100)
     fig, ax = plt.subplots()
-    mat = plot_wavefront(ax, pred_wave, colorbar=False)
+    mat = plot_wavefront(ax, pred_wave)
 
     for z in range(ztiles):
         fig = plt.figure(figsize=(11, 8))
@@ -2361,7 +2380,7 @@ def wavefronts(
             for x in range(ncols):
                 pred = Wavefront(predictions[f"p-z{z}-y{y}-x{x}"].values, lam_detection=wavelength)
                 pred_wave = pred.wave(size=100)
-                plot_wavefront(grid[i], pred_wave, colorbar=False)
+                plot_wavefront(grid[i], pred_wave)
                 grid[i].set_title(f"z{z}-y{y}-x{x}", pad=1)
                 i += 1
 
