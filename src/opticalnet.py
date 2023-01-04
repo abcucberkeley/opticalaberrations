@@ -20,18 +20,24 @@ logger = logging.getLogger(__name__)
 class Stem(layers.Layer):
     def __init__(
             self,
+            kernel_size=7,
             activation='gelu',
             mul=False,
             no_phase=False,
             **kwargs
     ):
         super().__init__(**kwargs)
+        self.kernel_size = kernel_size
         self.activation = activation
         self.mul = mul
         self.no_phase = no_phase
 
+        self.conv = layers.Conv3D(
+            filters=1,
+            kernel_size=(1, self.kernel_size, self.kernel_size),
+            padding='same'
+        )
         self.act = layers.Activation(self.activation)
-        self.ln = layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
     def build(self, input_shape):
         super(Stem, self).build(input_shape)
@@ -39,20 +45,33 @@ class Stem(layers.Layer):
     def get_config(self):
         config = super(Stem, self).get_config()
         config.update({
+            "kernel_size": self.kernel_size,
             "activation": self.activation,
             "mul": self.mul,
             "no_phase": self.no_phase,
         })
         return config
 
+    def gaussian_filter3D(self, inputs):
+        outputs = []
+        for i in range(inputs.shape[1]):
+            s = tfa.image.gaussian_filter2d(
+                inputs[:, i],
+                filter_shape=(self.kernel_size, self.kernel_size),
+                sigma=self.kernel_size/3,
+                padding='CONSTANT'
+            )
+            outputs.append(s)
+        return tf.stack(outputs, axis=1)
+
     def call(self, inputs, training=True, **kwargs):
-        alpha = self.ln(inputs[:, :3])
+        alpha = self.conv(inputs[:, :3])
         alpha = self.act(alpha)
 
         if self.no_phase:
             return alpha
         else:
-            phi = self.ln(inputs[:, 3:])
+            phi = self.gaussian_filter3D(inputs[:, 3:])
             phi = self.act(phi)
 
             if self.mul:
@@ -334,7 +353,12 @@ class OpticalTransformer(Base, ABC):
 
     def call(self, inputs, training=True, **kwargs):
 
-        m = Stem(activation=self.activation, mul=self.mul, no_phase=self.no_phase)(inputs)
+        m = Stem(
+            kernel_size=7,
+            activation=self.activation,
+            mul=self.mul,
+            no_phase=self.no_phase
+        )(inputs)
 
         if self.roi is not None:
             m = ROI(crop_shape=self.roi)(m)
