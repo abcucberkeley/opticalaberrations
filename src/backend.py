@@ -1036,7 +1036,6 @@ def featuremaps(
     return fig
 
 
-@profile
 def train(
         dataset: Path,
         outdir: Path,
@@ -1253,8 +1252,8 @@ def train(
 
     tensorboard = TensorBoardCallback(
         log_dir=outdir,
-        profile_batch='500,520',
         histogram_freq=1,
+        profile_batch=100000000
     )
 
     if fixedlr:
