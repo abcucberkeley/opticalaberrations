@@ -113,7 +113,7 @@ def evaluate_modes(model: Path, n_modes: int = 55):
         classes[:, i] = waves
 
         job = partial(eval_mode, modelpath=model, npoints=1, n_samples=5)
-        preds, ys = zip(*utils.multiprocess(job, classes, cores=-1))
+        preds, ys = zip(*utils.multiprocess(job, list(classes), cores=-1))
         y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
         y_pred = pd.DataFrame([], columns=['sample']).append(preds, ignore_index=True)
 
@@ -178,7 +178,7 @@ def evaluate_modes(model: Path, n_modes: int = 55):
             ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
         )
 
-        cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = 510~nm$)')
+        cbar.ax.set_ylabel(rf'Average peak-to-valley residuals ($\lambda = 510~nm$)')
         cbar.ax.set_title(r'$\lambda$')
         cbar.ax.yaxis.set_ticks_position('right')
         cbar.ax.yaxis.set_label_position('left')
@@ -188,7 +188,7 @@ def evaluate_modes(model: Path, n_modes: int = 55):
         ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         ax.set_ylabel(
-            'Average Peak-to-peak aberration'
+            'Average peak-to-valley aberration'
             rf' ($\lambda = 510~nm$)'
         )
         ax.set_yticks(np.arange(0, 6, .5), minor=True)
@@ -232,7 +232,7 @@ def eval_bin(
     na: float = 1.0,
     input_coverage: float = 1.0,
     no_phase: bool = False,
-    batch_size: int = 100
+    batch_size: int = 100,
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(
@@ -246,20 +246,18 @@ def eval_bin(
 
     val = data_utils.collect_dataset(
         datapath,
+        modes=gen.n_modes,
         samplelimit=samplelimit,
         no_phase=no_phase,
-        modes=gen.n_modes,
-        embedding=gen.embedding_option,
+        metadata=True
     )
 
     y_pred = pd.DataFrame([], columns=['sample'])
     y_true = pd.DataFrame([], columns=['sample'])
 
-    for inputs, ys in val.batch(100):
+    for inputs, ys, snr, p2v, npoints in val.batch(batch_size):
         if input_coverage != 1.:
-            mode = np.mean([np.abs(st.mode(s, axis=None).mode[0]) for s in inputs])
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
-            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, constant_values=mode)
 
         preds = backend.eval_sign(
             model=model,
@@ -267,16 +265,13 @@ def eval_bin(
             gen=gen,
             ys=ys if isinstance(ys, np.ndarray) else ys.numpy(),
             batch_size=batch_size,
-            desc=f"Predictions for ({datapath})"
         )
 
         p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds], columns=['sample'])
         y_pred = y_pred.append(p, ignore_index=True)
 
         y = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys.numpy()], columns=['sample'])
-        y['snr'] = int(np.mean(list(
-            map(int, str([s for s in datapath.parts if s.startswith('psnr_')][0]).lstrip('psnr_').split('-'))
-        )))
+        y['snr'] = snr
         y_true = y_true.append(y, ignore_index=True)
 
     return (y_pred, y_true)
@@ -285,10 +280,8 @@ def eval_bin(
 def evalheatmap(
     modelpath: Path,
     datadir: Path,
-    n_modes: int = 55,
     distribution: str = '/',
     samplelimit: Any = None,
-    max_amplitude: float = .25,
     na: float = 1.0,
     input_coverage: float = 1.0,
     no_phase: bool = False,
@@ -302,7 +295,7 @@ def evalheatmap(
         batch_size=batch_size,
     )
 
-    savepath = modelpath / f'evalheatmaps_{input_coverage}'
+    savepath = modelpath.with_suffix('') / f'evalheatmaps_{input_coverage}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -320,35 +313,25 @@ def evalheatmap(
         'xtick.major.pad': 10
     })
 
-    classes = sorted([
-        c for c in Path(datadir).rglob('*/')
-        if c.is_dir()
-           and len(list(c.glob('*.tif'))) > 0
-           and distribution in str(c)
-           and gen.embedding_option in str(c)
-           and f"z{int(n_modes)}" in str(c)
-           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
-    ])
-    logger.info(f"BINs: {[len(classes)]}")
-
-    job = partial(
-        eval_bin,
+    y_pred, y_true = eval_bin(
+        datadir,
         modelpath=modelpath,
         samplelimit=samplelimit,
         na=na,
         input_coverage=input_coverage,
-        no_phase=no_phase
+        no_phase=no_phase,
+        batch_size=batch_size
     )
-    preds, ys = zip(*utils.multiprocess(job, classes))
-    y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
-    y_pred = pd.DataFrame([], columns=['sample']).append(preds, ignore_index=True)
 
     error = np.abs(y_true - y_pred)
     error = pd.DataFrame(error, columns=['sample'])
 
     bins = np.arange(0, 10.25, .25)
+    snrbins = np.arange(0, 105, 5)
+
     df = pd.DataFrame(zip(y_true['sample'], error['sample'], y_true['snr']), columns=['aberration', 'error', 'snr'])
     df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+    df['snr'] = pd.cut(df['snr'], snrbins, labels=snrbins[1:], include_lowest=True)
 
     means = pd.pivot_table(df, values='error', index='bins', columns='snr', aggfunc=np.mean)
     means = means.sort_index().interpolate()
@@ -396,7 +379,7 @@ def evalheatmap(
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = {int(gen.lam_detection*1000)}~nm$)')
+    cbar.ax.set_ylabel(rf'Average peak-to-valley residuals ($\lambda = {int(gen.lam_detection*1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
@@ -406,7 +389,7 @@ def evalheatmap(
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     ax.set_ylabel(
-        'Average Peak-to-peak aberration'
+        'Average peak-to-valley aberration'
         rf'($\lambda = {int(gen.lam_detection*1000)}~nm$)'
     )
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
@@ -429,7 +412,8 @@ def evaldistbin(
     na: float = 1.0,
     no_phase: bool = False,
     input_coverage: float = 1.0,
-    batch_size: int = 100
+    batch_size: int = 100,
+    snr_range: tuple = (21, 30)
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(
@@ -443,20 +427,19 @@ def evaldistbin(
 
     val = data_utils.collect_dataset(
         datapath,
+        modes=gen.n_modes,
         samplelimit=samplelimit,
         no_phase=no_phase,
-        modes=gen.n_modes,
-        embedding=gen.embedding_option,
+        metadata=True,
+        snr_range=snr_range
     )
 
     y_true = pd.DataFrame([], columns=['dist', 'sample'])
     y_pred = pd.DataFrame([], columns=['dist', 'sample'])
 
-    for inputs, ys in val.batch(100):
+    for inputs, ys, snr, p2v, npoints in val.batch(batch_size):
         if input_coverage != 1.:
-            mode = np.mean([np.abs(st.mode(s, axis=None).mode[0]) for s in inputs])
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
-            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, constant_values=mode)
 
         preds = backend.eval_sign(
             model=model,
@@ -464,7 +447,6 @@ def evaldistbin(
             gen=gen,
             ys=ys if isinstance(ys, np.ndarray) else ys.numpy(),
             batch_size=batch_size,
-            desc=f"Predictions for ({datapath})"
         )
 
         p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds], columns=['sample'])
@@ -472,8 +454,8 @@ def evaldistbin(
 
         y = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys.numpy()], columns=['sample'])
         y['dist'] = [
-            utils.mean_min_distance(np.squeeze(i), voxel_size=gen.voxel_size)
-            for i in inputs
+            utils.mean_min_distance(np.squeeze(i), voxel_size=gen.voxel_size) if objs > 1 else 0.
+            for i, objs in zip(inputs, npoints)
         ]
         y_true = y_true.append(y, ignore_index=True)
 
@@ -484,15 +466,13 @@ def distheatmap(
     modelpath: Path,
     datadir: Path,
     distribution: str = '/',
-    n_modes: int = 55,
-    max_amplitude: float = .25,
     na: float = 1.0,
     no_phase: bool = False,
-    psnr: tuple = (21, 30),
     num_neighbor: Any = None,
     samplelimit: Any = None,
     input_coverage: float = 1.0,
-    batch_size: int = 100
+    batch_size: int = 100,
+    snr_range: tuple = (21, 30),
 ):
     gen = backend.load_metadata(
         modelpath,
@@ -503,9 +483,9 @@ def distheatmap(
     )
 
     if num_neighbor is not None:
-        savepath = modelpath / f'distheatmaps_neighbor_{num_neighbor}_{input_coverage}'
+        savepath = modelpath.with_suffix('') / f'distheatmaps_neighbor_{num_neighbor}_{input_coverage}'
     else:
-        savepath = modelpath / f'distheatmaps_{input_coverage}'
+        savepath = modelpath.with_suffix('') / f'distheatmaps_{input_coverage}'
 
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -524,48 +504,26 @@ def distheatmap(
         'xtick.major.pad': 10
     })
 
-    if num_neighbor is not None:
-        classes = sorted([
-            c for c in Path(datadir).rglob('*/')
-            if c.is_dir()
-               and len(list(c.glob('*.tif'))) > 0
-               and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
-               and distribution in str(c)
-               and gen.embedding_option in str(c)
-               and f"z{int(n_modes)}" in str(c)
-               and f"npoints_{num_neighbor}" in str(c)
-               and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
-        ])
-    else:
-        classes = sorted([
-            c for c in Path(datadir).rglob('*/')
-            if c.is_dir()
-               and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
-               and len(list(c.glob('*.tif'))) > 0
-               and distribution in str(c)
-               and gen.embedding_option in str(c)
-               and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
-        ])
-    logger.info(f"BINs: {[len(classes)]}")
-
-    job = partial(
-        evaldistbin,
+    y_pred, y_true = evaldistbin(
+        datadir,
         modelpath=modelpath,
         samplelimit=samplelimit,
         na=na,
-        no_phase=no_phase,
+        snr_range=snr_range,
         input_coverage=input_coverage,
+        no_phase=no_phase,
+        batch_size=batch_size
     )
-    preds, ys = zip(*utils.multiprocess(job, classes))
-    y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
-    y_pred = pd.DataFrame([], columns=['sample']).append(preds, ignore_index=True)
 
     error = np.abs(y_true - y_pred)
     error = pd.DataFrame(error, columns=['sample'])
 
     bins = np.arange(0, 10.25, .25)
+    distbins = np.arange(0, 5.5, .5)
+
     df = pd.DataFrame(zip(y_true['sample'], error['sample'], y_true['dist']), columns=['aberration', 'error', 'dist'])
     df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+    df['dist'] = pd.cut(df['dist'], distbins, labels=distbins[:-1], include_lowest=True)
 
     means = pd.pivot_table(df, values='error', index='bins', columns='dist', aggfunc=np.mean)
     means = means.sort_index().interpolate()
@@ -613,7 +571,7 @@ def distheatmap(
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = {int(gen.lam_detection*1000)}~nm$)')
+    cbar.ax.set_ylabel(rf'Average peak-to-valley residuals ($\lambda = {int(gen.lam_detection*1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
@@ -623,7 +581,7 @@ def distheatmap(
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     ax.set_ylabel(
-        'Average Peak-to-peak aberration'
+        'Average peak-to-valley aberration'
         rf'($\lambda = {int(gen.lam_detection*1000)}~nm$)'
     )
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
@@ -646,7 +604,8 @@ def evaldensitybin(
     na: float = 1.0,
     no_phase: bool = False,
     input_coverage: float = 1.0,
-    batch_size: int = 100
+    batch_size: int = 100,
+    snr_range: tuple = (21, 30)
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(
@@ -660,20 +619,19 @@ def evaldensitybin(
 
     val = data_utils.collect_dataset(
         datapath,
+        modes=gen.n_modes,
         samplelimit=samplelimit,
         no_phase=no_phase,
-        modes=gen.n_modes,
-        embedding=gen.embedding_option,
+        metadata=True,
+        snr_range=snr_range,
     )
 
-    y_true = pd.DataFrame([], columns=['neighbors', 'dist', 'sample'])
-    y_pred = pd.DataFrame([], columns=['neighbors', 'dist', 'sample'])
+    y_true = pd.DataFrame([], columns=['neighbors', 'sample'])
+    y_pred = pd.DataFrame([], columns=['neighbors', 'sample'])
 
-    for inputs, ys in val.batch(100):
+    for inputs, ys, snr, p2v, npoints in val.batch(batch_size):
         if input_coverage != 1.:
-            mode = np.mean([np.abs(st.mode(s, axis=None).mode[0]) for s in inputs])
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
-            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, constant_values=mode)
 
         preds = backend.eval_sign(
             model=model,
@@ -681,18 +639,13 @@ def evaldensitybin(
             gen=gen,
             ys=ys if isinstance(ys, np.ndarray) else ys.numpy(),
             batch_size=batch_size,
-            desc=f"Predictions for ({datapath})"
         )
 
         p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds], columns=['sample'])
         y_pred = y_pred.append(p, ignore_index=True)
 
         y = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys.numpy()], columns=['sample'])
-        y['dist'] = [
-            utils.mean_min_distance(np.squeeze(i), voxel_size=gen.voxel_size)
-            for i in inputs
-        ]
-        y['neighbors'] = int(str([s for s in datapath.parts if s.startswith('npoints_')][0]).lstrip('npoints_'))
+        y['neighbors'] = npoints
         y_true = y_true.append(y, ignore_index=True)
 
     return (y_pred, y_true)
@@ -701,15 +654,13 @@ def evaldensitybin(
 def densityheatmap(
     modelpath: Path,
     datadir: Path,
-    n_modes: int = 55,
     distribution: str = '/',
-    max_amplitude: float = .25,
     na: float = 1.0,
     no_phase: bool = False,
-    psnr: tuple = (21, 30),
     samplelimit: Any = None,
     input_coverage: float = 1.0,
-    batch_size: int = 100
+    batch_size: int = 100,
+    snr_range: tuple = (21, 30),
 ):
     gen = backend.load_metadata(
         modelpath,
@@ -719,7 +670,7 @@ def densityheatmap(
         batch_size=batch_size,
     )
 
-    savepath = modelpath / f'densityheatmaps_{input_coverage}'
+    savepath = modelpath.with_suffix('') / f'densityheatmaps_{input_coverage}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -736,37 +687,26 @@ def densityheatmap(
         'legend.fontsize': 10,
         'xtick.major.pad': 10
     })
-    classes = sorted([
-        c for c in Path(datadir).rglob('*/')
-        if c.is_dir()
-           and len(list(c.glob('*.tif'))) > 0
-           and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
-           and distribution in str(c)
-           and gen.embedding_option in str(c)
-           and f"z{int(n_modes)}" in str(c)
-           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
-    ])
-    logger.info(f"BINs: {[len(classes)]}")
 
-    job = partial(
-        evaldensitybin,
+    y_pred, y_true = evaldensitybin(
+        datadir,
         modelpath=modelpath,
         samplelimit=samplelimit,
         na=na,
-        no_phase=no_phase,
+        snr_range=snr_range,
         input_coverage=input_coverage,
+        no_phase=no_phase,
+        batch_size=batch_size
     )
-    preds, ys = zip(*utils.multiprocess(job, classes))
-    y_true = pd.DataFrame([], columns=['sample']).append(ys, ignore_index=True)
-    y_pred = pd.DataFrame([], columns=['sample']).append(preds, ignore_index=True)
 
     error = np.abs(y_true - y_pred)
     error = pd.DataFrame(error, columns=['sample'])
 
     bins = np.arange(0, 10.25, .25)
+
     df = pd.DataFrame(
-        zip(y_true['sample'], error['sample'], y_true['neighbors'], y_true['dist']),
-        columns=['aberration', 'error', 'neighbors', 'dist']
+        zip(y_true['sample'], error['sample'], y_true['neighbors']),
+        columns=['aberration', 'error', 'neighbors']
     )
     df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
 
@@ -816,18 +756,18 @@ def densityheatmap(
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = {int(gen.lam_detection*1000)}~nm$)')
+    cbar.ax.set_ylabel(rf'Average peak-to-valley residuals ($\lambda = {int(gen.lam_detection*1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
-    ax.set_xlabel(rf'Number of points')
+    ax.set_xlabel(rf'Number of objects')
     ax.set_xticks(np.arange(0, 35, 5))
     ax.set_xlim(1, 30)
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     ax.set_ylabel(
-        'Average Peak-to-peak aberration'
+        'Average peak-to-valley aberration'
         rf'($\lambda = {int(gen.lam_detection*1000)}~nm$)'
     )
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
@@ -846,13 +786,13 @@ def densityheatmap(
 def iter_eval_bin_with_reference(
     datapath,
     modelpath,
-    psnr: tuple = (21, 30),
     niter: int = 5,
     samplelimit: int = 1,
     na: float = 1.0,
     input_coverage: float = 1.0,
     no_phase: bool = False,
-    batch_size: int = 100
+    batch_size: int = 100,
+    snr_range: tuple = (21, 30)
 ):
 
     model = backend.load(modelpath)
@@ -867,13 +807,12 @@ def iter_eval_bin_with_reference(
 
     val = data_utils.collect_dataset(
         datapath,
+        modes=gen.n_modes,
         samplelimit=samplelimit,
         no_phase=no_phase,
-        modes=gen.n_modes,
-        embedding=gen.embedding_option,
+        snr_range=snr_range
     )
     val = np.array(list(val.take(-1)))
-
     inputs = np.array([i.numpy() for i in val[:, 0]])
     ys = np.array([i.numpy() for i in val[:, 1]])
 
@@ -889,12 +828,8 @@ def iter_eval_bin_with_reference(
         'residuals': [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys]
     })
 
-    reference = backend.beads(
-        gen=gen,
-        object_size=0,
-        num_objs=np.random.randint(1, 10)
-    )
-    snr = gen._randuniform(psnr)
+    reference = backend.beads(gen=gen, object_size=0, num_objs=1)
+    snr = gen._randuniform(snr_range)
 
     for k in range(1, niter+1):
         for i in range(inputs.shape[0]):
@@ -917,9 +852,7 @@ def iter_eval_bin_with_reference(
             inputs[i] = noisy_img[..., np.newaxis]
 
         if input_coverage != 1.:
-            mode = np.mean([np.abs(st.mode(s, axis=None).mode[0]) for s in inputs])
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
-            inputs = resize_with_crop_or_pad(inputs, crop_shape=gen.psf_shape, constant_values=mode)
 
         preds = backend.eval_sign(
             model=model,
@@ -928,7 +861,6 @@ def iter_eval_bin_with_reference(
             ys=ys,
             batch_size=batch_size,
             reference=reference,
-            desc=f"Predictions for ({datapath})"
         )
 
         p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds], columns=['residuals'])
@@ -942,8 +874,7 @@ def iter_eval_bin_with_reference(
         y_true = y_true.append(y, ignore_index=True)
 
         # setup next iter
-        res = ys - preds
-        ys = res
+        ys -= preds
 
     return (y_pred, y_true)
 
@@ -951,16 +882,14 @@ def iter_eval_bin_with_reference(
 def iterheatmap(
     modelpath: Path,
     datadir: Path,
-    psnr: tuple = (21, 30),
     niter: int = 5,
-    n_modes: int = 55,
     distribution: str = '/',
     samplelimit: Any = None,
-    max_amplitude: float = .25,
     na: float = 1.0,
     input_coverage: float = 1.0,
     no_phase: bool = False,
-    batch_size: int = 100
+    batch_size: int = 100,
+    snr_range: tuple = (21, 30),
 ):
     gen = backend.load_metadata(
         modelpath,
@@ -970,7 +899,7 @@ def iterheatmap(
         batch_size=batch_size,
     )
 
-    savepath = modelpath / f'iterheatmap_{input_coverage}'
+    savepath = modelpath.with_suffix('') / f'iterheatmap_{input_coverage}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -978,31 +907,17 @@ def iterheatmap(
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
 
-    classes = sorted([
-        c for c in Path(datadir).rglob('*/')
-        if c.is_dir()
-           and len(list(c.glob('*.tif'))) > 0
-           and f'psnr_{psnr[0]}-{psnr[1]}' in str(c)
-           and distribution in str(c)
-           and gen.embedding_option in str(c)
-           and f"z{int(n_modes)}" in str(c)
-           and float(str([s for s in c.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.')) <= max_amplitude
-    ])
-
-    job = partial(
-        iter_eval_bin_with_reference,
-        modelpath=modelpath,
+    y_pred, y_true = iter_eval_bin_with_reference(
+        datadir,
         niter=niter,
-        psnr=psnr,
+        modelpath=modelpath,
         samplelimit=samplelimit,
         na=na,
+        snr_range=snr_range,
+        input_coverage=input_coverage,
         no_phase=no_phase,
-        input_coverage=input_coverage
+        batch_size=batch_size
     )
-
-    preds, ys = zip(*utils.multiprocess(job, classes))
-    y_true = pd.DataFrame([], columns=['niter', 'residuals']).append(ys, ignore_index=True)
-    y_pred = pd.DataFrame([], columns=['niter', 'residuals']).append(preds, ignore_index=True)
 
     error = np.abs(y_true['residuals'] - y_pred['residuals'])
     error = pd.DataFrame(error, columns=['residuals'])
@@ -1071,7 +986,7 @@ def iterheatmap(
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = {int(gen.lam_detection*1000)}~nm$)')
+    cbar.ax.set_ylabel(rf'Average peak-to-valley residuals ($\lambda = {int(gen.lam_detection*1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
@@ -1082,7 +997,7 @@ def iterheatmap(
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     ax.set_ylabel(
-        'Average Peak-to-peak aberration '
+        'Average peak-to-valley aberration '
         rf'($\lambda = {int(gen.lam_detection*1000)}~nm$)'
     )
 

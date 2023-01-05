@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="eval_dataset" type="PythonConfigurationType" factoryName="Python" folderName="ao">
+  <configuration default="false" name="iterheatmap" type="PythonConfigurationType" factoryName="Python" folderName="tests">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -12,8 +12,8 @@
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="eval_dataset ../pretrained_models/z15_modes/lattice_yumb/x108-y108-z200/opticalnet.h5 $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20221220/amp_0p1/ $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20221220/ALPAO_Flatten.csv" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/test.py" />
+    <option name="PARAMETERS" value="../pretrained_models/z15_modes/lattice_yumb/x108-y108-z200/opticalnet.h5 --datadir ../dataset/test/x108-y108-z200/i64/z15 --input_coverage 1.0 --na 1.0 --n_samples 10 iterheatmap" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

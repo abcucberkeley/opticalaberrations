@@ -237,7 +237,8 @@ def bootstrap_predict(
                 psf=np.squeeze(i),
                 plot=plot,
                 no_phase=no_phase,
-                freq_strength_threshold=freq_strength_threshold
+                embedding_option=psfgen.embedding_option,
+                freq_strength_threshold=freq_strength_threshold,
             )
 
             if no_phase and model.input_shape[1] == 6:

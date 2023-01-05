@@ -218,20 +218,20 @@ def plot_to_image(figure):
 
 @profile
 def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
-    peaks = peak_local_max(
+    beads = peak_local_max(
         sample,
-        min_distance=1,
+        min_distance=5,
         threshold_rel=.33,
         exclude_border=False,
         p_norm=2,
-        num_peaks=10
+        num_peaks=100
     ).astype(np.float64)
 
     # rescale to mu meters
-    scaled_peaks = np.zeros_like(peaks)
-    scaled_peaks[:, 0] = peaks[:, 0] * voxel_size[0]
-    scaled_peaks[:, 1] = peaks[:, 1] * voxel_size[1]
-    scaled_peaks[:, 2] = peaks[:, 2] * voxel_size[2]
+    scaled_peaks = np.zeros_like(beads)
+    scaled_peaks[:, 0] = beads[:, 0] * voxel_size[0]
+    scaled_peaks[:, 1] = beads[:, 1] * voxel_size[1]
+    scaled_peaks[:, 2] = beads[:, 2] * voxel_size[2]
 
     kd = KDTree(scaled_peaks)
     dists, idx = kd.query(scaled_peaks, k=2, workers=-1)
@@ -247,11 +247,11 @@ def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
 
             for p in range(dists.shape[0]):
                 if ax == 0:
-                    axes[ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                    axes[ax].plot(beads[p, 2], beads[p, 1], marker='.', ls='', color=f'C{p}')
                 elif ax == 1:
-                    axes[ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                    axes[ax].plot(beads[p, 2], beads[p, 0], marker='.', ls='', color=f'C{p}')
                 else:
-                    axes[ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                    axes[ax].plot(beads[p, 1], beads[p, 0], marker='.', ls='', color=f'C{p}')
 
         plt.tight_layout()
         plt.show()

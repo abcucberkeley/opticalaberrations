@@ -30,23 +30,15 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--n_modes", default=55, type=int, help="number of modes to describe aberration"
-    )
-
-    parser.add_argument(
         "--outdir", default="../models", type=Path, help='path to save eval'
     )
 
     parser.add_argument(
-        "--n_samples", default=100, type=int, help='number of samples to evaluate'
+        "--n_samples", default=None, type=int, help='number of samples to evaluate'
     )
 
     parser.add_argument(
-        "--batch_size", default=100, type=int, help='number of samples per batch'
-    )
-
-    parser.add_argument(
-        "--dist", default='/', type=str, help='distribution to evaluate'
+        "--batch_size", default=512, type=int, help='number of samples per batch'
     )
 
     parser.add_argument(
@@ -114,11 +106,8 @@ def main(args=None):
         eval.evalheatmap(
             modelpath=args.model,
             datadir=args.datadir,
-            n_modes=args.n_modes,
             distribution=args.dist,
-            embedding=args.embedding,
             samplelimit=args.n_samples,
-            max_amplitude=args.max_amplitude,
             input_coverage=args.input_coverage,
             no_phase=args.no_phase,
             na=args.na,
@@ -128,11 +117,8 @@ def main(args=None):
         eval.distheatmap(
             modelpath=args.model,
             datadir=args.datadir,
-            n_modes=args.n_modes,
             distribution=args.dist,
-            embedding=args.embedding,
             samplelimit=args.n_samples,
-            max_amplitude=args.max_amplitude,
             num_neighbor=args.num_neighbor,
             input_coverage=args.input_coverage,
             no_phase=args.no_phase,
@@ -143,11 +129,8 @@ def main(args=None):
         eval.densityheatmap(
             modelpath=args.model,
             datadir=args.datadir,
-            n_modes=args.n_modes,
             distribution=args.dist,
-            embedding=args.embedding,
             samplelimit=args.n_samples,
-            max_amplitude=args.max_amplitude,
             input_coverage=args.input_coverage,
             no_phase=args.no_phase,
             na=args.na,
@@ -157,11 +140,8 @@ def main(args=None):
         eval.iterheatmap(
             modelpath=args.model,
             datadir=args.datadir,
-            n_modes=args.n_modes,
             distribution=args.dist,
-            embedding=args.embedding,
             samplelimit=args.n_samples,
-            max_amplitude=args.max_amplitude,
             input_coverage=args.input_coverage,
             no_phase=args.no_phase,
             na=args.na,

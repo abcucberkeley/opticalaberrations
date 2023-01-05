@@ -159,7 +159,7 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
         sns.histplot(peaks, kde=True, ax=pax, color='dimgrey')
 
         pax.set_xlabel(
-            'Peak-to-peak aberration\n'
+            'peak-to-valley aberration\n'
             rf'($\lambda = {int(wavelength*1000)}~nm$)'
         )
         pax.set_ylabel(rf'Samples')
@@ -940,7 +940,7 @@ def plot_signal(n_modes=55, wavelength=.605):
             axr.set_xlim((0, None))
             axr.set_ylim((0, 1))
             axr.set_xlabel(
-                'Peak-to-peak aberration'
+                'peak-to-valley aberration'
                 rf'($\lambda = {int(wavelength*1000)}~nm$)'
             )
             axr.set_ylabel('Percentage signal lost')
@@ -996,10 +996,10 @@ def plot_mode(savepath, df, mode_index, n_modes=55, wavelength=.605):
     ax.set_yscale('log')
     ax.set_ylim((10**-2, 10))
     ax.set_xlabel(
-        'Peak-to-peak aberration'
+        'peak-to-valley aberration'
         rf'($\lambda = {int(wavelength * 1000)}~nm$)'
     )
-    ax.set_ylabel('Peak-to-peak residuals')
+    ax.set_ylabel('peak-to-valley residuals')
     ax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
 
     phi = np.zeros(n_modes)
@@ -1695,7 +1695,7 @@ def plot_residuals(df: pd.DataFrame, save_path, wavelength=.605, nsamples=100, l
     axl.set_xlim(10 ** 1, 10 ** 3)
     axl.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
 
-    ax.set_ylabel(rf'Peak-to-peak residuals')
+    ax.set_ylabel(rf'peak-to-valley residuals')
     axl.set_ylabel(rf'($n$ = {nsamples}; $\lambda = {wavelength}~\mu m$)')
     ax.legend(frameon=False, loc='lower center')
 
@@ -1781,7 +1781,7 @@ def plot_eval(means: pd.DataFrame, save_path, wavelength=.605, nsamples=100, lab
     )
 
     cbar.ax.set_ylabel(
-        'Peak-to-peak aberration'
+        'peak-to-valley aberration'
         rf'($\lambda = {int(wavelength*1000)}~nm$)'
     )
     cbar.ax.set_title(r'$\lambda$')
@@ -1797,7 +1797,7 @@ def plot_eval(means: pd.DataFrame, save_path, wavelength=.605, nsamples=100, lab
 
     if 'amplitude' in label:
         ax.set_ylabel(
-            'Peak-to-peak aberration'
+            'peak-to-valley aberration'
             rf'($\lambda = {int(wavelength*1000)}~nm$)'
         )
         ax.set_yticks(np.arange(0, 11, .5), minor=True)
@@ -1863,7 +1863,7 @@ def plot_models(df: pd.DataFrame, save_path, wavelength=.605, nsamples=100, labe
     axl.set_xlim(10 ** 1, 10 ** 2)
     axl.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
 
-    ax.set_ylabel(rf'Peak-to-peak residuals')
+    ax.set_ylabel(rf'peak-to-valley residuals')
     axl.set_ylabel(rf'($n$ = {nsamples}; $\lambda = {wavelength}~\mu m$)')
     ax.legend(frameon=False, loc='lower center', ncol=df.shape[1] // 2)
 
@@ -1968,7 +1968,7 @@ def plot_convergence(df: pd.DataFrame, save_path, wavelength=.605, nsamples=100,
     ax.tick_params(axis='x', which='major', pad=10)
 
     #ax.set_title(f"PSNR: {psnr}, $n$ = {nsamples}")
-    ax.set_ylabel(rf'Average peak-to-peak residuals ($\lambda = {round(wavelength*1000)}~nm$)')
+    ax.set_ylabel(rf'Average peak-to-valley residuals ($\lambda = {round(wavelength*1000)}~nm$)')
     ax.legend(frameon=False, loc='lower center', ncol=4)
 
     plt.tight_layout()
