@@ -102,8 +102,8 @@ def main(args=None):
     if args.target == 'modes':
         eval.evaluate_modes(args.model)
 
-    elif args.target == 'evalheatmap':
-        eval.evalheatmap(
+    elif args.target == 'snrheatmap':
+        eval.snrheatmap(
             modelpath=args.model,
             datadir=args.datadir,
             distribution=args.dist,

@@ -45,14 +45,9 @@ do
       #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
       #python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
       python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-      --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  evalheatmap" \
+      --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  snrheatmap" \
       --taskname $NA \
-      --name $MODEL/evalheatmaps_${COV}
-
-      python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-      --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  distheatmap" \
-      --taskname $NA \
-      --name $MODEL/distheatmaps_${COV}
+      --name $MODEL/snrheatmaps_${COV}
 
       python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
       --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  densityheatmap" \

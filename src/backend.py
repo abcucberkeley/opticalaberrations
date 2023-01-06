@@ -293,6 +293,9 @@ def predict_sign(
         pct[pct < -100] = -100
         return pct
 
+    init_preds = np.abs(init_preds)
+    followup_preds = np.abs(followup_preds)
+
     preds = init_preds.copy()
     pchange = pct_change(followup_preds, init_preds)
 
@@ -473,7 +476,7 @@ def dual_stage_prediction(
 
 
 @profile
-def eval_sign(
+def evaluate(
     model: tf.keras.Model,
     inputs: np.array,
     gen: SyntheticPSF,
@@ -482,11 +485,20 @@ def eval_sign(
     reference: Any = None,
     plot: Any = None,
     threshold: float = 0.,
-    sign_threshold: float = 1.,
     desc: str = 'Eval',
+    eval_sign: bool = False
 ):
+    if isinstance(inputs, tf.Tensor):
+        inputs = inputs.numpy()
+
+    if isinstance(ys, tf.Tensor):
+        ys = ys.numpy()
+
     if len(ys.shape) == 1:
         ys = ys[np.newaxis, :]
+
+    if not eval_sign:
+        ys = np.abs(ys)
 
     init_preds, stdev = bootstrap_predict(
         model,
@@ -503,43 +515,57 @@ def eval_sign(
     else:
         init_preds = np.abs(init_preds)[np.newaxis, :ys.shape[-1]]
 
-    init_preds = np.abs(init_preds)
-    res = ys - init_preds
-    g = partial(
-        gen.single_psf,
-        normed=True,
-        noise=False,
-        meta=False
-    )
-    followup_inputs = np.stack(gen.batch(g, res), axis=0)
+    if eval_sign:
+        res = ys - init_preds
+        make_psf = partial(
+            gen.single_psf,
+            normed=True,
+            noise=False,
+            meta=False
+        )
+        followup_inputs = np.stack(gen.batch(make_psf, res), axis=0)
 
-    if reference is not None:
-        followup_inputs = np.array([utils.fftconvolution(kernel=k, sample=reference) for k in followup_inputs])
+        if reference is not None:
+            followup_inputs = np.array([utils.fftconvolution(kernel=k, sample=reference) for k in followup_inputs])
 
-    followup_preds, stdev = bootstrap_predict(
-        model,
-        followup_inputs[..., np.newaxis],
-        psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
-        no_phase=True,
-        threshold=threshold,
-        desc=desc,
-    )
+        followup_preds, stdev = bootstrap_predict(
+            model,
+            followup_inputs[..., np.newaxis],
+            psfgen=gen,
+            batch_size=batch_size,
+            n_samples=1,
+            no_phase=True,
+            threshold=threshold,
+            desc=desc,
+        )
 
-    if len(followup_preds.shape) > 1:
-        followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]
+        if len(followup_preds.shape) > 1:
+            followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]
+        else:
+            followup_preds = np.abs(followup_preds)[np.newaxis, :ys.shape[-1]]
+
+        preds, pchanges = predict_sign(
+            init_preds=init_preds,
+            followup_preds=followup_preds,
+            plot=plot
+        )
+
+        # for i in range(ys.shape[1]):
+        #     print(
+        #         f"{i}:\t"
+        #         f"\t Y={ys[0, i]:.2f}"
+        #         f"\t I={init_preds[0, i]:.2f}"
+        #         f"\t F={followup_preds[0, i]:.2f}"
+        #         f"\t C={pchanges[0, i]:.0f}\t"
+        #         f"\t P={preds[0, i]:.2f}"
+        #         f"     :{i}"
+        #     )
+
     else:
-        followup_preds = np.abs(followup_preds)[np.newaxis, :ys.shape[-1]]
+        preds = init_preds
 
-    preds, pchanges = predict_sign(
-        init_preds=init_preds,
-        followup_preds=followup_preds,
-        sign_threshold=sign_threshold,
-        plot=plot
-    )
-
-    return preds
+    residuals = ys - preds
+    return residuals, ys, preds
 
 
 @profile
@@ -634,7 +660,7 @@ def predict(model: Path, psnr: int = 30):
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
-                    p = eval_sign(
+                    p = evaluate(
                         model=m,
                         inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
                         reference=reference,
