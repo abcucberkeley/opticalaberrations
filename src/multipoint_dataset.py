@@ -56,6 +56,36 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, npoints=1
         )
 
 
+def beads(
+    gen: SyntheticPSF,
+    object_size: float = 0,
+    num_objs: int = 1,
+    radius: float = .4,
+):
+    np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
+    reference = np.zeros(gen.psf_shape)
+
+    for i in range(num_objs):
+        if object_size > 0:
+            reference += rg.sphere(
+                shape=gen.psf_shape,
+                radius=object_size,
+                position=np.random.uniform(low=.2, high=.8, size=3)
+            ).astype(np.float) * np.random.random()
+        else:
+            if radius > 0:
+                reference[
+                    np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+                ] += np.random.random()
+            else:
+                reference[gen.psf_shape[0] // 2, gen.psf_shape[1] // 2, gen.psf_shape[2] // 2] += np.random.random()
+
+    reference /= np.max(reference)
+    return reference
+
+
 def sim(
     filename: str,
     outdir: Path,

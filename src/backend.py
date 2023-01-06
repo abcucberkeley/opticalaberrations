@@ -6,7 +6,6 @@ numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
 import logging
 import sys
-import os
 import h5py
 from datetime import datetime
 from pathlib import Path
@@ -22,9 +21,6 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 import scipy as sp
-from tqdm import tqdm
-from tifffile import imsave
-import raster_geometry as rg
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -566,153 +562,6 @@ def evaluate(
 
     residuals = ys - preds
     return residuals, ys, preds
-
-
-@profile
-def beads(
-    gen: SyntheticPSF,
-    object_size: float = 0,
-    num_objs: int = 1,
-    radius: float = .45,
-):
-    np.random.seed(np.random.randint(1000) * os.getpid())
-    reference = np.zeros(gen.psf_shape)
-
-    for i in range(num_objs):
-        if object_size > 0:
-            reference += rg.sphere(
-                shape=gen.psf_shape,
-                radius=object_size,
-                position=np.random.uniform(low=.2, high=.8, size=3)
-            ).astype(np.float) * np.random.random()
-        else:
-            if radius > 0:
-                reference[
-                    np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
-                    np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
-                    np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
-                ] += np.random.random()
-            else:
-                reference[gen.psf_shape[0]//2, gen.psf_shape[1]//2, gen.psf_shape[2]//2] += np.random.random()
-
-    reference /= np.max(reference)
-    return reference
-
-
-@profile
-def predict(model: Path, psnr: int = 30):
-    m = load(model)
-    m.summary()
-
-    for dist in ['single', 'dual', 'multinomial', 'powerlaw', 'dirichlet']:
-        for amplitude_range in [(.1, .2), (.2, .3), (.3, .4)]:
-            gen = load_metadata(
-                model,
-                snr=psnr,
-                batch_size=1,
-                amplitude_ranges=amplitude_range,
-                distribution=dist,
-                signed=False,
-                rotate=True,
-                mode_weights='pyramid',
-                psf_shape=(64, 64, 64),
-                mean_background_noise=0,
-            )
-            for s in range(10):
-                for npoints in tqdm([1, 2, 5, 10]):
-                    reference = beads(
-                        gen=gen,
-                        object_size=0,
-                        num_objs=npoints
-                    )
-
-                    phi = Wavefront(
-                        amplitude_range,
-                        modes=gen.n_modes,
-                        distribution=dist,
-                        signed=False,
-                        rotate=True,
-                        mode_weights='pyramid',
-                        lam_detection=gen.lam_detection,
-                    )
-
-                    # aberrated PSF without noise
-                    psf, y, snr, maxcounts = gen.single_psf(
-                        phi=phi,
-                        normed=True,
-                        noise=False,
-                        meta=True,
-                    )
-
-                    img = utils.fftconvolution(sample=reference, kernel=psf)
-                    img *= psnr ** 2
-
-                    rand_noise = gen._random_noise(
-                        image=img,
-                        mean=0,
-                        sigma=gen.sigma_background_noise
-                    )
-                    noisy_img = rand_noise + img
-                    noisy_img /= np.max(noisy_img)
-
-                    save_path = Path(
-                        f"{model.with_suffix('')}/samples/{dist}/um-{amplitude_range[-1]}/npoints-{npoints}"
-                    )
-                    save_path.mkdir(exist_ok=True, parents=True)
-
-                    p = evaluate(
-                        model=m,
-                        inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
-                        reference=reference,
-                        gen=gen,
-                        ys=y,
-                        batch_size=1,
-                        plot=save_path / f'{s}',
-                    )
-
-                    p_wave = Wavefront(p, lam_detection=gen.lam_detection)
-                    y_wave = Wavefront(y.flatten(), lam_detection=gen.lam_detection)
-                    diff = y_wave - p_wave
-
-                    p_psf = gen.single_psf(p_wave, normed=True, noise=True)
-                    gt_psf = gen.single_psf(y_wave, normed=True, noise=True)
-
-                    corrected_psf = gen.single_psf(diff)
-                    corrected_noisy_img = utils.fftconvolution(sample=reference, kernel=corrected_psf)
-                    corrected_noisy_img *= psnr ** 2
-                    corrected_noisy_img = rand_noise + corrected_noisy_img
-                    corrected_noisy_img /= np.max(corrected_noisy_img)
-
-                    imsave(save_path / f'psf_{s}.tif', noisy_img)
-                    imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
-
-                    plt.style.use("default")
-                    vis.diagnostic_assessment(
-                        psf=noisy_img,
-                        gt_psf=gt_psf,
-                        predicted_psf=p_psf,
-                        corrected_psf=corrected_noisy_img,
-                        psnr=psnr,
-                        maxcounts=maxcounts,
-                        y=y_wave,
-                        pred=p_wave,
-                        save_path=save_path / f'{s}',
-                        display=False
-                    )
-
-                    plt.style.use('dark_background')
-                    vis.diagnostic_assessment(
-                        psf=noisy_img,
-                        gt_psf=gt_psf,
-                        predicted_psf=p_psf,
-                        corrected_psf=corrected_noisy_img,
-                        psnr=psnr,
-                        maxcounts=maxcounts,
-                        y=y_wave,
-                        pred=p_wave,
-                        save_path=save_path / f'{s}_db',
-                        display=False
-                    )
 
 
 def deconstruct(

@@ -33,7 +33,7 @@ do
   --taskname 'test' \
   --name $MODEL/evalmodes
 
-  python manager.py slurm predict.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
+  python manager.py slurm test.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
   --task "$MODEL random" \
   --taskname random \
   --name $MODEL/samples
@@ -57,7 +57,7 @@ do
       python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
       --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  iterheatmap" \
       --taskname $NA \
-      --name $MODEL/iterheatmap_${COV}
+      --name $MODEL/iterheatmaps_${COV}
     done
   done
 

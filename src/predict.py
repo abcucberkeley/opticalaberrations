@@ -83,13 +83,7 @@ def main(args=None):
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
-    if args.target == "random":
-        backend.predict(
-            model=args.model,
-            psnr=args.psnr
-        )
-
-    elif args.target == "metadata":
+    if args.target == "metadata":
         backend.save_metadata(
             filepath=args.model,
             n_modes=args.n_modes,

@@ -16,10 +16,14 @@ from tqdm import tqdm, trange
 import tensorflow as tf
 from preprocessing import resize_with_crop_or_pad
 from line_profiler_pycharm import profile
+from tqdm import tqdm
+from tifffile import imsave
 
 import utils
 import data_utils
 import backend
+import vis
+import multipoint_dataset
 
 from wavefront import Wavefront
 
@@ -33,35 +37,38 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 @profile
-def eval_mode(
-    phi,
-    modelpath,
-    npoints: int = 1,
-    n_samples: int = 10,
-    psnr: tuple = (21, 30),
-    na: float = 1.0,
-    batch_size: int = 100
-):
-    def sim_beads(ker):
-        snr = gen._randuniform(psnr)
-        ref = backend.beads(
+def simulate_beads(psf, gen, snr, object_size=0, num_objs=1, beads=None, noise=None):
+    if beads is None:
+        beads = multipoint_dataset.beads(
             gen=gen,
-            object_size=isize,
-            num_objs=npoints
+            object_size=object_size,
+            num_objs=num_objs
         )
 
-        img = utils.fftconvolution(sample=ref, kernel=ker)
-        img *= snr ** 2
+    img = utils.fftconvolution(sample=beads, kernel=psf)
+    img *= snr ** 2
 
-        rand_noise = gen._random_noise(
+    if noise is None:
+        noise = gen._random_noise(
             image=img,
             mean=gen.mean_background_noise,
             sigma=gen.sigma_background_noise
         )
-        noisy_img = rand_noise + img
-        noisy_img /= np.max(noisy_img)
-        return noisy_img
 
+    noisy_img = noise + img
+    noisy_img /= np.max(noisy_img)
+    return noisy_img
+
+
+@profile
+def eval_mode(
+    phi,
+    modelpath,
+    na: float = 1.0,
+    batch_size: int = 100,
+    snr_range: tuple = (21, 30),
+    n_samples: int = 10,
+):
     model = backend.load(modelpath)
     gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]])
 
@@ -78,7 +85,16 @@ def eval_mode(
 
     k = np.where(phi > 0)[0]
     for isize in tqdm([0, 1, 2, 3, 4, 5], desc=f"Evaluate different sizes [mode #{k}]"):
-        inputs = np.array([sim_beads(kernel) for i in range(n_samples)])
+        inputs = np.array([
+            simulate_beads(
+                psf=kernel,
+                gen=gen,
+                object_size=isize,
+                num_objs=1,
+                snr=gen._randuniform(snr_range),
+            )
+            for i in range(n_samples)
+        ])
         ys = np.array([phi for i in inputs])
 
         residuals, ys, preds = backend.evaluate(
@@ -114,7 +130,7 @@ def evaluate_modes(model: Path):
         classes = aberrations.copy()
         classes[:, i] = waves
 
-        job = partial(eval_mode, modelpath=model, npoints=1, n_samples=5)
+        job = partial(eval_mode, modelpath=model)
         preds = utils.multiprocess(job, list(classes), cores=-1)
         df = pd.DataFrame([]).append(preds, ignore_index=True)
 
@@ -471,7 +487,6 @@ def iter_eval_bin_with_reference(
     batch_size: int = 100,
     snr_range: tuple = (21, 30)
 ):
-
     model = backend.load(modelpath)
     gen = backend.load_metadata(
         modelpath,
@@ -496,36 +511,38 @@ def iter_eval_bin_with_reference(
     # ys = np.zeros_like(ys)
     # ys[:, 3] = .1
 
-    abr = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys]
+    p2v = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys]
     residuals = pd.DataFrame.from_dict({
         'id': np.arange(ys.shape[0], dtype=int),
         'niter': np.zeros(ys.shape[0], dtype=int),
-        'aberration': abr,
-        'residuals': abr,
+        'aberration': p2v,
+        'residuals': p2v,
     })
 
-    reference = backend.beads(gen=gen, object_size=0, num_objs=1)
+    reference = multipoint_dataset.beads(gen=gen, object_size=0, num_objs=1)
     snr = gen._randuniform(snr_range)
+    rand_noise = gen._random_noise(
+        image=reference,
+        mean=gen.mean_background_noise,
+        sigma=gen.sigma_background_noise
+    )
 
     for k in range(1, niter+1):
         for i in range(inputs.shape[0]):
-            kernel = gen.single_psf(
-                phi=ys[i],
+            psf = gen.single_psf(
+                phi=Wavefront(ys[i], lam_detection=gen.lam_detection),
                 normed=True,
                 noise=False,
                 meta=False,
             )
-            img = utils.fftconvolution(sample=reference, kernel=kernel)
-            img *= snr ** 2
 
-            rand_noise = gen._random_noise(
-                image=img,
-                mean=gen.mean_background_noise,
-                sigma=gen.sigma_background_noise
-            )
-            noisy_img = rand_noise + img
-            noisy_img /= np.max(noisy_img)
-            inputs[i] = noisy_img[..., np.newaxis]
+            inputs[i] = simulate_beads(
+                psf=psf,
+                gen=gen,
+                snr=snr,
+                beads=reference,
+                noise=rand_noise,
+            )[..., np.newaxis]
 
         if input_coverage != 1.:
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
@@ -566,15 +583,8 @@ def iterheatmap(
     batch_size: int = 100,
     snr_range: tuple = (21, 30),
 ):
-    gen = backend.load_metadata(
-        modelpath,
-        snr=1000,
-        signed=True,
-        rotate=True,
-        batch_size=batch_size,
-    )
-
-    savepath = modelpath.with_suffix('') / f'iterheatmap_{input_coverage}'
+    modelspecs = backend.load_metadata(modelpath)
+    savepath = modelpath.with_suffix('') / f'iterheatmaps_{input_coverage}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -613,70 +623,127 @@ def iterheatmap(
     logger.info(means)
     means.to_csv(f'{savepath}.csv')
 
-    fig, ax = plt.subplots(figsize=(8, 6))
-    levels = [
-        0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
-        .5, .6, .7, .8, .9,
-        1, 1.25, 1.5, 1.75, 2., 2.5,
-        3., 4., 5.,
-    ]
-
-    vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
-    highcmap = plt.get_cmap('magma_r', 256)
-    lowcmap = plt.get_cmap('GnBu_r', 256)
-    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-    cmap = mcolors.ListedColormap(cmap)
-
-    contours = ax.contourf(
-        means.columns.values,
-        means.index.values,
-        means.values,
-        cmap=cmap,
-        levels=levels,
-        extend='max',
-        linewidths=2,
-        linestyles='dashed',
-    )
-    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
-
-    cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
-    cbar = plt.colorbar(
-        contours,
-        cax=cax,
-        fraction=0.046,
-        pad=0.04,
-        extend='both',
-        spacing='proportional',
-        format=FormatStrFormatter("%.2f"),
-        ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
+    plot_heatmap(
+        means,
+        wavelength=modelspecs.lam_detection,
+        savepath=savepath,
+        label=f'Number of iterations',
+        lims=(0, niter)
     )
 
-    cbar.ax.set_ylabel(rf'Average peak-to-valley residuals ($\lambda = {int(gen.lam_detection*1000)}~nm$)')
-    cbar.ax.set_title(r'$\lambda$')
-    cbar.ax.yaxis.set_ticks_position('right')
-    cbar.ax.yaxis.set_label_position('left')
 
-    ax.set_xlabel(f'Number of iterations')
-    ax.set_xlim(0, niter)
-    ax.set_xticks(range(niter+1))
-    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+@profile
+def random_samples(model: Path, psnr: int = 30):
+    m = backend.load(model)
+    m.summary()
 
-    ax.set_ylabel(
-        'Average peak-to-valley aberration '
-        rf'($\lambda = {int(gen.lam_detection*1000)}~nm$)'
-    )
+    for dist in ['single', 'dual', 'multinomial', 'powerlaw', 'dirichlet']:
+        for amplitude_range in [(.1, .2), (.2, .3), (.3, .4)]:
+            gen = backend.load_metadata(
+                model,
+                snr=1000,
+                batch_size=1,
+                amplitude_ranges=amplitude_range,
+                distribution=dist,
+                signed=False,
+                rotate=True,
+                mode_weights='pyramid',
+                psf_shape=(64, 64, 64),
+                mean_background_noise=0,
+            )
+            for s in range(10):
+                for num_objs in tqdm([1, 2, 5, 10]):
+                    reference = multipoint_dataset.beads(
+                        gen=gen,
+                        object_size=0,
+                        num_objs=num_objs
+                    )
 
-    ax.set_yticks(np.arange(0, 6, .5), minor=True)
-    ax.set_yticks(np.arange(0, 6, 1))
-    ax.set_ylim(.25, 5)
+                    phi = Wavefront(
+                        amplitude_range,
+                        modes=gen.n_modes,
+                        distribution=dist,
+                        signed=False,
+                        rotate=True,
+                        mode_weights='pyramid',
+                        lam_detection=gen.lam_detection,
+                    )
 
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    plt.tight_layout()
+                    # aberrated PSF without noise
+                    psf, y, snr, maxcounts = gen.single_psf(
+                        phi=phi,
+                        normed=True,
+                        noise=False,
+                        meta=True,
+                    )
 
-    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    return fig
+                    img = utils.fftconvolution(sample=reference, kernel=psf)
+                    img *= psnr ** 2
 
+                    rand_noise = gen._random_noise(
+                        image=img,
+                        mean=0,
+                        sigma=gen.sigma_background_noise
+                    )
+                    noisy_img = rand_noise + img
+                    noisy_img /= np.max(noisy_img)
+
+                    save_path = Path(
+                        f"{model.with_suffix('')}/samples/{dist}/um-{amplitude_range[-1]}/num_objs-{num_objs}"
+                    )
+                    save_path.mkdir(exist_ok=True, parents=True)
+
+                    residuals, y, p = backend.evaluate(
+                        model=m,
+                        inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
+                        reference=reference,
+                        gen=gen,
+                        ys=y,
+                        batch_size=1,
+                        plot=save_path / f'{s}',
+                        eval_sign=False
+                    )
+
+                    p_wave = Wavefront(p, lam_detection=gen.lam_detection)
+                    y_wave = Wavefront(y, lam_detection=gen.lam_detection)
+                    residuals = Wavefront(residuals, lam_detection=gen.lam_detection)
+
+                    p_psf = gen.single_psf(p_wave, normed=True, noise=True)
+                    gt_psf = gen.single_psf(y_wave, normed=True, noise=True)
+
+                    corrected_psf = gen.single_psf(residuals)
+                    corrected_noisy_img = utils.fftconvolution(sample=reference, kernel=corrected_psf)
+                    corrected_noisy_img *= psnr ** 2
+                    corrected_noisy_img = rand_noise + corrected_noisy_img
+                    corrected_noisy_img /= np.max(corrected_noisy_img)
+
+                    imsave(save_path / f'psf_{s}.tif', noisy_img)
+                    imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
+
+                    plt.style.use("default")
+                    vis.diagnostic_assessment(
+                        psf=noisy_img,
+                        gt_psf=gt_psf,
+                        predicted_psf=p_psf,
+                        corrected_psf=corrected_noisy_img,
+                        psnr=psnr,
+                        maxcounts=maxcounts,
+                        y=y_wave,
+                        pred=p_wave,
+                        save_path=save_path / f'{s}',
+                        display=False
+                    )
+
+                    plt.style.use('dark_background')
+                    vis.diagnostic_assessment(
+                        psf=noisy_img,
+                        gt_psf=gt_psf,
+                        predicted_psf=p_psf,
+                        corrected_psf=corrected_noisy_img,
+                        psnr=psnr,
+                        maxcounts=maxcounts,
+                        y=y_wave,
+                        pred=p_wave,
+                        save_path=save_path / f'{s}_db',
+                        display=False
+                    )

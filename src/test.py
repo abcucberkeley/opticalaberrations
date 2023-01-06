@@ -102,24 +102,16 @@ def main(args=None):
     if args.target == 'modes':
         eval.evaluate_modes(args.model)
 
+    elif args.target == "random":
+        eval.random_samples(
+            model=args.model,
+        )
     elif args.target == 'snrheatmap':
         eval.snrheatmap(
             modelpath=args.model,
             datadir=args.datadir,
             distribution=args.dist,
             samplelimit=args.n_samples,
-            input_coverage=args.input_coverage,
-            no_phase=args.no_phase,
-            na=args.na,
-            batch_size=args.batch_size
-        )
-    elif args.target == 'distheatmap':
-        eval.distheatmap(
-            modelpath=args.model,
-            datadir=args.datadir,
-            distribution=args.dist,
-            samplelimit=args.n_samples,
-            num_neighbor=args.num_neighbor,
             input_coverage=args.input_coverage,
             no_phase=args.no_phase,
             na=args.na,
