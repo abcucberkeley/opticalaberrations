@@ -171,7 +171,7 @@ def create_synthetic_sample(
     distribution: str,
     mode_dist: str,
     gamma: float,
-    bimodal: bool,
+    signed: bool,
     rotate: bool,
     min_amplitude: float,
     max_amplitude: float,
@@ -201,7 +201,7 @@ def create_synthetic_sample(
         distribution=distribution,
         mode_weights=mode_dist,
         gamma=gamma,
-        bimodal=bimodal,
+        signed=signed,
         rotate=rotate,
         amplitude_ranges=(min_amplitude, max_amplitude),
         lam_detection=lam_detection,
@@ -342,7 +342,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        '--bimodal', action='store_true',
+        '--signed', action='store_true',
         help='optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes'
     )
 
@@ -416,7 +416,7 @@ def main(args=None):
         mode_dist=args.mode_dist,
         random_crop=args.random_crop,
         gamma=args.gamma,
-        bimodal=args.bimodal,
+        signed=args.signed,
         rotate=args.rotate,
         min_amplitude=args.min_amplitude,
         max_amplitude=args.max_amplitude,

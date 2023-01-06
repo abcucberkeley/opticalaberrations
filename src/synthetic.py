@@ -42,7 +42,7 @@ class SyntheticPSF:
         distribution='single',
         embedding_option='principle_planes',
         mode_weights='uniform',
-        bimodal=False,
+        signed=True,
         rotate=False,
         gamma=.75,
         n_modes=55,
@@ -66,7 +66,7 @@ class SyntheticPSF:
             psf_type: widefield or confocal
             distribution: desired distribution for the amplitudes
             gamma: optional exponent of the powerlaw distribution
-            bimodal: optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes,
+            signed: optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes,
                 otherwise just positive amplitudes only
             n_modes: number of zernike modes to describe the aberration
             order: eg noll or ansi, default is ansi
@@ -101,7 +101,7 @@ class SyntheticPSF:
         self.distribution = distribution
         self.mode_weights = mode_weights
         self.gamma = gamma
-        self.bimodal = bimodal
+        self.signed = signed
         self.rotate = rotate
         self.embedding_option = embedding_option
 
@@ -762,7 +762,7 @@ class SyntheticPSF:
                 mode_weights=self.mode_weights,
                 modes=self.n_modes,
                 gamma=self.gamma,
-                bimodal=self.bimodal,
+                signed=self.signed,
                 rotate=self.rotate,
                 lam_detection=self.lam_detection,
             )

@@ -129,7 +129,7 @@ def create_synthetic_sample(
     psf_type: str,
     distribution: str,
     gamma: float,
-    bimodal: bool,
+    signed: bool,
     min_amplitude: float,
     max_amplitude: float,
     x_voxel_size: float,
@@ -149,7 +149,7 @@ def create_synthetic_sample(
         psf_type=psf_type,
         distribution=distribution,
         gamma=gamma,
-        bimodal=bimodal,
+        signed=signed,
         amplitude_ranges=(min_amplitude, max_amplitude),
         lam_detection=lam_detection,
         psf_shape=3*[input_shape],
@@ -300,7 +300,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        '--bimodal', action='store_true',
+        '--signed', action='store_true',
         help='optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes'
     )
 
@@ -353,7 +353,7 @@ def main(args=None):
             psf_type=args.psf_type,
             distribution=args.dist,
             gamma=args.gamma,
-            bimodal=args.bimodal,
+            signed=args.signed,
             min_amplitude=args.min_amplitude,
             max_amplitude=args.max_amplitude,
             x_voxel_size=args.x_voxel_size,

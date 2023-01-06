@@ -40,7 +40,7 @@ class Wavefront:
         lam_detection=.510,
         distribution=None,
         gamma=.75,
-        bimodal=True,
+        signed=True,
         rotate=False,
         mode_weights='uniform'
     ):
@@ -50,7 +50,7 @@ class Wavefront:
         self.prefixed = [0, 1, 2, 4] if order == 'ansi' else [0, 1, 2, 3]
         self.length = modes
         self.gamma = gamma
-        self.bimodal = bimodal
+        self.signed = signed
         self.rotate = rotate
 
         if mode_weights == 'pyramid':
@@ -60,7 +60,7 @@ class Wavefront:
         else:
             self.mode_weights = self._uniform_weights(num_modes=self.length - len(self.prefixed))
 
-        self.distribution = np.random.choice(['single', 'dual', 'powerlaw', 'dirichlet'], size=1)[0] \
+        self.distribution = np.random.choice(['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet'], size=1)[0] \
             if distribution == 'mixed' else distribution
 
         if np.isscalar(self.ranges) or isinstance(self.ranges, tuple):
@@ -71,8 +71,11 @@ class Wavefront:
                 #  The first element has a random value picked from the range given by "lims", all others zeros
                 amps = self._single(lims)
 
-            elif self.distribution == 'dual':
-                amps = self._dual(lims)
+            elif self.distribution == 'bimodal':
+                amps = self._bimodal(lims)
+
+            elif self.distribution == 'multinomial':
+                amps = self._multinomial(lims)
 
             elif self.distribution == 'powerlaw':
                 amps = self._powerlaw(lims)
@@ -104,7 +107,7 @@ class Wavefront:
                         a = np.sqrt(self.zernikes[z] ** 2 + self.zernikes[twin] ** 2)
                         randomangle = np.random.uniform(
                             low=0,
-                            high=2 * np.pi if self.bimodal else np.pi/2
+                            high=2 * np.pi if self.signed else np.pi/2
                         )
                         self.zernikes[z] = a * np.cos(randomangle)
                         self.zernikes[twin] = a * np.sin(randomangle)
@@ -191,7 +194,7 @@ class Wavefront:
     def _single(self, range_lims):
         amplitudes = np.zeros(self.length)
 
-        if self.bimodal:
+        if self.signed:
             amp = np.random.choice([
                 np.random.uniform(*range_lims),
                 np.random.uniform(*-np.array(range_lims))
@@ -202,10 +205,10 @@ class Wavefront:
         amplitudes[0] = amp
         return amplitudes
 
-    def _dual(self, range_lims):
+    def _bimodal(self, range_lims):
         amplitudes = np.zeros(self.length)
 
-        if self.bimodal:
+        if self.signed:
             a = np.random.choice([
                 np.random.uniform(*range_lims),
                 np.random.uniform(*-np.array(range_lims))
@@ -218,20 +221,38 @@ class Wavefront:
         amplitudes[1] = a * (1 - frac)
         return amplitudes
 
+    def _multinomial(self, range_lims, maxpeaks=6):
+        amplitudes = np.zeros(self.length)
+
+        if self.signed:
+            a = np.random.choice([
+                np.random.uniform(*range_lims),
+                np.random.uniform(*-np.array(range_lims))
+            ])
+        else:
+            a = np.random.uniform(*range_lims)
+
+        dmodes = int(np.random.uniform(low=3, high=maxpeaks))
+
+        for i in range(dmodes):
+            amplitudes[i] = a/dmodes
+
+        return amplitudes
+
     def _powerlaw(self, range_lims):
         weights = np.random.pareto(self.gamma, size=self.length)
         weights /= np.sum(weights)
         weights = np.sort(weights)[::-1]
         amplitudes = np.random.uniform(*range_lims) * weights
 
-        if self.bimodal:
+        if self.signed:
             amplitudes *= np.random.choice([-1, 1], size=self.length)
 
         return amplitudes
 
     def _dirichlet(self, range_lims):
         """ sum of the coefficients will add up to the desired peak2peak aberration """
-        sign = 0 if self.bimodal else np.sum(np.sign(range_lims))
+        sign = 0 if self.signed else np.sum(np.sign(range_lims))
 
         # draw negative and positive random numbers that add up to 1
         if sign == 0:

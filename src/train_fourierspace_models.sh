@@ -38,8 +38,6 @@ done
 MODES=15
 BATCH=2048
 python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
---task "--network opticalnet $NO_PHASE --embedding rotary_slices --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
---taskname rotary_slices/opticalnet \
---task "--network opticalnet $NO_PHASE --embedding spatial_quadrants --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
---taskname spatial_quadrants/opticalnet \
---name new/$DATASET/z$MODES
+--task "--network opticalnet --embedding principle_planes --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--taskname opticalnet \
+--name new/$DATASET/z$MODES/phase

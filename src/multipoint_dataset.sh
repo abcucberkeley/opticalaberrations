@@ -72,7 +72,7 @@ else
 fi
 
 
-for DIST in single dual powerlaw dirichlet
+for DIST in single bimodal powerlaw dirichlet
 do
   for SNR in `seq 1 ${#xPSNR[@]}`
   do
@@ -95,7 +95,7 @@ do
             j="${j} --dist ${DIST}"
             j="${j} --mode_dist ${MODE_DIST}"
             j="${j} --iters ${ITERS}"
-            j="${j} --bimodal"
+            j="${j} --signed"
             j="${j} --rotate"
             j="${j} --noise"
             j="${j} --normalize"

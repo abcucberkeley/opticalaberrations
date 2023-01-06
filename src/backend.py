@@ -578,15 +578,15 @@ def predict(model: Path, psnr: int = 30):
     m = load(model)
     m.summary()
 
-    for dist in ['single', 'dual', 'powerlaw', 'dirichlet']:
-        for amplitude_range in [(.05, .1), (.1, .2), (.2, .3), (.3, .4)]:
+    for dist in ['single', 'dual', 'multinomial', 'powerlaw', 'dirichlet']:
+        for amplitude_range in [(.1, .2), (.2, .3), (.3, .4)]:
             gen = load_metadata(
                 model,
                 snr=psnr,
                 batch_size=1,
                 amplitude_ranges=amplitude_range,
                 distribution=dist,
-                bimodal=False,
+                signed=False,
                 rotate=True,
                 mode_weights='pyramid',
                 psf_shape=(64, 64, 64),
@@ -604,7 +604,7 @@ def predict(model: Path, psnr: int = 30):
                         amplitude_range,
                         modes=gen.n_modes,
                         distribution=dist,
-                        bimodal=False,
+                        signed=False,
                         rotate=True,
                         mode_weights='pyramid',
                         lam_detection=gen.lam_detection,

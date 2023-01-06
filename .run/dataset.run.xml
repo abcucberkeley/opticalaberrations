@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="dataset" type="PythonConfigurationType" factoryName="Python" folderName="tests">
+  <configuration default="false" name="dataset" type="PythonConfigurationType" factoryName="Python" folderName="utils">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/multipoint_dataset.py" />
-    <option name="PARAMETERS" value="--input_shape 64 --dist single --npoints 3 --modes 15 --bimodal --noise --norm --rotate --iter 500 --min_amplitude 0.1 --max_amplitude 0.1 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --lam_detection .510 --min_psnr 21 --max_psnr 30 --filename 1 --psf_type ../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat --cpu_workers -1 --emb --embedding_option principle_planes --embedding_option rotary_slices --embedding_option spatial_quadrants" />
+    <option name="PARAMETERS" value="--input_shape 64 --dist multinomial --npoints 1 --modes 15 --signed --noise --norm --rotate --iter 500 --min_amplitude 0.1 --max_amplitude 0.3 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --lam_detection .510 --min_psnr 21 --max_psnr 30 --filename 1 --psf_type ../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat --cpu_workers -1 --emb --embedding_option principle_planes --embedding_option rotary_slices --embedding_option spatial_quadrants" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

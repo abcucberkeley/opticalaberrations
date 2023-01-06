@@ -238,7 +238,7 @@ def eval_bin(
     gen = backend.load_metadata(
         modelpath,
         snr=1000,
-        bimodal=True,
+        signed=True,
         rotate=True,
         batch_size=batch_size,
         psf_shape=3*[model.input_shape[2]]
@@ -290,7 +290,7 @@ def evalheatmap(
     gen = backend.load_metadata(
         modelpath,
         snr=1000,
-        bimodal=True,
+        signed=True,
         rotate=True,
         batch_size=batch_size,
     )
@@ -419,7 +419,7 @@ def evaldistbin(
     gen = backend.load_metadata(
         modelpath,
         snr=1000,
-        bimodal=True,
+        signed=True,
         rotate=True,
         batch_size=batch_size,
         psf_shape=3*[model.input_shape[2]]
@@ -477,7 +477,7 @@ def distheatmap(
     gen = backend.load_metadata(
         modelpath,
         snr=1000,
-        bimodal=True,
+        signed=True,
         rotate=True,
         batch_size=batch_size,
     )
@@ -611,7 +611,7 @@ def evaldensitybin(
     gen = backend.load_metadata(
         modelpath,
         snr=1000,
-        bimodal=True,
+        signed=True,
         rotate=True,
         batch_size=batch_size,
         psf_shape=3*[model.input_shape[2]]
@@ -665,7 +665,7 @@ def densityheatmap(
     gen = backend.load_metadata(
         modelpath,
         snr=1000,
-        bimodal=True,
+        signed=True,
         rotate=True,
         batch_size=batch_size,
     )
@@ -799,7 +799,7 @@ def iter_eval_bin_with_reference(
     gen = backend.load_metadata(
         modelpath,
         snr=1000,
-        bimodal=True,
+        signed=True,
         rotate=True,
         batch_size=batch_size,
         psf_shape=3*[model.input_shape[2]]
@@ -894,7 +894,7 @@ def iterheatmap(
     gen = backend.load_metadata(
         modelpath,
         snr=1000,
-        bimodal=True,
+        signed=True,
         rotate=True,
         batch_size=batch_size,
     )

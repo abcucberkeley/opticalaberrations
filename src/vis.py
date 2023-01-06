@@ -106,13 +106,13 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     })
     from utils import peak2valley
 
-    for dist in ['single', 'dual', 'powerlaw', 'dirichlet', 'mixed']:
+    for dist in ['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet', 'mixed']:
         psfargs = dict(
             n_modes=55,
             psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
             distribution=dist,
             mode_weights='pyramid',
-            bimodal=True,
+            signed=True,
             rotate=True,
             gamma=.75,
             lam_detection=wavelength,
@@ -1628,8 +1628,7 @@ def diagnostic_assessment(
         ax.axis('off')
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2, hspace=.2)
-    # plt.savefig(f'{save_path}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     if display:
         plt.tight_layout()
