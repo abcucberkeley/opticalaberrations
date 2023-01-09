@@ -405,7 +405,8 @@ def snrheatmap(
         na=na,
         input_coverage=input_coverage,
         no_phase=no_phase,
-        batch_size=batch_size
+        batch_size=batch_size,
+        snr_range=(0, 100)
     )
 
     means = pd.pivot_table(df, values='residuals', index='bins', columns='snr', aggfunc=np.mean)

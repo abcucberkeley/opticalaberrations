@@ -34,17 +34,17 @@ do
         #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
         #python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-        --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  snrheatmap" \
+        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --n_samples $SAMPLES --na $NA  snrheatmap" \
         --taskname $NA \
         --name $MODEL/snrheatmaps_${COV}
 
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-        --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  densityheatmap" \
+        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --n_samples $SAMPLES --na $NA  densityheatmap" \
         --taskname $NA \
         --name $MODEL/densityheatmaps_${COV}
 
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-        --task "$MODEL --datadir $DATA/i$SHAPE --input_coverage $COV --n_samples $SAMPLES --na $NA  iterheatmap" \
+        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --n_samples $SAMPLES --na $NA  iterheatmap" \
         --taskname $NA \
         --name $MODEL/iterheatmaps_${COV}
       done

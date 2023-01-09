@@ -98,7 +98,7 @@ def check_criteria(
             and embedding in path \
             and f"z{modes}" in path \
             and amp <= max_amplitude \
-            and snr_range is None or (snr_range[0] <= snr[0] and snr[1] <= snr_range[1]) \
+            and snr_range is None or (snr_range is not None and snr_range[0] <= snr[0] and snr[1] <= snr_range[1]) \
             and check_sample(file) == 1:
         return path
 

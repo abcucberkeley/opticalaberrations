@@ -98,7 +98,7 @@ def load_metadata(
 
         try:
             embedding_option = str(file.get('embedding_option').asstr()[()])
-        except TypeError:
+        except Exception:
             embedding_option = 'principle_planes'
 
         psfgen = SyntheticPSF(
@@ -1183,7 +1183,8 @@ def train(
             embedding=embedding,
             samplelimit=samplelimit,
             max_amplitude=max_amplitude,
-            no_phase=no_phase
+            no_phase=no_phase,
+            snr_range=(min_psnr, max_psnr)
         )
 
         sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')

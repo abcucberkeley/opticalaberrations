@@ -2,7 +2,7 @@
 
 HANDLER=slurm
 ENV=~/anaconda3/envs/deep/bin/python
-NODES='all'
+NODES='abc'
 
 #PSF_TYPE='widefield'
 #xVOXEL=.15
