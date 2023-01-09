@@ -97,7 +97,7 @@ def load_metadata(
     with h5py.File(model_path, 'r') as file:
 
         try:
-            embedding_option = str(file.get('embedding_option')[()])
+            embedding_option = str(file.get('embedding_option').asstr()[()])
         except TypeError:
             embedding_option = 'principle_planes'
 
@@ -654,7 +654,12 @@ def save_metadata(
                 del h5file[name]
                 h5file.create_dataset(name, data=data)
 
-            assert np.allclose(h5file[name].value, data), f"Failed to write {name}"
+            if isinstance(data, str):
+                assert h5file.get(name).asstr()[()] == data, f"Failed to write {name}"
+            else:
+                assert np.allclose(h5file.get(name)[()], data), f"Failed to write {name}"
+
+            logger.info(f"`{name}`: {h5file.get(name)[()]}")
 
         except Exception as e:
             logger.error(e)

@@ -28,7 +28,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--embedding", default='principle_planes', type=str, help="embedding option to use for evaluation"
+        "--embedding_option", default='principle_planes', type=str, help="embedding option to use for evaluation"
     )
 
     parser.add_argument(
@@ -92,7 +92,7 @@ def main(args=None):
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
-            embedding_option=args.embedding
+            embedding_option=args.embedding_option
         )
 
     elif args.target == "featuremaps":

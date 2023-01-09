@@ -34,15 +34,15 @@ RCROP=32
 
 MODES=15
 TITLE='new_embeddings'
-DATASET='train'
+DATASET='test'
 
 MODE_DIST='pyramid'
-SAMPLES_PER_BIN=500
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   ITERS=100
+  SAMPLES_PER_BIN=500
   OBJS=(1 2 5 10 25)
   mPSNR=($(seq 11 10 51))
   xPSNR=($(seq 20 10 60))
@@ -61,12 +61,12 @@ if [ "$DATASET" = "train" ];then
 
 else
   TYPE=''
-  ITERS=10
-  TOTAL=20
+  ITERS=25
+  SAMPLES_PER_BIN=25
   OBJS=(1 2 3 4 5 10 15 20 25 30)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
-  SAMPLES=($(seq 1 $ITERS $TOTAL))
+  SAMPLES=($(seq 1 $ITERS $SAMPLES_PER_BIN))
   amps1=($(seq 0 .01 .49))
   amps2=($(seq .01 .01 .50))
 fi
@@ -115,7 +115,7 @@ do
             j="${j} --lam_detection ${LAMBDA}"
             j="${j} --cpu_workers ${CPUS}"
 
-            for e in principle_planes rotary_slices spatial_quadrants
+            for e in principle_planes
             do
               j="${j} --embedding_option ${e}"
             done
