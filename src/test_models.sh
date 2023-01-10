@@ -5,7 +5,6 @@ yVOXEL=.108
 zVOXEL=.200
 LAMBDA=.510
 SHAPE=64
-SAMPLES=100
 DATASET='new_embeddings'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/x108-y108-z200/"
@@ -34,17 +33,17 @@ do
         #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
         #python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --n_samples $SAMPLES --na $NA  snrheatmap" \
+        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA  snrheatmap" \
         --taskname $NA \
         --name $MODEL/snrheatmaps_${COV}
 
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --n_samples $SAMPLES --na $NA  densityheatmap" \
+        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA  densityheatmap" \
         --taskname $NA \
         --name $MODEL/densityheatmaps_${COV}
 
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --n_samples $SAMPLES --na $NA  iterheatmap" \
+        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA  iterheatmap" \
         --taskname $NA \
         --name $MODEL/iterheatmaps_${COV}
       done

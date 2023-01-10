@@ -97,7 +97,7 @@ def load_metadata(
     with h5py.File(model_path, 'r') as file:
 
         try:
-            embedding_option = str(file.get('embedding_option').asstr()[()])
+            embedding_option = str(file.get('embedding_option').asstr()[()]).strip("\'").strip('\"')
         except Exception:
             embedding_option = 'principle_planes'
 
