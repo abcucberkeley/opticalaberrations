@@ -349,7 +349,7 @@ def predict_sign(
             preds_error,
             percent_changes,
             percent_changes_error,
-            savepath=f'{plot}_sign_correction.svg'
+            savepath=f'{plot}_sign_correction'
         )
 
         plt.style.use("dark_background")
@@ -362,7 +362,7 @@ def predict_sign(
             preds_error,
             percent_changes,
             percent_changes_error,
-            savepath=f'{plot}_sign_correction_db.svg'
+            savepath=f'{plot}_sign_correction_db'
         )
 
     return preds, pchange
@@ -477,6 +477,7 @@ def evaluate(
     inputs: np.array,
     gen: SyntheticPSF,
     ys: np.array,
+    psnr: int,
     batch_size: int,
     reference: Any = None,
     plot: Any = None,
@@ -513,20 +514,41 @@ def evaluate(
 
     if eval_sign:
         res = ys - init_preds
-        make_psf = partial(
-            gen.single_psf,
-            normed=True,
-            noise=False,
-            meta=False
-        )
-        followup_inputs = np.stack(gen.batch(make_psf, res), axis=0)
+        followup_inputs = np.zeros_like(inputs)
 
         if reference is not None:
-            followup_inputs = np.array([utils.fftconvolution(kernel=k, sample=reference) for k in followup_inputs])
+            for i in range(inputs.shape[0]):
+                psf = gen.single_psf(
+                    res[i],
+                    normed=True,
+                    noise=False,
+                    meta=False
+                )
+
+                fi = utils.fftconvolution(kernel=psf, sample=reference)
+                fi *= psnr ** 2
+                rand_noise = gen._random_noise(image=fi, mean=0, sigma=gen.sigma_background_noise)
+                fi += rand_noise
+                fi /= np.max(fi)
+                followup_inputs[i] = fi[..., np.newaxis]
+
+        plt.style.use("default")
+        vis.plot_sign_eval(
+            inputs=inputs,
+            followup_inputs=followup_inputs,
+            savepath=f'{plot}_sign_eval'
+        )
+
+        plt.style.use("dark_background")
+        vis.plot_sign_eval(
+            inputs=inputs,
+            followup_inputs=followup_inputs,
+            savepath=f'{plot}_sign_eval_db'
+        )
 
         followup_preds, stdev = bootstrap_predict(
             model,
-            followup_inputs[..., np.newaxis],
+            followup_inputs,
             psfgen=gen,
             batch_size=batch_size,
             n_samples=1,
@@ -545,17 +567,6 @@ def evaluate(
             followup_preds=followup_preds,
             plot=plot
         )
-
-        # for i in range(ys.shape[1]):
-        #     print(
-        #         f"{i}:\t"
-        #         f"\t Y={ys[0, i]:.2f}"
-        #         f"\t I={init_preds[0, i]:.2f}"
-        #         f"\t F={followup_preds[0, i]:.2f}"
-        #         f"\t C={pchanges[0, i]:.0f}\t"
-        #         f"\t P={preds[0, i]:.2f}"
-        #         f"     :{i}"
-        #     )
 
     else:
         preds = init_preds

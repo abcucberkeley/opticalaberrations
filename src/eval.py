@@ -85,13 +85,14 @@ def eval_mode(
 
     k = np.where(phi > 0)[0]
     for isize in tqdm([0, 1, 2, 3, 4, 5], desc=f"Evaluate different sizes [mode #{k}]"):
+        psnr = gen._randuniform(snr_range)
         inputs = np.array([
             simulate_beads(
                 psf=kernel,
                 gen=gen,
                 object_size=isize,
                 num_objs=1,
-                snr=gen._randuniform(snr_range),
+                snr=psnr,
             )
             for i in range(n_samples)
         ])
@@ -102,6 +103,7 @@ def eval_mode(
             inputs=inputs,
             gen=gen,
             ys=ys,
+            psnr=psnr,
             batch_size=batch_size,
             eval_sign=False
         )
@@ -278,6 +280,7 @@ def eval_bin(
             inputs=inputs,
             gen=gen,
             ys=ys,
+            psnr=snr,
             batch_size=batch_size,
             eval_sign=False
         )
@@ -530,20 +533,28 @@ def iter_eval_bin_with_reference(
 
     for k in range(1, niter+1):
         for i in range(inputs.shape[0]):
+            phi = Wavefront(
+                ys[i],
+                modes=gen.n_modes,
+                signed=True,
+                rotate=True,
+                mode_weights='pyramid',
+                lam_detection=gen.lam_detection,
+            )
+
             psf = gen.single_psf(
-                phi=Wavefront(ys[i], lam_detection=gen.lam_detection),
+                phi=phi,
                 normed=True,
                 noise=False,
                 meta=False,
             )
 
-            inputs[i] = simulate_beads(
-                psf=psf,
-                gen=gen,
-                snr=snr,
-                beads=reference,
-                noise=rand_noise,
-            )[..., np.newaxis]
+            img = utils.fftconvolution(sample=reference, kernel=psf)
+            img *= snr ** 2
+
+            noisy_img = rand_noise + img
+            noisy_img /= np.max(noisy_img)
+            inputs[i] = noisy_img[..., np.newaxis]
 
         if input_coverage != 1.:
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
@@ -553,6 +564,7 @@ def iter_eval_bin_with_reference(
             inputs=inputs,
             gen=gen,
             ys=ys,
+            psnr=snr,
             batch_size=batch_size,
             reference=reference,
             eval_sign=False
@@ -638,8 +650,8 @@ def random_samples(model: Path, psnr: int = 30):
     m = backend.load(model)
     m.summary()
 
-    for dist in ['single', 'dual', 'multinomial', 'powerlaw', 'dirichlet']:
-        for amplitude_range in [(.1, .2), (.2, .3), (.3, .4)]:
+    for dist in ['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet']:
+        for amplitude_range in [(.05, .1), (.1, .2), (.2, .3)]:
             gen = backend.load_metadata(
                 model,
                 snr=1000,
@@ -687,7 +699,8 @@ def random_samples(model: Path, psnr: int = 30):
                         sigma=gen.sigma_background_noise
                     )
                     noisy_img = rand_noise + img
-                    noisy_img /= np.max(noisy_img)
+                    maxcounts = np.max(noisy_img)
+                    noisy_img /= maxcounts
 
                     save_path = Path(
                         f"{model.with_suffix('')}/samples/{dist}/um-{amplitude_range[-1]}/num_objs-{num_objs}"
@@ -700,6 +713,7 @@ def random_samples(model: Path, psnr: int = 30):
                         reference=reference,
                         gen=gen,
                         ys=y,
+                        psnr=psnr,
                         batch_size=1,
                         plot=save_path / f'{s}',
                         eval_sign=False

@@ -375,7 +375,6 @@ def plot_embeddings(
         x_voxel_size=.108,
         y_voxel_size=.108,
         z_voxel_size=.2,
-        log10=False,
         psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         savepath='../data/embeddings',
 ):
@@ -390,11 +389,7 @@ def plot_embeddings(
     })
     from utils import peak2valley
 
-    if log10:
-        vmin, vmax, vcenter, step = -2, 2, 0, .1
-    else:
-        vmin, vmax, vcenter, step = 0, 3, 1, .1
-
+    vmin, vmax, vcenter, step = 0, 3, 1, .1
     highcmap = plt.get_cmap('YlOrRd', 256)
     lowcmap = plt.get_cmap('YlGnBu_r', 256)
     low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -436,23 +431,25 @@ def plot_embeddings(
             phi = np.zeros(n_modes)
             phi[mode] = amp
 
-            window, amps, snr, maxcounts = gen.single_otf(
+            psf, amps, snr, maxcounts = gen.single_psf(
                 phi=phi,
                 normed=True,
                 noise=True,
                 meta=True,
-                na_mask=True,
-                ratio=True,
-                padsize=padsize,
-                log10=log10
             )
 
             abr = round(peak2valley(phi, wavelength=gen.lam_detection) * np.sign(amp), 1)
             grid[(mode, 0, amp)].set_title(f'{abr}$\\lambda$')
 
-            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/ratios/')
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/embeddings/')
             outdir.mkdir(exist_ok=True, parents=True)
-            imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", window)
+
+            emb = gen.embedding(
+                psf=psf,
+                no_phase=False,
+                plot=f"{outdir}/{str(abr).replace('.', 'p')}",
+            )
+            imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
 
             for ax in range(6):
                 if amp == waves[-1]:
@@ -465,10 +462,10 @@ def plot_embeddings(
                     grid[(mode, ax, 'wavefront')].axis('off')
                     grid[(mode, ax, 'wavefront')].set_aspect('equal')
 
-                if window.shape[0] == 6:
-                    vol = window[ax, :, :]
+                if emb.shape[0] == 6:
+                    vol = emb[ax, :, :]
                 else:
-                    vol = np.max(window, axis=ax)
+                    vol = np.max(emb, axis=ax)
 
                 m = grid[(mode, ax, amp)].imshow(
                     vol,
@@ -481,6 +478,135 @@ def plot_embeddings(
 
                 cax = inset_axes(
                     grid[(mode, ax, waves[-1])],
+                    width="10%",
+                    height="100%",
+                    loc='center right',
+                    borderpad=-3
+                )
+                cb = plt.colorbar(m, cax=cax)
+                cax.yaxis.set_label_position("right")
+
+    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
+    plt.savefig(f'{savepath}/i{res}_pad{padsize}_lattice.pdf', bbox_inches='tight', pad_inches=.25)
+
+
+def plot_rotations(
+        res=64,
+        padsize=None,
+        n_modes=15,
+        wavelength=.510,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.2,
+        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        savepath='../data/rotations',
+):
+    savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+    })
+
+    vmin, vmax, vcenter, step = 0, 3, 1, .1
+    highcmap = plt.get_cmap('YlOrRd', 256)
+    lowcmap = plt.get_cmap('YlGnBu_r', 256)
+    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+    cmap = mcolors.ListedColormap(cmap)
+
+    degrees = np.arange(0, 195, 15).astype(int)
+    logger.info(degrees)
+
+    fig = plt.figure(figsize=(25, 55))
+    nrows = (n_modes-5) * 6
+    gs = fig.add_gridspec(nrows, len(degrees)+1)
+    amp = .2
+
+    grid = {}
+    for mode, ax in zip(range(5, n_modes), np.round(np.arange(0, nrows, step=6))):
+        for k in range(6):
+            grid[(mode, k, 'wavefront')] = fig.add_subplot(gs[ax + k, 0])
+
+            for j, d in enumerate(degrees):
+                grid[(mode, k, d)] = fig.add_subplot(gs[ax+k, j+1])
+
+    gen = SyntheticPSF(
+        psf_type=psf_type,
+        amplitude_ranges=(-1, 1),
+        n_modes=n_modes,
+        lam_detection=wavelength,
+        psf_shape=3*[res],
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
+        snr=30,
+        cpu_workers=-1,
+    )
+
+    for mode in trange(5, n_modes):
+        for deg in degrees:
+            phi = np.zeros(n_modes)
+            phi[mode] = amp
+
+            z = Zernike(mode)
+            twin = Zernike((z.n, z.m * -1))
+            wave = Wavefront(phi, lam_detection=gen.lam_detection)
+
+            if z.m != 0 and wave.zernikes.get(twin) is not None:
+                phi[z.index_ansi] = amp * np.cos(deg)
+                phi[twin.index_ansi] = amp * np.sin(deg)
+
+            psf, amps, snr, maxcounts = gen.single_psf(
+                phi=phi,
+                normed=True,
+                noise=True,
+                meta=True,
+            )
+
+            grid[(mode, 0, deg)].set_title(f'{deg}$\\lambda$')
+
+            outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/embeddings/')
+            outdir.mkdir(exist_ok=True, parents=True)
+
+            emb = gen.embedding(
+                psf=psf,
+                no_phase=False,
+                plot=f"{outdir}/amp{str(amp).replace('.', 'p')}_deg{str(deg)}",
+            )
+            imsave(f"{outdir}/amp{str(amp).replace('.', 'p')}_deg{str(deg)}.tif", emb)
+
+            for ax in range(6):
+                if deg == degrees[-1]:
+                    mat = grid[(mode, ax, 'wavefront')].contourf(
+                        Wavefront(phi, lam_detection=wavelength).wave(100),
+                        levels=np.arange(-10, 10, step=1),
+                        cmap='Spectral_r',
+                        extend='both'
+                    )
+                    grid[(mode, ax, 'wavefront')].axis('off')
+                    grid[(mode, ax, 'wavefront')].set_aspect('equal')
+
+                if emb.shape[0] == 6:
+                    vol = emb[ax, :, :]
+                else:
+                    vol = np.max(emb, axis=ax)
+
+                m = grid[(mode, ax, deg)].imshow(
+                    vol,
+                    cmap=cmap if ax < 3 else 'Spectral_r',
+                    vmin=vmin if ax < 3 else -1,
+                    vmax=vmax if ax < 3 else 1,
+                )
+                grid[(mode, ax, deg)].set_aspect('equal')
+                grid[(mode, ax, deg)].axis('off')
+
+                cax = inset_axes(
+                    grid[(mode, ax, degrees[-1])],
                     width="10%",
                     height="100%",
                     loc='center right',
@@ -1629,6 +1755,7 @@ def diagnostic_assessment(
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2, hspace=.2)
     plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     if display:
         plt.tight_layout()
@@ -2493,4 +2620,50 @@ def plot_sign_correction(
     axes[2].set_ylabel(r'Zernike coefficients ($\mu$m RMS)')
 
     plt.tight_layout()
-    plt.savefig(savepath, dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+def plot_sign_eval(
+    inputs,
+    followup_inputs,
+    savepath,
+    gamma=.5,
+    cmap='hot'
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    fig, axes = plt.subplots(2, 3, figsize=(16, 8))
+
+    inputs = np.squeeze(inputs) ** gamma
+    inputs = np.nan_to_num(inputs)
+
+    followup_inputs = np.squeeze(followup_inputs) ** gamma
+    followup_inputs = np.nan_to_num(followup_inputs)
+
+    for i in range(3):
+        m = axes[0, i].imshow(np.max(inputs, axis=i), cmap=cmap, vmin=0, vmax=1)
+        m = axes[1, i].imshow(np.max(followup_inputs, axis=i), cmap=cmap, vmin=0, vmax=1)
+
+        if i == 2:
+            for k in range(2):
+                cax = inset_axes(axes[k, i], width="10%", height="100%", loc='center right', borderpad=-3)
+                cb = plt.colorbar(m, cax=cax)
+                cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+                cax.yaxis.set_label_position("right")
+                cb.ax.set_ylabel(rf"$\gamma$={gamma}")
+
+    axes[0, 0].set_ylabel('Input (MIP)')
+    axes[1, 0].set_ylabel('Followup (MIP)')
+
+    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)

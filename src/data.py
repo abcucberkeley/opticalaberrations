@@ -33,6 +33,7 @@ def parse_args(args):
     subparsers.add_parser("zernikes")
     subparsers.add_parser("psnr")
     subparsers.add_parser("embeddings")
+    subparsers.add_parser("rotations")
     subparsers.add_parser("shapes_embeddings")
     subparsers.add_parser("gaussian")
     subparsers.add_parser("simulation")
@@ -79,6 +80,9 @@ def main(args=None):
 
     elif args.cmd == "embeddings":
         vis.plot_embeddings()
+
+    elif args.cmd == "rotations":
+        vis.plot_rotations()
 
     elif args.cmd == "shapes_embeddings":
         vis.plot_shapes_embeddings()
