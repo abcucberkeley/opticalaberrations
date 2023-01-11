@@ -456,8 +456,8 @@ def plot_embeddings(
                 m = axes[ax, i+1].imshow(
                     emb[ax, :, :],
                     cmap=cmap if ax < 3 else 'Spectral_r',
-                    vmin=vmin if ax < 3 else -1,
-                    vmax=vmax if ax < 3 else 1,
+                    vmin=vmin if ax < 3 else -.5,
+                    vmax=vmax if ax < 3 else .5,
                 )
                 axes[ax, i+1].set_aspect('equal')
                 axes[ax, i+1].axis('off')
@@ -573,8 +573,8 @@ def plot_rotations(
                 m = axes[ax, i + 1].imshow(
                     emb[ax, :, :],
                     cmap=cmap if ax < 3 else 'Spectral_r',
-                    vmin=vmin if ax < 3 else -1,
-                    vmax=vmax if ax < 3 else 1,
+                    vmin=vmin if ax < 3 else -.5,
+                    vmax=vmax if ax < 3 else .5,
                 )
                 axes[ax, i + 1].set_aspect('equal')
                 axes[ax, i + 1].axis('off')

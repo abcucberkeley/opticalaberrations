@@ -379,8 +379,8 @@ class SyntheticPSF:
         emb = np.nan_to_num(emb, nan=0)
 
         if freq_strength_threshold != 0.:
-            emb[(emb > 0) * (emb < freq_strength_threshold)] = 0.
-            emb[(emb < 0) * (emb > -1 * freq_strength_threshold)] = 0.
+            emb[np.abs(emb) < freq_strength_threshold] = 0.
+
         return emb
 
     @profile
@@ -390,6 +390,15 @@ class SyntheticPSF:
                 emb[:, emb.shape[1] // 2, :],
                 emb[:, :, emb.shape[2] // 2],
             ], axis=0)
+
+    @profile
+    def spatial_planes(self, emb):
+        midplane = emb.shape[0] // 2
+        return np.stack([
+            emb[midplane, :, :],
+            np.mean(emb[midplane:midplane+5, :, :], axis=0),
+            np.mean(emb[midplane+5:midplane+10, :, :], axis=0),
+        ], axis=0)
 
     @profile
     def average_planes(self, emb):
@@ -567,14 +576,23 @@ class SyntheticPSF:
 
         if val == 'real':
             emb = np.real(otf)
+
         elif val == 'imag':
             emb = np.imag(otf)
+
         elif val == 'angle':
-            emb = np.angle(otf)
+            emb = otf / np.nanpercentile(np.abs(otf), 99.99)
+
+            if freq_strength_threshold != 0.:
+                emb[np.abs(emb) < freq_strength_threshold] = 0.
+                mask[np.abs(emb) < freq_strength_threshold] = 0.
+
+            emb = np.angle(emb)
             emb = np.ma.masked_array(emb, mask=~mask, fill_value=0)
             emb = unwrap_phase(emb)
             emb = emb.filled(0)
             emb /= 2 * np.pi
+
         else:
             emb = np.abs(otf)
 
@@ -593,14 +611,18 @@ class SyntheticPSF:
             emb = np.nan_to_num(emb, nan=0, posinf=0, neginf=0)
 
         if embedding_option.lower() == 'principle_planes' or embedding_option.lower() == 'pp':
-            emb = self.principle_planes(emb)
+            emb = self.spatial_planes(emb) if val == 'angle' else self.principle_planes(emb)
             return self.remove_phase_ramp(emb) if val == 'angle' else emb
+
         elif embedding_option.lower() == 'average_planes' or embedding_option.lower() == 'ap':
             return self.average_planes(emb)
+
         elif embedding_option.lower() == 'rotary_slices' or embedding_option.lower() == 'rs':
             return self.rotary_slices(emb)
+
         elif embedding_option.lower() == 'spatial_quadrants' or embedding_option.lower() == 'sq':
             return self.spatial_quadrants(emb)
+
         else:
             return emb
 
@@ -721,7 +743,7 @@ class SyntheticPSF:
                 norm=norm,
                 log10=log10,
                 embedding_option=self.embedding_option if embedding_option is None else embedding_option,
-                freq_strength_threshold=0.,
+                freq_strength_threshold=.03,
             )
 
             emb = np.concatenate([alpha, phi], axis=0)
