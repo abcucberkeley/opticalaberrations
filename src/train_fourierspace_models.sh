@@ -18,11 +18,11 @@ MAXAMP=.5
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/train/x108-y108-z200/"
 BATCH=2048
 
-MODES=15
-python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 4 --gpus 4 --cpus 16 \
---task "--network opticalnet --embedding principle_planes --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --multinode" \
---taskname opticalnet \
---name new/$DATASET/z$MODES/phase
+#MODES=15
+#python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 4 --gpus 4 --cpus 16 \
+#--task "--network opticalnet --embedding principle_planes --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --multinode" \
+#--taskname opticalnet \
+#--name new/$DATASET/z$MODES/phase
 
 
 #MODES=15
@@ -30,19 +30,19 @@ python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 
 #--task "--network opticalnet $NO_PHASE --embedding principle_planes --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --multinode" \
 #--taskname opticalnet \
 #--name new/$DATASET/z$MODES/principle_planes
-#
-#
-#for MODES in 28 45
-#do
-#  python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 2 --gpus 4 --cpus 16 \
-#  --task "--network opticalnet $NO_PHASE --embedding principle_planes --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --multinode" \
-#  --taskname opticalnet \
-#  --name new/$DATASET/z$MODES/principle_planes
-#done
 
 
-#MODES=45
-#python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
-#--task "--network opticalnet --embedding principle_planes --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
-#--taskname opticalnet \
-#--name new/$DATASET/z$MODES/phase
+for MODES in 15 28
+do
+  python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 2 --gpus 4 --cpus 16 \
+  --task "--network opticalnet $NO_PHASE --embedding principle_planes --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --multinode" \
+  --taskname opticalnet \
+  --name new/$DATASET/z$MODES/principle_planes
+done
+
+
+MODES=45
+python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
+--task "--network opticalnet $NO_PHASE --embedding principle_planes --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL" \
+--taskname opticalnet \
+--name new/$DATASET/z$MODES/principle_planes

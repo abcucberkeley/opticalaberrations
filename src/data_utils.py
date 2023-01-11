@@ -10,6 +10,9 @@ import numpy as np
 
 import tensorflow as tf
 import ujson
+
+from wavefront import Wavefront
+from zernike import Zernike
 from synthetic import SyntheticPSF
 from utils import multiprocess
 
@@ -54,8 +57,22 @@ def get_sample(path, no_phase=False, metadata=False):
         npoints = hashtbl['npoints']
 
         if no_phase and img.shape[0] == 6:
-            amps = np.abs(amps)
             img = img[:3]
+            wave = Wavefront(amps)
+
+            for i, a in enumerate(amps):
+                mode = Zernike(i)
+                twin = Zernike((mode.n, mode.m * -1))
+
+                if mode.index_ansi > twin.index_ansi:
+                    continue
+                else:
+                    if mode.m != 0 and wave.zernikes.get(twin) is not None:
+                        if np.sign(a) == -1:
+                            amps[mode.index_ansi] *= -1
+                            amps[twin.index_ansi] *= -1
+                    else:
+                        amps[i] = np.abs(a)
 
         if metadata:
             return img, amps, snr, peak2peak, npoints
