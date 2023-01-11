@@ -1,4 +1,5 @@
 import matplotlib
+
 matplotlib.use('Agg')
 
 import logging
@@ -20,6 +21,7 @@ from line_profiler_pycharm import profile
 from tifffile import TiffFile
 from skimage.feature import peak_local_max
 from skspatial.objects import Plane, Points
+from scipy import stats as st
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -36,29 +38,29 @@ logger = logging.getLogger(__name__)
 class SyntheticPSF:
 
     def __init__(
-        self,
-        amplitude_ranges=(-.1, .1),
-        psf_type='widefield',
-        distribution='single',
-        embedding_option='principle_planes',
-        mode_weights='uniform',
-        signed=True,
-        rotate=False,
-        gamma=.75,
-        n_modes=55,
-        order='ansi',
-        batch_size=100,
-        psf_shape=(64, 64, 64),
-        x_voxel_size=.108,
-        y_voxel_size=.108,
-        z_voxel_size=.2,
-        na_detection=1.0,
-        lam_detection=.510,
-        refractive_index=1.33,
-        snr=(10, 50),
-        mean_background_noise=0,
-        sigma_background_noise=(4, 8),
-        cpu_workers=-1
+            self,
+            amplitude_ranges=(-.1, .1),
+            psf_type='widefield',
+            distribution='single',
+            embedding_option='principle_planes',
+            mode_weights='uniform',
+            signed=True,
+            rotate=False,
+            gamma=.75,
+            n_modes=55,
+            order='ansi',
+            batch_size=100,
+            psf_shape=(64, 64, 64),
+            x_voxel_size=.108,
+            y_voxel_size=.108,
+            z_voxel_size=.2,
+            na_detection=1.0,
+            lam_detection=.510,
+            refractive_index=1.33,
+            snr=(10, 50),
+            mean_background_noise=100,
+            sigma_background_noise=(4, 8),
+            cpu_workers=-1
     ):
         """
         Args:
@@ -92,7 +94,7 @@ class SyntheticPSF:
         self.batch_size = batch_size
         self.mean_background_noise = mean_background_noise
         self.sigma_background_noise = sigma_background_noise
-        self.x_voxel_size = x_voxel_size    # desired voxel size
+        self.x_voxel_size = x_voxel_size  # desired voxel size
         self.y_voxel_size = y_voxel_size
         self.z_voxel_size = z_voxel_size
         self.voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
@@ -124,11 +126,11 @@ class SyntheticPSF:
 
     @profile
     def update_ideal_psf_with_empirical(
-        self,
-        ideal_empirical_psf: Union[Path, np.ndarray],
-        voxel_size: tuple = (.2, .108, .108),
-        remove_background: bool = True,
-        normalize: bool = True
+            self,
+            ideal_empirical_psf: Union[Path, np.ndarray],
+            voxel_size: tuple = (.2, .108, .108),
+            remove_background: bool = True,
+            normalize: bool = True
     ):
         """ 
 
@@ -217,14 +219,14 @@ class SyntheticPSF:
         # Add a random offset to the center
         if jitter:
             centroid += np.array([
-                np.random.randint(-jitter//s, jitter//s)  # max.jitter is in microns
+                np.random.randint(-jitter // s, jitter // s)  # max.jitter is in microns
                 for s in self.voxel_size
             ])
 
         # figure out the coordinates of the cropped image
-        cz = np.arange(centroid[0]-wz, centroid[0]+wz, dtype=int)
-        cy = np.arange(centroid[1]-wy, centroid[1]+wy, dtype=int)
-        cx = np.arange(centroid[2]-wx, centroid[2]+wx, dtype=int)
+        cz = np.arange(centroid[0] - wz, centroid[0] + wz, dtype=int)
+        cy = np.arange(centroid[1] - wy, centroid[1] + wy, dtype=int)
+        cx = np.arange(centroid[2] - wx, centroid[2] + wx, dtype=int)
         cz, cy, cx = np.meshgrid(cz, cy, cx, indexing='ij')
 
         interp = RegularGridInterpolator((z, y, x), psf)
@@ -259,11 +261,11 @@ class SyntheticPSF:
         return psf
 
     @profile
-    def fft(self, inputs, padsize=None,):
+    def fft(self, inputs, padsize=None, ):
         if padsize is not None:
             shape = inputs.shape[1]
             size = shape * (padsize / shape)
-            pad = int((size - shape)//2)
+            pad = int((size - shape) // 2)
             inputs = np.pad(inputs, ((pad, pad), (pad, pad), (pad, pad)), 'constant', constant_values=0)
 
         otf = np.fft.ifftshift(inputs)
@@ -286,11 +288,11 @@ class SyntheticPSF:
 
     @profile
     def plot_embeddings(
-        self,
-        inputs: np.array,
-        emb: np.array,
-        save_path: Any,
-        no_phase: bool = False,
+            self,
+            inputs: np.array,
+            emb: np.array,
+            save_path: Any,
+            no_phase: bool = False,
     ):
         plt.rcParams.update({
             'font.size': 10,
@@ -303,8 +305,8 @@ class SyntheticPSF:
         })
 
         step = .1
-        vmin = int(np.floor(np.percentile(emb[0], 1))) if np.any(emb[0] < 0) else 0
-        vmax = int(np.ceil(np.percentile(emb[0], 99))) if vmin < 0 else 3
+        vmin = int(np.floor(np.nanpercentile(emb[0], 1))) if np.any(emb[0] < 0) else 0
+        vmax = int(np.ceil(np.nanpercentile(emb[0], 99))) if vmin < 0 else 3
         vcenter = 1 if vmin == 0 else 0
 
         cmap = np.vstack((
@@ -323,9 +325,9 @@ class SyntheticPSF:
         else:
             fig, axes = plt.subplots(3, 3, figsize=(8, 8))
 
-        m = axes[0, 0].imshow(np.max(inputs, axis=0)**.5, cmap='hot', vmin=0, vmax=1)
-        axes[0, 1].imshow(np.max(inputs, axis=1)**.5, cmap='hot', vmin=0, vmax=1)
-        axes[0, 2].imshow(np.max(inputs, axis=2)**.5, cmap='hot', vmin=0, vmax=1)
+        m = axes[0, 0].imshow(np.max(inputs, axis=0) ** .5, cmap='hot', vmin=0, vmax=1)
+        axes[0, 1].imshow(np.max(inputs, axis=1) ** .5, cmap='hot', vmin=0, vmax=1)
+        axes[0, 2].imshow(np.max(inputs, axis=2) ** .5, cmap='hot', vmin=0, vmax=1)
         cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
@@ -340,8 +342,8 @@ class SyntheticPSF:
         cax.set_ylabel(r'Embedding ($\alpha$)')
 
         if not no_phase:
-            p_vmin = int(np.floor(np.percentile(emb[3], 1)))
-            p_vmax = int(np.ceil(np.percentile(emb[3], 99)))
+            p_vmin = -1 #int(np.floor(np.percentile(emb[3], 10)))
+            p_vmax = 1 #int(np.ceil(np.percentile(emb[3], 90)))
             p_vcenter = 0
 
             p_cmap = np.vstack((
@@ -386,27 +388,27 @@ class SyntheticPSF:
     @profile
     def principle_planes(self, emb):
         return np.stack([
-                emb[emb.shape[0] // 2, :, :],
-                emb[:, emb.shape[1] // 2, :],
-                emb[:, :, emb.shape[2] // 2],
-            ], axis=0)
+            emb[emb.shape[0] // 2, :, :],
+            emb[:, emb.shape[1] // 2, :],
+            emb[:, :, emb.shape[2] // 2],
+        ], axis=0)
 
     @profile
     def spatial_planes(self, emb):
         midplane = emb.shape[0] // 2
         return np.stack([
             emb[midplane, :, :],
-            np.mean(emb[midplane:midplane+5, :, :], axis=0),
-            np.mean(emb[midplane+5:midplane+10, :, :], axis=0),
+            np.mean(emb[midplane:midplane + 5, :, :], axis=0),
+            np.mean(emb[midplane + 5:midplane + 10, :, :], axis=0),
         ], axis=0)
 
     @profile
     def average_planes(self, emb):
         return np.stack([
-                np.mean(emb, axis=0),
-                np.mean(emb, axis=1),
-                np.mean(emb, axis=2),
-            ], axis=0)
+            np.mean(emb, axis=0),
+            np.mean(emb, axis=1),
+            np.mean(emb, axis=2),
+        ], axis=0)
 
     @profile
     def rotary_slices(self, emb):
@@ -491,14 +493,62 @@ class SyntheticPSF:
         return np.stack([xy, xz, yz], axis=0)
 
     @profile
-    def remove_phase_ramp(self, masked_phase, plot=False):
-        fig, axes = plt.subplots(3, 3)
+    def shift_otf(self, psf, otf, plot_shift):
+        """ Center around most isolated bead """
+        beads = peak_local_max(
+            psf,
+            min_distance=10,
+            threshold_rel=.33,
+            exclude_border=False,
+            p_norm=2,
+            num_peaks=1
+        ).astype(np.float64)
+
+        center = [(i - 1) / 2 for i in psf.shape]
+        shift = np.mean(beads, axis=0) - center
+
+        z = np.arange(0, psf.shape[0])
+        y = np.arange(0, psf.shape[1])
+        x = np.arange(0, psf.shape[2])
+        Z, Y, X = np.meshgrid(z, y, x, indexing='ij')
+
+        slope = [(shift[i] * 2 * np.pi) / psf.shape[i] for i in range(3)]
+        otf *= np.e ** (1j * (Z * slope[0] + Y * slope[1] + X * slope[2]))
+
+        if plot_shift is not None:
+            shifted = np.fft.fftshift(otf)
+            shifted = np.fft.ifftn(shifted)
+            shifted = np.abs(np.fft.ifftshift(shifted))
+
+            fig, axes = plt.subplots(1, 3, figsize=(8, 4), sharey=False, sharex=False)
+            for ax in range(3):
+                axes[ax].imshow(np.nanmax(shifted, axis=ax), aspect='equal', cmap='Greys_r')
+
+                for p in range(beads.shape[0]):
+                    if ax == 0:
+                        axes[ax].plot(beads[p, 2], beads[p, 1], marker='.', ls='', color=f'C{p}')
+                    elif ax == 1:
+                        axes[ax].plot(beads[p, 2], beads[p, 0], marker='.', ls='', color=f'C{p}')
+                    elif ax == 2:
+                        axes[ax].plot(beads[p, 1], beads[p, 0], marker='.', ls='', color=f'C{p}')
+
+                axes[ax].axis('off')
+
+            plt.tight_layout()
+            plt.savefig(f'{plot_shift}_shift.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+
+        return otf
+
+    @profile
+    def remove_phase_ramp(self, masked_phase, plot=True):
+        fig, axes = plt.subplots(3, 3, figsize=(8, 8))
 
         for i in range(masked_phase.shape[0]):
             phase_slice = masked_phase[i].copy()
             x = y = np.arange(0, phase_slice.shape[0])
             X, Y = np.meshgrid(x, y)
 
+            # ignores zero points
             points = [(x, y, v) for x, y, v in zip(X.ravel(), Y.ravel(), phase_slice.ravel()) if v != 0]
             points = Points(points)
             plane = Plane.best_fit(points)
@@ -506,29 +556,38 @@ class SyntheticPSF:
             Z[phase_slice == 0] = 0.
             masked_phase[i] -= Z
 
-            if plot:
-                axes[i, 0].set_title(f"phase_slice")
-                axes[i, 0].imshow(phase_slice, vmin=-1, vmax=10, cmap='coolwarm')
-                axes[i, 1].set_title(f"Z")
-                axes[i, 1].imshow(Z, vmin=-1, vmax=10, cmap='coolwarm')
-                axes[i, 2].set_title(f"emb[{i}] - Z")
-                axes[i, 2].imshow(masked_phase[i], vmin=-1, vmax=10, cmap='coolwarm')
-                axes[i, 2].axis('off')
-                plt.savefig("test.png")
+            # wrapped_phase = np.ma.masked_array(masked_phase[i], mask=masked_phase[i] == 0, fill_value=0)
+            # wrapped_phase = unwrap_phase(wrapped_phase)
+            # wrapped_phase /= 2 * np.pi
+            # masked_phase[i] = wrapped_phase.filled(0)
 
-        return masked_phase
+            if plot is not None:
+                axes[i, 0].set_title(f"phase_slice")
+                axes[i, 0].imshow(phase_slice, vmin=-.5, vmax=.5)
+                axes[i, 0].axis('off')
+
+                axes[i, 1].set_title(f"Z")
+                axes[i, 1].imshow(Z, vmin=-.5, vmax=.5)
+                axes[i, 1].axis('off')
+
+                axes[i, 2].set_title(f"emb[{i}] - Z")
+                axes[i, 2].imshow(masked_phase[i], vmin=-.5, vmax=.5)
+                axes[i, 2].axis('off')
+                plt.savefig(f"{plot}_phase_ramp.svg")
+
+        return np.nan_to_num(masked_phase, nan=0)
 
     @profile
     def compute_emb(
-        self,
-        otf: np.ndarray,
-        val: str,
-        ratio: bool,
-        norm: bool,
-        na_mask: bool,
-        log10: bool,
-        embedding_option: Any,
-        freq_strength_threshold: float = 0.,
+            self,
+            otf: np.ndarray,
+            val: str,
+            ratio: bool,
+            norm: bool,
+            na_mask: bool,
+            log10: bool,
+            embedding_option: Any,
+            freq_strength_threshold: float = 0.,
     ):
         """
         Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -591,19 +650,19 @@ class SyntheticPSF:
             emb = np.ma.masked_array(emb, mask=~mask, fill_value=0)
             emb = unwrap_phase(emb)
             emb = emb.filled(0)
-            emb /= 2 * np.pi
+            emb = np.nan_to_num(emb, nan=0)
 
         else:
             emb = np.abs(otf)
 
-        if norm and val != 'angle':
+        if norm:
             emb = self._normalize(emb, otf, freq_strength_threshold=freq_strength_threshold)
 
-        if ratio and val != 'angle':
+        if ratio:
             emb /= self.iotf
             emb = np.nan_to_num(emb, nan=0)
 
-        if na_mask and val != 'angle':
+        if na_mask:
             emb *= mask
 
         if log10:
@@ -611,8 +670,10 @@ class SyntheticPSF:
             emb = np.nan_to_num(emb, nan=0, posinf=0, neginf=0)
 
         if embedding_option.lower() == 'principle_planes' or embedding_option.lower() == 'pp':
-            emb = self.spatial_planes(emb) if val == 'angle' else self.principle_planes(emb)
-            return self.remove_phase_ramp(emb) if val == 'angle' else emb
+            return self.principle_planes(emb)
+
+        elif embedding_option.lower() == 'spatial_planes' or embedding_option.lower() == 'sp':
+            return self.spatial_planes(emb)
 
         elif embedding_option.lower() == 'average_planes' or embedding_option.lower() == 'ap':
             return self.average_planes(emb)
@@ -628,21 +689,20 @@ class SyntheticPSF:
 
     @profile
     def embedding(
-        self,
-        psf: np.array,
-        na_mask: bool = True,
-        ratio: bool = True,
-        norm: bool = True,
-        padsize: Any = None,
-        no_phase: bool = False,
-        alpha_val: str = 'abs',
-        phi_val: str = 'angle',
-        plot: Any = None,
-        log10: bool = False,
-        freq_strength_threshold: float = 0.01,
-        phase_shift: bool = True,
-        plot_phase_shift: bool = False,
-        embedding_option: Any = None,
+            self,
+            psf: np.array,
+            na_mask: bool = True,
+            ratio: bool = True,
+            norm: bool = True,
+            padsize: Any = None,
+            no_phase: bool = False,
+            alpha_val: str = 'abs',
+            phi_val: str = 'angle',
+            plot: Any = None,
+            log10: bool = False,
+            freq_strength_threshold: float = 0.01,
+            phase_shift: bool = True,
+            embedding_option: Any = None,
     ):
         """
         Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -667,6 +727,10 @@ class SyntheticPSF:
         if psf.ndim == 4:
             psf = np.squeeze(psf)
 
+        mode = st.mode(psf[psf < np.quantile(psf, .99)], axis=None).mode[0]
+        psf -= mode + .025
+        psf[psf < 0] = 0
+
         otf = self.fft(psf, padsize=padsize)
 
         if no_phase:
@@ -682,47 +746,7 @@ class SyntheticPSF:
             )
         else:
             if phase_shift:
-                beads = peak_local_max(
-                    psf,
-                    min_distance=5,
-                    threshold_rel=.33,
-                    exclude_border=False,
-                    p_norm=2,
-                    num_peaks=100
-                ).astype(np.float64)
-
-                center = [(i - 1) / 2 for i in psf.shape]
-                shift = np.mean(beads, axis=0) - center
-
-                z = np.arange(0, psf.shape[0])
-                y = np.arange(0, psf.shape[1])
-                x = np.arange(0, psf.shape[2])
-                Z, Y, X = np.meshgrid(z, y, x, indexing='ij')
-
-                slope = [(shift[i] * 2 * np.pi) / psf.shape[i] for i in range(3)]
-                otf *= np.e ** (1j * (Z * slope[0] + Y * slope[1] + X * slope[2]))
-
-                if plot_phase_shift:
-                    shifted = np.fft.fftshift(otf)
-                    shifted = np.fft.ifftn(shifted)
-                    shifted = np.abs(np.fft.ifftshift(shifted))
-
-                    fig, axes = plt.subplots(1, 3, figsize=(8, 4), sharey=False, sharex=False)
-                    for ax in range(3):
-                        axes[ax].imshow(np.nanmax(shifted, axis=ax), aspect='equal', cmap='Greys_r')
-
-                        for p in range(beads.shape[0]):
-                            if ax == 0:
-                                axes[ax].plot(beads[p, 2], beads[p, 1], marker='.', ls='', color=f'C{p}')
-                            elif ax == 1:
-                                axes[ax].plot(beads[p, 2], beads[p, 0], marker='.', ls='', color=f'C{p}')
-                            elif ax == 2:
-                                axes[ax].plot(beads[p, 1], beads[p, 0], marker='.', ls='', color=f'C{p}')
-
-                        axes[ax].axis('off')
-
-                    plt.tight_layout()
-                    plt.savefig(f'{plot}_phase_shift.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+                otf = self.shift_otf(psf, otf, plot_shift=plot)
 
             alpha = self.compute_emb(
                 otf,
@@ -738,13 +762,14 @@ class SyntheticPSF:
             phi = self.compute_emb(
                 otf,
                 val=phi_val,
-                ratio=ratio,
+                ratio=False,
                 na_mask=na_mask,
-                norm=norm,
-                log10=log10,
-                embedding_option=self.embedding_option if embedding_option is None else embedding_option,
-                freq_strength_threshold=.03,
+                norm=False,
+                log10=False,
+                embedding_option='spatial_planes',
+                freq_strength_threshold=freq_strength_threshold,
             )
+            phi = self.remove_phase_ramp(phi, plot=plot)
 
             emb = np.concatenate([alpha, phi], axis=0)
 
@@ -759,13 +784,13 @@ class SyntheticPSF:
 
     @profile
     def single_psf(
-        self,
-        phi: Any = None,
-        normed: bool = True,
-        noise: bool = False,
-        meta: bool = False,
-        no_phase: bool = False,
-        snr_post_aberration: bool = True
+            self,
+            phi: Any = None,
+            normed: bool = True,
+            noise: bool = False,
+            meta: bool = False,
+            no_phase: bool = False,
+            snr_post_aberration: bool = True
     ):
         """
         Args:
@@ -793,15 +818,15 @@ class SyntheticPSF:
         snr = self._randuniform(self.snr)
 
         if snr_post_aberration:
-            psf *= snr**2
+            psf *= snr ** 2
         else:
-            total_counts_ideal = np.sum(self.ipsf)      # peak value of ideal psf is 1, self.ipsf = 1
-            total_counts = total_counts_ideal * snr**2  # total photons of ideal psf with desired SNR
-            total_counts_abr = np.sum(psf)              # total photons in abberated psf
+            total_counts_ideal = np.sum(self.ipsf)  # peak value of ideal psf is 1, self.ipsf = 1
+            total_counts = total_counts_ideal * snr ** 2  # total photons of ideal psf with desired SNR
+            total_counts_abr = np.sum(psf)  # total photons in abberated psf
 
             # scale abberated psf to have the same number of photons as ideal psf
             # (e.g. abberation doesn't destroy/create light)
-            psf *= total_counts/total_counts_abr
+            psf *= total_counts / total_counts_abr
 
         if noise:
             rand_noise = self._random_noise(
@@ -811,7 +836,7 @@ class SyntheticPSF:
             )
             psf += rand_noise
 
-        psnr = np.sqrt(np.max(psf))                     # peak snr will drop as abberation smooshes psf
+        psnr = np.sqrt(np.max(psf))  # peak snr will drop as abberation smooshes psf
         maxcount = np.max(psf)
 
         if normed:
