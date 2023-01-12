@@ -33,8 +33,8 @@ SHAPE=64
 RCROP=32
 
 MODES=15
-TITLE='new_embeddings'
-DATASET='test'
+TITLE='noiseless_embeddings'
+DATASET='train'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"

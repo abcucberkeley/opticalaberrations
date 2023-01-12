@@ -493,18 +493,18 @@ class SyntheticPSF:
         return np.stack([xy, xz, yz], axis=0)
 
     @profile
-    def shift_otf(self, psf, otf, plot_shift):
+    def shift_otf(self, psf, otf, plot_shift, window_size=8):
         """ Center around most isolated bead """
         beads = peak_local_max(
             psf,
-            min_distance=10,
+            min_distance=window_size*2,
             threshold_rel=.33,
             exclude_border=False,
             p_norm=2,
             num_peaks=1
         ).astype(np.float64)
 
-        center = [(i - 1) / 2 for i in psf.shape]
+        center = [(i - 1) // 2 for i in psf.shape]
         shift = np.mean(beads, axis=0) - center
 
         z = np.arange(0, psf.shape[0])
@@ -515,11 +515,18 @@ class SyntheticPSF:
         slope = [(shift[i] * 2 * np.pi) / psf.shape[i] for i in range(3)]
         otf *= np.e ** (1j * (Z * slope[0] + Y * slope[1] + X * slope[2]))
 
-        if plot_shift is not None:
-            shifted = np.fft.fftshift(otf)
-            shifted = np.fft.ifftn(shifted)
-            shifted = np.abs(np.fft.ifftshift(shifted))
+        shifted = np.fft.fftshift(otf)
+        shifted = np.fft.ifftn(shifted)
+        shifted = np.abs(np.fft.ifftshift(shifted))
 
+        psf = shifted[
+          center[0]-window_size:center[0]+window_size,
+          center[1]-window_size:center[1]+window_size,
+          center[2]-window_size:center[2]+window_size,
+        ]
+        otf = self.fft(psf)
+
+        if plot_shift is not None:
             fig, axes = plt.subplots(1, 3, figsize=(8, 4), sharey=False, sharex=False)
             for ax in range(3):
                 axes[ax].imshow(np.nanmax(shifted, axis=ax), aspect='equal', cmap='Greys_r')
@@ -556,22 +563,17 @@ class SyntheticPSF:
             Z[phase_slice == 0] = 0.
             masked_phase[i] -= Z
 
-            # wrapped_phase = np.ma.masked_array(masked_phase[i], mask=masked_phase[i] == 0, fill_value=0)
-            # wrapped_phase = unwrap_phase(wrapped_phase)
-            # wrapped_phase /= 2 * np.pi
-            # masked_phase[i] = wrapped_phase.filled(0)
-
             if plot is not None:
                 axes[i, 0].set_title(f"phase_slice")
-                axes[i, 0].imshow(phase_slice, vmin=-.5, vmax=.5)
+                axes[i, 0].imshow(phase_slice, vmin=-.5, vmax=.5, cmap='Spectral_r')
                 axes[i, 0].axis('off')
 
                 axes[i, 1].set_title(f"Z")
-                axes[i, 1].imshow(Z, vmin=-.5, vmax=.5)
+                axes[i, 1].imshow(Z, vmin=-.5, vmax=.5, cmap='Spectral_r')
                 axes[i, 1].axis('off')
 
                 axes[i, 2].set_title(f"emb[{i}] - Z")
-                axes[i, 2].imshow(masked_phase[i], vmin=-.5, vmax=.5)
+                axes[i, 2].imshow(masked_phase[i], vmin=-.5, vmax=.5, cmap='Spectral_r')
                 axes[i, 2].axis('off')
                 plt.savefig(f"{plot}_phase_ramp.svg")
 
@@ -702,6 +704,7 @@ class SyntheticPSF:
             log10: bool = False,
             freq_strength_threshold: float = 0.01,
             phase_shift: bool = True,
+            phase_ramp: bool = True,
             embedding_option: Any = None,
     ):
         """
@@ -745,8 +748,6 @@ class SyntheticPSF:
                 freq_strength_threshold=freq_strength_threshold,
             )
         else:
-            if phase_shift:
-                otf = self.shift_otf(psf, otf, plot_shift=plot)
 
             alpha = self.compute_emb(
                 otf,
@@ -759,6 +760,9 @@ class SyntheticPSF:
                 freq_strength_threshold=freq_strength_threshold,
             )
 
+            if phase_shift:
+                otf = self.shift_otf(psf, otf, plot_shift=plot)
+
             phi = self.compute_emb(
                 otf,
                 val=phi_val,
@@ -769,7 +773,9 @@ class SyntheticPSF:
                 embedding_option='spatial_planes',
                 freq_strength_threshold=freq_strength_threshold,
             )
-            phi = self.remove_phase_ramp(phi, plot=plot)
+
+            if phase_ramp:
+                phi = self.remove_phase_ramp(phi, plot=plot)
 
             emb = np.concatenate([alpha, phi], axis=0)
 

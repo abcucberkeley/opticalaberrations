@@ -487,7 +487,6 @@ def plot_rotations(
         psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         savepath='../data/rotations',
 ):
-    from utils import peak2valley
 
     savepath = f"{savepath}/{int(wavelength * 1000)}/x{int(x_voxel_size * 1000)}-y{int(y_voxel_size * 1000)}-z{int(z_voxel_size * 1000)}"
     plt.rcParams.update({
