@@ -300,6 +300,7 @@ class SyntheticPSF:
             emb: np.array,
             save_path: Any,
             no_phase: bool = False,
+            gamma: float = .5
     ):
         plt.rcParams.update({
             'font.size': 10,
@@ -332,13 +333,13 @@ class SyntheticPSF:
         else:
             fig, axes = plt.subplots(3, 3, figsize=(8, 8))
 
-        m = axes[0, 0].imshow(np.max(inputs, axis=0) ** .5, cmap='hot', vmin=0, vmax=1)
-        axes[0, 1].imshow(np.max(inputs, axis=1) ** .5, cmap='hot', vmin=0, vmax=1)
-        axes[0, 2].imshow(np.max(inputs, axis=2) ** .5, cmap='hot', vmin=0, vmax=1)
+        m = axes[0, 0].imshow(np.max(inputs, axis=0) ** gamma, cmap='hot', vmin=0, vmax=1)
+        axes[0, 1].imshow(np.max(inputs, axis=1) ** gamma, cmap='hot', vmin=0, vmax=1)
+        axes[0, 2].imshow(np.max(inputs, axis=2) ** gamma, cmap='hot', vmin=0, vmax=1)
         cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
-        cax.set_ylabel('Input (MIP)')
+        cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
 
         m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
         axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
@@ -508,7 +509,7 @@ class SyntheticPSF:
         ]
 
     @profile
-    def shift_otf(self, psf, otf, plot_shift, window_size=8):
+    def shift_otf(self, psf, otf, plot, window_size=8):
         """ Center around most isolated bead """
         beads = peak_local_max(
             psf,
@@ -536,7 +537,7 @@ class SyntheticPSF:
         # compute a new OTF of the most isolated bead
         shifted_otf = self.fft(self.center_crop(shifted_image, window_size=window_size))
 
-        if plot_shift is not None:
+        if plot is not None:
             fig, axes = plt.subplots(1, 3, figsize=(8, 4), sharey=False, sharex=False)
             for ax in range(3):
                 axes[ax].imshow(np.nanmax(shifted_image, axis=ax), aspect='equal', cmap='Greys_r')
@@ -552,12 +553,56 @@ class SyntheticPSF:
                 axes[ax].axis('off')
 
             plt.tight_layout()
-            plt.savefig(f'{plot_shift}_shift.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+            plt.savefig(f'{plot}_shift.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
         return shifted_otf
 
+    def remove_interference_pattern(self, psf, otf, plot):
+        peaks = peak_local_max(
+            psf,
+            min_distance=5,
+            threshold_rel=.05,
+            exclude_border=5,
+            p_norm=2,
+            num_peaks=100
+        ).astype(int)
+
+        beads = np.zeros_like(psf)
+        for p in peaks:
+            beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
+
+        interference_pattern = self.fft(beads)
+        corrected_otf = otf / interference_pattern
+
+        corrected_psf = np.abs(self.ifft(corrected_otf))
+
+        if plot is not None:
+            fig, axes = plt.subplots(3, 3, figsize=(8, 8), sharey=False, sharex=False)
+
+            for ax in range(3):
+                for p in range(peaks.shape[0]):
+                    if ax == 0:
+                        axes[0, ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                    elif ax == 1:
+                        axes[0, ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                    elif ax == 2:
+                        axes[0, ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+
+                axes[0, ax].imshow(np.nanmax(psf, axis=ax)**.5, cmap='Greys_r')
+                axes[1, ax].imshow(np.nanmax(np.abs(interference_pattern), axis=ax), cmap='magma')
+                axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax)**.5, cmap='hot')
+
+            for ax in axes.flatten():
+                ax.axis('off')
+
+            plt.tight_layout()
+            plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+
+        return corrected_otf
+
+
     @profile
-    def remove_phase_ramp(self, masked_phase, plot=True):
+    def remove_phase_ramp(self, masked_phase, plot):
         fig, axes = plt.subplots(3, 3, figsize=(8, 8))
 
         for i in range(masked_phase.shape[0]):
@@ -713,8 +758,9 @@ class SyntheticPSF:
             plot: Any = None,
             log10: bool = False,
             freq_strength_threshold: float = 0.01,
-            phase_shift: bool = True,
-            phase_ramp: bool = True,
+            remove_interference: bool = True,
+            phase_shift: bool = False,
+            remove_phase_ramp: bool = False,
             embedding_option: Any = None,
     ):
         """
@@ -746,6 +792,9 @@ class SyntheticPSF:
 
         otf = self.fft(psf, padsize=padsize)
 
+        if remove_interference:
+            otf = self.remove_interference_pattern(psf, otf, plot=plot)
+
         if no_phase:
             emb = self.compute_emb(
                 otf,
@@ -771,7 +820,7 @@ class SyntheticPSF:
             )
 
             if phase_shift:
-                otf = self.shift_otf(psf, otf, plot_shift=plot)
+                otf = self.shift_otf(psf, otf, plot=plot)
 
             phi = self.compute_emb(
                 otf,
@@ -784,7 +833,7 @@ class SyntheticPSF:
                 freq_strength_threshold=freq_strength_threshold,
             )
 
-            if phase_ramp:
+            if remove_phase_ramp:
                 phi = self.remove_phase_ramp(phi, plot=plot)
 
             emb = np.concatenate([alpha, phi], axis=0)
