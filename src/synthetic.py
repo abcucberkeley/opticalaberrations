@@ -261,7 +261,7 @@ class SyntheticPSF:
         return psf
 
     @profile
-    def fft(self, inputs, padsize=None, ):
+    def fft(self, inputs, padsize=None):
         if padsize is not None:
             shape = inputs.shape[1]
             size = shape * (padsize / shape)
@@ -272,6 +272,13 @@ class SyntheticPSF:
         otf = np.fft.fftn(otf)
         otf = np.fft.fftshift(otf)
         return otf
+
+    @profile
+    def ifft(self, otf):
+        psf = np.fft.fftshift(otf)
+        psf = np.fft.ifftn(psf)
+        psf = np.abs(np.fft.ifftshift(psf))
+        return psf
 
     @profile
     def na_mask(self):
@@ -492,6 +499,14 @@ class SyntheticPSF:
 
         return np.stack([xy, xz, yz], axis=0)
 
+    def center_crop(self, inputs, window_size):
+        center = [(i - 1) // 2 for i in inputs.shape]
+        return inputs[
+          center[0]-window_size:center[0]+window_size,
+          center[1]-window_size:center[1]+window_size,
+          center[2]-window_size:center[2]+window_size,
+        ]
+
     @profile
     def shift_otf(self, psf, otf, plot_shift, window_size=8):
         """ Center around most isolated bead """
@@ -513,23 +528,18 @@ class SyntheticPSF:
         Z, Y, X = np.meshgrid(z, y, x, indexing='ij')
 
         slope = [(shift[i] * 2 * np.pi) / psf.shape[i] for i in range(3)]
-        otf *= np.e ** (1j * (Z * slope[0] + Y * slope[1] + X * slope[2]))
+        shifted_otf = otf * np.e ** (1j * (Z * slope[0] + Y * slope[1] + X * slope[2]))
 
-        shifted = np.fft.fftshift(otf)
-        shifted = np.fft.ifftn(shifted)
-        shifted = np.abs(np.fft.ifftshift(shifted))
+        # get a realspace image of the shifted OTF
+        shifted_image = self.ifft(shifted_otf)
 
-        psf = shifted[
-          center[0]-window_size:center[0]+window_size,
-          center[1]-window_size:center[1]+window_size,
-          center[2]-window_size:center[2]+window_size,
-        ]
-        otf = self.fft(psf)
+        # compute a new OTF of the most isolated bead
+        shifted_otf = self.fft(self.center_crop(shifted_image, window_size=window_size))
 
         if plot_shift is not None:
             fig, axes = plt.subplots(1, 3, figsize=(8, 4), sharey=False, sharex=False)
             for ax in range(3):
-                axes[ax].imshow(np.nanmax(shifted, axis=ax), aspect='equal', cmap='Greys_r')
+                axes[ax].imshow(np.nanmax(shifted_image, axis=ax), aspect='equal', cmap='Greys_r')
 
                 for p in range(beads.shape[0]):
                     if ax == 0:
@@ -544,7 +554,7 @@ class SyntheticPSF:
             plt.tight_layout()
             plt.savefig(f'{plot_shift}_shift.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
-        return otf
+        return shifted_otf
 
     @profile
     def remove_phase_ramp(self, masked_phase, plot=True):
