@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/multipoint_dataset.py" />
-    <option name="PARAMETERS" value="--input_shape 64 --dist single --npoints 5 --modes 15 --signed --noise --norm --rotate --iter 100 --min_amplitude 0.1 --max_amplitude 0.1 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --lam_detection .510 --min_psnr 21 --max_psnr 30 --filename 1 --psf_type ../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat --cpu_workers -1 --emb" />
+    <option name="PARAMETERS" value="--input_shape 64 --dist single --npoints 5 --modes 15 --signed --noise --norm --rotate --iter 100 --min_amplitude 0.1 --max_amplitude 0.1 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --lam_detection .510 --min_psnr 21 --max_psnr 30 --filename 1 --psf_type ../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat --cpu_workers -1 --emb --embedding_option spatial_planes" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

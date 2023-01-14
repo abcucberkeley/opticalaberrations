@@ -115,7 +115,7 @@ do
             j="${j} --lam_detection ${LAMBDA}"
             j="${j} --cpu_workers ${CPUS}"
 
-            for e in principle_planes
+            for e in principle_planes spatial_planes
             do
               j="${j} --embedding_option ${e}"
             done

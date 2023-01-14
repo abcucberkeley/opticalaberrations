@@ -299,7 +299,6 @@ class SyntheticPSF:
             inputs: np.array,
             emb: np.array,
             save_path: Any,
-            no_phase: bool = False,
             gamma: float = .5
     ):
         plt.rcParams.update({
@@ -328,8 +327,8 @@ class SyntheticPSF:
         ))
         cmap = mcolors.ListedColormap(cmap)
 
-        if no_phase:
-            fig, axes = plt.subplots(2, 3, figsize=(8, 8))
+        if emb.shape[0] == 3:
+            fig, axes = plt.subplots(2, 3, figsize=(8, 6))
         else:
             fig, axes = plt.subplots(3, 3, figsize=(8, 8))
 
@@ -349,9 +348,9 @@ class SyntheticPSF:
         cax.yaxis.set_label_position("right")
         cax.set_ylabel(r'Embedding ($\alpha$)')
 
-        if not no_phase:
-            p_vmin = -1 #int(np.floor(np.percentile(emb[3], 10)))
-            p_vmax = 1 #int(np.ceil(np.percentile(emb[3], 90)))
+        if emb.shape[0] > 3:
+            p_vmin = -1
+            p_vmax = 1
             p_vcenter = 0
 
             p_cmap = np.vstack((
@@ -786,7 +785,7 @@ class SyntheticPSF:
         if psf.ndim == 4:
             psf = np.squeeze(psf)
 
-        mode = st.mode(psf[psf < np.quantile(psf, .99)], axis=None).mode[0]
+        mode = st.mode(psf, axis=None).mode[0]
         psf -= mode + .025
         psf[psf < 0] = 0
 
@@ -807,7 +806,6 @@ class SyntheticPSF:
                 freq_strength_threshold=freq_strength_threshold,
             )
         else:
-
             alpha = self.compute_emb(
                 otf,
                 val=alpha_val,
@@ -840,7 +838,7 @@ class SyntheticPSF:
 
         if plot is not None:
             plt.style.use("default")
-            self.plot_embeddings(inputs=psf, emb=emb, save_path=plot, no_phase=no_phase)
+            self.plot_embeddings(inputs=psf, emb=emb, save_path=plot)
 
         if psf.ndim == 4:
             return np.expand_dims(emb, axis=-1)
