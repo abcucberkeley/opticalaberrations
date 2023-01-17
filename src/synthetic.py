@@ -22,6 +22,7 @@ from tifffile import TiffFile
 from skimage.feature import peak_local_max
 from skspatial.objects import Plane, Points
 from scipy import stats as st
+from scipy import ndimage
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -650,7 +651,7 @@ class SyntheticPSF:
 
         Args:
             otf: fft of the input data
-            val: optional toggle to apply the NA mask
+            val: what to compute (either 'real', 'imag'inary, or phase 'angle' from the complex OTF)
             ratio: optional toggle to return ratio of data to ideal OTF
             norm: optional toggle to normalize the data [0, 1]
             na_mask: optional toggle to apply the NA mask
@@ -659,6 +660,7 @@ class SyntheticPSF:
             freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
             embedding_option: type of embedding to use
                 (`principle_planes`,  'pp'): return principle planes only (middle planes)
+                (`spatial_planes`,    'sp'): return 
                 (`average_planes`,    'ap'): return average of each axis
                 (`rotary_slices`,     'rs'): return three radial slices
                 (`spatial_quadrants`, 'sq'): return four different spatial planes in each quadrant
@@ -792,7 +794,7 @@ class SyntheticPSF:
         otf = self.fft(psf, padsize=padsize)
 
         if remove_interference:
-            otf = self.remove_interference_pattern(psf, otf, plot=plot)
+            otf = self.remove_interference_pattern(ndimage.gaussian_filter(psf, sigma=.75), otf, plot=plot)
 
         if no_phase:
             emb = self.compute_emb(
