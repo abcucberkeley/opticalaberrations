@@ -348,11 +348,15 @@ def predict_rotation(
     )
 
     def cart2pol(x, y):
+        """Convert cartesian (x, y) to polar (rho, phi)            
+        """
         rho = np.sqrt(x ** 2 + y ** 2)
         phi = np.arctan2(y, x)
         return (rho, phi)
 
     def pol2cart(rho, phi):
+        """Convert polar (rho, phi) to cartesian (x, y)     
+        """
         x = rho * np.cos(phi)
         y = rho * np.sin(phi)
         return (x, y)
@@ -390,20 +394,22 @@ def predict_rotation(
         mode = Zernike(i)
         twin = Zernike((mode.n, mode.m * -1))
 
-        if mode.m != 0 and mode.index_ansi < twin.index_ansi:
-            xdata = rotations * np.abs(mode.m)  # in degrees
+        if mode.m != 0 and mode.index_ansi < twin.index_ansi and twin.index_ansi < init_preds.shape[1] - 1:
+            xdata = rotations * np.abs(mode.m)  # the Zernike modes have m periods per 2pi. Instead of adjusting saw_func period, we scale xdata
             rho, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
             ydata = np.degrees(ydata)
-            initial_guess = np.array([90, rotations[np.argmin(ydata)]])
-            # use the location of the minimum of ydata as the inital guess for phase
-            popt, pcov= sp.optimize.curve_fit(saw_func, xdata, ydata, initial_guess)
-            preds[:, mode.index_ansi], preds[:, twin.index_ansi] = pol2cart(np.max(rho), np.radians(popt[1]))
+            initial_guess = np.array([90, rotations[np.argmin(ydata)]* np.abs(mode.m)])
+            # use the location of the minimum of ydata as the inital guess for saw_func start, amplitude should be 90 degrees
+            popt, pcov= sp.optimize.curve_fit(saw_func, xdata, ydata, initial_guess)   
+            preds[:, mode.index_ansi], preds[:, twin.index_ansi] = pol2cart(np.max(rho), np.radians(popt[1] / np.abs(mode.m)))
 
             if plot is not None:
-                fig, axes = plt.subplots(2, 1)
-                axes[0].scatter(xdata, ydata, s=1)
-                axes[0].plot(xdata, saw_func(xdata, *popt), color='C1')
-                axes[1].scatter(xdata, rho, s=1)
+                fig, axes = plt.subplots(2, 1, sharex = True)
+                axes[0].scatter(rotations, ydata, s=1)
+                axes[0].plot(rotations, saw_func(xdata, *popt), color='C1')
+                axes[0].set_ylabel('Predicted rotation (deg)')
+                axes[1].scatter(rotations, rho, s=1)
+                axes[1].set_ylabel('Predicted rho (um rms)')
 
                 plt.tight_layout()
                 plt.savefig(f'{plot}_fit_mode{mode.index_ansi}_{twin.index_ansi}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
