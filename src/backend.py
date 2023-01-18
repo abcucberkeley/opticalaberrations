@@ -601,7 +601,6 @@ def evaluate(
     reference: Any = None,
     plot: Any = None,
     threshold: float = 0.,
-    desc: str = 'Eval',
     eval_sign: str = 'positive_only',
 ):
     if isinstance(inputs, tf.Tensor):
@@ -710,7 +709,7 @@ def evaluate(
             psfgen=gen,
             batch_size=batch_size,
             n_samples=1,
-            no_phase=True,
+            no_phase=False,
             threshold=threshold,
             plot=plot
         )

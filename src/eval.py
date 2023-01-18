@@ -655,7 +655,11 @@ def iterheatmap(
 
 
 @profile
-def random_samples(model: Path, psnr: int = 30, eval_sign: str = 'positive_only'):
+def random_samples(
+    model: Path,
+    psnr: int = 30,
+    eval_sign: str = 'positive_only'
+):
     m = backend.load(model)
     m.summary()
 
