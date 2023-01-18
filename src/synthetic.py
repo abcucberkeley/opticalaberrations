@@ -380,6 +380,7 @@ class SyntheticPSF:
             plt.show()
         else:
             plt.savefig(f'{save_path}_embeddings.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+            # plt.savefig(f'{save_path}_embeddings.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     @profile
     def _normalize(self, emb, otf, freq_strength_threshold: float = 0.):
@@ -598,6 +599,7 @@ class SyntheticPSF:
 
             plt.tight_layout()
             plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+            # plt.savefig(f'{plot}_interference_pattern.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
         return corrected_otf
 
