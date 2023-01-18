@@ -1,7 +1,4 @@
 import matplotlib
-
-from src.zernike import Zernike
-
 matplotlib.use('Agg')
 
 import numexpr
@@ -47,6 +44,7 @@ import data_utils
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
+from zernike import Zernike
 
 from tensorflow.keras import Model
 from phasenet import PhaseNet
