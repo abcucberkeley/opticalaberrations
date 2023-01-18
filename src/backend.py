@@ -282,7 +282,7 @@ def predict_rotation(
     psfgen: SyntheticPSF,
     batch_size: int = 1,
     n_samples: int = 10,
-    threshold: float = 0.05,
+    threshold: float = 0.,
     freq_strength_threshold: float = .01,
     plot: Any = None,
     no_phase: bool = False,
@@ -342,7 +342,7 @@ def predict_rotation(
         batch_size=batch_size,
         n_samples=n_samples,
         no_phase=True,
-        threshold=threshold,
+        threshold=0.,
         plot=plot,
         desc=desc
     )
@@ -411,6 +411,9 @@ def predict_rotation(
         else:
             preds[:, mode.index_ansi] = np.median(init_preds[:, mode.index_ansi])
 
+    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection) 
+    preds[np.abs(preds) <= threshold] = 0.
+    
     return preds
 
 
