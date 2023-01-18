@@ -1713,7 +1713,8 @@ def diagnostic_assessment(
     ax_zcoff.spines.top.set_visible(False)
     ax_zcoff.grid(True, which="both", axis='x', lw=1, ls='--', zorder=0)
     ax_zcoff.set_xlabel(r'Zernike coefficients ($\mu$m RMS)')
-    ax_zcoff.legend(frameon=False, loc='upper center', bbox_to_anchor=(.5, 1.05))
+    handles, labels = ax_zcoff.get_legend_handles_labels()
+    ax_zcoff.legend(reversed(handles), reversed(labels), frameon=False, loc='upper center', bbox_to_anchor=(.5, 1.05))
     ax_zcoff.xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
 
     for ax in [ax_gt, ax_pred, ax_diff]:
