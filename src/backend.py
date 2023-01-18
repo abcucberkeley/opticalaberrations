@@ -289,11 +289,24 @@ def predict_rotation(
     desc: str = 'Predict-rotations',
 ):
     """
-    Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin)
+    Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin).
+
+    We can think of the mode and its twin as the X and Y basis, and the abberation being a 
+    vector on this coordinate system. A problem occurs when the ground truth vector lies near
+    where one of the vectors flips sign (and the model was trained to only respond with positive
+    values for that vector).  Either a discontinuity or a degeneracy occurs in this area leading to
+    unreliable predictions.  The solution is to digitially rotate the input embeddings over a range
+    of angles.  Converting from cartesian X Y to polar coordinates (rho, phi), the model predictions 
+    should map phi as a linear waveform (if all were perfect), a triangle waveform (if degenergancies 
+    exist because the model was trained to only return positive values), or a sawtooth waveform (if
+    a discontinuity exists because the model was trained to only return positive values for the first
+    mode in the twin pair).  These waveforms (with known period:given by the m value of the mode,
+    known amplitude) can be curve-fit to determine the actual phi. Given rho and phi, we can 
+    return to cartesian coordinates, which give the amplitudes for mode & twin.
 
     Args:
-        model: pre-trained keras model
-        inputs: encoded tokens to be processed
+        model: pre-trained keras model. Model must be trained with XY embeddings only so that we can rotate them.
+        inputs: encoded tokens to be processed. (e.g. input images)
         psfgen: Synthetic PSF object
         n_samples: number of predictions of average
         batch_size: number of samples per batch
@@ -344,9 +357,18 @@ def predict_rotation(
         y = rho * np.sin(phi)
         return (x, y)
 
-    def saw_func(x, a, b):
+    def saw_func(x, a: float = 1, b: float = 0):
+        """Generates triangle function range of [0 to a] over 0-90 degrees
+        Generates a sawtooth function range of [0 to a] over 0-180 degrees
+        if width set to 1
+
+        Args:
+            x (array): array of degrees to evaluate at
+            a (float): amplitude
+            b (float): phase offset in degrees
+
+        """
         saw = sp.signal.sawtooth(2 * np.pi / 180 * (x - b), width=0.5)
-        # (width=0.5 => triangle wave, width= => saw) range of [-1 to 1] over 0-90 degrees
         return a * (1 + saw) / 2
 
     preds = np.zeros((inputs.shape[0], psfgen.n_modes))
