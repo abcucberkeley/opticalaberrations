@@ -392,7 +392,8 @@ def snrheatmap(
     na: float = 1.0,
     input_coverage: float = 1.0,
     no_phase: bool = False,
-    batch_size: int = 100
+    batch_size: int = 100,
+    eval_sign: str = 'positive_only'
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / f'snrheatmaps_{input_coverage}'
@@ -411,7 +412,8 @@ def snrheatmap(
         input_coverage=input_coverage,
         no_phase=no_phase,
         batch_size=batch_size,
-        snr_range=(0, 100)
+        snr_range=(0, 100),
+        eval_sign=eval_sign
     )
 
     means = pd.pivot_table(df, values='residuals', index='bins', columns='snr', aggfunc=np.mean)
@@ -440,6 +442,7 @@ def densityheatmap(
     input_coverage: float = 1.0,
     batch_size: int = 100,
     snr_range: tuple = (21, 30),
+    eval_sign: str = 'positive_only'
 ):
     modelspecs = backend.load_metadata(modelpath)
     df = eval_bin(
@@ -451,7 +454,8 @@ def densityheatmap(
         snr_range=snr_range,
         input_coverage=input_coverage,
         no_phase=no_phase,
-        batch_size=batch_size
+        batch_size=batch_size,
+        eval_sign=eval_sign
     )
 
     for savedir, col, label, lims in zip(
@@ -598,6 +602,7 @@ def iterheatmap(
     no_phase: bool = False,
     batch_size: int = 100,
     snr_range: tuple = (21, 30),
+    eval_sign: str = 'positive_only'
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / f'iterheatmaps_{input_coverage}'
@@ -617,7 +622,8 @@ def iterheatmap(
         snr_range=snr_range,
         input_coverage=input_coverage,
         no_phase=no_phase,
-        batch_size=batch_size
+        batch_size=batch_size,
+        eval_sign=eval_sign
     )
 
     means = pd.pivot_table(
