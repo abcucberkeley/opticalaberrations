@@ -34,6 +34,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--eval_sign", default="positive_only", type=str, help='path to save eval'
+    )
+
+    parser.add_argument(
         "--n_samples", default=None, type=int, help='number of samples to evaluate'
     )
 
@@ -100,11 +104,15 @@ def main(args=None):
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
     if args.target == 'modes':
-        eval.evaluate_modes(args.model)
+        eval.evaluate_modes(
+            args.model,
+            eval_sign=args.eval_sign
+        )
 
     elif args.target == "random":
         eval.random_samples(
             model=args.model,
+            eval_sign=args.eval_sign
         )
     elif args.target == 'snrheatmap':
         eval.snrheatmap(
@@ -115,7 +123,8 @@ def main(args=None):
             input_coverage=args.input_coverage,
             no_phase=args.no_phase,
             na=args.na,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            eval_sign=args.eval_sign
         )
     elif args.target == 'densityheatmap':
         eval.densityheatmap(
@@ -126,7 +135,8 @@ def main(args=None):
             input_coverage=args.input_coverage,
             no_phase=args.no_phase,
             na=args.na,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            eval_sign=args.eval_sign
         )
     elif args.target == 'iterheatmap':
         eval.iterheatmap(
@@ -137,7 +147,8 @@ def main(args=None):
             input_coverage=args.input_coverage,
             no_phase=args.no_phase,
             na=args.na,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            eval_sign=args.eval_sign
         )
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

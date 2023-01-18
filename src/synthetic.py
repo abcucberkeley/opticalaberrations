@@ -557,6 +557,7 @@ class SyntheticPSF:
 
         return shifted_otf
 
+    @profile
     def remove_interference_pattern(self, psf, otf, plot):
         peaks = peak_local_max(
             psf,

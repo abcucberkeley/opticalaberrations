@@ -1,4 +1,7 @@
 import matplotlib
+
+from src.zernike import Zernike
+
 matplotlib.use('Agg')
 
 import numexpr
@@ -16,6 +19,7 @@ from line_profiler_pycharm import profile
 
 import pandas as pd
 from skimage.restoration import richardson_lucy
+from skimage.transform import rotate
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -274,6 +278,123 @@ def bootstrap_predict(
 
 
 @profile
+def predict_rotation(
+    model: tf.keras.Model,
+    inputs: np.array,
+    psfgen: SyntheticPSF,
+    batch_size: int = 1,
+    n_samples: int = 10,
+    threshold: float = 0.05,
+    freq_strength_threshold: float = .01,
+    plot: Any = None,
+    no_phase: bool = False,
+    desc: str = 'Predict-rotations',
+):
+    """
+    Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin)
+
+    Args:
+        model: pre-trained keras model
+        inputs: encoded tokens to be processed
+        psfgen: Synthetic PSF object
+        n_samples: number of predictions of average
+        batch_size: number of samples per batch
+        threshold: set predictions below threshold to zero (wavelength)
+        desc: test to display for the progressbar
+
+    Returns:
+        average prediction, stdev
+    """
+    embs = psfgen.embedding(
+        psf=np.squeeze(inputs),
+        plot=plot,
+        no_phase=no_phase,
+        embedding_option=psfgen.embedding_option,
+        freq_strength_threshold=freq_strength_threshold,
+    )
+
+    rotated_embs = []
+    rotations = np.arange(0, 361, 1).astype(int)
+    for angle in rotations:
+        emb = np.array([rotate(e, angle=angle) for e in embs])
+        rotated_embs.append(emb)
+
+    if no_phase:
+        rotated_embs = np.array(rotated_embs)[:, :3]
+    else:
+         rotated_embs = np.array(rotated_embs)
+
+    init_preds, stdev = bootstrap_predict(
+        model,
+        rotated_embs,
+        psfgen=psfgen,
+        batch_size=batch_size,
+        n_samples=n_samples,
+        no_phase=True,
+        threshold=threshold,
+        plot=plot,
+        desc=desc
+    )
+
+    def cart2pol(x, y):
+        rho = np.sqrt(x ** 2 + y ** 2)
+        phi = np.arctan2(y, x)
+        return (rho, phi)
+
+    def pol2cart(rho, phi):
+        x = rho * np.cos(phi)
+        y = rho * np.sin(phi)
+        return (x, y)
+
+    def saw_func(x, a, b):
+        saw = sp.signal.sawtooth(2 * np.pi / 180 * (x - b), width=0.5)
+        # (width=0.5 => triangle wave, width= => saw) range of [-1 to 1] over 0-90 degrees
+        return a * (1 + saw) / 2
+
+    preds = np.zeros((inputs.shape[0], psfgen.n_modes))
+
+    if plot is not None:
+        fig, axes = plt.subplots(init_preds.shape[1], figsize=(15, 20))
+
+        for i, ax in enumerate(axes):
+            ax.plot(init_preds[:, i])
+            ax.set_title(f"Mode: {i}")
+            ax.set_xlim(0, 360)
+            ax.set_xticks(range(0, 370, 10))
+            ax.set_ylim(np.min(init_preds), np.max(init_preds))
+
+        plt.tight_layout()
+        plt.savefig(f'{plot}_rotations.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    for i in range(psfgen.n_modes):
+        mode = Zernike(i)
+        twin = Zernike((mode.n, mode.m * -1))
+
+        if mode.m != 0 and mode.index_ansi < twin.index_ansi:
+            xdata = rotations * np.abs(mode.m)  # in degrees
+            rho, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
+            ydata = np.degrees(ydata)
+            initial_guess = np.array([90, rotations[np.argmin(ydata)]])
+            # use the location of the minimum of ydata as the inital guess for phase
+            popt, pcov= sp.optimize.curve_fit(saw_func, xdata, ydata, initial_guess)
+            preds[:, mode.index_ansi], preds[:, twin.index_ansi] = pol2cart(np.max(rho), np.radians(popt[1]))
+
+            if plot is not None:
+                fig, axes = plt.subplots(2, 1)
+                axes[0].scatter(xdata, ydata, s=1)
+                axes[0].plot(xdata, saw_func(xdata, *popt), color='C1')
+                axes[1].scatter(xdata, rho, s=1)
+
+                plt.tight_layout()
+                plt.savefig(f'{plot}_fit_mode{mode.index_ansi}_{twin.index_ansi}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+        else:
+            preds[:, mode.index_ansi] = np.median(init_preds[:, mode.index_ansi])
+
+    return preds
+
+
+@profile
 def predict_sign(
     init_preds: np.ndarray,
     followup_preds: np.ndarray,
@@ -483,7 +604,7 @@ def evaluate(
     plot: Any = None,
     threshold: float = 0.,
     desc: str = 'Eval',
-    eval_sign: bool = False
+    eval_sign: str = 'positive_only',
 ):
     if isinstance(inputs, tf.Tensor):
         inputs = inputs.numpy()
@@ -494,25 +615,41 @@ def evaluate(
     if len(ys.shape) == 1:
         ys = ys[np.newaxis, :]
 
-    if not eval_sign:
+    if eval_sign == 'positive_only':
         ys = np.abs(ys)
 
-    init_preds, stdev = bootstrap_predict(
-        model,
-        inputs,
-        psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
-        no_phase=True,
-        threshold=threshold,
-        plot=plot
-    )
-    if len(init_preds.shape) > 1:
-        init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
-    else:
-        init_preds = np.abs(init_preds)[np.newaxis, :ys.shape[-1]]
+        preds, stdev = bootstrap_predict(
+            model,
+            inputs,
+            psfgen=gen,
+            batch_size=batch_size,
+            n_samples=1,
+            no_phase=True,
+            threshold=threshold,
+            plot=plot
+        )
+        if len(preds.shape) > 1:
+            preds = np.abs(preds)[:, :ys.shape[-1]]
+        else:
+            preds = np.abs(preds)[np.newaxis, :ys.shape[-1]]
 
-    if eval_sign:
+    elif eval_sign == 'dual_stage':
+        init_preds = predict_rotation(
+            model=model,
+            inputs=inputs,
+            psfgen=gen,
+            no_phase=True,
+            batch_size=batch_size,
+            n_samples=1,
+            threshold=threshold,
+            plot=plot
+        )
+
+        if len(init_preds.shape) > 1:
+            init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
+        else:
+            init_preds = np.abs(init_preds)[np.newaxis, :ys.shape[-1]]
+
         res = ys - init_preds
         followup_inputs = np.zeros_like(inputs)
 
@@ -546,15 +683,15 @@ def evaluate(
             savepath=f'{plot}_sign_eval_db'
         )
 
-        followup_preds, stdev = bootstrap_predict(
-            model,
-            followup_inputs,
+        followup_preds = predict_rotation(
+            model=model,
+            inputs=followup_inputs,
             psfgen=gen,
+            no_phase=True,
             batch_size=batch_size,
             n_samples=1,
-            no_phase=True,
             threshold=threshold,
-            desc=desc,
+            plot=plot
         )
 
         if len(followup_preds.shape) > 1:
@@ -569,7 +706,20 @@ def evaluate(
         )
 
     else:
-        preds = init_preds
+        preds, stdev = bootstrap_predict(
+            model,
+            inputs,
+            psfgen=gen,
+            batch_size=batch_size,
+            n_samples=1,
+            no_phase=True,
+            threshold=threshold,
+            plot=plot
+        )
+        if len(preds.shape) > 1:
+            preds = preds[:, :ys.shape[-1]]
+        else:
+            preds = preds[np.newaxis, :ys.shape[-1]]
 
     residuals = ys - preds
     return residuals, ys, preds

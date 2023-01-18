@@ -68,6 +68,7 @@ def eval_mode(
     batch_size: int = 100,
     snr_range: tuple = (21, 30),
     n_samples: int = 10,
+    eval_sign: str = 'positive_only'
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]])
@@ -105,7 +106,7 @@ def eval_mode(
             ys=ys,
             psnr=psnr,
             batch_size=batch_size,
-            eval_sign=False
+            eval_sign=eval_sign
         )
 
         p = pd.DataFrame([p2v for i in inputs], columns=['aberration'])
@@ -118,7 +119,7 @@ def eval_mode(
 
 
 @profile
-def evaluate_modes(model: Path):
+def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
     outdir = model.with_suffix('') / 'evalmodes'
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
@@ -132,7 +133,7 @@ def evaluate_modes(model: Path):
         classes = aberrations.copy()
         classes[:, i] = waves
 
-        job = partial(eval_mode, modelpath=model)
+        job = partial(eval_mode, modelpath=model, eval_sign=eval_sign)
         preds = utils.multiprocess(job, list(classes), cores=-1)
         df = pd.DataFrame([]).append(preds, ignore_index=True)
 
@@ -247,7 +248,8 @@ def eval_bin(
     no_phase: bool = False,
     batch_size: int = 100,
     snr_range: Any = None,
-    distribution: str = ''
+    distribution: str = '',
+    eval_sign: str = 'positive_only'
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(
@@ -282,7 +284,7 @@ def eval_bin(
             ys=ys,
             psnr=snr,
             batch_size=batch_size,
-            eval_sign=False
+            eval_sign=eval_sign
         )
 
         p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys], columns=['aberration'])
@@ -489,7 +491,8 @@ def iter_eval_bin_with_reference(
     input_coverage: float = 1.0,
     no_phase: bool = False,
     batch_size: int = 100,
-    snr_range: tuple = (21, 30)
+    snr_range: tuple = (21, 30),
+    eval_sign: str = 'positive_only'
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(
@@ -567,7 +570,7 @@ def iter_eval_bin_with_reference(
             psnr=snr,
             batch_size=batch_size,
             reference=reference,
-            eval_sign=False
+            eval_sign=eval_sign
         )
 
         y = pd.DataFrame(np.arange(inputs.shape[0], dtype=int), columns=['id'])
@@ -646,7 +649,7 @@ def iterheatmap(
 
 
 @profile
-def random_samples(model: Path, psnr: int = 30):
+def random_samples(model: Path, psnr: int = 30, eval_sign: str = 'positive_only'):
     m = backend.load(model)
     m.summary()
 
@@ -658,13 +661,13 @@ def random_samples(model: Path, psnr: int = 30):
                 batch_size=1,
                 amplitude_ranges=amplitude_range,
                 distribution=dist,
-                signed=False,
+                signed=False if eval_sign == 'positive_only' else True,
                 rotate=True,
                 mode_weights='pyramid',
                 psf_shape=(64, 64, 64),
                 mean_background_noise=0,
             )
-            for s in range(10):
+            for s in range(1):
                 for num_objs in tqdm([1, 2, 5, 10]):
                     reference = multipoint_dataset.beads(
                         gen=gen,
@@ -676,7 +679,7 @@ def random_samples(model: Path, psnr: int = 30):
                         amplitude_range,
                         modes=gen.n_modes,
                         distribution=dist,
-                        signed=False,
+                        signed=False if eval_sign == 'positive_only' else True,
                         rotate=True,
                         mode_weights='pyramid',
                         lam_detection=gen.lam_detection,
@@ -716,7 +719,7 @@ def random_samples(model: Path, psnr: int = 30):
                         psnr=psnr,
                         batch_size=1,
                         plot=save_path / f'{s}',
-                        eval_sign=False
+                        eval_sign=eval_sign
                     )
 
                     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
