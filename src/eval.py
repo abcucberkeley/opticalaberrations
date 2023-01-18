@@ -221,11 +221,9 @@ def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
             noise=False,
             meta=False,
         )
-        emb = gen.embedding(psf=kernel, no_phase=True)
-
-        ax_xy.imshow(emb[0], vmin=0, vmax=2, cmap='Spectral_r')
-        ax_xz.imshow(emb[1], vmin=0, vmax=2, cmap='Spectral_r')
-        ax_yz.imshow(emb[2], vmin=0, vmax=2, cmap='Spectral_r')
+        ax_xy.imshow(np.max(kernel, axis=0)**.5, vmin=0, vmax=1, cmap='hot')
+        ax_xz.imshow(np.max(kernel, axis=1)**.5, vmin=0, vmax=1, cmap='hot')
+        ax_yz.imshow(np.max(kernel, axis=2)**.5, vmin=0, vmax=1, cmap='hot')
         ax_wavevfront.imshow(w.wave(size=100), vmin=-1, vmax=1, cmap='Spectral_r')
 
         for a, t in zip([ax_xy, ax_xz, ax_yz, ax_wavevfront], ['XY', 'XZ', 'YZ', 'Wavefront']):
