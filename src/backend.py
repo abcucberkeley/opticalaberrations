@@ -363,7 +363,7 @@ def predict_rotation(
     )
 
     rotated_embs = []
-    rotations = np.arange(0, 361, 1).astype(int)
+    rotations = np.arange(0, 361, 7).astype(int)
     
     for angle in rotations:
         emb = np.array([rotate(e, angle=angle) for e in embs])
@@ -410,7 +410,7 @@ def predict_rotation(
                 popt, pcov = sp.optimize.curve_fit(saw_func, xdata, ydata)
                 fit = saw_func(xdata,*popt)
                 residual_standard_error = np.std(fit - ydata)
-                if residual_standard_error > 5: rho = 0
+                if residual_standard_error * 2 > 15: rho = 0    # reject if it doesn't show rotation.
                 
                 twin_angle = fit[0]   # evaluate the curve fit when there is no digital rotation.
                 preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
@@ -419,8 +419,8 @@ def predict_rotation(
                     ax = fig.add_subplot(gs[row, 0])
                     fit_ax = fig.add_subplot(gs[row, 1])
 
-                    ax.plot(init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
-                    ax.plot(init_preds[:, twin.index_ansi], '--', label=f"m{twin.index_ansi}")
+                    ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
+                    ax.plot(rotations, init_preds[:, twin.index_ansi], '--', label=f"m{twin.index_ansi}")
 
                     ax.set_xlim(0, 360)
                     ax.set_xticks(range(0, 405, 45))
@@ -436,11 +436,12 @@ def predict_rotation(
                     
                     fit_ax.set_title(
                         f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
-                        f' [$b$={twin_angle:.2f}$^\circ$, $\\rho$={rho:.3f} um rms]', color=title_color
+                        f' [$b$={twin_angle:.2f}$^\circ$, $\\rho$={rho:.3f} $\mu$ RMS, 2$\\sigma$={residual_standard_error*2:.1f}$^\circ$]', color=title_color
                     )
 
                     fit_ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                    fit_ax.set_ylabel('Twin angle (deg)')
+                    fit_ax.set_ylabel('Predicted Twin angle (deg)')
+                    fit_ax.set_xlabel('Digitially rotated Twin angle (deg)')
                     fit_ax.set_xlim(0, 360 * np.abs(mode.m))
                     #fit_ax.yaxis.tick_right()
                     #fit_ax.yaxis.set_label_position("right")
@@ -458,8 +459,8 @@ def predict_rotation(
 
                 if plot is not None:
                     ax = fig.add_subplot(gs[row, 0])
-                    ax.plot(init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
-                    ax.plot(init_preds[:, twin.index_ansi], '--', label=f"m{twin.index_ansi}")
+                    ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
+                    ax.plot(rotations, init_preds[:, twin.index_ansi], '--', label=f"m{twin.index_ansi}")
 
                     ax.set_xlim(0, 360)
                     ax.set_xticks(range(0, 405, 45))
@@ -476,8 +477,8 @@ def predict_rotation(
             preds[mode.index_ansi] = rho
 
             if plot is not None:
-                ax = fig.add_subplot(gs[row, :])
-                ax.plot(init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
+                ax = fig.add_subplot(gs[row, 0])
+                ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}={rho:.3f}")
 
                 ax.set_xlim(0, 360)
                 ax.set_xticks(range(0, 405, 45))
