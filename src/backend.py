@@ -352,7 +352,7 @@ def predict_rotation(
             b (float): phase offset in degrees
         """
         saw = sp.signal.sawtooth(2 * np.pi / 180 * (x - b), width=1)
-        return 90 * saw
+        return np.unwrap(90 * saw, period=180)
 
     embs = psfgen.embedding(
         psf=np.squeeze(inputs),
@@ -403,12 +403,17 @@ def predict_rotation(
             if np.mean(magnitude) > threshold:
                 # the Zernike modes have m periods per 2pi. Instead of adjusting saw_func period, we scale xdata
                 xdata = rotations * np.abs(mode.m)
-                rho, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
-                ydata = np.degrees(ydata)
+                rhos, raw_ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
+                rho = rhos[np.argmin(np.abs(raw_ydata))]
+                ydata = np.unwrap(np.degrees(raw_ydata), period=180)
 
                 popt, pcov = sp.optimize.curve_fit(saw_func, xdata, ydata)
-                fit_angle = ydata[xdata == 0]
-                preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(np.max(rho), np.radians(fit_angle))
+                fit = saw_func(xdata,*popt)
+                residual_standard_error = np.std(fit - ydata)
+                if residual_standard_error > 5: rho = 0
+                
+                twin_angle = fit[0]   # evaluate the curve fit when there is no digital rotation.
+                preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
 
                 if plot is not None:
                     ax = fig.add_subplot(gs[row, 0])
@@ -425,22 +430,23 @@ def predict_rotation(
                     ax.set_ylabel('Amplitude ($\mu$ RMS)')
                     ax.set_xlabel('Digital rotation (deg)')
 
-                    fit_ax.scatter(xdata, ydata, s=1, color='C2')
-                    fit_ax.plot(xdata, saw_func(xdata, *popt), color='C3')
-
+                    title_color = 'g' if rho > 0 else 'r'
+                    fit_ax.plot(xdata, saw_func(xdata, *popt), color=title_color, lw='.75')
+                    fit_ax.scatter(xdata, ydata, s=2, color='grey')
+                    
                     fit_ax.set_title(
                         f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
-                        f' [$x_0$={int(fit_angle)}$^\circ$, $\\angle$={int(popt[0])}$^\circ$, $\\rho$={np.max(rho):.3f}]'
+                        f' [$b$={twin_angle:.2f}$^\circ$, $\\rho$={rho:.3f} um rms]', color=title_color
                     )
 
                     fit_ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                    fit_ax.set_ylabel('Predicted rotation')
+                    fit_ax.set_ylabel('Twin angle (deg)')
                     fit_ax.set_xlim(0, 360 * np.abs(mode.m))
-                    fit_ax.yaxis.tick_right()
-                    fit_ax.yaxis.set_label_position("right")
+                    #fit_ax.yaxis.tick_right()
+                    #fit_ax.yaxis.set_label_position("right")
 
                     rho_ax = ax.twinx()
-                    rho_ax.scatter(rotations, rho, s=1, color='grey')
+                    rho_ax.scatter(rotations, rhos, s=1.5, color='grey')
                     rho_ax.set_ylabel('Predicted $\\rho$ ($\mu$ RMS)')
                     rho_ax.set_ylim(ymin=0)
                     rho_ax.yaxis.label.set_color('grey')
@@ -451,7 +457,7 @@ def predict_rotation(
                 preds[twin.index_ansi] = 0
 
                 if plot is not None:
-                    ax = fig.add_subplot(gs[row, :])
+                    ax = fig.add_subplot(gs[row, 0])
                     ax.plot(init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
                     ax.plot(init_preds[:, twin.index_ansi], '--', label=f"m{twin.index_ansi}")
 
@@ -464,6 +470,7 @@ def predict_rotation(
                     ax.set_xlabel('Digital rotation (deg)')
 
         else:
+            # mode has m=0 (spherical,...), or twin isn't within the 55 modes.
             rho = np.median(init_preds[:, mode.index_ansi])
             rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
             preds[mode.index_ansi] = rho
