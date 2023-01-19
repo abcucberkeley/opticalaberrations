@@ -1722,7 +1722,7 @@ def diagnostic_assessment(
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2, hspace=.2)
     plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    # plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     if display:
         plt.tight_layout()

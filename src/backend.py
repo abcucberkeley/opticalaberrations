@@ -192,12 +192,17 @@ def bootstrap_predict(
     psfgen: SyntheticPSF,
     batch_size: int = 1,
     n_samples: int = 10,
+    no_phase: bool = False,
+    padsize: Any = None,
+    alpha_val: str = 'abs',
+    phi_val: str = 'angle',
+    peaks: Any = None,
+    remove_interference: bool = True,
+    ignore_modes: list = (0, 1, 2, 4),
     threshold: float = 0.05,
     freq_strength_threshold: float = .01,
-    ignore_modes: list = (0, 1, 2, 4),
     verbose: bool = True,
     plot: Any = None,
-    no_phase: bool = False,
     desc: str = 'MiniBatch-probabilistic-predictions',
 ):
     """
@@ -210,9 +215,17 @@ def bootstrap_predict(
         n_samples: number of predictions of average
         ignore_modes: list of modes to ignore
         batch_size: number of samples per batch
+        no_phase: ignore/drop the phase component of the FFT
+        padsize: pad the input to the desired size for the FFT
+        alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
+        phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
+        remove_interference: a toggle to normalize out the interference pattern from the OTF
+        peaks: masked array of the peaks of interest to compute the interference pattern
         threshold: set predictions below threshold to zero (wavelength)
+        freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
         desc: test to display for the progressbar
         verbose: a toggle for progress bar
+        plot: optional toggle to visualize embeddings
 
     Returns:
         average prediction, stdev
@@ -235,7 +248,12 @@ def bootstrap_predict(
             emb = psfgen.embedding(
                 psf=np.squeeze(i),
                 plot=plot,
+                padsize=padsize,
                 no_phase=no_phase,
+                alpha_val=alpha_val,
+                phi_val=phi_val,
+                peaks=peaks,
+                remove_interference=remove_interference,
                 embedding_option=psfgen.embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
@@ -285,8 +303,13 @@ def predict_rotation(
     n_samples: int = 10,
     threshold: float = 0.01,
     freq_strength_threshold: float = .01,
-    plot: Any = None,
     no_phase: bool = False,
+    padsize: Any = None,
+    alpha_val: str = 'abs',
+    phi_val: str = 'angle',
+    peaks: Any = None,
+    remove_interference: bool = True,
+    plot: Any = None,
     desc: str = 'Predict-rotations',
 ):
     """
@@ -311,8 +334,18 @@ def predict_rotation(
         psfgen: Synthetic PSF object
         n_samples: number of predictions of average
         batch_size: number of samples per batch
+        no_phase: ignore/drop the phase component of the FFT
+        padsize: pad the input to the desired size for the FFT
+        alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
+        phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
+        remove_interference: a toggle to normalize out the interference pattern from the OTF
+        peaks: masked array of the peaks of interest to compute the interference pattern
         threshold: set predictions below threshold to zero (wavelength)
+        freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
+        threshold: set predictions below threshold to zero (wavelength)
+        freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
         desc: test to display for the progressbar
+        plot: optional toggle to visualize embeddings
 
     Returns:
         average prediction, stdev
@@ -357,7 +390,12 @@ def predict_rotation(
     embs = psfgen.embedding(
         psf=np.squeeze(inputs),
         plot=plot,
+        padsize=padsize,
         no_phase=no_phase,
+        alpha_val=alpha_val,
+        phi_val=phi_val,
+        peaks=peaks,
+        remove_interference=remove_interference,
         embedding_option=psfgen.embedding_option,
         freq_strength_threshold=freq_strength_threshold,
     )
@@ -506,10 +544,12 @@ def predict_sign(
     plot: Any = None,
 ):
     def pct_change(cur, prev):
+        cur = np.abs(cur)
+        prev = np.abs(prev)
+
         if np.array_equal(cur, prev):
             return np.zeros_like(prev)
-
-        pct = ((cur - prev) / np.abs(prev+1e-6)) * 100.0
+        pct = ((cur - prev) / (prev+1e-6)) * 100.0
         pct[pct > 100] = 100
         pct[pct < -100] = -100
         return pct
@@ -745,6 +785,7 @@ def evaluate(
             batch_size=batch_size,
             n_samples=1,
             threshold=threshold,
+            peaks=reference,
             plot=plot
         )
 
@@ -758,8 +799,14 @@ def evaluate(
 
         if reference is not None:
             for i in range(inputs.shape[0]):
-                psf = gen.single_psf(
+                wavefront = Wavefront(
                     res[i],
+                    modes=gen.n_modes,
+                    rotate=False,
+                    lam_detection=gen.lam_detection,
+                )
+                psf = gen.single_psf(
+                    wavefront,
                     normed=True,
                     noise=False,
                     meta=False
@@ -791,6 +838,7 @@ def evaluate(
             inputs=followup_inputs,
             psfgen=gen,
             no_phase=True,
+            peaks=reference,
             batch_size=batch_size,
             n_samples=1,
             threshold=threshold,

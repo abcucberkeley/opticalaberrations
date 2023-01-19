@@ -559,20 +559,26 @@ class SyntheticPSF:
         return shifted_otf
 
     @profile
-    def remove_interference_pattern(self, psf, otf, plot):
-        peaks = peak_local_max(
-            psf,
-            min_distance=5,
-            threshold_rel=.05,
-            exclude_border=5,
-            p_norm=2,
-            num_peaks=100
-        ).astype(int)
+    def remove_interference_pattern(self, psf, otf, plot, peaks=None):
+        if peaks is None:
+            peaks = peak_local_max(
+                ndimage.gaussian_filter(psf, sigma=1.1),
+                min_distance=5,
+                threshold_rel=.05,
+                exclude_border=5,
+                p_norm=2,
+                num_peaks=100
+            ).astype(int)
 
-        beads = np.zeros_like(psf)
-        for p in peaks:
-            beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
+            beads = np.zeros_like(psf)
+            for p in peaks:
+                beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
+        else:
+            beads = peaks.copy()
+            beads[beads < .05] = 0.
+            peaks = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
 
+        logger.info(f"Detected objects: {peaks.shape}")
         interference_pattern = self.fft(beads)
         corrected_otf = otf / interference_pattern
 
@@ -590,7 +596,7 @@ class SyntheticPSF:
                     elif ax == 2:
                         axes[0, ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
 
-                axes[0, ax].imshow(np.nanmax(psf, axis=ax)**.5, cmap='Greys_r')
+                axes[0, ax].imshow(np.nanmax(psf, axis=ax)**.5, cmap='Greys_r', alpha=.66)
                 axes[1, ax].imshow(np.nanmax(np.abs(interference_pattern), axis=ax), cmap='magma')
                 axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax)**.5, cmap='hot')
 
@@ -762,9 +768,8 @@ class SyntheticPSF:
             plot: Any = None,
             log10: bool = False,
             freq_strength_threshold: float = 0.01,
+            peaks: Any = None,
             remove_interference: bool = True,
-            phase_shift: bool = False,
-            remove_phase_ramp: bool = False,
             embedding_option: Any = None,
     ):
         """
@@ -781,6 +786,8 @@ class SyntheticPSF:
             alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
             phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
             plot: optional toggle to visualize embeddings
+            remove_interference: a toggle to normalize out the interference pattern from the OTF
+            peaks: masked array of the peaks of interest to compute the interference pattern between objects
             log10: optional toggle to take log10 of the FFT
             freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
             embedding_option: type of embedding to use.
@@ -797,7 +804,7 @@ class SyntheticPSF:
         otf = self.fft(psf, padsize=padsize)
 
         if remove_interference:
-            otf = self.remove_interference_pattern(ndimage.gaussian_filter(psf, sigma=.75), otf, plot=plot)
+            otf = self.remove_interference_pattern(psf, otf, plot=plot, peaks=peaks)
 
         if no_phase:
             emb = self.compute_emb(
@@ -822,9 +829,6 @@ class SyntheticPSF:
                 freq_strength_threshold=freq_strength_threshold,
             )
 
-            if phase_shift:
-                otf = self.shift_otf(psf, otf, plot=plot)
-
             phi = self.compute_emb(
                 otf,
                 val=phi_val,
@@ -835,9 +839,6 @@ class SyntheticPSF:
                 embedding_option='spatial_planes',
                 freq_strength_threshold=freq_strength_threshold,
             )
-
-            if remove_phase_ramp:
-                phi = self.remove_phase_ramp(phi, plot=plot)
 
             emb = np.concatenate([alpha, phi], axis=0)
 
