@@ -225,3 +225,6 @@ class Zernike:
 
     def ansi_to_nm(self, k):
         return self._ansi_to_nm[k]
+
+    def twin(self):
+        return Zernike((self.n, self.m * -1))

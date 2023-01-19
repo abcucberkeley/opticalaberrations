@@ -317,6 +317,43 @@ def predict_rotation(
     Returns:
         average prediction, stdev
     """
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    def cart2pol(x, y):
+        """Convert cartesian (x, y) to polar (rho, phi)
+        """
+        rho = np.sqrt(x ** 2 + y ** 2)
+        phi = np.arctan2(y, x)
+        return (rho, phi)
+
+    def pol2cart(rho, phi):
+        """Convert polar (rho, phi) to cartesian (x, y)
+        """
+        x = rho * np.cos(phi)
+        y = rho * np.sin(phi)
+        return (x, y)
+
+    def saw_func(x, b: float = 0):
+        """Generates triangle function range of [0 to a] over 0-90 degrees
+        Generates a sawtooth function range of [0 to a] over 0-180 degrees
+        if width set to 1
+
+        Args:
+            x (array): array of degrees to evaluate at
+            a (float): amplitude
+            b (float): phase offset in degrees
+        """
+        saw = sp.signal.sawtooth(2 * np.pi / 180 * (x - b), width=1)
+        return 90 * saw
+
     embs = psfgen.embedding(
         psf=np.squeeze(inputs),
         plot=plot,
@@ -329,9 +366,7 @@ def predict_rotation(
     rotations = np.arange(0, 361, 1).astype(int)
     
     for angle in rotations:
-        # emb = np.array([rotate(e, angle=angle) for e in embs])
-        angs = [angle, 0, 0]
-        emb   = np.array([rotate(e, angle=ang) for e, ang in zip(embs, angs)])
+        emb = np.array([rotate(e, angle=angle) for e in embs])
         rotated_embs.append(emb)
 
     if no_phase:
@@ -353,93 +388,102 @@ def predict_rotation(
 
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection) 
 
-    def cart2pol(x, y):
-        """Convert cartesian (x, y) to polar (rho, phi)            
-        """
-        rho = np.sqrt(x ** 2 + y ** 2)
-        phi = np.arctan2(y, x)
-        return (rho, phi)
-
-    def pol2cart(rho, phi):
-        """Convert polar (rho, phi) to cartesian (x, y)     
-        """
-        x = rho * np.cos(phi)
-        y = rho * np.sin(phi)
-        return (x, y)
-
-    def saw_func(x, a: float = 1, b: float = 0):
-        """Generates triangle function range of [0 to a] over 0-90 degrees
-        Generates a sawtooth function range of [0 to a] over 0-180 degrees
-        if width set to 1
-
-        Args:
-            x (array): array of degrees to evaluate at
-            a (float): amplitude
-            b (float): phase offset in degrees
-
-        """
-        saw = sp.signal.sawtooth(2 * np.pi / 180 * (x - b), width=0.5)
-        return a * (1 + saw) / 2
-
-    preds = np.zeros((inputs.shape[0], psfgen.n_modes))
+    preds = np.zeros(psfgen.n_modes)
+    wavefront = Wavefront(preds)
 
     if plot is not None:
-        fig, axes = plt.subplots(init_preds.shape[1], figsize=(15, 20))
+        fig = plt.figure(figsize=(15, 20))
+        plt.subplots_adjust(hspace=0.1)
+        gs = fig.add_gridspec(len(wavefront.twins.keys()), 2)
 
-        for i, ax in enumerate(axes):
-            ax.plot(init_preds[:, i])
-            ax.set_title(f"Mode: {i}")
-            ax.set_xlim(0, 360)
-            ax.set_xticks(range(0, 370, 10))
-            ax.set_ylim(np.min(init_preds), np.max(init_preds))
+    for row, (mode, twin) in enumerate(wavefront.twins.items()):
+        if twin is not None:
+            magnitude, phiangle = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
 
+            if np.mean(magnitude) > threshold:
+                # the Zernike modes have m periods per 2pi. Instead of adjusting saw_func period, we scale xdata
+                xdata = rotations * np.abs(mode.m)
+                rho, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
+                ydata = np.degrees(ydata)
+
+                popt, pcov = sp.optimize.curve_fit(saw_func, xdata, ydata)
+                fit_angle = ydata[xdata == 0]
+                preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(np.max(rho), np.radians(fit_angle))
+
+                if plot is not None:
+                    ax = fig.add_subplot(gs[row, 0])
+                    fit_ax = fig.add_subplot(gs[row, 1])
+
+                    ax.plot(init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
+                    ax.plot(init_preds[:, twin.index_ansi], '--', label=f"m{twin.index_ansi}")
+
+                    ax.set_xlim(0, 360)
+                    ax.set_xticks(range(0, 405, 45))
+                    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+                    ax.set_ylim(np.min(init_preds), np.max(init_preds))
+                    ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
+                    ax.set_ylabel('Amplitude ($\mu$ RMS)')
+                    ax.set_xlabel('Digital rotation (deg)')
+
+                    fit_ax.scatter(xdata, ydata, s=1, color='C2')
+                    fit_ax.plot(xdata, saw_func(xdata, *popt), color='C3')
+
+                    fit_ax.set_title(
+                        f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
+                        f' [$x_0$={int(fit_angle)}$^\circ$, $\\angle$={int(popt[0])}$^\circ$, $\\rho$={np.max(rho):.3f}]'
+                    )
+
+                    fit_ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+                    fit_ax.set_ylabel('Predicted rotation')
+                    fit_ax.set_xlim(0, 360 * np.abs(mode.m))
+                    fit_ax.yaxis.tick_right()
+                    fit_ax.yaxis.set_label_position("right")
+
+                    rho_ax = ax.twinx()
+                    rho_ax.scatter(rotations, rho, s=1, color='grey')
+                    rho_ax.set_ylabel('Predicted $\\rho$ ($\mu$ RMS)')
+                    rho_ax.set_ylim(ymin=0)
+                    rho_ax.yaxis.label.set_color('grey')
+                    rho_ax.tick_params(axis='y', colors='grey')
+
+            else:
+                preds[mode.index_ansi] = 0
+                preds[twin.index_ansi] = 0
+
+                if plot is not None:
+                    ax = fig.add_subplot(gs[row, :])
+                    ax.plot(init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
+                    ax.plot(init_preds[:, twin.index_ansi], '--', label=f"m{twin.index_ansi}")
+
+                    ax.set_xlim(0, 360)
+                    ax.set_xticks(range(0, 405, 45))
+                    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+                    ax.set_ylim(np.min(init_preds), np.max(init_preds))
+                    ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
+                    ax.set_ylabel('Amplitude ($\mu$ RMS)')
+                    ax.set_xlabel('Digital rotation (deg)')
+
+        else:
+            rho = np.median(init_preds[:, mode.index_ansi])
+            rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
+            preds[mode.index_ansi] = rho
+
+            if plot is not None:
+                ax = fig.add_subplot(gs[row, :])
+                ax.plot(init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
+
+                ax.set_xlim(0, 360)
+                ax.set_xticks(range(0, 405, 45))
+                ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+                ax.set_ylim(np.min(init_preds), np.max(init_preds))
+                ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
+                ax.set_ylabel('Amplitude ($\mu$ RMS)')
+                ax.set_xlabel('Digital rotation (deg)')
+
+    if plot is not None:
         plt.tight_layout()
         plt.savefig(f'{plot}_rotations.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-    for i in range(psfgen.n_modes):
-        mode = Zernike(i)
-        twin = Zernike((mode.n, mode.m * -1))
-
-        for j in range(inputs.shape[0]):
-            if twin.index_ansi < init_preds.shape[1] - 1:
-                magnitude, phiangle = cart2pol(init_preds[j, mode.index_ansi], init_preds[j, twin.index_ansi])
-            else:
-                magnitude = 0.
-
-            if mode.m != 0 and mode.index_ansi < twin.index_ansi and magnitude > threshold:
-                xdata = rotations * np.abs(mode.m)  # the Zernike modes have m periods per 2pi. Instead of adjusting saw_func period, we scale xdata
-                rho, ydata = cart2pol(init_preds[j, mode.index_ansi], init_preds[j:, twin.index_ansi])
-                ydata = np.degrees(ydata)
-                initial_guess = np.array([90, rotations[np.argmin(ydata)]* np.abs(mode.m)])
-                # use the location of the minimum of ydata as the inital guess for saw_func start, amplitude should be 90 degrees
-                popt, pcov= sp.optimize.curve_fit(saw_func, xdata, ydata, initial_guess)
-                fit_angle = popt[1] / np.abs(mode.m)   
-                preds[j, mode.index_ansi], preds[j, twin.index_ansi] = pol2cart(np.max(rho), np.radians(fit_angle))
-
-                if plot is not None and np.max(rho) > threshold:
-                    fig, axes = plt.subplots(2, 1, sharex = True)                    
-                    axes[0].scatter(rotations, ydata, s=1)
-                    axes[0].plot(rotations, saw_func(xdata, *popt), color='C1')
-                    axes[0].set_ylabel('Predicted rotation (deg)')
-                    axes[0].set_title(f'Fit angle = {int(fit_angle)} (deg), R = {np.max(rho):.2f} \n mode {mode.index_ansi} = {preds[j, mode.index_ansi]:.2f}, mode {twin.index_ansi} = {preds[j, twin.index_ansi]:.2f} /n Threshold={threshold:.2f}')
-                    axes[1].scatter(rotations, rho, s=1)
-                    axes[1].set_ylabel('Predicted rho (um rms)')
-                    axes[1].set_xlabel('Digital rotation (deg)')
-                    axes[1].set_ylim(ymin=0)
-
-                    plt.tight_layout()
-                    plt.savefig(f'{plot}_fit_mode{mode.index_ansi}_{twin.index_ansi}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-            else:
-                try:
-                    os.remove(f'{plot}_fit_mode{mode.index_ansi}_{twin.index_ansi}.svg')    # delete old plots if they exist
-                except OSError:
-                    pass
-                rho = np.median(init_preds[j, mode.index_ansi])
-                rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
-                
-                preds[j, mode.index_ansi] = rho                      
-    
     return preds
 
 
@@ -739,7 +783,7 @@ def evaluate(
             batch_size=batch_size,
             n_samples=1,
             threshold=threshold,
-            plot=plot
+            plot=f"{plot}_followup"
         )
 
         if len(followup_preds.shape) > 1:
@@ -764,6 +808,7 @@ def evaluate(
             threshold=threshold,
             plot=plot
         )
+
         if len(preds.shape) > 1:
             preds = preds[:, :ys.shape[-1]]
         else:

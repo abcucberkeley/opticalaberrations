@@ -128,6 +128,16 @@ class Wavefront:
 
         self.amplitudes = np.array([self.zernikes[k] for k in sorted(self.zernikes.keys())])
 
+        self.twins = {}
+        for mode in self.zernikes:
+            twin = mode.twin()
+            if mode.index_ansi not in self.prefixed:
+                if mode.index_ansi == twin.index_ansi:
+                    self.twins[mode] = None
+
+                elif mode.index_ansi < twin.index_ansi:
+                    self.twins[mode] = twin
+
     def __len__(self):
         return len(self.zernikes)
 

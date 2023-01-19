@@ -2633,4 +2633,4 @@ def plot_sign_eval(
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    # plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
