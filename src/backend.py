@@ -296,7 +296,7 @@ def predict_rotation(
     vector on this coordinate system. A problem occurs when the ground truth vector lies near
     where one of the vectors flips sign (and the model was trained to only respond with positive
     values for that vector).  Either a discontinuity or a degeneracy occurs in this area leading to
-    unreliable predictions.  The solution is to digitially rotate the input embeddings over a range
+    unreliable predictions.  The solution is to digitally rotate the input embeddings over a range
     of angles.  Converting from cartesian X Y to polar coordinates (rho, phi), the model predictions 
     should map phi as a linear waveform (if all were perfect), a triangle waveform (if degenergancies 
     exist because the model was trained to only return positive values), or a sawtooth waveform (if
@@ -363,7 +363,7 @@ def predict_rotation(
     )
 
     rotated_embs = []
-    rotations = np.arange(0, 361, 7).astype(int)
+    rotations = np.arange(0, 361, 1).astype(int)
     
     for angle in rotations:
         emb = np.array([rotate(e, angle=angle) for e in embs])
@@ -408,10 +408,12 @@ def predict_rotation(
                 ydata = np.unwrap(np.degrees(raw_ydata), period=180)
 
                 popt, pcov = sp.optimize.curve_fit(saw_func, xdata, ydata)
-                fit = saw_func(xdata,*popt)
-                residual_standard_error = np.std(fit - ydata)
-                if residual_standard_error * 2 > 15: rho = 0    # reject if it doesn't show rotation.
-                
+                fit = saw_func(xdata, *popt)
+
+                mse = np.mean(np.square(fit-ydata))
+                if mse > 700: rho = 0    # reject if it doesn't show rotation.
+
+
                 twin_angle = fit[0]   # evaluate the curve fit when there is no digital rotation.
                 preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
 
@@ -436,7 +438,8 @@ def predict_rotation(
                     
                     fit_ax.set_title(
                         f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
-                        f' [$b$={twin_angle:.2f}$^\circ$, $\\rho$={rho:.3f} $\mu$ RMS, 2$\\sigma$={residual_standard_error*2:.1f}$^\circ$]', color=title_color
+                        f' [$b$={twin_angle:.2f}$^\circ$, $\\rho$={rho:.3f} $\mu$ RMS, MSE={mse:.2f}]',
+                        color=title_color
                     )
 
                     fit_ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
@@ -506,13 +509,13 @@ def predict_sign(
         if np.array_equal(cur, prev):
             return np.zeros_like(prev)
 
-        pct = ((cur - prev) / (prev+1e-6)) * 100.0
+        pct = ((cur - prev) / np.abs(prev+1e-6)) * 100.0
         pct[pct > 100] = 100
         pct[pct < -100] = -100
         return pct
 
-    init_preds = np.abs(init_preds)
-    followup_preds = np.abs(followup_preds)
+    # init_preds = np.abs(init_preds)
+    # followup_preds = np.abs(followup_preds)
 
     preds = init_preds.copy()
     pchange = pct_change(followup_preds, init_preds)
@@ -746,9 +749,9 @@ def evaluate(
         )
 
         if len(init_preds.shape) > 1:
-            init_preds = np.abs(init_preds)[:, :ys.shape[-1]]
+            init_preds = init_preds[:, :ys.shape[-1]]
         else:
-            init_preds = np.abs(init_preds)[np.newaxis, :ys.shape[-1]]
+            init_preds = init_preds[np.newaxis, :ys.shape[-1]]
 
         res = ys - init_preds
         followup_inputs = np.zeros_like(inputs)
@@ -783,7 +786,7 @@ def evaluate(
             savepath=f'{plot}_sign_eval_db'
         )
 
-        followup_preds = predict_rotation(
+        followup_preds, stdev = bootstrap_predict(
             model=model,
             inputs=followup_inputs,
             psfgen=gen,
@@ -795,9 +798,9 @@ def evaluate(
         )
 
         if len(followup_preds.shape) > 1:
-            followup_preds = np.abs(followup_preds)[:, :ys.shape[-1]]
+            followup_preds = followup_preds[:, :ys.shape[-1]]
         else:
-            followup_preds = np.abs(followup_preds)[np.newaxis, :ys.shape[-1]]
+            followup_preds = followup_preds[np.newaxis, :ys.shape[-1]]
 
         preds, pchanges = predict_sign(
             init_preds=init_preds,
