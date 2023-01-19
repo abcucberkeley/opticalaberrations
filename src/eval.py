@@ -675,7 +675,7 @@ def random_samples(
                 psf_shape=(64, 64, 64),
                 mean_background_noise=0,
             )
-            for s in range(1):
+            for s in range(10):
                 for num_objs in tqdm([1, 2, 5, 10]):
                     reference = multipoint_dataset.beads(
                         gen=gen,
