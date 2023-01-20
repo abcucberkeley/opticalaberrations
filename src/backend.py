@@ -374,18 +374,9 @@ def predict_rotation(
         y = rho * np.sin(phi)
         return (x, y)
 
-    def saw_func(x, b: float = 0):
-        """Generates triangle function range of [0 to a] over 0-90 degrees
-        Generates a sawtooth function range of [0 to a] over 0-180 degrees
-        if width set to 1
-
-        Args:
-            x (array): array of degrees to evaluate at
-            a (float): amplitude
-            b (float): phase offset in degrees
-        """
-        saw = sp.signal.sawtooth(2 * np.pi / 180 * (x - b), width=1)
-        return np.unwrap(90 * saw, period=180)
+    def linear_fit_fixed_slope(x, y, m):
+        b = np.mean(y - m*x)
+        return b
 
     embs = psfgen.embedding(
         psf=np.squeeze(inputs),
@@ -401,7 +392,7 @@ def predict_rotation(
     )
 
     rotated_embs = []
-    rotations = np.arange(0, 361, 1).astype(int)
+    rotations = np.arange(0, 361, 2).astype(int)
     
     for angle in rotations:
         emb = np.array([rotate(e, angle=angle) for e in embs])
@@ -439,20 +430,37 @@ def predict_rotation(
             magnitude, phiangle = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
 
             if np.mean(magnitude) > threshold:
-                # the Zernike modes have m periods per 2pi. Instead of adjusting saw_func period, we scale xdata
+                # the Zernike modes have m periods per 2pi. xdata is now the Twin angle
                 xdata = rotations * np.abs(mode.m)
                 rhos, raw_ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
                 rho = rhos[np.argmin(np.abs(raw_ydata))]
+
                 ydata = np.unwrap(np.degrees(raw_ydata), period=180)
 
-                popt, pcov = sp.optimize.curve_fit(saw_func, xdata, ydata)
-                fit = saw_func(xdata, *popt)
+                m = 1   # slope is 1 when xdata is the Twin angle
+                data_mask = np.ones(ydata.shape[0], dtype=bool)
+                data_mask[ ydata < 110] = 0
+                data_mask[ ydata > 160] = 0   # exclude points near discontinuities
+
+                b = linear_fit_fixed_slope(xdata[data_mask], ydata[data_mask], m)   # initial fit just between 110 and 160 degrees, away from phase unwrapping errors that could occur due to discontinuties
+                fit = m * xdata + b
+
+                wrapped_fit = (fit + 90) % 180 # wrapped between 0 and 180
+                data_mask = np.ones(wrapped_fit.shape[0], dtype=bool)
+                data_mask[ wrapped_fit < 10] = 0
+                data_mask[ wrapped_fit > 170] = 0   # exclude points near discontinuities (-90, +90, 450,..) based upon fit
+                
+                xdata = xdata[data_mask]
+                ydata = ydata[data_mask]
+                ydata = np.unwrap(ydata, period=180)
+                             
+                b = linear_fit_fixed_slope(xdata, ydata, m) # refit without bad data points
+                fit = m * xdata + b
 
                 mse = np.mean(np.square(fit-ydata))
-                if mse > 700: rho = 0    # reject if it doesn't show rotation.
+                if mse > 700: rho = 0    # reject if it doesn't show rotation that matches within +/- 26deg, equivalent to +/- 0.005 um on a 0.01 um mode.
 
-
-                twin_angle = fit[0]   # evaluate the curve fit when there is no digital rotation.
+                twin_angle = b   # evaluate the curve fit when there is no digital rotation.
                 preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
 
                 if plot is not None:
@@ -465,34 +473,31 @@ def predict_rotation(
                     ax.set_xlim(0, 360)
                     ax.set_xticks(range(0, 405, 45))
                     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                    ax.set_ylim(np.min(init_preds), np.max(init_preds))
+                    ax.set_ylim(-np.max(rhos), np.max(rhos))
                     ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
                     ax.set_ylabel('Amplitude ($\mu$ RMS)')
                     ax.set_xlabel('Digital rotation (deg)')
 
                     title_color = 'g' if rho > 0 else 'r'
-                    fit_ax.plot(xdata, saw_func(xdata, *popt), color=title_color, lw='.75')
+                    fit_ax.plot(xdata, m * xdata + b, color=title_color, lw='.75')
                     fit_ax.scatter(xdata, ydata, s=2, color='grey')
                     
                     fit_ax.set_title(
                         f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
-                        f' [$b$={twin_angle:.2f}$^\circ$, $\\rho$={rho:.3f} $\mu$ RMS, MSE={mse:.2f}]',
+                        f' [$b$={twin_angle:.1f}$^\circ$  $\\rho$={rho:.3f} $\mu$RMS   MSE={mse:.0f}]',
                         color=title_color
                     )
 
                     fit_ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
                     fit_ax.set_ylabel('Predicted Twin angle (deg)')
                     fit_ax.set_xlabel('Digitially rotated Twin angle (deg)')
+                    fit_ax.set_xticks(range(0, int(np.max(xdata)), 90))
+                    fit_ax.set_yticks(np.insert(np.arange(-90, np.max(ydata), 180), 0, 0))
                     fit_ax.set_xlim(0, 360 * np.abs(mode.m))
-                    #fit_ax.yaxis.tick_right()
-                    #fit_ax.yaxis.set_label_position("right")
+     
+                    ax.scatter(rotations[~data_mask], rhos[~data_mask], s=1.5, color='pink')                    
+                    ax.scatter(rotations[ data_mask], rhos[ data_mask], s=1.5, color='black')
 
-                    rho_ax = ax.twinx()
-                    rho_ax.scatter(rotations, rhos, s=1.5, color='grey')
-                    rho_ax.set_ylabel('Predicted $\\rho$ ($\mu$ RMS)')
-                    rho_ax.set_ylim(ymin=0)
-                    rho_ax.yaxis.label.set_color('grey')
-                    rho_ax.tick_params(axis='y', colors='grey')
 
             else:
                 preds[mode.index_ansi] = 0
