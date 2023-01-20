@@ -22,6 +22,7 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 import scipy as sp
+from scipy import ndimage
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -37,15 +38,14 @@ from tensorflow.keras.callbacks import EarlyStopping
 from callbacks import Defibrillator
 from callbacks import LearningRateScheduler
 from callbacks import TensorBoardCallback
+from skimage.feature import peak_local_max
 
 import utils
 import vis
 import data_utils
-import os
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
-from zernike import Zernike
 
 from tensorflow.keras import Model
 from phasenet import PhaseNet
@@ -311,6 +311,7 @@ def predict_rotation(
     remove_interference: bool = True,
     plot: Any = None,
     desc: str = 'Predict-rotations',
+    rotations: np.ndarray = np.arange(0, 361, 1).astype(int)
 ):
     """
     Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin).
@@ -375,8 +376,9 @@ def predict_rotation(
         return (x, y)
 
     def linear_fit_fixed_slope(x, y, m):
-        b = np.mean(y - m*x)
-        return b
+        return np.mean(y - m*x)
+
+    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
 
     embs = psfgen.embedding(
         psf=np.squeeze(inputs),
@@ -392,8 +394,6 @@ def predict_rotation(
     )
 
     rotated_embs = []
-    rotations = np.arange(0, 361, 2).astype(int)
-    
     for angle in rotations:
         emb = np.array([rotate(e, angle=angle) for e in embs])
         rotated_embs.append(emb)
@@ -415,8 +415,6 @@ def predict_rotation(
         desc=desc
     )
 
-    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection) 
-
     preds = np.zeros(psfgen.n_modes)
     wavefront = Wavefront(preds)
 
@@ -432,33 +430,25 @@ def predict_rotation(
             if np.mean(magnitude) > threshold:
                 # the Zernike modes have m periods per 2pi. xdata is now the Twin angle
                 xdata = rotations * np.abs(mode.m)
-                rhos, raw_ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
-                rho = rhos[np.argmin(np.abs(raw_ydata))]
+                rhos, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
+                ydata = np.degrees(ydata)
+                rho = rhos[np.argmin(np.abs(ydata))]
 
-                ydata = np.unwrap(np.degrees(raw_ydata), period=180)
-
-                m = 1   # slope is 1 when xdata is the Twin angle
-                data_mask = np.ones(ydata.shape[0], dtype=bool)
-                data_mask[ ydata < 110] = 0
-                data_mask[ ydata > 160] = 0   # exclude points near discontinuities
-
-                b = linear_fit_fixed_slope(xdata[data_mask], ydata[data_mask], m)   # initial fit just between 110 and 160 degrees, away from phase unwrapping errors that could occur due to discontinuties
-                fit = m * xdata + b
-
-                wrapped_fit = (fit + 90) % 180 # wrapped between 0 and 180
-                data_mask = np.ones(wrapped_fit.shape[0], dtype=bool)
-                data_mask[ wrapped_fit < 10] = 0
-                data_mask[ wrapped_fit > 170] = 0   # exclude points near discontinuities (-90, +90, 450,..) based upon fit
-                
+                # exclude points near discontinuities (-90, +90, 450,..) based upon fit
+                data_mask = np.ones(xdata.shape[0], dtype=bool)
+                data_mask[(init_preds[:, mode.index_ansi] < rho/5) * (rho > threshold)] = 0.
                 xdata = xdata[data_mask]
                 ydata = ydata[data_mask]
                 ydata = np.unwrap(ydata, period=180)
-                             
-                b = linear_fit_fixed_slope(xdata, ydata, m) # refit without bad data points
+
+                m = 1
+                b = linear_fit_fixed_slope(xdata, ydata, m)  # refit without bad data points
                 fit = m * xdata + b
 
                 mse = np.mean(np.square(fit-ydata))
-                if mse > 700: rho = 0    # reject if it doesn't show rotation that matches within +/- 26deg, equivalent to +/- 0.005 um on a 0.01 um mode.
+                if mse > 700:
+                    # reject if it doesn't show rotation that matches within +/- 26deg, equivalent to +/- 0.005 um on a 0.01 um mode.
+                    rho = 0
 
                 twin_angle = b   # evaluate the curve fit when there is no digital rotation.
                 preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
@@ -475,7 +465,7 @@ def predict_rotation(
                     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
                     ax.set_ylim(-np.max(rhos), np.max(rhos))
                     ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
-                    ax.set_ylabel('Amplitude ($\mu$ RMS)')
+                    ax.set_ylabel('Amplitude ($\mu$m RMS)')
                     ax.set_xlabel('Digital rotation (deg)')
 
                     title_color = 'g' if rho > 0 else 'r'
@@ -495,10 +485,8 @@ def predict_rotation(
                     fit_ax.set_yticks(np.insert(np.arange(-90, np.max(ydata), 180), 0, 0))
                     fit_ax.set_xlim(0, 360 * np.abs(mode.m))
      
-                    ax.scatter(rotations[~data_mask], rhos[~data_mask], s=1.5, color='pink')                    
-                    ax.scatter(rotations[ data_mask], rhos[ data_mask], s=1.5, color='black')
-
-
+                    ax.scatter(rotations[~data_mask], rhos[~data_mask], s=1.5, color='pink', zorder=3)
+                    ax.scatter(rotations[data_mask], rhos[data_mask], s=1.5, color='black', zorder=3)
             else:
                 preds[mode.index_ansi] = 0
                 preds[twin.index_ansi] = 0
@@ -782,6 +770,20 @@ def evaluate(
             preds = np.abs(preds)[np.newaxis, :ys.shape[-1]]
 
     elif eval_sign == 'dual_stage':
+        # for i in inputs:
+        #     peaks = peak_local_max(
+        #         ndimage.gaussian_filter(i, sigma=1.1),
+        #         min_distance=5,
+        #         threshold_rel=.05,
+        #         exclude_border=5,
+        #         p_norm=2,
+        #         num_peaks=100
+        #     ).astype(int)
+        #
+        #     beads = np.zeros_like(i)
+        #     for p in peaks:
+        #         beads[p[0], p[1], p[2]] = i[p[0], p[1], p[2]]
+
         init_preds = predict_rotation(
             model=model,
             inputs=inputs,
@@ -799,7 +801,11 @@ def evaluate(
         else:
             init_preds = init_preds[np.newaxis, :ys.shape[-1]]
 
-        res = ys - init_preds
+        threshold = utils.waves2microns(threshold, wavelength=gen.lam_detection)
+        ps = init_preds.copy()
+        ps[ps > .1] = .1
+        ps[ps < -.1] = -.1
+        res = ys - ps
         followup_inputs = np.zeros_like(inputs)
 
         if reference is not None:

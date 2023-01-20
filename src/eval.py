@@ -725,7 +725,7 @@ def random_samples(
                         gen=gen,
                         ys=y,
                         psnr=psnr,
-                        batch_size=1,
+                        batch_size=512,
                         plot=save_path / f'{s}',
                         eval_sign=eval_sign
                     )
