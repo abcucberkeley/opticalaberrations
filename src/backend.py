@@ -242,30 +242,19 @@ def bootstrap_predict(
 
     if not emb:
         logger.info(f"Generating embeddings")
-
-        model_inputs = []
-        for i in inputs:
-            emb = psfgen.embedding(
-                psf=np.squeeze(i),
-                plot=plot,
-                padsize=padsize,
-                no_phase=no_phase,
-                alpha_val=alpha_val,
-                phi_val=phi_val,
-                peaks=peaks,
-                remove_interference=remove_interference,
-                embedding_option=psfgen.embedding_option,
-                freq_strength_threshold=freq_strength_threshold,
-            )
-
-            if no_phase and model.input_shape[1] == 6:
-                phase_mask = np.zeros((3, model.input_shape[2], model.input_shape[3]))
-                emb = np.concatenate([emb, phase_mask], axis=0)
-            elif model.input_shape[1] == 3:
-                emb = emb[:3]
-
-            model_inputs.append(emb)
-
+        generate_fourier_embeddings = partial(
+            psfgen.embedding,
+            plot=plot,
+            padsize=padsize,
+            no_phase=no_phase,
+            alpha_val=alpha_val,
+            phi_val=phi_val,
+            peaks=peaks,
+            remove_interference=remove_interference,
+            embedding_option=psfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+        )
+        model_inputs = utils.multiprocess(generate_fourier_embeddings, inputs, cores=-1)
         model_inputs = np.stack(model_inputs, axis=0)
     else:
         # pass raw PSFs to the model
@@ -295,62 +284,36 @@ def bootstrap_predict(
 
 
 @profile
-def predict_rotation(
-    model: tf.keras.Model,
-    inputs: np.array,
+def eval_rotation(
+    init_preds: np.ndarray,
+    rotations: np.ndarray,
     psfgen: SyntheticPSF,
-    batch_size: int = 1,
-    n_samples: int = 10,
     threshold: float = 0.01,
-    freq_strength_threshold: float = .01,
-    no_phase: bool = False,
-    padsize: Any = None,
-    alpha_val: str = 'abs',
-    phi_val: str = 'angle',
-    peaks: Any = None,
-    remove_interference: bool = True,
     plot: Any = None,
-    desc: str = 'Predict-rotations',
-    rotations: np.ndarray = np.arange(0, 361, 1).astype(int)
 ):
     """
-    Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin).
+        We can think of the mode and its twin as the X and Y basis, and the abberation being a
+        vector on this coordinate system. A problem occurs when the ground truth vector lies near
+        where one of the vectors flips sign (and the model was trained to only respond with positive
+        values for that vector).  Either a discontinuity or a degeneracy occurs in this area leading to
+        unreliable predictions.  The solution is to digitally rotate the input embeddings over a range
+        of angles.  Converting from cartesian X Y to polar coordinates (rho, phi), the model predictions
+        should map phi as a linear waveform (if all were perfect), a triangle waveform (if degenergancies
+        exist because the model was trained to only return positive values), or a sawtooth waveform (if
+        a discontinuity exists because the model was trained to only return positive values for the first
+        mode in the twin pair).  These waveforms (with known period:given by the m value of the mode,
+        known amplitude) can be curve-fit to determine the actual phi. Given rho and phi, we can
+        return to cartesian coordinates, which give the amplitudes for mode & twin.
 
-    We can think of the mode and its twin as the X and Y basis, and the abberation being a 
-    vector on this coordinate system. A problem occurs when the ground truth vector lies near
-    where one of the vectors flips sign (and the model was trained to only respond with positive
-    values for that vector).  Either a discontinuity or a degeneracy occurs in this area leading to
-    unreliable predictions.  The solution is to digitally rotate the input embeddings over a range
-    of angles.  Converting from cartesian X Y to polar coordinates (rho, phi), the model predictions 
-    should map phi as a linear waveform (if all were perfect), a triangle waveform (if degenergancies 
-    exist because the model was trained to only return positive values), or a sawtooth waveform (if
-    a discontinuity exists because the model was trained to only return positive values for the first
-    mode in the twin pair).  These waveforms (with known period:given by the m value of the mode,
-    known amplitude) can be curve-fit to determine the actual phi. Given rho and phi, we can 
-    return to cartesian coordinates, which give the amplitudes for mode & twin.
-
-    Args:
-        model: pre-trained keras model. Model must be trained with XY embeddings only so that we can rotate them.
-        inputs: encoded tokens to be processed. (e.g. input images)
-        psfgen: Synthetic PSF object
-        n_samples: number of predictions of average
-        batch_size: number of samples per batch
-        no_phase: ignore/drop the phase component of the FFT
-        padsize: pad the input to the desired size for the FFT
-        alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
-        phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
-        remove_interference: a toggle to normalize out the interference pattern from the OTF
-        peaks: masked array of the peaks of interest to compute the interference pattern
-        threshold: set predictions below threshold to zero (wavelength)
-        freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
-        threshold: set predictions below threshold to zero (wavelength)
-        freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
-        desc: test to display for the progressbar
-        plot: optional toggle to visualize embeddings
-
-    Returns:
-        average prediction, stdev
+        Args:
+            init_preds: predictions for each rotation angle
+            rotations: list of rotations applied to the embeddings
+            psfgen: Synthetic PSF object
+            threshold: set predictions below threshold to zero (wavelength)
+            plot: optional toggle to visualize embeddings
     """
+
+    plt.style.use("default")
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -360,7 +323,6 @@ def predict_rotation(
         'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
-
     def cart2pol(x, y):
         """Convert cartesian (x, y) to polar (rho, phi)
         """
@@ -379,41 +341,6 @@ def predict_rotation(
         return np.mean(y - m*x)
 
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
-
-    embs = psfgen.embedding(
-        psf=np.squeeze(inputs),
-        plot=plot,
-        padsize=padsize,
-        no_phase=no_phase,
-        alpha_val=alpha_val,
-        phi_val=phi_val,
-        peaks=peaks,
-        remove_interference=remove_interference,
-        embedding_option=psfgen.embedding_option,
-        freq_strength_threshold=freq_strength_threshold,
-    )
-
-    rotated_embs = []
-    for angle in rotations:
-        emb = np.array([rotate(e, angle=angle) for e in embs])
-        rotated_embs.append(emb)
-
-    if no_phase:
-        rotated_embs = np.array(rotated_embs)[:, :3]
-    else:
-         rotated_embs = np.array(rotated_embs)
-
-    init_preds, stdev = bootstrap_predict(
-        model,
-        rotated_embs,
-        psfgen=psfgen,
-        batch_size=batch_size,
-        n_samples=n_samples,
-        no_phase=True,
-        threshold=0.,
-        plot=plot,
-        desc=desc
-    )
 
     preds = np.zeros(psfgen.n_modes)
     wavefront = Wavefront(preds)
@@ -530,6 +457,91 @@ def predict_rotation(
 
 
 @profile
+def predict_rotation(
+    model: tf.keras.Model,
+    inputs: np.array,
+    psfgen: SyntheticPSF,
+    batch_size: int = 1,
+    n_samples: int = 10,
+    threshold: float = 0.01,
+    freq_strength_threshold: float = .01,
+    no_phase: bool = False,
+    padsize: Any = None,
+    alpha_val: str = 'abs',
+    phi_val: str = 'angle',
+    peaks: Any = None,
+    remove_interference: bool = True,
+    plot: Any = None,
+    desc: str = 'Predict-rotations',
+    rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int)
+):
+    """
+    Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin).
+
+    Args:
+        model: pre-trained keras model. Model must be trained with XY embeddings only so that we can rotate them.
+        inputs: encoded tokens to be processed. (e.g. input images)
+        psfgen: Synthetic PSF object
+        n_samples: number of predictions of average
+        batch_size: number of samples per batch
+        no_phase: ignore/drop the phase component of the FFT
+        padsize: pad the input to the desired size for the FFT
+        alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
+        phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
+        remove_interference: a toggle to normalize out the interference pattern from the OTF
+        peaks: masked array of the peaks of interest to compute the interference pattern
+        threshold: set predictions below threshold to zero (wavelength)
+        freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
+        threshold: set predictions below threshold to zero (wavelength)
+        freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
+        desc: test to display for the progressbar
+        plot: optional toggle to visualize embeddings
+    """
+    generate_fourier_embeddings = partial(
+        psfgen.embedding,
+        plot=plot,
+        padsize=padsize,
+        no_phase=no_phase,
+        alpha_val=alpha_val,
+        phi_val=phi_val,
+        peaks=peaks,
+        remove_interference=remove_interference,
+        embedding_option=psfgen.embedding_option,
+        freq_strength_threshold=freq_strength_threshold,
+    )
+    embeddings = np.array(utils.multiprocess(generate_fourier_embeddings, inputs, cores=-1))
+
+    rotated_embs = []
+    for emb in embeddings:
+        for angle in rotations:
+            rotated_embs.append(np.array([rotate(plane, angle=angle) for plane in emb]))
+    rotated_embs = np.array(rotated_embs)
+
+    init_preds, stdev = bootstrap_predict(
+        model,
+        rotated_embs,
+        psfgen=psfgen,
+        batch_size=batch_size,
+        n_samples=n_samples,
+        no_phase=True,
+        threshold=0.,
+        plot=plot,
+        desc=desc
+    )
+
+    eval_mode_rotations = partial(
+        eval_rotation,
+        rotations=rotations,
+        psfgen=psfgen,
+        threshold=threshold,
+        plot=plot,
+    )
+
+    init_preds = np.stack(np.split(init_preds, inputs.shape[0]), axis=0)
+    return np.array(utils.multiprocess(eval_mode_rotations, init_preds, cores=-1))
+
+
+@profile
 def predict_sign(
     init_preds: np.ndarray,
     followup_preds: np.ndarray,
@@ -546,9 +558,6 @@ def predict_sign(
         pct[pct > 100] = 100
         pct[pct < -100] = -100
         return pct
-
-    # init_preds = np.abs(init_preds)
-    # followup_preds = np.abs(followup_preds)
 
     preds = init_preds.copy()
     pchange = pct_change(followup_preds, init_preds)
@@ -830,19 +839,19 @@ def evaluate(
                 fi /= np.max(fi)
                 followup_inputs[i] = fi[..., np.newaxis]
 
-        plt.style.use("default")
-        vis.plot_sign_eval(
-            inputs=inputs,
-            followup_inputs=followup_inputs,
-            savepath=f'{plot}_sign_eval'
-        )
-
-        plt.style.use("dark_background")
-        vis.plot_sign_eval(
-            inputs=inputs,
-            followup_inputs=followup_inputs,
-            savepath=f'{plot}_sign_eval_db'
-        )
+        # plt.style.use("default")
+        # vis.plot_sign_eval(
+        #     inputs=inputs,
+        #     followup_inputs=followup_inputs,
+        #     savepath=f'{plot}_sign_eval'
+        # )
+        #
+        # plt.style.use("dark_background")
+        # vis.plot_sign_eval(
+        #     inputs=inputs,
+        #     followup_inputs=followup_inputs,
+        #     savepath=f'{plot}_sign_eval_db'
+        # )
 
         followup_preds, stdev = bootstrap_predict(
             model=model,
