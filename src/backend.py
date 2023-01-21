@@ -779,19 +779,6 @@ def evaluate(
             preds = np.abs(preds)[np.newaxis, :ys.shape[-1]]
 
     elif eval_sign == 'dual_stage':
-        # for i in inputs:
-        #     peaks = peak_local_max(
-        #         ndimage.gaussian_filter(i, sigma=1.1),
-        #         min_distance=5,
-        #         threshold_rel=.05,
-        #         exclude_border=5,
-        #         p_norm=2,
-        #         num_peaks=100
-        #     ).astype(int)
-        #
-        #     beads = np.zeros_like(i)
-        #     for p in peaks:
-        #         beads[p[0], p[1], p[2]] = i[p[0], p[1], p[2]]
 
         init_preds = predict_rotation(
             model=model,
@@ -801,7 +788,6 @@ def evaluate(
             batch_size=batch_size,
             n_samples=1,
             threshold=threshold,
-            peaks=reference,
             plot=plot
         )
 
@@ -858,7 +844,6 @@ def evaluate(
             inputs=followup_inputs,
             psfgen=gen,
             no_phase=True,
-            peaks=reference,
             batch_size=batch_size,
             n_samples=1,
             threshold=threshold,

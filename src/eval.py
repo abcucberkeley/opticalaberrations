@@ -666,7 +666,6 @@ def random_samples(
             gen = backend.load_metadata(
                 model,
                 snr=1000,
-                batch_size=1,
                 amplitude_ranges=amplitude_range,
                 distribution=dist,
                 signed=False if eval_sign == 'positive_only' else True,

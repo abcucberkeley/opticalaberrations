@@ -578,7 +578,7 @@ class SyntheticPSF:
             beads[beads < .05] = 0.
             peaks = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
 
-        logger.info(f"Detected objects: {peaks.shape}")
+        logger.info(f"Detected objects: {peaks.shape[0]}")
         interference_pattern = self.fft(beads)
         corrected_otf = otf / interference_pattern
 
