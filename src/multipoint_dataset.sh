@@ -33,7 +33,7 @@ SHAPE=64
 RCROP=32
 
 MODES=15
-TITLE='noiseless_embeddings'
+TITLE='spatial_planes_embeddings'
 DATASET='train'
 
 MODE_DIST='pyramid'
@@ -42,7 +42,7 @@ OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   ITERS=100
-  SAMPLES_PER_BIN=500
+  SAMPLES_PER_BIN=200
   OBJS=(1 2 5 10 25)
   mPSNR=($(seq 11 10 51))
   xPSNR=($(seq 20 10 60))
@@ -115,7 +115,7 @@ do
             j="${j} --lam_detection ${LAMBDA}"
             j="${j} --cpu_workers ${CPUS}"
 
-            for e in principle_planes spatial_planes
+            for e in spatial_planes
             do
               j="${j} --embedding_option ${e}"
             done
