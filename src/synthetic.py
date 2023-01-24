@@ -561,7 +561,7 @@ class SyntheticPSF:
         return shifted_otf
 
     @profile
-    def remove_interference_pattern(self, psf, otf, plot, peaks=None, min_distance=5, window_size=16):
+    def remove_interference_pattern(self, psf, otf, plot, peaks=None, min_distance=5, kernel_size=15):
         """
         Normalize interference pattern from the given FFT
         Args:
@@ -570,58 +570,60 @@ class SyntheticPSF:
             plot: a toggle for visualization
             peaks: pre-defined mask of the exact bead locations
             min_distance: minimum distance for detecting adjacent beads
-            window_size: size of the window for template matching
+            kernel_size: size of the window for template matching
         """
+        blured_psf = ndimage.gaussian_filter(psf, sigma=1.1)
+
         # get max pixel in the image
-        poi = np.unravel_index(np.argmax(psf, axis=None), psf.shape)
+        half_length = kernel_size // 2
+        poi = np.unravel_index(np.argmax(blured_psf, axis=None), psf.shape)
 
         # crop a window around the object for template matching
-        poi = np.clip(poi, a_min=window_size//2, a_max=psf.shape[0]-(window_size//2)+1)
-        kernel = psf[
-            poi[0]-window_size//2:poi[0]+window_size//2,
-            poi[1]-window_size//2:poi[1]+window_size//2,
-            poi[2]-window_size//2:poi[2]+window_size//2,
+        poi = np.clip(poi, a_min=half_length, a_max=(psf.shape[0]-half_length)-1)
+        init_pos = [p-half_length for p in poi]
+        kernel = blured_psf[
+            init_pos[0]:init_pos[0]+kernel_size,
+            init_pos[1]:init_pos[1]+kernel_size,
+            init_pos[2]:init_pos[2]+kernel_size,
         ]
 
-        # convolve template with the input image and apply a gaussian filter
-        filtered_psf = convolution.convolve_fft(psf, kernel, allow_huge=True)
-        filtered_psf = ndimage.gaussian_filter(filtered_psf, sigma=1.1)
-        filtered_psf /= np.nanmax(filtered_psf)
+        # convolve template with the input image
+        # we're actually doing cross-corr NOT convolution
+        convolued_psf = convolution.convolve_fft(blured_psf, kernel, allow_huge=True, boundary='wrap')
+        convolued_psf -= np.nanmin(convolued_psf)
+        convolued_psf /= np.nanmax(convolued_psf)
 
         if peaks is None:
-            peaks = []
             # Bead detection
-            for border in [5, 4, 3, 2, 1, 0]:
-                detected_peaks = peak_local_max(
-                    filtered_psf,
-                    min_distance=min_distance,
-                    threshold_rel=.05,
-                    exclude_border=border,
-                    p_norm=2,
-                    num_peaks=100
-                ).astype(int)
+            peaks = []
+            detected_peaks = peak_local_max(
+                convolued_psf,
+                min_distance=min_distance,
+                threshold_rel=.05,
+                exclude_border=0,
+                p_norm=2,
+                num_peaks=100
+            ).astype(int)
 
-                beads = np.zeros_like(psf)
-                for p in detected_peaks:
-                    try:
-                        fov = filtered_psf[
-                            p[0]-(min_distance+1):p[0]+(min_distance+1),
-                            p[1]-(min_distance+1):p[1]+(min_distance+1),
-                            p[2]-(min_distance+1):p[2]+(min_distance+1),
-                        ]
-                        if np.max(fov) > filtered_psf[p[0], p[1], p[2]]:
-                            continue
-                        else:
-                            beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
-                            peaks.append(p)
-
-                    except Exception:
-                        # keep peak if we are at the border of the image
+            beads = np.zeros_like(psf)
+            for p in detected_peaks:
+                try:
+                    fov = convolued_psf[
+                        p[0]-(min_distance+1):p[0]+(min_distance+1),
+                        p[1]-(min_distance+1):p[1]+(min_distance+1),
+                        p[2]-(min_distance+1):p[2]+(min_distance+1),
+                    ]
+                    if np.max(fov) > convolued_psf[p[0], p[1], p[2]]:
+                        continue
+                    else:
                         beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
                         peaks.append(p)
 
-                if len(peaks) > 0:
-                    break
+                except Exception:
+                    # keep peak if we are at the border of the image
+                    beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
+                    peaks.append(p)
+
             peaks = np.array(peaks)
         else:
             beads = peaks.copy()
@@ -629,7 +631,7 @@ class SyntheticPSF:
             peaks = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
 
         if peaks.shape[0] > 0:
-            logger.info(f"Detected objects: {peaks.shape[0]}")
+            # logger.info(f"Detected objects: {peaks.shape[0]}")
 
             interference_pattern = self.fft(beads)
             corrected_otf = otf / interference_pattern
@@ -638,28 +640,29 @@ class SyntheticPSF:
             corrected_psf /= np.nanmax(corrected_psf)
 
             if plot is not None:
-                fig, axes = plt.subplots(3, 3, figsize=(8, 8), sharey=False, sharex=False)
+                fig, axes = plt.subplots(4, 3, figsize=(8, 8), sharey=False, sharex=False)
 
                 for ax in range(3):
                     for p in range(peaks.shape[0]):
                         if ax == 0:
+
                             axes[0, ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
-                            axes[1, ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                            axes[2, ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
                             axes[0, ax].add_patch(patches.Rectangle(
-                                xy=(peaks[p, 2] - window_size // 2, peaks[p, 1] - window_size // 2),
-                                width=window_size,
-                                height=window_size,
+                                xy=(peaks[p, 2] - half_length, peaks[p, 1] - half_length),
+                                width=kernel_size,
+                                height=kernel_size,
                                 fill=None,
                                 color=f'C{p}',
                                 alpha=1
                             ))
                         elif ax == 1:
                             axes[0, ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
-                            axes[1, ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                            axes[2, ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
                             axes[0, ax].add_patch(patches.Rectangle(
-                                xy=(peaks[p, 2] - window_size // 2, peaks[p, 0] - window_size // 2),
-                                width=window_size,
-                                height=window_size,
+                                xy=(peaks[p, 2] - half_length, peaks[p, 0] - half_length),
+                                width=kernel_size,
+                                height=kernel_size,
                                 fill=None,
                                 color=f'C{p}',
                                 alpha=1
@@ -667,24 +670,25 @@ class SyntheticPSF:
 
                         elif ax == 2:
                             axes[0, ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
-                            axes[1, ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                            axes[2, ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
                             axes[0, ax].add_patch(patches.Rectangle(
-                                xy=(peaks[p, 1] - window_size // 2, peaks[p, 0] - window_size // 2),
-                                width=window_size,
-                                height=window_size,
+                                xy=(peaks[p, 1] - half_length, peaks[p, 0] - half_length),
+                                width=kernel_size,
+                                height=kernel_size,
                                 fill=None,
                                 color=f'C{p}',
                                 alpha=1
                             ))
 
                     m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='Greys_r', alpha=.66)
-                    m2 = axes[1, ax].imshow(np.nanmax(filtered_psf, axis=ax), cmap='Greys_r')
-                    m3 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot')
+                    m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='magma')
+                    m3 = axes[2, ax].imshow(np.nanmax(convolued_psf, axis=ax), cmap='Greys_r')
+                    m4 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot')
 
                 for ax, m, label in zip(
-                        range(3),
-                        [m1, m2, m3],
-                        [f'Inputs (MIP)', 'Detected POIs', f'Normalized (MIP)']
+                        range(4),
+                        [m1, m2, m3, m4],
+                        [f'Inputs (MIP)', 'Kernel', 'Detected POIs', f'Normalized (MIP)']
                 ):
                     cax = inset_axes(axes[ax, -1], width="10%", height="100%", loc='center right', borderpad=-3)
                     cb = plt.colorbar(m, cax=cax)
@@ -707,7 +711,7 @@ class SyntheticPSF:
                 for ax in range(3):
                     m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='Greys_r', alpha=.66)
                     m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='Greys_r')
-                    m3 = axes[2, ax].imshow(np.nanmax(filtered_psf, axis=ax), cmap='Greys_r')
+                    m3 = axes[2, ax].imshow(np.nanmax(convolued_psf, axis=ax), cmap='Greys_r')
 
                 for ax, m, label in zip(
                         range(3),
@@ -921,9 +925,6 @@ class SyntheticPSF:
 
         otf = self.fft(psf, padsize=padsize)
 
-        if remove_interference:
-            otf = self.remove_interference_pattern(psf, otf, plot=plot, peaks=peaks)
-
         if no_phase:
             emb = self.compute_emb(
                 otf,
@@ -946,6 +947,9 @@ class SyntheticPSF:
                 embedding_option=self.embedding_option if embedding_option is None else embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
+
+            if remove_interference:
+                otf = self.remove_interference_pattern(psf, otf, plot=plot, peaks=peaks)
 
             phi = self.compute_emb(
                 otf,
