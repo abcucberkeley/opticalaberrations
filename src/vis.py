@@ -1448,8 +1448,9 @@ def diagnostic_assessment(
         bar_width: float = .35,
         dxy: float = .108,
         dz: float = .2,
+        pltstyle = None,
 ):
-
+    if pltstyle is not None: plt.style.use(pltstyle)
     def formatter(x, pos, dd):
         return f'{np.ceil(x * dd).astype(int):1d}'
 

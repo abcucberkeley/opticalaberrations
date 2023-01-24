@@ -1,5 +1,6 @@
 import matplotlib
 matplotlib.use('Agg')
+from multiprocessing import Pool
 
 import logging
 import sys
@@ -661,6 +662,8 @@ def random_samples(
     m = backend.load(model)
     m.summary()
 
+    pool = Pool(processes=4) # plotting = 2*calculation time, so shouldn't need more than 2-4 processes to keep up.
+
     for dist in ['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet']:
         for amplitude_range in [(.05, .1), (.1, .2), (.2, .3)]:
             gen = backend.load_metadata(
@@ -745,8 +748,8 @@ def random_samples(
                     imsave(save_path / f'psf_{s}.tif', noisy_img)
                     imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
 
-                    plt.style.use("default")
-                    vis.diagnostic_assessment(
+                    task = partial(
+                        vis.diagnostic_assessment,
                         psf=noisy_img,
                         gt_psf=gt_psf,
                         predicted_psf=p_psf,
@@ -756,11 +759,13 @@ def random_samples(
                         y=y_wave,
                         pred=p_wave,
                         save_path=save_path / f'{s}',
-                        display=False
+                        display=False,
+                        pltstyle='default'
                     )
+                    _ = pool.apply_async(task)  # issue task
 
-                    plt.style.use('dark_background')
-                    vis.diagnostic_assessment(
+                    task = partial(
+                        vis.diagnostic_assessment,
                         psf=noisy_img,
                         gt_psf=gt_psf,
                         predicted_psf=p_psf,
@@ -770,5 +775,11 @@ def random_samples(
                         y=y_wave,
                         pred=p_wave,
                         save_path=save_path / f'{s}_db',
-                        display=False
-                    )
+                        display=False,
+                        pltstyle='dark_background'
+                    )                
+                    _ = pool.apply_async(task)  # issue task
+                    
+    
+    pool.close()    # close the pool
+    pool.join()     # wait for all tasks to complete
