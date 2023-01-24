@@ -19,10 +19,12 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
 from tifffile import TiffFile
-from skimage.feature import peak_local_max
+from skimage.feature import peak_local_max, match_template
 from skspatial.objects import Plane, Points
 from scipy import stats as st
 from scipy import ndimage
+import matplotlib.patches as patches
+from astropy import convolution
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -504,9 +506,9 @@ class SyntheticPSF:
     def center_crop(self, inputs, window_size):
         center = [(i - 1) // 2 for i in inputs.shape]
         return inputs[
-          center[0]-window_size:center[0]+window_size,
-          center[1]-window_size:center[1]+window_size,
-          center[2]-window_size:center[2]+window_size,
+          center[0]-window_size//2:center[0]+window_size//2,
+          center[1]-window_size//2:center[1]+window_size//2,
+          center[2]-window_size//2:center[2]+window_size//2,
         ]
 
     @profile
@@ -559,55 +561,171 @@ class SyntheticPSF:
         return shifted_otf
 
     @profile
-    def remove_interference_pattern(self, psf, otf, plot, peaks=None):
-        if peaks is None:
-            peaks = peak_local_max(
-                ndimage.gaussian_filter(psf, sigma=1.1),
-                min_distance=5,
-                threshold_rel=.05,
-                exclude_border=5,
-                p_norm=2,
-                num_peaks=100
-            ).astype(int)
+    def remove_interference_pattern(self, psf, otf, plot, peaks=None, min_distance=5, window_size=16):
+        """
+        Normalize interference pattern from the given FFT
+        Args:
+            psf: input image
+            otf: FFT of the given input
+            plot: a toggle for visualization
+            peaks: pre-defined mask of the exact bead locations
+            min_distance: minimum distance for detecting adjacent beads
+            window_size: size of the window for template matching
+        """
+        # get max pixel in the image
+        poi = np.unravel_index(np.argmax(psf, axis=None), psf.shape)
 
-            beads = np.zeros_like(psf)
-            for p in peaks:
-                beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
+        # crop a window around the object for template matching
+        poi = np.clip(poi, a_min=window_size//2, a_max=psf.shape[0]-(window_size//2)+1)
+        kernel = psf[
+            poi[0]-window_size//2:poi[0]+window_size//2,
+            poi[1]-window_size//2:poi[1]+window_size//2,
+            poi[2]-window_size//2:poi[2]+window_size//2,
+        ]
+
+        # convolve template with the input image and apply a gaussian filter
+        filtered_psf = convolution.convolve_fft(psf, kernel, allow_huge=True)
+        filtered_psf = ndimage.gaussian_filter(filtered_psf, sigma=1.1)
+        filtered_psf /= np.nanmax(filtered_psf)
+
+        if peaks is None:
+            peaks = []
+            # Bead detection
+            for border in [5, 4, 3, 2, 1, 0]:
+                detected_peaks = peak_local_max(
+                    filtered_psf,
+                    min_distance=min_distance,
+                    threshold_rel=.05,
+                    exclude_border=border,
+                    p_norm=2,
+                    num_peaks=100
+                ).astype(int)
+
+                beads = np.zeros_like(psf)
+                for p in detected_peaks:
+                    try:
+                        fov = filtered_psf[
+                            p[0]-(min_distance+1):p[0]+(min_distance+1),
+                            p[1]-(min_distance+1):p[1]+(min_distance+1),
+                            p[2]-(min_distance+1):p[2]+(min_distance+1),
+                        ]
+                        if np.max(fov) > filtered_psf[p[0], p[1], p[2]]:
+                            continue
+                        else:
+                            beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
+                            peaks.append(p)
+
+                    except Exception:
+                        # keep peak if we are at the border of the image
+                        beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
+                        peaks.append(p)
+
+                if len(peaks) > 0:
+                    break
+            peaks = np.array(peaks)
         else:
             beads = peaks.copy()
             beads[beads < .05] = 0.
             peaks = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
 
-        logger.info(f"Detected objects: {peaks.shape[0]}")
-        interference_pattern = self.fft(beads)
-        corrected_otf = otf / interference_pattern
+        if peaks.shape[0] > 0:
+            logger.info(f"Detected objects: {peaks.shape[0]}")
 
-        corrected_psf = np.abs(self.ifft(corrected_otf))
+            interference_pattern = self.fft(beads)
+            corrected_otf = otf / interference_pattern
 
-        if plot is not None:
-            fig, axes = plt.subplots(3, 3, figsize=(8, 8), sharey=False, sharex=False)
+            corrected_psf = np.abs(self.ifft(corrected_otf))
+            corrected_psf /= np.nanmax(corrected_psf)
 
-            for ax in range(3):
-                for p in range(peaks.shape[0]):
-                    if ax == 0:
-                        axes[0, ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
-                    elif ax == 1:
-                        axes[0, ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
-                    elif ax == 2:
-                        axes[0, ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+            if plot is not None:
+                fig, axes = plt.subplots(3, 3, figsize=(8, 8), sharey=False, sharex=False)
 
-                axes[0, ax].imshow(np.nanmax(psf, axis=ax)**.5, cmap='Greys_r', alpha=.66)
-                axes[1, ax].imshow(np.nanmax(np.abs(interference_pattern), axis=ax), cmap='magma')
-                axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax)**.5, cmap='hot')
+                for ax in range(3):
+                    for p in range(peaks.shape[0]):
+                        if ax == 0:
+                            axes[0, ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                            axes[1, ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                            axes[0, ax].add_patch(patches.Rectangle(
+                                xy=(peaks[p, 2] - window_size // 2, peaks[p, 1] - window_size // 2),
+                                width=window_size,
+                                height=window_size,
+                                fill=None,
+                                color=f'C{p}',
+                                alpha=1
+                            ))
+                        elif ax == 1:
+                            axes[0, ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                            axes[1, ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                            axes[0, ax].add_patch(patches.Rectangle(
+                                xy=(peaks[p, 2] - window_size // 2, peaks[p, 0] - window_size // 2),
+                                width=window_size,
+                                height=window_size,
+                                fill=None,
+                                color=f'C{p}',
+                                alpha=1
+                            ))
 
-            for ax in axes.flatten():
-                ax.axis('off')
+                        elif ax == 2:
+                            axes[0, ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                            axes[1, ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                            axes[0, ax].add_patch(patches.Rectangle(
+                                xy=(peaks[p, 1] - window_size // 2, peaks[p, 0] - window_size // 2),
+                                width=window_size,
+                                height=window_size,
+                                fill=None,
+                                color=f'C{p}',
+                                alpha=1
+                            ))
 
-            plt.tight_layout()
-            plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
-            # plt.savefig(f'{plot}_interference_pattern.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+                    m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='Greys_r', alpha=.66)
+                    m2 = axes[1, ax].imshow(np.nanmax(filtered_psf, axis=ax), cmap='Greys_r')
+                    m3 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot')
 
-        return corrected_otf
+                for ax, m, label in zip(
+                        range(3),
+                        [m1, m2, m3],
+                        [f'Inputs (MIP)', 'Detected POIs', f'Normalized (MIP)']
+                ):
+                    cax = inset_axes(axes[ax, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+                    cb = plt.colorbar(m, cax=cax)
+                    cax.yaxis.set_label_position("right")
+                    cax.set_ylabel(label)
+
+                for ax in axes.flatten():
+                    ax.axis('off')
+
+                plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+                # plt.savefig(f'{plot}_interference_pattern.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+
+            return corrected_otf
+        else:
+            logger.warning("No objects were detected")
+
+            if plot is not None:
+                fig, axes = plt.subplots(3, 3, figsize=(8, 8), sharey=False, sharex=False)
+
+                for ax in range(3):
+                    m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='Greys_r', alpha=.66)
+                    m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='Greys_r')
+                    m3 = axes[2, ax].imshow(np.nanmax(filtered_psf, axis=ax), cmap='Greys_r')
+
+                for ax, m, label in zip(
+                        range(3),
+                        [m1, m2, m3],
+                        [f'Inputs (MIP)', 'Kernel', 'Detected POIs']
+                ):
+                    cax = inset_axes(axes[ax, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+                    cb = plt.colorbar(m, cax=cax)
+                    cax.yaxis.set_label_position("right")
+                    cax.set_ylabel(label)
+
+                for ax in axes.flatten():
+                    ax.axis('off')
+
+                plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+                # plt.savefig(f'{plot}_interference_pattern.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+
+            return otf
 
 
     @profile
