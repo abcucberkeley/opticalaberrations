@@ -22,7 +22,6 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 import scipy as sp
-from scipy import ndimage
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model

@@ -22,15 +22,15 @@ class Stem(layers.Layer):
             self,
             kernel_size=7,
             activation='gelu',
-            mul=False,
             no_phase=False,
+            mul=False,
             **kwargs
     ):
         super().__init__(**kwargs)
         self.kernel_size = kernel_size
         self.activation = activation
-        self.mul = mul
         self.no_phase = no_phase
+        self.mul = mul
 
         self.conv = layers.Conv3D(
             filters=1,
@@ -52,18 +52,6 @@ class Stem(layers.Layer):
         })
         return config
 
-    def gaussian_filter3D(self, inputs):
-        outputs = []
-        for i in range(inputs.shape[1]):
-            s = tfa.image.gaussian_filter2d(
-                inputs[:, i],
-                filter_shape=(self.kernel_size, self.kernel_size),
-                sigma=self.kernel_size/3,
-                padding='CONSTANT'
-            )
-            outputs.append(s)
-        return tf.stack(outputs, axis=1)
-
     def call(self, inputs, training=True, **kwargs):
         alpha = self.conv(inputs[:, :3])
         alpha = self.act(alpha)
@@ -71,7 +59,7 @@ class Stem(layers.Layer):
         if self.no_phase:
             return alpha
         else:
-            phi = self.gaussian_filter3D(inputs[:, 3:])
+            phi = self.conv(inputs[:, 3:])
             phi = self.act(phi)
 
             if self.mul:
@@ -356,8 +344,8 @@ class OpticalTransformer(Base, ABC):
         m = Stem(
             kernel_size=7,
             activation=self.activation,
+            no_phase=self.no_phase,
             mul=self.mul,
-            no_phase=self.no_phase
         )(inputs)
 
         if self.roi is not None:
