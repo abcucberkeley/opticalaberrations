@@ -58,8 +58,8 @@ else
   OBJS=(1 2 3 4 5 10 15 20 25 30)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
-  amps1=($(seq 0 .01 .49))
-  amps2=($(seq .01 .01 .50))
+  amps1=($(seq 0 .05 .45))
+  amps2=($(seq .05 .05 .50))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
 fi
 
@@ -112,9 +112,9 @@ do
               j="${j} --embedding_option ${e}"
             done
 
-            if [ "$DATASET" = "train" ];then
-              j="${j} --random_crop ${RCROP}"
-            fi
+            #if [ "$DATASET" = "train" ];then
+            #  j="${j} --random_crop ${RCROP}"
+            #fi
 
             task="/usr/bin/sbatch"
             task="${task} --qos=abc_normal --nice=1111111111"
