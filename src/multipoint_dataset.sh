@@ -30,7 +30,7 @@ PHI='angle'
 CPUS=4
 MEM='80G'
 TIMELIMIT='1:00:00'
-SAMPLES_PER_JOB=10
+SAMPLES_PER_JOB=100
 
 SHAPE=64
 RCROP=32
@@ -73,7 +73,7 @@ do
       for N in `seq 1 ${#OBJS[@]}`
       do
         for S in `seq 1 ${#SAMPLES[@]}`
-          do
+        do
             while [ $(squeue -u thayeralshaabi -h -t pending -r | wc -l) -gt 300 ]
             do
               sleep 10s
