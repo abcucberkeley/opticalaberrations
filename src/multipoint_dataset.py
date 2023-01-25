@@ -278,7 +278,7 @@ def create_synthetic_sample(
 def parse_args(args):
     parser = cli.argparser()
 
-    parser.add_argument("--filename", type=str, default='sample')
+    parser.add_argument("--filename", type=str, default='1')
     parser.add_argument("--npoints", type=int, default=1)
     parser.add_argument("--outdir", type=Path, default='../dataset')
 
@@ -288,8 +288,8 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--embedding_option", action='append', default=['principle_planes'],
-        help='type of embedding to use: ["principle_planes", "rotary_slices", "spatial_quadrants"]'
+        "--embedding_option", action='append', default=['spatial_planes'],
+        help='type of embedding to use: ["spatial_planes", "principle_planes", "rotary_slices", "spatial_quadrants"]'
     )
 
     parser.add_argument(
