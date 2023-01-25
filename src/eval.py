@@ -716,7 +716,7 @@ def random_samples(
                     noisy_img /= maxcounts
 
                     save_path = Path(
-                        f"{model.with_suffix('')}/samples/{dist}/um-{amplitude_range[-1]}/num_objs-{num_objs}"
+                        f"{model.with_suffix('')}/samples/{dist}/um-{amplitude_range[-1]}/num_objs-{num_objs:02d}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 

@@ -366,8 +366,11 @@ def eval_rotation(
                 data_mask[(init_preds[:, mode.index_ansi] < rho/5) * (rho > threshold)] = 0.
                 data_mask[rhos < rho/2] = 0.    # exclude if rho is unusually small (which can lead to small, but dominant primary mode near discontinuity)
                 xdata = xdata[data_mask]
-                ydata = ydata[data_mask]
+                ydata = ydata[data_mask] 
+                offset = ydata[0]
                 ydata = np.unwrap(ydata, period=180)
+                ydata = ((ydata - offset - xdata) + 90) % 180 - 90 + offset + xdata
+
 
                 m = 1
                 b = linear_fit_fixed_slope(xdata, ydata, m)  # refit without bad data points
@@ -840,7 +843,7 @@ def evaluate(
         #     savepath=f'{plot}_sign_eval_db'
         # )
 
-        followup_preds, stdev = bootstrap_predict(
+        followup_preds = predict_rotation(
             model=model,
             inputs=followup_inputs,
             psfgen=gen,
