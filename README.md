@@ -56,6 +56,13 @@ conda activate ml
 conda env update --file windows.yml 
 ```
 
+### Pre-trained models
+To make sure you have the latest pre-trained models:
+```shell 
+git lfs fetch --all
+git lfs pull 
+```
+
 
 ### Other prerequisites 
 Clone the LLSM3D tools repository for additional functions such as `decon`, `deskew` and `point detection`
