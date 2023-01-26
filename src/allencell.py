@@ -52,7 +52,7 @@ def parse_args(args):
     parser = cli.argparser()
 
     subparsers = parser.add_subparsers(
-        help="Arguments for specific action.", dest="dtype"
+        help="Arguments for specific action.", dest="cmd"
     )
     subparsers.required = True
 
@@ -141,15 +141,13 @@ def split_channels(
 
 def convolve(kernel, sample, sample_voxel_size, psf_shape, save_path, sample_name, cuda=False, embeddings=False):
     modelgen = SyntheticPSF(
-        n_modes=60,
+        n_modes=55,
         lam_detection=.605,
-        # dtype='confocal',
         psf_shape=psf_shape,
         x_voxel_size=.15,
         y_voxel_size=.15,
         z_voxel_size=.6,
         snr=1000,
-        max_jitter=0,
         na_detection=1.0,
     )
 
@@ -231,16 +229,16 @@ def main(args=None):
 
     mp.set_start_method('spawn', force=True)
 
-    if args.dtype == 'conv':
+    if args.cmd == 'conv':
         convolve_dataset(savedir=args.savedir, kernels=args.kernels, samples=args.samples)
 
-    elif args.dtype == 'dataset':
+    elif args.cmd == 'dataset':
         create_sample(sample=args.sample, kernels=args.kernels, savedir=args.savedir)
 
-    elif args.dtype == 'split':
+    elif args.cmd == 'split':
         split_channels(savedir=args.savedir, samples=args.samples, label=args.label)
 
-    elif args.dtype == 'download':
+    elif args.cmd == 'download':
         download_data(savedir=args.savedir)
 
     else:

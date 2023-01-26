@@ -11,7 +11,7 @@ from skimage.filters import threshold_otsu
 
 import cli
 from preprocessing import resize
-from utils import peak_aberration
+from utils import peak2valley
 from synthetic import SyntheticPSF
 
 logging.basicConfig(
@@ -22,7 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_synthetic_sample(savepath, inputs, kernel, amps, snr, maxcounts, save_kernel=False):
+def save_synthetic_sample(savepath, inputs, kernel, amps, snr, maxcounts, p2v, save_kernel=False):
 
     logger.info(f"Saved: {savepath}")
     imsave(f"{savepath}.tif", inputs)
@@ -36,7 +36,7 @@ def save_synthetic_sample(savepath, inputs, kernel, amps, snr, maxcounts, save_k
             snr=int(snr),
             shape=inputs.shape,
             maxcounts=int(maxcounts),
-            peak2peak=float(peak_aberration(amps))
+            peak2peak=float(p2v)
         )
 
         ujson.dump(
@@ -61,7 +61,6 @@ def convolve(
     strides: int,
     log10: bool = True,
     apodization: bool = True,
-    principle_planes: bool = True,
     rolling_embedding: bool = True,
     debug: bool = False,
 ):
@@ -100,14 +99,12 @@ def convolve(
             log10=log10,
             apodization=apodization,
             strides=strides,
-            principle_planes=principle_planes,
             plot=f"{savepath}_embedding" if debug else None
         )
     else:
         emb = gen.embedding(
             psf=conv,
             log10=log10,
-            principle_planes=principle_planes,
             plot=f"{savepath}_embedding" if debug else None
         )
 
@@ -118,7 +115,8 @@ def convolve(
         amps=amps,
         snr=snr,
         maxcounts=maxcounts,
-        save_kernel=save_kernel
+        save_kernel=save_kernel,
+        p2v=peak2valley(amps, wavelength=gen.lam_detection)
     )
 
 
@@ -131,7 +129,7 @@ def create_synthetic_sample(
     psf_type: str,
     distribution: str,
     gamma: float,
-    bimodal: bool,
+    signed: bool,
     min_amplitude: float,
     max_amplitude: float,
     x_voxel_size: float,
@@ -147,12 +145,11 @@ def create_synthetic_sample(
         order='ansi',
         cpu_workers=cpu_workers,
         n_modes=modes,
-        max_jitter=0,
         snr=1000,
-        dtype=psf_type,
+        psf_type=psf_type,
         distribution=distribution,
         gamma=gamma,
-        bimodal=bimodal,
+        signed=signed,
         amplitude_ranges=(min_amplitude, max_amplitude),
         lam_detection=lam_detection,
         psf_shape=3*[input_shape],
@@ -182,12 +179,10 @@ def create_synthetic_sample(
             phi = np.zeros(modes)
             phi[i] = np.random.uniform(min_amplitude, max_amplitude)
 
-            kernel, amps, snr, zplanes, maxcounts = gen.single_psf(
+            kernel, amps, snr, maxcounts = gen.single_psf(
                 phi=phi,
-                zplanes=0,
                 normed=True,
                 noise=False,
-                augmentation=True,
                 meta=True
             )
             savepath = savepath / sample.stem
@@ -207,12 +202,10 @@ def create_synthetic_sample(
             )
 
     else:
-        kernel, amps, snr, zplanes, maxcounts = gen.single_psf(
+        kernel, amps, snr, maxcounts = gen.single_psf(
             phi=(min_amplitude, max_amplitude),
-            zplanes=0,
             normed=True,
             noise=False,
-            augmentation=True,
             meta=True
         )
 
@@ -287,7 +280,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--modes", default=60, type=int,
+        "--modes", default=55, type=int,
         help="number of modes to describe aberration"
     )
 
@@ -307,7 +300,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        '--bimodal', action='store_true',
+        '--signed', action='store_true',
         help='optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes'
     )
 
@@ -360,7 +353,7 @@ def main(args=None):
             psf_type=args.psf_type,
             distribution=args.dist,
             gamma=args.gamma,
-            bimodal=args.bimodal,
+            signed=args.signed,
             min_amplitude=args.min_amplitude,
             max_amplitude=args.max_amplitude,
             x_voxel_size=args.x_voxel_size,

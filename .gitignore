@@ -1,3 +1,4 @@
+LabVIEW/
 LLSM3DTools/
 data/
 dataset/
@@ -9,6 +10,8 @@ logs/
 profilers/
 notebooks/
 .idea/
+.DS_Store
+.DS_Store?
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -139,3 +142,11 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Profiler
+*.pclprof
+
+#Pretrained models
+
+pretrained_models/**/*.*
+!pretrained_models/**/*.h5

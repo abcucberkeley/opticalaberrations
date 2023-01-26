@@ -1,3 +1,4 @@
+
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
@@ -6,19 +7,19 @@ matplotlib.use('Agg')
 
 import logging
 import sys
+import os
 import time
 import ujson
+from functools import partial
 from typing import Any
 from pathlib import Path
-from tifffile import imread, imsave
+from tifffile import imsave
 import numpy as np
-import scipy.stats as st
 import raster_geometry as rg
-from tqdm import trange
 
 import cli
 from preprocessing import resize_with_crop_or_pad
-from utils import peak_aberration, fftconvolution
+from utils import peak2valley, fftconvolution, multiprocess
 from synthetic import SyntheticPSF
 
 logging.basicConfig(
@@ -29,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
+def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, npoints=1):
 
     logger.info(f"Saved: {savepath}")
     imsave(f"{savepath}.tif", inputs)
@@ -41,7 +42,8 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
             snr=int(snr),
             shape=inputs.shape,
             maxcounts=int(maxcounts),
-            peak2peak=float(peak_aberration(amps))
+            npoints=int(npoints),
+            peak2peak=float(p2v)
         )
 
         ujson.dump(
@@ -54,72 +56,139 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts):
         )
 
 
+def beads(
+    gen: SyntheticPSF,
+    object_size: float = 0,
+    num_objs: int = 1,
+    radius: float = .4,
+):
+    np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
+    reference = np.zeros(gen.psf_shape)
+
+    for i in range(num_objs):
+        if object_size > 0:
+            reference += rg.sphere(
+                shape=gen.psf_shape,
+                radius=object_size,
+                position=np.random.uniform(low=.2, high=.8, size=3)
+            ).astype(np.float) * np.random.random()
+        else:
+            if radius > 0:
+                reference[
+                    np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+                ] += np.random.random()
+            else:
+                reference[gen.psf_shape[0] // 2, gen.psf_shape[1] // 2, gen.psf_shape[2] // 2] += np.random.random()
+
+    reference /= np.max(reference)
+    return reference
+
+
 def sim(
-    savepath: Path,
+    filename: str,
+    outdir: Path,
     gen: SyntheticPSF,
     npoints: int,
-    kernel: np.array,
-    amps: np.array,
     snr: tuple,
     emb: bool = True,
     noise: bool = True,
+    normalize: bool = True,
     random_crop: Any = None,
     radius: float = .4,
-    sphere: float = 0,
+    embedding_option: list = (),
+    alpha_val: str = 'abs',
+    phi_val: str = 'angle',
 ):
+    np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
     reference = np.zeros(gen.psf_shape)
+
+    # aberrated PSF without noise
+    kernel, amps, phi, maxcounts = gen.single_psf(
+        phi=gen.amplitude_ranges,
+        normed=True,
+        noise=False,
+        meta=True,
+    )
+
     for i in range(npoints):
-        if sphere > 0:
+        sphere_radius = np.random.choice([0, 1, 2], p=[.95, .04, .01])
+
+        if sphere_radius > 0:
             reference += rg.sphere(
                 shape=gen.psf_shape,
-                radius=sphere,
-                position=np.random.uniform(low=.2, high=.8)
+                radius=sphere_radius,
+                position=np.random.uniform(low=.2, high=.8, size=3)
             ).astype(np.float) * np.random.random()
         else:
-            reference[
-                np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
-                np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
-                np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
-            ] = np.random.random()
+            if radius > 0:
+                reference[
+                    np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+                ] += np.random.random()
+            else:
+                reference[gen.psf_shape[0] // 2, gen.psf_shape[1] // 2, gen.psf_shape[2] // 2] += np.random.random()
 
-    img = fftconvolution(reference, kernel)
+    reference /= np.max(reference)
+    img = fftconvolution(sample=reference, kernel=kernel)
+    snr = gen._randuniform(snr)
+    img *= snr ** 2
 
     if noise:
-        snr = gen._randuniform(snr)
-        img *= snr**2
-
         rand_noise = gen._random_noise(
             image=img,
-            mean=int(np.random.uniform(low=0, high=10)),
+            mean=gen.mean_background_noise,
             sigma=gen.sigma_background_noise
         )
         noisy_img = rand_noise + img
-        # noisy_img = noisy_img ** np.random.uniform(low=.25, high=1.25)
-
         psnr = np.sqrt(np.max(noisy_img))
         maxcounts = np.max(noisy_img)
-        noisy_img /= np.max(noisy_img)
     else:
         psnr = np.mean(np.array(snr))
         maxcounts = np.max(img)
         noisy_img = img
 
     if random_crop is not None:
-        mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
         crop = int(np.random.uniform(low=random_crop, high=gen.psf_shape[0]+1))
         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[crop]*3)
-        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
+
+    if normalize:
+        noisy_img /= np.max(noisy_img)
 
     if emb:
-        noisy_img = gen.embedding(psf=noisy_img, principle_planes=True, plot=f"{savepath}_embedding")
+        for e in set(embedding_option):
+            odir = outdir/e
+            odir.mkdir(exist_ok=True, parents=True)
 
-    save_synthetic_sample(
-        savepath,
-        noisy_img,
-        amps=amps,
-        snr=psnr,
-        maxcounts=maxcounts,
-    )
+            embeddings = gen.embedding(
+                psf=noisy_img,
+                embedding_option=e,
+                alpha_val=alpha_val,
+                phi_val=phi_val,
+                plot=odir/filename
+            )
+
+            save_synthetic_sample(
+                odir/filename,
+                embeddings,
+                amps=amps,
+                snr=psnr,
+                maxcounts=maxcounts,
+                npoints=npoints,
+                p2v=peak2valley(amps, wavelength=gen.lam_detection)
+            )
+    else:
+        save_synthetic_sample(
+            outdir/filename,
+            noisy_img,
+            amps=amps,
+            snr=psnr,
+            maxcounts=maxcounts,
+            npoints=npoints,
+            p2v=peak2valley(amps, wavelength=gen.lam_detection)
+        )
 
 
 def create_synthetic_sample(
@@ -130,8 +199,10 @@ def create_synthetic_sample(
     modes: int,
     psf_type: str,
     distribution: str,
+    mode_dist: str,
     gamma: float,
-    bimodal: bool,
+    signed: bool,
+    rotate: bool,
     min_amplitude: float,
     max_amplitude: float,
     x_voxel_size: float,
@@ -145,19 +216,23 @@ def create_synthetic_sample(
     cpu_workers: int,
     random_crop: Any,
     noise: bool,
+    normalize: bool,
     emb: bool,
-    sphere: int
+    embedding_option: list,
+    alpha_val: str = 'abs',
+    phi_val: str = 'angle',
 ):
     gen = SyntheticPSF(
         order='ansi',
         cpu_workers=cpu_workers,
         n_modes=modes,
         snr=1000,
-        max_jitter=0,
-        dtype=psf_type,
+        psf_type=psf_type,
         distribution=distribution,
+        mode_weights=mode_dist,
         gamma=gamma,
-        bimodal=bimodal,
+        signed=signed,
+        rotate=rotate,
         amplitude_ranges=(min_amplitude, max_amplitude),
         lam_detection=lam_detection,
         psf_shape=3*[input_shape],
@@ -168,103 +243,53 @@ def create_synthetic_sample(
         na_detection=na_detection,
     )
 
-    if distribution == 'single':
-        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
-        outdir = outdir / f"i{input_shape}"
+    outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
+    outdir = outdir / f"i{input_shape}"
+    outdir = outdir / f"z{modes}"
 
-        if distribution == 'powerlaw':
-            outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
-        else:
-            outdir = outdir / f"{distribution}"
-
-        outdir = outdir / f"z{modes}"
-        outdir = outdir / f"psnr_{min_psnr}-{max_psnr}"
-        outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-            f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
-
-        for i in range(5, modes):
-            savepath = outdir / f"m{i}"
-
-            phi = np.zeros(modes)
-            phi[i] = np.random.uniform(min_amplitude, max_amplitude)
-
-            # theoretical kernel without noise
-            kernel = gen.single_psf(
-                phi=phi,
-                zplanes=0,
-                normed=True,
-                noise=False,
-                augmentation=False,
-                meta=False,
-            )
-            savepath = savepath / f"sphere_{sphere}" / f"npoints_{npoints}"
-            savepath.mkdir(exist_ok=True, parents=True)
-            savepath = savepath / filename
-
-            sim(
-                savepath=savepath,
-                gen=gen,
-                npoints=npoints,
-                kernel=kernel,
-                amps=phi,
-                snr=(min_psnr, max_psnr),
-                emb=emb,
-                noise=noise,
-                sphere=sphere
-            )
-
+    if distribution == 'powerlaw':
+        outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
     else:
-        # theoretical kernel without noise
-        kernel, amps, phi, _, _ = gen.single_psf(
-            phi=(min_amplitude, max_amplitude),
-            zplanes=0,
-            normed=True,
-            noise=False,
-            augmentation=False,
-            meta=True,
-        )
+        outdir = outdir / f"{distribution}"
 
-        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
-        outdir = outdir / f"i{input_shape}"
+    outdir = outdir / f"psnr_{min_psnr}-{max_psnr}"
+    outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                          f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
-        if distribution == 'powerlaw':
-            outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
-        else:
-            outdir = outdir / f"{distribution}"
+    outdir = outdir / f"npoints_{npoints}"
+    outdir.mkdir(exist_ok=True, parents=True)
 
-        savepath = outdir / f"z{modes}"
-        savepath = savepath / f"psnr_{min_psnr}-{max_psnr}"
-        savepath = savepath / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
-
-        savepath = savepath / f"sphere_{sphere}" / f"npoints_{npoints}"
-        savepath.mkdir(exist_ok=True, parents=True)
-        savepath = savepath / filename
-
-        sim(
-            savepath=savepath,
-            gen=gen,
-            npoints=npoints,
-            kernel=kernel,
-            amps=amps,
-            snr=(min_psnr, max_psnr),
-            emb=emb,
-            random_crop=random_crop,
-            noise=noise,
-            sphere=sphere
-        )
+    sim(
+        filename=filename,
+        outdir=outdir,
+        gen=gen,
+        npoints=npoints,
+        snr=(min_psnr, max_psnr),
+        emb=emb,
+        embedding_option=embedding_option,
+        random_crop=random_crop,
+        noise=noise,
+        normalize=normalize,
+        alpha_val=alpha_val,
+        phi_val=phi_val,
+    )
 
 
 def parse_args(args):
     parser = cli.argparser()
 
-    parser.add_argument("--filename", type=str, default='sample')
+    parser.add_argument("--filename", type=str, default='1')
     parser.add_argument("--npoints", type=int, default=1)
     parser.add_argument("--outdir", type=Path, default='../dataset')
 
     parser.add_argument(
         '--emb', action='store_true',
         help='toggle to save embeddings only'
+    )
+
+    parser.add_argument(
+        "--embedding_option", action='append', default=['spatial_planes'],
+        help='type of embedding to use: ["spatial_planes", "principle_planes", "rotary_slices", "spatial_quadrants"]'
     )
 
     parser.add_argument(
@@ -283,17 +308,22 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--x_voxel_size", default=.15, type=float,
+        '--normalize', action='store_true',
+        help='toggle to scale the generated PSFs to 1.0'
+    )
+
+    parser.add_argument(
+        "--x_voxel_size", default=.108, type=float,
         help='lateral voxel size in microns for X'
     )
 
     parser.add_argument(
-        "--y_voxel_size", default=.15, type=float,
+        "--y_voxel_size", default=.108, type=float,
         help='lateral voxel size in microns for Y'
     )
 
     parser.add_argument(
-        "--z_voxel_size", default=.6, type=float,
+        "--z_voxel_size", default=.2, type=float,
         help='axial voxel size in microns for Z'
     )
 
@@ -307,7 +337,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--modes", default=60, type=int,
+        "--modes", default=55, type=int,
         help="number of modes to describe aberration"
     )
 
@@ -317,7 +347,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--max_psnr", default=100, type=int,
+        "--max_psnr", default=50, type=int,
         help="maximum PSNR for training samples"
     )
 
@@ -327,8 +357,13 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--dist", default='powerlaw', type=str,
+        "--dist", default='single', type=str,
         help="distribution of the zernike amplitudes"
+    )
+
+    parser.add_argument(
+        "--mode_dist", default='uniform', type=str,
+        help="distribution of the zernike modes"
     )
 
     parser.add_argument(
@@ -337,8 +372,13 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        '--bimodal', action='store_true',
+        '--signed', action='store_true',
         help='optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes'
+    )
+
+    parser.add_argument(
+        '--rotate', action='store_true',
+        help='optional flag to introduce a random radial rotation to each zernike mode'
     )
 
     parser.add_argument(
@@ -357,22 +397,27 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--sphere", default=0, type=int,
-        help="Radius of the reference sphere objects"
-    )
-
-    parser.add_argument(
         "--na_detection", default=1.0, type=float,
         help="Numerical aperture"
     )
 
     parser.add_argument(
-        "--lam_detection", default=.605, type=float,
+        "--lam_detection", default=.510, type=float,
         help='wavelength in microns'
     )
 
     parser.add_argument(
-        "--cpu_workers", default=1, type=int,
+        "--alpha_val", default='abs', type=str,
+        help="values to use for the `alpha` embedding [options: real, abs]"
+    )
+
+    parser.add_argument(
+        "--phi_val", default='angle', type=str,
+        help="values to use for the `phi` embedding [options: angle, imag, abs]"
+    )
+
+    parser.add_argument(
+        "--cpu_workers", default=-1, type=int,
         help='number of CPU cores to use'
     )
 
@@ -384,37 +429,40 @@ def main(args=None):
     args = parse_args(args)
     logger.info(args)
 
-    def sample(k):
-        return create_synthetic_sample(
-            filename=f"{int(args.filename)+k}",
-            emb=args.emb,
-            npoints=args.npoints,
-            outdir=args.outdir,
-            noise=args.noise,
-            modes=args.modes,
-            input_shape=args.input_shape,
-            psf_type=args.psf_type,
-            distribution=args.dist,
-            random_crop=args.random_crop,
-            gamma=args.gamma,
-            bimodal=args.bimodal,
-            min_amplitude=args.min_amplitude,
-            max_amplitude=args.max_amplitude,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            min_psnr=args.min_psnr,
-            max_psnr=args.max_psnr,
-            lam_detection=args.lam_detection,
-            sphere=args.sphere,
-            refractive_index=args.refractive_index,
-            na_detection=args.na_detection,
-            cpu_workers=args.cpu_workers,
-        )
+    sample = partial(
+        create_synthetic_sample,
+        emb=args.emb,
+        embedding_option=args.embedding_option,
+        alpha_val=args.alpha_val,
+        phi_val=args.phi_val,
+        npoints=args.npoints,
+        outdir=args.outdir,
+        noise=args.noise,
+        normalize=args.normalize,
+        modes=args.modes,
+        input_shape=args.input_shape,
+        psf_type=args.psf_type,
+        distribution=args.dist,
+        mode_dist=args.mode_dist,
+        random_crop=args.random_crop,
+        gamma=args.gamma,
+        signed=args.signed,
+        rotate=args.rotate,
+        min_amplitude=args.min_amplitude,
+        max_amplitude=args.max_amplitude,
+        x_voxel_size=args.x_voxel_size,
+        y_voxel_size=args.y_voxel_size,
+        z_voxel_size=args.z_voxel_size,
+        min_psnr=args.min_psnr,
+        max_psnr=args.max_psnr,
+        lam_detection=args.lam_detection,
+        refractive_index=args.refractive_index,
+        na_detection=args.na_detection,
+        cpu_workers=args.cpu_workers,
+    )
 
-    for i in trange(args.iters):
-        sample(k=i)
-
+    jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]
+    multiprocess(sample, jobs=jobs, cores=args.cpu_workers)
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 

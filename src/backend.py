@@ -1,5 +1,3 @@
-from functools import partial
-
 import matplotlib
 matplotlib.use('Agg')
 
@@ -8,20 +6,22 @@ numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
 import logging
 import sys
+import h5py
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
-from typing import Any
+from typing import Any, Union
+from functools import partial
+from line_profiler_pycharm import profile
 
 import pandas as pd
-from scipy import stats as st
-from skimage.feature import peak_local_max
+from skimage.restoration import richardson_lucy
+from skimage.transform import rotate
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
-from tqdm import trange, tqdm
-from tifffile import imsave
+import scipy as sp
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -37,27 +37,28 @@ from tensorflow.keras.callbacks import EarlyStopping
 from callbacks import Defibrillator
 from callbacks import LearningRateScheduler
 from callbacks import TensorBoardCallback
+from skimage.feature import peak_local_max
 
 import utils
 import vis
 import data_utils
-import experimental
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 
 from tensorflow.keras import Model
 from phasenet import PhaseNet
-from preprocessing import resize_with_crop_or_pad
 
 from stem import Stem
 from activation import MaskedActivation
 from depthwiseconv import DepthwiseConv3D
 from spatial import SpatialAttention
 from roi import ROI
+import opticalnet
 import opticalresnet
 import opticaltransformer
-from baseline import Baseline
+import baseline
+import otfnet
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -68,10 +69,59 @@ logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 
 
-def load(model_path: Path, mosaic=False) -> Model:
+@profile
+def load_metadata(
+        model_path: Path,
+        psf_shape: Union[tuple, list] = (64, 64, 64),
+        psf_type=None,
+        n_modes=None,
+        z_voxel_size=None,
+        **kwargs
+):
+    """ The model .h5, HDF5 file, is also used to store metadata parameters (wavelength, x_voxel_size, etc) that 
+    the model was trained with.  The metadata is read from file and is returned within the returned SyntheticPSF class.
+
+    Args:
+        model_path (Path): path to .h5 model, or path to the containing folder.
+        psf_shape (Union[tuple, list], optional): dimensions of the SyntheticPSF to return. Defaults to (64, 64, 64).
+        psf_type (str, optional): "widefield" or "confocal". Defaults to None which reads the value from the .h5 file.
+        n_modes (int, optional): # of Zernike modes to describe abberation. Defaults to None which reads the value from the .h5 file.
+        z_voxel_size (float, optional):  Defaults to None which reads the value from the .h5 file.
+        **kwargs:  Get passed into SyntheticPSF generator.
+
+    Returns:
+        SyntheticPSF class: ideal PSF that the model was trained on.
+    """
+    # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
+    if not model_path.suffix == '.h5':       
+        model_path = list(model_path.rglob('*.h5'))[0]  # locate the model if the parent folder path is given
+
+    with h5py.File(model_path, 'r') as file:
+
+        try:
+            embedding_option = str(file.get('embedding_option').asstr()[()]).strip("\'").strip('\"')
+        except Exception:
+            embedding_option = 'principle_planes'
+
+        psfgen = SyntheticPSF(
+            psf_type=np.array(file.get('psf_type')[:]) if psf_type is None else psf_type,
+            psf_shape=psf_shape,
+            n_modes=int(file.get('n_modes')[()]) if n_modes is None else n_modes,
+            lam_detection=float(file.get('wavelength')[()]),
+            x_voxel_size=float(file.get('x_voxel_size')[()]),
+            y_voxel_size=float(file.get('y_voxel_size')[()]),
+            z_voxel_size=float(file.get('z_voxel_size')[()]) if z_voxel_size is None else z_voxel_size,
+            embedding_option=embedding_option,
+            **kwargs
+        )
+    return psfgen
+
+
+@profile
+def load(model_path: Path, mosaic=False):
     model_path = Path(model_path)
 
-    if mosaic:
+    if 'transformer' in str(model_path):
         custom_objects = {
             "ROI": ROI,
             "Stem": opticaltransformer.Stem,
@@ -81,10 +131,35 @@ def load(model_path: Path, mosaic=False) -> Model:
             "MLP": opticaltransformer.MLP,
             "Transformer": opticaltransformer.Transformer,
         }
+    elif 'resnet' in str(model_path):
+        custom_objects = {
+            "Stem": Stem,
+            "MaskedActivation": MaskedActivation,
+            "SpatialAttention": SpatialAttention,
+            "DepthwiseConv3D": DepthwiseConv3D,
+            "CAB": opticalresnet.CAB,
+            "TB": opticalresnet.TB,
+        }
+    else:
+        custom_objects = {
+            "ROI": ROI,
+            "Stem": opticalnet.Stem,
+            "Patchify": opticalnet.Patchify,
+            "Merge": opticalnet.Merge,
+            "PatchEncoder": opticalnet.PatchEncoder,
+            "MLP": opticalnet.MLP,
+            "Transformer": opticalnet.Transformer,
+        }
+
+    if mosaic:
         if model_path.is_file() and model_path.suffix == '.h5':
-            return load_model(str(model_path), custom_objects=custom_objects)
+            model_path = Path(model_path)
         else:
-            return load_model(str(list(model_path.rglob('*.h5'))[0]), custom_objects=custom_objects)
+            model_path = Path(list(model_path.rglob('*.h5'))[0])
+
+        model = load_model(model_path, custom_objects=custom_objects)
+        return model
+
     else:
         try:
             try:
@@ -95,427 +170,39 @@ def load(model_path: Path, mosaic=False) -> Model:
                     return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
 
             except IndexError or FileNotFoundError or OSError:
-                if 'opticaltransformer' in str(model_path):
-                    custom_objects = {
-                        "ROI": ROI,
-                        "Stem": opticaltransformer.Stem,
-                        "Patchify": opticaltransformer.Patchify,
-                        "Merge": opticaltransformer.Merge,
-                        "PatchEncoder": opticaltransformer.PatchEncoder,
-                        "MLP": opticaltransformer.MLP,
-                        "Transformer": opticaltransformer.Transformer,
-                    }
-                else:
-                    custom_objects = {
-                        "Stem": Stem,
-                        "MaskedActivation": MaskedActivation,
-                        "SpatialAttention": SpatialAttention,
-                        "DepthwiseConv3D": DepthwiseConv3D,
-                        "CAB": opticalresnet.CAB,
-                        "TB": opticalresnet.TB,
-                    }
-
                 '''.h5/hdf5 format'''
                 if model_path.is_file() and model_path.suffix == '.h5':
-                    return load_model(str(model_path), custom_objects=custom_objects)
+                    model_path = str(model_path)
                 else:
-                    return load_model(str(list(model_path.rglob('*.h5'))[0]), custom_objects=custom_objects)
+                    model_path = str(list(model_path.rglob('*.h5'))[0])
+
+                model = load_model(model_path, custom_objects=custom_objects)
+                return model
 
         except Exception as e:
             logger.exception(e)
             exit()
 
 
-def train(
-        dataset: Path,
-        outdir: Path,
-        network: str,
-        distribution: str,
-        samplelimit: int,
-        max_amplitude: float,
-        input_shape: int,
-        batch_size: int,
-        patch_size: list,
-        steps_per_epoch: int,
-        depth_scalar: int,
-        width_scalar: int,
-        activation: str,
-        fixedlr: bool,
-        opt: str,
-        lr: float,
-        wd: float,
-        warmup: int,
-        decay_period: int,
-        wavelength: float,
-        psf_type: str,
-        x_voxel_size: float,
-        y_voxel_size: float,
-        z_voxel_size: float,
-        modes: int,
-        pmodes: int,
-        min_psnr: int,
-        max_psnr: int,
-        epochs: int,
-        mul: bool,
-        roi: Any = None,
-        refractive_index: float = 1.33,
-        no_phase: bool = False,
-        plot_patches: bool = False
-):
-    network = network.lower()
-    opt = opt.lower()
-    restored = False
-
-    if network == 'opticaltransformer':
-        model = opticaltransformer.OpticalTransformer(
-            name='OpticalTransformer',
-            roi=roi,
-            patches=patch_size,
-            modes=pmodes,
-            na_det=1.0,
-            refractive_index=refractive_index,
-            psf_type=psf_type,
-            lambda_det=wavelength,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            mask_shape=input_shape,
-            activation=activation,
-            mul=mul,
-            no_phase=no_phase
-        )
-    elif network == 'opticalresnet':
-        model = opticalresnet.OpticalResNet(
-            name='OpticalResNet',
-            modes=pmodes,
-            na_det=1.0,
-            refractive_index=refractive_index,
-            lambda_det=wavelength,
-            psf_type=psf_type,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            mask_shape=input_shape,
-            activation=activation,
-            mul=mul,
-            no_phase=no_phase
-        )
-    elif network == 'baseline':
-        model = Baseline(
-            name='Baseline',
-            modes=pmodes,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            activation=activation,
-        )
-    elif network == 'phasenet':
-        model = PhaseNet(
-            name='PhaseNet',
-            modes=pmodes
-        )
-    else:
-        model = load(Path(network))
-        checkpoint = tf.train.Checkpoint(model)
-        status = checkpoint.restore(network)
-
-        if status:
-            logger.info(f"Restored from {network}")
-            restored = True
-        else:
-            logger.info("Initializing from scratch")
-
-    if network == 'phasenet':
-        inputs = (input_shape, input_shape, input_shape, 1)
-        lr = .0003
-        opt = Adam(learning_rate=lr)
-        loss = 'mse'
-    else:
-        if network == 'baseline':
-            inputs = (input_shape, input_shape, input_shape, 1)
-        else:
-            inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
-
-        loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
-
-        """
-            Adam: A Method for Stochastic Optimization: https://arxiv.org/pdf/1412.6980
-            SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
-            Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
-        """
-        if opt.lower() == 'adam':
-            opt = Adam(learning_rate=lr)
-        elif opt == 'sgd':
-            opt = SGD(learning_rate=lr, momentum=0.9)
-        elif opt.lower() == 'adamw':
-            opt = AdamW(learning_rate=lr, weight_decay=wd)
-        elif opt == 'sgdw':
-            opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
-        else:
-            raise ValueError(f'Unknown optimizer `{opt}`')
-
-    if not restored:
-        model = model.build(input_shape=inputs)
-        model.compile(
-            optimizer=opt,
-            loss=loss,
-            metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
-        )
-
-    outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
-    outdir.mkdir(exist_ok=True, parents=True)
-    logger.info(model.summary())
-
-    tblogger = CSVLogger(
-        f"{outdir}/logbook.csv",
-        append=True,
-    )
-
-    pb_checkpoints = ModelCheckpoint(
-        filepath=f"{outdir}",
-        monitor="loss",
-        save_best_only=True,
-        verbose=1,
-    )
-
-    h5_checkpoints = ModelCheckpoint(
-        filepath=f"{outdir}.h5",
-        monitor="loss",
-        save_best_only=True,
-        verbose=1,
-    )
-
-    earlystopping = EarlyStopping(
-        monitor='loss',
-        min_delta=0,
-        patience=50,
-        verbose=1,
-        mode='auto',
-        restore_best_weights=True
-    )
-
-    defibrillator = Defibrillator(
-        monitor='loss',
-        patience=20,
-        verbose=1,
-    )
-
-    features = LambdaCallback(
-        on_epoch_end=lambda epoch, logs: featuremaps(
-            modelpath=outdir,
-            amplitude_range=.3,
-            wavelength=wavelength,
-            psf_type=psf_type,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            cpu_workers=-1,
-            psnr=100,
-        ) if epoch % 50 == 0 else epoch
-    )
-
-    tensorboard = TensorBoardCallback(
-        log_dir=outdir,
-        profile_batch='500,520',
-        histogram_freq=1,
-    )
-
-    if fixedlr:
-        lrscheduler = LearningRateScheduler(
-            initial_learning_rate=lr,
-            verbose=0,
-            fixed=True
-        )
-    else:
-        lrscheduler = LearningRateScheduler(
-            initial_learning_rate=lr,
-            weight_decay=wd,
-            decay_period=epochs if decay_period is None else decay_period,
-            warmup_epochs=0 if warmup is None else warmup,
-            alpha=.01,
-            decay_multiplier=2.,
-            decay=.9,
-            verbose=1,
-        )
-
-    if dataset is None:
-
-        config = dict(
-            dtype=psf_type,
-            psf_shape=inputs,
-            snr=(min_psnr, max_psnr),
-            max_jitter=1,
-            n_modes=modes,
-            distribution=distribution,
-            amplitude_ranges=(-max_amplitude, max_amplitude),
-            lam_detection=wavelength,
-            batch_size=batch_size,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            cpu_workers=-1
-        )
-
-        train_data = data_utils.create_dataset(config)
-        training_steps = steps_per_epoch
-    else:
-        train_data = data_utils.collect_dataset(
-            dataset,
-            distribution=distribution,
-            samplelimit=samplelimit,
-            max_amplitude=max_amplitude,
-            no_phase=no_phase
-        )
-
-        sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
-        with sample_writer.as_default():
-            for s in range(10):
-                fig = None
-                for i, (img, y) in enumerate(train_data.shuffle(1000).take(5)):
-                    img = np.squeeze(img, axis=-1)
-
-                    if fig is None:
-                        fig, axes = plt.subplots(5, img.shape[0], figsize=(8, 8))
-
-                    for k in range(img.shape[0]):
-                        if k > 2:
-                            mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=-.5, vmax=.5)
-                        else:
-                            malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
-
-                        axes[i, k].axis('off')
-
-                    if img.shape[0] > 3:
-                        cax = inset_axes(axes[i, 0], width="10%", height="100%", loc='center left', borderpad=-3)
-                        cb = plt.colorbar(malpha, cax=cax)
-                        cax.yaxis.set_label_position("left")
-
-                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                        cb = plt.colorbar(mphi, cax=cax)
-                        cax.yaxis.set_label_position("right")
-
-                    else:
-                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                        cb = plt.colorbar(malpha, cax=cax)
-                        cax.yaxis.set_label_position("right")
-
-                tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
-
-        def configure_for_performance(ds):
-            ds = ds.cache()
-            ds = ds.shuffle(batch_size)
-            ds = ds.batch(batch_size)
-            ds = ds.prefetch(buffer_size=tf.data.AUTOTUNE)
-            return ds
-
-        train_data = configure_for_performance(train_data)
-        training_steps = tf.data.experimental.cardinality(train_data).numpy()
-
-    for img, y in train_data.shuffle(buffer_size=100).take(1):
-        logger.info(f"Batch size: {batch_size}")
-        logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
-
-        if plot_patches:
-            img = np.expand_dims(img[0], axis=0)
-            original = np.squeeze(img[0, 1])
-
-            vmin = np.min(original)
-            vmax = np.max(original)
-            vcenter = (vmin + vmax) / 2
-            step = .01
-            print(vmin, vmax, vcenter)
-
-            highcmap = plt.get_cmap('YlOrRd', 256)
-            lowcmap = plt.get_cmap('YlGnBu_r', 256)
-            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            cmap = mcolors.ListedColormap(cmap)
-
-            plt.figure(figsize=(4, 4))
-            plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
-            plt.axis("off")
-            plt.title('Original')
-
-            for p in patch_size:
-                sample = Stem(
-                    kernel_size=3,
-                    activation=activation,
-                    mask_shape=input_shape,
-                    refractive_index=refractive_index,
-                    lambda_det=wavelength,
-                    psf_type=psf_type,
-                    x_voxel_size=x_voxel_size,
-                    y_voxel_size=y_voxel_size,
-                    z_voxel_size=z_voxel_size,
-                    mul=mul,
-                    no_phase=no_phase
-                )(img)
-
-                if roi is not None:
-                    sample = ROI(crop_shape=roi)(sample)
-
-                patches = opticaltransformer.Patchify(patch_size=p)(sample)
-                merged = opticaltransformer.Merge(patch_size=p)(patches)
-                print(patches.shape)
-                print(merged.shape)
-
-                patches = patches[0, 1]
-                merged = np.squeeze(merged[0, 1])
-
-                plt.figure(figsize=(4, 4))
-                plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
-                plt.axis("off")
-                plt.title('Merged')
-
-                n = int(np.sqrt(patches.shape[0]))
-                plt.figure(figsize=(4, 4))
-                plt.title('Patches')
-                for i, patch in enumerate(patches):
-                    ax = plt.subplot(n, n, i + 1)
-                    patch_img = tf.reshape(patch, (p, p)).numpy()
-                    ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
-                    ax.axis("off")
-            plt.show()
-
-    try:
-        model.fit(
-            train_data,
-            steps_per_epoch=training_steps,
-            epochs=epochs,
-            verbose=2,
-            shuffle=True,
-            callbacks=[
-                tblogger,
-                tensorboard,
-                pb_checkpoints,
-                h5_checkpoints,
-                earlystopping,
-                defibrillator,
-                # features,
-                lrscheduler,
-            ],
-        )
-    except tf.errors.ResourceExhaustedError as e:
-        logger.error(e)
-        sys.exit(1)
-
-
+@profile
 def bootstrap_predict(
     model: tf.keras.Model,
     inputs: np.array,
     psfgen: SyntheticPSF,
     batch_size: int = 1,
     n_samples: int = 10,
-    threshold: float = 1e-3,
+    no_phase: bool = False,
+    padsize: Any = None,
+    alpha_val: str = 'abs',
+    phi_val: str = 'angle',
+    peaks: Any = None,
+    remove_interference: bool = True,
+    ignore_modes: list = (0, 1, 2, 4),
+    threshold: float = 0.05,
+    freq_strength_threshold: float = .01,
     verbose: bool = True,
-    desc: str = 'MiniBatch-probabilistic-predictions',
     plot: Any = None,
-    gamma: float = 1.0,
-    no_phase: bool = False
+    desc: str = 'MiniBatch-probabilistic-predictions',
 ):
     """
     Average predictions and compute stdev
@@ -525,40 +212,48 @@ def bootstrap_predict(
         inputs: encoded tokens to be processed
         psfgen: Synthetic PSF object
         n_samples: number of predictions of average
+        ignore_modes: list of modes to ignore
         batch_size: number of samples per batch
-        threshold: set predictions below threshold to zero
+        no_phase: ignore/drop the phase component of the FFT
+        padsize: pad the input to the desired size for the FFT
+        alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
+        phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
+        remove_interference: a toggle to normalize out the interference pattern from the OTF
+        peaks: masked array of the peaks of interest to compute the interference pattern
+        threshold: set predictions below threshold to zero (wavelength)
+        freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
         desc: test to display for the progressbar
         verbose: a toggle for progress bar
-        gamma: apply a gamma to the embeddings
+        plot: optional toggle to visualize embeddings
 
     Returns:
         average prediction, stdev
     """
+    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
+    ignore_modes = list(map(int, ignore_modes))
+    logger.info(f"Ignoring modes: {ignore_modes}")
+
     # check z-axis to compute embeddings for fourier models
-    if len(np.squeeze(inputs.shape)) == 3:
+    if len(inputs.shape) == 3:
         emb = model.input_shape[1] == inputs.shape[0]
     else:
         emb = model.input_shape[1] == inputs.shape[1]
 
     if not emb:
-        model_inputs = []
-        for i in inputs:
-            emb = psfgen.embedding(
-                psf=np.squeeze(i),
-                plot=plot,
-                gamma=gamma,
-                no_phase=no_phase,
-                principle_planes=True
-            )
-
-            if no_phase and model.input_shape[1] == 6:
-                phase_mask = np.zeros((3, model.input_shape[2], model.input_shape[3]))
-                emb = np.concatenate([emb, phase_mask], axis=0)
-            elif model.input_shape[1] == 3:
-                emb = emb[:3]
-
-            model_inputs.append(emb)
-
+        logger.info(f"Generating embeddings")
+        generate_fourier_embeddings = partial(
+            psfgen.embedding,
+            plot=plot,
+            padsize=padsize,
+            no_phase=no_phase,
+            alpha_val=alpha_val,
+            phi_val=phi_val,
+            peaks=peaks,
+            remove_interference=remove_interference,
+            embedding_option=psfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+        )
+        model_inputs = utils.multiprocess(generate_fourier_embeddings, inputs, cores=-1)
         model_inputs = np.stack(model_inputs, axis=0)
     else:
         # pass raw PSFs to the model
@@ -566,112 +261,14 @@ def bootstrap_predict(
 
     model_inputs = np.nan_to_num(model_inputs, nan=0, posinf=0, neginf=0)
     model_inputs = model_inputs[..., np.newaxis] if model_inputs.shape[-1] != 1 else model_inputs
+    features = np.array([np.count_nonzero(s) for s in inputs])
 
-    preds = None
-    total = n_samples * (len(model_inputs) // batch_size)
-    if verbose:
-        pbar = tqdm(total=total, desc=desc, unit='batch')
-
-    for i in range(n_samples):
-        b = []
-        if verbose:
-            pbar.update(len(model_inputs) // batch_size)
-            gen = tqdm(tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size), leave=False)
-        else:
-            gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size)
-
-        for batch in gen:
-            # if plot is not None:
-            #     img = np.squeeze(batch[0])
-            #     input_img = np.squeeze(inputs[0])
-            #
-            #     if img.shape[0] != img.shape[1]:
-            #         vmin, vmax, vcenter, step = 0, 2, 1, .1
-            #         highcmap = plt.get_cmap('YlOrRd', 256)
-            #         lowcmap = plt.get_cmap('YlGnBu_r', 256)
-            #         low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            #         high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            #         cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            #         cmap = mcolors.ListedColormap(cmap)
-            #
-            #         fig, axes = plt.subplots(3, 3)
-            #
-            #         if img.shape[0] == 6:
-            #             for t in range(3):
-            #                 inner = gridspec.GridSpecFromSubplotSpec(
-            #                     1, 2, subplot_spec=axes[0, t], wspace=0.1, hspace=0.1
-            #                 )
-            #                 ax = fig.add_subplot(inner[0])
-            #                 m = ax.imshow(img[t].T if t == 2 else img[t], cmap=cmap, vmin=vmin, vmax=vmax)
-            #                 ax.set_xticks([])
-            #                 ax.set_yticks([])
-            #                 ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-            #                 ax = fig.add_subplot(inner[1])
-            #                 ax.imshow(img[t+3].T if t == 2 else img[t+3], cmap='coolwarm', vmin=vmin, vmax=vmax)
-            #                 ax.set_xticks([])
-            #                 ax.set_yticks([])
-            #                 ax.set_xlabel(r'$\varphi = \angle \tau$')
-            #         else:
-            #             m = axes[0, 0].imshow(input_img[input_img.shape[0]//2, :, :], cmap='hot', vmin=0, vmax=1)
-            #             axes[0, 1].imshow(input_img[:, input_img.shape[1]//2, :], cmap='hot', vmin=0, vmax=1)
-            #             axes[0, 2].imshow(input_img[:, :, input_img.shape[2]//2].T, cmap='hot', vmin=0, vmax=1)
-            #             cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            #             cb = plt.colorbar(m, cax=cax)
-            #             cax.yaxis.set_label_position("right")
-            #             cax.set_ylabel('Input (middle)')
-            #
-            #         m = axes[1, 0].imshow(img[0], cmap=cmap, vmin=vmin, vmax=vmax)
-            #         axes[1, 1].imshow(img[1], cmap=cmap, vmin=vmin, vmax=vmax)
-            #         axes[1, 2].imshow(img[2].T, cmap=cmap, vmin=vmin, vmax=vmax)
-            #         cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            #         cb = plt.colorbar(m, cax=cax)
-            #         cax.yaxis.set_label_position("right")
-            #         cax.set_ylabel(r'Embedding ($\alpha$)')
-            #
-            #         m = axes[2, 0].imshow(img[3], cmap='coolwarm', vmin=-1, vmax=1)
-            #         axes[2, 1].imshow(img[4], cmap='coolwarm', vmin=-1, vmax=1)
-            #         axes[2, 2].imshow(img[5].T, cmap='coolwarm', vmin=-1, vmax=1)
-            #         cax = inset_axes(axes[2, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-            #         cb = plt.colorbar(m, cax=cax)
-            #         cax.yaxis.set_label_position("right")
-            #         cax.set_ylabel(r'Embedding ($\varphi$)')
-            #
-            #         for ax in axes.flatten():
-            #             ax.axis('off')
-            #     else:
-            #         fig, axes = plt.subplots(1, 3)
-            #
-            #         axes[1].set_title(str(img.shape))
-            #         m = axes[0].imshow(np.max(img, axis=0), cmap='Spectral_r')
-            #         axes[1].imshow(np.max(img, axis=1), cmap='Spectral_r')
-            #         axes[2].imshow(np.max(img, axis=2).T, cmap='Spectral_r')
-            #
-            #         for ax in axes.flatten():
-            #             ax.axis('off')
-            #
-            #         cax = inset_axes(axes[2], width="10%", height="100%", loc='center right', borderpad=-3)
-            #         cb = plt.colorbar(m, cax=cax)
-            #         cax.yaxis.set_label_position("right")
-            #
-            #     if plot == True:
-            #         plt.show()
-            #     else:
-            #         plt.savefig(f'{plot}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-            p = model(batch, training=True).numpy()
-
-            p[:, [0, 1, 2, 4]] = 0.
-            p[np.abs(p) <= threshold] = 0.
-
-            features = np.array([np.count_nonzero(s) for s in batch])
-            p[np.where(features == 0)[0]] = np.zeros_like(p[0])
-
-            b.extend(p)
-
-        if preds is None:
-            preds = np.zeros((len(b), len(b[0]), n_samples))
-
-        preds[:, :, i] = b
+    logger.info(f"[BS={batch_size}, n={n_samples}] {desc}")
+    gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples)
+    preds = model.predict(gen, batch_size=batch_size, verbose=verbose)
+    preds[:, ignore_modes] = 0.
+    preds[np.abs(preds) <= threshold] = 0.
+    preds = np.stack(np.split(preds, n_samples), axis=-1)
 
     mu = np.mean(preds, axis=-1)
     mu = mu.flatten() if mu.shape[0] == 1 else mu
@@ -679,209 +276,395 @@ def bootstrap_predict(
     sigma = np.std(preds, axis=-1)
     sigma = sigma.flatten() if sigma.shape[0] == 1 else sigma
 
+    mu[np.where(features == 0)[0]] = np.zeros_like(mu[0])
+    sigma[np.where(features == 0)[0]] = np.zeros_like(sigma[0])
+
     return mu, sigma
 
 
-def predict_sign(
-    model: tf.keras.Model,
-    inputs: np.array,
-    gen: SyntheticPSF,
-    batch_size: int,
-    init_preds: Any = None,
-    desc: Any = None,
+@profile
+def eval_rotation(
+    init_preds: np.ndarray,
+    rotations: np.ndarray,
+    psfgen: SyntheticPSF,
+    threshold: float = 0.01,
     plot: Any = None,
-    verbose: bool = False,
-    threshold: float = 1e-2,
 ):
+    """
+        We can think of the mode and its twin as the X and Y basis, and the abberation being a
+        vector on this coordinate system. A problem occurs when the ground truth vector lies near
+        where one of the vectors flips sign (and the model was trained to only respond with positive
+        values for that vector).  Either a discontinuity or a degeneracy occurs in this area leading to
+        unreliable predictions.  The solution is to digitally rotate the input embeddings over a range
+        of angles.  Converting from cartesian X Y to polar coordinates (rho, phi), the model predictions
+        should map phi as a linear waveform (if all were perfect), a triangle waveform (if degenergancies
+        exist because the model was trained to only return positive values), or a sawtooth waveform (if
+        a discontinuity exists because the model was trained to only return positive values for the first
+        mode in the twin pair).  These waveforms (with known period:given by the m value of the mode,
+        known amplitude) can be curve-fit to determine the actual phi. Given rho and phi, we can
+        return to cartesian coordinates, which give the amplitudes for mode & twin.
 
-    if init_preds is None:
-        init_preds, stdev = bootstrap_predict(
-            model,
-            inputs,
-            psfgen=gen,
-            batch_size=batch_size,
-            n_samples=1,
-            no_phase=True,
-            desc=desc,
-            verbose=verbose,
-            threshold=threshold,
-            plot=plot
-        )
-        init_preds = np.abs(init_preds)
+        Args:
+            init_preds: predictions for each rotation angle
+            rotations: list of rotations applied to the embeddings
+            psfgen: Synthetic PSF object
+            threshold: set predictions below threshold to zero (wavelength)
+            plot: optional toggle to visualize embeddings
+    """
 
-    g = partial(
-        gen.single_psf,
-        zplanes=0,
-        normed=True,
-        noise=False,
-        augmentation=False,
-        meta=False
-    )
+    plt.style.use("default")
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+    def cart2pol(x, y):
+        """Convert cartesian (x, y) to polar (rho, phi)
+        """
+        rho = np.sqrt(x ** 2 + y ** 2)
+        phi = np.arctan2(y, x)
+        return (rho, phi)
 
-    predicted_psf = g(init_preds)[np.newaxis, ...]
-    predicted_peaks = np.zeros_like(inputs)
+    def pol2cart(rho, phi):
+        """Convert polar (rho, phi) to cartesian (x, y)
+        """
+        x = rho * np.cos(phi)
+        y = rho * np.sin(phi)
+        return (x, y)
 
-    peaks = peak_local_max(
-        np.squeeze(inputs),
-        min_distance=10,
-        threshold_rel=.33,
-        exclude_border=False,
-        p_norm=2,
-        num_peaks=10
-    ).astype(np.int32)
+    def linear_fit_fixed_slope(x, y, m):
+        return np.mean(y - m*x)
 
-    for p in peaks:
-        predicted_peaks[0, p[0], p[1], p[2]] = inputs[0, p[0], p[1], p[2]]
+    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
 
-    predicted_inputs = utils.fftconvolution(
-        np.squeeze(predicted_peaks),
-        np.squeeze(predicted_psf)
-    )
-
-    predicted_inputs = predicted_inputs[..., np.newaxis]
-    if len(predicted_inputs.shape) == 4:
-        predicted_inputs = predicted_inputs[np.newaxis, ...]
-
-    predicted_inputs *= 30 ** 2
-    rand_noise = gen._random_noise(
-        image=predicted_inputs,
-        mean=gen.mean_background_noise,
-        sigma=gen.sigma_background_noise
-    )
-    predicted_inputs += rand_noise
-    predicted_inputs /= predicted_inputs.max()
-
-    # ratio = inputs * predicted_inputs
-    ratio = predicted_inputs / inputs
-    ratio[np.where(predicted_inputs <= .1)] = 1
-    ratio = np.nan_to_num(ratio, nan=1, posinf=1, neginf=1)
-
-    followup_inputs = inputs - (inputs * ratio)
-    followup_inputs[followup_inputs < 0] = 0
-    followup_inputs = np.nan_to_num(followup_inputs, nan=0, posinf=0, neginf=0)
-    followup_inputs /= np.max(followup_inputs)
-
-    followup_preds, stdev = bootstrap_predict(
-        model,
-        followup_inputs,
-        psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
-        no_phase=True,
-        desc=desc,
-        verbose=verbose,
-    )
-    followup_preds = np.abs(followup_preds)
+    preds = np.zeros(psfgen.n_modes)
+    stdevs = np.zeros(psfgen.n_modes)
+    wavefront = Wavefront(preds)
 
     if plot is not None:
-        fig, axes = plt.subplots(6, 3, figsize=(6, 11))
-        gamma = .5
-        vmin, vmax, vcenter, step = 0, 3, 1, .01
-        highcmap = plt.get_cmap('terrain_r', 256)
-        lowcmap = plt.get_cmap('Greys_r', 256)
-        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-        cmap = mcolors.ListedColormap(cmap)
+        fig = plt.figure(figsize=(15, 20))
+        plt.subplots_adjust(hspace=0.1)
+        gs = fig.add_gridspec(len(wavefront.twins.keys()), 2)
 
-        for i in range(3):
-            mi = axes[0, i].imshow(
-                np.max(np.squeeze(inputs), axis=i) ** gamma,
-                vmin=0, vmax=1, cmap='magma', aspect='equal'
-            )
-            axes[0, i].set_xticks([])
-            axes[0, i].set_yticks([])
+    for row, (mode, twin) in enumerate(wavefront.twins.items()):
+        if twin is not None:
+            magnitude, phiangle = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
 
-            mpoi = axes[1, i].imshow(
-                np.max(np.squeeze(predicted_peaks) ** gamma, axis=i),
-                vmin=0, vmax=1, cmap='hot', aspect='equal'
-            )
-            axes[1, i].set_xticks([])
-            axes[1, i].set_yticks([])
+            if np.mean(magnitude) > threshold:
+                # the Zernike modes have m periods per 2pi. xdata is now the Twin angle
+                xdata = rotations * np.abs(mode.m)
+                rhos, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
+                ydata = np.degrees(ydata)
+                rho = rhos[np.argmin(np.abs(ydata))]
 
-            mppsf = axes[2, i].imshow(
-                np.max(np.squeeze(predicted_psf), axis=i) ** gamma,
-                vmin=0, vmax=1, cmap='hot', aspect='equal'
-            )
-            axes[2, i].set_xticks([])
-            axes[2, i].set_yticks([])
+                # exclude points near discontinuities (-90, +90, 450,..) based upon fit
+                data_mask = np.ones(xdata.shape[0], dtype=bool)
+                data_mask[(init_preds[:, mode.index_ansi] < rho/5) * (rho > threshold)] = 0.
+                data_mask[rhos < rho/2] = 0.    # exclude if rho is unusually small (which can lead to small, but dominant primary mode near discontinuity)
+                xdata = xdata[data_mask]
+                ydata = ydata[data_mask]
+                offset = ydata[0]
+                ydata = np.unwrap(ydata, period=180)
+                ydata = ((ydata - offset - xdata) + 90) % 180 - 90 + offset + xdata
 
-            mp = axes[3, i].imshow(
-                np.max(np.squeeze(predicted_inputs), axis=i) ** gamma,
-                vmin=0, vmax=1, cmap='magma', aspect='equal'
-            )
-            axes[3, i].set_xticks([])
-            axes[3, i].set_yticks([])
+                m = 1
+                b = linear_fit_fixed_slope(xdata, ydata, m)  # refit without bad data points
+                fit = m * xdata + b
 
-            mr = axes[4, i].imshow(
-                np.max(np.squeeze(ratio), axis=i),
-                vmin=vmin, vmax=vmax, cmap=cmap, aspect='equal'
-            )
-            axes[4, i].set_xticks([])
-            axes[4, i].set_yticks([])
+                mse = np.mean(np.square(fit-ydata))
+                if mse > 700:
+                    # reject if it doesn't show rotation that matches within +/- 26deg, equivalent to +/- 0.005 um on a 0.01 um mode.
+                    rho = 0
 
-            mf = axes[5, i].imshow(
-                np.max(np.squeeze(followup_inputs), axis=i) ** gamma,
-                vmin=0, vmax=1, cmap='magma', aspect='equal'
-            )
-            axes[5, i].set_xticks([])
-            axes[5, i].set_yticks([])
+                twin_angle = b   # evaluate the curve fit when there is no digital rotation.
+                preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
+                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = np.std(rhos[data_mask]), np.std(rhos[data_mask])
 
-        axes[0, 0].set_ylabel('Input')
-        axes[1, 0].set_ylabel('POI')
-        axes[2, 0].set_ylabel('PSF')
-        axes[3, 0].set_ylabel('Predicted')
-        axes[4, 0].set_ylabel('Delta')
-        axes[5, 0].set_ylabel('Followup inputs')
+                if plot is not None:
+                    ax = fig.add_subplot(gs[row, 0])
+                    fit_ax = fig.add_subplot(gs[row, 1])
 
-        for i, m in zip(range(6), [mi, mpoi, mppsf, mp, mr, mf]):
-            cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-3)
-            cax.set_ylabel(f"$\gamma$: {gamma:.2f}")
-            plt.colorbar(m, cax=cax)
+                    ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
+                    ax.plot(rotations, init_preds[:, twin.index_ansi], ':', label=f"m{twin.index_ansi}")
 
-        plt.savefig(f'{plot}_sign.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+                    ax.set_xlim(0, 360)
+                    ax.set_xticks(range(0, 405, 45))
+                    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+                    ax.set_ylim(-np.max(rhos), np.max(rhos))
+                    ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
+                    ax.set_ylabel('Amplitude ($\mu$m RMS)')
+                    ax.set_xlabel('Digital rotation (deg)')
+
+                    title_color = 'g' if rho > 0 else 'r'
+                    fit_ax.plot(xdata, m * xdata + b, color=title_color, lw='.75')
+                    fit_ax.scatter(xdata, ydata, s=2, color='grey')
+                    
+                    fit_ax.set_title(
+                        f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
+                        f' [$b$={twin_angle:.1f}$^\circ$  $\\rho$={rho:.3f} $\mu$RMS   MSE={mse:.0f}]',
+                        color=title_color
+                    )
+
+                    fit_ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+                    fit_ax.set_ylabel('Predicted Twin angle (deg)')
+                    fit_ax.set_xlabel('Digitially rotated Twin angle (deg)')
+                    fit_ax.set_xticks(range(0, int(np.max(xdata)), 90))
+                    fit_ax.set_yticks(np.insert(np.arange(-90, np.max(ydata), 180), 0, 0))
+                    fit_ax.set_xlim(0, 360 * np.abs(mode.m))
+     
+                    ax.scatter(rotations[~data_mask], rhos[~data_mask], s=1.5, color='pink', zorder=3)
+                    ax.scatter(rotations[data_mask], rhos[data_mask], s=1.5, color='black', zorder=3)
+            else:
+                preds[mode.index_ansi] = 0
+                preds[twin.index_ansi] = 0
+
+                if plot is not None:
+                    ax = fig.add_subplot(gs[row, 0])
+                    ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
+                    ax.plot(rotations, init_preds[:, twin.index_ansi], ':', label=f"m{twin.index_ansi}")
+
+                    ax.set_xlim(0, 360)
+                    ax.set_xticks(range(0, 405, 45))
+                    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+                    ax.set_ylim(np.min(init_preds), np.max(init_preds))
+                    ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
+                    ax.set_ylabel('Amplitude ($\mu$ RMS)')
+                    ax.set_xlabel('Digital rotation (deg)')
+
+        else:
+            # mode has m=0 (spherical,...), or twin isn't within the 55 modes.
+            rho = np.median(init_preds[:, mode.index_ansi])
+            rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
+            preds[mode.index_ansi] = rho
+            stdevs[mode.index_ansi] = np.std(init_preds[:, mode.index_ansi])
+
+            if plot is not None:
+                ax = fig.add_subplot(gs[row, 0])
+                ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}={rho:.3f}")
+
+                ax.set_xlim(0, 360)
+                ax.set_xticks(range(0, 405, 45))
+                ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+                ax.set_ylim(np.min(init_preds), np.max(init_preds))
+                ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
+                ax.set_ylabel('Amplitude ($\mu$ RMS)')
+                ax.set_xlabel('Digital rotation (deg)')
+
+    if plot is not None:
+        plt.tight_layout()
+        plt.savefig(f'{plot}_rotations.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    return preds, stdevs
+
+
+@profile
+def predict_rotation(
+    model: tf.keras.Model,
+    inputs: np.array,
+    psfgen: SyntheticPSF,
+    batch_size: int = 1,
+    n_samples: int = 1,
+    no_phase: bool = False,
+    padsize: Any = None,
+    alpha_val: str = 'abs',
+    phi_val: str = 'angle',
+    peaks: Any = None,
+    ignore_modes: list = (0, 1, 2, 4),
+    threshold: float = 0.05,
+    freq_strength_threshold: float = .01,
+    verbose: bool = True,
+    plot: Any = None,
+    remove_interference: bool = True,
+    desc: str = 'Predict-rotations',
+    rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int)
+):
+    """
+    Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin).
+
+    Args:
+        model: pre-trained keras model. Model must be trained with XY embeddings only so that we can rotate them.
+        inputs: encoded tokens to be processed. (e.g. input images)
+        psfgen: Synthetic PSF object
+        n_samples: number of predictions of average
+        batch_size: number of samples per batch
+        no_phase: ignore/drop the phase component of the FFT
+        padsize: pad the input to the desired size for the FFT
+        alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
+        phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
+        remove_interference: a toggle to normalize out the interference pattern from the OTF
+        peaks: masked array of the peaks of interest to compute the interference pattern
+        threshold: set predictions below threshold to zero (wavelength)
+        freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
+        threshold: set predictions below threshold to zero (wavelength)
+        freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
+        desc: test to display for the progressbar
+        plot: optional toggle to visualize embeddings
+    """
+    generate_fourier_embeddings = partial(
+        psfgen.embedding,
+        plot=plot,
+        padsize=padsize,
+        no_phase=no_phase,
+        alpha_val=alpha_val,
+        phi_val=phi_val,
+        peaks=peaks,
+        remove_interference=remove_interference,
+        embedding_option=psfgen.embedding_option,
+        freq_strength_threshold=freq_strength_threshold,
+    )
+    embeddings = np.array(utils.multiprocess(generate_fourier_embeddings, inputs, cores=-1))
+
+    rotated_embs = []
+    for emb in embeddings:
+        for angle in rotations:
+            rotated_embs.append(np.array([rotate(plane, angle=angle) for plane in emb]))
+    rotated_embs = np.array(rotated_embs)
+
+    init_preds, stdev = bootstrap_predict(
+        model,
+        rotated_embs,
+        psfgen=psfgen,
+        batch_size=batch_size,
+        n_samples=n_samples,
+        no_phase=True,
+        threshold=0.,
+        ignore_modes=ignore_modes,
+        plot=plot,
+        verbose=verbose,
+        desc=desc
+    )
+
+    eval_mode_rotations = partial(
+        eval_rotation,
+        rotations=rotations,
+        psfgen=psfgen,
+        threshold=threshold,
+        plot=plot,
+    )
+
+    init_preds = np.stack(np.split(init_preds, inputs.shape[0]), axis=0)
+    jobs = np.array([list(zip(*j)) for j in utils.multiprocess(eval_mode_rotations, init_preds, cores=-1)])
+    preds, stdev = jobs[..., 0], jobs[..., -1]
+    return preds, stdev
+
+
+@profile
+def predict_sign(
+    init_preds: np.ndarray,
+    followup_preds: np.ndarray,
+    sign_threshold: float = .99,
+    plot: Any = None,
+):
+    def pct_change(cur, prev):
+        cur = np.abs(cur)
+        prev = np.abs(prev)
+
+        if np.array_equal(cur, prev):
+            return np.zeros_like(prev)
+        pct = ((cur - prev) / (prev+1e-6)) * 100.0
+        pct[pct > 100] = 100
+        pct[pct < -100] = -100
+        return pct
 
     preds = init_preds.copy()
-    flips = np.where(followup_preds > (.4 * init_preds))[0]
-    preds[flips] *= -1
+    pchange = pct_change(followup_preds, init_preds)
 
-    if plot is not None and followup_preds is not None:
-        init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-        followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-        preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
+    # flip signs and make any necessary adjustments to the amplitudes based on the followup predictions
+    # adj = pchange.copy()
+    # adj[np.where(pchange > 0)] = -200
+    # adj[np.where(pchange < 0)] += 100
+    # preds += preds * (adj/100)
 
-        fig, axes = plt.subplots(2, 1, figsize=(24, 8))
-        axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
-        axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
-        axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
-        axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
-        axes[0].legend(frameon=False, loc='upper left')
-        axes[0].set_xlim((0, 60))
-        axes[0].set_xticks(range(0, 61))
+    # threshold-based sign prediction
+    # threshold = sign_threshold * init_preds
+    # flips = np.stack(np.where(followup_preds > threshold), axis=0)
 
-        axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
-        axes[1].legend(frameon=False, loc='upper left')
-        axes[1].set_xlim((0, 60))
-        axes[1].set_xticks(range(0, 61))
+    # if len(np.squeeze(preds).shape) == 1:
+    #     preds[flips[0]] *= -1
+    # else:
+    #     preds[flips[0], flips[1]] *= -1
 
-        plt.tight_layout()
-        plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    # flip sign only if amplitudes increased on the followup predictions
+    preds[pchange > 0.] *= -1
 
-    return preds, followup_inputs
+    if plot is not None:
+        if len(np.squeeze(preds).shape) == 1:
+            init_preds_wave = np.squeeze(init_preds)
+            init_preds_wave_error = np.zeros_like(init_preds_wave)
+
+            followup_preds_wave = np.squeeze(followup_preds)
+            followup_preds_wave_error = np.zeros_like(followup_preds_wave)
+
+            preds_wave = np.squeeze(preds)
+            preds_error = np.zeros_like(preds_wave)
+
+            percent_changes = np.squeeze(pchange)
+            percent_changes_error = np.zeros_like(percent_changes)
+        else:
+            init_preds_wave = np.mean(init_preds, axis=0)
+            init_preds_wave_error = np.std(init_preds, axis=0)
+
+            followup_preds_wave = np.mean(followup_preds, axis=0)
+            followup_preds_wave_error = np.std(followup_preds, axis=0)
+
+            preds_wave = np.mean(preds, axis=0)
+            preds_error = np.std(preds, axis=0)
+
+            percent_changes = np.mean(pchange, axis=0)
+            percent_changes_error = np.std(pchange, axis=0)
+
+        plt.style.use("default")
+        vis.plot_sign_correction(
+            init_preds_wave,
+            init_preds_wave_error,
+            followup_preds_wave,
+            followup_preds_wave_error,
+            preds_wave,
+            preds_error,
+            percent_changes,
+            percent_changes_error,
+            savepath=f'{plot}_sign_correction'
+        )
+
+        plt.style.use("dark_background")
+        vis.plot_sign_correction(
+            init_preds_wave,
+            init_preds_wave_error,
+            followup_preds_wave,
+            followup_preds_wave_error,
+            preds_wave,
+            preds_error,
+            percent_changes,
+            percent_changes_error,
+            savepath=f'{plot}_sign_correction_db'
+        )
+
+    return preds, pchange
 
 
-def booststrap_predict_sign(
+@profile
+def dual_stage_prediction(
     model: tf.keras.Model,
     inputs: np.array,
     gen: SyntheticPSF,
-    desc: Any = None,
+    modelgen: SyntheticPSF,
     plot: Any = None,
     verbose: bool = False,
-    threshold: float = 1e-2,
-    sign_threshold: float = .4,
+    threshold: float = 0.,
+    freq_strength_threshold: float = .01,
+    sign_threshold: float = .9,
     n_samples: int = 1,
-    prev_pred: Any = None
+    batch_size: int = 1,
+    ignore_modes: list = (0, 1, 2, 4),
+    prev_pred: Any = None,
+    estimate_sign_with_decon: bool = False,
+    decon_iters: int = 5
 ):
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -892,388 +675,224 @@ def booststrap_predict_sign(
         'axes.autolimit_mode': 'round_numbers'
     })
 
-    preds, stdev = bootstrap_predict(
+    prev_pred = None if (prev_pred is None or str(prev_pred) == 'None') else prev_pred
+
+    init_preds, stdev = predict_rotation(
         model,
         inputs,
-        psfgen=gen,
+        psfgen=modelgen,
         n_samples=n_samples,
         no_phase=True,
-        desc=desc,
         verbose=verbose,
+        batch_size=batch_size,
         threshold=threshold,
+        ignore_modes=ignore_modes,
+        freq_strength_threshold=freq_strength_threshold,
         plot=plot
     )
-    preds = np.abs(preds)
 
-    if prev_pred is not None:
-        followup_preds = preds.copy()
-        init_preds = np.abs(pd.read_csv(prev_pred, header=0)['amplitude'].values)
+    if estimate_sign_with_decon:
+        logger.info(f"Estimating signs w/ Decon")
+        abrs = range(init_preds.shape[0]) if len(init_preds.shape) > 1 else range(1)
+        make_psf = partial(gen.single_psf, normed=True, noise=False)
+        psfs = np.stack(gen.batch(
+            make_psf,
+            [Wavefront(init_preds[i], lam_detection=gen.lam_detection) for i in abrs]
+        ), axis=0)
 
-        if len(np.squeeze(preds).shape) == 1:
-            flips = np.where(followup_preds > (sign_threshold * init_preds))[0]
-            init_preds[flips] *= -1
-            preds = init_preds.copy()
+        with sp.fft.set_workers(-1):
+            followup_inputs = richardson_lucy(np.squeeze(inputs), np.squeeze(psfs), num_iter=decon_iters)
 
-            if plot is not None:
-                init_preds_wave = Wavefront(init_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-                followup_preds_wave = Wavefront(followup_preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-                preds_wave = Wavefront(preds, lam_detection=gen.lam_detection).amplitudes_ansi_waves
-
-                fig, axes = plt.subplots(2, 1, figsize=(24, 8))
-                axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
-                axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
-                axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
-                axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
-                axes[0].legend(frameon=False, loc='upper left')
-                axes[0].set_xlim((0, 60))
-                axes[0].set_xticks(range(0, 61))
-
-                axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
-                axes[1].legend(frameon=False, loc='upper left')
-                axes[1].set_xlim((0, 60))
-                axes[1].set_xticks(range(0, 61))
-
-                plt.tight_layout()
-                plt.savefig(f'{plot}_sign_correction.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
+        if len(followup_inputs.shape) == 3:
+            followup_inputs = followup_inputs[np.newaxis, ..., np.newaxis]
         else:
-            for i in range(preds.shape[0]):
-                flips = np.where(followup_preds[i] > (sign_threshold * init_preds[i]))[0]
-                init_preds[i, flips] *= -1
-            preds = init_preds.copy()
+            followup_inputs = followup_inputs[..., np.newaxis]
 
-    return preds, stdev
+        followup_preds, stdev = predict_rotation(
+            model,
+            followup_inputs,
+            psfgen=modelgen,
+            n_samples=n_samples,
+            no_phase=True,
+            verbose=False,
+            batch_size=batch_size,
+            threshold=threshold,
+            ignore_modes=ignore_modes,
+            freq_strength_threshold=freq_strength_threshold,
+        )
+
+        preds, pchanges = predict_sign(
+            init_preds=init_preds,
+            followup_preds=followup_preds,
+            sign_threshold=sign_threshold,
+            plot=plot
+        )
+
+    elif prev_pred is not None:
+        logger.info(f"Evaluating signs")
+        followup_preds = init_preds.copy()
+        init_preds = pd.read_csv(prev_pred, header=0)['amplitude'].values
+
+        preds, pchanges = predict_sign(
+            init_preds=init_preds,
+            followup_preds=followup_preds,
+            sign_threshold=sign_threshold,
+            plot=plot
+        )
+
+    else:
+        preds = init_preds
+        pchanges = np.zeros_like(preds)
+
+    return preds, stdev, pchanges
 
 
-def eval_sign(
+@profile
+def evaluate(
     model: tf.keras.Model,
     inputs: np.array,
     gen: SyntheticPSF,
     ys: np.array,
+    psnr: int,
     batch_size: int,
-    desc: Any = None,
     reference: Any = None,
     plot: Any = None,
-    threshold: float = 1e-3,
-    sign_threshold: float = .4,
+    threshold: float = 0.01,
+    eval_sign: str = 'positive_only',
 ):
-    init_preds, stdev = bootstrap_predict(
-        model,
-        inputs,
-        psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
-        no_phase=True,
-        threshold=threshold,
-        desc=desc,
-        plot=plot
-    )
-    init_preds = np.abs(init_preds)
+    if isinstance(inputs, tf.Tensor):
+        inputs = inputs.numpy()
 
-    res = ys - init_preds
-    g = partial(
-        gen.single_psf,
-        zplanes=0,
-        normed=True,
-        noise=False if reference is not None else True,
-        augmentation=False if reference is not None else True,
-        meta=False
-    )
-    followup_inputs = np.expand_dims(np.stack(gen.batch(g, res), axis=0), -1)
+    if isinstance(ys, tf.Tensor):
+        ys = ys.numpy()
 
-    if reference is not None:
-        followup_inputs = utils.fftconvolution(reference, followup_inputs)
+    if len(ys.shape) == 1:
+        ys = ys[np.newaxis, :]
 
-    followup_preds, stdev = bootstrap_predict(
-        model,
-        followup_inputs,
-        psfgen=gen,
-        batch_size=batch_size,
-        n_samples=1,
-        no_phase=True,
-        threshold=threshold,
-        desc=desc,
-    )
-    followup_preds = np.abs(followup_preds)
+    if eval_sign == 'positive_only':
+        ys = np.abs(ys)
 
-    preds = init_preds.copy()
+        preds, stdev = bootstrap_predict(
+            model,
+            inputs,
+            psfgen=gen,
+            batch_size=batch_size,
+            n_samples=1,
+            no_phase=True,
+            threshold=threshold,
+            plot=plot
+        )
+        if len(preds.shape) > 1:
+            preds = np.abs(preds)[:, :ys.shape[-1]]
+        else:
+            preds = np.abs(preds)[np.newaxis, :ys.shape[-1]]
 
-    if ys.shape[0] == 1:
-        flips = np.where(followup_preds > (sign_threshold * init_preds))[0]
-        preds[flips] *= -1
+    elif eval_sign == 'dual_stage':
+
+        init_preds, stds = predict_rotation(
+            model=model,
+            inputs=inputs,
+            psfgen=gen,
+            no_phase=True,
+            batch_size=batch_size,
+            n_samples=1,
+            threshold=threshold,
+            plot=plot
+        )
+
+        if len(init_preds.shape) > 1:
+            init_preds = init_preds[:, :ys.shape[-1]]
+        else:
+            init_preds = init_preds[np.newaxis, :ys.shape[-1]]
+
+        threshold = utils.waves2microns(threshold, wavelength=gen.lam_detection)
+        ps = init_preds.copy()
+        ps[ps > .1] = .1
+        ps[ps < -.1] = -.1
+        res = ys - ps
+        followup_inputs = np.zeros_like(inputs)
+
+        if reference is not None:
+            for i in range(inputs.shape[0]):
+                wavefront = Wavefront(
+                    res[i],
+                    modes=gen.n_modes,
+                    rotate=False,
+                    lam_detection=gen.lam_detection,
+                )
+                psf = gen.single_psf(
+                    wavefront,
+                    normed=True,
+                    noise=False,
+                    meta=False
+                )
+
+                fi = utils.fftconvolution(kernel=psf, sample=reference)
+                fi *= psnr ** 2
+                rand_noise = gen._random_noise(image=fi, mean=0, sigma=gen.sigma_background_noise)
+                fi += rand_noise
+                fi /= np.max(fi)
+                followup_inputs[i] = fi[..., np.newaxis]
+
+        # plt.style.use("default")
+        # vis.plot_sign_eval(
+        #     inputs=inputs,
+        #     followup_inputs=followup_inputs,
+        #     savepath=f'{plot}_sign_eval'
+        # )
+        #
+        # plt.style.use("dark_background")
+        # vis.plot_sign_eval(
+        #     inputs=inputs,
+        #     followup_inputs=followup_inputs,
+        #     savepath=f'{plot}_sign_eval_db'
+        # )
+
+        followup_preds, stds = predict_rotation(
+            model=model,
+            inputs=followup_inputs,
+            psfgen=gen,
+            no_phase=True,
+            batch_size=batch_size,
+            n_samples=1,
+            threshold=threshold,
+            plot=f"{plot}_followup"
+        )
+
+        if len(followup_preds.shape) > 1:
+            followup_preds = followup_preds[:, :ys.shape[-1]]
+        else:
+            followup_preds = followup_preds[np.newaxis, :ys.shape[-1]]
+
+        preds, pchanges = predict_sign(
+            init_preds=init_preds,
+            followup_preds=followup_preds,
+            plot=plot
+        )
+
     else:
-        for i in range(ys.shape[0]):
-            flips = np.where(followup_preds[i] > (sign_threshold * init_preds[i]))[0]
-            preds[i, flips] *= -1
+        preds, stdev = bootstrap_predict(
+            model,
+            inputs,
+            psfgen=gen,
+            batch_size=batch_size,
+            n_samples=1,
+            no_phase=False,
+            threshold=threshold,
+            plot=plot
+        )
 
-            if plot == True:
-                init_preds_wave = Wavefront(init_preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
-                followup_preds_wave = Wavefront(followup_preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
-                preds_wave = Wavefront(preds[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
-                ys_wave = Wavefront(ys[i], lam_detection=gen.lam_detection).amplitudes_ansi_waves
+        if len(preds.shape) > 1:
+            preds = preds[:, :ys.shape[-1]]
+        else:
+            preds = preds[np.newaxis, :ys.shape[-1]]
 
-                fig, axes = plt.subplots(2, 1, figsize=(24, 8))
-                axes[0].plot(init_preds_wave, '-', color='lightgrey', label='Init')
-                axes[0].plot(followup_preds_wave, '-.', color='dimgrey', label='Followup')
-                axes[0].scatter(flips, init_preds_wave[flips], marker='o', color='r', label='Flip')
-                axes[0].scatter(flips, followup_preds_wave[flips], marker='o', color='r')
-                axes[0].legend(frameon=False, loc='upper left')
-                axes[0].set_xlim((0, 60))
-                axes[0].set_xticks(range(0, 61))
-
-                axes[1].plot(preds_wave, '-o', color='C0', label='Prediction')
-                axes[1].plot(ys_wave, '-o', color='C1', label='Ground truth')
-                axes[1].legend(frameon=False, loc='upper left')
-                axes[1].set_xlim((0, 60))
-                axes[1].set_xticks(range(0, 61))
-
-                plt.tight_layout()
-                plt.show()
-
-    return preds
-
-
-def predict(
-    model: Path,
-    psf_type: str,
-    wavelength: float,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
-    max_jitter: float,
-    cpu_workers: int,
-    input_coverage: float = 1.0,
-    no_phase: bool = False,
-    radius: float = .4,
-    psnr: int = 30
-):
-    m = load(model)
-    m.summary()
-
-    modes = m.layers[-1].output_shape[-1]
-    input_shape = m.layers[0].input_shape[0][1:-1]
-
-    for dist in ['powerlaw', 'dirichlet']:
-        for amplitude_range in [(.1, .2), (.2, .3)]:
-            psfargs = dict(
-                dtype=psf_type,
-                order='ansi',
-                snr=1000,
-                n_modes=modes,
-                distribution=dist,
-                gamma=.75,
-                bimodal=True,
-                lam_detection=wavelength,
-                amplitude_ranges=amplitude_range,
-                psf_shape=3 * [input_shape[-1]],
-                x_voxel_size=x_voxel_size,
-                y_voxel_size=y_voxel_size,
-                z_voxel_size=z_voxel_size,
-                batch_size=1,
-                max_jitter=max_jitter,
-                cpu_workers=cpu_workers,
-            )
-
-            gen = SyntheticPSF(**psfargs)
-            for s, (psf, y, snr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True)):
-                waves = np.round(utils.microns2waves(amplitude_range[0], wavelength), 2)
-                psf = np.squeeze(psf)
-
-                for npoints in trange(1, 6):
-                    if npoints > 1:
-                        img = np.zeros([3 * s for s in gen.psf_shape])
-                        width = [(i // 2) for i in gen.psf_shape]
-                        center = gen.psf_shape
-
-                        for i in range(npoints):
-                            p = [
-                                np.random.randint(int(gen.psf_shape[0] * (.5 - radius)),
-                                                  int(gen.psf_shape[0] * (.5 + radius))),
-                                np.random.randint(int(gen.psf_shape[1] * (.5 - radius)),
-                                                  int(gen.psf_shape[1] * (.5 + radius))),
-                                np.random.randint(int(gen.psf_shape[2] * (.5 - radius)),
-                                                  int(gen.psf_shape[2] * (.5 + radius)))
-                            ]
-
-                            img[
-                                (p[0] + center[0]) - width[0]:(p[0] + center[0]) + width[0],
-                                (p[1] + center[1]) - width[1]:(p[1] + center[1]) + width[1],
-                                (p[2] + center[2]) - width[2]:(p[2] + center[2]) + width[2],
-                            ] += psf
-
-                        img = resize_with_crop_or_pad(img, crop_shape=gen.psf_shape)
-                    else:
-                        img = psf
-
-                    img[img < 0] = 0
-                    img = np.nan_to_num(img, nan=0)
-                    rand_noise = gen._random_noise(
-                        image=img,
-                        mean=gen.mean_background_noise,
-                        sigma=gen.sigma_background_noise
-                    )
-                    noisy_img = rand_noise + (img * psnr**2)
-                    noisy_img /= np.max(noisy_img)
-
-                    save_path = Path(
-                        f"{model}/{dist}/c{input_coverage}/lambda-{waves}/npoints-{npoints}"
-                    )
-                    save_path.mkdir(exist_ok=True, parents=True)
-
-                    if input_coverage != 1.:
-                        mode = np.abs(st.mode(noisy_img, axis=None).mode[0])
-                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[int(s * input_coverage) for s in gen.psf_shape])
-                        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=gen.psf_shape, constant_values=mode)
-
-                    p = eval_sign(
-                        model=m,
-                        inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
-                        gen=gen,
-                        ys=y,
-                        batch_size=1,
-                        plot=save_path / f'embeddings_{s}',
-                    )
-
-                    p_wave = Wavefront(p, lam_detection=wavelength)
-                    # logger.info('Prediction')
-                    # pprint(p_wave.zernikes)
-
-                    y_wave = Wavefront(y.flatten(), lam_detection=wavelength)
-                    # logger.info('GT')
-                    # pprint(y_wave.zernikes)
-
-                    diff = y_wave - p_wave
-
-                    p_psf = gen.single_psf(p_wave, zplanes=0)
-                    gt_psf = gen.single_psf(y_wave, zplanes=0)
-                    corrected_psf = gen.single_psf(diff, zplanes=0)
-
-                    imsave(save_path / f'psf_{s}.tif', noisy_img)
-                    imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
-
-                    vis.diagnostic_assessment(
-                        psf=noisy_img,
-                        gt_psf=gt_psf,
-                        predicted_psf=p_psf,
-                        corrected_psf=corrected_psf,
-                        wavelength=wavelength,
-                        psnr=psnr,
-                        maxcounts=maxcounts,
-                        y=y_wave,
-                        pred=p_wave,
-                        save_path=save_path / f'{s}',
-                        display=False
-                    )
-
-
-def compare(
-        model: Path,
-        wavelength: float,
-        x_voxel_size: float,
-        y_voxel_size: float,
-        z_voxel_size: float,
-        max_jitter: float,
-        cpu_workers: int,
-):
-    m = load(model)
-    m.summary()
-
-    modes = m.layers[-1].output_shape[-1]
-    input_shape = m.layers[0].input_shape[0][1:-1]
-
-    for dist in ['powerlaw', 'dirichlet']:
-        for amplitude_range in [(0, .2), (.2, .4), (.4, .6)]:
-            psfargs = dict(
-                order='ansi',
-                snr=50,
-                n_modes=modes,
-                distribution=dist,
-                gamma=.75,
-                bimodal=True,
-                lam_detection=wavelength,
-                amplitude_ranges=amplitude_range,
-                psf_shape=3 * [input_shape[-1]],
-                x_voxel_size=x_voxel_size,
-                y_voxel_size=y_voxel_size,
-                z_voxel_size=z_voxel_size,
-                batch_size=1,
-                max_jitter=max_jitter,
-                cpu_workers=cpu_workers,
-            )
-
-            gen = SyntheticPSF(**psfargs)
-
-            for i, (psf, y, psnr, zplanes, maxcounts) in zip(range(10), gen.generator(debug=True)):
-                # rotate to match matlab and DM
-                psf = np.squeeze(psf[0], axis=-1)
-
-                # compute amp ratio and phase
-                model_input = gen.embedding(psf)
-
-                model_input = np.expand_dims(np.expand_dims(model_input, axis=0), axis=-1)
-
-                p, std = bootstrap_predict(m, psfgen=gen, inputs=model_input, batch_size=1, n_samples=1)
-
-                p = Wavefront(p, lam_detection=wavelength)
-                logger.info('Prediction')
-                pprint(p.zernikes)
-
-                logger.info('GT')
-                y = Wavefront(y.flatten(), lam_detection=wavelength)
-                pprint(y.zernikes)
-
-                diff = Wavefront(y - p, lam_detection=wavelength)
-
-                p_psf = gen.single_psf(p, zplanes=0)
-                corrected_psf = gen.single_psf(diff, zplanes=0)
-
-                model_input = np.squeeze(model_input[0], axis=-1)
-                waves = np.round(utils.microns2waves(amplitude_range[1], wavelength), 2)
-                save_path = Path(
-                    f"{model}/compare/{dist}/lambda-{waves}/psnr-{psfargs['snr']}/"
-                )
-                save_path.mkdir(exist_ok=True, parents=True)
-
-                imsave(save_path / f'input_{i}.tif', model_input)
-                imsave(save_path / f'input_psf_{i}.tif', psf)
-                imsave(save_path / f'corrected_psf_{i}.tif', corrected_psf)
-
-                logger.info('Matlab')
-                pred_matlab = np.zeros_like(p.amplitudes)
-                m_amps = np.array(experimental.phase_retrieval(
-                    psf=save_path / f'input_psf_{i}.tif',
-                    dx=x_voxel_size,
-                    dz=z_voxel_size,
-                    wavelength=wavelength,
-                    n_modes=p.amplitudes.shape[0]
-                ))
-                pred_matlab[:m_amps.shape[0]] = m_amps
-                pred_matlab = Wavefront(pred_matlab.flatten(), lam_detection=wavelength)
-                matlab_diff = Wavefront(y - pred_matlab, lam_detection=wavelength)
-                matlab_corrected_psf = gen.single_psf(matlab_diff, zplanes=0)
-                imsave(save_path / f'matlab_corrected_psf_{i}.tif', matlab_corrected_psf)
-                pprint(pred_matlab.zernikes)
-
-                vis.matlab_diagnostic_assessment(
-                    psf=model_input,
-                    gt_psf=psf,
-                    predicted_psf=p_psf,
-                    corrected_psf=corrected_psf,
-                    matlab_corrected_psf=matlab_corrected_psf,
-                    psnr=psnr,
-                    maxcounts=maxcounts,
-                    wavelength=wavelength,
-                    y=y,
-                    pred=p,
-                    pred_matlab=pred_matlab,
-                    save_path=save_path / f'{i}',
-                    display=False
-                )
+    residuals = ys - preds
+    return residuals, ys, preds
 
 
 def deconstruct(
         model: Path,
-        max_jitter: float = 1,
         cpu_workers: int = -1,
         x_voxel_size: float = .15,
         y_voxel_size: float = .15,
@@ -1299,11 +918,10 @@ def deconstruct(
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
             batch_size=1,
-            max_jitter=max_jitter,
             cpu_workers=cpu_workers,
         )
         gen = SyntheticPSF(**psfargs)
-        psf, y, psnr, zplanes, maxcounts = next(gen.generator(debug=True))
+        psf, y, psnr, maxcounts = next(gen.generator(debug=True))
         p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1)
 
         p = Wavefront(p, lam_detection=wavelength)
@@ -1315,10 +933,9 @@ def deconstruct(
         pprint(y.zernikes)
 
         diff = Wavefront(y - p, lam_detection=wavelength)
-
-        p_psf = gen.single_psf(p, zplanes=0)
-        gt_psf = gen.single_psf(y, zplanes=0)
-        corrected_psf = gen.single_psf(diff, zplanes=0)
+        p_psf = gen.single_psf(p)
+        gt_psf = gen.single_psf(y)
+        corrected_psf = gen.single_psf(diff)
 
         psf = np.squeeze(psf[0], axis=-1)
         save_path = Path(f'{model}/deconstruct/{eval_distribution}/')
@@ -1331,7 +948,6 @@ def deconstruct(
             corrected_psf=corrected_psf,
             psnr=psnr,
             maxcounts=maxcounts,
-            wavelength=wavelength,
             y=y,
             pred=p,
             save_path=save_path / f'{i}',
@@ -1345,6 +961,111 @@ def deconstruct(
             pred=p,
             save_path=save_path / f'{i}_dmodes',
         )
+
+
+def save_metadata(
+    filepath: Path,
+    wavelength: float,
+    psf_type: str,
+    x_voxel_size: float,
+    y_voxel_size: float,
+    z_voxel_size: float,
+    n_modes: int,
+    embedding_option: str = 'principle_planes'
+):
+    def add_param(h5file, name, data):
+        try:
+            if name not in h5file.keys():
+                h5file.create_dataset(name, data=data)
+            else:
+                del h5file[name]
+                h5file.create_dataset(name, data=data)
+
+            if isinstance(data, str):
+                assert h5file.get(name).asstr()[()] == data, f"Failed to write {name}"
+            else:
+                assert np.allclose(h5file.get(name)[()], data), f"Failed to write {name}"
+
+            logger.info(f"`{name}`: {h5file.get(name)[()]}")
+
+        except Exception as e:
+            logger.error(e)
+
+    file = filepath if str(filepath).endswith('.h5') else list(filepath.rglob('*.h5'))[0]
+    with h5py.File(file, 'r+') as file:
+        add_param(file, name='n_modes', data=n_modes)
+        add_param(file, name='wavelength', data=wavelength)
+        add_param(file, name='x_voxel_size', data=x_voxel_size)
+        add_param(file, name='y_voxel_size', data=y_voxel_size)
+        add_param(file, name='z_voxel_size', data=z_voxel_size)
+        add_param(file, name='embedding_option', data=embedding_option)
+
+        if isinstance(psf_type, str) or isinstance(psf_type, Path):
+            with h5py.File(psf_type, 'r+') as f:
+                add_param(file, name='psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
+
+
+def kernels(modelpath: Path, activation='relu'):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    def factorization(n):
+        """Calculates kernel grid dimensions."""
+        for i in range(int(np.sqrt(float(n))), 0, -1):
+            if n % i == 0:
+                return i, n // i
+
+    logger.info(f"Model: {modelpath}")
+    model = load(modelpath)
+    layers = [layer for layer in model.layers if str(layer.name).startswith('conv')]
+
+    if isinstance(activation, str):
+        activation = tf.keras.layers.Activation(activation)
+
+    logger.info("Plotting learned kernels")
+    for i, layer in enumerate(layers):
+        fig, ax = plt.subplots(figsize=(8, 11))
+        grid, biases = layer.get_weights()
+        logger.info(f"Layer [{layer.name}]: {layer.output_shape}, {grid.shape}")
+
+        grid = activation(grid)
+        grid = np.squeeze(grid, axis=0)
+
+        with tf.name_scope(layer.name):
+            low, high = tf.reduce_min(grid), tf.reduce_max(grid)
+            grid = (grid - low) / (high - low)
+            grid = tf.pad(grid, ((1, 1), (1, 1), (0, 0), (0, 0)))
+
+            r, c, chan_in, chan_out = grid.shape
+            grid_r, grid_c = factorization(chan_out)
+
+            grid = tf.transpose(grid, (3, 0, 1, 2))
+            grid = tf.reshape(grid, tf.stack([grid_c, r * grid_r, c, chan_in]))
+            grid = tf.transpose(grid, (0, 2, 1, 3))
+            grid = tf.reshape(grid, tf.stack([1, c * grid_c, r * grid_r, chan_in]))
+            grid = tf.transpose(grid, (0, 2, 1, 3))
+
+            while grid.shape[3] > 4:
+                a, b = tf.split(grid, 2, axis=3)
+                grid = tf.concat([a, b], axis=0)
+
+            _, a, b, channels = grid.shape
+            if channels == 2:
+                grid = tf.concat([grid, tf.zeros((1, a, b, 1))], axis=3)
+
+        img = grid[-1, :, :, 0]
+        ax.imshow(img)
+        ax.set_aspect('equal')
+        ax.axis('off')
+
+        plt.savefig(f'{modelpath}/kernels_{layer.name}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
 def featuremaps(
@@ -1381,7 +1102,7 @@ def featuremaps(
 
     psfargs = dict(
         n_modes=modes,
-        dtype=psf_type,
+        psf_type=psf_type,
         psf_shape=3 * [input_shape[1]],
         distribution='single',
         lam_detection=wavelength,
@@ -1391,7 +1112,6 @@ def featuremaps(
         z_voxel_size=z_voxel_size,
         batch_size=1,
         snr=psnr,
-        max_jitter=1,
         cpu_workers=cpu_workers,
     )
     gen = SyntheticPSF(**psfargs)
@@ -1399,15 +1119,13 @@ def featuremaps(
     if input_shape[0] == 3 or input_shape[0] == 6:
         inputs = gen.single_otf(
             amplitude_range,
-            zplanes=0,
             normed=True,
             noise=True,
             na_mask=True,
             ratio=True,
-            augmentation=True
         )
     else:
-        inputs = gen.single_psf(amplitude_range, zplanes=0, normed=True, noise=True, augmentation=True)
+        inputs = gen.single_psf(amplitude_range, normed=True, noise=True)
 
     inputs = np.expand_dims(np.stack(inputs, axis=0), 0)
     inputs = np.expand_dims(np.stack(inputs, axis=0), -1)
@@ -1526,65 +1244,388 @@ def featuremaps(
     return fig
 
 
-def kernels(modelpath: Path, activation='relu'):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
+def train(
+        dataset: Path,
+        outdir: Path,
+        network: str,
+        distribution: str,
+        embedding: str,
+        samplelimit: int,
+        max_amplitude: float,
+        input_shape: int,
+        batch_size: int,
+        patch_size: list,
+        steps_per_epoch: int,
+        depth_scalar: int,
+        width_scalar: int,
+        activation: str,
+        fixedlr: bool,
+        opt: str,
+        lr: float,
+        wd: float,
+        warmup: int,
+        decay_period: int,
+        wavelength: float,
+        psf_type: str,
+        x_voxel_size: float,
+        y_voxel_size: float,
+        z_voxel_size: float,
+        modes: int,
+        pmodes: int,
+        min_psnr: int,
+        max_psnr: int,
+        epochs: int,
+        mul: bool,
+        roi: Any = None,
+        refractive_index: float = 1.33,
+        no_phase: bool = False,
+        plot_patches: bool = False
+):
+    network = network.lower()
+    opt = opt.lower()
+    restored = False
 
-    def factorization(n):
-        """Calculates kernel grid dimensions."""
-        for i in range(int(np.sqrt(float(n))), 0, -1):
-            if n % i == 0:
-                return i, n // i
+    if isinstance(psf_type, str) or isinstance(psf_type, Path):
+        with h5py.File(psf_type, 'r') as file:
+            psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
 
-    logger.info(f"Model: {modelpath}")
-    model = load(modelpath)
-    layers = [layer for layer in model.layers if str(layer.name).startswith('conv')]
+    if network == 'opticalnet':
+        model = opticalnet.OpticalTransformer(
+            name='OpticalNet',
+            roi=roi,
+            patches=patch_size,
+            modes=pmodes,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            activation=activation,
+            mul=mul,
+            no_phase=no_phase
+        )
 
-    if isinstance(activation, str):
-        activation = tf.keras.layers.Activation(activation)
+    elif network == 'opticaltransformer':
+        model = opticaltransformer.OpticalTransformer(
+            name='OpticalTransformer',
+            roi=roi,
+            patches=patch_size,
+            modes=pmodes,
+            na_det=1.0,
+            refractive_index=refractive_index,
+            psf_type=psf_type,
+            lambda_det=wavelength,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            mask_shape=input_shape,
+            activation=activation,
+            mul=mul,
+            no_phase=no_phase
+        )
+    elif network == 'opticalresnet':
+        model = opticalresnet.OpticalResNet(
+            name='OpticalResNet',
+            modes=pmodes,
+            na_det=1.0,
+            refractive_index=refractive_index,
+            lambda_det=wavelength,
+            psf_type=psf_type,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            mask_shape=input_shape,
+            activation=activation,
+            mul=mul,
+            no_phase=no_phase
+        )
+    elif network == 'baseline':
+        model = baseline.Baseline(
+            name='Baseline',
+            modes=pmodes,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            activation=activation,
+        )
+    elif network == 'otfnet':
+        model = otfnet.OTFNet(
+            name='OTFNet',
+            modes=pmodes
+        )
+    elif network == 'phasenet':
+        model = PhaseNet(
+            name='PhaseNet',
+            modes=pmodes
+        )
+    else:
+        model = load(Path(network))
+        checkpoint = tf.train.Checkpoint(model)
+        status = checkpoint.restore(network)
 
-    logger.info("Plotting learned kernels")
-    for i, layer in enumerate(layers):
-        fig, ax = plt.subplots(figsize=(8, 11))
-        grid, biases = layer.get_weights()
-        logger.info(f"Layer [{layer.name}]: {layer.output_shape}, {grid.shape}")
+        if status:
+            logger.info(f"Restored from {network}")
+            restored = True
+        else:
+            logger.info("Initializing from scratch")
 
-        grid = activation(grid)
-        grid = np.squeeze(grid, axis=0)
+    if network == 'phasenet':
+        inputs = (input_shape, input_shape, input_shape, 1)
+        lr = .0003
+        opt = Adam(learning_rate=lr)
+        loss = 'mse'
+    else:
+        if network == 'baseline':
+            inputs = (input_shape, input_shape, input_shape, 1)
+        else:
+            inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
 
-        with tf.name_scope(layer.name):
-            low, high = tf.reduce_min(grid), tf.reduce_max(grid)
-            grid = (grid - low) / (high - low)
-            grid = tf.pad(grid, ((1, 1), (1, 1), (0, 0), (0, 0)))
+        loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
 
-            r, c, chan_in, chan_out = grid.shape
-            grid_r, grid_c = factorization(chan_out)
+        """
+            Adam: A Method for Stochastic Optimization: httpsz://arxiv.org/pdf/1412.6980
+            SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
+            Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
+        """
+        if opt.lower() == 'adam':
+            opt = Adam(learning_rate=lr)
+        elif opt == 'sgd':
+            opt = SGD(learning_rate=lr, momentum=0.9)
+        elif opt.lower() == 'adamw':
+            opt = AdamW(learning_rate=lr, weight_decay=wd)
+        elif opt == 'sgdw':
+            opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
+        else:
+            raise ValueError(f'Unknown optimizer `{opt}`')
 
-            grid = tf.transpose(grid, (3, 0, 1, 2))
-            grid = tf.reshape(grid, tf.stack([grid_c, r * grid_r, c, chan_in]))
-            grid = tf.transpose(grid, (0, 2, 1, 3))
-            grid = tf.reshape(grid, tf.stack([1, c * grid_c, r * grid_r, chan_in]))
-            grid = tf.transpose(grid, (0, 2, 1, 3))
+    if not restored:
+        model = model.build(input_shape=inputs)
+        model.compile(
+            optimizer=opt,
+            loss=loss,
+            metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
+        )
 
-            while grid.shape[3] > 4:
-                a, b = tf.split(grid, 2, axis=3)
-                grid = tf.concat([a, b], axis=0)
+    outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
+    outdir.mkdir(exist_ok=True, parents=True)
+    logger.info(model.summary())
 
-            _, a, b, channels = grid.shape
-            if channels == 2:
-                grid = tf.concat([grid, tf.zeros((1, a, b, 1))], axis=3)
+    tblogger = CSVLogger(
+        f"{outdir}/logbook.csv",
+        append=True,
+    )
 
-        img = grid[-1, :, :, 0]
-        ax.imshow(img)
-        ax.set_aspect('equal')
-        ax.axis('off')
+    pb_checkpoints = ModelCheckpoint(
+        filepath=f"{outdir}",
+        monitor="loss",
+        save_best_only=True,
+        verbose=1,
+    )
 
-        plt.savefig(f'{modelpath}/kernels_{layer.name}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{modelpath}/kernels_{layer.name}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    h5_checkpoints = ModelCheckpoint(
+        filepath=f"{outdir}.h5",
+        monitor="loss",
+        save_best_only=True,
+        verbose=1,
+    )
+
+    earlystopping = EarlyStopping(
+        monitor='loss',
+        min_delta=0,
+        patience=50,
+        verbose=1,
+        mode='auto',
+        restore_best_weights=True
+    )
+
+    defibrillator = Defibrillator(
+        monitor='loss',
+        patience=20,
+        verbose=1,
+    )
+
+    features = LambdaCallback(
+        on_epoch_end=lambda epoch, logs: featuremaps(
+            modelpath=outdir,
+            amplitude_range=.3,
+            wavelength=wavelength,
+            psf_type=psf_type,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            cpu_workers=-1,
+            psnr=100,
+        ) if epoch % 50 == 0 else epoch
+    )
+
+    tensorboard = TensorBoardCallback(
+        log_dir=outdir,
+        histogram_freq=1,
+        profile_batch=100000000
+    )
+
+    if fixedlr:
+        lrscheduler = LearningRateScheduler(
+            initial_learning_rate=lr,
+            verbose=0,
+            fixed=True
+        )
+    else:
+        lrscheduler = LearningRateScheduler(
+            initial_learning_rate=lr,
+            weight_decay=wd,
+            decay_period=epochs if decay_period is None else decay_period,
+            warmup_epochs=0 if warmup is None else warmup,
+            alpha=.01,
+            decay_multiplier=2.,
+            decay=.9,
+            verbose=1,
+        )
+
+    if dataset is None:
+
+        config = dict(
+            psf_type=psf_type,
+            psf_shape=inputs,
+            snr=(min_psnr, max_psnr),
+            n_modes=modes,
+            distribution=distribution,
+            embedding_option=embedding,
+            amplitude_ranges=(-max_amplitude, max_amplitude),
+            lam_detection=wavelength,
+            batch_size=batch_size,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            cpu_workers=-1
+        )
+
+        train_data = data_utils.create_dataset(config)
+        training_steps = steps_per_epoch
+    else:
+        train_data = data_utils.collect_dataset(
+            dataset,
+            modes=modes,
+            distribution=distribution,
+            embedding=embedding,
+            samplelimit=samplelimit,
+            max_amplitude=max_amplitude,
+            no_phase=no_phase,
+            snr_range=(min_psnr, max_psnr)
+        )
+
+        sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
+        with sample_writer.as_default():
+            for s in range(10):
+                fig = None
+                for i, (img, y) in enumerate(train_data.shuffle(1000).take(5)):
+                    img = np.squeeze(img, axis=-1)
+
+                    if fig is None:
+                        fig, axes = plt.subplots(5, img.shape[0], figsize=(8, 8))
+
+                    for k in range(img.shape[0]):
+                        if k > 2:
+                            mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=-.5, vmax=.5)
+                        else:
+                            malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
+
+                        axes[i, k].axis('off')
+
+                    if img.shape[0] > 3:
+                        cax = inset_axes(axes[i, 0], width="10%", height="100%", loc='center left', borderpad=-3)
+                        cb = plt.colorbar(malpha, cax=cax)
+                        cax.yaxis.set_label_position("left")
+
+                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
+                        cb = plt.colorbar(mphi, cax=cax)
+                        cax.yaxis.set_label_position("right")
+
+                    else:
+                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
+                        cb = plt.colorbar(malpha, cax=cax)
+                        cax.yaxis.set_label_position("right")
+
+                tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
+
+        def configure_for_performance(ds):
+            ds = ds.cache()
+            ds = ds.shuffle(batch_size)
+            ds = ds.batch(batch_size)
+            ds = ds.prefetch(buffer_size=tf.data.AUTOTUNE)
+            return ds
+
+        train_data = configure_for_performance(train_data)
+        training_steps = tf.data.experimental.cardinality(train_data).numpy()
+
+    for img, y in train_data.shuffle(buffer_size=100).take(1):
+        logger.info(f"Batch size: {batch_size}")
+        logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
+
+        if plot_patches:
+            for k, label in enumerate(['xy', 'xz', 'yz']):
+                img = np.expand_dims(img[0], axis=0)
+                original = np.squeeze(img[0, k])
+
+                vmin = np.min(original)
+                vmax = np.max(original)
+                vcenter = (vmin + vmax) / 2
+                step = .01
+
+                highcmap = plt.get_cmap('YlOrRd', 256)
+                lowcmap = plt.get_cmap('YlGnBu_r', 256)
+                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+                cmap = mcolors.ListedColormap(cmap)
+
+                plt.figure(figsize=(4, 4))
+                plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
+                plt.axis("off")
+                plt.title('Original')
+                plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+                for p in patch_size:
+                    patches = opticalnet.Patchify(patch_size=p)(img)
+                    merged = opticalnet.Merge(patch_size=p)(patches)
+
+                    patches = patches[0, k]
+                    merged = np.squeeze(merged[0, k])
+
+                    plt.figure(figsize=(4, 4))
+                    plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
+                    plt.axis("off")
+                    plt.title('Merged')
+                    plt.savefig(f'{outdir}/{label}_merged.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+                    n = int(np.sqrt(patches.shape[0]))
+                    plt.figure(figsize=(4, 4))
+                    plt.title('Patches')
+                    for i, patch in enumerate(patches):
+                        ax = plt.subplot(n, n, i + 1)
+                        patch_img = tf.reshape(patch, (p, p)).numpy()
+                        ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
+                        ax.axis("off")
+
+                    plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    try:
+        model.fit(
+            train_data,
+            steps_per_epoch=training_steps,
+            epochs=epochs,
+            verbose=2,
+            shuffle=True,
+            callbacks=[
+                tblogger,
+                tensorboard,
+                pb_checkpoints,
+                h5_checkpoints,
+                earlystopping,
+                defibrillator,
+                lrscheduler,
+            ],
+        )
+    except tf.errors.ResourceExhaustedError as e:
+        logger.error(e)
+        sys.exit(1)

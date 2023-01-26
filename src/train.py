@@ -46,7 +46,8 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--psf_type", default='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat', help="type of the desired PSF"
+        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        help="type of the desired PSF"
     )
 
     train_parser.add_argument(
@@ -58,7 +59,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--z_voxel_size", default=.268, type=float, help='axial voxel size in microns for Z'
+        "--z_voxel_size", default=.2, type=float, help='axial voxel size in microns for Z'
     )
 
     train_parser.add_argument(
@@ -66,7 +67,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--modes", default=60, type=int, help="number of modes to describe aberration"
+        "--modes", default=55, type=int, help="number of modes to describe aberration"
     )
 
     train_parser.add_argument(
@@ -83,6 +84,10 @@ def parse_args(args):
 
     train_parser.add_argument(
         "--dist", default='/', type=str, help="distribution of the zernike amplitudes"
+    )
+
+    train_parser.add_argument(
+        "--embedding", default='', type=str, help="embedding option to use for training"
     )
 
     train_parser.add_argument(
@@ -191,6 +196,7 @@ def main(args=None):
         backend.train(
             epochs=args.epochs,
             dataset=args.dataset,
+            embedding=args.embedding,
             outdir=args.outdir,
             network=args.network,
             input_shape=args.input_shape,

@@ -30,23 +30,19 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--kernel", default=None, type=Path, help='path to an aberrated PSF'
-    )
-
-    parser.add_argument(
-        "--reference", default=None, help='path to a reference sample'
-    )
-
-    parser.add_argument(
         "--outdir", default="../models", type=Path, help='path to save eval'
     )
 
     parser.add_argument(
-        "--n_samples", default=100, type=int, help='number of samples to evaluate'
+        "--eval_sign", default="positive_only", type=str, help='path to save eval'
     )
 
     parser.add_argument(
-        "--batch_size", default=100, type=int, help='number of samples per batch'
+        "--n_samples", default=None, type=int, help='number of samples to evaluate'
+    )
+
+    parser.add_argument(
+        "--batch_size", default=512, type=int, help='number of samples per batch'
     )
 
     parser.add_argument(
@@ -54,35 +50,15 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--embedding", default='', type=str, help="embedding option to use for evaluation"
+    )
+
+    parser.add_argument(
         "--max_amplitude", default=.5, type=float, help="max amplitude for the zernike coefficients"
     )
 
     parser.add_argument(
-        "--psf_type", default='widefield', help="type of the desired PSF"
-    )
-
-    parser.add_argument(
-        "--wavelength", default=.605, type=float, help='wavelength in microns'
-    )
-
-    parser.add_argument(
-        "--x_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
-    )
-
-    parser.add_argument(
-        "--y_voxel_size", default=.15, type=float, help='lateral voxel size in microns for Y'
-    )
-
-    parser.add_argument(
-        "--z_voxel_size", default=.6, type=float, help='axial voxel size in microns for Z'
-    )
-
-    parser.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
-    )
-
-    parser.add_argument(
-        "--modes", default=60, type=int, help="number of modes to describe aberration"
     )
 
     parser.add_argument(
@@ -107,10 +83,6 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--dmodes", default=None, type=int, help='minimum number of dominant modes in each sample'
-    )
-
-    parser.add_argument(
         "--peaks", default=None, help="matlab file that outlines peaks-coordinates"
     )
 
@@ -131,58 +103,28 @@ def main(args=None):
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
-    if args.target == 'evalheatmap':
-        eval.evalheatmap(
-            modelpath=args.model,
-            datadir=args.datadir,
-            distribution=args.dist,
-            samplelimit=args.n_samples,
-            max_amplitude=args.max_amplitude,
-            psf_type=args.psf_type,
-            wavelength=args.wavelength,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            modes=args.modes,
-            na=args.na,
-            input_coverage=args.input_coverage,
-            no_phase=args.no_phase,
+    if args.target == 'modes':
+        eval.evaluate_modes(
+            args.model,
+            eval_sign=args.eval_sign
         )
-    elif args.target == 'iterheatmap':
-        eval.iterheatmap(
-            modelpath=args.model,
-            datadir=args.datadir,
-            reference=args.reference,
-            distribution=args.dist,
-            samplelimit=args.n_samples,
-            max_amplitude=args.max_amplitude,
-            psf_type=args.psf_type,
-            wavelength=args.wavelength,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            modes=args.modes,
-            na=args.na,
-            input_coverage=args.input_coverage,
-            no_phase=args.no_phase,
+
+    elif args.target == "random":
+        eval.random_samples(
+            model=args.model,
+            eval_sign=args.eval_sign
         )
-    elif args.target == 'distheatmap':
-        eval.distheatmap(
+    elif args.target == 'snrheatmap':
+        eval.snrheatmap(
             modelpath=args.model,
             datadir=args.datadir,
             distribution=args.dist,
             samplelimit=args.n_samples,
-            max_amplitude=args.max_amplitude,
-            psf_type=args.psf_type,
-            wavelength=args.wavelength,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            num_neighbor=args.num_neighbor,
             input_coverage=args.input_coverage,
-            modes=args.modes,
-            na=args.na,
             no_phase=args.no_phase,
+            na=args.na,
+            batch_size=args.batch_size,
+            eval_sign=args.eval_sign
         )
     elif args.target == 'densityheatmap':
         eval.densityheatmap(
@@ -190,49 +132,23 @@ def main(args=None):
             datadir=args.datadir,
             distribution=args.dist,
             samplelimit=args.n_samples,
-            max_amplitude=args.max_amplitude,
-            psf_type=args.psf_type,
-            wavelength=args.wavelength,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
             input_coverage=args.input_coverage,
-            modes=args.modes,
-            na=args.na,
             no_phase=args.no_phase,
+            na=args.na,
+            batch_size=args.batch_size,
+            eval_sign=args.eval_sign
         )
-    elif args.target == 'evalpoints':
-        eval.evalpoints(
-            na=args.na,
-            no_phase=args.no_phase,
+    elif args.target == 'iterheatmap':
+        eval.iterheatmap(
             modelpath=args.model,
             datadir=args.datadir,
             distribution=args.dist,
             samplelimit=args.n_samples,
-            max_amplitude=args.max_amplitude,
-            psf_type=args.psf_type,
-            wavelength=args.wavelength,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            modes=args.modes,
             input_coverage=args.input_coverage,
-            num_neighbor=args.num_neighbor,
-        )
-    else:
-        eval.evaluate(
-            model=args.model,
-            target=args.target,
-            wavelength=args.wavelength,
-            dist=args.dist,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            n_samples=args.n_samples,
+            no_phase=args.no_phase,
+            na=args.na,
             batch_size=args.batch_size,
-            cpu_workers=args.cpu_workers,
-            plot=args.plot,
-            dominant_modes=args.dmodes,
+            eval_sign=args.eval_sign
         )
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

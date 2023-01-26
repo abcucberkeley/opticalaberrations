@@ -23,10 +23,10 @@ class MaskedActivation(layers.Layer):
         mask_shape=64,
         na_det=1.0,
         psf_type='widefield',
-        lambda_det=.605,
-        x_voxel_size=.15,
-        y_voxel_size=.15,
-        z_voxel_size=.6,
+        lambda_det=.510,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.2,
         refractive_index=1.33,
         **kwargs
     ):
@@ -62,16 +62,15 @@ class MaskedActivation(layers.Layer):
 
     def _theoretical_mask(self, mask_shape, planes):
         psfgen = SyntheticPSF(
-            n_modes=60,
+            n_modes=55,
             amplitude_ranges=0,
             psf_shape=mask_shape,
-            dtype=self.psf_type,
+            psf_type=self.psf_type,
             lam_detection=self.lambda_det,
             x_voxel_size=self.x_voxel_size,
             y_voxel_size=self.y_voxel_size,
             z_voxel_size=self.z_voxel_size,
             snr=1000,
-            max_jitter=0,
         )
 
         mask = psfgen.na_mask()

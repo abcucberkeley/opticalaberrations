@@ -16,7 +16,7 @@ def parse_args(args):
     )
 
     slurm.add_argument(
-        "--python", default=f'{Path.home()}/anaconda3/envs/deep/bin/python', type=str,
+        "--python", default=f'{Path.home()}/anaconda3/envs/ml/bin/python', type=str,
         help='path to ext python to run program with'
     )
 

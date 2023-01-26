@@ -62,7 +62,7 @@ def parse_args(args):
     parser = cli.argparser()
 
     subparsers = parser.add_subparsers(
-        help="Arguments for specific action.", dest="dtype"
+        help="Arguments for specific action.", dest="cmd"
     )
     subparsers.required = True
 
@@ -108,14 +108,13 @@ def download_data(savedir: Path, resolution: str, dtype: str = 'zarr'):
 
 def convolve(kernel, sample, sample_voxel_size, save_path, cuda=False):
     modelgen = SyntheticPSF(
-        n_modes=60,
+        n_modes=55,
         lam_detection=.605,
         psf_shape=(64, 64, 64),
         x_voxel_size=.15,
         y_voxel_size=.15,
         z_voxel_size=.6,
         snr=100,
-        max_jitter=0,
     )
 
     ker = imread(kernel)
@@ -206,10 +205,10 @@ def main(args=None):
 
     mp.set_start_method('spawn', force=True)
 
-    if args.dtype == "dataset":
+    if args.cmd == "dataset":
         create_dataset(savedir=args.savedir, kernels=args.kernels, samples=args.samples)
 
-    elif args.dtype == "download":
+    elif args.cmd == "download":
         download_data(savedir=args.savedir, resolution=args.resolution)
 
     else:

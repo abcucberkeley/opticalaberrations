@@ -1,0 +1,56 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ao.py",
+            "type": "python",
+            "request": "launch",
+            "module": "ao",
+            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\src",
+            "args": [
+                "predict_sample",                
+                "..\\pretrained_models\\z55_modes\\lattice_yumb\\x108-y108-z200\\opticaltransformer.h5",
+                "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\examples\\LabVIEW\\Measurement_510nm.tif",
+                "..\\examples\\Zernike_Korra_Bax273.csv",
+                "--current_dm=None",
+                "--dm_damping_scalar=1.0",
+                "--wavelength=0.51",
+                "--lateral_voxel_size=0.108",
+                "--axial_voxel_size=0.2",
+                "--prediction_threshold=0.0",
+                "--freq_strength_threshold=0.01",
+                "--sign_threshold=0.9",
+                "--num_predictions=10",
+                "--batch_size=256",
+                "--prev=None",
+                "--plot",
+                "--ideal_empirical_psf=C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\examples\\LabVIEW\\Measurement_510nm.tif"
+            ],
+            "justMyCode": true
+        },
+        {
+            "name": "test_ao.py",
+            "type": "python",
+            "request": "launch",
+            "program": "test_ao.py",
+            "console": "integratedTerminal",
+            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\src",
+            "justMyCode": true
+        },
+        {
+            "name": "data.py",
+            "type": "python",
+            "request": "launch",
+            "program": "data.py",
+            "console": "integratedTerminal",
+            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\src",
+            "args": [
+                "dist"
+            ],
+            "justMyCode": true
+        }
+    ]
+}

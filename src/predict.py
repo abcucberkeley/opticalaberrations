@@ -28,15 +28,15 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--embedding_option", default='principle_planes', type=str, help="embedding option to use for evaluation"
+    )
+
+    parser.add_argument(
         "--amplitude_range", default=.2, type=float, help='amplitude range for zernike modes in microns'
     )
 
     parser.add_argument(
-        "--max_jitter", default=1, type=float, help='randomly move the center point within a given limit (microns)'
-    )
-
-    parser.add_argument(
-        "--wavelength", default=.605, type=float, help='wavelength in microns'
+        "--wavelength", default=.510, type=float, help='wavelength in microns'
     )
 
     parser.add_argument(
@@ -44,19 +44,23 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--x_voxel_size", default=.15, type=float, help='lateral voxel size in microns for X'
+        "--x_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
     )
 
     parser.add_argument(
-        "--y_voxel_size", default=.15, type=float, help='lateral voxel size in microns for Y'
+        "--y_voxel_size", default=.108, type=float, help='lateral voxel size in microns for Y'
     )
 
     parser.add_argument(
-        "--z_voxel_size", default=.6, type=float, help='axial voxel size in microns for Z'
+        "--z_voxel_size", default=.2, type=float, help='axial voxel size in microns for Z'
     )
 
     parser.add_argument(
-        "--psnr", default=100, type=float, help='peak signal-to-noise ratio'
+        "--psnr", default=30, type=float, help='peak signal-to-noise ratio'
+    )
+
+    parser.add_argument(
+        "--n_modes", default=55, type=int, help='number zernike modes'
     )
 
     parser.add_argument(
@@ -65,16 +69,6 @@ def parse_args(args):
 
     parser.add_argument(
         "--gpu_workers", default=1, type=int, help='number of GPUs to use'
-    )
-
-    parser.add_argument(
-        "--input_coverage", default=1.0, type=float, help='faction of the image to feed into the model '
-                                                          '(then padded to keep the original image size)'
-    )
-
-    parser.add_argument(
-        '--no_phase', action='store_true',
-        help='toggle to use exclude phase from the model embeddings'
     )
 
     return parser.parse_args(args)
@@ -89,18 +83,16 @@ def main(args=None):
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
-    if args.target == "random":
-        backend.predict(
-            model=args.model,
-            psf_type=args.psf_type,
+    if args.target == "metadata":
+        backend.save_metadata(
+            filepath=args.model,
+            n_modes=args.n_modes,
             wavelength=args.wavelength,
+            psf_type=args.psf_type,
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
-            max_jitter=args.max_jitter,
-            cpu_workers=args.cpu_workers,
-            input_coverage=args.input_coverage,
-            no_phase=args.no_phase
+            embedding_option=args.embedding_option
         )
 
     elif args.target == "featuremaps":

@@ -261,35 +261,31 @@ def similarity(
     savepath.mkdir(exist_ok=True, parents=True)
 
     modelgen = SyntheticPSF(
-        n_modes=60,
+        n_modes=55,
         lam_detection=.605,
         psf_shape=(64, 64, 64),
         x_voxel_size=.15,
         y_voxel_size=.15,
         z_voxel_size=.6,
         snr=100,
-        max_jitter=0,
     )
 
     gen = SyntheticPSF(
-        n_modes=60,
+        n_modes=55,
         lam_detection=.605,
         psf_shape=image_size,
         z_voxel_size=reference_voxel_size[0],
         y_voxel_size=reference_voxel_size[1],
         x_voxel_size=reference_voxel_size[2],
         snr=100,
-        max_jitter=0,
     )
 
-    ys = np.zeros(60)
+    ys = np.zeros(55)
     ys[10] = .1
     kernel = gen.single_psf(
         phi=Wavefront(ys, lam_detection=.605),
-        zplanes=0,
         normed=True,
         noise=False,
-        augmentation=False,
         meta=False
     )
     imsave(savepath / f'kernel.tif', kernel)

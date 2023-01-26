@@ -4,13 +4,14 @@ matplotlib.use('Agg')
 import logging
 import multiprocessing as mp
 import sys
-from functools import partial
-from typing import Any, List
+from typing import Union, Any, List, Generator
+from line_profiler_pycharm import profile
 
 import io
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from scipy.special import binom
 import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
 from scipy.spatial import KDTree
@@ -30,7 +31,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def multiprocess(func: Any, jobs: List, desc: str = 'Processing', cores: int = -1):
+@profile
+def multiprocess(func: Any, jobs: Union[Generator, List, np.ndarray], desc: str = 'Processing', cores: int = -1):
     """ Multiprocess a generic function
     Args:
         func: a python function
@@ -42,12 +44,12 @@ def multiprocess(func: Any, jobs: List, desc: str = 'Processing', cores: int = -
         an array of outputs for every function call
     """
     jobs = list(jobs)
-    if cores == 1:
+    if cores == 1 or len(jobs) == 1:
         logs = []
         for j in tqdm(jobs, total=len(jobs), desc=desc):
             logs.append(func(j))
     elif cores == -1:
-        with mp.Pool(mp.cpu_count()) as p:
+        with mp.Pool(min(mp.cpu_count(), len(jobs))) as p:
             logs = list(tqdm(p.imap(func, jobs), total=len(jobs), desc=desc))
     elif cores > 1:
         with mp.Pool(cores) as p:
@@ -56,6 +58,14 @@ def multiprocess(func: Any, jobs: List, desc: str = 'Processing', cores: int = -
         logging.error('Jobs must be a positive integer')
         return False
     return logs
+
+
+def microns2waves(a, wavelength):
+    return a/wavelength
+
+
+def waves2microns(a, wavelength):
+    return a*wavelength
 
 
 def mae(y: np.array, p: np.array, axis=0) -> np.array:
@@ -78,45 +88,62 @@ def mape(y: np.array, p: np.array, axis=0) -> np.array:
     return 100 * np.mean(error[np.isfinite(error)], axis=axis)
 
 
-def peak_aberration(w, na: float = 1.0) -> float:
-    w = Wavefront(w).wave(100)
-    radius = (na * w.shape[0]) / 2
+@profile
+def p2v(zernikes, wavelength=.510, na=1.0):
+    grid = 100
+    r = np.linspace(-1, 1, grid)
+    X, Y = np.meshgrid(r, r, indexing='ij')
+    rho = np.hypot(X, Y)
+    theta = np.arctan2(Y, X)
+
+    Y, X = np.ogrid[:grid, :grid]
+    dist_from_center = np.sqrt((X - grid//2) ** 2 + (Y - grid//2) ** 2)
+    na_mask = dist_from_center <= (na * grid) / 2
+
+    nm_pairs = set((n, m) for n in range(11) for m in range(-n, n + 1, 2))
+    ansi_to_nm = dict(zip(((n * (n + 2) + m) // 2 for n, m in nm_pairs), nm_pairs))
+
+    polynomials = []
+    for ansi, a in enumerate(zernikes):
+        n, m = ansi_to_nm[ansi]
+        m0 = abs(m)
+
+        radial = 0
+        for k in range((n - m0) // 2 + 1):
+            radial += (-1.) ** k * binom(n - k, k) * binom(n - 2 * k, (n - m0) // 2 - k) * rho ** (n - 2 * k)
+
+        radial *= (rho <= 1.)
+        prefac = 1. / np.sqrt((1. + (m == 0)) / (2. * n + 2))
+
+        if (n - m) % 2 == 1:
+            polynomials.append(0)
+        elif m >= 0:
+            polynomials.append(microns2waves(a, wavelength=wavelength) * prefac * radial * np.cos(m0 * theta))
+        else:
+            polynomials.append(microns2waves(a, wavelength=wavelength) * prefac * radial * np.sin(m0 * theta))
+
+    wavefront = np.sum(np.array(polynomials), axis=0) * na_mask
+    return abs(np.nanmax(wavefront) - np.nanmin(wavefront))
+
+
+@profile
+def peak2valley(w, wavelength: float = .510, na: float = 1.0) -> float:
+    if not isinstance(w, Wavefront):
+        w = Wavefront(w, lam_detection=wavelength).wave(100)
 
     center = (int(w.shape[0] / 2), int(w.shape[1] / 2))
     Y, X = np.ogrid[:w.shape[0], :w.shape[1]]
     dist_from_center = np.sqrt((X - center[0]) ** 2 + (Y - center[1]) ** 2)
-    mask = dist_from_center <= radius
+    mask = dist_from_center <= (na * w.shape[0]) / 2
     phi = w * mask
-
-    mn = np.nanquantile(phi, .05)
-    mx = np.nanquantile(phi, .95)
-    return abs(mx-mn)
-
-
-def peak2peak(y: np.array, na: float = 1.0) -> np.array:
-    p2p = partial(peak_aberration, na=na)
-    return np.array(multiprocess(p2p, list(y), desc='Compute peak2peak aberrations'))
-
-
-def peak2peak_residuals(y: np.array, p: np.array, na: float = 1.0) -> np.array:
-    p2p = partial(peak_aberration, na=na)
-    error = np.abs(p2p(y) - p2p(p))
-    return error
-
-
-def microns2waves(phi, wavelength):
-    return phi * (2 * np.pi / wavelength)
-
-
-def waves2microns(phi, wavelength):
-    return phi / (2 * np.pi / wavelength)
+    return abs(np.nanmax(phi) - np.nanmin(phi))
 
 
 def compute_signal_lost(phi, gen, res):
     hashtbl = {}
     w = Wavefront(phi, order='ansi')
-    psf = gen.single_psf(w, zplanes=0, normed=True, noise=False)
-    abr = 0 if np.count_nonzero(phi) == 0 else round(peak_aberration(phi))
+    psf = gen.single_psf(w, normed=True, noise=False)
+    abr = 0 if np.count_nonzero(phi) == 0 else round(peak2valley(phi, wavelength=gen.lam_detection))
 
     for k, r in enumerate(res):
         window = resize_with_crop_or_pad(psf, crop_shape=tuple(3*[r]))
@@ -135,7 +162,7 @@ def compute_error(y_true: pd.DataFrame, y_pred: pd.DataFrame, axis=None) -> pd.D
 
 
 def eval(k: tuple, psfargs: dict):
-    psf, y, pred, path, psnr, zplanes, maxcounts = k
+    psf, y, pred, path, psnr, maxcounts = k
 
     if psf.ndim == 5:
         psf = np.squeeze(psf, axis=0)
@@ -149,9 +176,9 @@ def eval(k: tuple, psfargs: dict):
     diff = Wavefront(diff)
 
     psf_gen = SyntheticPSF(**psfargs)
-    p_psf = psf_gen.single_psf(pred, zplanes=zplanes)
-    gt_psf = psf_gen.single_psf(y, zplanes=zplanes)
-    corrected_psf = psf_gen.single_psf(diff, zplanes=zplanes)
+    p_psf = psf_gen.single_psf(pred)
+    gt_psf = psf_gen.single_psf(y)
+    corrected_psf = psf_gen.single_psf(diff)
 
     vis.diagnostic_assessment(
         psf=psf,
@@ -189,21 +216,22 @@ def plot_to_image(figure):
     return image
 
 
+@profile
 def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
-    peaks = peak_local_max(
+    beads = peak_local_max(
         sample,
-        min_distance=1,
+        min_distance=5,
         threshold_rel=.33,
         exclude_border=False,
         p_norm=2,
-        num_peaks=10
+        num_peaks=100
     ).astype(np.float64)
 
     # rescale to mu meters
-    scaled_peaks = np.zeros_like(peaks)
-    scaled_peaks[:, 0] = peaks[:, 0] * voxel_size[0]
-    scaled_peaks[:, 1] = peaks[:, 1] * voxel_size[1]
-    scaled_peaks[:, 2] = peaks[:, 2] * voxel_size[2]
+    scaled_peaks = np.zeros_like(beads)
+    scaled_peaks[:, 0] = beads[:, 0] * voxel_size[0]
+    scaled_peaks[:, 1] = beads[:, 1] * voxel_size[1]
+    scaled_peaks[:, 2] = beads[:, 2] * voxel_size[2]
 
     kd = KDTree(scaled_peaks)
     dists, idx = kd.query(scaled_peaks, k=2, workers=-1)
@@ -219,11 +247,11 @@ def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
 
             for p in range(dists.shape[0]):
                 if ax == 0:
-                    axes[ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                    axes[ax].plot(beads[p, 2], beads[p, 1], marker='.', ls='', color=f'C{p}')
                 elif ax == 1:
-                    axes[ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                    axes[ax].plot(beads[p, 2], beads[p, 0], marker='.', ls='', color=f'C{p}')
                 else:
-                    axes[ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                    axes[ax].plot(beads[p, 1], beads[p, 0], marker='.', ls='', color=f'C{p}')
 
         plt.tight_layout()
         plt.show()
@@ -231,37 +259,16 @@ def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
     return np.round(np.mean(dists), 1)
 
 
-def fftconvolution(sample, kernel, plot=False):
-    if len(kernel.shape) > 4:
-        conv = []
-        for k in kernel:
-            c = convolution.convolve_fft(sample, k, allow_huge=True)
-            c /= np.nanmax(c)
-            conv.append(c)
+@profile
+def fftconvolution(kernel, sample):
+    if kernel.shape[0] == 1 or kernel.shape[-1] == 1:
+        kernel = np.squeeze(kernel)
 
-            if plot:
-                fig, axes = plt.subplots(3, 3, figsize=(24, 12))
-                for ax in range(3):
-                    axes[0, ax].imshow(np.max(sample, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-                    axes[1, ax].imshow(np.max(k, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-                    axes[2, ax].imshow(np.max(c, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-                plt.tight_layout()
-                plt.show()
+    if sample.shape[0] == 1 or sample.shape[-1] == 1:
+        sample = np.squeeze(sample)
 
-        conv = np.array(conv)
-    else:
-        conv = convolution.convolve_fft(sample, kernel, allow_huge=True)
-        conv /= np.nanmax(conv)
-
-        if plot:
-            fig, axes = plt.subplots(3, 3, figsize=(24, 12))
-            for ax in range(3):
-                axes[0, ax].imshow(np.max(sample, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-                axes[1, ax].imshow(np.max(kernel, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-                axes[2, ax].imshow(np.max(conv, axis=ax) ** .5, vmin=0, vmax=1, cmap='magma')
-            plt.tight_layout()
-            plt.show()
-
+    conv = convolution.convolve_fft(sample, kernel, allow_huge=True)
+    conv /= np.nanmax(conv)
     conv = np.nan_to_num(conv, nan=0, neginf=0, posinf=0)
     conv[conv < 0] = 0
     return conv

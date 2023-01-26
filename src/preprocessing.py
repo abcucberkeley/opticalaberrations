@@ -16,10 +16,12 @@ from matplotlib import gridspec
 from tifffile import imread, imsave
 from skimage import transform
 from scipy.spatial import KDTree
+from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from line_profiler_pycharm import profile
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -29,7 +31,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@profile
 def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
+    """Crops or pads array.  Output will have dimensions "crop_shape". No interpolation. Padding type
+    can be customized with **kwargs, like "reflect" to get mirror pad.
+
+    Args:
+        psf (np.array): N-dim array
+        crop_shape (Sequence): desired output dimensions
+        **kwargs: arguments to pass to np.pad
+
+    Returns:
+        N-dim array with desired output shape
+    """
     rank = len(crop_shape)
     psf_shape = psf.shape[1:-1] if len(psf.shape) == 5 else psf.shape
     index = [[0, psf_shape[d]] for d in range(rank)]
@@ -52,16 +66,27 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
         else:
             return np.pad(np.squeeze(psf)[slicer], pad, **kwargs)[np.newaxis, ..., np.newaxis]
     else:
-        return np.pad(psf[slicer], pad, **kwargs)
+        return np.pad(psf[tuple(slicer)], pad, **kwargs)
 
 
+@profile
 def resize(
     vol,
     voxel_size: Sequence,
-    crop_shape: Any,
     sample_voxel_size: Sequence = (.1, .1, .1),
+    minimum_shape: tuple = (64, 64, 64),
     debug: Any = None
 ):
+    """ Up/down-scales volume to output voxel size using 3rd order interpolation. 
+    Output volume is padded if array has fewer voxels than "minimum_shape". 
+
+    Args:
+        vol (_type_): 3D volume
+        voxel_size (3 element Sequence): Output voxel size
+        sample_voxel_size (3 element Sequence, optional): Input voxel size. Defaults to (.1, .1, .1).
+        minimum_shape (tuple, optional): Pad array if vol (after resizing) is too small. Defaults to (64, 64, 64).
+        debug : "True" to show figure, "not None" will write {debug}_rescaling.svg file. Defaults to None.
+    """
     def plot(cls, img):
         if img.shape[0] == 6:
             vmin, vmax, vcenter, step = 0, 2, 1, .1
@@ -107,11 +132,13 @@ def resize(
         order=3,
         anti_aliasing=True,
     )
-    if crop_shape is not None:
-        mode = np.abs(st.mode(resampled_vol, axis=None).mode[0])
-        resized_vol = resize_with_crop_or_pad(resampled_vol, crop_shape=crop_shape, constant_values=mode)
-    else:
-        resized_vol = resampled_vol
+
+    mode = np.abs(st.mode(resampled_vol, axis=None).mode[0])
+    resized_vol = resize_with_crop_or_pad(
+        resampled_vol,
+        crop_shape=[s if s >= m else m for s, m in zip(resampled_vol.shape, minimum_shape)],
+        constant_values=mode
+    )
 
     if debug is not None:
         debug = Path(debug)
@@ -137,37 +164,58 @@ def resize(
         if debug == True:
             plt.show()
         else:
-            plt.savefig(f'{debug}_rescaling.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return resized_vol
 
 
+@profile
 def prep_sample(
     sample: np.array,
-    crop_shape: Any,
     sample_voxel_size: tuple,
     model_voxel_size: tuple,
     debug: Any = None,
     remove_background: bool = True,
+    normalize: bool = True,
+    background_mode_offset: int = 0
 ):
+    """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
+
+    Background subtraction (mode of voxels below 99th percentile + background_mode_offset)
+    Normalization to 0-1
+    Resample to model_voxel_size
+    Transpose
+
+    Args:
+        sample (np.array): Input 3D array (or series of 3D arrays)
+        sample_voxel_size (tuple): 
+        model_voxel_size (tuple): 
+        debug (Any, optional): plot or save .svg's. Defaults to None.
+        remove_background (bool, optional): Defaults to True.
+        normalize (bool, optional): Defaults to True.
+        background_mode_offset (int, optional): >0 gives more aggressive background subtraction. Defaults to 0.
+
+    Returns:
+        _type_: 3D array (or series of 3D arrays)
+    """
     if len(np.squeeze(sample).shape) == 4:
         samples = []
         for i in range(sample.shape[0]):
             s = sample[i]
-            mode = int(st.mode(s[s < np.quantile(s, .99)], axis=None).mode[0])
 
             if remove_background:
-                s -= mode
+                mode = int(st.mode(s[s < np.quantile(s, .99)], axis=None).mode[0])
+                s -= mode + background_mode_offset
                 s[s < 0] = 0
 
-            s /= np.nanmax(s)
+            if normalize:
+                s /= np.nanmax(s)
 
             if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
                 s = resize(
                     s,
                     sample_voxel_size=sample_voxel_size,
                     voxel_size=model_voxel_size,
-                    crop_shape=crop_shape,
                     debug=debug/f"{i}_preprocessing" if debug is not None else None
                 )
             s = s.transpose(0, 2, 1)
@@ -176,20 +224,19 @@ def prep_sample(
         return np.array(samples)
 
     else:
-        mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
-
         if remove_background:
-            sample -= mode
+            mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
+            sample -= mode + background_mode_offset
             sample[sample < 0] = 0
 
-        sample = sample / np.nanmax(sample)
+        if normalize:
+            sample /= np.nanmax(sample)
 
         if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
             sample = resize(
                 sample,
                 sample_voxel_size=sample_voxel_size,
                 voxel_size=model_voxel_size,
-                crop_shape=crop_shape,
                 debug=debug
             )
 
@@ -197,9 +244,9 @@ def prep_sample(
         return sample
 
 
+@profile
 def find_roi(
     path: Union[Path, np.array],
-    savepath: Path,
     window_size: tuple = (64, 64, 64),
     plot: Any = None,
     num_peaks: Any = None,
@@ -209,8 +256,8 @@ def find_roi(
     peaks: Any = None,
     max_neighbor: int = 5,
     voxel_size: tuple = (.200, .108, .108),
+    savepath: Any = None,
 ):
-    savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
@@ -289,7 +336,7 @@ def find_roi(
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         plt.tight_layout()
-        plt.savefig(f'{plot}_detected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+        plt.savefig(f'{plot}_detected_points.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     if min_dist is not None:
         peaks = peaks[peaks['dist'] >= min_dist]
@@ -329,24 +376,22 @@ def find_roi(
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         plt.tight_layout()
-        plt.savefig(f'{plot}_selected_points.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+        plt.savefig(f'{plot}_selected_points.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     peaks = peaks.head(num_peaks)
-    peaks.to_csv(f"{plot}_rois.csv")
+    peaks.to_csv(f"{plot}_stats.csv")
 
     logger.info(f"Predicted points of interest")
-    print(peaks)
-
     peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
     widths = [w // 2 for w in window_size]
 
     if plot:
-        fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False, sharex=False)
-        for ax in range(3):
+        fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharey=False, sharex=False)
+        for ax in range(2):
             axes[ax].imshow(
                 np.nanmax(dataset, axis=ax),
-                aspect='auto',
-                cmap='hot'
+                aspect='equal',
+                cmap='Greys_r',
             )
 
             for p in range(peaks.shape[0]):
@@ -360,6 +405,7 @@ def find_roi(
                         color=f'C{p}',
                         alpha=1
                     ))
+                    axes[ax].set_title('XY')
                 elif ax == 1:
                     axes[ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
                     axes[ax].add_patch(patches.Rectangle(
@@ -370,20 +416,12 @@ def find_roi(
                         color=f'C{p}',
                         alpha=1
                     ))
-                else:
-                    axes[ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
-                    axes[ax].add_patch(patches.Rectangle(
-                        xy=(peaks[p, 1] - window_size[1] // 2, peaks[p, 0] - window_size[0] // 2),
-                        width=window_size[1],
-                        height=window_size[2],
-                        fill=None,
-                        color=f'C{p}',
-                        alpha=1
-                    ))
+                    axes[ax].set_title('XZ')
 
         plt.tight_layout()
-        plt.savefig(f'{plot}_rois.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+        plt.savefig(f'{plot}_mips.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
+    rois = []
     logger.info(f"Locating ROIs: {[peaks.shape[0]]}")
     for p in range(peaks.shape[0]):
         start = [
@@ -398,4 +436,53 @@ def find_roi(
 
         if r.size != 0:
             r = resize_with_crop_or_pad(r, crop_shape=window_size)
-            imsave(savepath/f"roi_{p}.tif", r)
+            rois.append(r)
+
+            if savepath is not None:
+                savepath.mkdir(parents=True, exist_ok=True)
+                imsave(savepath / f"roi_{p:02}.tif", r)
+
+    return rois
+
+
+@profile
+def get_tiles(
+    path: Union[Path, np.array],
+    window_size: tuple = (64, 64, 64),
+    strides: int = 64,
+    savepath: Any = None,
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+    })
+
+    if isinstance(path, (np.ndarray, np.generic)):
+        dataset = path
+    elif path.suffix == '.tif':
+        dataset = imread(path).astype(np.float)
+        logger.info(f"Sample: {dataset.shape}")
+    elif path.suffix == '.zarr':
+        dataset = zarr.open_array(str(path), mode='r', order='F')
+        logger.info(f"Sample: {dataset.shape}")
+    else:
+        logger.error(f"Unknown file format: {path.name}")
+        return
+
+    logger.info(f"Sample: {[dataset.shape]}")
+    windows = sliding_window_view(dataset, window_shape=window_size)[::strides, ::strides, ::strides]
+    zplanes, nrows, ncols = windows.shape[:3]
+    windows = np.reshape(windows, (-1, *window_size))
+
+    logger.info(f"Locating ROIs: {[windows.shape[0]]}")
+
+    if savepath is not None:
+        savepath.mkdir(parents=True, exist_ok=True)
+        for i, w in enumerate(windows):
+            imsave(savepath/f"roi_{i:02}.tif", w)
+
+    return windows, zplanes, nrows, ncols

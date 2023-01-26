@@ -37,7 +37,7 @@ def nm_to_ansi(n, m):
 
 
 def nm_normalization(n, m):
-    """the norm of the zernike mode n,m in born/wolf convetion
+    """the norm of the zernike mode n,m in born/wolf convention
     i.e. sqrt( \int | z_nm |^2 )
     """
     return np.sqrt((1. + (m == 0)) / (2. * n + 2))
@@ -95,6 +95,7 @@ def nm_polynomial(n, m, rho, theta, normed=True):
     else:
         return prefac * radial * np.sin(m0 * theta)
 
+
 @lru_cache(maxsize=32)
 def rho_theta(size):
     r = np.linspace(-1, 1, size)
@@ -118,7 +119,7 @@ class Zernike:
         :param order: string, defines the Zernike nomenclature if index is an integer, eg noll or ansi, default is noll
     """
 
-    _nm_pairs = set((n, m) for n in range(200) for m in range(-n, n + 1, 2))
+    _nm_pairs = set((n, m) for n in range(11) for m in range(-n, n + 1, 2))
     _noll_to_nm = dict(zip((nm_to_noll(*nm) for nm in _nm_pairs), _nm_pairs))
     _ansi_to_nm = dict(zip((nm_to_ansi(*nm) for nm in _nm_pairs), _nm_pairs))
 
@@ -127,27 +128,33 @@ class Zernike:
 
         if isinstance(index, (list, tuple)) and len(index) == 2:
             self.n, self.m = int(index[0]), int(index[1])
-            (self.n, self.m) in self._nm_pairs \
-            or logging.error(ValueError(
-                "Your input for index is list/tuple : Could not identify the n,m order of Zernike polynomial"))
+
+            if (self.n, self.m) not in self._nm_pairs:
+                raise ValueError(
+                    "Your input for index is list/tuple : Could not identify the n,m order of Zernike polynomial"
+                )
 
         elif isinstance(index, int):
             order = str(order).lower()
-            order in ('noll', 'ansi') \
-            or logging.error(ValueError("Your input for index is int : Could not identify the Zernike nomenclature/order"))
+            if order not in ('noll', 'ansi'):
+                raise ValueError(
+                    "Your input for index is int : Could not identify the Zernike nomenclature/order"
+                )
 
             if order == 'noll':
-                index in self._noll_to_nm \
-                or logging.error(ValueError(
-                    "Your input for index is int and input for Zernike nomenclature is "
-                    "Noll: Could not identify the Zernike polynomial with this index"))
+                if index not in self._noll_to_nm:
+                    raise ValueError(
+                        "Your input for index is int and input for Zernike nomenclature is "
+                        "Noll: Could not identify the Zernike polynomial with this index"
+                    )
                 self.n, self.m = self._noll_to_nm[index]
 
             elif order == 'ansi':
-                index in self._ansi_to_nm \
-                or logging.error(ValueError(
-                    "Your input for index is int and input for Zernike nomenclature is "
-                    "ANSI: Could not identify the Zernike polynomial with this index"))
+                if index not in self._ansi_to_nm:
+                    raise ValueError(
+                        "Your input for index is int and input for Zernike nomenclature is "
+                        "ANSI: Could not identify the Zernike polynomial with this index"
+                    )
                 self.n, self.m = self._ansi_to_nm[index]
         else:
             logging.error(ValueError("Could not identify your index input, we accept strings, lists and tuples only"))
@@ -210,7 +217,7 @@ class Zernike:
             logging.error(AttributeError('Zernike is immutable'))
 
     def __repr__(self):
-        return f'Zernike(n={self.n}, m={self.m: 1}, noll={self.index_noll:2}, ansi={self.index_ansi:2})'
+        return f'Zernike(n:{self.n:2}, m:{self.m:2}, noll:{self.index_noll:2}, ansi:{self.index_ansi:2})'
 
     @property
     def nm_pairs(self):
@@ -218,3 +225,6 @@ class Zernike:
 
     def ansi_to_nm(self, k):
         return self._ansi_to_nm[k]
+
+    def twin(self):
+        return Zernike((self.n, self.m * -1))
