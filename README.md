@@ -14,6 +14,8 @@
    * [Deskew](#deskew)
 
 
+![zernike_pyramid](/home/supernova/Github/opticalaberrations/examples/zernikes/10th_zernike_pyramid.png)
+
 
 ## Installation
 
@@ -87,7 +89,7 @@ for running our models on a given 3D stack (`.tif` file).
 
 For each successful run, the script will output the following files:
 - `*_sample_predictions_psf.tif`: predicted PSF
-- `*_sample_predictions_zernike_coffs.csv`: predicted Zernike modes 
+- `*_sample_predictions_zernike_coefficients.csv`: predicted Zernike modes 
 - `*_sample_predictions_pupil_displacement.tif`: predicted wavefront
 - `*_sample_predictions_corrected_actuators.csv`: a new vector describing the new positions for the DM's actuators
 
@@ -223,7 +225,7 @@ The script takes 2 positional arguments and a few optional ones described below.
 For each successful run, the script will output the following files:
 - `*_predictions_aggregated_psf.tif`: predicted PSF
 - `*_predictions_aggregated.csv`: a statistical summary of the predictions
-- `*_predictions_aggregated_zernike_coffs.csv`: predicted zernike modes 
+- `*_predictions_aggregated_zernike_coefficients.csv`: predicted zernike modes 
 - `*_predictions_aggregated_pupil_displacement.tif`: predicted wavefront
 - `*_predictions_aggregated_corrected_actuators.csv`: a new vector describing the new positions for the DM's actuators
 
