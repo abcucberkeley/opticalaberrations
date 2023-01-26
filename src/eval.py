@@ -121,7 +121,7 @@ def eval_mode(
 
 @profile
 def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
-    outdir = model.with_suffix('') / 'evalmodes'
+    outdir = model.with_suffix('') / eval_sign / 'evalmodes'
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
@@ -395,7 +395,7 @@ def snrheatmap(
     eval_sign: str = 'positive_only'
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = modelpath.with_suffix('') / f'snrheatmaps_{input_coverage}'
+    savepath = modelpath.with_suffix('') / eval_sign / f'snrheatmaps_{input_coverage}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -463,7 +463,7 @@ def densityheatmap(
         ['Number of objects', 'Average distance to nearest neighbor (microns)'],
         [(1, 30), (0, 4)]
     ):
-        savepath = modelpath.with_suffix('') / f'{savedir}_{input_coverage}'
+        savepath = modelpath.with_suffix('') / eval_sign / f'{savedir}_{input_coverage}'
         savepath.mkdir(parents=True, exist_ok=True)
 
         if distribution != '/':
@@ -604,7 +604,7 @@ def iterheatmap(
     eval_sign: str = 'positive_only'
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = modelpath.with_suffix('') / f'iterheatmaps_{input_coverage}'
+    savepath = modelpath.with_suffix('') / eval_sign / f'iterheatmaps_{input_coverage}'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -662,7 +662,7 @@ def random_samples(
     m = backend.load(model)
     m.summary()
 
-    pool = Pool(processes=4) # plotting = 2*calculation time, so shouldn't need more than 2-4 processes to keep up.
+    pool = Pool(processes=4)  # plotting = 2*calculation time, so shouldn't need more than 2-4 processes to keep up.
 
     for dist in ['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet']:
         for amplitude_range in [(.05, .1), (.1, .2), (.2, .3)]:
@@ -716,7 +716,7 @@ def random_samples(
                     noisy_img /= maxcounts
 
                     save_path = Path(
-                        f"{model.with_suffix('')}/samples/{dist}/um-{amplitude_range[-1]}/num_objs-{num_objs:02d}"
+                        f"{model.with_suffix('')}/samples/{eval_sign}/{dist}/um-{amplitude_range[-1]}/num_objs-{num_objs:02d}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 

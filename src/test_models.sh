@@ -19,12 +19,12 @@ do
     python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
     --task "$MODEL --eval_sign $EVALSIGN modes" \
     --taskname 'test' \
-    --name $MODEL/evalmodes
+    --name $MODEL/$EVALSIGN/evalmodes
 
     python manager.py slurm test.py --partition abc --mem '64GB' --cpus 4 --gpus 0 \
     --task "$MODEL --eval_sign $EVALSIGN random" \
     --taskname random \
-    --name $MODEL/samples
+    --name $MODEL/$EVALSIGN/samples
 
     for NA in 1. .9 .8
     do
@@ -35,17 +35,17 @@ do
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
         --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA --eval_sign $EVALSIGN densityheatmap" \
         --taskname $NA \
-        --name $MODEL/densityheatmaps_${COV}
+        --name $MODEL/$EVALSIGN/densityheatmaps_${COV}
 
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
         --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA --eval_sign $EVALSIGN --n_samples 100000 snrheatmap" \
         --taskname $NA \
-        --name $MODEL/snrheatmaps_${COV}
+        --name $MODEL/$EVALSIGN/snrheatmaps_${COV}
 
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA --eval_sign $EVALSIGN --n_samples 1000 iterheatmap" \
+        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA --eval_sign $EVALSIGN --n_samples 5000 iterheatmap" \
         --taskname $NA \
-        --name $MODEL/iterheatmaps_${COV}
+        --name $MODEL/$EVALSIGN/iterheatmaps_${COV}
       done
     done
   done
