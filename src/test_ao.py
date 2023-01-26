@@ -102,7 +102,7 @@ for mode in ignore_modes:
     predict_sample += f" --ignore_mode {mode}"
 
 
-prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
+prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coefficients.csv)
 # image = repo/'data/agarose/exp1.tif'  # replace with second image
 predict_sample_signed = f"{predict_sample} --prev {prev}"
 
@@ -128,7 +128,7 @@ for mode in ignore_modes:
     predict_rois += f" --ignore_mode {mode}"
 
 
-prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
+prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coefficients.csv)
 # image = repo/'data/agarose/exp1.tif'  # replace with second image
 predict_rois_signed = f"{predict_rois} --prev {prev}"
 
@@ -151,7 +151,7 @@ for mode in ignore_modes:
     predict_tiles += f" --ignore_mode {mode}"
 
 
-prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coffs.csv)
+prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coefficients.csv)
 # image = repo/'data/agarose/exp1.tif'  # replace with second image
 predict_tiles_signed = f"{predict_tiles} --prev {prev}"
 

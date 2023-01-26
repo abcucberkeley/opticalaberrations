@@ -468,13 +468,13 @@ def predict_sample(
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
     std = Wavefront(std, order='ansi', lam_detection=wavelength)
 
-    coffs = [
+    coefficients = [
         {'n': z.n, 'm': z.m, 'amplitude': a}
         for z, a in p.zernikes.items()
     ]
-    coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
-    coffs.index.name = 'ansi'
-    coffs.to_csv(f"{img.with_suffix('')}_sample_predictions_zernike_coffs.csv")
+    coefficients = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
+    coefficients.index.name = 'ansi'
+    coefficients.to_csv(f"{img.with_suffix('')}_sample_predictions_zernike_coefficients.csv")
 
     psf = psfgen.single_psf(phi=p, normed=True, noise=False)
     imsave(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
@@ -788,13 +788,13 @@ def aggregate_predictions(
     p = Wavefront(predictions[final_prediction].values, order='ansi', lam_detection=wavelength)
     pred_std = Wavefront(predictions['std'].values, order='ansi', lam_detection=wavelength)
 
-    coffs = [
+    coefficients = [
         {'n': z.n, 'm': z.m, 'amplitude': a}
         for z, a in p.zernikes.items()
     ]
-    coffs = pd.DataFrame(coffs, columns=['n', 'm', 'amplitude'])
-    coffs.index.name = 'ansi'
-    coffs.to_csv(f"{model_pred.with_suffix('')}_aggregated_zernike_coffs.csv")
+    coefficients = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
+    coefficients.index.name = 'ansi'
+    coefficients.to_csv(f"{model_pred.with_suffix('')}_aggregated_zernike_coefficients.csv")
 
     psfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
@@ -941,7 +941,7 @@ def eval_mode(
             prediction_threshold=0.,
         )
         prediction_path = Path(
-            f"{str(gt_path.with_suffix('')).replace(f'_{gt_postfix}', '')}_sample_predictions_zernike_coffs.csv"
+            f"{str(gt_path.with_suffix('')).replace(f'_{gt_postfix}', '')}_sample_predictions_zernike_coefficients.csv"
         )
 
     try:
@@ -1023,9 +1023,9 @@ def eval_dataset(
     model: Path,
     datadir: Path,
     flat: Path,
-    gt_postfix: str = 'ground_truth_zernike_coffs.csv',
-    postfix: str = 'sample_predictions_zernike_coffs.csv'
-    # postfix: str = 'matlab_zernike_coffs.csv'
+    gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
+    postfix: str = 'sample_predictions_zernike_coefficients.csv'
+    # postfix: str = 'matlab_zernike_coefficients.csv'
 ):
     func = partial(
         eval_mode,
@@ -1056,7 +1056,7 @@ def eval_dataset(
         logger.info(f"Looking for: {prefix}")
 
         try:
-            gt_path = list(datadir.rglob(f'{prefix}_ground_truth_zernike_coffs.csv'))[0]
+            gt_path = list(datadir.rglob(f'{prefix}_ground_truth_zernike_coefficients.csv'))[0]
             logger.info(f"GT: {gt_path.name}")
         except IndexError:
             logger.warning(f'GT not found for: {file.name}')
