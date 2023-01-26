@@ -8,11 +8,11 @@ SHAPE=64
 DATASET='spatial_planes_embeddings'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/x108-y108-z200/"
-EVALSIGN="positive_only"  ## options: "positive_only", "dual_stage", "signed"
+EVALSIGN="dual_stage"  ## options: "positive_only", "dual_stage", "signed"
 
 for MODES in 15 28 45
 do
-  for M in phase-1024/opticalnet phase/opticalnet compact/opticalnet
+  for M in spatial_planes/opticalnet phase/opticalnet
   do
     MODEL="../models/new/$DATASET/z$MODES/$M"
 

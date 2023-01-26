@@ -708,7 +708,7 @@ def dual_stage_prediction(
         else:
             followup_inputs = followup_inputs[..., np.newaxis]
 
-        followup_preds, stdev = bootstrap_predict(
+        followup_preds, stdev = predict_rotation(
             model,
             followup_inputs,
             psfgen=modelgen,
@@ -720,7 +720,6 @@ def dual_stage_prediction(
             ignore_modes=ignore_modes,
             freq_strength_threshold=freq_strength_threshold,
         )
-        followup_preds = np.abs(followup_preds)
 
         preds, pchanges = predict_sign(
             init_preds=init_preds,
