@@ -5,13 +5,12 @@ yVOXEL=.108
 zVOXEL=.200
 LAMBDA=.510
 SHAPE=64
-DATASET='noiseless_embeddings'
+DATASET='spatial_planes_embeddings'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/x108-y108-z200/"
-EVALSIGN="signed"  ## options: "positive_only", "dual_stage", "signed"
-SAMPLES=5000
+EVALSIGN="positive_only"  ## options: "positive_only", "dual_stage", "signed"
 
-for MODES in 15
+for MODES in 15 28 45
 do
   for M in phase-1024/opticalnet phase/opticalnet compact/opticalnet
   do
@@ -34,17 +33,17 @@ do
         #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
         #python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA --eval_sign $EVALSIGN --n_samples $SAMPLES densityheatmap" \
+        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA --eval_sign $EVALSIGN densityheatmap" \
         --taskname $NA \
         --name $MODEL/densityheatmaps_${COV}
 
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA --eval_sign $EVALSIGN --n_samples $SAMPLES snrheatmap" \
+        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA --eval_sign $EVALSIGN --n_samples 100000 snrheatmap" \
         --taskname $NA \
         --name $MODEL/snrheatmaps_${COV}
 
         python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA --eval_sign $EVALSIGN --n_samples $SAMPLES iterheatmap" \
+        --task "$MODEL --datadir $DATA/i$SHAPE/z$MODES --input_coverage $COV --na $NA --eval_sign $EVALSIGN --n_samples 1000 iterheatmap" \
         --taskname $NA \
         --name $MODEL/iterheatmaps_${COV}
       done

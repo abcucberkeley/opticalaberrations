@@ -530,7 +530,7 @@ def plot_rotations(
         fig, axes = plt.subplots(6, len(degrees) + 1, figsize=(12, 6))
 
         for i, deg in enumerate(degrees):
-            axes[0, i + 1].set_title(f'{deg}')
+            axes[0, i + 1].set_title(f'{deg}$^\circ$')
 
             outdir = Path(f'{savepath}/i{res}_pad_{padsize}/mode_{mode}/embeddings/')
             outdir.mkdir(exist_ok=True, parents=True)
