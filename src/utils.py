@@ -44,7 +44,7 @@ def multiprocess(func: Any, jobs: Union[Generator, List, np.ndarray], desc: str 
         an array of outputs for every function call
     """
     jobs = list(jobs)
-    if cores == 1:
+    if cores == 1 or len(jobs) == 1:
         logs = []
         for j in tqdm(jobs, total=len(jobs), desc=desc):
             logs.append(func(j))
