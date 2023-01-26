@@ -14,7 +14,7 @@
    * [Deskew](#deskew)
 
 
-![zernike_pyramid](/home/supernova/Github/opticalaberrations/examples/zernikes/10th_zernike_pyramid.png)
+![zernike_pyramid](examples/zernikes/10th_zernike_pyramid.png)
 
 
 ## Installation
