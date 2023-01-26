@@ -312,28 +312,50 @@ def predict(
     rois = np.array(utils.multiprocess(load, rois, desc='Processing ROIs'))
     logger.info(rois.shape)
 
-    preds, stds, pchange = dual_stage_prediction(
-        model,
-        batch_size=batch_size,
-        inputs=rois[..., np.newaxis],
-        threshold=prediction_threshold,
-        sign_threshold=sign_threshold,
-        n_samples=num_predictions,
-        verbose=True,
-        gen=psfgen,
-        modelgen=modelpsfgen,
-        prev_pred=prev,
-        estimate_sign_with_decon=estimate_sign_with_decon,
-        ignore_modes=ignore_modes,
-        freq_strength_threshold=freq_strength_threshold,
-        plot=Path(f"{data.with_suffix('')}_predictions") if plot else None,
-    )
+    no_phase = True if model.input_shape[1] == 3 else False
+
+    if no_phase:
+        preds, stds, pchange = dual_stage_prediction(
+            model,
+            batch_size=batch_size,
+            inputs=rois[..., np.newaxis],
+            threshold=prediction_threshold,
+            sign_threshold=sign_threshold,
+            n_samples=num_predictions,
+            verbose=True,
+            gen=psfgen,
+            modelgen=modelpsfgen,
+            prev_pred=prev,
+            estimate_sign_with_decon=estimate_sign_with_decon,
+            ignore_modes=ignore_modes,
+            freq_strength_threshold=freq_strength_threshold,
+            plot=Path(f"{data.with_suffix('')}_predictions") if plot else None,
+        )
+    else:
+        preds, stds = predict_rotation(
+            model,
+            batch_size=batch_size,
+            inputs=rois[..., np.newaxis],
+            threshold=prediction_threshold,
+            sign_threshold=sign_threshold,
+            n_samples=num_predictions,
+            verbose=True,
+            gen=psfgen,
+            modelgen=modelpsfgen,
+            prev_pred=prev,
+            estimate_sign_with_decon=estimate_sign_with_decon,
+            ignore_modes=ignore_modes,
+            freq_strength_threshold=freq_strength_threshold,
+            plot=Path(f"{data.with_suffix('')}_predictions") if plot else None,
+        )
+        pchange = None
 
     predictions = summarize_predictions(preds)
     predictions.to_csv(f"{data}_predictions.csv")
 
-    pchanges = summarize_predictions(pchange)
-    pchanges.to_csv(f"{data}_predictions_percent_changes.csv")
+    if pchange is not None:
+        pchanges = summarize_predictions(pchange)
+        pchanges.to_csv(f"{data}_predictions_percent_changes.csv")
 
     if plot:
         vis.wavefronts(
