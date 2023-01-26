@@ -342,6 +342,7 @@ def eval_rotation(
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
 
     preds = np.zeros(psfgen.n_modes)
+    stdevs = np.zeros(psfgen.n_modes)
     wavefront = Wavefront(preds)
 
     if plot is not None:
@@ -365,11 +366,10 @@ def eval_rotation(
                 data_mask[(init_preds[:, mode.index_ansi] < rho/5) * (rho > threshold)] = 0.
                 data_mask[rhos < rho/2] = 0.    # exclude if rho is unusually small (which can lead to small, but dominant primary mode near discontinuity)
                 xdata = xdata[data_mask]
-                ydata = ydata[data_mask] 
+                ydata = ydata[data_mask]
                 offset = ydata[0]
                 ydata = np.unwrap(ydata, period=180)
                 ydata = ((ydata - offset - xdata) + 90) % 180 - 90 + offset + xdata
-
 
                 m = 1
                 b = linear_fit_fixed_slope(xdata, ydata, m)  # refit without bad data points
@@ -382,13 +382,14 @@ def eval_rotation(
 
                 twin_angle = b   # evaluate the curve fit when there is no digital rotation.
                 preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
+                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = np.std(rhos[data_mask]), np.std(rhos[data_mask])
 
                 if plot is not None:
                     ax = fig.add_subplot(gs[row, 0])
                     fit_ax = fig.add_subplot(gs[row, 1])
 
                     ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
-                    ax.plot(rotations, init_preds[:, twin.index_ansi], '--', label=f"m{twin.index_ansi}")
+                    ax.plot(rotations, init_preds[:, twin.index_ansi], ':', label=f"m{twin.index_ansi}")
 
                     ax.set_xlim(0, 360)
                     ax.set_xticks(range(0, 405, 45))
@@ -424,7 +425,7 @@ def eval_rotation(
                 if plot is not None:
                     ax = fig.add_subplot(gs[row, 0])
                     ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
-                    ax.plot(rotations, init_preds[:, twin.index_ansi], '--', label=f"m{twin.index_ansi}")
+                    ax.plot(rotations, init_preds[:, twin.index_ansi], ':', label=f"m{twin.index_ansi}")
 
                     ax.set_xlim(0, 360)
                     ax.set_xticks(range(0, 405, 45))
@@ -439,6 +440,7 @@ def eval_rotation(
             rho = np.median(init_preds[:, mode.index_ansi])
             rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
             preds[mode.index_ansi] = rho
+            stdevs[mode.index_ansi] = np.std(init_preds[:, mode.index_ansi])
 
             if plot is not None:
                 ax = fig.add_subplot(gs[row, 0])
@@ -456,7 +458,7 @@ def eval_rotation(
         plt.tight_layout()
         plt.savefig(f'{plot}_rotations.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-    return preds
+    return preds, stdevs
 
 
 @profile
@@ -465,16 +467,18 @@ def predict_rotation(
     inputs: np.array,
     psfgen: SyntheticPSF,
     batch_size: int = 1,
-    n_samples: int = 10,
-    threshold: float = 0.01,
-    freq_strength_threshold: float = .01,
+    n_samples: int = 1,
     no_phase: bool = False,
     padsize: Any = None,
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
     peaks: Any = None,
-    remove_interference: bool = True,
+    ignore_modes: list = (0, 1, 2, 4),
+    threshold: float = 0.05,
+    freq_strength_threshold: float = .01,
+    verbose: bool = True,
     plot: Any = None,
+    remove_interference: bool = True,
     desc: str = 'Predict-rotations',
     rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int)
 ):
@@ -528,7 +532,9 @@ def predict_rotation(
         n_samples=n_samples,
         no_phase=True,
         threshold=0.,
+        ignore_modes=ignore_modes,
         plot=plot,
+        verbose=verbose,
         desc=desc
     )
 
@@ -541,7 +547,9 @@ def predict_rotation(
     )
 
     init_preds = np.stack(np.split(init_preds, inputs.shape[0]), axis=0)
-    return np.array(utils.multiprocess(eval_mode_rotations, init_preds, cores=-1))
+    jobs = np.array([list(zip(*j)) for j in utils.multiprocess(eval_mode_rotations, init_preds, cores=-1)])
+    preds, stdev = jobs[..., 0], jobs[..., -1]
+    return preds, stdev
 
 
 @profile
@@ -669,7 +677,7 @@ def dual_stage_prediction(
 
     prev_pred = None if (prev_pred is None or str(prev_pred) == 'None') else prev_pred
 
-    init_preds, stdev = bootstrap_predict(
+    init_preds, stdev = predict_rotation(
         model,
         inputs,
         psfgen=modelgen,
@@ -682,7 +690,6 @@ def dual_stage_prediction(
         freq_strength_threshold=freq_strength_threshold,
         plot=plot
     )
-    init_preds = np.abs(init_preds)
 
     if estimate_sign_with_decon:
         logger.info(f"Estimating signs w/ Decon")
@@ -725,7 +732,7 @@ def dual_stage_prediction(
     elif prev_pred is not None:
         logger.info(f"Evaluating signs")
         followup_preds = init_preds.copy()
-        init_preds = np.abs(pd.read_csv(prev_pred, header=0)['amplitude'].values)
+        init_preds = pd.read_csv(prev_pred, header=0)['amplitude'].values
 
         preds, pchanges = predict_sign(
             init_preds=init_preds,
@@ -783,7 +790,7 @@ def evaluate(
 
     elif eval_sign == 'dual_stage':
 
-        init_preds = predict_rotation(
+        init_preds, stds = predict_rotation(
             model=model,
             inputs=inputs,
             psfgen=gen,
@@ -842,7 +849,7 @@ def evaluate(
         #     savepath=f'{plot}_sign_eval_db'
         # )
 
-        followup_preds = predict_rotation(
+        followup_preds, stds = predict_rotation(
             model=model,
             inputs=followup_inputs,
             psfgen=gen,

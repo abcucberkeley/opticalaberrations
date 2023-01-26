@@ -27,7 +27,7 @@ from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
-from backend import load_metadata, dual_stage_prediction
+from backend import load_metadata, dual_stage_prediction, predict_rotation
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 import logging
@@ -399,23 +399,39 @@ def predict_sample(
     )
 
     inputs = np.expand_dims(inputs, axis=0)
+    no_phase = True if model.input_shape[1] == 3 else False
 
-    p, std, pchange = dual_stage_prediction(
-        model,
-        inputs=inputs,
-        threshold=prediction_threshold,
-        sign_threshold=sign_threshold,
-        n_samples=num_predictions,
-        verbose=verbose,
-        gen=psfgen,
-        modelgen=modelpsfgen,
-        batch_size=batch_size,
-        prev_pred=prev,
-        estimate_sign_with_decon=estimate_sign_with_decon,
-        ignore_modes=ignore_modes,
-        freq_strength_threshold=freq_strength_threshold,
-        plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
-    )
+    if no_phase:
+        p, std, pchange = dual_stage_prediction(
+            model,
+            inputs=inputs,
+            threshold=prediction_threshold,
+            sign_threshold=sign_threshold,
+            n_samples=num_predictions,
+            verbose=verbose,
+            gen=psfgen,
+            modelgen=modelpsfgen,
+            batch_size=batch_size,
+            prev_pred=prev,
+            estimate_sign_with_decon=estimate_sign_with_decon,
+            ignore_modes=ignore_modes,
+            freq_strength_threshold=freq_strength_threshold,
+            plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
+        )
+    else:
+        p, std = predict_rotation(
+            model,
+            inputs=inputs,
+            psfgen=modelpsfgen,
+            n_samples=num_predictions,
+            no_phase=False,
+            verbose=verbose,
+            batch_size=batch_size,
+            threshold=prediction_threshold,
+            ignore_modes=ignore_modes,
+            freq_strength_threshold=freq_strength_threshold,
+            plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
+        )
 
     if dm_calibration is not None:
         dm_state = load_dm(dm_state)

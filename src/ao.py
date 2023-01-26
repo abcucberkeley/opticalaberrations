@@ -100,7 +100,7 @@ def parse_args(args):
         help='a toggle for plotting predictions'
     )
     predict_sample.add_argument(
-        "--num_predictions", default=10, type=int,
+        "--num_predictions", default=1, type=int,
         help="number of predictions per sample to estimate model's confidence"
     )
     predict_sample.add_argument(

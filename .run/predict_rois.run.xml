@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="predict_rois ../pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5 ../examples/single/single.tif ../examples/single/results/Detection3D.mat --num_rois 10 --min_intensity 200 --minimum_distance 0.5 --wavelength 0.51 --lateral_voxel_size 0.108 --axial_voxel_size 0.1 --window_size 64 --prediction_threshold 0. --freq_strength_threshold 0.01 --sign_threshold 0.9 --num_predictions 10 --batch_size 256 --prev None --plot --ignore_mode 44 --ignore_mode 45 --ignore_mode 54" />
+    <option name="PARAMETERS" value="predict_rois ../pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z15/spatial_planes.h5 ../examples/single/single.tif ../examples/single/results/Detection3D.mat --num_rois 10 --min_intensity 200 --minimum_distance 0.5 --wavelength 0.51 --lateral_voxel_size 0.108 --axial_voxel_size 0.1 --window_size 64 --prediction_threshold 0. --freq_strength_threshold 0.01 --sign_threshold 0.9 --num_predictions 1 --batch_size 256 --prev None --plot" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
