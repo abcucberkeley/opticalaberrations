@@ -203,6 +203,7 @@ def bootstrap_predict(
     verbose: bool = True,
     plot: Any = None,
     desc: str = 'MiniBatch-probabilistic-predictions',
+    cpu_workers: int = 1
 ):
     """
     Average predictions and compute stdev
@@ -253,7 +254,7 @@ def bootstrap_predict(
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
         )
-        model_inputs = utils.multiprocess(generate_fourier_embeddings, inputs, cores=-1)
+        model_inputs = utils.multiprocess(generate_fourier_embeddings, inputs, cores=cpu_workers)
         model_inputs = np.stack(model_inputs, axis=0)
     else:
         # pass raw PSFs to the model

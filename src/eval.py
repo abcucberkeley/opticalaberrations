@@ -128,12 +128,13 @@ def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
     waves = np.arange(1e-5, .75, step=.05)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
 
-    for i in trange(5, modelspecs.n_modes):
+    for i in range(5, modelspecs.n_modes):
         savepath = outdir / f"m{i}"
 
         classes = aberrations.copy()
         classes[:, i] = waves
-        preds = [eval_mode(c, modelpath=model, eval_sign=eval_sign) for c in classes]
+        job = partial(eval_mode, modelpath=model, eval_sign=eval_sign)
+        preds = utils.multiprocess(job, list(classes), cores=-1)
         df = pd.DataFrame([]).append(preds, ignore_index=True)
 
         bins = np.arange(0, 10.25, .25)
