@@ -97,7 +97,7 @@ def eval_mode(
                 snr=psnr,
             )
             for i in range(n_samples)
-        ])
+        ])[..., np.newaxis]
         ys = np.array([phi for i in inputs])
 
         residuals, ys, preds = backend.evaluate(
@@ -133,9 +133,7 @@ def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
 
         classes = aberrations.copy()
         classes[:, i] = waves
-
-        job = partial(eval_mode, modelpath=model, eval_sign=eval_sign)
-        preds = utils.multiprocess(job, list(classes), cores=-1)
+        preds = [eval_mode(c, modelpath=model, eval_sign=eval_sign) for c in classes]
         df = pd.DataFrame([]).append(preds, ignore_index=True)
 
         bins = np.arange(0, 10.25, .25)

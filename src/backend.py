@@ -769,6 +769,8 @@ def evaluate(
     if len(ys.shape) == 1:
         ys = ys[np.newaxis, :]
 
+    no_phase = True if model.input_shape[1] == 3 else False
+
     if eval_sign == 'positive_only':
         ys = np.abs(ys)
 
@@ -778,7 +780,7 @@ def evaluate(
             psfgen=gen,
             batch_size=batch_size,
             n_samples=1,
-            no_phase=True,
+            no_phase=no_phase,
             threshold=threshold,
             plot=plot
         )
@@ -793,7 +795,7 @@ def evaluate(
             model=model,
             inputs=inputs,
             psfgen=gen,
-            no_phase=True,
+            no_phase=no_phase,
             batch_size=batch_size,
             n_samples=1,
             threshold=threshold,
@@ -852,7 +854,7 @@ def evaluate(
             model=model,
             inputs=followup_inputs,
             psfgen=gen,
-            no_phase=True,
+            no_phase=no_phase,
             batch_size=batch_size,
             n_samples=1,
             threshold=threshold,
@@ -877,7 +879,7 @@ def evaluate(
             psfgen=gen,
             batch_size=batch_size,
             n_samples=1,
-            no_phase=False,
+            no_phase=no_phase,
             threshold=threshold,
             plot=plot
         )
