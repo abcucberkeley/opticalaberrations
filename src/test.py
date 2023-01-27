@@ -42,7 +42,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--batch_size", default=512, type=int, help='number of samples per batch'
+        "--batch_size", default=1024, type=int, help='number of samples per batch'
     )
 
     parser.add_argument(
