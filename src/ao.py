@@ -309,6 +309,15 @@ def parse_args(args):
         help='IDs [e.g., "z0-y0-x0"] for tiles you wish to ignore'
     )
 
+    eval_mode = subparsers.add_parser("eval_mode")
+    eval_mode.add_argument("model_path", type=Path, help="path to pretrained tensorflow model (.h5)")
+    eval_mode.add_argument("input_path", type=Path, help="path to input file (.tif)")
+    eval_mode.add_argument("flat_path", type=Path, help="path to the flat DM acts file (.csv)")
+    eval_mode.add_argument("gt_path", type=Path, help="path to ground truth file (.csv)")
+    eval_mode.add_argument("prediction_path", type=Path, help="path to model predictions (.csv)")
+    eval_mode.add_argument("--prediction_postfix", type=str, default='sample_predictions_zernike_coefficients.csv')
+    eval_mode.add_argument("--gt_postfix", type=str, default='ground_truth_zernike_coefficients.csv')
+
     eval_dataset = subparsers.add_parser("eval_dataset")
     eval_dataset.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
@@ -445,6 +454,16 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             model=args.model,
             datadir=args.datadir,
             flat=args.flat,
+        )
+    elif args.func == 'eval_mode':
+        experimental.eval_mode(
+            model_path=args.model_path,
+            input_path=args.input_path,
+            flat_path=args.flat_path,
+            prediction_path=args.prediction_path,
+            gt_path=args.gt_path,
+            postfix=args.prediction_postfix,
+            gt_postfix=args.gt_postfix,
         )
     else:
         logger.error(f"Error")
