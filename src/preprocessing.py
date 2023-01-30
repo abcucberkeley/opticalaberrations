@@ -198,6 +198,9 @@ def prep_sample(
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
+    if isinstance(background_mode_offset, tuple):
+        background_mode_offset = np.max(background_mode_offset)
+
     if len(np.squeeze(sample).shape) == 4:
         samples = []
         for i in range(sample.shape[0]):
@@ -218,14 +221,14 @@ def prep_sample(
                     voxel_size=model_voxel_size,
                     debug=debug/f"{i}_preprocessing" if debug is not None else None
                 )
-            s = s.transpose(0, 2, 1)
+            # s = s.transpose(0, 2, 1)
             samples.append(s)
 
         return np.array(samples)
 
     else:
         if remove_background:
-            mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
+            mode = int(st.mode(sample, axis=None).mode[0])
             sample -= mode + background_mode_offset
             sample[sample < 0] = 0
 
@@ -240,7 +243,7 @@ def prep_sample(
                 debug=debug
             )
 
-        sample = sample.transpose(0, 2, 1)
+        # sample = sample.transpose(0, 2, 1)
         return sample
 
 

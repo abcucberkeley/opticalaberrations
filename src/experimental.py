@@ -1056,7 +1056,7 @@ def eval_dataset(
         logger.info(f"Looking for: {prefix}")
 
         try:
-            gt_path = list(datadir.rglob(f'{prefix}_ground_truth_zernike_coefficients.csv'))[0]
+            gt_path = list(datadir.rglob(f'{prefix}_{gt_postfix}'))[0]
             logger.info(f"GT: {gt_path.name}")
         except IndexError:
             logger.warning(f'GT not found for: {file.name}')
