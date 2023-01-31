@@ -364,7 +364,7 @@ def eval_rotation(
 
                 # exclude points near discontinuities (-90, +90, 450,..) based upon fit
                 data_mask = np.ones(xdata.shape[0], dtype=bool)
-                data_mask[(init_preds[:, mode.index_ansi] < rho/5) * (rho > threshold)] = 0.
+                data_mask[np.abs(init_preds[:, mode.index_ansi] / rho) < np.cos(np.radians(70)) * (rho > threshold)] = 0.
                 data_mask[rhos < rho/2] = 0.    # exclude if rho is unusually small (which can lead to small, but dominant primary mode near discontinuity)
                 xdata = xdata[data_mask]
                 ydata = ydata[data_mask]
@@ -874,7 +874,7 @@ def evaluate(
         )
 
     else:
-        preds, stdev = bootstrap_predict(
+        preds, stdev = predict_rotation(
             model,
             inputs,
             psfgen=gen,

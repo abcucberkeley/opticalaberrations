@@ -71,12 +71,13 @@ def zernikies_to_actuators(
     dm_calibration = pd.read_csv(dm_calibration, header=None).values
 
     if dm_calibration.shape[-1] > coefficients.size:
-        dm_calibration = dm_calibration[:, :coefficients.size]
+        dm_calibration = dm_calibration[:, :coefficients.size]  # if we have <55 coefficients, crop the calibration matrix columns
     else:
-        coefficients = coefficients[:dm_calibration.shape[-1]]
+        coefficients = coefficients[:dm_calibration.shape[-1]]  # if we have >55 coefficients, crop the coefficients array
 
-    coefficients = np.expand_dims(coefficients, axis=-1)
-    offset = np.dot(dm_calibration, coefficients)[:, 0]
+    #coefficients = np.expand_dims(coefficients, axis=-1)
+    #offset = np.dot(dm_calibration, coefficients)[:, 0]
+    offset = np.dot(dm_calibration, coefficients)
     return dm_state - (offset * scalar)
 
 
@@ -455,16 +456,6 @@ def predict_sample(
             plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
         )
 
-    if dm_calibration is not None:
-        dm_state = load_dm(dm_state)
-        estimate_and_save_new_dm(
-            savepath=Path(f"{img.with_suffix('')}_sample_predictions_corrected_actuators.csv"),
-            coefficients=p,
-            dm_calibration=dm_calibration,
-            dm_state=dm_state,
-            dm_damping_scalar=dm_damping_scalar
-        )
-
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
     std = Wavefront(std, order='ansi', lam_detection=wavelength)
 
@@ -475,6 +466,16 @@ def predict_sample(
     coefficients = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
     coefficients.index.name = 'ansi'
     coefficients.to_csv(f"{img.with_suffix('')}_sample_predictions_zernike_coefficients.csv")
+
+    if dm_calibration is not None:
+        dm_state = load_dm(dm_state)
+        estimate_and_save_new_dm(
+            savepath=Path(f"{img.with_suffix('')}_sample_predictions_corrected_actuators.csv"),
+            coefficients=coefficients['amplitude'].values,
+            dm_calibration=dm_calibration,
+            dm_state=dm_state,
+            dm_damping_scalar=dm_damping_scalar
+        )
 
     psf = psfgen.single_psf(phi=p, normed=True, noise=False)
     imsave(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
@@ -976,7 +977,7 @@ def eval_mode(
     corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True))
 
     rfilter = f"{str(gt_path.name).replace(gt_postfix, '')}"
-    dm_path = Path(str(list(input_path.parent.glob(f"{rfilter}*_JSONsettings.json"))[0]))
+    dm_path = Path(str(list(input_path.parent.glob(f"{rfilter}*JSONsettings.json"))[0]))
     dm_wavefront = Path(gt_path.parent/f"{rfilter}_dm_wavefront.svg")
 
     plot_dm_actuators(

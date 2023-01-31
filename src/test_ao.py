@@ -20,7 +20,7 @@ image = repo/f'examples/{n}/{n}.tif'                   # Test image file
 pois = repo/f'examples/{n}/results/Detection3D.mat'
 
 dm_calibration = repo/'examples/Zernike_Korra_Bax273.csv'           # Deformable Mirror offsets that produce the Zernike functions
-model = repo/'pretrained_models/z60_modes/lattice_yumb/x108-y108-z200/opticaltransformer.h5'
+model = repo/'pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z15/phase.h5'
 psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'    # excitation PSF being used.  This is sythesized.
 
 
@@ -42,7 +42,7 @@ window_size = 64
 batch_size = 256
 plot = True
 estimate_sign_with_decon = False
-ignore_modes = [44, 45, 54]
+ignore_modes = []
 
 # extra `aggregate_predictions` flags
 majority_threshold = .5
