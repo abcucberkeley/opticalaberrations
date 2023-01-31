@@ -79,6 +79,7 @@ def main(args=None):
         vis.plot_fov()
 
     elif args.cmd == "embeddings":
+        vis.plot_embedding_pyramid()
         vis.plot_embeddings()
 
     elif args.cmd == "rotations":

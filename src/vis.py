@@ -95,6 +95,154 @@ def plot_zernike_pyramid(amp=.1, wavelength=.510):
 
 
 @profile
+def plot_embedding_pyramid(
+        res=64,
+        n_modes=60,
+        wavelength=.510,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.2,
+        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        datadir='../data/embeddings',
+        embedding_option='principle_planes',
+):
+    def formatter(x, pos):
+        val_str = '{:.1g}'.format(x)
+        if np.abs(x) > 0 and np.abs(x) < 1:
+            return val_str.replace("0", "", 1)
+        else:
+            return val_str
+
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12,
+    })
+
+    vmin, vmax, vcenter, step = 0, 2, 1, .1
+
+    alpha_cmap = np.vstack((
+        plt.get_cmap('GnBu_r', 256)(
+            np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+        ),
+        [1, 1, 1, 1],
+        plt.get_cmap('YlOrRd', 256)(
+            np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+        )
+    ))
+    alpha_cmap = mcolors.ListedColormap(alpha_cmap)
+
+    phi_cmap = np.vstack((
+        plt.get_cmap('GnBu_r', 256)(
+            np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+        ),
+        [1, 1, 1, 1],
+        plt.get_cmap('OrRd', 256)(
+            np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+        )
+    ))
+    phi_cmap = mcolors.ListedColormap(phi_cmap)
+
+    gen = SyntheticPSF(
+        psf_type=psf_type,
+        amplitude_ranges=(-1, 1),
+        n_modes=n_modes,
+        lam_detection=wavelength,
+        psf_shape=3 * [res],
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
+        snr=1000,
+        cpu_workers=-1,
+    )
+    waves = np.arange(-.3, .35, step=.05).round(2)
+
+    for nth_order in range(2, 11):
+        for amp in tqdm(waves):
+            title = f"{int(np.sign(amp))}x0p{str(int(np.abs(amp*100).round(0)))}"
+
+            embeddings = {}
+            for n in range(nth_order + 1):
+                for i, m in enumerate(range(-nth_order, nth_order + 1)):
+                    if (n == 0 and m == 0) or (n > 0):
+                        try:
+                            z = Zernike((n, m))
+                            wavefront = Wavefront({z.index_ansi: amp}, lam_detection=wavelength)
+
+                            psf = gen.single_psf(
+                                wavefront,
+                                normed=True,
+                                noise=False,
+                                meta=False,
+                            )
+
+                            emb = gen.embedding(
+                                psf=psf,
+                                no_phase=False,
+                                remove_interference=False,
+                                embedding_option=embedding_option,
+                            )
+                            embeddings[z] = emb
+                        except ValueError:
+                            continue
+
+            for plane in trange(6):
+                outdir = Path(f'{datadir}/{embedding_option}/{nth_order}th/POI_{plane}')
+                outdir.mkdir(exist_ok=True, parents=True)
+
+                fig = plt.figure(figsize=(3 * nth_order, 2 * nth_order))
+                gs = fig.add_gridspec(nth_order + 1, 2 * nth_order + 1)
+
+                for n in range(nth_order + 1):
+                    for i, m in enumerate(range(-nth_order, nth_order + 1)):
+                        ax = fig.add_subplot(gs[n, i])
+                        ax.axis('off')
+
+                        if (n == 0 and m == 0) or (n > 0):
+                            try:
+                                z = Zernike((n, m))
+                                w = Wavefront({z.index_ansi: amp}, lam_detection=wavelength).wave(size=100)
+                                abr = round((np.nanmax(w) - np.nanmin(w)) * np.sign(amp), 1)
+
+                                if n == 0 and m == 0:
+                                    mode = f"$\lambda$ = {wavelength} $\mu$m\n" \
+                                           f"Amplitude={amp} $\mu$m RMS\n\n" \
+                                           f"{abr} $\lambda$\n" \
+                                           f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$"
+                                else:
+                                    mode = f"{abr} $\lambda$\n" \
+                                           f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$"
+
+                                plt.figure(fig.number)
+                                mat = ax.imshow(
+                                    embeddings[z][plane],
+                                    cmap=alpha_cmap if plane < 3 else phi_cmap,
+                                    vmin=vmin if plane < 3 else -.5,
+                                    vmax=vmax if plane < 3 else .5,
+                                )
+
+                                cax = inset_axes(ax, width="100%", height="10%", loc='lower center', borderpad=-1)
+                                cbar = plt.colorbar(mat, cax=cax, extend='both', format=formatter, orientation='horizontal')
+                                cbar.ax.xaxis.set_ticks_position('bottom')
+                                cbar.ax.xaxis.set_label_position('top')
+                                cbar.ax.set_xticks([
+                                    vmin if plane < 3 else -.5,
+                                    vcenter if plane < 3 else 0,
+                                    vmax if plane < 3 else .5,
+                                ])
+                                ax.set_title(mode)
+
+                            except ValueError:
+                                continue
+
+                plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
+                plt.savefig(f"{outdir}/{title}.png", bbox_inches='tight', pad_inches=.25)
+
+
+@profile
 def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     plt.rcParams.update({
         'font.size': 10,
@@ -379,7 +527,8 @@ def plot_embeddings(
         savepath='../data/embeddings',
         embedding_option='spatial_planes',
 ):
-    savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
+
+    savepath = f"{savepath}/{embedding_option}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
     plt.rcParams.update({
         'font.size': 8,
         'axes.titlesize': 10,
@@ -411,7 +560,7 @@ def plot_embeddings(
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
-        snr=30,
+        snr=1000,
         cpu_workers=-1,
     )
 
@@ -425,7 +574,7 @@ def plot_embeddings(
             psf, amps, snr, maxcounts = gen.single_psf(
                 phi=phi,
                 normed=True,
-                noise=True,
+                noise=False,
                 meta=True,
             )
 
@@ -438,6 +587,7 @@ def plot_embeddings(
             emb = gen.embedding(
                 psf=psf,
                 no_phase=False,
+                remove_interference=False,
                 embedding_option=embedding_option,
                 plot=f"{outdir}/{str(abr).replace('.', 'p')}",
             )
@@ -491,7 +641,7 @@ def plot_rotations(
         embedding_option='spatial_planes',
 ):
 
-    savepath = f"{savepath}/{int(wavelength * 1000)}/x{int(x_voxel_size * 1000)}-y{int(y_voxel_size * 1000)}-z{int(z_voxel_size * 1000)}"
+    savepath = f"{savepath}/{embedding_option}/{int(wavelength * 1000)}/x{int(x_voxel_size * 1000)}-y{int(y_voxel_size * 1000)}-z{int(z_voxel_size * 1000)}"
     plt.rcParams.update({
         'font.size': 8,
         'axes.titlesize': 10,
@@ -522,7 +672,7 @@ def plot_rotations(
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
-        snr=30,
+        snr=1000,
         cpu_workers=-1,
     )
 
@@ -549,13 +699,14 @@ def plot_rotations(
             psf, amps, snr, maxcounts = gen.single_psf(
                 phi=v,
                 normed=True,
-                noise=True,
+                noise=False,
                 meta=True,
             )
 
             emb = gen.embedding(
                 psf=psf,
                 no_phase=False,
+                remove_interference=False,
                 embedding_option=embedding_option,
                 plot=f"{outdir}/amp{str(amp).replace('.', 'p')}_deg{str(deg)}",
             )
@@ -626,7 +777,7 @@ def plot_shapes_embeddings(
         img = rg.sphere(shape=image_size, radius=radius, position=position)
         return img.astype(np.float)
 
-    savepath = f"{savepath}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
+    savepath = f"{savepath}/{embedding_option}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
     plt.rcParams.update({
         'font.size': 8,
         'axes.titlesize': 10,
@@ -658,7 +809,7 @@ def plot_shapes_embeddings(
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
-        snr=30,
+        snr=1000,
         cpu_workers=-1,
     )
 
@@ -684,7 +835,7 @@ def plot_shapes_embeddings(
                 psf, amps, snr, maxcounts = gen.single_psf(
                     phi=phi,
                     normed=True,
-                    noise=True,
+                    noise=False,
                     meta=True,
                 )
 
@@ -702,6 +853,7 @@ def plot_shapes_embeddings(
                 emb = gen.embedding(
                     inputs,
                     no_phase=False,
+                    remove_interference=False,
                     embedding_option=embedding_option,
                     plot=f"{outdir}/{str(abr).replace('.', 'p')}",
                 )
