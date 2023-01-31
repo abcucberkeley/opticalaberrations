@@ -914,7 +914,8 @@ def eval_mode(
     normalize: bool = True,
     remove_background: bool = True,
     postfix: str = '',
-    gt_postfix: str = ''
+    gt_postfix: str = '',
+    plot_actuators: bool = False
 ):
     save_postfix = 'pr' if postfix.startswith('matlab') else 'ml'
 
@@ -976,15 +977,16 @@ def eval_mode(
     gt_psf = prep(gen.single_psf(y_wave, normed=False, noise=True))
     corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True))
 
-    rfilter = f"{str(gt_path.name).replace(gt_postfix, '')}"
-    dm_path = Path(str(list(input_path.parent.glob(f"{rfilter}*JSONsettings.json"))[0]))
-    dm_wavefront = Path(gt_path.parent/f"{rfilter}_dm_wavefront.svg")
+    if plot_actuators:
+        rfilter = f"{str(gt_path.name).replace(gt_postfix, '')}"
+        dm_path = Path(str(list(input_path.parent.glob(f"{rfilter}*JSONsettings.json"))[0]))
+        dm_wavefront = Path(gt_path.parent/f"{rfilter}_dm_wavefront.svg")
 
-    plot_dm_actuators(
-        dm_path=dm_path,
-        flat_path=flat_path,
-        save_path=dm_wavefront
-    )
+        plot_dm_actuators(
+            dm_path=dm_path,
+            flat_path=flat_path,
+            save_path=dm_wavefront
+        )
 
     plt.style.use("default")
     vis.diagnostic_assessment(

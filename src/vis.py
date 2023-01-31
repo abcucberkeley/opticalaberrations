@@ -104,7 +104,7 @@ def plot_embedding_pyramid(
         z_voxel_size=.2,
         psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         datadir='../data/embeddings',
-        embedding_option='principle_planes',
+        embedding_option='spatial_planes',
 ):
     def formatter(x, pos):
         val_str = '{:.1g}'.format(x)
