@@ -14,12 +14,13 @@ import multiprocessing as mp
 from typing import Iterable
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from skimage.filters import sobel, scharr
 from skimage.restoration import unwrap_phase
+from skimage.feature import peak_local_max, match_template
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
 from tifffile import TiffFile
-from skimage.feature import peak_local_max, match_template
 from skspatial.objects import Plane, Points
 from scipy import stats as st
 from scipy import ndimage
@@ -893,6 +894,7 @@ class SyntheticPSF:
             peaks: Any = None,
             remove_interference: bool = True,
             embedding_option: Any = None,
+            edge_filter: bool = False,
     ):
         """
         Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -912,6 +914,7 @@ class SyntheticPSF:
             peaks: masked array of the peaks of interest to compute the interference pattern between objects
             log10: optional toggle to take log10 of the FFT
             freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
+            edge_filter: a toggle for running an edge filter pass on the alpha embeddings
             embedding_option: type of embedding to use.
                 Capitalizing on the radial symmetry of the FFT,
                 we have a few options to minimize the size of the embedding.
@@ -936,6 +939,10 @@ class SyntheticPSF:
                 embedding_option=self.embedding_option if embedding_option is None else embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
+            if edge_filter:
+                emb = scharr(emb)
+                emb /= np.nanpercentile(emb, 90)
+                emb[emb > 1] = 1
         else:
             alpha = self.compute_emb(
                 otf,
@@ -947,6 +954,11 @@ class SyntheticPSF:
                 embedding_option=self.embedding_option if embedding_option is None else embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
+
+            if edge_filter:
+                alpha = scharr(alpha)
+                alpha /= np.nanpercentile(alpha, 90)
+                alpha[alpha > 1] = 1
 
             if remove_interference:
                 otf = self.remove_interference_pattern(psf, otf, plot=plot, peaks=peaks)

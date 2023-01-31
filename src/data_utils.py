@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 import tensorflow as tf
+from skimage.filters import sobel, scharr
 import ujson
 
 from wavefront import Wavefront
@@ -39,7 +40,7 @@ def get_image(path):
 
 
 @profile
-def get_sample(path, no_phase=False, metadata=False):
+def get_sample(path, no_phase=False, metadata=False, edge_filter=False):
     try:
         if isinstance(path, tf.Tensor):
             path = Path(str(path.numpy(), "utf-8"))
@@ -73,6 +74,13 @@ def get_sample(path, no_phase=False, metadata=False):
                             amps[twin.index_ansi] *= -1
                     else:
                         amps[i] = np.abs(a)
+
+        if edge_filter:
+            alpha = img[:3]
+            alpha = scharr(alpha)
+            alpha /= np.nanpercentile(alpha, 90)
+            alpha[alpha > 1] = 1
+            img[:3] = alpha
 
         if metadata:
             return img, amps, snr, peak2peak, npoints
