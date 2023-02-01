@@ -1092,7 +1092,7 @@ def dm_matrix(
     postfix: str = 'sample_predictions_zernike_coefficients.csv'
 ):
 
-    data = {}
+    data = np.identity(15)
     for file in sorted(datadir.glob('ansi_z*.tif')):
         if 'CamB' in str(file):
             continue
@@ -1136,14 +1136,18 @@ def dm_matrix(
         except KeyError:
             y = pd.read_csv(gt_path, header=0).iloc[:, -1].values[:len(p)]
 
-        data[mode] = {i: p[i] for i in range(p.shape[0])}
+        magnitude = y[np.argmax(np.abs(y))]
 
-    data = pd.DataFrame.from_dict(data, orient='index')
+        for i in range(p.shape[0]):
+            data[i, int(mode)] = p[i] / magnitude   # normalize by the magnitude of the mode we put on the mirror
+
+        # data = pd.DataFrame.from_dict(data, orient='index')
 
     fig, ax = plt.subplots(figsize=(10, 10))
-    ax = sns.heatmap(data, ax=ax, annot=True, fmt=".2f", vmin=-.15, vmax=.15, cmap='Spectral_r')
-    ax.set(xlabel="", ylabel="")
+    ax = sns.heatmap(data, ax=ax, annot=True, fmt=".2f", vmin=-1, vmax=1, cmap='coolwarm', square=True, cbar_kws={'label': 'Ratio of ML prediction to GT'})
+    ax.set(ylabel="ML saw these modes", xlabel="DM applied this mode",)
     ax.xaxis.tick_top()
+    ax.xaxis.set_label_position('top')
 
     for t in ax.texts:
         if abs(float(t.get_text())) >= 0.01:
@@ -1151,4 +1155,8 @@ def dm_matrix(
         else:
             t.set_text("")
 
-    plt.savefig(f'{datadir}/dm_matrix.pdf', bbox_inches='tight', pad_inches=.25)
+    ax.set_title(f'DM magnitude = {magnitude} um RMS {chr(10)} {datadir.parts[-2]}')
+
+    output_file = Path(f'{datadir}/../{datadir.parts[-1]}_dm_matrix.png')
+    plt.savefig(output_file, bbox_inches='tight', pad_inches=.25)
+    logger.info(f"Saved result to: {output_file}")
