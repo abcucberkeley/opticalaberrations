@@ -323,8 +323,15 @@ def parse_args(args):
     eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
     eval_dataset.add_argument("flat", type=Path, help="path to the flat DM acts file")
 
-    dm_matrix = subparsers.add_parser("dm_matrix")
-    dm_matrix.add_argument("datadir", type=Path, help="path to dataset directory")
+    eval_dm = subparsers.add_parser("eval_dm")
+    eval_dm.add_argument("datadir", type=Path, help="path to dataset directory")
+
+    calibrate_dm = subparsers.add_parser("calibrate_dm")
+    calibrate_dm.add_argument("datadir", type=Path, help="path to DM eval directory")
+    calibrate_dm.add_argument(
+        "dm_calibration", type=Path,
+        help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
+    )
 
     return parser.parse_args(args)
 
@@ -468,9 +475,14 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             postfix=args.prediction_postfix,
             gt_postfix=args.gt_postfix,
         )
-    elif args.func == 'dm_matrix':
-        experimental.dm_matrix(
+    elif args.func == 'eval_dm':
+        experimental.eval_dm(
             datadir=args.datadir,
+        )
+    elif args.func == 'calibrate_dm':
+        experimental.calibrate_dm(
+            datadir=args.datadir,
+            dm_calibration=args.dm_calibration,
         )
     else:
         logger.error(f"Error")

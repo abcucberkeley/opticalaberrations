@@ -1086,7 +1086,7 @@ def eval_dataset(
 
 
 @profile
-def dm_matrix(
+def eval_dm(
     datadir: Path,
     gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
     postfix: str = 'sample_predictions_zernike_coefficients.csv'
@@ -1141,10 +1141,12 @@ def dm_matrix(
         for i in range(p.shape[0]):
             data[i, int(mode)] = p[i] / magnitude   # normalize by the magnitude of the mode we put on the mirror
 
-        # data = pd.DataFrame.from_dict(data, orient='index')
-
+    df = pd.DataFrame(data)
     fig, ax = plt.subplots(figsize=(10, 10))
-    ax = sns.heatmap(data, ax=ax, annot=True, fmt=".2f", vmin=-1, vmax=1, cmap='coolwarm', square=True, cbar_kws={'label': 'Ratio of ML prediction to GT'})
+    ax = sns.heatmap(
+        data, ax=ax, annot=True, fmt=".2f", vmin=-1, vmax=1,
+        cmap='coolwarm', square=True, cbar_kws={'label': 'Ratio of ML prediction to GT', 'shrink': .8}
+    )
     ax.set(ylabel="ML saw these modes", xlabel="DM applied this mode",)
     ax.xaxis.tick_top()
     ax.xaxis.set_label_position('top')
@@ -1157,6 +1159,42 @@ def dm_matrix(
 
     ax.set_title(f'DM magnitude = {magnitude} um RMS {chr(10)} {datadir.parts[-2]}')
 
-    output_file = Path(f'{datadir}/../{datadir.parts[-1]}_dm_matrix.png')
-    plt.savefig(output_file, bbox_inches='tight', pad_inches=.25)
+    output_file = Path(f'{datadir}/../{datadir.parts[-1]}_dm_matrix')
+    df.to_csv(f"{output_file}.csv")
+    plt.savefig(f"{output_file}.png", bbox_inches='tight', pad_inches=.25)
+    logger.info(f"Saved result to: {output_file}")
+
+
+def calibrate_dm(datadir, dm_calibration):
+    dataframes = []
+    for file in sorted(datadir.glob('*dm_matrix.csv')):
+        df = pd.read_csv(file, header=0, index_col=0)
+        dataframes.append(df)
+
+    df = pd.concat(dataframes)
+    avg = df.groupby(df.index).mean()
+    dm = pd.read_csv(dm_calibration, header=None)
+
+    scalers = np.identity(dm.shape[1])
+    scalers[np.diag_indices_from(avg)] *= np.diag(avg)
+    calibration = np.dot(dm, scalers)
+    calibration = pd.DataFrame(calibration)
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax = sns.heatmap(avg, ax=ax, annot=True, fmt=".2f", vmin=-1, vmax=1, cmap='coolwarm', square=True,
+                     cbar_kws={'label': 'Ratio of ML prediction to GT', 'shrink': .8})
+    ax.set(ylabel="ML saw these modes", xlabel="DM applied this mode", )
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position('top')
+
+    for t in ax.texts:
+        if abs(float(t.get_text())) >= 0.01:
+            t.set_text(t.get_text())
+        else:
+            t.set_text("")
+
+    output_file = Path(f"{datadir}/calibration")
+    plt.savefig(f"{output_file}.png", bbox_inches='tight', pad_inches=.25)
+
+    calibration.to_csv(f"{output_file}.csv", header=False, index=False)
     logger.info(f"Saved result to: {output_file}")
