@@ -188,10 +188,9 @@ def prep_sample(
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
 
-    Background subtraction (mode of voxels below 99th percentile + background_mode_offset)
-    Normalization to 0-1
-    Resample to model_voxel_size
-    Transpose
+        -Background subtraction
+        -Normalization to 0-1
+        -Resample to model_voxel_size
 
     Args:
         sample (np.array): Input 3D array (or series of 3D arrays)
