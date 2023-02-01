@@ -1175,7 +1175,7 @@ def calibrate_dm(datadir, dm_calibration):
     dm = pd.read_csv(dm_calibration, header=None)
 
     scalers = np.identity(dm.shape[1])
-    scalers[np.diag_indices_from(avg)] *= np.diag(avg)
+    scalers[np.diag_indices_from(avg)] /= np.diag(avg)
     calibration = np.dot(dm, scalers)
     calibration = pd.DataFrame(calibration)
 
@@ -1194,6 +1194,14 @@ def calibrate_dm(datadir, dm_calibration):
 
     output_file = Path(f"{datadir}/calibration")
     plt.savefig(f"{output_file}.png", bbox_inches='tight', pad_inches=.25)
+
+    dm = calibration / dm
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax = sns.heatmap(dm, ax=ax, vmin=0, vmax=2, cmap='coolwarm', square=True, cbar_kws={'shrink': .8})
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position('top')
+    ax.set(ylabel="Actuators", xlabel="Zernike modes", )
+    plt.savefig(f"{output_file}_diff.png", bbox_inches='tight', pad_inches=.25)
 
     calibration.to_csv(f"{output_file}.csv", header=False, index=False)
     logger.info(f"Saved result to: {output_file}")

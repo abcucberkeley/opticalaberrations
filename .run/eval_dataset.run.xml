@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="eval_dataset ../pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z15/phase.h5 $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230131/empri_PSF/m0p15/ $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230131/empri_PSF/ALPAO_Flatten.csv" />
+    <option name="PARAMETERS" value="eval_dataset ../pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z15/phase.h5 $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230201/empirical/m0p1_Aang_cal/ $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230201/empirical/ALPAO_Flatten.csv" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
