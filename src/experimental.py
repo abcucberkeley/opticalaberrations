@@ -966,7 +966,6 @@ def eval_mode(
     prep = partial(
         preprocessing.prep_sample,
         normalize=normalize,
-        background_mode_offset=gen.sigma_background_noise,
         remove_background=remove_background,
         sample_voxel_size=gen.voxel_size,
         model_voxel_size=gen.voxel_size,

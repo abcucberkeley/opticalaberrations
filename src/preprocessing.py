@@ -169,6 +169,14 @@ def resize(
     return resized_vol
 
 
+def remove_background_noise(image, read_noise_bias: float = 5):
+    """ A simple function to remove background noise from a given image """
+    mode = int(st.mode(image, axis=None).mode[0])
+    image -= mode + read_noise_bias
+    image[image < 0] = 0
+    return image
+
+
 @profile
 def prep_sample(
     sample: np.array,
@@ -177,7 +185,6 @@ def prep_sample(
     debug: Any = None,
     remove_background: bool = True,
     normalize: bool = True,
-    background_mode_offset: int = 0
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
 
@@ -193,23 +200,17 @@ def prep_sample(
         debug (Any, optional): plot or save .svg's. Defaults to None.
         remove_background (bool, optional): Defaults to True.
         normalize (bool, optional): Defaults to True.
-        background_mode_offset (int, optional): >0 gives more aggressive background subtraction. Defaults to 0.
 
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
-    if isinstance(background_mode_offset, tuple):
-        background_mode_offset = np.max(background_mode_offset)
-
     if len(np.squeeze(sample).shape) == 4:
         samples = []
         for i in range(sample.shape[0]):
             s = sample[i]
 
             if remove_background:
-                mode = int(st.mode(s[s < np.quantile(s, .99)], axis=None).mode[0])
-                s -= mode + background_mode_offset
-                s[s < 0] = 0
+                s = remove_background_noise(s)
 
             if normalize:
                 s /= np.nanmax(s)
@@ -228,9 +229,7 @@ def prep_sample(
 
     else:
         if remove_background:
-            mode = int(st.mode(sample, axis=None).mode[0])
-            sample -= mode + background_mode_offset
-            sample[sample < 0] = 0
+            sample = remove_background_noise(sample)
 
         if normalize:
             sample /= np.nanmax(sample)

@@ -18,7 +18,7 @@ import numpy as np
 import raster_geometry as rg
 
 import cli
-from preprocessing import resize_with_crop_or_pad
+from preprocessing import resize_with_crop_or_pad, remove_background_noise
 from utils import peak2valley, fftconvolution, multiprocess
 from synthetic import SyntheticPSF
 
@@ -95,6 +95,7 @@ def sim(
     emb: bool = True,
     noise: bool = True,
     normalize: bool = True,
+    remove_background: bool = True,
     random_crop: Any = None,
     radius: float = .4,
     embedding_option: list = (),
@@ -153,6 +154,9 @@ def sim(
     if random_crop is not None:
         crop = int(np.random.uniform(low=random_crop, high=gen.psf_shape[0]+1))
         noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[crop]*3)
+
+    if remove_background:
+        noisy_img = remove_background_noise(noisy_img)
 
     if normalize:
         noisy_img /= np.max(noisy_img)
