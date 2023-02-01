@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="zernikes" type="PythonConfigurationType" factoryName="Python" folderName="utils">
+  <configuration default="false" name="embeddings_pyramid" type="PythonConfigurationType" factoryName="Python" folderName="utils">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/data.py" />
-    <option name="PARAMETERS" value="zernikes_pyramid" />
+    <option name="PARAMETERS" value="embeddings_pyramid" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

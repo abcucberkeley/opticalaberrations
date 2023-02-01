@@ -505,6 +505,7 @@ def predict_rotation(
         desc: test to display for the progressbar
         plot: optional toggle to visualize embeddings
     """
+    logger.info(f"Generating embeddings")
     generate_fourier_embeddings = partial(
         psfgen.embedding,
         plot=plot,

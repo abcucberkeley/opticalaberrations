@@ -323,6 +323,9 @@ def parse_args(args):
     eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
     eval_dataset.add_argument("flat", type=Path, help="path to the flat DM acts file")
 
+    dm_matrix = subparsers.add_parser("dm_matrix")
+    dm_matrix.add_argument("datadir", type=Path, help="path to dataset directory")
+
     return parser.parse_args(args)
 
 
@@ -464,6 +467,10 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             gt_path=args.gt_path,
             postfix=args.prediction_postfix,
             gt_postfix=args.gt_postfix,
+        )
+    elif args.func == 'dm_matrix':
+        experimental.dm_matrix(
+            datadir=args.datadir,
         )
     else:
         logger.error(f"Error")

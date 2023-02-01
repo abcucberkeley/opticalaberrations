@@ -893,6 +893,7 @@ class SyntheticPSF:
             freq_strength_threshold: float = 0.01,
             peaks: Any = None,
             remove_interference: bool = True,
+            remove_background: bool = True,
             embedding_option: Any = None,
             edge_filter: bool = False,
     ):
@@ -922,9 +923,10 @@ class SyntheticPSF:
         if psf.ndim == 4:
             psf = np.squeeze(psf)
 
-        mode = st.mode(psf, axis=None).mode[0]
-        psf -= mode + .025
-        psf[psf < 0] = 0
+        if remove_background:
+            mode = st.mode(psf, axis=None).mode[0]
+            psf -= mode + .025
+            psf[psf < 0] = 0
 
         otf = self.fft(psf, padsize=padsize)
 

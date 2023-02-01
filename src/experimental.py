@@ -1083,3 +1083,72 @@ def eval_dataset(
                 if not p.is_alive():
                     jobs.remove(p)
             time.sleep(10)
+
+
+@profile
+def dm_matrix(
+    datadir: Path,
+    gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
+    postfix: str = 'sample_predictions_zernike_coefficients.csv'
+):
+
+    data = {}
+    for file in sorted(datadir.glob('ansi_z*.tif')):
+        if 'CamB' in str(file):
+            continue
+
+        modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
+        modes = [m for m in modes if m]
+        logger.info(modes)
+        logger.info(f"Input: {file.name[:75]}....tif")
+
+        if len(modes) > 1:
+            prefix = f"ansi_"
+            for m in modes:
+                prefix += f"z{m}*"
+        else:
+            mode = modes[0]
+            prefix = f"ansi_z{mode}*"
+
+        logger.info(f"Looking for: {prefix}")
+
+        try:
+            gt_path = list(datadir.rglob(f'{prefix}_{gt_postfix}'))[0]
+            logger.info(f"GT: {gt_path.name}")
+        except IndexError:
+            logger.warning(f'GT not found for: {file.name}')
+            continue
+
+        try:
+            prediction_path = list(datadir.rglob(f'{prefix}_{postfix}'))[0]
+            logger.info(f"Pred: {prediction_path.name}")
+        except IndexError:
+            logger.warning(f'Prediction not found for: {file.name}')
+            prediction_path = None
+
+        try:
+            p = pd.read_csv(prediction_path, header=0)['amplitude'].values
+        except KeyError:
+            p = pd.read_csv(prediction_path, header=None).iloc[:, 0].values
+
+        try:
+            y = pd.read_csv(gt_path, header=0)['amplitude'].values[:len(p)]
+        except KeyError:
+            y = pd.read_csv(gt_path, header=0).iloc[:, -1].values[:len(p)]
+
+        data[mode] = {i: p[i] for i in range(p.shape[0])}
+
+    data = pd.DataFrame.from_dict(data, orient='index')
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax = sns.heatmap(data, ax=ax, annot=True, fmt=".2f", vmin=-.15, vmax=.15, cmap='Spectral_r')
+    ax.set(xlabel="", ylabel="")
+    ax.xaxis.tick_top()
+
+    for t in ax.texts:
+        if abs(float(t.get_text())) >= 0.01:
+            t.set_text(t.get_text())
+        else:
+            t.set_text("")
+
+    plt.savefig(f'{datadir}/dm_matrix.pdf', bbox_inches='tight', pad_inches=.25)

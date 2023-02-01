@@ -564,7 +564,7 @@ def plot_embeddings(
         cpu_workers=-1,
     )
 
-    for mode in trange(5, n_modes):
+    for mode in trange(3, n_modes):
         fig, axes = plt.subplots(6, len(waves)+1, figsize=(12, 6))
 
         for i, amp in enumerate(waves):
@@ -676,7 +676,7 @@ def plot_rotations(
         cpu_workers=-1,
     )
 
-    for mode in trange(5, n_modes):
+    for mode in trange(3, n_modes):
         fig, axes = plt.subplots(6, len(degrees) + 1, figsize=(12, 6))
 
         for i, deg in enumerate(degrees):
@@ -813,7 +813,7 @@ def plot_shapes_embeddings(
         cpu_workers=-1,
     )
 
-    for mode in trange(5, n_modes):
+    for mode in trange(3, n_modes):
         for radius in trange(shapes):
             if radius == 0:
                 reference = np.zeros(gen.psf_shape)

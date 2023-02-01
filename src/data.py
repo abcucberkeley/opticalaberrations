@@ -30,9 +30,10 @@ def parse_args(args):
     subparsers.add_parser("fov")
     subparsers.add_parser("dist")
     subparsers.add_parser("signal")
-    subparsers.add_parser("zernikes")
     subparsers.add_parser("psnr")
     subparsers.add_parser("embeddings")
+    subparsers.add_parser("zernikes_pyramid")
+    subparsers.add_parser("embeddings_pyramid")
     subparsers.add_parser("rotations")
     subparsers.add_parser("shapes_embeddings")
     subparsers.add_parser("gaussian")
@@ -79,7 +80,6 @@ def main(args=None):
         vis.plot_fov()
 
     elif args.cmd == "embeddings":
-        vis.plot_embedding_pyramid()
         vis.plot_embeddings()
 
     elif args.cmd == "rotations":
@@ -94,8 +94,11 @@ def main(args=None):
     elif args.cmd == "simulation":
         vis.plot_simulation()
 
-    elif args.cmd == "zernikes":
+    elif args.cmd == "zernikes_pyramid":
         vis.plot_zernike_pyramid()
+
+    elif args.cmd == "embeddings_pyramid":
+        vis.plot_embedding_pyramid()
 
     elif args.cmd == "psnr":
         vis.plot_psnr()
