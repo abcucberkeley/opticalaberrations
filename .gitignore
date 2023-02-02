@@ -9,6 +9,7 @@ archive/
 logs/
 profilers/
 notebooks/
+test_samples/
 .idea/
 .DS_Store
 .DS_Store?

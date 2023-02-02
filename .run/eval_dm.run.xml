@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="eval_dm $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230201/empirical/0p1_new_cal/" />
+    <option name="PARAMETERS" value="eval_dm $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230201/empirical/0p1_new_cal_before_and_after/" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

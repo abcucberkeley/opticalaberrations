@@ -13,7 +13,6 @@ import matplotlib.colors as mcolors
 
 import numpy as np
 import pandas as pd
-from tqdm import tqdm, trange
 import tensorflow as tf
 from preprocessing import resize_with_crop_or_pad
 from line_profiler_pycharm import profile
