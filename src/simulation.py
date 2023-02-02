@@ -205,7 +205,7 @@ if __name__ == "__main__":
     #     noise=noise,
     # )
 
-    reference = beads(gen=gen, object_size=0, num_objs=5)
+    reference = beads(gen=gen, object_size=0, num_objs=3)
 
     zernikes = np.zeros(modes)
     zernikes[5] = .05  # mu rms
@@ -231,14 +231,6 @@ if __name__ == "__main__":
         remove_interference=False,
     )
 
-    pseudo_psf = gen.ifft(gen.fft(f1) / gen.fft(f2))
-    pseudo_psf /= np.nanmax(pseudo_psf)
-    embeddings_pseudo_psf = gen.embedding(
-        psf=pseudo_psf,
-        plot=outdir / f"pseudo_psf",
-        remove_interference=False,
-    )
-
     zernikes = np.zeros(modes)
     zernikes[11] = .05  # mu rms
     wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
@@ -246,5 +238,17 @@ if __name__ == "__main__":
     embeddings_psf = gen.embedding(
         psf=psf,
         plot=outdir / f"psf",
+        remove_interference=False,
+    )
+
+    psf = fftconvolution(sample=reference, kernel=psf)
+    otf = gen.remove_interference_pattern(psf, gen.fft(psf), plot=outdir / f"psf")
+
+    ratio = gen.fft(f1) / gen.fft(f2)
+    pseudo_psf = np.abs(gen.ifft(ratio))
+    pseudo_psf /= np.nanmax(pseudo_psf)
+    embeddings_pseudo_psf = gen.embedding(
+        psf=pseudo_psf,
+        plot=outdir / f"pseudo_psf",
         remove_interference=False,
     )
