@@ -7,11 +7,12 @@ import ujson
 import numpy as np
 from pathlib import Path
 from tifffile import imsave
+import raster_geometry as rg
 
 from wavefront import Wavefront
 from synthetic import SyntheticPSF
 from preprocessing import remove_background_noise
-from utils import peak2valley
+from utils import peak2valley, fftconvolution
 from vis import plot_wavefront
 
 logging.basicConfig(
@@ -20,6 +21,35 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def beads(
+    gen: SyntheticPSF,
+    object_size: float = 0,
+    num_objs: int = 1,
+    radius: float = .4,
+):
+    reference = np.zeros(gen.psf_shape)
+
+    for i in range(num_objs):
+        if object_size > 0:
+            reference += rg.sphere(
+                shape=gen.psf_shape,
+                radius=object_size,
+                position=np.random.uniform(low=.2, high=.8, size=3)
+            ).astype(np.float) * np.random.random()
+        else:
+            if radius > 0:
+                reference[
+                    np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
+                    np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
+                ] += np.random.random()
+            else:
+                reference[gen.psf_shape[0] // 2, gen.psf_shape[1] // 2, gen.psf_shape[2] // 2] += np.random.random()
+
+    reference /= np.max(reference)
+    return reference
 
 
 def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, npoints=1):
@@ -128,6 +158,8 @@ def create_synthetic_sample(
             p2v=peak2valley(amps, wavelength=gen.lam_detection)
         )
 
+    return noisy_img
+
 
 if __name__ == "__main__":
     modes = 15
@@ -158,17 +190,61 @@ if __name__ == "__main__":
         na_detection=na_detection,
     )
 
-    # ANSI index
-    filename = f'mode_12'
-    zernikes[3] = .05  # mu rms
-    zernikes[12] = .05  # mu rms
+    # # ANSI index
+    # filename = f'mode_5_and_12'
+    # zernikes[5] = .05  # mu rms
+    # zernikes[12] = .05  # mu rms
+    #
+    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    #
+    # psf = create_synthetic_sample(
+    #     wavefront=wavefront,
+    #     filename=filename,
+    #     outdir=outdir,
+    #     gen=gen,
+    #     noise=noise,
+    # )
 
+    reference = beads(gen=gen, object_size=0, num_objs=5)
+
+    zernikes = np.zeros(modes)
+    zernikes[5] = .05  # mu rms
+    zernikes[11] = .05  # mu rms
     wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    f1 = gen.single_psf(wavefront, normed=True, noise=False)
+    f1 = fftconvolution(sample=reference, kernel=f1)
+    embeddings_f1 = gen.embedding(
+        psf=f1,
+        plot=outdir / f"f1",
+        remove_interference=False,
+    )
 
-    create_synthetic_sample(
-        wavefront=wavefront,
-        filename=filename,
-        outdir=outdir,
-        gen=gen,
-        noise=noise,
+    zernikes = np.zeros(modes)
+    zernikes[5] = -.05  # mu rms
+    zernikes[11] = .05  # mu rms
+    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    f2 = gen.single_psf(wavefront, normed=True, noise=False)
+    f2 = fftconvolution(sample=reference, kernel=f2)
+    embeddings_f2 = gen.embedding(
+        psf=f2,
+        plot=outdir / f"f2",
+        remove_interference=False,
+    )
+
+    pseudo_psf = gen.ifft(gen.fft(f1) / gen.fft(f2))
+    pseudo_psf /= np.nanmax(pseudo_psf)
+    embeddings_pseudo_psf = gen.embedding(
+        psf=pseudo_psf,
+        plot=outdir / f"pseudo_psf",
+        remove_interference=False,
+    )
+
+    zernikes = np.zeros(modes)
+    zernikes[11] = .05  # mu rms
+    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    psf = gen.single_psf(wavefront, normed=True, noise=False)
+    embeddings_psf = gen.embedding(
+        psf=psf,
+        plot=outdir / f"psf",
+        remove_interference=False,
     )
