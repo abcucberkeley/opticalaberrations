@@ -29,7 +29,6 @@ from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
 from backend import load_metadata, dual_stage_prediction, predict_rotation
-from zernike import Zernike, rho_theta, nm_polynomial
 
 import logging
 logger = logging.getLogger('')
@@ -951,30 +950,18 @@ def eval_mode(
     except KeyError:
         p = pd.read_csv(prediction_path, header=None).iloc[:, 0].values
 
-    if gt_path is None:
-        y = np.zeros_like(p)
+    if gt_path.suffix == 'tif':
+        y = gt_path
     elif gt_path.suffix == '.csv':
         try:
             y = pd.read_csv(gt_path, header=0)['amplitude'].values[:len(p)]
         except KeyError:
             y = pd.read_csv(gt_path, header=None).iloc[:, -1].values[:len(p)]
     else:
-        zernikes = [Zernike(i) for i in range(p.shape[0])]
-        pupil_displacement = np.ascontiguousarray(imread(gt_path).astype(float))
-        pupil_displacement = pupil_displacement[:, ~np.isnan(pupil_displacement).all(axis=0)]
-        pupil_displacement = pupil_displacement[~np.isnan(pupil_displacement).all(axis=1), :]
+        y = np.zeros_like(p)
 
-        rho, theta = rho_theta(pupil_displacement.shape[0])
-        valid = rho <= 1 & ~np.isnan(pupil_displacement)
-        rho = rho[valid].flatten()
-        theta = theta[valid].flatten()
-        pupil_displacement = pupil_displacement[valid].flatten()
-        Z = np.array([nm_polynomial(z.n, z.m, rho=rho, theta=theta) for z in zernikes])
-        y, residuals, rank, s = np.linalg.lstsq(Z.T, pupil_displacement, rcond=None)
-        y[[0, 1, 2, 4]] = 0.
-
-    p_wave = Wavefront(p, lam_detection=gen.lam_detection)
-    y_wave = Wavefront(y, lam_detection=gen.lam_detection)
+    p_wave = Wavefront(p, lam_detection=gen.lam_detection, modes=len(p))
+    y_wave = Wavefront(y, lam_detection=gen.lam_detection, modes=len(p))
     diff = y_wave - p_wave
 
     prep = partial(
@@ -1040,7 +1027,7 @@ def eval_dataset(
     datadir: Path,
     flat: Any = None,
     postfix: str = 'sample_predictions_zernike_coefficients.csv',
-    gt_postfix: str = 'matlab_zernike_coffs.csv',
+    gt_postfix: str = 'matlab_pupil_waves.tif',
     # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
 ):
     func = partial(
@@ -1103,7 +1090,7 @@ def eval_dataset(
 def eval_dm(
     datadir: Path,
     num_modes: int = 15,
-    gt_postfix: str = 'matlab_zernike_coffs.csv',
+    gt_postfix: str = 'matlab_pupil_waves.tif',
     # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
     postfix: str = 'sample_predictions_zernike_coefficients.csv'
 ):

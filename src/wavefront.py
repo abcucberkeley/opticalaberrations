@@ -8,8 +8,9 @@ import logging
 import sys
 
 import numpy as np
-from zernike import Zernike
-from pprint import pprint
+from zernike import Zernike, rho_theta, nm_polynomial
+from pathlib import Path
+from tifffile import imread
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -89,6 +90,9 @@ class Wavefront:
             amplitudes = np.zeros(self.length)      # initialize modes 55
             moi = self._pick_modes()                # pick order of modes from most "interesting" to least (51 modes)
             amplitudes[moi] = amps[:len(moi)]       # assign amplitudes  amps[:len(moi)] is 51, so amplitudes[piston, tip,tilt, defocus] will always be zero
+
+        elif isinstance(amplitudes, Path) or isinstance(amplitudes, str):
+            amplitudes = self._fit_zernikes(amplitudes)
 
         amplitudes = self._formatter(amplitudes, order)
 
@@ -343,3 +347,23 @@ class Wavefront:
 
     def wave(self, size=55, normed=True):
         return np.flip(np.rot90(self.polynomial(size=size, normed=normed)), axis=0)
+
+    def _fit_zernikes(self, wavefront):
+        wavefront = np.ascontiguousarray(imread(wavefront).astype(float))
+
+        zernikes = [Zernike(i) for i in range(self.length)]
+        wavefront = wavefront[:, ~np.isnan(wavefront).all(axis=0)]
+        wavefront = wavefront[~np.isnan(wavefront).all(axis=1), :]
+
+        rho, theta = rho_theta(wavefront.shape[0])
+        valid = rho <= 1 & ~np.isnan(wavefront)
+
+        rho = rho[valid].flatten()
+        theta = theta[valid].flatten()
+        pupil_displacement = wavefront[valid].flatten()
+
+        Z = np.array([nm_polynomial(z.n, z.m, rho=rho, theta=theta) for z in zernikes])
+        coeffs, residuals, rank, s = np.linalg.lstsq(Z.T, pupil_displacement, rcond=None)
+        coeffs[self.prefixed] = 0.
+
+        return coeffs
