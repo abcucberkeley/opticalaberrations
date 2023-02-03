@@ -19,6 +19,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from line_profiler_pycharm import profile
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 import utils
 import vis
@@ -28,7 +29,7 @@ from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
 from backend import load_metadata, dual_stage_prediction, predict_rotation
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from zernike import Zernike, rho_theta, nm_polynomial
 
 import logging
 logger = logging.getLogger('')
@@ -958,28 +959,19 @@ def eval_mode(
         except KeyError:
             y = pd.read_csv(gt_path, header=None).iloc[:, -1].values[:len(p)]
     else:
-        '''
-            Z = zernfun(N,M,r_pupil(is_in_circle),theta_pupil(is_in_circle));
-            Zcoefficients = Z\pupil_displacement(is_in_circle);  
-            % Solves the system equations Z*Zcoeffs = pupil_disp. Z has units of um. Zcoefficients is unitless
-    
-            from zernike import Zernike, rho_theta
-    
-            pupil_displacement = np.ascontiguousarray(imread(gt_path).astype(float))
-            zernikes = [Zernike(i) for i in range(p.shape[0])]
-    
-            cart_grid = zernikes[0].polynomial(size=pupil_displacement.shape[0], normed=True)
-            cart_grid[np.isnan(pupil_displacement)] = np.nan
-            s = int(np.sqrt(np.count_nonzero(cart_grid[~np.isnan(cart_grid)])).round(0))
-            rho, theta = rho_theta(pupil_displacement.shape[0])
-    
-            Z = np.array([
-                z.polynomial(pupil_displacement.shape[0], normed=True, outside=np.nan)
-                for z in zernikes
-            ])
-            y = np.linalg.solve(Z, pupil_displacement)
-        '''
-        logger.info('matlab can go hell....')
+        zernikes = [Zernike(i) for i in range(p.shape[0])]
+        pupil_displacement = np.ascontiguousarray(imread(gt_path).astype(float))
+        pupil_displacement = pupil_displacement[:, ~np.isnan(pupil_displacement).all(axis=0)]
+        pupil_displacement = pupil_displacement[~np.isnan(pupil_displacement).all(axis=1), :]
+
+        rho, theta = rho_theta(pupil_displacement.shape[0])
+        valid = rho <= 1 & ~np.isnan(pupil_displacement)
+        rho = rho[valid].flatten()
+        theta = theta[valid].flatten()
+        pupil_displacement = pupil_displacement[valid].flatten()
+        Z = np.array([nm_polynomial(z.n, z.m, rho=rho, theta=theta) for z in zernikes])
+        y, residuals, rank, s = np.linalg.lstsq(Z.T, pupil_displacement, rcond=None)
+        y[[0, 1, 2, 4]] = 0.
 
     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
     y_wave = Wavefront(y, lam_detection=gen.lam_detection)
