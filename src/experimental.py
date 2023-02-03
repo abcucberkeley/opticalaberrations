@@ -1111,15 +1111,18 @@ def eval_dataset(
 @profile
 def eval_dm(
     datadir: Path,
-    gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
+    num_modes: int = 15,
+    gt_postfix: str = 'matlab_zernike_coffs.csv',
+    # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
     postfix: str = 'sample_predictions_zernike_coefficients.csv'
 ):
 
-    data = np.identity(15)
-    for file in sorted(datadir.glob('ansi_z*.tif')):
+    data = np.identity(num_modes)
+    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif')):
         if 'CamB' in str(file):
             continue
 
+        state = file.stem.split('_')[0]
         modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
         modes = [m for m in modes if m]
         logger.info(modes)
@@ -1136,14 +1139,14 @@ def eval_dm(
         logger.info(f"Looking for: {prefix}")
 
         try:
-            gt_path = list(datadir.rglob(f'{prefix}_{gt_postfix}'))[0]
+            gt_path = list(datadir.rglob(f'{state}_widefield_{prefix}_{gt_postfix}'))[0]
             logger.info(f"GT: {gt_path.name}")
         except IndexError:
             logger.warning(f'GT not found for: {file.name}')
             continue
 
         try:
-            prediction_path = list(datadir.rglob(f'{prefix}_{postfix}'))[0]
+            prediction_path = list(datadir.rglob(f'{state}_lightsheet_{prefix}_{postfix}'))[0]
             logger.info(f"Pred: {prediction_path.name}")
         except IndexError:
             logger.warning(f'Prediction not found for: {file.name}')
