@@ -10,7 +10,6 @@ from subprocess import call
 import multiprocessing as mp
 import tensorflow as tf
 
-import orthopy
 from typing import Any, Sequence, Union
 import numpy as np
 from scipy import stats as st
