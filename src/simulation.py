@@ -100,6 +100,7 @@ def create_synthetic_sample(
         vcolorbar=True,
     )
     plt.savefig(f"{outdir}/{filename}_wavefront.png", bbox_inches='tight', pad_inches=.25)
+    imsave(f"{outdir}/{filename}_wavefront.tif", wavefront.wave(size=128))
 
     # aberrated PSF without noise
     psf, amps, phi, maxcounts = gen.single_psf(
@@ -168,7 +169,7 @@ if __name__ == "__main__":
     z_voxel_size = .108
     lam_detection = .510
     psf_type = 'widefield'
-    input_shape = (64, 64, 64)
+    input_shape = (128, 128, 128)
     na_detection = 1.0
     refractive_index = 1.33
     snr = 100
@@ -190,65 +191,71 @@ if __name__ == "__main__":
         na_detection=na_detection,
     )
 
-    # # ANSI index
-    # filename = f'mode_5_and_12'
-    # zernikes[5] = .05  # mu rms
-    # zernikes[12] = .05  # mu rms
-    #
-    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    #
-    # psf = create_synthetic_sample(
-    #     wavefront=wavefront,
-    #     filename=filename,
-    #     outdir=outdir,
-    #     gen=gen,
-    #     noise=noise,
-    # )
+    # ANSI index
+    filename = f'mode_7'
+    zernikes[7] = .1  # mu rms
 
-    reference = beads(gen=gen, object_size=0, num_objs=3)
-
-    zernikes = np.zeros(modes)
-    zernikes[5] = .05  # mu rms
-    zernikes[11] = .05  # mu rms
     wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    f1 = gen.single_psf(wavefront, normed=True, noise=False)
-    f1 = fftconvolution(sample=reference, kernel=f1)
-    embeddings_f1 = gen.embedding(
-        psf=f1,
-        plot=outdir / f"f1",
-        remove_interference=False,
+
+    psf = create_synthetic_sample(
+        wavefront=wavefront,
+        filename=filename,
+        outdir=outdir,
+        gen=gen,
+        noise=noise,
     )
 
-    zernikes = np.zeros(modes)
-    zernikes[5] = -.05  # mu rms
-    zernikes[11] = .05  # mu rms
-    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    f2 = gen.single_psf(wavefront, normed=True, noise=False)
-    f2 = fftconvolution(sample=reference, kernel=f2)
-    embeddings_f2 = gen.embedding(
-        psf=f2,
-        plot=outdir / f"f2",
-        remove_interference=False,
-    )
-
-    zernikes = np.zeros(modes)
-    zernikes[11] = .05  # mu rms
-    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    psf = gen.single_psf(wavefront, normed=True, noise=False)
     embeddings_psf = gen.embedding(
         psf=psf,
         plot=outdir / f"psf",
         remove_interference=False,
     )
 
-    psf = fftconvolution(sample=reference, kernel=psf)
-    otf = gen.remove_interference_pattern(psf, gen.fft(psf), plot=outdir / f"psf")
 
-    ratio = gen.fft(f1) / gen.fft(f2)
-    pseudo_psf = np.abs(gen.ifft(ratio))
-    pseudo_psf /= np.nanmax(pseudo_psf)
-    embeddings_pseudo_psf = gen.embedding(
-        psf=pseudo_psf,
-        plot=outdir / f"pseudo_psf",
-        remove_interference=False,
-    )
+    # reference = beads(gen=gen, object_size=0, num_objs=3)
+    #
+    # zernikes = np.zeros(modes)
+    # zernikes[5] = .05  # mu rms
+    # zernikes[11] = .05  # mu rms
+    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    # f1 = gen.single_psf(wavefront, normed=True, noise=False)
+    # f1 = fftconvolution(sample=reference, kernel=f1)
+    # embeddings_f1 = gen.embedding(
+    #     psf=f1,
+    #     plot=outdir / f"f1",
+    #     remove_interference=False,
+    # )
+    #
+    # zernikes = np.zeros(modes)
+    # zernikes[5] = -.05  # mu rms
+    # zernikes[11] = .05  # mu rms
+    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    # f2 = gen.single_psf(wavefront, normed=True, noise=False)
+    # f2 = fftconvolution(sample=reference, kernel=f2)
+    # embeddings_f2 = gen.embedding(
+    #     psf=f2,
+    #     plot=outdir / f"f2",
+    #     remove_interference=False,
+    # )
+    #
+    # zernikes = np.zeros(modes)
+    # zernikes[11] = .05  # mu rms
+    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    # psf = gen.single_psf(wavefront, normed=True, noise=False)
+    # embeddings_psf = gen.embedding(
+    #     psf=psf,
+    #     plot=outdir / f"psf",
+    #     remove_interference=False,
+    # )
+    #
+    # psf = fftconvolution(sample=reference, kernel=psf)
+    # otf = gen.remove_interference_pattern(psf, gen.fft(psf), plot=outdir / f"psf")
+    #
+    # ratio = gen.fft(f1) / gen.fft(f2)
+    # pseudo_psf = np.abs(gen.ifft(ratio))
+    # pseudo_psf /= np.nanmax(pseudo_psf)
+    # embeddings_pseudo_psf = gen.embedding(
+    #     psf=pseudo_psf,
+    #     plot=outdir / f"pseudo_psf",
+    #     remove_interference=False,
+    # )
