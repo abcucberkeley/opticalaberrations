@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="eval_mode ../pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z15/spatial_planes.h5 $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230127/spatial_planes/0p1/ansi_z03_n02_m-2_amp0p1_mixedwith_z03_1_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0004334319msecAbs_-01x_-01y_-01z_0000t.tif $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230127/spatial_planes/ALPAO_Flatten.csv $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230127/spatial_planes/0p1/ansi_z03_n02_m-2_amp0p1_mixedwith_z03_ground_truth_zernike_coefficients.csv $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230127/spatial_planes/0p1/MLResults/ansi_z03_n02_m-2_amp0p1_mixedwith_z03_sample_predictions_zernike_coefficients.csv" />
+    <option name="PARAMETERS" value="eval_mode ../pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z15/phase.h5 $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/Measurement_510nm.tif $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/Measurement_510nm_ground_truth_zernike_coefficients.csv $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/Measurement_510nm_sample_predictions_zernike_coefficients.csv" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

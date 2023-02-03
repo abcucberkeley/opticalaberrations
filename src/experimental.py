@@ -10,6 +10,7 @@ from subprocess import call
 import multiprocessing as mp
 import tensorflow as tf
 
+import orthopy
 from typing import Any, Sequence, Union
 import numpy as np
 from scipy import stats as st
@@ -909,13 +910,12 @@ def eval_mode(
     input_path: Path,
     prediction_path: Path,
     gt_path: Path,
-    flat_path: Path,
     model_path: Path,
+    flat_path: Any = None,
     normalize: bool = True,
     remove_background: bool = True,
     postfix: str = '',
     gt_postfix: str = '',
-    plot_actuators: bool = False
 ):
     save_postfix = 'pr' if postfix.startswith('matlab') else 'ml'
 
@@ -953,11 +953,34 @@ def eval_mode(
 
     if gt_path is None:
         y = np.zeros_like(p)
-    else:
+    elif gt_path.suffix == '.csv':
         try:
             y = pd.read_csv(gt_path, header=0)['amplitude'].values[:len(p)]
         except KeyError:
-            y = pd.read_csv(gt_path, header=0).iloc[:, -1].values[:len(p)]
+            y = pd.read_csv(gt_path, header=None).iloc[:, -1].values[:len(p)]
+    else:
+        '''
+            Z = zernfun(N,M,r_pupil(is_in_circle),theta_pupil(is_in_circle));
+            Zcoefficients = Z\pupil_displacement(is_in_circle);  
+            % Solves the system equations Z*Zcoeffs = pupil_disp. Z has units of um. Zcoefficients is unitless
+    
+            from zernike import Zernike, rho_theta
+    
+            pupil_displacement = np.ascontiguousarray(imread(gt_path).astype(float))
+            zernikes = [Zernike(i) for i in range(p.shape[0])]
+    
+            cart_grid = zernikes[0].polynomial(size=pupil_displacement.shape[0], normed=True)
+            cart_grid[np.isnan(pupil_displacement)] = np.nan
+            s = int(np.sqrt(np.count_nonzero(cart_grid[~np.isnan(cart_grid)])).round(0))
+            rho, theta = rho_theta(pupil_displacement.shape[0])
+    
+            Z = np.array([
+                z.polynomial(pupil_displacement.shape[0], normed=True, outside=np.nan)
+                for z in zernikes
+            ])
+            y = np.linalg.solve(Z, pupil_displacement)
+        '''
+        logger.info('matlab can go hell....')
 
     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
     y_wave = Wavefront(y, lam_detection=gen.lam_detection)
@@ -976,7 +999,7 @@ def eval_mode(
     gt_psf = prep(gen.single_psf(y_wave, normed=False, noise=True))
     corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True))
 
-    if plot_actuators:
+    if flat_path is not None:
         rfilter = f"{str(gt_path.name).replace(gt_postfix, '')}"
         dm_path = Path(str(list(input_path.parent.glob(f"{rfilter}*JSONsettings.json"))[0]))
         dm_wavefront = Path(gt_path.parent/f"{rfilter}_dm_wavefront.svg")
@@ -1024,10 +1047,10 @@ def eval_mode(
 def eval_dataset(
     model: Path,
     datadir: Path,
-    flat: Path,
-    gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
-    postfix: str = 'sample_predictions_zernike_coefficients.csv'
-    # postfix: str = 'matlab_zernike_coefficients.csv'
+    flat: Any = None,
+    postfix: str = 'sample_predictions_zernike_coefficients.csv',
+    gt_postfix: str = 'matlab_zernike_coffs.csv',
+    # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
 ):
     func = partial(
         eval_mode,
@@ -1038,10 +1061,11 @@ def eval_dataset(
     )
 
     jobs = []
-    for file in sorted(datadir.glob('ansi_z*.tif')):
-        if 'CamB' in str(file):
+    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif')):
+        if 'CamB' in str(file) or 'pupil' in str(file):
             continue
 
+        state = file.stem.split('_')[0]
         modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
         modes = [m for m in modes if m]
         logger.info(modes)
@@ -1058,14 +1082,14 @@ def eval_dataset(
         logger.info(f"Looking for: {prefix}")
 
         try:
-            gt_path = list(datadir.rglob(f'{prefix}_{gt_postfix}'))[0]
+            gt_path = list(datadir.rglob(f'{state}_widefield_{prefix}_{gt_postfix}'))[0]
             logger.info(f"GT: {gt_path.name}")
         except IndexError:
             logger.warning(f'GT not found for: {file.name}')
             continue
 
         try:
-            prediction_path = list(datadir.rglob(f'{prefix}_{postfix}'))[0]
+            prediction_path = list(datadir.rglob(f'{state}_lightsheet_{prefix}_{postfix}'))[0]
             logger.info(f"Pred: {prediction_path.name}")
         except IndexError:
             logger.warning(f'Prediction not found for: {file.name}')
