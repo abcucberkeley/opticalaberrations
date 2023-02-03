@@ -950,7 +950,7 @@ def eval_mode(
     except KeyError:
         p = pd.read_csv(prediction_path, header=None).iloc[:, 0].values
 
-    if gt_path.suffix == 'tif':
+    if gt_path.suffix == '.tif':
         y = gt_path
     elif gt_path.suffix == '.csv':
         try:

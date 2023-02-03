@@ -365,5 +365,4 @@ class Wavefront:
         Z = np.array([nm_polynomial(z.n, z.m, rho=rho, theta=theta) for z in zernikes])
         coeffs, residuals, rank, s = np.linalg.lstsq(Z.T, pupil_displacement, rcond=None)
         coeffs[self.prefixed] = 0.
-
         return coeffs
