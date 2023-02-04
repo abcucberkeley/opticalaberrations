@@ -771,10 +771,10 @@ class SyntheticPSF:
             otf: np.ndarray,
             val: str,
             ratio: bool,
-            norm: bool,
-            na_mask: bool,
-            log10: bool,
-            embedding_option: Any,
+            norm: bool = True,
+            na_mask: bool = True,
+            log10: bool = False,
+            embedding_option: Any = 'spatial_planes',
             freq_strength_threshold: float = 0.,
     ):
         """

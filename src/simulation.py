@@ -12,7 +12,7 @@ import raster_geometry as rg
 from wavefront import Wavefront
 from synthetic import SyntheticPSF
 from preprocessing import remove_background_noise
-from utils import peak2valley, fftconvolution
+from utils import peak2valley, fftconvolution, resize_with_crop_or_pad
 from vis import plot_wavefront
 
 logging.basicConfig(
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     z_voxel_size = .108
     lam_detection = .510
     psf_type = 'widefield'
-    input_shape = (128, 128, 128)
+    input_shape = (64, 64, 64)
     na_detection = 1.0
     refractive_index = 1.33
     snr = 100
@@ -192,70 +192,103 @@ if __name__ == "__main__":
     )
 
     # ANSI index
-    filename = f'mode_7'
-    zernikes[7] = .1  # mu rms
-
-    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-
-    psf = create_synthetic_sample(
-        wavefront=wavefront,
-        filename=filename,
-        outdir=outdir,
-        gen=gen,
-        noise=noise,
-    )
-
-    embeddings_psf = gen.embedding(
-        psf=psf,
-        plot=outdir / f"psf",
-        remove_interference=False,
-    )
-
-
-    # reference = beads(gen=gen, object_size=0, num_objs=3)
+    # filename = f'mode_7'
+    # zernikes[7] = .1  # mu rms
     #
-    # zernikes = np.zeros(modes)
-    # zernikes[5] = .05  # mu rms
-    # zernikes[11] = .05  # mu rms
     # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    # f1 = gen.single_psf(wavefront, normed=True, noise=False)
-    # f1 = fftconvolution(sample=reference, kernel=f1)
-    # embeddings_f1 = gen.embedding(
-    #     psf=f1,
-    #     plot=outdir / f"f1",
-    #     remove_interference=False,
+    #
+    # psf = create_synthetic_sample(
+    #     wavefront=wavefront,
+    #     filename=filename,
+    #     outdir=outdir,
+    #     gen=gen,
+    #     noise=noise,
     # )
     #
-    # zernikes = np.zeros(modes)
-    # zernikes[5] = -.05  # mu rms
-    # zernikes[11] = .05  # mu rms
-    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    # f2 = gen.single_psf(wavefront, normed=True, noise=False)
-    # f2 = fftconvolution(sample=reference, kernel=f2)
-    # embeddings_f2 = gen.embedding(
-    #     psf=f2,
-    #     plot=outdir / f"f2",
-    #     remove_interference=False,
-    # )
-    #
-    # zernikes = np.zeros(modes)
-    # zernikes[11] = .05  # mu rms
-    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    # psf = gen.single_psf(wavefront, normed=True, noise=False)
     # embeddings_psf = gen.embedding(
     #     psf=psf,
     #     plot=outdir / f"psf",
     #     remove_interference=False,
     # )
-    #
-    # psf = fftconvolution(sample=reference, kernel=psf)
-    # otf = gen.remove_interference_pattern(psf, gen.fft(psf), plot=outdir / f"psf")
-    #
-    # ratio = gen.fft(f1) / gen.fft(f2)
-    # pseudo_psf = np.abs(gen.ifft(ratio))
-    # pseudo_psf /= np.nanmax(pseudo_psf)
-    # embeddings_pseudo_psf = gen.embedding(
-    #     psf=pseudo_psf,
-    #     plot=outdir / f"pseudo_psf",
-    #     remove_interference=False,
-    # )
+
+    num_objs = 2
+    reference = beads(gen=gen, object_size=0, num_objs=num_objs)
+
+    zernikes = np.zeros(modes)
+    zernikes[5] = .05  # mu rms
+    zernikes[11] = .05  # mu rms
+    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    f1 = gen.single_psf(wavefront, normed=True, noise=False)
+
+    if num_objs > 1:
+        f1 = fftconvolution(sample=reference, kernel=f1)
+
+    embeddings_f1 = gen.embedding(
+        psf=f1,
+        plot=outdir / f"f1_num_objs_{num_objs}",
+        remove_interference=False,
+    )
+
+    zernikes = np.zeros(modes)
+    zernikes[5] = -.05  # mu rms
+    zernikes[11] = .05  # mu rms
+    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    f2 = gen.single_psf(wavefront, normed=True, noise=False)
+
+    if num_objs > 1:
+        f2 = fftconvolution(sample=reference, kernel=f2)
+
+    embeddings_f2 = gen.embedding(
+        psf=f2,
+        plot=outdir / f"f2_num_objs_{num_objs}",
+        remove_interference=False,
+    )
+
+    zernikes = np.zeros(modes)
+    zernikes[11] = .05  # mu rms
+    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    psf = gen.single_psf(wavefront, normed=True, noise=False)
+    embeddings_psf = gen.embedding(
+        psf=psf,
+        plot=outdir / f"psf_num_objs_{num_objs}",
+        remove_interference=False,
+    )
+
+    if num_objs > 1:
+        psf = fftconvolution(sample=reference, kernel=psf)
+
+    ratio = gen.fft(f1) / gen.fft(f2)
+    pseudo_psf = np.abs(gen.ifft(ratio))
+    pseudo_psf /= np.nanmax(pseudo_psf)
+    pseudo_psf = resize_with_crop_or_pad(pseudo_psf, crop_shape=(32, 32, 32))
+
+    embeddings_pseudo_psf = gen.embedding(
+        psf=pseudo_psf,
+        plot=outdir / f"pseudo_psf_num_objs_{num_objs}",
+        remove_interference=False,
+    )
+
+    alpha = gen.compute_emb(
+        ratio,
+        val='abs',
+        ratio=True,
+        norm=True,
+        embedding_option='spatial_planes',
+    )
+
+    phi = gen.compute_emb(
+        ratio,
+        val='angle',
+        ratio=False,
+        na_mask=True,
+        norm=False,
+        embedding_option='spatial_planes',
+    )
+    ratio_emb = np.concatenate([alpha, phi], axis=0)
+
+    gen.plot_embeddings(
+        inputs=pseudo_psf,
+        emb=ratio_emb,
+        save_path=outdir / f"fourier_embeddings_num_objs_{num_objs}",
+    )
+
