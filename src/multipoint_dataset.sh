@@ -31,13 +31,11 @@ CPUS=4
 MEM='80G'
 TIMELIMIT='1:00:00'
 SAMPLES_PER_JOB=100
-
 SHAPE=64
-RCROP=32
 
 MODES=15
 TITLE='spatial_planes_embeddings'
-DATASET='train'
+DATASET='test'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -51,6 +49,7 @@ if [ "$DATASET" = "train" ];then
   amps1=($(seq 0 .01 .29))
   amps2=($(seq .01 .01 .3))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
+  DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
 
 else
   TYPE=''
@@ -61,10 +60,11 @@ else
   amps1=($(seq 0 .05 .45))
   amps2=($(seq .05 .05 .50))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
+  DISTRIBUTIONS=(mixed)
 fi
 
 
-for DIST in single bimodal powerlaw dirichlet
+for DIST in `seq 1 ${#DISTRIBUTIONS[@]}`
 do
   for SNR in `seq 1 ${#xPSNR[@]}`
   do
@@ -84,7 +84,7 @@ do
             j="${j} --psf_type ${PSF_TYPE}"
             j="${j} --alpha_val ${ALPHA}"
             j="${j} --phi_val ${PHI}"
-            j="${j} --dist ${DIST}"
+            j="${j} --dist ${DISTRIBUTIONS[$DIST-1]}"
             j="${j} --mode_dist ${MODE_DIST}"
             j="${j} --iters ${SAMPLES_PER_JOB}"
             j="${j} --signed"

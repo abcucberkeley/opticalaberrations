@@ -30,7 +30,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, npoints=1):
+def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, npoints=1, gt=None):
+
+    if gt is not None:
+        imsave(f"{savepath}_gt.tif", gt)
 
     logger.info(f"Saved: {savepath}")
     imsave(f"{savepath}.tif", inputs)
@@ -181,7 +184,8 @@ def sim(
                 snr=psnr,
                 maxcounts=maxcounts,
                 npoints=npoints,
-                p2v=peak2valley(amps, wavelength=gen.lam_detection)
+                p2v=peak2valley(amps, wavelength=gen.lam_detection),
+                gt=reference
             )
     else:
         save_synthetic_sample(
@@ -191,7 +195,8 @@ def sim(
             snr=psnr,
             maxcounts=maxcounts,
             npoints=npoints,
-            p2v=peak2valley(amps, wavelength=gen.lam_detection)
+            p2v=peak2valley(amps, wavelength=gen.lam_detection),
+            gt=reference
         )
 
 

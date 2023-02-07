@@ -211,7 +211,7 @@ if __name__ == "__main__":
     #     remove_interference=False,
     # )
 
-    num_objs = 2
+    num_objs = 50
     reference = beads(gen=gen, object_size=0, num_objs=num_objs)
 
     zernikes = np.zeros(modes)
@@ -261,12 +261,6 @@ if __name__ == "__main__":
     pseudo_psf = np.abs(gen.ifft(ratio))
     pseudo_psf /= np.nanmax(pseudo_psf)
     pseudo_psf = resize_with_crop_or_pad(pseudo_psf, crop_shape=(32, 32, 32))
-
-    embeddings_pseudo_psf = gen.embedding(
-        psf=pseudo_psf,
-        plot=outdir / f"pseudo_psf_num_objs_{num_objs}",
-        remove_interference=False,
-    )
 
     alpha = gen.compute_emb(
         ratio,

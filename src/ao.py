@@ -88,7 +88,7 @@ def parse_args(args):
              '(percentages; values below that will be set to the desired minimum)'
     )
     predict_sample.add_argument(
-        "--prediction_threshold", default=0., type=float,
+        "--prediction_threshold", default=0.02, type=float,
         help='set predictions below threshold to zero (waves)'
     )
     predict_sample.add_argument(
@@ -166,7 +166,7 @@ def parse_args(args):
              '(percentages; values below that will be set to the desired minimum)'
     )
     predict_rois.add_argument(
-        "--prediction_threshold", default=0., type=float,
+        "--prediction_threshold", default=0.02, type=float,
         help='set predictions below threshold to zero (waves)'
     )
     predict_rois.add_argument(
@@ -228,7 +228,7 @@ def parse_args(args):
              '(percentages; values below that will be set to the desired minimum)'
     )
     predict_tiles.add_argument(
-        "--prediction_threshold", default=0., type=float,
+        "--prediction_threshold", default=0.02, type=float,
         help='set predictions below threshold to zero (waves)'
     )
     predict_tiles.add_argument(
@@ -281,7 +281,7 @@ def parse_args(args):
         help='scale DM actuators by an arbitrary multiplier'
     )
     aggregate_predictions.add_argument(
-        "--prediction_threshold", default=.1, type=float,
+        "--prediction_threshold", default=.05, type=float,
         help='set predictions below threshold to zero (waves)'
     )
     aggregate_predictions.add_argument(

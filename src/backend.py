@@ -198,7 +198,7 @@ def bootstrap_predict(
     peaks: Any = None,
     remove_interference: bool = True,
     ignore_modes: list = (0, 1, 2, 4),
-    threshold: float = 0.05,
+    threshold: float = 0.02,
     freq_strength_threshold: float = .01,
     verbose: bool = True,
     plot: Any = None,
@@ -475,13 +475,14 @@ def predict_rotation(
     phi_val: str = 'angle',
     peaks: Any = None,
     ignore_modes: list = (0, 1, 2, 4),
-    threshold: float = 0.05,
+    threshold: float = 0.02,
     freq_strength_threshold: float = .01,
     verbose: bool = True,
     plot: Any = None,
     remove_interference: bool = True,
     desc: str = 'Predict-rotations',
-    rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int)
+    rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
+    cpu_workers: int = 1
 ):
     """
     Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin).
@@ -518,7 +519,7 @@ def predict_rotation(
         embedding_option=psfgen.embedding_option,
         freq_strength_threshold=freq_strength_threshold,
     )
-    embeddings = np.array(utils.multiprocess(generate_fourier_embeddings, inputs, cores=-1))
+    embeddings = np.array(utils.multiprocess(generate_fourier_embeddings, inputs, cores=cpu_workers))
 
     rotated_embs = []
     for emb in embeddings:
@@ -537,7 +538,8 @@ def predict_rotation(
         ignore_modes=ignore_modes,
         plot=plot,
         verbose=verbose,
-        desc=desc
+        desc=desc,
+        cpu_workers=cpu_workers
     )
 
     eval_mode_rotations = partial(
@@ -755,12 +757,13 @@ def evaluate(
     inputs: np.array,
     gen: SyntheticPSF,
     ys: np.array,
-    psnr: int,
-    batch_size: int,
+    psnr: int = 30,
+    batch_size: int = 1024,
     reference: Any = None,
     plot: Any = None,
-    threshold: float = 0.01,
+    threshold: float = 0.02,
     eval_sign: str = 'positive_only',
+    cpu_workers: int = -1
 ):
     if isinstance(inputs, tf.Tensor):
         inputs = inputs.numpy()
@@ -784,7 +787,8 @@ def evaluate(
             n_samples=1,
             no_phase=no_phase,
             threshold=threshold,
-            plot=plot
+            plot=plot,
+            cpu_workers=cpu_workers
         )
         if len(preds.shape) > 1:
             preds = np.abs(preds)[:, :ys.shape[-1]]
@@ -801,7 +805,8 @@ def evaluate(
             batch_size=batch_size,
             n_samples=1,
             threshold=threshold,
-            plot=plot
+            plot=plot,
+            cpu_workers=cpu_workers
         )
 
         if len(init_preds.shape) > 1:
@@ -860,7 +865,8 @@ def evaluate(
             batch_size=batch_size,
             n_samples=1,
             threshold=threshold,
-            plot=f"{plot}_followup"
+            plot=f"{plot}_followup",
+            cpu_workers=cpu_workers
         )
 
         if len(followup_preds.shape) > 1:
@@ -883,7 +889,8 @@ def evaluate(
             n_samples=1,
             no_phase=no_phase,
             threshold=threshold,
-            plot=plot
+            plot=plot,
+            cpu_workers=cpu_workers
         )
 
         if len(preds.shape) > 1:

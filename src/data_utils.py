@@ -54,7 +54,7 @@ def get_sample(path, no_phase=False, metadata=False, edge_filter=False):
         img = get_image(path)
         amps = hashtbl['zernikes']
         snr = hashtbl['snr']
-        peak2peak = hashtbl['peak2peak']
+        p2v = hashtbl['peak2peak']
         npoints = hashtbl['npoints']
 
         if no_phase and img.shape[0] == 6:
@@ -83,7 +83,8 @@ def get_sample(path, no_phase=False, metadata=False, edge_filter=False):
             img[:3] = alpha
 
         if metadata:
-            return img, amps, snr, peak2peak, npoints
+            return img, amps, snr, p2v, npoints, str(path)
+
         else:
             return img, amps
 
@@ -148,7 +149,7 @@ def load_dataset(
         max_amplitude=max_amplitude,
         snr_range=snr_range
     )
-    files = multiprocess(check, Path(datadir).rglob('*.tif'), cores=-1, desc='Loading dataset hashtable')
+    files = multiprocess(check, Path(datadir).rglob('*[!_gt].tif'), cores=1, desc='Loading dataset hashtable')
     files = [f for f in files if f is not None]
 
     if samplelimit is not None:
@@ -203,8 +204,8 @@ def collect_dataset(
     snr_range=None
 ):
     if metadata:
-        # img, amps, snr, peak2peak, npoints
-        dtypes = [tf.float32, tf.float32, tf.int32, tf.float32, tf.float32]
+        # img, amps, snr, peak2peak, npoints, filename
+        dtypes = [tf.float32, tf.float32, tf.int32, tf.float32, tf.float32, tf.string]
     else:
         # img, amps
         dtypes = [tf.float32, tf.float32]

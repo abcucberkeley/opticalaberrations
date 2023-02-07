@@ -61,14 +61,15 @@ def simulate_beads(psf, gen, snr, object_size=0, num_objs=1, beads=None, noise=N
 
 
 @profile
-def eval_mode(
+def eval_object(
     phi,
     modelpath,
     na: float = 1.0,
     batch_size: int = 100,
     snr_range: tuple = (21, 30),
     n_samples: int = 10,
-    eval_sign: str = 'positive_only'
+    eval_sign: str = 'positive_only',
+    savepath: Any = None,
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]])
@@ -106,14 +107,24 @@ def eval_mode(
             ys=ys,
             psnr=psnr,
             batch_size=batch_size,
-            eval_sign=eval_sign
+            eval_sign=eval_sign,
+            cpu_workers=1
         )
 
         p = pd.DataFrame([p2v for i in inputs], columns=['aberration'])
         p['prediction'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds]
         p['residuals'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in residuals]
         p['object_size'] = 1 if isize == 0 else isize * 2
+
+        for z in range(preds.shape[-1]):
+            p[f'z{z}_ground_truth'] = ys[:, z]
+            p[f'z{z}_prediction'] = preds[:, z]
+            p[f'z{z}_residual'] = residuals[:, z]
+
         df = df.append(p, ignore_index=True)
+
+        if savepath is not None:
+            df.to_csv(f'{savepath}_predictions.csv')
 
     return df
 
@@ -127,12 +138,15 @@ def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
     waves = np.arange(1e-5, .75, step=.05)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
 
-    for i in range(5, modelspecs.n_modes):
+    for i in range(3, modelspecs.n_modes):
+        if i == 4:
+            continue
+
         savepath = outdir / f"m{i}"
 
         classes = aberrations.copy()
         classes[:, i] = waves
-        job = partial(eval_mode, modelpath=model, eval_sign=eval_sign)
+        job = partial(eval_object, modelpath=model, eval_sign=eval_sign, savepath=savepath)
         preds = utils.multiprocess(job, list(classes), cores=-1)
         df = pd.DataFrame([]).append(preds, ignore_index=True)
 
@@ -246,7 +260,8 @@ def eval_bin(
     batch_size: int = 100,
     snr_range: Any = None,
     distribution: str = '',
-    eval_sign: str = 'positive_only'
+    eval_sign: str = 'positive_only',
+    savepath: Any = None,
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(
@@ -268,9 +283,9 @@ def eval_bin(
         snr_range=snr_range
     )
 
-    df = pd.DataFrame([], columns=['aberration', 'prediction', 'residuals', 'snr', 'neighbors', 'dist'])
+    df = pd.DataFrame([])
 
-    for inputs, ys, snr, p2v, npoints in val.batch(batch_size):
+    for inputs, ys, snr, p2v, npoints, files in val.batch(batch_size):
         if input_coverage != 1.:
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
 
@@ -284,21 +299,31 @@ def eval_bin(
             eval_sign=eval_sign
         )
 
-        p = pd.DataFrame([utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys], columns=['aberration'])
+        p = pd.DataFrame([i.numpy().decode("utf-8") for i in files], columns=['filename'])
+        p['aberration'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys]
         p['prediction'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds]
         p['residuals'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in residuals]
         p['snr'] = snr.numpy()
         p['neighbors'] = npoints
-        p['dist'] = [
+        p['distance'] = [
             utils.mean_min_distance(np.squeeze(i), voxel_size=gen.voxel_size) if objs > 1 else 0.
             for i, objs in zip(inputs, npoints)
         ]
+
+        for z in range(preds.shape[-1]):
+            p[f'z{z}_ground_truth'] = ys[:, z]
+            p[f'z{z}_prediction'] = preds[:, z]
+            p[f'z{z}_residual'] = residuals[:, z]
+
         df = df.append(p, ignore_index=True)
+
+        if savepath is not None:
+            df.to_csv(f'{savepath}_predictions.csv')
 
     bins = np.arange(0, 10.25, .25)
     distbins = np.arange(0, 5.5, .5)
     df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
-    df['dist'] = pd.cut(df['dist'], distbins, labels=distbins[:-1], include_lowest=True)
+    df['distance'] = pd.cut(df['distance'], distbins, labels=distbins[:-1], include_lowest=True)
     return df
 
 
@@ -403,6 +428,7 @@ def snrheatmap(
 
     df = eval_bin(
         datadir,
+        savepath=savepath,
         modelpath=modelpath,
         samplelimit=samplelimit,
         na=na,
@@ -410,7 +436,7 @@ def snrheatmap(
         no_phase=no_phase,
         batch_size=batch_size,
         snr_range=(0, 100),
-        eval_sign=eval_sign
+        eval_sign=eval_sign,
     )
 
     means = pd.pivot_table(df, values='residuals', index='bins', columns='snr', aggfunc=np.mean)
@@ -457,7 +483,7 @@ def densityheatmap(
 
     for savedir, col, label, lims in zip(
         ['densityheatmaps', 'distanceheatmaps'],
-        ['neighbors', 'dist'],
+        ['neighbors', 'distance'],
         ['Number of objects', 'Average distance to nearest neighbor (microns)'],
         [(1, 30), (0, 4)]
     ):
@@ -468,6 +494,8 @@ def densityheatmap(
             savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
         else:
             savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+        df.to_csv(f'{savepath}_predictions.csv')
 
         means = pd.pivot_table(df, values='residuals', index='bins', columns=col, aggfunc=np.mean)
         means = means.sort_index().interpolate()
@@ -493,7 +521,8 @@ def iter_eval_bin_with_reference(
     no_phase: bool = False,
     batch_size: int = 100,
     snr_range: tuple = (21, 30),
-    eval_sign: str = 'positive_only'
+    eval_sign: str = 'positive_only',
+    savepath: Any = None,
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(
@@ -507,6 +536,7 @@ def iter_eval_bin_with_reference(
 
     val = data_utils.collect_dataset(
         datapath,
+        metadata=True,
         modes=gen.n_modes,
         samplelimit=samplelimit,
         no_phase=no_phase,
@@ -515,50 +545,51 @@ def iter_eval_bin_with_reference(
     val = np.array(list(val.take(-1)))
     inputs = np.array([i.numpy() for i in val[:, 0]])
     ys = np.array([i.numpy() for i in val[:, 1]])
+    snrs = np.array([i.numpy() for i in val[:, 2]])
+    p2v = np.array([i.numpy() for i in val[:, 3]])
+    npoints = np.array([i.numpy() for i in val[:, 4]])
+    files = np.array([Path(str(i.numpy(), "utf-8")) for i in val[:, -1]])
+    refs = np.array([np.squeeze(data_utils.get_image(f.with_stem(f'{f.stem}_gt'))) for f in files])
 
-    # ys = np.zeros_like(ys)
-    # ys[:, 3] = .1
-
-    p2v = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys]
     residuals = pd.DataFrame.from_dict({
         'id': np.arange(ys.shape[0], dtype=int),
         'niter': np.zeros(ys.shape[0], dtype=int),
         'aberration': p2v,
         'residuals': p2v,
+        'snr': snrs
     })
 
-    reference = multipoint_dataset.beads(gen=gen, object_size=0, num_objs=1)
-    snr = gen._randuniform(snr_range)
-    rand_noise = gen._random_noise(
-        image=reference,
-        mean=gen.mean_background_noise,
-        sigma=gen.sigma_background_noise
-    )
-
     for k in range(1, niter+1):
-        for i in range(inputs.shape[0]):
-            phi = Wavefront(
-                ys[i],
-                modes=gen.n_modes,
-                signed=True,
-                rotate=True,
-                mode_weights='pyramid',
-                lam_detection=gen.lam_detection,
-            )
+        if k > 1:
+            for i in range(inputs.shape[0]):
+                phi = Wavefront(
+                    ys[i],
+                    modes=gen.n_modes,
+                    signed=True,
+                    rotate=True,
+                    mode_weights='pyramid',
+                    lam_detection=gen.lam_detection,
+                )
 
-            psf = gen.single_psf(
-                phi=phi,
-                normed=True,
-                noise=False,
-                meta=False,
-            )
+                psf = gen.single_psf(
+                    phi=phi,
+                    normed=True,
+                    noise=False,
+                    meta=False,
+                )
 
-            img = utils.fftconvolution(sample=reference, kernel=psf)
-            img *= snr ** 2
+                img = utils.fftconvolution(sample=refs[i], kernel=psf)
+                img *= snrs[i] ** 2
 
-            noisy_img = rand_noise + img
-            noisy_img /= np.max(noisy_img)
-            inputs[i] = noisy_img[..., np.newaxis]
+                rand_noise = gen._random_noise(
+                    image=refs[i],
+                    mean=gen.mean_background_noise,
+                    sigma=gen.sigma_background_noise
+                )
+
+                noisy_img = rand_noise + img
+                noisy_img /= np.max(noisy_img)
+                inputs[i] = noisy_img[..., np.newaxis]
 
         if input_coverage != 1.:
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
@@ -568,18 +599,26 @@ def iter_eval_bin_with_reference(
             inputs=inputs,
             gen=gen,
             ys=ys,
-            psnr=snr,
             batch_size=batch_size,
-            reference=reference,
             eval_sign=eval_sign
         )
 
         y = pd.DataFrame(np.arange(inputs.shape[0], dtype=int), columns=['id'])
+        y['niter'] = k
         y['residuals'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in res]
         y['aberration'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys]
         y['predictions'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ps]
-        y['niter'] = k
+        y['snr'] = snrs
+
+        for z in range(ps.shape[-1]):
+            y[f'z{z}_ground_truth'] = ys[:, z]
+            y[f'z{z}_prediction'] = ps[:, z]
+            y[f'z{z}_residual'] = res[:, z]
+
         residuals = residuals.append(y, ignore_index=True)
+
+        if savepath is not None:
+            residuals.to_csv(f'{savepath}_predictions.csv')
 
         # setup next iter
         ys = res
@@ -612,6 +651,7 @@ def iterheatmap(
 
     df = iter_eval_bin_with_reference(
         datadir,
+        savepath=savepath,
         niter=niter,
         modelpath=modelpath,
         samplelimit=samplelimit,
@@ -777,7 +817,6 @@ def random_samples(
                         pltstyle='dark_background'
                     )                
                     _ = pool.apply_async(task)  # issue task
-                    
-    
+
     pool.close()    # close the pool
     pool.join()     # wait for all tasks to complete

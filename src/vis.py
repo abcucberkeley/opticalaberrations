@@ -278,13 +278,6 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
         peaks = []
         zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
 
-        ## Training dataset
-        # difractionlimit = np.arange(0, 0.05, .01).round(3)  # 5 bins
-        # small = np.arange(.05, .1, .002).round(3)           # 25 bins
-        # large = np.arange(.1, .3, .01).round(3)             # 20 bins
-        # min_amps = np.concatenate([difractionlimit, small, large[:-1]])
-        # max_amps = np.concatenate([difractionlimit[1:], small, large])
-
         ## Testing dataset
         min_amps = np.arange(0, .30, .01).round(3)
         max_amps = np.arange(.01, .31, .01).round(3)
