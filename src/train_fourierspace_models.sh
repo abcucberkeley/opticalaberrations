@@ -30,6 +30,6 @@ do
   python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 2 --gpus 4 --cpus 16 \
   --task "--network opticalnet --mul --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH --psf_type $PSF_TYPE --wavelength $LAMBDA --x_voxel_size $xVOXEL --y_voxel_size $yVOXEL --z_voxel_size $zVOXEL --multinode" \
   --taskname opticalnet \
-  --name new/$DATASET/z$MODES/$EMB
+  --name new/$DATASET/z$MODES/compact
 done
 
