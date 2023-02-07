@@ -126,7 +126,7 @@ class Wavefront:
         self.amplitudes_ansi = np.array(
             self._dict_to_list({z.index_ansi: a for z, a in self.zernikes.items()})
         )
-        self.amplitudes = np.array(
+        self.amplitudes_ansi_waves = np.array(
             self._dict_to_list({z.index_ansi: self._microns2waves(a) for z, a in self.zernikes.items()})
         )
 
@@ -348,8 +348,11 @@ class Wavefront:
     def wave(self, size=55, normed=True):
         return np.flip(np.rot90(self.polynomial(size=size, normed=normed)), axis=0)
 
-    def _fit_zernikes(self, wavefront):
+    def _fit_zernikes(self, wavefront, rotate=True):
         wavefront = np.ascontiguousarray(imread(wavefront).astype(float))
+
+        if rotate:
+            wavefront = np.flip(np.rot90(wavefront), axis=0)
 
         zernikes = [Zernike(i) for i in range(self.length)]
         wavefront = wavefront[:, ~np.isnan(wavefront).all(axis=0)]

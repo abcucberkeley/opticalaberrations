@@ -20,6 +20,9 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from line_profiler_pycharm import profile
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+import pyotf.phaseretrieval as pr
+from pyotf.utils import prep_data_for_PR
+from pyotf.zernike import osa2degrees
 
 import utils
 import vis
@@ -1211,18 +1214,103 @@ def calibrate_dm(datadir, dm_calibration):
     calibration.to_csv(f"{output_file}.csv", header=False, index=False)
     logger.info(f"Saved result to: {output_file}")
 
-def phase_retrieval(img: Path,
+
+def phase_retrieval(
+    img: Path,
+    num_modes: int,
     dm_calibration: Any,
     dm_state: Any,
     axial_voxel_size: float,
     lateral_voxel_size: float,
-    wavelength: float = .605,
+    wavelength: float = .510,
     dm_damping_scalar: float = 1,
-    prediction_threshold: float = 0.0,
     plot: bool = False,
     num_iterations: int = 150,
     ignore_modes: list = (0, 1, 2, 4),
-    ):
+    prediction_threshold: float = 0.0,
+):
+    dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
+    data = np.int_(imread(img))
+    data_prepped = prep_data_for_PR(data, multiplier=1.1)
 
+    psfgen = SyntheticPSF(
+        psf_type='widefield',
+        snr=100,
+        psf_shape=data.shape,
+        n_modes=num_modes,
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
 
+    params = dict(
+        wl=psfgen.lam_detection,
+        na=psfgen.na_detection,
+        ni=psfgen.refractive_index,
+        res=lateral_voxel_size,
+        zres=axial_voxel_size,
+    )
+
+    pr_result = pr.retrieve_phase(
+        data_prepped,
+        params,
+        max_iters=num_iterations,
+        pupil_tol=1e-5,
+        mse_tol=1e-5,
+        phase_only=True
+    )
+    pr_result.fit_to_zernikes(num_modes-1, mapping=osa2degrees)
+
+    pupil = pr_result.phase / (2 * np.pi)
+    pupil[pupil == 0.] = np.nan
+    pupil_path = Path(f"{img.with_suffix('')}_phase_retrieval_wavefront.tif")
+    imsave(pupil_path, pupil)
+
+    threshold = utils.waves2microns(prediction_threshold, wavelength=psfgen.lam_detection)
+    ignore_modes = list(map(int, ignore_modes))
+
+    preds = np.zeros(num_modes)
+    preds[1:] = pr_result.zd_result.pcoefs #/ (2 * np.pi)
+    preds[ignore_modes] = 0.
+    preds[np.abs(preds) <= threshold] = 0.
+
+    preds_std = np.zeros(num_modes)
+    preds_std[1:] = pr_result.zd_result.mcoefs #/ (2 * np.pi)
+    preds_std[ignore_modes] = 0.
+
+    pred = Wavefront(preds, modes=num_modes, order='ansi', lam_detection=wavelength)
+    pred_std = Wavefront(preds_std, modes=num_modes, order='ansi', lam_detection=wavelength)
+
+    coefficients = [
+        {'n': z.n, 'm': z.m, 'amplitude': a}
+        for z, a in pred.zernikes.items()
+    ]
+
+    coefficients = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
+    coefficients.index.name = 'ansi'
+    coefficients.to_csv(f"{img.with_suffix('')}_phase_retrieval_zernike_coefficients.csv")
+
+    if dm_calibration is not None:
+        dm_state = load_dm(dm_state)
+        estimate_and_save_new_dm(
+            savepath=Path(f"{img.with_suffix('')}_phase_retrieval_corrected_actuators.csv"),
+            coefficients=coefficients['amplitude'].values,
+            dm_calibration=dm_calibration,
+            dm_state=dm_state,
+            dm_damping_scalar=dm_damping_scalar
+        )
+
+    psf = psfgen.single_psf(pred, normed=True, noise=False)
+    imsave(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf)
+
+    if plot:
+        vis.diagnosis(
+            pred=pred,
+            pred_std=pred_std,
+            save_path=Path(f"{img.with_suffix('')}_phase_retrieval_diagnosis"),
+        )
+
+        fig, axes = pr_result.plot()
+        plt.savefig(Path(f"{img.with_suffix('')}_phase_retrieval_convergence.svg"), bbox_inches='tight', pad_inches=.25)

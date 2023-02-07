@@ -332,6 +332,52 @@ def parse_args(args):
         help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
     )
 
+
+    phase_retrieval = subparsers.add_parser("phase_retrieval")
+    phase_retrieval.add_argument("input", type=Path, help="path to input .tif file")
+    phase_retrieval.add_argument(
+        "dm_calibration", type=Path,
+        help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
+    )
+    phase_retrieval.add_argument(
+        "--num_modes", type=int, default=15,
+        help="number of zernike modes to predict"
+    )
+    phase_retrieval.add_argument(
+        "--current_dm", default=None, type=Path,
+        help="optional path to current DM .csv file (Default: `blank mirror`)"
+    )
+    phase_retrieval.add_argument(
+        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+    phase_retrieval.add_argument(
+        "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
+    )
+    phase_retrieval.add_argument(
+        "--wavelength", default=.510, type=float,
+        help='wavelength in microns'
+    )
+    phase_retrieval.add_argument(
+        "--dm_damping_scalar", default=.75, type=float,
+        help='scale DM actuators by an arbitrary multiplier'
+    )
+    phase_retrieval.add_argument(
+        "--prediction_threshold", default=0.02, type=float,
+        help='set predictions below threshold to zero (waves)'
+    )
+    phase_retrieval.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
+    phase_retrieval.add_argument(
+        "--num_iterations", default=150, type=int,
+        help="max number of iterations"
+    )
+    phase_retrieval.add_argument(
+        "--ignore_mode", action='append', default=[0, 1, 2, 4],
+        help='ANSI index for mode you wish to ignore'
+    )
+
     return parser.parse_args(args)
 
 
@@ -484,12 +530,19 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         )
     elif args.func == 'phase_retrieval':
         experimental.phase_retrieval(
-            input_path=args.input_path,,
+            img=args.input,
+            num_modes=args.num_modes,
             dm_calibration=args.dm_calibration,
-            wavelength = args.wavelength,
-            axial_voxel_size = args.axial_voxel_size,
-            lateral_voxel_size = args.lateral_voxel_size,
-    )
+            dm_state=args.current_dm,
+            axial_voxel_size=args.axial_voxel_size,
+            lateral_voxel_size=args.lateral_voxel_size,
+            wavelength=args.wavelength,
+            dm_damping_scalar=args.dm_damping_scalar,
+            prediction_threshold=args.prediction_threshold,
+            num_iterations=args.num_iterations,
+            plot=args.plot,
+            ignore_modes=args.ignore_mode,
+        )
     else:
         logger.error(f"Error")
 

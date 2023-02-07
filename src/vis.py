@@ -2424,7 +2424,13 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None):
     ax_wavefornt = fig.add_subplot(gs[0, -1])
     ax_zcoff = fig.add_subplot(gs[0, :-1])
 
-    plot_wavefront(ax_wavefornt, pred_wave, label='Predicted wavefront', vcolorbar=True)
+    plot_wavefront(
+        ax_wavefornt,
+        pred_wave,
+        label='Predicted wavefront',
+        vcolorbar=True,
+        nas=(.55, .65, .75, .85, .95, 1.)
+    )
 
     if pred_std is not None:
         ax_zcoff.bar(
