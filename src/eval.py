@@ -609,6 +609,7 @@ def iter_eval_bin_with_reference(
         y['aberration'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys]
         y['predictions'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ps]
         y['snr'] = snrs
+        y['neighbors'] = npoints
 
         for z in range(ps.shape[-1]):
             y[f'z{z}_ground_truth'] = ys[:, z]
@@ -636,7 +637,7 @@ def iterheatmap(
     na: float = 1.0,
     input_coverage: float = 1.0,
     no_phase: bool = False,
-    batch_size: int = 100,
+    batch_size: int = 1024,
     snr_range: tuple = (21, 30),
     eval_sign: str = 'positive_only'
 ):
@@ -664,16 +665,15 @@ def iterheatmap(
     )
 
     means = pd.pivot_table(
-        df[df['niter'] == 0], values='residuals', index='aberration', columns='niter', aggfunc=np.mean
+        df[df['niter'] == 0], values='residuals', index='id', columns='niter', aggfunc=np.mean
     )
     for i in range(1, niter+1):
         means[i] = pd.pivot_table(
-            df[df['niter'] == i],
-            values='residuals', index=means.index, columns='niter', aggfunc=np.mean
+            df[df['niter'] == i], values='residuals', index='id', columns='niter', aggfunc=np.mean
         )
 
-    bins = np.arange(0, 11, .25)
-    means.index = pd.cut(means.index, bins, labels=bins[1:], include_lowest=True)
+    bins = np.arange(0, 10.25, .25)
+    means.index = pd.cut(means[0], bins, labels=bins[1:], include_lowest=True)
     means.index.name = 'bins'
     means = means.groupby("bins").agg("mean")
     means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
