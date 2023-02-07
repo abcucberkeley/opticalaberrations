@@ -482,6 +482,14 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             datadir=args.datadir,
             dm_calibration=args.dm_calibration,
         )
+    elif args.func == 'phase_retrieval':
+        experimental.phase_retrieval(
+            input_path=args.input_path,,
+            dm_calibration=args.dm_calibration,
+            wavelength = args.wavelength,
+            axial_voxel_size = args.axial_voxel_size,
+            lateral_voxel_size = args.lateral_voxel_size,
+    )
     else:
         logger.error(f"Error")
 

@@ -1210,3 +1210,19 @@ def calibrate_dm(datadir, dm_calibration):
 
     calibration.to_csv(f"{output_file}.csv", header=False, index=False)
     logger.info(f"Saved result to: {output_file}")
+
+def phase_retrieval(img: Path,
+    dm_calibration: Any,
+    dm_state: Any,
+    axial_voxel_size: float,
+    lateral_voxel_size: float,
+    wavelength: float = .605,
+    dm_damping_scalar: float = 1,
+    prediction_threshold: float = 0.0,
+    plot: bool = False,
+    num_iterations: int = 150,
+    ignore_modes: list = (0, 1, 2, 4),
+    ):
+
+
+
