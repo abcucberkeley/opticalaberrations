@@ -53,18 +53,23 @@ class Stem(layers.Layer):
         return config
 
     def call(self, inputs, training=True, **kwargs):
-        alpha = self.conv(inputs[:, :3])
-        alpha = self.act(alpha)
 
-        if self.no_phase:
-            return alpha
+        if self.mul:
+            emb = layers.multiply([inputs[:, :3], inputs[:, 3:]])
+            emb = self.conv(emb)
+            emb = self.act(emb)
+            return emb
         else:
-            phi = self.conv(inputs[:, 3:])
-            phi = self.act(phi)
+            if self.no_phase:
+                alpha = self.conv(inputs[:, :3])
+                alpha = self.act(alpha)
+                return alpha
+            else:  # two independent kernels for alpha and phi
+                alpha = self.conv(inputs[:, :3])
+                alpha = self.act(alpha)
 
-            if self.mul:
-                return layers.multiply([alpha, phi])
-            else:
+                phi = self.conv(inputs[:, 3:])
+                phi = self.act(phi)
                 return layers.concatenate([alpha, phi], axis=1)
 
 
