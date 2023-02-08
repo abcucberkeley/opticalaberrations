@@ -5,6 +5,27 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "phase_retrieval",
+            "type": "python",
+            "request": "launch",
+            "module": "ao",
+            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\src",
+            "args": [
+                "phase_retrieval",                
+                "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\examples\\LabVIEW\\Measurement_510nm.tif",
+                "U:\\Data\\20221003_Korra_TestForThayer\\20230201\\empirical\\calibration.csv",
+                "--current_dm=C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\examples\\DM_State_510nm.csv",
+                "--dm_damping_scalar=1.0",
+                "--wavelength=0.51",
+                "--lateral_voxel_size=0.097",
+                "--axial_voxel_size=0.2",
+                "--prediction_threshold=0.00",
+                "--num_iterations=150",
+                "--plot",                
+            ],
+            "justMyCode": true
+        },
+        {
             "name": "ao.py",
             "type": "python",
             "request": "launch",

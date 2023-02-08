@@ -1258,12 +1258,15 @@ def phase_retrieval(
         params,
         max_iters=num_iterations,
         pupil_tol=1e-5,
-        mse_tol=1e-5,
+        mse_tol=0,
         phase_only=True
     )
-    pr_result.fit_to_zernikes(num_modes-1, mapping=osa2degrees)
+    pupil = pr_result.phase / (2 * np.pi) # convert radians to waves
+    pr_result.phase = utils.waves2microns(pupil, wavelength=psfgen.lam_detection)  # convert waves to microns before fitting.
+    pr_result.fit_to_zernikes(num_modes-1, mapping=osa2degrees) # zernikes now in um rms
+    pr_result.phase = pupil # phase is now again in waves
 
-    pupil = pr_result.phase / (2 * np.pi)
+    
     pupil[pupil == 0.] = np.nan
     pupil_path = Path(f"{img.with_suffix('')}_phase_retrieval_wavefront.tif")
     imsave(pupil_path, pupil)
@@ -1276,10 +1279,8 @@ def phase_retrieval(
     preds[ignore_modes] = 0.
     preds[np.abs(preds) <= threshold] = 0.
 
-    preds_std = np.zeros(num_modes)
-    preds_std[1:] = pr_result.zd_result.mcoefs #/ (2 * np.pi)
-    preds_std[ignore_modes] = 0.
-
+    preds_std = np.zeros(num_modes) # finding the error in the coeffs is difficult.  This makes the error bars zero.    
+    
     pred = Wavefront(preds, modes=num_modes, order='ansi', lam_detection=wavelength)
     pred_std = Wavefront(preds_std, modes=num_modes, order='ansi', lam_detection=wavelength)
 
@@ -1313,4 +1314,5 @@ def phase_retrieval(
         )
 
         fig, axes = pr_result.plot()
+        axes[0].set_title("Phase in waves")
         plt.savefig(Path(f"{img.with_suffix('')}_phase_retrieval_convergence.svg"), bbox_inches='tight', pad_inches=.25)
