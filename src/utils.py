@@ -129,14 +129,15 @@ def p2v(zernikes, wavelength=.510, na=1.0):
 @profile
 def peak2valley(w, wavelength: float = .510, na: float = 1.0) -> float:
     if not isinstance(w, Wavefront):
-        w = Wavefront(w, lam_detection=wavelength).wave(100)
+        w = Wavefront(w, lam_detection=wavelength)
 
-    center = (int(w.shape[0] / 2), int(w.shape[1] / 2))
-    Y, X = np.ogrid[:w.shape[0], :w.shape[1]]
+    wavefront = w.wave(100)
+    center = (int(wavefront.shape[0] / 2), int(wavefront.shape[1] / 2))
+    Y, X = np.ogrid[:wavefront.shape[0], :wavefront.shape[1]]
     dist_from_center = np.sqrt((X - center[0]) ** 2 + (Y - center[1]) ** 2)
-    mask = dist_from_center <= (na * w.shape[0]) / 2
-    phi = w * mask
-    return abs(np.nanmax(phi) - np.nanmin(phi))
+    mask = dist_from_center <= (na * wavefront.shape[0]) / 2
+    wavefront *= mask
+    return abs(np.nanmax(wavefront) - np.nanmin(wavefront))
 
 
 def compute_signal_lost(phi, gen, res):

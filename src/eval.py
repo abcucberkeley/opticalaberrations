@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
 
+import swifter
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -426,18 +427,25 @@ def snrheatmap(
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
 
-    df = eval_bin(
-        datadir,
-        savepath=savepath,
-        modelpath=modelpath,
-        samplelimit=samplelimit,
-        na=na,
-        input_coverage=input_coverage,
-        no_phase=no_phase,
-        batch_size=batch_size,
-        snr_range=(0, 100),
-        eval_sign=eval_sign,
-    )
+    if datadir.suffix == '.csv':
+        df = pd.read_csv(datadir, header=0, index_col=0)
+        bins = np.arange(0, 10.25, .25)
+        distbins = np.arange(0, 5.5, .5)
+        df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+        df['distance'] = pd.cut(df['distance'], distbins, labels=distbins[:-1], include_lowest=True)
+    else:
+        df = eval_bin(
+            datadir,
+            savepath=savepath,
+            modelpath=modelpath,
+            samplelimit=samplelimit,
+            na=na,
+            input_coverage=input_coverage,
+            no_phase=no_phase,
+            batch_size=batch_size,
+            snr_range=(0, 100),
+            eval_sign=eval_sign,
+        )
 
     means = pd.pivot_table(df, values='residuals', index='bins', columns='snr', aggfunc=np.mean)
     means = means.sort_index().interpolate()
@@ -452,6 +460,32 @@ def snrheatmap(
         label=f'Peak signal-to-noise ratio',
         lims=(0, 100)
     )
+
+    for z in range(3, modelspecs.n_modes):
+        if z == 4: continue  # ignore defocus
+
+        df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
+            lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+        )
+        df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
+            lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+        )
+
+        bins = np.arange(0, 10.25, .25)
+        df['bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
+        means = pd.pivot_table(df, values=f'z{z}_residual', index='bins', columns='snr', aggfunc=np.mean)
+        means = means.sort_index().interpolate()
+        logger.info(f"z{z}")
+        logger.info(means)
+        means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
+
+        plot_heatmap(
+            means,
+            wavelength=modelspecs.lam_detection,
+            savepath=savepath.with_name(f"{savepath.name}_z{z}"),
+            label=f'Peak signal-to-noise ratio',
+            lims=(0, 100)
+        )
 
 
 @profile
@@ -468,18 +502,26 @@ def densityheatmap(
     eval_sign: str = 'positive_only'
 ):
     modelspecs = backend.load_metadata(modelpath)
-    df = eval_bin(
-        datadir,
-        modelpath=modelpath,
-        samplelimit=samplelimit,
-        distribution=distribution,
-        na=na,
-        snr_range=snr_range,
-        input_coverage=input_coverage,
-        no_phase=no_phase,
-        batch_size=batch_size,
-        eval_sign=eval_sign
-    )
+
+    if datadir.suffix == '.csv':
+        df = pd.read_csv(datadir, header=0, index_col=0)
+        bins = np.arange(0, 10.25, .25)
+        distbins = np.arange(0, 5.5, .5)
+        df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+        df['distance'] = pd.cut(df['distance'], distbins, labels=distbins[:-1], include_lowest=True)
+    else:
+        df = eval_bin(
+            datadir,
+            modelpath=modelpath,
+            samplelimit=samplelimit,
+            distribution=distribution,
+            na=na,
+            snr_range=snr_range,
+            input_coverage=input_coverage,
+            no_phase=no_phase,
+            batch_size=batch_size,
+            eval_sign=eval_sign
+        )
 
     for savedir, col, label, lims in zip(
         ['densityheatmaps', 'distanceheatmaps'],
@@ -508,6 +550,32 @@ def densityheatmap(
             label=label,
             lims=lims
         )
+
+        for z in range(3, modelspecs.n_modes):
+            if z == 4: continue  # ignore defocus
+
+            df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
+                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+            )
+            df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
+                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+            )
+
+            bins = np.arange(0, 10.25, .25)
+            df['bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
+            means = pd.pivot_table(df, values=f'z{z}_residual', index='bins', columns=col, aggfunc=np.mean)
+            means = means.sort_index().interpolate()
+            logger.info(f"z{z}")
+            logger.info(means)
+            means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
+
+            plot_heatmap(
+                means,
+                wavelength=modelspecs.lam_detection,
+                savepath=savepath.with_name(f"{savepath.name}_z{z}"),
+                label=label,
+                lims=lims
+            )
 
 
 @profile
@@ -558,6 +626,11 @@ def iter_eval_bin_with_reference(
         'residuals': p2v,
         'snr': snrs
     })
+
+    for z in range(ys.shape[-1]):
+        residuals[f'z{z}_ground_truth'] = ys[:, z]
+        residuals[f'z{z}_prediction'] = np.zeros_like(ys[:, z])
+        residuals[f'z{z}_residual'] = ys[:, z]
 
     for k in range(1, niter+1):
         if k > 1:
@@ -650,19 +723,22 @@ def iterheatmap(
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
 
-    df = iter_eval_bin_with_reference(
-        datadir,
-        savepath=savepath,
-        niter=niter,
-        modelpath=modelpath,
-        samplelimit=samplelimit,
-        na=na,
-        snr_range=snr_range,
-        input_coverage=input_coverage,
-        no_phase=no_phase,
-        batch_size=batch_size,
-        eval_sign=eval_sign
-    )
+    if datadir.suffix == '.csv':
+        df = pd.read_csv(datadir, header=0, index_col=0)
+    else:
+        df = iter_eval_bin_with_reference(
+            datadir,
+            savepath=savepath,
+            niter=niter,
+            modelpath=modelpath,
+            samplelimit=samplelimit,
+            na=na,
+            snr_range=snr_range,
+            input_coverage=input_coverage,
+            no_phase=no_phase,
+            batch_size=batch_size,
+            eval_sign=eval_sign
+        )
 
     means = pd.pivot_table(
         df[df['niter'] == 0], values='residuals', index='id', columns='niter', aggfunc=np.mean
@@ -689,6 +765,43 @@ def iterheatmap(
         label=f'Number of iterations',
         lims=(0, niter)
     )
+
+    for z in range(3, modelspecs.n_modes):
+        if z == 4: continue  # ignore defocus
+
+        df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
+            lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+        )
+        df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
+            lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+        )
+
+        means = pd.pivot_table(
+            df[df['niter'] == 0], values=f"z{z}_residual", index='id', columns='niter', aggfunc=np.mean
+        )
+        for i in range(1, niter + 1):
+            means[i] = pd.pivot_table(
+                df[df['niter'] == i], values=f"z{z}_residual", index='id', columns='niter', aggfunc=np.mean
+            )
+
+        bins = np.arange(0, 10.25, .25)
+        means.index = pd.cut(means[0], bins, labels=bins[1:], include_lowest=True)
+        means.index.name = 'bins'
+        means = means.groupby("bins").agg("mean")
+        means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
+        means = means.sort_index().interpolate()
+
+        logger.info(f"z{z}")
+        logger.info(means)
+        means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
+
+        plot_heatmap(
+            means,
+            wavelength=modelspecs.lam_detection,
+            savepath=savepath.with_name(f"{savepath.name}_z{z}"),
+            label=f'Number of iterations',
+            lims=(0, niter)
+        )
 
 
 @profile

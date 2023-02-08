@@ -147,10 +147,10 @@ def sim(
             sigma=gen.sigma_background_noise
         )
         noisy_img = rand_noise + img
-        psnr = np.sqrt(np.max(noisy_img))
+        psnr = np.sqrt(np.max(noisy_img)-gen.mean_background_noise)
         maxcounts = np.max(noisy_img)
     else:
-        psnr = np.mean(np.array(snr))
+        psnr = np.mean(np.array(snr)-gen.mean_background_noise)
         maxcounts = np.max(img)
         noisy_img = img
 
