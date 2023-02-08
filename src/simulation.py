@@ -283,6 +283,77 @@ if __name__ == "__main__":
     gen.plot_embeddings(
         inputs=pseudo_psf,
         emb=ratio_emb,
-        save_path=outdir / f"fourier_embeddings_num_objs_{num_objs}",
+        save_path=outdir / f"pseudo_psf_num_objs_{num_objs}",
     )
 
+    zernikes = np.zeros(modes)
+    zernikes[11] = .05  # mu rms
+    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    img = gen.single_psf(wavefront, normed=True, noise=False)
+
+    if num_objs > 1:
+        img = fftconvolution(sample=reference, kernel=img)
+
+    embeddings_img = gen.embedding(
+        psf=img,
+        plot=outdir / f"img_num_objs_{num_objs}",
+        remove_interference=False,
+    )
+
+    from skimage.feature import hog
+
+    structure = np.zeros_like(img)
+    for plane in range(img.shape[0]):
+        fd, hog_image = hog(
+            img[plane],
+            orientations=9,
+            pixels_per_cell=(3, 3),
+            cells_per_block=(3, 3),
+            visualize=True,
+            block_norm='L2-Hys'
+        )
+        structure[plane] = hog_image
+
+
+    # t_loc_otsu = rank.otsu(img, ball(15))
+    # t_glob_otsu = threshold_otsu(img)
+    # structure = np.zeros_like(img)
+    # structure[img >= t_glob_otsu] = img[img >= t_glob_otsu]**3
+    structure /= np.nanmax(structure)
+
+    # if num_objs > 1:
+    #     structure = fftconvolution(sample=structure, kernel=gen.ipsf)
+
+    embeddings_structure = gen.embedding(
+        psf=structure,
+        plot=outdir / f"structure_num_objs_{num_objs}",
+        remove_interference=False,
+    )
+
+    ratio = gen.fft(img) / gen.fft(structure)
+    reconstructed_psf = np.abs(gen.ifft(ratio))
+    reconstructed_psf /= np.nanmax(reconstructed_psf)
+
+    alpha = gen.compute_emb(
+        ratio,
+        val='abs',
+        ratio=True,
+        norm=True,
+        embedding_option='spatial_planes',
+    )
+
+    phi = gen.compute_emb(
+        ratio,
+        val='angle',
+        ratio=False,
+        na_mask=True,
+        norm=False,
+        embedding_option='spatial_planes',
+    )
+    ratio_emb = np.concatenate([alpha, phi], axis=0)
+
+    gen.plot_embeddings(
+        inputs=reconstructed_psf,
+        emb=ratio_emb,
+        save_path=outdir / f"fourier_embeddings_num_objs_{num_objs}",
+    )
