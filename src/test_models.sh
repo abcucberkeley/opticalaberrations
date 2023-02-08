@@ -42,7 +42,7 @@ do
         --taskname $NA \
         --name $MODEL/$EVALSIGN/iterheatmaps_${COV}
 
-        python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 32 --gpus 2 \
+        python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
         --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN --n_samples 10000 snrheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/snrheatmaps_${COV}
