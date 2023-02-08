@@ -137,8 +137,8 @@ def sim(
 
     reference /= np.max(reference)
     img = fftconvolution(sample=reference, kernel=kernel)
-    snr = gen._randuniform(snr)
-    img *= snr ** 2
+    psnr = gen._randuniform(snr)
+    img *= psnr ** 2
 
     if noise:
         rand_noise = gen._random_noise(
@@ -147,10 +147,8 @@ def sim(
             sigma=gen.sigma_background_noise
         )
         noisy_img = rand_noise + img
-        psnr = np.sqrt(np.max(noisy_img)-gen.mean_background_noise)
         maxcounts = np.max(noisy_img)
     else:
-        psnr = np.mean(np.array(snr)-gen.mean_background_noise)
         maxcounts = np.max(img)
         noisy_img = img
 
