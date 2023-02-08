@@ -9,6 +9,7 @@ DATASET='spatial_planes_embeddings'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/x108-y108-z200/i$SHAPE/z15"
 EVALSIGN="signed"  ## options: "positive_only", "dual_stage", "signed"
+BATCH=1024
 
 for MODES in 15 28 45
 do
@@ -30,13 +31,11 @@ do
     do
       for COV in 1.0
       do
-        BATCH=512
-        python manager.py slurm test.py --partition abc --constraint 'titan' --mem '250GB' --cpus 10 --gpus 2 \
+        python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0 \
         --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN densityheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/densityheatmaps_${COV}
 
-        BATCH=1024
         python manager.py slurm test.py --partition abc_a100 --mem '250GB' --cpus 8 --gpus 2 \
         --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN iterheatmap" \
         --taskname $NA \
