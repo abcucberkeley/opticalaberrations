@@ -5,7 +5,6 @@ yVOXEL=.108
 zVOXEL=.200
 LAMBDA=.510
 SHAPE=64
-BATCH=512
 DATASET='spatial_planes_embeddings'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/x108-y108-z200/i$SHAPE/z15"
@@ -31,17 +30,19 @@ do
     do
       for COV in 1.0
       do
-        python manager.py slurm test.py --partition abc --constraint 'titan'  --mem '128GB' --cpus 5 --gpus 1 \
+        BATCH=512
+        python manager.py slurm test.py --partition abc --constraint 'titan' --mem '250GB' --cpus 10 --gpus 2 \
         --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN densityheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/densityheatmaps_${COV}
 
-        python manager.py slurm test.py --partition abc_a100 --mem '128GB' --cpus 4 --gpus 1 \
+        BATCH=1024
+        python manager.py slurm test.py --partition abc_a100 --mem '250GB' --cpus 8 --gpus 2 \
         --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN iterheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/iterheatmaps_${COV}
 
-        python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
+        python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 32 --gpus 2 \
         --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN --n_samples 10000 snrheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/snrheatmaps_${COV}
