@@ -198,7 +198,7 @@ def bootstrap_predict(
     peaks: Any = None,
     remove_interference: bool = True,
     ignore_modes: list = (0, 1, 2, 4),
-    threshold: float = 0.02,
+    threshold: float = 0.,
     freq_strength_threshold: float = .01,
     verbose: bool = True,
     plot: Any = None,
@@ -289,7 +289,7 @@ def eval_rotation(
     rotations: np.ndarray,
     psfgen: SyntheticPSF,
     no_phase: bool,
-    threshold: float = 0.01,
+    threshold: float = 0.,
     plot: Any = None,
 ):
     """
@@ -476,7 +476,7 @@ def predict_rotation(
     phi_val: str = 'angle',
     peaks: Any = None,
     ignore_modes: list = (0, 1, 2, 4),
-    threshold: float = 0.02,
+    threshold: float = 0.,
     freq_strength_threshold: float = .01,
     verbose: bool = True,
     plot: Any = None,
@@ -763,7 +763,7 @@ def evaluate(
     batch_size: int = 1024,
     reference: Any = None,
     plot: Any = None,
-    threshold: float = 0.02,
+    threshold: float = 0.,
     eval_sign: str = 'positive_only',
     cpu_workers: int = -1
 ):

@@ -464,28 +464,31 @@ def snrheatmap(
     for z in range(3, modelspecs.n_modes):
         if z == 4: continue  # ignore defocus
 
-        df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
-            lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
-        )
-        df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
-            lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
-        )
+        try:
+            df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
+                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+            )
+            df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
+                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+            )
 
-        bins = np.arange(0, 10.25, .25)
-        df['bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
-        means = pd.pivot_table(df, values=f'z{z}_residual', index='bins', columns='snr', aggfunc=np.mean)
-        means = means.sort_index().interpolate()
-        logger.info(f"z{z}")
-        logger.info(means)
-        means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
+            bins = np.arange(0, 10.25, .25)
+            df['bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
+            means = pd.pivot_table(df, values=f'z{z}_residual', index='bins', columns='snr', aggfunc=np.mean)
+            means = means.sort_index().interpolate()
+            logger.info(f"z{z}")
+            logger.info(means)
+            means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
 
-        plot_heatmap(
-            means,
-            wavelength=modelspecs.lam_detection,
-            savepath=savepath.with_name(f"{savepath.name}_z{z}"),
-            label=f'Peak signal-to-noise ratio',
-            lims=(0, 100)
-        )
+            plot_heatmap(
+                means,
+                wavelength=modelspecs.lam_detection,
+                savepath=savepath.with_name(f"{savepath.name}_z{z}"),
+                label=f'Peak signal-to-noise ratio',
+                lims=(0, 100)
+            )
+        except KeyError:
+            logger.warning(f"No evaluation found for z{z}")
 
 
 @profile
@@ -554,28 +557,31 @@ def densityheatmap(
         for z in range(3, modelspecs.n_modes):
             if z == 4: continue  # ignore defocus
 
-            df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
-                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
-            )
-            df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
-                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
-            )
+            try:
+                df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
+                    lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+                )
+                df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
+                    lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+                )
 
-            bins = np.arange(0, 10.25, .25)
-            df['bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
-            means = pd.pivot_table(df, values=f'z{z}_residual', index='bins', columns=col, aggfunc=np.mean)
-            means = means.sort_index().interpolate()
-            logger.info(f"z{z}")
-            logger.info(means)
-            means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
+                bins = np.arange(0, 10.25, .25)
+                df['bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
+                means = pd.pivot_table(df, values=f'z{z}_residual', index='bins', columns=col, aggfunc=np.mean)
+                means = means.sort_index().interpolate()
+                logger.info(f"z{z}")
+                logger.info(means)
+                means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
 
-            plot_heatmap(
-                means,
-                wavelength=modelspecs.lam_detection,
-                savepath=savepath.with_name(f"{savepath.name}_z{z}"),
-                label=label,
-                lims=lims
-            )
+                plot_heatmap(
+                    means,
+                    wavelength=modelspecs.lam_detection,
+                    savepath=savepath.with_name(f"{savepath.name}_z{z}"),
+                    label=label,
+                    lims=lims
+                )
+            except KeyError:
+                logger.warning(f"No evaluation found for z{z}")
 
 
 @profile
@@ -769,39 +775,42 @@ def iterheatmap(
     for z in range(3, modelspecs.n_modes):
         if z == 4: continue  # ignore defocus
 
-        df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
-            lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
-        )
-        df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
-            lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
-        )
-
-        means = pd.pivot_table(
-            df[df['niter'] == 0], values=f"z{z}_residual", index='id', columns='niter', aggfunc=np.mean
-        )
-        for i in range(1, niter + 1):
-            means[i] = pd.pivot_table(
-                df[df['niter'] == i], values=f"z{z}_residual", index='id', columns='niter', aggfunc=np.mean
+        try:
+            df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
+                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+            )
+            df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
+                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
             )
 
-        bins = np.arange(0, 10.25, .25)
-        means.index = pd.cut(means[0], bins, labels=bins[1:], include_lowest=True)
-        means.index.name = 'bins'
-        means = means.groupby("bins").agg("mean")
-        means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
-        means = means.sort_index().interpolate()
+            means = pd.pivot_table(
+                df[df['niter'] == 0], values=f"z{z}_residual", index='id', columns='niter', aggfunc=np.mean
+            )
+            for i in range(1, niter + 1):
+                means[i] = pd.pivot_table(
+                    df[df['niter'] == i], values=f"z{z}_residual", index='id', columns='niter', aggfunc=np.mean
+                )
 
-        logger.info(f"z{z}")
-        logger.info(means)
-        means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
+            bins = np.arange(0, 10.25, .25)
+            means.index = pd.cut(means[0], bins, labels=bins[1:], include_lowest=True)
+            means.index.name = 'bins'
+            means = means.groupby("bins").agg("mean")
+            means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
+            means = means.sort_index().interpolate()
 
-        plot_heatmap(
-            means,
-            wavelength=modelspecs.lam_detection,
-            savepath=savepath.with_name(f"{savepath.name}_z{z}"),
-            label=f'Number of iterations',
-            lims=(0, niter)
-        )
+            logger.info(f"z{z}")
+            logger.info(means)
+            means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
+
+            plot_heatmap(
+                means,
+                wavelength=modelspecs.lam_detection,
+                savepath=savepath.with_name(f"{savepath.name}_z{z}"),
+                label=f'Number of iterations',
+                lims=(0, niter)
+            )
+        except KeyError:
+            logger.warning(f"No evaluation found for z{z}")
 
 
 @profile
