@@ -119,11 +119,11 @@ def create_synthetic_sample(
             sigma=gen.sigma_background_noise
         )
         noisy_img = rand_noise + img
-        psnr = np.sqrt(np.max(noisy_img)-gen.mean_background_noise)
         maxcounts = np.max(noisy_img)
+        psnr = np.sqrt(maxcounts)
     else:
-        psnr = np.mean(np.array(snr)-gen.mean_background_noise)
         maxcounts = np.max(img)
+        psnr = np.sqrt(maxcounts)
         noisy_img = img
 
     save_synthetic_sample(

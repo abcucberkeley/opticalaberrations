@@ -30,7 +30,6 @@ PHI='angle'
 CPUS=4
 MEM='80G'
 TIMELIMIT='1:00:00'
-SAMPLES_PER_JOB=100
 SHAPE=64
 
 MODES=15
@@ -42,6 +41,7 @@ OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
+  SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=200
   OBJS=(1 2 5 10 25)
   mPSNR=($(seq 11 10 51))
@@ -53,7 +53,8 @@ if [ "$DATASET" = "train" ];then
 
 else
   TYPE=''
-  SAMPLES_PER_BIN=100
+  SAMPLES_PER_JOB=10
+  SAMPLES_PER_BIN=10
   OBJS=(1 2 3 4 5 10 15 20 25 30)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
