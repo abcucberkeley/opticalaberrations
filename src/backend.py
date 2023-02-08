@@ -348,7 +348,7 @@ def eval_rotation(
     wavefront = Wavefront(preds)
 
     if plot is not None:
-        fig = plt.figure(figsize=(15, 20))
+        fig = plt.figure(figsize=(15, 20 * round(psfgen.n_modes/15)))
         plt.subplots_adjust(hspace=0.1)
         gs = fig.add_gridspec(len(wavefront.twins.keys()), 2)
 
