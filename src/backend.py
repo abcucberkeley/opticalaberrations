@@ -288,6 +288,7 @@ def eval_rotation(
     init_preds: np.ndarray,
     rotations: np.ndarray,
     psfgen: SyntheticPSF,
+    no_phase: bool,
     threshold: float = 0.01,
     plot: Any = None,
 ):
@@ -362,10 +363,10 @@ def eval_rotation(
                 ydata = np.degrees(ydata)
                 rho = rhos[np.argmin(np.abs(ydata))]
 
-                # exclude points near discontinuities (-90, +90, 450,..) based upon fit
+                # if spatial model: exclude points near discontinuities (-90, +90, 450,..) based upon fit
                 data_mask = np.ones(xdata.shape[0], dtype=bool)
-                data_mask[np.abs(init_preds[:, mode.index_ansi] / rho) < np.cos(np.radians(70)) * (rho > threshold)] = 0.
-                data_mask[rhos < rho/2] = 0.    # exclude if rho is unusually small (which can lead to small, but dominant primary mode near discontinuity)
+                if no_phase: data_mask[np.abs(init_preds[:, mode.index_ansi] / rho) < np.cos(np.radians(70)) * (rho > threshold)] = 0.
+                data_mask[rhos < rho/2] = 0. # exclude if rho is unusually small (which can lead to small, but dominant primary mode near discontinuity)
                 xdata = xdata[data_mask]
                 ydata = ydata[data_mask]
                 offset = ydata[0]
@@ -548,6 +549,7 @@ def predict_rotation(
         psfgen=psfgen,
         threshold=threshold,
         plot=plot,
+        no_phase=no_phase,
     )
 
     init_preds = np.stack(np.split(init_preds, inputs.shape[0]), axis=0)
