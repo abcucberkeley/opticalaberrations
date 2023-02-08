@@ -99,9 +99,9 @@ def load_metadata(
     with h5py.File(model_path, 'r') as file:
 
         try:
-            embedding_option = str(file.get('embedding_option').asstr()[()]).strip("\'").strip('\"')
+            embedding_option = str(file.get('embedding_option')[()]).strip("\'").strip('\"')
         except Exception:
-            embedding_option = 'principle_planes'
+            embedding_option = 'spatial_planes'
 
         psfgen = SyntheticPSF(
             psf_type=np.array(file.get('psf_type')[:]) if psf_type is None else psf_type,
@@ -984,7 +984,7 @@ def save_metadata(
     y_voxel_size: float,
     z_voxel_size: float,
     n_modes: int,
-    embedding_option: str = 'principle_planes'
+    embedding_option: str = 'spatial_planes'
 ):
     def add_param(h5file, name, data):
         try:
@@ -995,7 +995,7 @@ def save_metadata(
                 h5file.create_dataset(name, data=data)
 
             if isinstance(data, str):
-                assert h5file.get(name).asstr()[()] == data, f"Failed to write {name}"
+                assert h5file.get(name)[()] == data, f"Failed to write {name}"
             else:
                 assert np.allclose(h5file.get(name)[()], data), f"Failed to write {name}"
 

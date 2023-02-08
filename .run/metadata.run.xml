@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/predict.py" />
-    <option name="PARAMETERS" value="$USER_HOME$/fiona/thayer/opticalaberrations/models/new/spatial_planes_embeddings/z15/spatial_planes/opticalnet --psf_type ../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat --n_modes 15 --wavelength .510 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --embedding_option spatial_planes metadata" />
+    <option name="PARAMETERS" value="$USER_HOME$/fiona/thayer/opticalaberrations/models/new/spatial_planes_embeddings/z28/phase/opticalnet --psf_type ../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat --n_modes 28 --wavelength .510 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --embedding_option spatial_planes metadata" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
