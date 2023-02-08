@@ -31,19 +31,17 @@ do
     do
       for COV in 1.0
       do
-        #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
-        #python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
-        python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0 \
+        python manager.py slurm test.py --partition abc --constraint 'titan'  --mem '128GB' --cpus 5 --gpus 1 \
         --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN densityheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/densityheatmaps_${COV}
 
-        python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0 \
+        python manager.py slurm test.py --partition abc_a100 --mem '128GB' --cpus 4 --gpus 1 \
         --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN iterheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/iterheatmaps_${COV}
 
-        python manager.py slurm test.py --partition abc --mem '500GB' --cpus 24 --gpus 0 \
+        python manager.py slurm test.py --partition dgx --mem '250GB' --cpus 16 --gpus 1 \
         --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN --n_samples 10000 snrheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/snrheatmaps_${COV}
