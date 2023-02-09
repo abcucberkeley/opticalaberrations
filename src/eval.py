@@ -585,7 +585,7 @@ def densityheatmap(
     for col, label, lims in zip(
         ['neighbors', 'distance'],
         ['Number of objects', 'Average distance to nearest neighbor (microns)'],
-        [(1, 30), (0, 4)]
+        [(1, 150), (0, 4)]
     ):
         means = pd.pivot_table(df, values='residuals', index='bins', columns=col, aggfunc=np.mean)
         means = means.sort_index().interpolate()
@@ -907,7 +907,7 @@ def random_samples(
                 mean_background_noise=0,
             )
             for s in range(10):
-                for num_objs in tqdm([1, 2, 5, 10]):
+                for num_objs in tqdm([1, 2, 5, 25, 50, 100, 150]):
                     reference = multipoint_dataset.beads(
                         gen=gen,
                         object_size=0,
