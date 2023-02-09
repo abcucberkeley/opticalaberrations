@@ -7,6 +7,7 @@ import sys
 from typing import Any, Union
 
 import numpy as np
+import cupy as cp
 from pathlib import Path
 from skimage import transform
 from functools import partial
@@ -25,7 +26,6 @@ from skspatial.objects import Plane, Points
 from scipy import ndimage
 import matplotlib.patches as patches
 from astropy import convolution
-from skimage.transform import rotate
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -881,7 +881,7 @@ class SyntheticPSF:
     @profile
     def embedding(
             self,
-            psf: np.array,
+            inputs: np.array,
             na_mask: bool = True,
             ratio: bool = True,
             norm: bool = True,
@@ -901,7 +901,7 @@ class SyntheticPSF:
         Gives the "lower dimension" representation of the data that will be shown to the model.
 
         Args:
-            psf: 3D array.
+            inputs: 3D array.
             na_mask: optional toggle to apply the NA mask
             ratio: Returns ratio of data to ideal PSF,
                 which helps put all the FFT voxels on a similar scale. Otherwise, straight values.
@@ -920,10 +920,10 @@ class SyntheticPSF:
                 Capitalizing on the radial symmetry of the FFT,
                 we have a few options to minimize the size of the embedding.
         """
-        if psf.ndim == 4:
-            psf = np.squeeze(psf)
+        if inputs.ndim == 4:
+            inputs = np.squeeze(inputs)
 
-        otf = self.fft(psf, padsize=padsize)
+        otf = self.fft(inputs, padsize=padsize)
 
         if no_phase:
             emb = self.compute_emb(
@@ -958,7 +958,7 @@ class SyntheticPSF:
                 alpha[alpha > 1] = 1
 
             if remove_interference:
-                otf = self.remove_interference_pattern(psf, otf, plot=plot, peaks=peaks)
+                otf = self.remove_interference_pattern(inputs, otf, plot=plot, peaks=peaks)
 
             phi = self.compute_emb(
                 otf,
@@ -975,26 +975,12 @@ class SyntheticPSF:
 
         if plot is not None:
             plt.style.use("default")
-            self.plot_embeddings(inputs=psf, emb=emb, save_path=plot)
+            self.plot_embeddings(inputs=inputs, emb=emb, save_path=plot)
 
-        if psf.ndim == 4:
+        if inputs.ndim == 4:
             return np.expand_dims(emb, axis=-1)
         else:
             return emb
-
-    def rotate_embeddings(self, emb, rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int)):
-        # def _rotate(image, angle):
-        #     image_center = tuple(np.array(image.shape[1::-1]) / 2)
-        #     rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
-        #     result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
-        #     return result
-
-        rotated_embs = np.zeros((rotations.shape[0], *emb.shape))
-        for i, angle in enumerate(rotations):
-            for j, plane in enumerate(emb):
-                # rotated_embs[i, j, :, :] = _rotate(plane, angle)
-                rotated_embs[i, j, :, :] = rotate(plane, angle=angle, order=0)
-        return rotated_embs
 
 
     @profile

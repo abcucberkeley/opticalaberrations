@@ -21,6 +21,8 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 import scipy as sp
+import cupy as cp
+from cupyx.scipy.ndimage import rotate
 from tqdm import tqdm
 
 import tensorflow as tf
@@ -525,10 +527,10 @@ def predict_rotation(
         generate_fourier_embeddings, inputs, cores=cpu_workers, desc=f"Generating Fourier embeddings"
     ))
 
-    rotate = partial(psfgen.rotate_embeddings, rotations=rotations)
-    rotated_embs = np.concatenate(utils.multiprocess(
-        rotate, embeddings, cores=cpu_workers, desc=f"Generating digital rotations"
-    ), axis=0)
+    rotated_embs = np.concatenate([
+        cp.asnumpy(rotate(cp.array(embeddings), angle=angle, reshape=False, axes=(-2, -1)))
+        for angle in tqdm(rotations, desc=f"Generating digital rotations")
+    ], axis=0)
 
     init_preds, stdev = bootstrap_predict(
         model,
@@ -554,7 +556,7 @@ def predict_rotation(
         no_phase=no_phase,
     )
 
-    init_preds = np.stack(np.split(init_preds, inputs.shape[0]), axis=0)
+    init_preds = np.stack(np.split(init_preds, rotations.shape[0]), axis=1)
     jobs = utils.multiprocess(
         eval_mode_rotations,
         init_preds,
