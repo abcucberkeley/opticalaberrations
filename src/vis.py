@@ -2421,11 +2421,11 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None):
 
     fig = plt.figure(figsize=(10, 6))
     gs = fig.add_gridspec(1, 3)
-    ax_wavefornt = fig.add_subplot(gs[0, -1])
+    ax_wavefront = fig.add_subplot(gs[0, -1])
     ax_zcoff = fig.add_subplot(gs[0, :-1])
 
     plot_wavefront(
-        ax_wavefornt,
+        ax_wavefront,
         pred_wave,
         label='Predicted wavefront',
         vcolorbar=True,
