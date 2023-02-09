@@ -875,6 +875,7 @@ class SyntheticPSF:
             return self.spatial_quadrants(emb)
 
         else:
+            logger.warning(f"embedding_option is unrecognized : {embedding_option}")
             return emb
 
     @profile
