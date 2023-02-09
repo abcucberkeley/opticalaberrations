@@ -190,7 +190,7 @@ def bootstrap_predict(
     model: tf.keras.Model,
     inputs: np.array,
     psfgen: SyntheticPSF,
-    batch_size: int = 1,
+    batch_size: int = 128,
     n_samples: int = 10,
     no_phase: bool = False,
     padsize: Any = None,
@@ -474,7 +474,7 @@ def predict_rotation(
     model: tf.keras.Model,
     inputs: np.array,
     psfgen: SyntheticPSF,
-    batch_size: int = 1,
+    batch_size: int = 128,
     no_phase: bool = False,
     padsize: Any = None,
     alpha_val: str = 'abs',
@@ -527,10 +527,12 @@ def predict_rotation(
         generate_fourier_embeddings, inputs, cores=cpu_workers, desc=f"Generating Fourier embeddings"
     ))
 
+    gpu_embeddings = cp.array(embeddings)
     rotated_embs = np.concatenate([
-        cp.asnumpy(rotate(cp.array(embeddings), angle=angle, reshape=False, axes=(-2, -1)))
+        cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
         for angle in tqdm(rotations, desc=f"Generating digital rotations")
     ], axis=0)
+    del gpu_embeddings
 
     init_preds, stdev = bootstrap_predict(
         model,

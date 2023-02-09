@@ -881,7 +881,7 @@ class SyntheticPSF:
     @profile
     def embedding(
             self,
-            inputs: np.array,
+            psf: np.array,
             na_mask: bool = True,
             ratio: bool = True,
             norm: bool = True,
@@ -901,7 +901,7 @@ class SyntheticPSF:
         Gives the "lower dimension" representation of the data that will be shown to the model.
 
         Args:
-            inputs: 3D array.
+            psf: 3D array.
             na_mask: optional toggle to apply the NA mask
             ratio: Returns ratio of data to ideal PSF,
                 which helps put all the FFT voxels on a similar scale. Otherwise, straight values.
@@ -920,10 +920,10 @@ class SyntheticPSF:
                 Capitalizing on the radial symmetry of the FFT,
                 we have a few options to minimize the size of the embedding.
         """
-        if inputs.ndim == 4:
-            inputs = np.squeeze(inputs)
+        if psf.ndim == 4:
+            psf = np.squeeze(psf)
 
-        otf = self.fft(inputs, padsize=padsize)
+        otf = self.fft(psf, padsize=padsize)
 
         if no_phase:
             emb = self.compute_emb(
@@ -958,7 +958,7 @@ class SyntheticPSF:
                 alpha[alpha > 1] = 1
 
             if remove_interference:
-                otf = self.remove_interference_pattern(inputs, otf, plot=plot, peaks=peaks)
+                otf = self.remove_interference_pattern(psf, otf, plot=plot, peaks=peaks)
 
             phi = self.compute_emb(
                 otf,
@@ -975,9 +975,9 @@ class SyntheticPSF:
 
         if plot is not None:
             plt.style.use("default")
-            self.plot_embeddings(inputs=inputs, emb=emb, save_path=plot)
+            self.plot_embeddings(inputs=psf, emb=emb, save_path=plot)
 
-        if inputs.ndim == 4:
+        if psf.ndim == 4:
             return np.expand_dims(emb, axis=-1)
         else:
             return emb
