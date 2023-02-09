@@ -242,6 +242,7 @@ def bootstrap_predict(
         emb = model.input_shape[1] == inputs.shape[1]
 
     if not emb:
+        embeddings = psfgen.fft(inputs)
         generate_fourier_embeddings = partial(
             psfgen.embedding,
             plot=plot,
@@ -254,13 +255,13 @@ def bootstrap_predict(
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
         )
-        model_inputs = utils.multiprocess(
+
+        model_inputs = np.array(utils.multiprocess(
             generate_fourier_embeddings,
-            inputs,
+            [(i, emb) for i, emb in zip(inputs, embeddings)],
             cores=cpu_workers,
             desc=f"Generating Fourier embeddings"
-        )
-        model_inputs = np.stack(model_inputs, axis=0)
+        ))
     else:
         # pass raw PSFs to the model
         model_inputs = inputs
@@ -511,6 +512,7 @@ def predict_rotation(
         desc: test to display for the progressbar
         plot: optional toggle to visualize embeddings
     """
+    embeddings = psfgen.fft(inputs)
     generate_fourier_embeddings = partial(
         psfgen.embedding,
         plot=plot,
@@ -523,8 +525,12 @@ def predict_rotation(
         embedding_option=psfgen.embedding_option,
         freq_strength_threshold=freq_strength_threshold,
     )
+
     embeddings = np.array(utils.multiprocess(
-        generate_fourier_embeddings, inputs, cores=cpu_workers, desc=f"Generating Fourier embeddings"
+        generate_fourier_embeddings,
+        [(i, emb) for i, emb in zip(inputs, embeddings)],
+        cores=cpu_workers,
+        desc=f"Generating Fourier embeddings"
     ))
 
     gpu_embeddings = cp.array(embeddings)

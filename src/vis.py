@@ -180,7 +180,7 @@ def plot_embedding_pyramid(
                             )
 
                             emb = gen.embedding(
-                                psf=psf,
+                                psf,
                                 no_phase=False,
                                 remove_interference=False,
                                 embedding_option=embedding_option,
@@ -578,7 +578,7 @@ def plot_embeddings(
             outdir.mkdir(exist_ok=True, parents=True)
 
             emb = gen.embedding(
-                psf=psf,
+                psf,
                 no_phase=False,
                 remove_interference=False,
                 embedding_option=embedding_option,
@@ -697,7 +697,7 @@ def plot_rotations(
             )
 
             emb = gen.embedding(
-                psf=psf,
+                psf,
                 no_phase=False,
                 remove_interference=False,
                 embedding_option=embedding_option,

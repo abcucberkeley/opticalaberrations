@@ -272,17 +272,29 @@ class SyntheticPSF:
             pad = int((size - shape) // 2)
             inputs = np.pad(inputs, ((pad, pad), (pad, pad), (pad, pad)), 'constant', constant_values=0)
 
-        otf = np.fft.ifftshift(inputs)
-        otf = np.fft.fftn(otf)
-        otf = np.fft.fftshift(otf)
-        return otf
+        try:
+            otf = cp.fft.ifftshift(cp.array(inputs))
+            otf = cp.fft.fftn(otf)
+            otf = cp.fft.fftshift(otf)
+            return cp.asnumpy(otf)
+        except Exception:
+            otf = np.fft.ifftshift(inputs)
+            otf = np.fft.fftn(otf)
+            otf = np.fft.fftshift(otf)
+            return otf
 
     @profile
     def ifft(self, otf):
-        psf = np.fft.fftshift(otf)
-        psf = np.fft.ifftn(psf)
-        psf = np.abs(np.fft.ifftshift(psf))
-        return psf
+        try:
+            psf = cp.fft.fftshift(cp.array(otf))
+            psf = cp.fft.ifftn(psf)
+            psf = cp.abs(np.fft.ifftshift(psf))
+            return cp.asnumpy(psf)
+        except Exception:
+            psf = np.fft.fftshift(otf)
+            psf = np.fft.ifftn(psf)
+            psf = np.abs(np.fft.ifftshift(psf))
+            return psf
 
     @profile
     def na_mask(self):
@@ -881,7 +893,7 @@ class SyntheticPSF:
     @profile
     def embedding(
             self,
-            psf: np.array,
+            inputs: Union[np.array, tuple],
             na_mask: bool = True,
             ratio: bool = True,
             norm: bool = True,
@@ -901,7 +913,7 @@ class SyntheticPSF:
         Gives the "lower dimension" representation of the data that will be shown to the model.
 
         Args:
-            psf: 3D array.
+            inputs: 3D array.
             na_mask: optional toggle to apply the NA mask
             ratio: Returns ratio of data to ideal PSF,
                 which helps put all the FFT voxels on a similar scale. Otherwise, straight values.
@@ -920,10 +932,15 @@ class SyntheticPSF:
                 Capitalizing on the radial symmetry of the FFT,
                 we have a few options to minimize the size of the embedding.
         """
+        if isinstance(inputs, tuple):
+            psf, otf = inputs
+        else:
+            psf = inputs
+            otf = self.fft(inputs, padsize=padsize)
+
         if psf.ndim == 4:
             psf = np.squeeze(psf)
-
-        otf = self.fft(psf, padsize=padsize)
+            otf = np.squeeze(otf)
 
         if no_phase:
             emb = self.compute_emb(

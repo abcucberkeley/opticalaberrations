@@ -142,7 +142,7 @@ def create_synthetic_sample(
 
     for e in set(embedding_option):
         embeddings = gen.embedding(
-            psf=noisy_img,
+            noisy_img,
             remove_interference=remove_interference,
             embedding_option=e,
             alpha_val=alpha_val,
@@ -206,7 +206,7 @@ if __name__ == "__main__":
     # )
     #
     # embeddings_psf = gen.embedding(
-    #     psf=psf,
+    #     psf,
     #     plot=outdir / f"psf",
     #     remove_interference=False,
     # )
@@ -224,7 +224,7 @@ if __name__ == "__main__":
         f1 = fftconvolution(sample=reference, kernel=f1)
 
     embeddings_f1 = gen.embedding(
-        psf=f1,
+        f1,
         plot=outdir / f"f1_num_objs_{num_objs}",
         remove_interference=False,
     )
@@ -239,7 +239,7 @@ if __name__ == "__main__":
         f2 = fftconvolution(sample=reference, kernel=f2)
 
     embeddings_f2 = gen.embedding(
-        psf=f2,
+        f2,
         plot=outdir / f"f2_num_objs_{num_objs}",
         remove_interference=False,
     )
@@ -249,7 +249,7 @@ if __name__ == "__main__":
     wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
     psf = gen.single_psf(wavefront, normed=True, noise=False)
     embeddings_psf = gen.embedding(
-        psf=psf,
+        psf,
         plot=outdir / f"psf_num_objs_{num_objs}",
         remove_interference=False,
     )
@@ -295,7 +295,7 @@ if __name__ == "__main__":
         img = fftconvolution(sample=reference, kernel=img)
 
     embeddings_img = gen.embedding(
-        psf=img,
+        img,
         plot=outdir / f"img_num_objs_{num_objs}",
         remove_interference=False,
     )
@@ -325,7 +325,7 @@ if __name__ == "__main__":
     #     structure = fftconvolution(sample=structure, kernel=gen.ipsf)
 
     embeddings_structure = gen.embedding(
-        psf=structure,
+        structure,
         plot=outdir / f"structure_num_objs_{num_objs}",
         remove_interference=False,
     )

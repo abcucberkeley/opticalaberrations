@@ -168,7 +168,7 @@ def sim(
             odir.mkdir(exist_ok=True, parents=True)
 
             embeddings = gen.embedding(
-                psf=noisy_img,
+                noisy_img,
                 embedding_option=e,
                 alpha_val=alpha_val,
                 phi_val=phi_val,

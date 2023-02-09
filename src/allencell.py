@@ -178,7 +178,7 @@ def convolve(kernel, sample, sample_voxel_size, psf_shape, save_path, sample_nam
     )
 
     if embeddings:
-        modelgen.embedding(psf=conv, plot=f'{save_path}_embeddings')
+        modelgen.embedding(conv, plot=f'{save_path}_embeddings')
 
     save_path = Path(f'{save_path}/{"/".join(kernel.parts[-7:-1])}/{sample_name}/{kernel.name}')
     save_path.parent.mkdir(exist_ok=True, parents=True)

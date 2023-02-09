@@ -146,7 +146,7 @@ def convolve(kernel, sample, sample_voxel_size, save_path, cuda=False):
         debug=f'{save_path}_embeddings',
     )
 
-    modelgen.embedding(psf=conv, plot=f'{save_path}_embeddings')
+    modelgen.embedding(conv, plot=f'{save_path}_embeddings')
 
 
 def create_dataset(

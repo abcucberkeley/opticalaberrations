@@ -91,22 +91,13 @@ def convolve(
     )
     # imsave(f"{savepath}_conv.tif", conv)
 
-    kernel = gen.embedding(psf=kernel, log10=True, plot=f"{savepath}_kernel_embedding" if debug else None)
+    kernel = gen.embedding(kernel, log10=True, plot=f"{savepath}_kernel_embedding" if debug else None)
 
-    if rolling_embedding:
-        emb = gen.rolling_embedding(
-            psf=conv,
-            log10=log10,
-            apodization=apodization,
-            strides=strides,
-            plot=f"{savepath}_embedding" if debug else None
-        )
-    else:
-        emb = gen.embedding(
-            psf=conv,
-            log10=log10,
-            plot=f"{savepath}_embedding" if debug else None
-        )
+    emb = gen.embedding(
+        conv,
+        log10=log10,
+        plot=f"{savepath}_embedding" if debug else None
+    )
 
     save_synthetic_sample(
         savepath,
