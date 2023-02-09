@@ -25,6 +25,7 @@ from skspatial.objects import Plane, Points
 from scipy import ndimage
 import matplotlib.patches as patches
 from astropy import convolution
+from skimage.transform import rotate
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -979,6 +980,21 @@ class SyntheticPSF:
             return np.expand_dims(emb, axis=-1)
         else:
             return emb
+
+    def rotate_embeddings(self, emb, rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int)):
+        # def _rotate(image, angle):
+        #     image_center = tuple(np.array(image.shape[1::-1]) / 2)
+        #     rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
+        #     result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
+        #     return result
+
+        rotated_embs = np.zeros((rotations.shape[0], *emb.shape))
+        for i, angle in enumerate(rotations):
+            for j, plane in enumerate(emb):
+                # rotated_embs[i, j, :, :] = _rotate(plane, angle)
+                rotated_embs[i, j, :, :] = rotate(plane, angle=angle, order=0)
+        return rotated_embs
+
 
     @profile
     def single_psf(

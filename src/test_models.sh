@@ -13,7 +13,7 @@ BATCH=1024
 
 for MODES in 15 28 45
 do
-  for M in phase/opticalnet compact/opticalnet
+  for M in phase/opticalnet
   do
     MODEL="../models/new/$DATASET/z$MODES/$M"
 

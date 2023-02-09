@@ -16,7 +16,6 @@ from line_profiler_pycharm import profile
 
 import pandas as pd
 from skimage.restoration import richardson_lucy
-from skimage.transform import rotate
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -241,7 +240,6 @@ def bootstrap_predict(
         emb = model.input_shape[1] == inputs.shape[1]
 
     if not emb:
-        logger.info(f"Generating embeddings")
         generate_fourier_embeddings = partial(
             psfgen.embedding,
             plot=plot,
@@ -254,7 +252,12 @@ def bootstrap_predict(
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
         )
-        model_inputs = utils.multiprocess(generate_fourier_embeddings, inputs, cores=cpu_workers)
+        model_inputs = utils.multiprocess(
+            generate_fourier_embeddings,
+            inputs,
+            cores=cpu_workers,
+            desc=f"Generating Fourier embeddings"
+        )
         model_inputs = np.stack(model_inputs, axis=0)
     else:
         # pass raw PSFs to the model
@@ -506,7 +509,6 @@ def predict_rotation(
         desc: test to display for the progressbar
         plot: optional toggle to visualize embeddings
     """
-    logger.info(f"Generating embeddings")
     generate_fourier_embeddings = partial(
         psfgen.embedding,
         plot=plot,
@@ -519,13 +521,14 @@ def predict_rotation(
         embedding_option=psfgen.embedding_option,
         freq_strength_threshold=freq_strength_threshold,
     )
-    embeddings = np.array(utils.multiprocess(generate_fourier_embeddings, inputs, cores=cpu_workers))
+    embeddings = np.array(utils.multiprocess(
+        generate_fourier_embeddings, inputs, cores=cpu_workers, desc=f"Generating Fourier embeddings"
+    ))
 
-    rotated_embs = []
-    for emb in tqdm(embeddings, desc=f"Generating digital rotations"):
-        for angle in rotations:
-            rotated_embs.append(np.array([rotate(plane, angle=angle) for plane in emb]))
-    rotated_embs = np.array(rotated_embs)
+    rotate = partial(psfgen.rotate_embeddings, rotations=rotations)
+    rotated_embs = np.concatenate(utils.multiprocess(
+        rotate, embeddings, cores=cpu_workers, desc=f"Generating digital rotations"
+    ), axis=0)
 
     init_preds, stdev = bootstrap_predict(
         model,
@@ -533,7 +536,7 @@ def predict_rotation(
         psfgen=psfgen,
         batch_size=batch_size,
         n_samples=1,
-        no_phase=True,
+        no_phase=no_phase,
         threshold=0.,
         ignore_modes=ignore_modes,
         plot=plot,
@@ -754,173 +757,6 @@ def dual_stage_prediction(
         pchanges = np.zeros_like(preds)
 
     return preds, stdev, pchanges
-
-
-@profile
-def evaluate(
-    model: tf.keras.Model,
-    inputs: np.array,
-    gen: SyntheticPSF,
-    ys: np.array,
-    psnr: int = 30,
-    batch_size: int = 1024,
-    reference: Any = None,
-    plot: Any = None,
-    threshold: float = 0.,
-    eval_sign: str = 'positive_only',
-    cpu_workers: int = -1
-):
-    if isinstance(inputs, tf.Tensor):
-        inputs = inputs.numpy()
-
-    if isinstance(ys, tf.Tensor):
-        ys = ys.numpy()
-
-    if len(ys.shape) == 1:
-        ys = ys[np.newaxis, :]
-
-    no_phase = True if model.input_shape[1] == 3 else False
-
-    if eval_sign == 'positive_only':
-        ys = np.abs(ys)
-
-        preds, stdev = bootstrap_predict(
-            model,
-            inputs,
-            psfgen=gen,
-            batch_size=batch_size,
-            n_samples=1,
-            no_phase=no_phase,
-            threshold=threshold,
-            plot=plot,
-            cpu_workers=cpu_workers
-        )
-        if len(preds.shape) > 1:
-            preds = np.abs(preds)[:, :ys.shape[-1]]
-        else:
-            preds = np.abs(preds)[np.newaxis, :ys.shape[-1]]
-
-    elif eval_sign == 'dual_stage':
-
-        init_preds, stds = predict_rotation(
-            model=model,
-            inputs=inputs,
-            psfgen=gen,
-            no_phase=no_phase,
-            batch_size=batch_size,
-            threshold=threshold,
-            plot=plot,
-            cpu_workers=cpu_workers
-        )
-
-        if len(init_preds.shape) > 1:
-            init_preds = init_preds[:, :ys.shape[-1]]
-        else:
-            init_preds = init_preds[np.newaxis, :ys.shape[-1]]
-
-        threshold = utils.waves2microns(threshold, wavelength=gen.lam_detection)
-        ps = init_preds.copy()
-        ps[ps > .1] = .1
-        ps[ps < -.1] = -.1
-        res = ys - ps
-        followup_inputs = np.zeros_like(inputs)
-
-        if reference is not None:
-            for i in range(inputs.shape[0]):
-                wavefront = Wavefront(
-                    res[i],
-                    modes=gen.n_modes,
-                    rotate=False,
-                    lam_detection=gen.lam_detection,
-                )
-                psf = gen.single_psf(
-                    wavefront,
-                    normed=True,
-                    noise=False,
-                    meta=False
-                )
-
-                fi = utils.fftconvolution(kernel=psf, sample=reference)
-                fi *= psnr ** 2
-                rand_noise = gen._random_noise(image=fi, mean=0, sigma=gen.sigma_background_noise)
-                fi += rand_noise
-                fi /= np.max(fi)
-                followup_inputs[i] = fi[..., np.newaxis]
-
-        # plt.style.use("default")
-        # vis.plot_sign_eval(
-        #     inputs=inputs,
-        #     followup_inputs=followup_inputs,
-        #     savepath=f'{plot}_sign_eval'
-        # )
-        #
-        # plt.style.use("dark_background")
-        # vis.plot_sign_eval(
-        #     inputs=inputs,
-        #     followup_inputs=followup_inputs,
-        #     savepath=f'{plot}_sign_eval_db'
-        # )
-
-        followup_preds, stds = predict_rotation(
-            model=model,
-            inputs=followup_inputs,
-            psfgen=gen,
-            no_phase=no_phase,
-            batch_size=batch_size,
-            threshold=threshold,
-            plot=f"{plot}_followup",
-            cpu_workers=cpu_workers
-        )
-
-        if len(followup_preds.shape) > 1:
-            followup_preds = followup_preds[:, :ys.shape[-1]]
-        else:
-            followup_preds = followup_preds[np.newaxis, :ys.shape[-1]]
-
-        preds, pchanges = predict_sign(
-            init_preds=init_preds,
-            followup_preds=followup_preds,
-            plot=plot
-        )
-
-    elif eval_sign == 'signed':
-        preds, stdev = bootstrap_predict(
-            model,
-            inputs,
-            psfgen=gen,
-            batch_size=batch_size,
-            n_samples=1,
-            no_phase=no_phase,
-            threshold=threshold,
-            plot=plot,
-            cpu_workers=cpu_workers
-        )
-
-        if len(preds.shape) > 1:
-            preds = preds[:, :ys.shape[-1]]
-        else:
-            preds = preds[np.newaxis, :ys.shape[-1]]
-
-    else:
-        preds, stdev = predict_rotation(
-            model,
-            inputs,
-            psfgen=gen,
-            batch_size=batch_size,
-            n_samples=1,
-            no_phase=no_phase,
-            threshold=threshold,
-            plot=plot,
-            cpu_workers=cpu_workers
-        )
-
-        if len(preds.shape) > 1:
-            preds = preds[:, :ys.shape[-1]]
-        else:
-            preds = preds[np.newaxis, :ys.shape[-1]]
-
-    residuals = ys - preds
-    return residuals, ys, preds
 
 
 def deconstruct(

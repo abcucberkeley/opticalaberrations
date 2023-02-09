@@ -38,6 +38,119 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 @profile
+def evaluate(
+    modelpath: Path,
+    datapath: Path,
+    savepath: Path,
+    batch_size: int = 1024,
+    plot: Any = None,
+    na: float = 1.0,
+    threshold: float = 0.,
+    snr_range: Any = None,
+    distribution: str = '',
+    samplelimit: Any = None,
+    input_coverage: float = 1.0,
+    eval_sign: str = 'signed',
+    cpu_workers: int = -1
+):
+    model = backend.load(modelpath)
+    gen = backend.load_metadata(
+        modelpath,
+        snr=1000,
+        signed=True,
+        rotate=True,
+        batch_size=batch_size,
+        psf_shape=3*[model.input_shape[2]]
+    )
+
+    no_phase = True if model.input_shape[1] == 3 else False
+
+    val = data_utils.collect_dataset(
+        datapath,
+        modes=gen.n_modes,
+        samplelimit=samplelimit,
+        distribution=distribution,
+        no_phase=no_phase,
+        metadata=True,
+        snr_range=snr_range
+    )
+
+    val = np.array(list(val.take(-1)))
+    inputs = np.array([i.numpy() for i in val[:, 0]])
+    ys = np.array([i.numpy() for i in val[:, 1]])
+    snrs = np.array([i.numpy() for i in val[:, 2]])
+    p2v = np.array([i.numpy() for i in val[:, 3]])
+    npoints = np.array([i.numpy() for i in val[:, 4]])
+    files = np.array([Path(str(i.numpy(), "utf-8")) for i in val[:, -1]])
+
+    if input_coverage != 1.:
+        inputs = utils.resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
+
+    if eval_sign == 'rotations':
+        preds, stdev = backend.predict_rotation(
+            model,
+            inputs,
+            psfgen=gen,
+            batch_size=batch_size,
+            no_phase=no_phase,
+            threshold=threshold,
+            plot=plot,
+            cpu_workers=cpu_workers
+        )
+    else:
+        preds, stdev = backend.bootstrap_predict(
+            model,
+            inputs,
+            psfgen=gen,
+            batch_size=batch_size,
+            n_samples=1,
+            no_phase=no_phase,
+            threshold=threshold,
+            plot=plot,
+            cpu_workers=cpu_workers
+        )
+
+    if eval_sign == 'positive_only':
+        ys = np.abs(ys)
+        if len(preds.shape) > 1:
+            preds = np.abs(preds)[:, :ys.shape[-1]]
+        else:
+            preds = np.abs(preds)[np.newaxis, :ys.shape[-1]]
+    else:
+        if len(preds.shape) > 1:
+            preds = preds[:, :ys.shape[-1]]
+        else:
+            preds = preds[np.newaxis, :ys.shape[-1]]
+
+    residuals = ys - preds
+
+    df = pd.DataFrame(files, columns=['filename'])
+    df['aberration'] = p2v
+    df['prediction'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds]
+    df['residuals'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in residuals]
+    df['snr'] = snrs
+    df['neighbors'] = npoints
+    df['distance'] = [
+        utils.mean_min_distance(np.squeeze(i), voxel_size=gen.voxel_size) if objs > 1 else 0.
+        for i, objs in zip(inputs, npoints)
+    ]
+
+    for z in range(preds.shape[-1]):
+        df[f'z{z}_ground_truth'] = ys[:, z]
+        df[f'z{z}_prediction'] = preds[:, z]
+        df[f'z{z}_residual'] = residuals[:, z]
+
+    bins = np.arange(0, 10.25, .25)
+    df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+
+    distbins = np.arange(0, 5.5, .5)
+    df['distance'] = pd.cut(df['distance'], distbins, labels=distbins[:-1], include_lowest=True)
+
+    df.to_csv(f'{savepath}_predictions.csv')
+    return df
+
+
+@profile
 def simulate_beads(psf, gen, snr, object_size=0, num_objs=1, beads=None, noise=None):
     if beads is None:
         beads = multipoint_dataset.beads(
@@ -74,6 +187,7 @@ def eval_object(
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]])
+    no_phase = True if model.input_shape[1] == 3 else False
 
     p2v = utils.peak2valley(phi, na=na, wavelength=gen.lam_detection)
     df = pd.DataFrame([], columns=['aberration', 'prediction', 'residuals', 'object_size'])
@@ -101,16 +215,39 @@ def eval_object(
         ])[..., np.newaxis]
         ys = np.array([phi for i in inputs])
 
-        residuals, ys, preds = backend.evaluate(
-            model=model,
-            inputs=inputs,
-            gen=gen,
-            ys=ys,
-            psnr=psnr,
-            batch_size=batch_size,
-            eval_sign=eval_sign,
-            cpu_workers=1
-        )
+        if eval_sign == 'rotations':
+            preds, stdev = backend.predict_rotation(
+                model,
+                inputs,
+                psfgen=gen,
+                batch_size=batch_size,
+                no_phase=no_phase,
+                cpu_workers=1
+            )
+        else:
+            preds, stdev = backend.bootstrap_predict(
+                model,
+                inputs,
+                psfgen=gen,
+                batch_size=batch_size,
+                n_samples=1,
+                no_phase=no_phase,
+                cpu_workers=1
+            )
+
+        if eval_sign == 'positive_only':
+            ys = np.abs(ys)
+            if len(preds.shape) > 1:
+                preds = np.abs(preds)[:, :ys.shape[-1]]
+            else:
+                preds = np.abs(preds)[np.newaxis, :ys.shape[-1]]
+        else:
+            if len(preds.shape) > 1:
+                preds = preds[:, :ys.shape[-1]]
+            else:
+                preds = preds[np.newaxis, :ys.shape[-1]]
+
+        residuals = ys - preds
 
         p = pd.DataFrame([p2v for i in inputs], columns=['aberration'])
         p['prediction'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds]
@@ -251,84 +388,6 @@ def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
 
 
 @profile
-def eval_bin(
-    datapath,
-    modelpath,
-    samplelimit: int = 1,
-    na: float = 1.0,
-    input_coverage: float = 1.0,
-    no_phase: bool = False,
-    batch_size: int = 100,
-    snr_range: Any = None,
-    distribution: str = '',
-    eval_sign: str = 'positive_only',
-    savepath: Any = None,
-):
-    model = backend.load(modelpath)
-    gen = backend.load_metadata(
-        modelpath,
-        snr=1000,
-        signed=True,
-        rotate=True,
-        batch_size=batch_size,
-        psf_shape=3*[model.input_shape[2]]
-    )
-
-    val = data_utils.collect_dataset(
-        datapath,
-        modes=gen.n_modes,
-        samplelimit=samplelimit,
-        distribution=distribution,
-        no_phase=no_phase,
-        metadata=True,
-        snr_range=snr_range
-    )
-
-    df = pd.DataFrame([])
-
-    for inputs, ys, snr, p2v, npoints, files in val.batch(batch_size):
-        if input_coverage != 1.:
-            inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
-
-        residuals, ys, preds = backend.evaluate(
-            model=model,
-            inputs=inputs,
-            gen=gen,
-            ys=ys,
-            psnr=snr,
-            batch_size=batch_size,
-            eval_sign=eval_sign
-        )
-
-        p = pd.DataFrame([i.numpy().decode("utf-8") for i in files], columns=['filename'])
-        p['aberration'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in ys]
-        p['prediction'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds]
-        p['residuals'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in residuals]
-        p['snr'] = snr.numpy()
-        p['neighbors'] = npoints
-        p['distance'] = [
-            utils.mean_min_distance(np.squeeze(i), voxel_size=gen.voxel_size) if objs > 1 else 0.
-            for i, objs in zip(inputs, npoints)
-        ]
-
-        for z in range(preds.shape[-1]):
-            p[f'z{z}_ground_truth'] = ys[:, z]
-            p[f'z{z}_prediction'] = preds[:, z]
-            p[f'z{z}_residual'] = residuals[:, z]
-
-        df = df.append(p, ignore_index=True)
-
-        if savepath is not None:
-            df.to_csv(f'{savepath}_predictions.csv')
-
-    bins = np.arange(0, 10.25, .25)
-    distbins = np.arange(0, 5.5, .5)
-    df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
-    df['distance'] = pd.cut(df['distance'], distbins, labels=distbins[:-1], include_lowest=True)
-    return df
-
-
-@profile
 def plot_heatmap(means, wavelength, savepath, label=f'Peak signal-to-noise ratio', lims=(0, 100)):
     plt.rcParams.update({
         'font.size': 10,
@@ -414,7 +473,6 @@ def snrheatmap(
     samplelimit: Any = None,
     na: float = 1.0,
     input_coverage: float = 1.0,
-    no_phase: bool = False,
     batch_size: int = 100,
     eval_sign: str = 'positive_only'
 ):
@@ -429,19 +487,14 @@ def snrheatmap(
 
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0)
-        bins = np.arange(0, 10.25, .25)
-        distbins = np.arange(0, 5.5, .5)
-        df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
-        df['distance'] = pd.cut(df['distance'], distbins, labels=distbins[:-1], include_lowest=True)
     else:
-        df = eval_bin(
-            datadir,
-            savepath=savepath,
+        df = evaluate(
             modelpath=modelpath,
+            datapath=datadir,
+            savepath=savepath,
             samplelimit=samplelimit,
             na=na,
             input_coverage=input_coverage,
-            no_phase=no_phase,
             batch_size=batch_size,
             snr_range=(0, 100),
             eval_sign=eval_sign,
@@ -497,7 +550,6 @@ def densityheatmap(
     datadir: Path,
     distribution: str = '/',
     na: float = 1.0,
-    no_phase: bool = False,
     samplelimit: Any = None,
     input_coverage: float = 1.0,
     batch_size: int = 100,
@@ -506,50 +558,43 @@ def densityheatmap(
 ):
     modelspecs = backend.load_metadata(modelpath)
 
+    savepath = modelpath.with_suffix('') / eval_sign / f'densityheatmaps_{input_coverage}'
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    if distribution != '/':
+        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+    else:
+        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0)
-        bins = np.arange(0, 10.25, .25)
-        distbins = np.arange(0, 5.5, .5)
-        df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
-        df['distance'] = pd.cut(df['distance'], distbins, labels=distbins[:-1], include_lowest=True)
     else:
-        df = eval_bin(
-            datadir,
+        df = evaluate(
             modelpath=modelpath,
+            datapath=datadir,
+            savepath=savepath,
             samplelimit=samplelimit,
             distribution=distribution,
             na=na,
             snr_range=snr_range,
             input_coverage=input_coverage,
-            no_phase=no_phase,
             batch_size=batch_size,
             eval_sign=eval_sign
         )
 
-    for savedir, col, label, lims in zip(
-        ['densityheatmaps', 'distanceheatmaps'],
+    for col, label, lims in zip(
         ['neighbors', 'distance'],
         ['Number of objects', 'Average distance to nearest neighbor (microns)'],
         [(1, 30), (0, 4)]
     ):
-        savepath = modelpath.with_suffix('') / eval_sign / f'{savedir}_{input_coverage}'
-        savepath.mkdir(parents=True, exist_ok=True)
-
-        if distribution != '/':
-            savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
-        else:
-            savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
-
-        df.to_csv(f'{savepath}_predictions.csv')
-
         means = pd.pivot_table(df, values='residuals', index='bins', columns=col, aggfunc=np.mean)
         means = means.sort_index().interpolate()
-        means.to_csv(f'{savepath}.csv')
+        means.to_csv(f'{savepath}_{col}.csv')
 
         plot_heatmap(
             means,
             wavelength=modelspecs.lam_detection,
-            savepath=savepath,
+            savepath=f'{savepath}_{col}',
             label=label,
             lims=lims
         )
@@ -571,12 +616,12 @@ def densityheatmap(
                 means = means.sort_index().interpolate()
                 logger.info(f"z{z}")
                 logger.info(means)
-                means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
+                means.to_csv(savepath.with_name(f"{savepath.name}_{col}_z{z}.csv"))
 
                 plot_heatmap(
                     means,
                     wavelength=modelspecs.lam_detection,
-                    savepath=savepath.with_name(f"{savepath.name}_z{z}"),
+                    savepath=savepath.with_name(f"{savepath.name}_{col}_z{z}"),
                     label=label,
                     lims=lims
                 )
@@ -673,14 +718,37 @@ def iter_eval_bin_with_reference(
         if input_coverage != 1.:
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
 
-        res, ys, ps = backend.evaluate(
-            model=model,
-            inputs=inputs,
-            gen=gen,
-            ys=ys,
-            batch_size=batch_size,
-            eval_sign=eval_sign
-        )
+        if eval_sign == 'rotations':
+            ps, stdev = backend.predict_rotation(
+                model,
+                inputs,
+                psfgen=gen,
+                batch_size=batch_size,
+                no_phase=no_phase,
+            )
+        else:
+            ps, stdev = backend.bootstrap_predict(
+                model,
+                inputs,
+                psfgen=gen,
+                batch_size=batch_size,
+                n_samples=1,
+                no_phase=no_phase,
+            )
+
+        if eval_sign == 'positive_only':
+            ys = np.abs(ys)
+            if len(ps.shape) > 1:
+                ps = np.abs(ps)[:, :ys.shape[-1]]
+            else:
+                ps = np.abs(ps)[np.newaxis, :ys.shape[-1]]
+        else:
+            if len(ps.shape) > 1:
+                ps = ps[:, :ys.shape[-1]]
+            else:
+                ps = ps[np.newaxis, :ys.shape[-1]]
+
+        res = ys - ps
 
         y = pd.DataFrame(np.arange(inputs.shape[0], dtype=int), columns=['id'])
         y['niter'] = k
@@ -821,6 +889,7 @@ def random_samples(
 ):
     m = backend.load(model)
     m.summary()
+    no_phase = True if m.input_shape[1] == 3 else False
 
     pool = Pool(processes=4)  # plotting = 2*calculation time, so shouldn't need more than 2-4 processes to keep up.
 
@@ -880,17 +949,37 @@ def random_samples(
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
-                    residuals, y, p = backend.evaluate(
-                        model=m,
-                        inputs=noisy_img[np.newaxis, :, :, :, np.newaxis],
-                        reference=reference,
-                        gen=gen,
-                        ys=y,
-                        psnr=psnr,
-                        batch_size=512,
-                        plot=save_path / f'{s}',
-                        eval_sign=eval_sign
-                    )
+                    if eval_sign == 'rotations':
+                        p, stdev = backend.predict_rotation(
+                            m,
+                            noisy_img[np.newaxis, :, :, :, np.newaxis],
+                            psfgen=gen,
+                            no_phase=no_phase,
+                            plot=save_path / f'{s}',
+                        )
+                    else:
+                        p, stdev = backend.bootstrap_predict(
+                            m,
+                            noisy_img[np.newaxis, :, :, :, np.newaxis],
+                            psfgen=gen,
+                            n_samples=1,
+                            no_phase=no_phase,
+                            plot=save_path / f'{s}',
+                        )
+
+                    if eval_sign == 'positive_only':
+                        y = np.abs(y)
+                        if len(p.shape) > 1:
+                            p = np.abs(p)[:, :y.shape[-1]]
+                        else:
+                            p = np.abs(p)[np.newaxis, :y.shape[-1]]
+                    else:
+                        if len(p.shape) > 1:
+                            p = p[:, :y.shape[-1]]
+                        else:
+                            p = p[np.newaxis, :y.shape[-1]]
+
+                    residuals = y - p
 
                     p_wave = Wavefront(p, lam_detection=gen.lam_detection)
                     y_wave = Wavefront(y, lam_detection=gen.lam_detection)

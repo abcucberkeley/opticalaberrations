@@ -86,11 +86,6 @@ def parse_args(args):
         "--peaks", default=None, help="matlab file that outlines peaks-coordinates"
     )
 
-    parser.add_argument(
-        '--no_phase', action='store_true',
-        help='toggle to use exclude phase from the model embeddings'
-    )
-
     return parser.parse_args(args)
 
 
@@ -121,7 +116,6 @@ def main(args=None):
             distribution=args.dist,
             samplelimit=args.n_samples,
             input_coverage=args.input_coverage,
-            no_phase=args.no_phase,
             na=args.na,
             batch_size=args.batch_size,
             eval_sign=args.eval_sign
@@ -133,7 +127,6 @@ def main(args=None):
             distribution=args.dist,
             samplelimit=args.n_samples,
             input_coverage=args.input_coverage,
-            no_phase=args.no_phase,
             na=args.na,
             batch_size=args.batch_size,
             eval_sign=args.eval_sign
@@ -145,7 +138,6 @@ def main(args=None):
             distribution=args.dist,
             samplelimit=args.n_samples,
             input_coverage=args.input_coverage,
-            no_phase=args.no_phase,
             na=args.na,
             batch_size=args.batch_size,
             eval_sign=args.eval_sign
