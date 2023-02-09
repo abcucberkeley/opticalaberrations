@@ -1358,11 +1358,11 @@ def plot_wavefront(
     step = .1
 
     if vmin is None:
-        vmin = np.round(np.nanmin(phi))
+        vmin = np.floor(np.nanmin(phi))
         vmin = -1*dlimit if vmin > -0.01 else vmin
 
     if vmax is None:
-        vmax = np.round(np.nanmax(phi))
+        vmax = np.ceil(np.nanmax(phi))
         vmax = dlimit if vmax < 0.01 else vmax
 
     highcmap = plt.get_cmap('magma_r', 256)
