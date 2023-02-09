@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/test.py" />
-    <option name="PARAMETERS" value="../pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z45/spatial_planes.h5 --datadir ../dataset/test/x108-y108-z200/i64/z15 --input_coverage 1.0 --na 1.0 --n_samples 100 --eval_sign signed snrheatmap" />
+    <option name="PARAMETERS" value="../pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z45/phase.h5 --datadir ../dataset/test/x108-y108-z200/i64/z15 --input_coverage 1.0 --na 1.0 --n_samples 100 --eval_sign signed snrheatmap" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

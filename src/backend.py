@@ -22,6 +22,7 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 import scipy as sp
+from tqdm import tqdm
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -37,7 +38,6 @@ from tensorflow.keras.callbacks import EarlyStopping
 from callbacks import Defibrillator
 from callbacks import LearningRateScheduler
 from callbacks import TensorBoardCallback
-from skimage.feature import peak_local_max
 
 import utils
 import vis
@@ -260,6 +260,7 @@ def bootstrap_predict(
         # pass raw PSFs to the model
         model_inputs = inputs
 
+    logger.info(f"Checking for invalid inputs")
     model_inputs = np.nan_to_num(model_inputs, nan=0, posinf=0, neginf=0)
     model_inputs = model_inputs[..., np.newaxis] if model_inputs.shape[-1] != 1 else model_inputs
     features = np.array([np.count_nonzero(s) for s in inputs])
@@ -469,7 +470,6 @@ def predict_rotation(
     inputs: np.array,
     psfgen: SyntheticPSF,
     batch_size: int = 1,
-    n_samples: int = 1,
     no_phase: bool = False,
     padsize: Any = None,
     alpha_val: str = 'abs',
@@ -483,7 +483,7 @@ def predict_rotation(
     remove_interference: bool = True,
     desc: str = 'Predict-rotations',
     rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
-    cpu_workers: int = 1
+    cpu_workers: int = -1
 ):
     """
     Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin).
@@ -492,7 +492,6 @@ def predict_rotation(
         model: pre-trained keras model. Model must be trained with XY embeddings only so that we can rotate them.
         inputs: encoded tokens to be processed. (e.g. input images)
         psfgen: Synthetic PSF object
-        n_samples: number of predictions of average
         batch_size: number of samples per batch
         no_phase: ignore/drop the phase component of the FFT
         padsize: pad the input to the desired size for the FFT
@@ -523,7 +522,7 @@ def predict_rotation(
     embeddings = np.array(utils.multiprocess(generate_fourier_embeddings, inputs, cores=cpu_workers))
 
     rotated_embs = []
-    for emb in embeddings:
+    for emb in tqdm(embeddings, desc=f"Generating digital rotations"):
         for angle in rotations:
             rotated_embs.append(np.array([rotate(plane, angle=angle) for plane in emb]))
     rotated_embs = np.array(rotated_embs)
@@ -533,7 +532,7 @@ def predict_rotation(
         rotated_embs,
         psfgen=psfgen,
         batch_size=batch_size,
-        n_samples=n_samples,
+        n_samples=1,
         no_phase=True,
         threshold=0.,
         ignore_modes=ignore_modes,
@@ -553,7 +552,13 @@ def predict_rotation(
     )
 
     init_preds = np.stack(np.split(init_preds, inputs.shape[0]), axis=0)
-    jobs = np.array([list(zip(*j)) for j in utils.multiprocess(eval_mode_rotations, init_preds, cores=-1)])
+    jobs = utils.multiprocess(
+        eval_mode_rotations,
+        init_preds,
+        cores=cpu_workers,
+        desc="Evaluate predictions"
+    )
+    jobs = np.array([list(zip(*j)) for j in jobs])
     preds, stdev = jobs[..., 0], jobs[..., -1]
     return preds, stdev
 
@@ -687,7 +692,6 @@ def dual_stage_prediction(
         model,
         inputs,
         psfgen=modelgen,
-        n_samples=n_samples,
         no_phase=True,
         verbose=verbose,
         batch_size=batch_size,
@@ -718,7 +722,6 @@ def dual_stage_prediction(
             model,
             followup_inputs,
             psfgen=modelgen,
-            n_samples=n_samples,
             no_phase=True,
             verbose=False,
             batch_size=batch_size,
@@ -805,7 +808,6 @@ def evaluate(
             psfgen=gen,
             no_phase=no_phase,
             batch_size=batch_size,
-            n_samples=1,
             threshold=threshold,
             plot=plot,
             cpu_workers=cpu_workers
@@ -865,7 +867,6 @@ def evaluate(
             psfgen=gen,
             no_phase=no_phase,
             batch_size=batch_size,
-            n_samples=1,
             threshold=threshold,
             plot=f"{plot}_followup",
             cpu_workers=cpu_workers
@@ -881,6 +882,24 @@ def evaluate(
             followup_preds=followup_preds,
             plot=plot
         )
+
+    elif eval_sign == 'signed':
+        preds, stdev = bootstrap_predict(
+            model,
+            inputs,
+            psfgen=gen,
+            batch_size=batch_size,
+            n_samples=1,
+            no_phase=no_phase,
+            threshold=threshold,
+            plot=plot,
+            cpu_workers=cpu_workers
+        )
+
+        if len(preds.shape) > 1:
+            preds = preds[:, :ys.shape[-1]]
+        else:
+            preds = preds[np.newaxis, :ys.shape[-1]]
 
     else:
         preds, stdev = predict_rotation(
