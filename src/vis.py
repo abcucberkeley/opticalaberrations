@@ -2460,7 +2460,7 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None):
     ax_zcoff.spines['right'].set_visible(False)
     ax_zcoff.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
     ax_zcoff.set_xticks(range(len(pred.amplitudes)), minor=True)
-    ax_zcoff.set_xticks(range(0, len(pred.amplitudes)+5, 5), minor=False)
+    ax_zcoff.set_xticks(range(0, len(pred.amplitudes)+5, min(5, int(np.ceil(len(pred.amplitudes)+5)/8))), minor=False) # at least 8 ticks
     ax_zcoff.set_xlim((-.5, len(pred.amplitudes)))
     ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
 
