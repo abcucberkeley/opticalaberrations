@@ -917,7 +917,7 @@ def eval_mode(
     postfix: str = '',
     gt_postfix: str = '',
 ):
-    save_postfix = 'pr' if postfix.startswith('matlab') else 'ml'
+    save_postfix = 'pr' if postfix.startswith('pr') else 'ml'
 
     noisy_img = np.squeeze(get_image(input_path).astype(float))
     maxcounts = np.max(noisy_img)
@@ -1028,7 +1028,7 @@ def eval_dataset(
     datadir: Path,
     flat: Any = None,
     postfix: str = 'sample_predictions_zernike_coefficients.csv',
-    gt_postfix: str = 'matlab_pupil_waves.tif',
+    gt_postfix: str = 'pr_pupil_waves.tif',
     # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
 ):
     func = partial(
@@ -1091,7 +1091,7 @@ def eval_dataset(
 def eval_dm(
     datadir: Path,
     num_modes: int = 15,
-    gt_postfix: str = 'matlab_pupil_waves.tif',
+    gt_postfix: str = 'pr_pupil_waves.tif',
     # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
     postfix: str = 'sample_predictions_zernike_coefficients.csv'
 ):
@@ -1260,6 +1260,7 @@ def phase_retrieval(
         phase_only=True
     )
     pupil = pr_result.phase / (2 * np.pi) # convert radians to waves
+    pupil[pupil != 0.] -= np.mean(pupil[pupil != 0.])
     pr_result.phase = utils.waves2microns(pupil, wavelength=psfgen.lam_detection)  # convert waves to microns before fitting.
     pr_result.fit_to_zernikes(num_modes-1, mapping=osa2degrees) # zernikes now in um rms
     pr_result.phase = pupil # phase is now again in waves
