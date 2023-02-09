@@ -1,7 +1,7 @@
 #!/bin/bash
 
 HANDLER=slurm
-ENV=~/anaconda3/envs/deep/bin/python
+ENV=~/anaconda3/envs/ml/bin/python
 NODES='all'
 
 #PSF_TYPE='widefield'
@@ -55,7 +55,8 @@ else
   TYPE=''
   SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=100
-  OBJS=(1 2 5 10 25 50 75 100 125 150)
+  OBJS=(25 35 45 55 65 75 85 100 125 150)
+  #OBJS=(1 2 3 4 5 10 15 20 25 30)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
   amps1=($(seq 0 .05 .45))
