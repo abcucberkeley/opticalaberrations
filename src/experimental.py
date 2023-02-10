@@ -1271,7 +1271,7 @@ def phase_retrieval(
     )
 
     logger.info("Starting phase retrieval iterations")
-    data_prepped = prep_data_for_PR(data, multiplier=1.1)
+    data_prepped = prep_data_for_PR(np.flip(data, axis=0), multiplier=1.1)
     pr_result = pr.retrieve_phase(
         data_prepped,
         params,
