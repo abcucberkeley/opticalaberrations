@@ -513,29 +513,36 @@ def predict_rotation(
         desc: test to display for the progressbar
         plot: optional toggle to visualize embeddings
     """
-    logger.info("Computing FFTs")
-    embeddings = psfgen.fft(inputs)
-    generate_fourier_embeddings = partial(
-        psfgen.embedding,
-        plot=plot,
-        padsize=padsize,
-        no_phase=no_phase,
-        alpha_val=alpha_val,
-        phi_val=phi_val,
-        peaks=peaks,
-        remove_interference=remove_interference,
-        embedding_option=psfgen.embedding_option,
-        freq_strength_threshold=freq_strength_threshold,
-    )
+    # check z-axis to compute embeddings for fourier models
+    if len(inputs.shape) == 3:
+        emb = model.input_shape[1] == inputs.shape[0]
+    else:
+        emb = model.input_shape[1] == inputs.shape[1]
 
-    embeddings = np.array(utils.multiprocess(
-        generate_fourier_embeddings,
-        [(i, emb) for i, emb in zip(inputs, embeddings)],
-        cores=cpu_workers,
-        desc=f"Generating Fourier embeddings"
-    ))
+    if not emb:
+        logger.info("Computing FFTs")
+        embeddings = psfgen.fft(inputs)
+        generate_fourier_embeddings = partial(
+            psfgen.embedding,
+            plot=plot,
+            padsize=padsize,
+            no_phase=no_phase,
+            alpha_val=alpha_val,
+            phi_val=phi_val,
+            peaks=peaks,
+            remove_interference=remove_interference,
+            embedding_option=psfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+        )
 
-    gpu_embeddings = cp.array(embeddings)
+        inputs = np.array(utils.multiprocess(
+            generate_fourier_embeddings,
+            [(i, emb) for i, emb in zip(inputs, embeddings)],
+            cores=cpu_workers,
+            desc=f"Generating Fourier embeddings"
+        ))
+
+    gpu_embeddings = cp.array(inputs)
     rotated_embs = np.concatenate([
         cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
         for angle in tqdm(rotations, desc=f"Generating digital rotations")

@@ -30,10 +30,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, npoints=1, gt=None):
+def save_synthetic_sample(
+    savepath,
+    inputs,
+    amps,
+    snr,
+    maxcounts,
+    p2v,
+    gen,
+    npoints=1,
+    gt=None,
+    realspace=None,
+):
 
     if gt is not None:
         imsave(f"{savepath}_gt.tif", gt)
+
+    if realspace is not None:
+        imsave(f"{savepath}_realspace.tif", realspace)
 
     logger.info(f"Saved: {savepath}")
     imsave(f"{savepath}.tif", inputs)
@@ -41,12 +55,23 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, npoints=1
     with Path(f"{savepath}.json").open('w') as f:
         json = dict(
             path=f"{savepath}.tif",
+            n_modes=int(gen.n_modes),
+            order=str(gen.order),
             zernikes=amps.tolist(),
             snr=int(snr),
             shape=inputs.shape,
             maxcounts=int(maxcounts),
             npoints=int(npoints),
-            peak2peak=float(p2v)
+            peak2peak=float(p2v),
+            x_voxel_size=float(gen.x_voxel_size),
+            y_voxel_size=float(gen.y_voxel_size),
+            z_voxel_size=float(gen.z_voxel_size),
+            wavelength=float(gen.lam_detection),
+            na_detection=float(gen.na_detection),
+            refractive_index=float(gen.refractive_index),
+            mode_weights=str(gen.mode_weights),
+            embedding_option=str(gen.embedding_option),
+            distribution=str(gen.distribution),
         )
 
         ujson.dump(
@@ -183,7 +208,9 @@ def sim(
                 maxcounts=maxcounts,
                 npoints=npoints,
                 p2v=peak2valley(amps, wavelength=gen.lam_detection),
-                gt=reference
+                gt=reference,
+                gen=gen,
+                realspace=noisy_img
             )
     else:
         save_synthetic_sample(
@@ -194,7 +221,8 @@ def sim(
             maxcounts=maxcounts,
             npoints=npoints,
             p2v=peak2valley(amps, wavelength=gen.lam_detection),
-            gt=reference
+            gt=reference,
+            gen=gen
         )
 
 
@@ -369,7 +397,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--mode_dist", default='uniform', type=str,
+        "--mode_dist", default='pyramid', type=str,
         help="distribution of the zernike modes"
     )
 

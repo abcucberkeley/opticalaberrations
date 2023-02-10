@@ -2,7 +2,7 @@
 
 HANDLER=slurm
 ENV=~/anaconda3/envs/ml/bin/python
-NODES='all'
+NODES='abc'
 
 #PSF_TYPE='widefield'
 #xVOXEL=.15
@@ -34,7 +34,7 @@ SHAPE=64
 
 MODES=15
 TITLE='spatial_planes_embeddings'
-DATASET='test'
+DATASET='sparse'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -52,11 +52,11 @@ if [ "$DATASET" = "train" ];then
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
 
 else
-  TYPE=''
+  TYPE='--emb'
   SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=100
-  OBJS=(25 35 45 55 65 75 85 100 125 150)
-  #OBJS=(1 2 3 4 5 10 15 20 25 30)
+  #OBJS=(25 35 45 55 65 75 85 100 125 150)
+  OBJS=(1 2 3 4 5 10 15 20 25 30)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
   amps1=($(seq 0 .05 .45))

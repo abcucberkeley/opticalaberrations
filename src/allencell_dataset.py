@@ -107,7 +107,7 @@ def convolve(
         snr=snr,
         maxcounts=maxcounts,
         save_kernel=save_kernel,
-        p2v=peak2valley(amps, wavelength=gen.lam_detection)
+        p2v=peak2valley(amps, wavelength=gen.lam_detection),
     )
 
 

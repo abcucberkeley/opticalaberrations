@@ -149,7 +149,7 @@ def load_dataset(
         max_amplitude=max_amplitude,
         snr_range=snr_range
     )
-    files = multiprocess(check, Path(datadir).rglob('*[!_gt].tif'), cores=1, desc='Loading dataset hashtable')
+    files = multiprocess(check, Path(datadir).rglob('*[!_gt|!_realspace].tif'), cores=-1, desc='Loading dataset hashtable')
     files = [f for f in files if f is not None]
 
     if samplelimit is not None:
