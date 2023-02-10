@@ -1226,6 +1226,7 @@ def phase_retrieval(
     num_iterations: int = 150,
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.0,
+    use_pyotf_zernikes: bool = False
 ):
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
@@ -1259,13 +1260,12 @@ def phase_retrieval(
         mse_tol=0,
         phase_only=True
     )
-    pupil = pr_result.phase / (2 * np.pi) # convert radians to waves
+    pupil = pr_result.phase / (2 * np.pi)  # convert radians to waves
     pupil[pupil != 0.] -= np.mean(pupil[pupil != 0.])
     pr_result.phase = utils.waves2microns(pupil, wavelength=psfgen.lam_detection)  # convert waves to microns before fitting.
-    pr_result.fit_to_zernikes(num_modes-1, mapping=osa2degrees) # zernikes now in um rms
-    pr_result.phase = pupil # phase is now again in waves
+    pr_result.fit_to_zernikes(num_modes-1, mapping=osa2degrees)  # zernikes now in um rms
+    pr_result.phase = pupil  # phase is now again in waves
 
-    
     pupil[pupil == 0.] = np.nan
     pupil_path = Path(f"{img.with_suffix('')}_phase_retrieval_wavefront.tif")
     imsave(pupil_path, pupil)
@@ -1273,15 +1273,17 @@ def phase_retrieval(
     threshold = utils.waves2microns(prediction_threshold, wavelength=psfgen.lam_detection)
     ignore_modes = list(map(int, ignore_modes))
 
-    preds = np.zeros(num_modes)
-    preds[1:] = pr_result.zd_result.pcoefs #/ (2 * np.pi)
-    preds[ignore_modes] = 0.
-    preds[np.abs(preds) <= threshold] = 0.
+    if use_pyotf_zernikes:
+        pred = np.zeros(num_modes)
+        pred[1:] = pr_result.zd_result.pcoefs
+        pred[ignore_modes] = 0.
+        pred[np.abs(pred) <= threshold] = 0.
+        pred = Wavefront(pred, modes=num_modes, order='ansi', lam_detection=wavelength)
+    else:
+        pred = Wavefront(pupil_path, modes=num_modes, order='ansi', lam_detection=wavelength)
 
-    preds_std = np.zeros(num_modes) # finding the error in the coeffs is difficult.  This makes the error bars zero.    
-    
-    pred = Wavefront(preds, modes=num_modes, order='ansi', lam_detection=wavelength)
-    pred_std = Wavefront(preds_std, modes=num_modes, order='ansi', lam_detection=wavelength)
+    # finding the error in the coeffs is difficult.  This makes the error bars zero.
+    pred_std = Wavefront(np.zeros(num_modes), modes=num_modes, order='ansi', lam_detection=wavelength)
 
     coefficients = [
         {'n': z.n, 'm': z.m, 'amplitude': a}

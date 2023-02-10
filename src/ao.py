@@ -378,6 +378,11 @@ def parse_args(args):
         help='ANSI index for mode you wish to ignore'
     )
 
+    phase_retrieval.add_argument(
+        "--use_pyotf_zernikes", action='store_true',
+        help='a toggle to use pyOTF zernike definitions'
+    )
+
     return parser.parse_args(args)
 
 
@@ -542,6 +547,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             num_iterations=args.num_iterations,
             plot=args.plot,
             ignore_modes=args.ignore_mode,
+            use_pyotf_zernikes=args.use_pyotf_zernikes,
         )
     else:
         logger.error(f"Error")

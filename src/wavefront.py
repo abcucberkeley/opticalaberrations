@@ -348,8 +348,11 @@ class Wavefront:
     def wave(self, size=55, normed=True):
         return np.flip(np.rot90(self.polynomial(size=size, normed=normed)), axis=0)
 
-    def _fit_zernikes(self, wavefront, rotate=True):
+    def _fit_zernikes(self, wavefront, rotate=True, microns=True):
         wavefront = np.ascontiguousarray(imread(wavefront).astype(float))
+
+        if microns:
+            wavefront *= self.lam_detection  # convert waves to microns before fitting.
 
         if rotate:
             wavefront = np.flip(np.rot90(wavefront), axis=0)
