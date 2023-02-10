@@ -649,7 +649,7 @@ class SyntheticPSF:
             interference_pattern = self.fft(beads)
             corrected_otf = otf / interference_pattern
 
-            corrected_psf = np.abs(self.ifft(corrected_otf))
+            corrected_psf = self.ifft(corrected_otf)
             corrected_psf /= np.nanmax(corrected_psf)
 
             if plot is not None:

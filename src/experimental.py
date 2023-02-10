@@ -1241,7 +1241,6 @@ def phase_retrieval(
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
     data = np.int_(imread(img))
-    data_prepped = prep_data_for_PR(data, multiplier=1.1)
 
     psfgen = SyntheticPSF(
         psf_type='widefield',
@@ -1254,6 +1253,15 @@ def phase_retrieval(
         z_voxel_size=axial_voxel_size
     )
 
+    psf = data / np.nanmax(data)
+    otf = psfgen.fft(psf)
+    otf = psfgen.remove_interference_pattern(
+        psf=psf,
+        otf=otf,
+        plot=f"{img.with_suffix('')}_phase_retrieval" if plot else None,
+    )
+    data = np.int_(psfgen.ifft(otf) * np.nanmax(data))
+
     params = dict(
         wl=psfgen.lam_detection,
         na=psfgen.na_detection,
@@ -1261,7 +1269,9 @@ def phase_retrieval(
         res=lateral_voxel_size,
         zres=axial_voxel_size,
     )
+
     logger.info("Starting phase retrieval iterations")
+    data_prepped = prep_data_for_PR(data, multiplier=1.1)
     pr_result = pr.retrieve_phase(
         data_prepped,
         params,
