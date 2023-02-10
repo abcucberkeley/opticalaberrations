@@ -156,7 +156,8 @@ def simulate_beads(psf, gen, snr, object_size=0, num_objs=1, beads=None, noise=N
         beads = multipoint_dataset.beads(
             gen=gen,
             object_size=object_size,
-            num_objs=num_objs
+            num_objs=num_objs,
+            radius=.1
         )
 
     img = utils.fftconvolution(sample=beads, kernel=psf)

@@ -73,7 +73,7 @@ def beads(
             reference += rg.sphere(
                 shape=gen.psf_shape,
                 radius=object_size,
-                position=np.random.uniform(low=.2, high=.8, size=3)
+                position=np.random.uniform(low=(.5 - radius), high=(.5 + radius), size=3)
             ).astype(np.float) * np.random.random()
         else:
             if radius > 0:

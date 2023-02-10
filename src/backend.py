@@ -242,6 +242,7 @@ def bootstrap_predict(
         emb = model.input_shape[1] == inputs.shape[1]
 
     if not emb:
+        logger.info("Computing FFTs")
         embeddings = psfgen.fft(inputs)
         generate_fourier_embeddings = partial(
             psfgen.embedding,
@@ -512,6 +513,7 @@ def predict_rotation(
         desc: test to display for the progressbar
         plot: optional toggle to visualize embeddings
     """
+    logger.info("Computing FFTs")
     embeddings = psfgen.fft(inputs)
     generate_fourier_embeddings = partial(
         psfgen.embedding,
