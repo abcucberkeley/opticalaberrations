@@ -664,13 +664,13 @@ def iter_eval_bin_with_reference(
         snr_range=snr_range
     )
     val = np.array(list(val.take(-1)))
-    inputs = np.array([i.numpy() for i in val[:, 0]])
     ys = np.array([i.numpy() for i in val[:, 1]])
     snrs = np.array([i.numpy() for i in val[:, 2]])
     p2v = np.array([i.numpy() for i in val[:, 3]])
     npoints = np.array([i.numpy() for i in val[:, 4]])
     files = np.array([Path(str(i.numpy(), "utf-8")) for i in val[:, -1]])
     refs = np.array([np.squeeze(data_utils.get_image(f.with_stem(f'{f.stem}_gt'))) for f in files])
+    inputs = np.array([np.squeeze(data_utils.get_image(f.with_stem(f'{f.stem}_realspace'))) for f in files])
 
     residuals = pd.DataFrame.from_dict({
         'id': np.arange(ys.shape[0], dtype=int),

@@ -11,11 +11,11 @@ DATA="/clusterfs/nvme/thayer/dataset/$DATASET/sparse/x108-y108-z200/i$SHAPE/z15"
 EVALSIGN="rotations"  ## options: "positive_only", "dual_stage", "signed", "rotations"
 BATCH=512
 
-for EVALSIGN in positive_only signed rotations
+for EVALSIGN in positive_only signed
 do
   for MODES in 15 28 45
   do
-    for M in phase/opticalnet compact/opticalnet spatial_planes/opticalnet
+    for M in phase/opticalnet
     do
       MODEL="../models/new/$DATASET/z$MODES/$M"
 

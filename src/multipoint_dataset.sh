@@ -34,7 +34,7 @@ SHAPE=64
 
 MODES=15
 TITLE='spatial_planes_embeddings'
-DATASET='sparse'
+DATASET='test'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -55,8 +55,7 @@ else
   TYPE='--emb'
   SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=100
-  #OBJS=(25 35 45 55 65 75 85 100 125 150)
-  OBJS=(1 2 3 4 5 10 15 20 25 30)
+  OBJS=(1 3 5 10 25 50 75 100 125 150)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
   amps1=($(seq 0 .05 .45))
