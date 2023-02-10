@@ -30,7 +30,6 @@ from astropy import convolution
 from psf import PsfGenerator3D
 from wavefront import Wavefront
 from preprocessing import prep_sample
-from timeout import timeout
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -574,7 +573,7 @@ class SyntheticPSF:
 
         return shifted_otf
 
-    @timeout(300)
+    @profile
     def remove_interference_pattern(self, psf, otf, plot, peaks=None, min_distance=5, kernel_size=15):
         """
         Normalize interference pattern from the given FFT
