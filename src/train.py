@@ -6,7 +6,7 @@ import sys
 import time
 from pathlib import Path
 import tensorflow as tf
-
+import cupy as cp
 
 import cli
 import backend
@@ -181,6 +181,10 @@ def main(args=None):
     physical_devices = tf.config.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
+
+    if len(physical_devices) > 1:
+        cp.fft.config.use_multi_gpus = True
+        cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
 
     if args.multinode:
         strategy = tf.distribute.MultiWorkerMirroredStrategy(
