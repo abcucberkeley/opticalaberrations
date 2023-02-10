@@ -41,7 +41,7 @@ logger = logging.getLogger('')
 def reloadmodel_if_needed(
     preloaded: Preloadedmodelclass,
     modelpath: Path,
-    ideal_empirical_psf: Any = None,
+    ideal_empirical_psf: Union[Path, np.ndarray] = None,
     ideal_empirical_psf_voxel_size: Any = None
 ):
     if preloaded is None:
@@ -54,6 +54,7 @@ def reloadmodel_if_needed(
 
 
     elif preloaded.ideal_empirical_psf != ideal_empirical_psf:
+        logger.info(f"Updating ideal psf with empirical, because {chr(10)} {preloaded.ideal_empirical_psf} of type {type(preloaded.ideal_empirical_psf)} has been changed to {chr(10)} {ideal_empirical_psf} of type {type(ideal_empirical_psf)}")
         preloaded.modelpsfgen.update_ideal_psf_with_empirical(
             ideal_empirical_psf=ideal_empirical_psf,
             voxel_size=ideal_empirical_psf_voxel_size,
@@ -1251,7 +1252,7 @@ def phase_retrieval(
         res=lateral_voxel_size,
         zres=axial_voxel_size,
     )
-
+    logger.info("Starting phase retrieval iterations")
     pr_result = pr.retrieve_phase(
         data_prepped,
         params,
@@ -1261,12 +1262,12 @@ def phase_retrieval(
         phase_only=True
     )
     pupil = pr_result.phase / (2 * np.pi)  # convert radians to waves
-    pupil[pupil != 0.] -= np.mean(pupil[pupil != 0.])
+    pupil[pupil != 0.] -= np.mean(pupil[pupil != 0.])   # remove a piston term by subtracting the mean of the pupil
     pr_result.phase = utils.waves2microns(pupil, wavelength=psfgen.lam_detection)  # convert waves to microns before fitting.
-    pr_result.fit_to_zernikes(num_modes-1, mapping=osa2degrees)  # zernikes now in um rms
+    pr_result.fit_to_zernikes(num_modes-1, mapping=osa2degrees)  # pyotf's zernikes now in um rms
     pr_result.phase = pupil  # phase is now again in waves
 
-    pupil[pupil == 0.] = np.nan
+    pupil[pupil == 0.] = np.nan # put NaN's outside of pupil
     pupil_path = Path(f"{img.with_suffix('')}_phase_retrieval_wavefront.tif")
     imsave(pupil_path, pupil)
 
@@ -1274,12 +1275,14 @@ def phase_retrieval(
     ignore_modes = list(map(int, ignore_modes))
 
     if use_pyotf_zernikes:
+        # use pyotf definition of zernikes and fit using them.  I suspect m=0 modes have opposite sign to our definition.
         pred = np.zeros(num_modes)
         pred[1:] = pr_result.zd_result.pcoefs
         pred[ignore_modes] = 0.
         pred[np.abs(pred) <= threshold] = 0.
         pred = Wavefront(pred, modes=num_modes, order='ansi', lam_detection=wavelength)
     else:
+        # use our definition of zernikes and fit using them
         pred = Wavefront(pupil_path, modes=num_modes, order='ansi', lam_detection=wavelength)
 
     # finding the error in the coeffs is difficult.  This makes the error bars zero.
