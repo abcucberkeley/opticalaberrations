@@ -358,6 +358,7 @@ class Wavefront:
             wavefront = np.flip(np.rot90(wavefront), axis=0)
 
         zernikes = [Zernike(i) for i in range(self.length)]
+        # crop to where pupil is
         wavefront = wavefront[:, ~np.isnan(wavefront).all(axis=0)]
         wavefront = wavefront[~np.isnan(wavefront).all(axis=1), :]
 
