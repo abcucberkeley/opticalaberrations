@@ -9,42 +9,45 @@ DATASET='spatial_planes_embeddings'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/sparse/x108-y108-z200/i$SHAPE/z15"
 EVALSIGN="rotations"  ## options: "positive_only", "dual_stage", "signed", "rotations"
-BATCH=1024
+BATCH=512
 
-for MODES in 15 28 45
+for EVALSIGN in positive_only signed rotations
 do
-  for M in phase/opticalnet compact/opticalnet spatial_planes/opticalnet
+  for MODES in 15 28 45
   do
-    MODEL="../models/new/$DATASET/z$MODES/$M"
-
-    python manager.py slurm test.py --partition abc --constraint 'titan'  --mem '250GB' --cpus 10 --gpus 2 \
-    --task "$MODEL --eval_sign $EVALSIGN modes" \
-    --taskname 'test' \
-    --name $MODEL/$EVALSIGN/evalmodes
-
-    python manager.py slurm test.py --partition abc --constraint 'titan'  --mem '250GB' --cpus 10 --gpus 2 \
-    --task "$MODEL --eval_sign $EVALSIGN random" \
-    --taskname random \
-    --name $MODEL/$EVALSIGN/samples
-
-    for NA in 1.
+    for M in phase/opticalnet compact/opticalnet spatial_planes/opticalnet
     do
-      for COV in 1.0
+      MODEL="../models/new/$DATASET/z$MODES/$M"
+
+      python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
+      --task "$MODEL --eval_sign $EVALSIGN modes" \
+      --taskname 'test' \
+      --name $MODEL/$EVALSIGN/evalmodes
+
+      python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
+      --task "$MODEL --eval_sign $EVALSIGN random" \
+      --taskname random \
+      --name $MODEL/$EVALSIGN/samples
+
+      for NA in 1.
       do
-        python manager.py slurm test.py --partition abc_a100 --mem '250GB' --cpus 8 --gpus 2 \
-        --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN densityheatmap" \
-        --taskname $NA \
-        --name $MODEL/$EVALSIGN/densityheatmaps_${COV}
+        for COV in 1.0
+        do
+          python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
+          --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN densityheatmap" \
+          --taskname $NA \
+          --name $MODEL/$EVALSIGN/densityheatmaps_${COV}
 
-        python manager.py slurm test.py --partition abc_a100 --mem '250GB' --cpus 8 --gpus 2 \
-        --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN iterheatmap" \
-        --taskname $NA \
-        --name $MODEL/$EVALSIGN/iterheatmaps_${COV}
+          python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
+          --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN iterheatmap" \
+          --taskname $NA \
+          --name $MODEL/$EVALSIGN/iterheatmaps_${COV}
 
-        python manager.py slurm test.py --partition dgx --mem '500GB' --cpus 32 --gpus 2 \
-        --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN --n_samples 10000 snrheatmap" \
-        --taskname $NA \
-        --name $MODEL/$EVALSIGN/snrheatmaps_${COV}
+          python manager.py slurm test.py --partition dgx --mem '500GB' --cpus 32 --gpus 2 \
+          --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN --n_samples 10000 snrheatmap" \
+          --taskname $NA \
+          --name $MODEL/$EVALSIGN/snrheatmaps_${COV}
+        done
       done
     done
   done

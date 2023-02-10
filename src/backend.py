@@ -487,6 +487,7 @@ def predict_rotation(
     freq_strength_threshold: float = .01,
     verbose: bool = True,
     plot: Any = None,
+    plot_rotations: Any = None,
     remove_interference: bool = True,
     desc: str = 'Predict-rotations',
     rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
@@ -569,7 +570,7 @@ def predict_rotation(
         rotations=rotations,
         psfgen=psfgen,
         threshold=threshold,
-        plot=plot,
+        plot=plot_rotations,
         no_phase=no_phase,
     )
 
@@ -720,7 +721,8 @@ def dual_stage_prediction(
         threshold=threshold,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
-        plot=plot
+        plot=plot,
+        plot_rotations=plot,
     )
 
     if estimate_sign_with_decon:

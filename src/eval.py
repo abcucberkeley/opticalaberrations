@@ -95,6 +95,7 @@ def evaluate(
             no_phase=no_phase,
             threshold=threshold,
             plot=plot,
+            plot_rotations=plot,
             cpu_workers=cpu_workers
         )
     else:
@@ -957,6 +958,7 @@ def random_samples(
                             psfgen=gen,
                             no_phase=no_phase,
                             plot=save_path / f'{s}',
+                            plot_rotations=save_path / f'{s}',
                         )
                     else:
                         p, stdev = backend.bootstrap_predict(

@@ -100,6 +100,10 @@ def parse_args(args):
         help='a toggle for plotting predictions'
     )
     predict_sample.add_argument(
+        "--plot_rotations", action='store_true',
+        help='a toggle for plotting predictions for digital rotations'
+    )
+    predict_sample.add_argument(
         "--num_predictions", default=1, type=int,
         help="number of predictions per sample to estimate model's confidence"
     )
@@ -178,6 +182,10 @@ def parse_args(args):
         help='a toggle for plotting predictions'
     )
     predict_rois.add_argument(
+        "--plot_rotations", action='store_true',
+        help='a toggle for plotting predictions for digital rotations'
+    )
+    predict_rois.add_argument(
         "--num_predictions", default=10, type=int,
         help="number of predictions per ROI to estimate model's confidence"
     )
@@ -238,6 +246,10 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
+    )
+    predict_tiles.add_argument(
+        "--plot_rotations", action='store_true',
+        help='a toggle for plotting predictions for digital rotations'
     )
     predict_tiles.add_argument(
         "--num_predictions", default=10, type=int,
@@ -439,6 +451,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             sign_threshold=args.sign_threshold,
             num_predictions=args.num_predictions,
             plot=args.plot,
+            plot_rotations=args.plot_rotations,
             batch_size=args.batch_size,
             estimate_sign_with_decon=args.estimate_sign_with_decon,
             ignore_modes=args.ignore_mode,
@@ -464,6 +477,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             sign_threshold=args.sign_threshold,
             minimum_distance=args.minimum_distance,
             plot=args.plot,
+            plot_rotations=args.plot_rotations,
             batch_size=args.batch_size,
             estimate_sign_with_decon=args.estimate_sign_with_decon,
             ignore_modes=args.ignore_mode,
@@ -484,6 +498,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             wavelength=args.wavelength,
             window_size=args.window_size,
             plot=args.plot,
+            plot_rotations=args.plot_rotations,
             batch_size=args.batch_size,
             estimate_sign_with_decon=args.estimate_sign_with_decon,
             ignore_modes=args.ignore_mode,

@@ -263,6 +263,7 @@ def predict(
     num_predictions: int = 1,
     batch_size: int = 1,
     plot: bool = True,
+    plot_rotations: bool = False,
     ztiles: int = 1,
     nrows: int = 1,
     ncols: int = 1,
@@ -351,6 +352,7 @@ def predict(
             ignore_modes=ignore_modes,
             freq_strength_threshold=freq_strength_threshold,
             plot=Path(f"{data.with_suffix('')}_predictions") if plot else None,
+            plot_rotations=Path(f"{data.with_suffix('')}_predictions") if plot_rotations else None,
         )
         pchange = None
 
@@ -388,6 +390,7 @@ def predict_sample(
     sign_threshold: float = .9,
     verbose: bool = False,
     plot: bool = False,
+    plot_rotations: bool = False,
     num_predictions: int = 1,
     batch_size: int = 1,
     prev: Any = None,
@@ -456,6 +459,7 @@ def predict_sample(
             ignore_modes=ignore_modes,
             freq_strength_threshold=freq_strength_threshold,
             plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
+            plot_rotations=Path(f"{img.with_suffix('')}_sample_predictions") if plot_rotations else None,
         )
 
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
@@ -508,6 +512,7 @@ def predict_rois(
     sign_threshold: float = .9,
     minimum_distance: float = 1.,
     plot: bool = False,
+    plot_rotations: bool = False,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
@@ -557,6 +562,8 @@ def predict_rois(
         ztiles=1,
         nrows=ncols,
         ncols=nrows,
+        plot=plot,
+        plot_rotations=plot_rotations,
         estimate_sign_with_decon=estimate_sign_with_decon,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
@@ -579,6 +586,7 @@ def predict_tiles(
     freq_strength_threshold: float = .01,
     sign_threshold: float = .9,
     plot: bool = True,
+    plot_rotations: bool = False,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),    
@@ -623,6 +631,7 @@ def predict_tiles(
         wavelength=wavelength,
         prev=prev,
         plot=plot,
+        plot_rotations=plot_rotations,
         ztiles=ztiles,
         nrows=nrows,
         ncols=ncols,
