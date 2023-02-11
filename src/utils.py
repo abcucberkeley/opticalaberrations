@@ -221,14 +221,12 @@ def plot_to_image(figure):
 def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
     beads = peak_local_max(
         sample,
-        min_distance=5,
-        threshold_rel=.33,
+        min_distance=0,
+        threshold_rel=0,
         exclude_border=False,
         p_norm=2,
-        num_peaks=100
     ).astype(np.float64)
 
-    # rescale to mu meters
     scaled_peaks = np.zeros_like(beads)
     scaled_peaks[:, 0] = beads[:, 0] * voxel_size[0]
     scaled_peaks[:, 1] = beads[:, 1] * voxel_size[1]

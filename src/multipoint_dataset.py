@@ -18,6 +18,7 @@ import numpy as np
 import raster_geometry as rg
 
 import cli
+from utils import mean_min_distance
 from preprocessing import resize_with_crop_or_pad, remove_background_noise
 from utils import peak2valley, fftconvolution, multiprocess
 from synthetic import SyntheticPSF
@@ -30,18 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_synthetic_sample(
-    savepath,
-    inputs,
-    amps,
-    snr,
-    maxcounts,
-    p2v,
-    gen,
-    npoints=1,
-    gt=None,
-    realspace=None,
-):
+def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, avg_min_distance, gen, npoints=1, gt=None, realspace=None):
 
     if gt is not None:
         imsave(f"{savepath}_gt.tif", gt)
@@ -63,6 +53,7 @@ def save_synthetic_sample(
             maxcounts=int(maxcounts),
             npoints=int(npoints),
             peak2peak=float(p2v),
+            avg_min_distance=float(avg_min_distance),
             x_voxel_size=float(gen.x_voxel_size),
             y_voxel_size=float(gen.y_voxel_size),
             z_voxel_size=float(gen.z_voxel_size),
@@ -160,6 +151,8 @@ def sim(
             else:
                 reference[gen.psf_shape[0] // 2, gen.psf_shape[1] // 2, gen.psf_shape[2] // 2] += np.random.random()
 
+    avg_min_distance = mean_min_distance(reference, voxel_size=gen.voxel_size) if npoints > 1 else 0.
+
     reference /= np.max(reference)
     img = fftconvolution(sample=reference, kernel=kernel)
     psnr = gen._randuniform(snr)
@@ -210,7 +203,8 @@ def sim(
                 p2v=peak2valley(amps, wavelength=gen.lam_detection),
                 gt=reference,
                 gen=gen,
-                realspace=noisy_img
+                realspace=noisy_img,
+                avg_min_distance=avg_min_distance
             )
     else:
         save_synthetic_sample(
@@ -220,6 +214,7 @@ def sim(
             snr=psnr,
             maxcounts=maxcounts,
             npoints=npoints,
+            avg_min_distance=avg_min_distance,
             p2v=peak2valley(amps, wavelength=gen.lam_detection),
             gt=reference,
             gen=gen
