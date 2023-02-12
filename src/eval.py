@@ -16,6 +16,7 @@ import cupy as cp
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import tensorflow_addons as tfa
 from preprocessing import resize_with_crop_or_pad, remove_background_noise
 from line_profiler_pycharm import profile
 from tqdm import tqdm
@@ -112,8 +113,8 @@ def predict(
         inputs = inputs.map(lambda *args: tf.py_function(rotate_embeddings, [args[0]], [tf.float32]))
         inputs = inputs.unbatch().batch(batch_size)
 
-    # for i in inputs.take(1):
-    #     logger.info(f"Input: {i[0].numpy().shape}")
+        # for i in inputs.take(1):
+        #     logger.info(f"Input: {i[0].numpy().shape}")
 
     logger.info(f"[BS={batch_size}] {desc}")
     preds = model.predict(inputs, batch_size=batch_size, verbose=verbose)
