@@ -35,6 +35,14 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--niter", default=1, type=int, help='number of iterations'
+    )
+
+    parser.add_argument(
+        "--digital_rotations", action='store_true', help='use digital rotations to estimate prediction confidence'
+    )
+
+    parser.add_argument(
         "--eval_sign", default="positive_only", type=str, help='path to save eval'
     )
 
@@ -107,16 +115,18 @@ def main(args=None):
     if args.target == 'modes':
         eval.evaluate_modes(
             args.model,
-            eval_sign=args.eval_sign
+            eval_sign=args.eval_sign,
         )
 
     elif args.target == "random":
         eval.random_samples(
             model=args.model,
-            eval_sign=args.eval_sign
+            eval_sign=args.eval_sign,
+            digital_rotations=args.digital_rotations,
         )
     elif args.target == 'snrheatmap':
         eval.snrheatmap(
+            niter=args.niter,
             modelpath=args.model,
             datadir=args.datadir,
             distribution=args.dist,
@@ -124,10 +134,12 @@ def main(args=None):
             input_coverage=args.input_coverage,
             na=args.na,
             batch_size=args.batch_size,
-            eval_sign=args.eval_sign
+            eval_sign=args.eval_sign,
+            digital_rotations=args.digital_rotations,
         )
     elif args.target == 'densityheatmap':
         eval.densityheatmap(
+            niter=args.niter,
             modelpath=args.model,
             datadir=args.datadir,
             distribution=args.dist,
@@ -135,10 +147,12 @@ def main(args=None):
             input_coverage=args.input_coverage,
             na=args.na,
             batch_size=args.batch_size,
-            eval_sign=args.eval_sign
+            eval_sign=args.eval_sign,
+            digital_rotations=args.digital_rotations,
         )
     elif args.target == 'iterheatmap':
         eval.iterheatmap(
+            niter=args.niter,
             modelpath=args.model,
             datadir=args.datadir,
             distribution=args.dist,
@@ -146,7 +160,8 @@ def main(args=None):
             input_coverage=args.input_coverage,
             na=args.na,
             batch_size=args.batch_size,
-            eval_sign=args.eval_sign
+            eval_sign=args.eval_sign,
+            digital_rotations=args.digital_rotations,
         )
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
