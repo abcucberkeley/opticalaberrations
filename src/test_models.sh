@@ -41,7 +41,7 @@ do
           --name $MODEL/$EVALSIGN/densityheatmaps_${COV}
 
           python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
-          --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH --eval_sign $EVALSIGN --n_samples $MAX iterheatmap" \
+          --task "$MODEL --datadir $DATA --input_coverage $COV --na $NA --batch_size $BATCH  --niter 10 --eval_sign $EVALSIGN --n_samples $MAX iterheatmap" \
           --taskname $NA \
           --name $MODEL/$EVALSIGN/iterheatmaps_${COV}
 
