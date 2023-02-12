@@ -206,11 +206,31 @@ def iter_evaluate(
         residuals[f'z{z}_residual'] = ys[:, z]
 
     for k in range(1, niter+1):
-        inputs = apply_correction(
-            predictions=residuals[residuals['niter'] == k-1],
+        predictions = residuals[residuals['niter'] == k - 1]
+        generate_fourier_embeddings = partial(
+            apply_correction,
+            predictions=predictions,
             psfgen=gen,
-            no_phase=no_phase
+            no_phase=no_phase,
+
         )
+        if k == 1:
+            # check if embeddings has been pre-computed already
+            emb = data_utils.get_image(files[0])
+            if emb.shape[0] == 3 or emb.shape[0] == 6:
+                inputs = np.array([data_utils.get_image(f) for f in files])
+            else:
+                inputs = utils.multiprocess(
+                    generate_fourier_embeddings,
+                    predictions['id'].values,
+                    desc='Generate Fourier embeddings'
+                )
+        else:  # need to apply new corrections  after the first iteration
+            inputs = utils.multiprocess(
+                generate_fourier_embeddings,
+                predictions['id'].values,
+                desc=f'Applying correction iter[{k}]'
+            )
 
         if input_coverage != 1.:
             inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
@@ -265,58 +285,57 @@ def iter_evaluate(
 
 
 def apply_correction(
+    image_id: int,
     predictions: pd.DataFrame,
     psfgen: SyntheticPSF,
     no_phase: bool = False
 ):
-    inputs = []
-    for index, row in tqdm(predictions.iterrows(), desc='Applying correction'):
-        f = Path(str(row['file']))
-        ys = [row[cc] for cc in predictions.columns[predictions.columns.str.endswith('_residual')]]
-        ref = np.squeeze(data_utils.get_image(f.with_stem(f'{f.stem}_gt')))
+    hashtable = predictions[predictions['id'] == image_id].iloc[0].to_dict()
 
-        wavefront = Wavefront(
-            ys,
-            modes=psfgen.n_modes,
-            signed=True,
-            rotate=True,
-            mode_weights='pyramid',
-            lam_detection=psfgen.lam_detection,
-        )
+    f = Path(str(hashtable['file']))
+    ys = [hashtable[cc] for cc in predictions.columns[predictions.columns.str.endswith('_residual')]]
+    ref = np.squeeze(data_utils.get_image(f.with_stem(f'{f.stem}_gt')))
 
-        psf = psfgen.single_psf(
-            phi=wavefront,
-            normed=True,
-            noise=False,
-            meta=False,
-        )
+    wavefront = Wavefront(
+        ys,
+        modes=psfgen.n_modes,
+        signed=True,
+        rotate=True,
+        mode_weights='pyramid',
+        lam_detection=psfgen.lam_detection,
+    )
 
-        img = utils.fftconvolution(sample=ref, kernel=psf)
-        img *= row['snr'] ** 2
+    psf = psfgen.single_psf(
+        phi=wavefront,
+        normed=True,
+        noise=False,
+        meta=False,
+    )
 
-        rand_noise = psfgen._random_noise(
-            image=ref,
-            mean=psfgen.mean_background_noise,
-            sigma=psfgen.sigma_background_noise
-        )
+    img = utils.fftconvolution(sample=ref, kernel=psf)
+    img *= hashtable['snr'] ** 2
 
-        noisy_img = rand_noise + img
-        noisy_img = remove_background_noise(noisy_img)
-        noisy_img /= np.max(noisy_img)
+    rand_noise = psfgen._random_noise(
+        image=ref,
+        mean=psfgen.mean_background_noise,
+        sigma=psfgen.sigma_background_noise
+    )
 
-        emb = embeddings.fourier_embeddings(
-            noisy_img,
-            iotf=psfgen.iotf,
-            no_phase=no_phase,
-            alpha_val='abs',
-            phi_val='angle',
-            remove_interference=True,
-            embedding_option=psfgen.embedding_option,
-        )
+    noisy_img = rand_noise + img
+    noisy_img = remove_background_noise(noisy_img)
+    noisy_img /= np.max(noisy_img)
 
-        inputs.append(emb)
+    emb = embeddings.fourier_embeddings(
+        noisy_img,
+        iotf=psfgen.iotf,
+        no_phase=no_phase,
+        alpha_val='abs',
+        phi_val='angle',
+        remove_interference=True,
+        embedding_option=psfgen.embedding_option,
+    )
 
-    return np.array(inputs)
+    return emb
 
 
 @profile
