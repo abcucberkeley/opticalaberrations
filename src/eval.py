@@ -487,8 +487,8 @@ def snrheatmap(
             )
 
             bins = np.arange(0, 10.25, .25)
-            df['bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
-            means = pd.pivot_table(df, values=f'z{z}_residual', index='bins', columns='snr', aggfunc=np.mean)
+            df[f'z{z}_bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
+            means = pd.pivot_table(df, values=f'z{z}_residual', index=f'z{z}_bins', columns='snr', aggfunc=np.mean)
             means = means.sort_index().interpolate()
             logger.info(f"z{z}")
             logger.info(means)
@@ -581,8 +581,8 @@ def densityheatmap(
                 )
 
                 bins = np.arange(0, 10.25, .25)
-                df['bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
-                means = pd.pivot_table(df, values=f'z{z}_residual', index='bins', columns=col, aggfunc=np.mean)
+                df[f'z{z}_bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
+                means = pd.pivot_table(df, values=f'z{z}_residual', index=f'z{z}_bins', columns=col, aggfunc=np.mean)
                 means = means.sort_index().interpolate()
                 logger.info(f"z{z}")
                 logger.info(means)
