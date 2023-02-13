@@ -456,13 +456,12 @@ def snrheatmap(
             digital_rotations=digital_rotations
         )
 
-    means = pd.pivot_table(
-        df[df['niter'] == niter], values='residuals', index='aberration', columns='snr', aggfunc=np.mean
-    )
-
     bins = np.arange(0, 10.25, .25)
-    means.index = pd.cut(means.index, bins, labels=bins[1:], include_lowest=True)
-    means.index.name = 'bins'
+    df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+
+    means = pd.pivot_table(
+        df[df['niter'] == niter], values='residuals', index='bins', columns='snr', aggfunc=np.mean
+    )
     means = means.sort_index().interpolate()
 
     logger.info(means)
@@ -553,13 +552,12 @@ def densityheatmap(
         ['Number of objects', 'Average distance to nearest neighbor (microns)'],
         [(1, 150), (0, 4)]
     ):
-        means = pd.pivot_table(
-            df[df['niter'] == niter], values='residuals', index='aberration', columns=col, aggfunc=np.mean
-        )
-
         bins = np.arange(0, 10.25, .25)
-        means.index = pd.cut(means.index, bins, labels=bins[1:], include_lowest=True)
-        means.index.name = 'bins'
+        df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+
+        means = pd.pivot_table(
+            df[df['niter'] == niter], values='residuals', index='bins', columns=col, aggfunc=np.mean
+        )
         means = means.sort_index().interpolate()
         means.to_csv(f'{savepath}_{col}.csv')
 
