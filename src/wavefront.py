@@ -91,30 +91,41 @@ class Wavefront:
             moi = self._pick_modes()                # pick order of modes from most "interesting" to least (51 modes)
             amplitudes[moi] = amps[:len(moi)]       # assign amplitudes  amps[:len(moi)] is 51, so amplitudes[piston, tip,tilt, defocus] will always be zero
 
+            if self.rotate:
+                for j, a in amplitudes.items():
+                    if a != 0:
+                        z = Zernike(j, order=order)
+                        twin = Zernike((z.n, z.m * -1), order=order)
+
+                        if z.m != 0 and self.zernikes.get(twin) is not None:
+                            a = np.sqrt(self.zernikes[z] ** 2 + self.zernikes[twin] ** 2)
+                            randomangle = np.random.uniform(
+                                low=0,
+                                high=2 * np.pi if self.signed else np.pi / 2
+                            )
+                            self.zernikes[z] = a * np.cos(randomangle)
+                            self.zernikes[twin] = a * np.sin(randomangle)
+
+            amplitudes = self._formatter(amplitudes, order)
+
+            self.zernikes = {
+                Zernike(j, order=order): a
+                for j, a in amplitudes.items()
+            }
+
         elif isinstance(amplitudes, Path) or isinstance(amplitudes, str):
             amplitudes = self._fit_zernikes(amplitudes)
-
-        amplitudes = self._formatter(amplitudes, order)
-
-        self.zernikes = {
-            Zernike(j, order=order): a
-            for j, a in amplitudes.items()
-        }
-
-        if self.rotate:
-            for j, a in amplitudes.items():
-                if a != 0:
-                    z = Zernike(j, order=order)
-                    twin = Zernike((z.n, z.m*-1), order=order)
-
-                    if z.m != 0 and self.zernikes.get(twin) is not None:
-                        a = np.sqrt(self.zernikes[z] ** 2 + self.zernikes[twin] ** 2)
-                        randomangle = np.random.uniform(
-                            low=0,
-                            high=2 * np.pi if self.signed else np.pi/2
-                        )
-                        self.zernikes[z] = a * np.cos(randomangle)
-                        self.zernikes[twin] = a * np.sin(randomangle)
+            amplitudes = self._formatter(amplitudes, order)
+            self.zernikes = {
+                Zernike(j, order=order): a
+                for j, a in amplitudes.items()
+            }
+        else:
+            amplitudes = self._formatter(amplitudes, order)
+            self.zernikes = {
+                Zernike(j, order=order): a
+                for j, a in amplitudes.items()
+            }
 
         self.amplitudes_noll = np.array(
             self._dict_to_list({z.index_noll: a for z, a in self.zernikes.items()})[1:]

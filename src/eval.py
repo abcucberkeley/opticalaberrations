@@ -191,7 +191,7 @@ def iter_evaluate(
     dists = np.array([i.numpy() for i in metadata[:, 4]])
     files = np.array([Path(str(i.numpy(), "utf-8")) for i in metadata[:, -1]])
 
-    residuals = pd.DataFrame.from_dict({
+    results = pd.DataFrame.from_dict({
         'id': np.arange(ys.shape[0], dtype=int),
         'niter': np.zeros(ys.shape[0], dtype=int),
         'aberration': p2v,
@@ -202,15 +202,15 @@ def iter_evaluate(
     })
 
     for z in range(ys.shape[-1]):
-        residuals[f'z{z}_ground_truth'] = ys[:, z]
-        residuals[f'z{z}_prediction'] = np.zeros_like(ys[:, z])
-        residuals[f'z{z}_residual'] = ys[:, z]
+        results[f'z{z}_ground_truth'] = ys[:, z]
+        results[f'z{z}_prediction'] = np.zeros_like(ys[:, z])
+        results[f'z{z}_residual'] = ys[:, z]
 
     for k in range(1, niter+1):
-        predictions = residuals[residuals['niter'] == k - 1]
+        residuals = results[results['niter'] == k - 1]
         generate_fourier_embeddings = partial(
             apply_correction,
-            predictions=predictions,
+            predictions=residuals,
             psfgen=gen,
             no_phase=no_phase,
 
@@ -223,14 +223,14 @@ def iter_evaluate(
             else:
                 inputs = utils.multiprocess(
                     generate_fourier_embeddings,
-                    predictions['id'].values,
+                    residuals['id'].values,
                     desc='Generate Fourier embeddings'
                 )
         else:  # need to apply new corrections  after the first iteration
             inputs = utils.multiprocess(
                 generate_fourier_embeddings,
-                predictions['id'].values,
-                desc=f'Applying correction iter[{k}]'
+                residuals['id'].values,
+                desc=f'Applying correction iter[{k-1}]'
             )
 
         if input_coverage != 1.:
@@ -260,29 +260,29 @@ def iter_evaluate(
 
         res = ys - ps
 
-        predictions = pd.DataFrame(np.arange(ys.shape[0], dtype=int), columns=['id'])
-        predictions['niter'] = k
-        predictions['aberration'] = p2v
-        predictions['residuals'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in res]
-        predictions['snr'] = snrs
-        predictions['neighbors'] = npoints
-        predictions['distance'] = dists
-        predictions['file'] = files
+        residuals = pd.DataFrame(np.arange(ys.shape[0], dtype=int), columns=['id'])
+        residuals['niter'] = k
+        residuals['aberration'] = p2v
+        residuals['residuals'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in res]
+        residuals['snr'] = snrs
+        residuals['neighbors'] = npoints
+        residuals['distance'] = dists
+        residuals['file'] = files
 
         for z in range(ps.shape[-1]):
-            predictions[f'z{z}_ground_truth'] = ys[:, z]
-            predictions[f'z{z}_prediction'] = ps[:, z]
-            predictions[f'z{z}_residual'] = res[:, z]
+            residuals[f'z{z}_ground_truth'] = ys[:, z]
+            residuals[f'z{z}_prediction'] = ps[:, z]
+            residuals[f'z{z}_residual'] = res[:, z]
 
-        residuals = residuals.append(predictions, ignore_index=True)
+        results = results.append(residuals, ignore_index=True)
 
         if savepath is not None:
-            residuals.to_csv(f'{savepath}_predictions.csv')
+            results.to_csv(f'{savepath}_predictions.csv')
 
         # setup next iter
         ys = res
 
-    return residuals
+    return results
 
 
 def apply_correction(
@@ -300,9 +300,6 @@ def apply_correction(
     wavefront = Wavefront(
         ys,
         modes=psfgen.n_modes,
-        signed=True,
-        rotate=True,
-        mode_weights='pyramid',
         lam_detection=psfgen.lam_detection,
     )
 
