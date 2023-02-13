@@ -183,6 +183,7 @@ def iter_evaluate(
         snr_range=snr_range,
         metadata=True
     )
+    # this runs multiple samples (aka images) at a time.  ys is a 2D array, rows are each sample, columns give abberation in zernike coeffs
     metadata = np.array(list(metadata.take(-1)))
     ys = np.array([i.numpy() for i in metadata[:, 0]])
     snrs = np.array([i.numpy() for i in metadata[:, 1]])
@@ -190,6 +191,17 @@ def iter_evaluate(
     npoints = np.array([i.numpy() for i in metadata[:, 3]])
     dists = np.array([i.numpy() for i in metadata[:, 4]])
     files = np.array([Path(str(i.numpy(), "utf-8")) for i in metadata[:, -1]])
+
+    # 'results' is going to be written out as the .csv.  It holds the information 
+    # from every iteration.  Initialize it first with the zeroth iteration. 
+    # 
+    # id = image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
+    # niter = iteration index.
+    # abberation = initial p2v abberation. Constant over iterations.
+    # residuals = remaining p2v abberation after ML correction.  not to be confused with "z?_residual" which is the zernike coeffs residue
+    # snr = signal to noise
+    # distance = separation of beads?
+    # file = binary image file filled with zeros except at location of beads
 
     results = pd.DataFrame.from_dict({
         'id': np.arange(ys.shape[0], dtype=int),
@@ -201,20 +213,24 @@ def iter_evaluate(
         'file': files,
     })
 
+    # make 3 more columns for every z mode, all in terms of zernike coeffs. _residual will become the next iteration's ground truth.
+    # iteration zero will have _prediction = zero, GT = _residual = starting abberation
     for z in range(ys.shape[-1]):
         results[f'z{z}_ground_truth'] = ys[:, z]
         results[f'z{z}_prediction'] = np.zeros_like(ys[:, z])
         results[f'z{z}_residual'] = ys[:, z]
 
+
+    # ys contains the current GT abberation of every sample.
     for k in range(1, niter+1):
-        residuals = results[results['niter'] == k - 1]
-        generate_fourier_embeddings = partial(
+        before = results[results['niter'] == k - 1]
+        generate_updated_embeddings = partial(
             apply_correction,
-            predictions=residuals,
+            predictions=before,
             psfgen=gen,
             no_phase=no_phase,
 
-        )
+        )   # uses the DataFrame for the current iteration and the image 'id' to generate embs
         if k == 1:
             # check if embeddings has been pre-computed already
             emb = data_utils.get_image(files[0])
@@ -222,19 +238,19 @@ def iter_evaluate(
                 inputs = np.array([data_utils.get_image(f) for f in files])
             else:
                 inputs = utils.multiprocess(
-                    generate_fourier_embeddings,
-                    residuals['id'].values,
+                    generate_updated_embeddings,
+                    before['id'].values,
                     desc='Generate Fourier embeddings'
                 )
-        else:  # need to apply new corrections  after the first iteration
+        else:  # need to apply new corrections after the first iteration
             inputs = utils.multiprocess(
-                generate_fourier_embeddings,
-                residuals['id'].values,
+                generate_updated_embeddings,
+                before['id'].values,
                 desc=f'Applying correction iter[{k-1}]'
             )
 
         if input_coverage != 1.:
-            inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape])
+            inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape]) # needed if we use e.g. 32 crop
 
         inputs = tf.data.Dataset.from_tensor_slices(inputs)
 
@@ -260,26 +276,26 @@ def iter_evaluate(
 
         res = ys - ps
 
-        residuals = pd.DataFrame(np.arange(ys.shape[0], dtype=int), columns=['id'])
-        residuals['niter'] = k
-        residuals['aberration'] = p2v
-        residuals['residuals'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in res]
-        residuals['snr'] = snrs
-        residuals['neighbors'] = npoints
-        residuals['distance'] = dists
-        residuals['file'] = files
+        current = pd.DataFrame(np.arange(ys.shape[0], dtype=int), columns=['id'])
+        current['niter'] = k
+        current['aberration'] = p2v
+        current['current'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in res]
+        current['snr'] = snrs
+        current['neighbors'] = npoints
+        current['distance'] = dists
+        current['file'] = files
 
         for z in range(ps.shape[-1]):
-            residuals[f'z{z}_ground_truth'] = ys[:, z]
-            residuals[f'z{z}_prediction'] = ps[:, z]
-            residuals[f'z{z}_residual'] = res[:, z]
+            current[f'z{z}_ground_truth'] = ys[:, z]
+            current[f'z{z}_prediction'] = ps[:, z]
+            current[f'z{z}_residual'] = res[:, z]
 
-        results = results.append(residuals, ignore_index=True)
+        results = results.append(current, ignore_index=True)
 
         if savepath is not None:
             results.to_csv(f'{savepath}_predictions.csv')
 
-        # setup next iter
+        # update the abberation for the next iteration with the residue
         ys = res
 
     return results
