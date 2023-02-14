@@ -6,6 +6,7 @@ import sys
 from typing import Any, Union
 
 import numpy as np
+import cupy as cp
 from skimage import transform
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -19,7 +20,7 @@ from line_profiler_pycharm import profile
 from scipy import ndimage
 import matplotlib.patches as patches
 from astropy import convolution
-from scipy.ndimage import rotate
+from cupyx.scipy.ndimage import rotate
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -697,12 +698,13 @@ def fourier_embeddings(
         emb = np.expand_dims(emb, axis=-1)
 
     if digital_rotations is not None:
+        gpu_embeddings = cp.array(emb)
         emb = np.stack([
-            rotate(emb, angle=angle, reshape=False, axes=(-2, -1))
+            cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
             for angle in tqdm(digital_rotations, desc=f"Generating digital rotations")
         ], axis=0)
+        del gpu_embeddings
 
-        return emb
-    else:
-        return emb[np.newaxis, ...]
+    return emb
+
 

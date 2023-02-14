@@ -143,9 +143,12 @@ def predict(
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
     ignore_modes = list(map(int, ignore_modes))
     logger.info(f"Ignoring modes: {ignore_modes}")
+    logger.info(f"[BS={batch_size}] {desc}")
     inputs = inputs.batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
 
-    logger.info(f"[BS={batch_size}] {desc}")
+    for i in inputs.take(1):
+        logger.info(f"Input: {i.numpy().shape}")
+
     preds = model.predict(inputs, batch_size=batch_size, verbose=verbose)
 
     preds[:, ignore_modes] = 0.
@@ -236,25 +239,19 @@ def iter_evaluate(
             input_coverage=input_coverage,
         )
 
-        if k == 1:
-            # check if embeddings has been pre-computed already
-            emb = data_utils.get_image(files[0])
-            if emb.shape[0] == 3 or emb.shape[0] == 6:
-                inputs = np.array([data_utils.get_image(f) for f in files])
-            else:
-                inputs = np.concatenate(utils.multiprocess(
-                    updated_embeddings,
-                    before['id'].values,
-                    desc=f'Updated embeddings (iter #{k})'
-                ), axis=0)
-        else:  # need to apply new corrections after the first iteration
-            inputs = np.concatenate(utils.multiprocess(
-                updated_embeddings,
-                before['id'].values,
-                desc=f'Updated embeddings (iter #{k})'
-            ), axis=0)
+        check = data_utils.get_image(files[0])
 
-        inputs = tf.data.Dataset.from_tensor_slices(inputs)
+        # need to get this working with digital rotations and a dynamic batchsize
+        if k == 1 and (check.shape[0] == 3 or check.shape[0] == 6):
+            # check if embeddings has been pre-computed
+            inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(files))
+            inputs = inputs.map(lambda x: tf.py_function(data_utils.get_image, [x], tf.float32))
+        else:
+            inputs = tf.data.Dataset.from_tensor_slices(ids)
+            inputs = inputs.map(lambda image_id: tf.py_function(updated_embeddings, [image_id], tf.float32))
+
+        for i in inputs.take(1):
+            logger.info(f"dataset: {i.numpy().shape}")
 
         ps = predict(
             model,
@@ -262,7 +259,7 @@ def iter_evaluate(
             psfgen=gen,
             batch_size=batch_size,
             threshold=threshold,
-            desc=f'Predicting (iter{k})'
+            desc=f'Predicting (iter #{k})'
         )
 
         if digital_rotations:

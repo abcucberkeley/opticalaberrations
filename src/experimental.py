@@ -1015,21 +1015,21 @@ def eval_mode(
         dz=gen.z_voxel_size
     )
 
-    plt.style.use("dark_background")
-    vis.diagnostic_assessment(
-        psf=noisy_img,
-        gt_psf=gt_psf,
-        predicted_psf=p_psf,
-        corrected_psf=corrected_psf,
-        psnr=psnr,
-        maxcounts=maxcounts,
-        y=y_wave,
-        pred=p_wave,
-        save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval_db'),
-        display=False,
-        dxy=gen.x_voxel_size,
-        dz=gen.z_voxel_size
-    )
+    # plt.style.use("dark_background")
+    # vis.diagnostic_assessment(
+    #     psf=noisy_img,
+    #     gt_psf=gt_psf,
+    #     predicted_psf=p_psf,
+    #     corrected_psf=corrected_psf,
+    #     psnr=psnr,
+    #     maxcounts=maxcounts,
+    #     y=y_wave,
+    #     pred=p_wave,
+    #     save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval_db'),
+    #     display=False,
+    #     dxy=gen.x_voxel_size,
+    #     dz=gen.z_voxel_size
+    # )
 
 
 @profile
@@ -1038,7 +1038,7 @@ def eval_dataset(
     datadir: Path,
     flat: Any = None,
     postfix: str = 'sample_predictions_zernike_coefficients.csv',
-    gt_postfix: str = 'pr_pupil_waves.tif',
+    gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv',
     # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
 ):
     func = partial(
