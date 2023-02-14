@@ -7,6 +7,7 @@ from typing import Any, Union
 
 import numpy as np
 from skimage import transform
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from skimage.filters import scharr
@@ -18,10 +19,11 @@ from line_profiler_pycharm import profile
 from scipy import ndimage
 import matplotlib.patches as patches
 from astropy import convolution
+from scipy.ndimage import rotate
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
-
+from utils import resize_with_crop_or_pad
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -593,11 +595,13 @@ def fourier_embeddings(
         phi_val: str = 'angle',
         plot: Any = None,
         log10: bool = False,
+        input_coverage: float = 1.0,
         freq_strength_threshold: float = 0.01,
         peaks: Any = None,
         remove_interference: bool = True,
         embedding_option: Any = None,
         edge_filter: bool = False,
+        digital_rotations: Any = None,
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -615,9 +619,11 @@ def fourier_embeddings(
         plot: optional toggle to visualize embeddings
         remove_interference: a toggle to normalize out the interference pattern from the OTF
         peaks: masked array of the peaks of interest to compute the interference pattern between objects
+        input_coverage: optional crop to the realspace image
         log10: optional toggle to take log10 of the FFT
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
         edge_filter: a toggle for running an edge filter pass on the alpha embeddings
+        digital_rotations: optional digital rotations to the embeddings
         embedding_option: type of embedding to use.
             Capitalizing on the radial symmetry of the FFT,
             we have a few options to minimize the size of the embedding.
@@ -631,6 +637,9 @@ def fourier_embeddings(
     if psf.ndim == 4:
         psf = np.squeeze(psf)
         otf = np.squeeze(otf)
+
+    if input_coverage != 1.:
+        psf = resize_with_crop_or_pad(psf, crop_shape=[int(s * input_coverage) for s in psf.shape])
 
     if no_phase:
         emb = compute_emb(
@@ -684,7 +693,16 @@ def fourier_embeddings(
         plt.style.use("default")
         plot_embeddings(inputs=psf, emb=emb, save_path=plot)
 
-    if psf.ndim == 3:
-        return np.expand_dims(emb, axis=-1)
-    else:
+    if psf.shape[-1] != 1:
+        emb = np.expand_dims(emb, axis=-1)
+
+    if digital_rotations is not None:
+        emb = np.stack([
+            rotate(emb, angle=angle, reshape=False, axes=(-2, -1))
+            for angle in tqdm(digital_rotations, desc=f"Generating digital rotations")
+        ], axis=0)
+
         return emb
+    else:
+        return emb[np.newaxis, ...]
+

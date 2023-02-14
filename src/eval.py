@@ -12,16 +12,13 @@ from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
 
 import swifter
-import cupy as cp
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import tensorflow_addons as tfa
-from preprocessing import resize_with_crop_or_pad, remove_background_noise
+from preprocessing import remove_background_noise
 from line_profiler_pycharm import profile
 from tqdm import tqdm
 from tifffile import imsave
-from cupyx.scipy.ndimage import rotate
 
 import embeddings
 import utils
@@ -63,8 +60,57 @@ def simulate_beads(psf, gen, snr, object_size=0, num_objs=1, beads=None, noise=N
         )
 
     noisy_img = noise + img
+    noisy_img = remove_background_noise(noisy_img)
     noisy_img /= np.max(noisy_img)
     return noisy_img
+
+
+def generate_fourier_embeddings(
+    image_id: int,
+    data: pd.DataFrame,
+    psfgen: SyntheticPSF,
+    no_phase: bool = False,
+    input_coverage: float = 1.0,
+    digital_rotations: Any = None,
+):
+    hashtable = data[data['id'] == image_id].iloc[0].to_dict()
+
+    f = Path(str(hashtable['file']))
+    ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
+    ref = np.squeeze(data_utils.get_image(f.with_stem(f'{f.stem}_gt')))
+
+    wavefront = Wavefront(
+        ys,
+        modes=psfgen.n_modes,
+        lam_detection=psfgen.lam_detection,
+    )
+
+    psf = psfgen.single_psf(
+        phi=wavefront,
+        normed=True,
+        noise=False,
+        meta=False,
+    )
+
+    noisy_img = simulate_beads(
+        psf=psf,
+        beads=ref,
+        gen=psfgen,
+        snr=hashtable['snr']
+    )
+
+    emb = embeddings.fourier_embeddings(
+        noisy_img,
+        iotf=psfgen.iotf,
+        no_phase=no_phase,
+        alpha_val='abs',
+        phi_val='angle',
+        remove_interference=True,
+        input_coverage=input_coverage,
+        embedding_option=psfgen.embedding_option,
+        digital_rotations=digital_rotations
+    )
+    return emb
 
 
 @profile
@@ -77,8 +123,6 @@ def predict(
     threshold: float = 0.,
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
-    digital_rotations: bool = False,
-    rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int)
 ):
     """
     Average predictions and compute stdev
@@ -96,25 +140,10 @@ def predict(
     Returns:
         average prediction, stdev
     """
-    def rotate_embeddings(batch):
-        gpu_embeddings = cp.array(batch)
-        return np.concatenate([
-            cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
-            for angle in tqdm(rotations, desc=f"Generating digital rotations")
-        ], axis=0)
-
-    no_phase = True if model.input_shape[1] == 3 else False
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
     ignore_modes = list(map(int, ignore_modes))
     logger.info(f"Ignoring modes: {ignore_modes}")
-    inputs = inputs.batch(batch_size)
-
-    if digital_rotations:
-        inputs = inputs.map(lambda *args: tf.py_function(rotate_embeddings, [args[0]], [tf.float32]))
-        inputs = inputs.unbatch().batch(batch_size)
-
-        # for i in inputs.take(1):
-        #     logger.info(f"Input: {i[0].numpy().shape}")
+    inputs = inputs.batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
 
     logger.info(f"[BS={batch_size}] {desc}")
     preds = model.predict(inputs, batch_size=batch_size, verbose=verbose)
@@ -122,30 +151,7 @@ def predict(
     preds[:, ignore_modes] = 0.
     preds[np.abs(preds) <= threshold] = 0.
 
-    if digital_rotations:
-        eval_mode_rotations = partial(
-           backend.eval_rotation,
-            rotations=rotations,
-            psfgen=psfgen,
-            threshold=threshold,
-            no_phase=no_phase,
-            plot=True
-        )
-
-        preds = np.stack(np.split(preds, rotations.shape[0]), axis=1)
-        print(preds.shape)
-
-        jobs = utils.multiprocess(
-            eval_mode_rotations,
-            preds,
-            cores=-1,
-            desc="Evaluate predictions"
-        )
-        jobs = np.array([list(zip(*j)) for j in jobs])
-        preds, stdev = jobs[..., 0], jobs[..., -1]
-        return preds, stdev
-    else:
-        return preds, np.zeros_like(preds)
+    return preds
 
 
 @profile
@@ -157,11 +163,13 @@ def iter_evaluate(
     na: float = 1.0,
     distribution: str = '/',
     input_coverage: float = 1.0,
+    threshold: float = 0.,
     no_phase: bool = False,
     batch_size: int = 100,
     snr_range: tuple = (21, 30),
     eval_sign: str = 'positive_only',
     digital_rotations: bool = False,
+    rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
     savepath: Any = None,
 ):
     model = backend.load(modelpath)
@@ -183,7 +191,8 @@ def iter_evaluate(
         snr_range=snr_range,
         metadata=True
     )
-    # this runs multiple samples (aka images) at a time.  ys is a 2D array, rows are each sample, columns give abberation in zernike coeffs
+    # this runs multiple samples (aka images) at a time.
+    # ys is a 2D array, rows are each sample, columns give abberation in zernike coeffs
     metadata = np.array(list(metadata.take(-1)))
     ys = np.array([i.numpy() for i in metadata[:, 0]])
     snrs = np.array([i.numpy() for i in metadata[:, 1]])
@@ -191,76 +200,91 @@ def iter_evaluate(
     npoints = np.array([i.numpy() for i in metadata[:, 3]])
     dists = np.array([i.numpy() for i in metadata[:, 4]])
     files = np.array([Path(str(i.numpy(), "utf-8")) for i in metadata[:, -1]])
+    ids = np.arange(ys.shape[0], dtype=int)
 
-    # 'results' is going to be written out as the .csv.  It holds the information 
-    # from every iteration.  Initialize it first with the zeroth iteration. 
-    # 
-    # id = image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
-    # niter = iteration index.
-    # abberation = initial p2v abberation. Constant over iterations.
-    # residuals = remaining p2v abberation after ML correction.  not to be confused with "z?_residual" which is the zernike coeffs residue
-    # snr = signal to noise
-    # distance = separation of beads?
-    # file = binary image file filled with zeros except at location of beads
-
+    # 'results' is going to be written out as the .csv.
+    # It holds the information from every iteration.
+    # Initialize it first with the zeroth iteration.
     results = pd.DataFrame.from_dict({
-        'id': np.arange(ys.shape[0], dtype=int),
-        'niter': np.zeros(ys.shape[0], dtype=int),
-        'aberration': p2v,
-        'residuals': p2v,
-        'snr': snrs,
-        'distance': dists,
-        'file': files,
+        # image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
+        'id': ids,
+        'niter': np.zeros_like(ids, dtype=int),  # iteration index.
+        'aberration': p2v,  # initial p2v aberration. Constant over iterations.
+        'residuals': p2v,  # remaining p2v aberration after ML correction.
+        'snr': snrs,  # signal-to-noise
+        'distance': dists,  # average distance to nearst bead
+        'file': files,  # file = binary image file filled with zeros except at location of beads
     })
 
-    # make 3 more columns for every z mode, all in terms of zernike coeffs. _residual will become the next iteration's ground truth.
-    # iteration zero will have _prediction = zero, GT = _residual = starting abberation
+    # make 3 more columns for every z mode,
+    # all in terms of zernike coeffs. _residual will become the next iteration's ground truth.
+    # iteration zero will have _prediction = zero, GT = _residual = starting aberration
     for z in range(ys.shape[-1]):
         results[f'z{z}_ground_truth'] = ys[:, z]
         results[f'z{z}_prediction'] = np.zeros_like(ys[:, z])
         results[f'z{z}_residual'] = ys[:, z]
 
-
-    # ys contains the current GT abberation of every sample.
+    # ys contains the current GT aberration of every sample.
     for k in range(1, niter+1):
         before = results[results['niter'] == k - 1]
-        generate_updated_embeddings = partial(
-            apply_correction,
-            predictions=before,
+        updated_embeddings = partial(
+            generate_fourier_embeddings,
+            data=before,
             psfgen=gen,
             no_phase=no_phase,
+            digital_rotations=rotations if digital_rotations else None,
+            input_coverage=input_coverage,
+        )
 
-        )   # uses the DataFrame for the current iteration and the image 'id' to generate embs
         if k == 1:
             # check if embeddings has been pre-computed already
             emb = data_utils.get_image(files[0])
             if emb.shape[0] == 3 or emb.shape[0] == 6:
                 inputs = np.array([data_utils.get_image(f) for f in files])
             else:
-                inputs = utils.multiprocess(
-                    generate_updated_embeddings,
+                inputs = np.concatenate(utils.multiprocess(
+                    updated_embeddings,
                     before['id'].values,
-                    desc='Generate Fourier embeddings'
-                )
+                    desc=f'Updated embeddings (iter #{k})'
+                ), axis=0)
         else:  # need to apply new corrections after the first iteration
-            inputs = utils.multiprocess(
-                generate_updated_embeddings,
+            inputs = np.concatenate(utils.multiprocess(
+                updated_embeddings,
                 before['id'].values,
-                desc=f'Applying correction iter[{k-1}]'
-            )
-
-        if input_coverage != 1.:
-            inputs = resize_with_crop_or_pad(inputs, crop_shape=[int(s*input_coverage) for s in gen.psf_shape]) # needed if we use e.g. 32 crop
+                desc=f'Updated embeddings (iter #{k})'
+            ), axis=0)
 
         inputs = tf.data.Dataset.from_tensor_slices(inputs)
 
-        ps, stdev = predict(
+        ps = predict(
             model,
             inputs,
             psfgen=gen,
             batch_size=batch_size,
-            digital_rotations=digital_rotations
+            threshold=threshold,
+            desc=f'Predicting (iter{k})'
         )
+
+        if digital_rotations:
+            eval_mode_rotations = partial(
+                backend.eval_rotation,
+                rotations=rotations,
+                psfgen=gen,
+                threshold=threshold,
+                no_phase=no_phase,
+                plot=True
+            )
+
+            ps = np.stack(np.split(ps, rotations.shape[0]), axis=1)
+
+            jobs = utils.multiprocess(
+                eval_mode_rotations,
+                ps,
+                cores=-1,
+                desc="Evaluate predictions"
+            )
+            jobs = np.array([list(zip(*j)) for j in jobs])
+            ps, stdev = jobs[..., 0], jobs[..., -1]
 
         if eval_sign == 'positive_only':
             ys = np.abs(ys)
@@ -276,10 +300,10 @@ def iter_evaluate(
 
         res = ys - ps
 
-        current = pd.DataFrame(np.arange(ys.shape[0], dtype=int), columns=['id'])
+        current = pd.DataFrame(ids, columns=['id'])
         current['niter'] = k
         current['aberration'] = p2v
-        current['current'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in res]
+        current['residuals'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in res]
         current['snr'] = snrs
         current['neighbors'] = npoints
         current['distance'] = dists
@@ -295,61 +319,10 @@ def iter_evaluate(
         if savepath is not None:
             results.to_csv(f'{savepath}_predictions.csv')
 
-        # update the abberation for the next iteration with the residue
+        # update the aberration for the next iteration with the residue
         ys = res
 
     return results
-
-
-def apply_correction(
-    image_id: int,
-    predictions: pd.DataFrame,
-    psfgen: SyntheticPSF,
-    no_phase: bool = False
-):
-    hashtable = predictions[predictions['id'] == image_id].iloc[0].to_dict()
-
-    f = Path(str(hashtable['file']))
-    ys = [hashtable[cc] for cc in predictions.columns[predictions.columns.str.endswith('_residual')]]
-    ref = np.squeeze(data_utils.get_image(f.with_stem(f'{f.stem}_gt')))
-
-    wavefront = Wavefront(
-        ys,
-        modes=psfgen.n_modes,
-        lam_detection=psfgen.lam_detection,
-    )
-
-    psf = psfgen.single_psf(
-        phi=wavefront,
-        normed=True,
-        noise=False,
-        meta=False,
-    )
-
-    img = utils.fftconvolution(sample=ref, kernel=psf)
-    img *= hashtable['snr'] ** 2
-
-    rand_noise = psfgen._random_noise(
-        image=ref,
-        mean=psfgen.mean_background_noise,
-        sigma=psfgen.sigma_background_noise
-    )
-
-    noisy_img = rand_noise + img
-    noisy_img = remove_background_noise(noisy_img)
-    noisy_img /= np.max(noisy_img)
-
-    emb = embeddings.fourier_embeddings(
-        noisy_img,
-        iotf=psfgen.iotf,
-        no_phase=no_phase,
-        alpha_val='abs',
-        phi_val='angle',
-        remove_interference=True,
-        embedding_option=psfgen.embedding_option,
-    )
-
-    return emb
 
 
 @profile
