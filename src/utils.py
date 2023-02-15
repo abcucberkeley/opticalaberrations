@@ -43,6 +43,7 @@ def multiprocess(func: Any, jobs: Union[Generator, List, np.ndarray], desc: str 
     Returns:
         an array of outputs for every function call
     """
+    mp.set_start_method('spawn', force=True)
     jobs = list(jobs)
     if cores == 1 or len(jobs) == 1:
         logs = []

@@ -249,120 +249,73 @@ def load_sample(
 
 @profile
 def predict(
-    rois: list,
-    data: Path,
-    model: Path,
-    axial_voxel_size: float,
-    lateral_voxel_size: float,
+    rois: np.ndarray,
+    outdir: Path,
+    model: tf.keras.Model,
+    psfgen: SyntheticPSF,
     wavelength: float = .605,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
-    sign_threshold: float = .9,
-    num_predictions: int = 1,
     batch_size: int = 1,
     plot: bool = True,
     plot_rotations: bool = False,
     ztiles: int = 1,
     nrows: int = 1,
     ncols: int = 1,
-    preloaded: Preloadedmodelclass = None,
-    ideal_empirical_psf: Any = None,
 ):
-    def summarize_predictions(data):
-        columns = []
+    i = 0
+    predictions = pd.DataFrame([])
+    no_phase = True if model.input_shape[1] == 3 else False
+
+    with tqdm(total=rois.shape[0]) as pbar:
         for z in range(ztiles):
             for y in range(nrows):
                 for x in range(ncols):
-                    columns.append(f"p-z{z}-y{y}-x{x}")
+                    tile = f"p-z{z}-y{y}-x{x}"
+                    pbar.set_description(f"Processing [{tile}]")
 
-        df = pd.DataFrame(data.T, columns=columns)
-        pcols = df.columns[pd.Series(df.columns).str.startswith('p')]
+                    if no_phase:
+                        p, std, pchange = dual_stage_prediction(
+                            model,
+                            inputs=rois[i][np.newaxis, ..., np.newaxis],
+                            threshold=prediction_threshold,
+                            gen=psfgen,
+                            modelgen=psfgen,
+                            batch_size=batch_size,
+                            prev_pred=prev,
+                            ignore_modes=ignore_modes,
+                            freq_strength_threshold=freq_strength_threshold,
+                            # plot=Path(f"{outdir.with_suffix('')}_predictions_{tile}") if plot else None,
+                        )
+                    else:
+                        p, std = predict_rotation(
+                            model,
+                            inputs=rois[i][np.newaxis, ..., np.newaxis],
+                            psfgen=psfgen,
+                            no_phase=False,
+                            batch_size=batch_size,
+                            threshold=prediction_threshold,
+                            ignore_modes=ignore_modes,
+                            freq_strength_threshold=freq_strength_threshold,
+                            # plot=Path(f"{outdir.with_suffix('')}_predictions_{tile}") if plot else None,
+                            # plot_rotations=Path(f"{outdir.with_suffix('')}_predictions_{tile}") if plot_rotations else None,
+                        )
 
-        df['mean'] = df[pcols].mean(axis=1)
-        df['median'] = df[pcols].median(axis=1)
-        df['min'] = df[pcols].min(axis=1)
-        df['max'] = df[pcols].max(axis=1)
-        df['std'] = df[pcols].std(axis=1)
+                    predictions[tile] = p.flatten()
+                    i += 1
+                    pbar.update(i)
 
-        df.index.name = 'ansi'
-        return df
-
-    model, modelpsfgen = reloadmodel_if_needed(
-        preloaded,
-        model,
-        ideal_empirical_psf=ideal_empirical_psf,
-        ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
-    )
-    
-    psfgen = SyntheticPSF(
-        psf_type=modelpsfgen.psf_type,
-        snr=100,
-        psf_shape=modelpsfgen.psf_shape,
-        n_modes=model.output_shape[1],
-        lam_detection=wavelength,
-        x_voxel_size=lateral_voxel_size,
-        y_voxel_size=lateral_voxel_size,
-        z_voxel_size=axial_voxel_size,
-    )
-
-    load = partial(
-        load_sample,
-        model_voxel_size=modelpsfgen.voxel_size,
-        sample_voxel_size=psfgen.voxel_size,
-        remove_background=True,
-        normalize=True,
-    )
-
-    rois = np.array(utils.multiprocess(load, rois, desc='Processing ROIs'))
-    logger.info(rois.shape)
-
-    no_phase = True if model.input_shape[1] == 3 else False
-
-    if no_phase:
-        preds, stds, pchange = dual_stage_prediction(
-            model,
-            batch_size=batch_size,
-            inputs=rois[..., np.newaxis],
-            threshold=prediction_threshold,
-            sign_threshold=sign_threshold,
-            n_samples=num_predictions,
-            verbose=True,
-            gen=psfgen,
-            modelgen=modelpsfgen,
-            prev_pred=prev,
-            estimate_sign_with_decon=estimate_sign_with_decon,
-            ignore_modes=ignore_modes,
-            freq_strength_threshold=freq_strength_threshold,
-            plot=Path(f"{data.with_suffix('')}_predictions") if plot else None,
-        )
-    else:
-        preds, stds = predict_rotation(
-            model,
-            batch_size=batch_size,
-            inputs=rois[..., np.newaxis],
-            threshold=prediction_threshold,
-            sign_threshold=sign_threshold,
-            verbose=True,
-            gen=psfgen,
-            modelgen=modelpsfgen,
-            prev_pred=prev,
-            estimate_sign_with_decon=estimate_sign_with_decon,
-            ignore_modes=ignore_modes,
-            freq_strength_threshold=freq_strength_threshold,
-            plot=Path(f"{data.with_suffix('')}_predictions") if plot else None,
-            plot_rotations=Path(f"{data.with_suffix('')}_predictions") if plot_rotations else None,
-        )
-        pchange = None
-
-    predictions = summarize_predictions(preds)
-    predictions.to_csv(f"{data}_predictions.csv")
-
-    if pchange is not None:
-        pchanges = summarize_predictions(pchange)
-        pchanges.to_csv(f"{data}_predictions_percent_changes.csv")
+    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
+    predictions['mean'] = predictions[pcols].mean(axis=1)
+    predictions['median'] = predictions[pcols].median(axis=1)
+    predictions['min'] = predictions[pcols].min(axis=1)
+    predictions['max'] = predictions[pcols].max(axis=1)
+    predictions['std'] = predictions[pcols].std(axis=1)
+    predictions.index.name = 'ansi'
+    predictions.to_csv(f"{outdir}_predictions.csv")
 
     if plot:
         vis.wavefronts(
@@ -372,7 +325,7 @@ def predict(
             ncols=ncols,
             ztiles=ztiles,
             wavelength=wavelength,
-            save_path=Path(f"{data.with_suffix('')}_predictions_wavefronts"),
+            save_path=Path(f"{outdir.with_suffix('')}_predictions_wavefronts"),
         )
 
 
@@ -510,23 +463,32 @@ def predict_rois(
     min_intensity: int = 200,
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
-    sign_threshold: float = .9,
     minimum_distance: float = 1.,
     plot: bool = False,
     plot_rotations: bool = False,
-    prev: Any = None,
-    estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
+    sign_threshold: float = .9,
+    prev: Any = None,
+    estimate_sign_with_decon: bool = False,
 ):
-    sample = imread(img).astype(float)
-    esnr = np.sqrt(sample.max()).astype(int)
 
-    mode = st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0]
-    sample -= mode
-    sample[sample < 0] = 0
-    sample = sample / np.nanmax(sample)
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
+        preloaded,
+        model,
+        ideal_empirical_psf=ideal_empirical_psf,
+        ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+    )
+
+    logger.info(f"Loading file: {img.name}")
+    sample = load_sample(
+        img,
+        model_voxel_size=premodelpsfgen.voxel_size,
+        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        remove_background=True,
+        normalize=True,
+    )
 
     outdir = Path(f"{img.with_suffix('')}_rois")
     logger.info(f"Sample: {sample.shape}")
@@ -550,26 +512,21 @@ def predict_rois(
 
     predict(
         rois=rois,
-        data=outdir,
-        model=model,
-        axial_voxel_size=axial_voxel_size,
-        lateral_voxel_size=lateral_voxel_size,
+        outdir=outdir,
+        model=preloadedmodel,
+        psfgen=premodelpsfgen,
         prediction_threshold=prediction_threshold,
-        sign_threshold=sign_threshold,
-        num_predictions=num_predictions,
         batch_size=batch_size,
         wavelength=wavelength,
         prev=prev,
         ztiles=1,
-        nrows=ncols,
-        ncols=nrows,
+        nrows=nrows,
+        ncols=ncols,
+        ignore_modes=ignore_modes,
+        estimate_sign_with_decon=estimate_sign_with_decon,
+        freq_strength_threshold=freq_strength_threshold,
         plot=plot,
         plot_rotations=plot_rotations,
-        estimate_sign_with_decon=estimate_sign_with_decon,
-        ignore_modes=ignore_modes,
-        freq_strength_threshold=freq_strength_threshold,
-        preloaded=preloaded,
-        ideal_empirical_psf=ideal_empirical_psf
     )
 
 
@@ -590,11 +547,10 @@ def predict_tiles(
     plot_rotations: bool = False,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
-    ignore_modes: list = (0, 1, 2, 4),    
+    ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
 ):
-
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         preloaded,
         model,
@@ -602,6 +558,7 @@ def predict_tiles(
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
 
+    logger.info(f"Loading file: {img.name}")
     sample = load_sample(
         img,
         model_voxel_size=premodelpsfgen.voxel_size,
@@ -612,36 +569,14 @@ def predict_tiles(
     outdir = Path(f"{img.with_suffix('')}_tiles")
     logger.info(f"Sample: {sample.shape}")
 
-    windows, ztiles, nrows, ncols = preprocessing.get_tiles(
+    logger.info(f"Tiling...")
+    rois, ztiles, nrows, ncols = preprocessing.get_tiles(
         sample,
         # savepath=outdir,
         strides=window_size,
         window_size=tuple(3*[window_size]),
     )
-
-    predict(
-        rois=windows,
-        data=outdir,
-        model=model,
-        axial_voxel_size=premodelpsfgen.z_voxel_size,
-        lateral_voxel_size=premodelpsfgen.x_voxel_size,
-        prediction_threshold=prediction_threshold,
-        sign_threshold=sign_threshold,
-        num_predictions=num_predictions,
-        batch_size=batch_size,
-        wavelength=wavelength,
-        prev=prev,
-        plot=plot,
-        plot_rotations=plot_rotations,
-        ztiles=ztiles,
-        nrows=nrows,
-        ncols=ncols,
-        estimate_sign_with_decon=estimate_sign_with_decon,
-        ignore_modes=ignore_modes,
-        freq_strength_threshold=freq_strength_threshold,
-        preloaded=preloaded,
-        ideal_empirical_psf=ideal_empirical_psf
-    )
+    logger.info(f"Tiles: {rois.shape}")
 
     if plot:
         vis.tiles(
@@ -650,6 +585,25 @@ def predict_tiles(
             window_size=window_size,
             save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
         )
+
+    predict(
+        rois=rois,
+        outdir=outdir,
+        model=preloadedmodel,
+        psfgen=premodelpsfgen,
+        prediction_threshold=prediction_threshold,
+        batch_size=batch_size,
+        wavelength=wavelength,
+        prev=prev,
+        estimate_sign_with_decon=estimate_sign_with_decon,
+        ztiles=ztiles,
+        nrows=nrows,
+        ncols=ncols,
+        ignore_modes=ignore_modes,
+        freq_strength_threshold=freq_strength_threshold,
+        plot=plot,
+        plot_rotations=plot_rotations,
+    )
 
 
 @profile

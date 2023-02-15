@@ -2556,7 +2556,7 @@ def tiles(
         nrows, ncols = tiles.shape[0], tiles.shape[1]
         tiles = np.reshape(tiles, (-1, window_size, window_size))
 
-        fig = plt.figure(figsize=(11, 8))
+        fig = plt.figure(figsize=(3*nrows, 3*ncols))
         grid = ImageGrid(
             fig, 111,
             nrows_ncols=(nrows, ncols),
@@ -2611,7 +2611,7 @@ def wavefronts(
     mat = plot_wavefront(ax, pred_wave)
 
     for z in range(ztiles):
-        fig = plt.figure(figsize=(11, 8))
+        fig = plt.figure(figsize=(3*nrows, 3*ncols))
         grid = ImageGrid(
             fig, 111,
             nrows_ncols=(nrows, ncols),
