@@ -1594,6 +1594,7 @@ def diagnostic_assessment(
         dxy: float = .108,
         dz: float = .2,
         pltstyle = None,
+        transform_to_align_to_DM = False,
 ):
     if pltstyle is not None: plt.style.use(pltstyle)
     def formatter(x, pos, dd):
@@ -1820,6 +1821,8 @@ def diagnostic_assessment(
     ax_xz.set_title(f"PSNR: {psnr:.2f}")
     ax_yz.set_title(f"Max photon count: {maxcounts:.0f}")
 
+    if transform_to_align_to_DM:
+        psf = np.transpose(np.rot90(psf, k=2, axes=(1,2)), axes=(0,2,1))    # 180 rotate, then transpose
     psf_slice(ax_xy, ax_xz, ax_yz, psf, label='Input (MIP)')
     psf_slice(ax_pxy, ax_pxz, ax_pyz, predicted_psf, label='Predicted')
     psf_slice(ax_cxy, ax_cxz, ax_cyz, corrected_psf, label='Corrected')
