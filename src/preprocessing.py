@@ -11,6 +11,7 @@ import pandas as pd
 import seaborn as sns
 import zarr
 import h5py
+import scipy.io
 import matplotlib.colors as mcolors
 from matplotlib import gridspec
 from tifffile import imread, imsave
@@ -282,10 +283,18 @@ def find_roi(
         return
 
     if isinstance(peaks, str) or isinstance(peaks, Path):
-        with h5py.File(peaks, 'r') as file:
+        try:
+            with h5py.File(peaks, 'r') as file:
+                file = file.get('frameInfo')
+                peaks = pd.DataFrame(
+                    np.hstack((file['x'], file['y'], file['z'], file['A'])),
+                    columns=['x', 'y', 'z', 'A']
+                ).round(0).astype(int)
+        except OSError:
+            file = scipy.io.loadmat(peaks)
             file = file.get('frameInfo')
             peaks = pd.DataFrame(
-                np.hstack((file['x'], file['y'], file['z'], file['A'])),
+                np.vstack((file['x'][0][0][0], file['y'][0][0][0], file['z'][0][0][0], file['A'][0][0][0])).T,
                 columns=['x', 'y', 'z', 'A']
             ).round(0).astype(int)
 
@@ -443,7 +452,7 @@ def find_roi(
                 savepath.mkdir(parents=True, exist_ok=True)
                 imsave(savepath / f"roi_{p:02}.tif", r)
 
-    return rois
+    return np.array(rois)
 
 
 @profile

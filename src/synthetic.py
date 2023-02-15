@@ -977,7 +977,7 @@ class SyntheticPSF:
             if remove_interference:
                 try:
                     otf = self.remove_interference_pattern(psf, otf, plot=plot, peaks=peaks)
-                except TimeoutError as e:
+                except Exception as e:
                     logger.warning(e)
 
             phi = self.compute_emb(
