@@ -1009,7 +1009,7 @@ def eval_dataset(
 
     jobs = []
     for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime): # sort by creation time
-        if 'CamB' in str(file) or 'pupil' in str(file):
+        if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
             continue
 
         state = file.stem.split('_')[0] # state = 'after0'    file='after0_lightsheet_ansi_z03_n02_m-2_amp0p1_test_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0000754431msecAbs_-01x_-01y_-01z_0000t.tif'
