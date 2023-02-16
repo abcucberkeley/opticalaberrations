@@ -584,17 +584,18 @@ class SyntheticPSF:
             peaks: pre-defined mask of the exact bead locations
             min_distance: minimum distance for detecting adjacent beads
             kernel_size: size of the window for template matching
+            max_num_peaks: maximum number of peaks to look for.
         """
-        blured_psf = ndimage.gaussian_filter(psf, sigma=1.1)
+        blurred_psf = ndimage.gaussian_filter(psf, sigma=1.1)
 
         # get max pixel in the image
         half_length = kernel_size // 2
-        poi = np.unravel_index(np.argmax(blured_psf, axis=None), psf.shape)
+        poi = np.unravel_index(np.argmax(blurred_psf, axis=None), psf.shape)
 
         # crop a window around the object for template matching
         poi = np.clip(poi, a_min=half_length, a_max=(psf.shape[0]-half_length)-1)
         init_pos = [p-half_length for p in poi]
-        kernel = blured_psf[
+        kernel = blurred_psf[
             init_pos[0]:init_pos[0]+kernel_size,
             init_pos[1]:init_pos[1]+kernel_size,
             init_pos[2]:init_pos[2]+kernel_size,
@@ -602,15 +603,17 @@ class SyntheticPSF:
 
         # convolve template with the input image
         # we're actually doing cross-corr NOT convolution
-        convolued_psf = convolution.convolve_fft(blured_psf, kernel, allow_huge=True, boundary='wrap')
-        convolued_psf -= np.nanmin(convolued_psf)
-        convolued_psf /= np.nanmax(convolued_psf)
+        convolved_psf = convolution.convolve_fft(blurred_psf, kernel, allow_huge=True, boundary='wrap')
+        convolved_min = np.nanmin(convolved_psf)
+        if convolved_min < 0: logger.warning(f"convolved_psf min is below zero: {np.nanmin(convolved_psf)}")
+        convolved_psf -= convolved_min # subtract the minimum
+        convolved_psf /= np.nanmax(convolved_psf) # scale to 0..1
 
         if peaks is None:
             # Bead detection
             peaks = []
             detected_peaks = peak_local_max(
-                convolued_psf,
+                convolved_psf,
                 min_distance=min_distance,
                 threshold_rel=.05,
                 exclude_border=0,
@@ -621,12 +624,13 @@ class SyntheticPSF:
             beads = np.zeros_like(psf)
             for p in detected_peaks:
                 try:
-                    fov = convolued_psf[
+                    fov = convolved_psf[
                         p[0]-(min_distance+1):p[0]+(min_distance+1),
                         p[1]-(min_distance+1):p[1]+(min_distance+1),
                         p[2]-(min_distance+1):p[2]+(min_distance+1),
                     ]
-                    if np.max(fov) > convolued_psf[p[0], p[1], p[2]]:
+                    # reject if we are on the side of a large peak where max in the crop will be higher than the center
+                    if np.max(fov) > convolved_psf[p[0], p[1], p[2]]:
                         continue
                     else:
                         beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
@@ -695,7 +699,7 @@ class SyntheticPSF:
 
                     m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='Greys_r', alpha=.66)
                     m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='magma')
-                    m3 = axes[2, ax].imshow(np.nanmax(convolued_psf, axis=ax), cmap='Greys_r')
+                    m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r')
                     m4 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot')
 
                 for ax, m, label in zip(
@@ -724,7 +728,7 @@ class SyntheticPSF:
                 for ax in range(3):
                     m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='Greys_r', alpha=.66)
                     m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='Greys_r')
-                    m3 = axes[2, ax].imshow(np.nanmax(convolued_psf, axis=ax), cmap='Greys_r')
+                    m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r')
 
                 for ax, m, label in zip(
                         range(3),
