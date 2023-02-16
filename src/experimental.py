@@ -5,6 +5,7 @@ import re
 import json
 import time
 from functools import partial
+import os
 from pathlib import Path
 from subprocess import call
 import multiprocessing as mp
@@ -965,24 +966,27 @@ def eval_mode(
         save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval'),
         display=False,
         dxy=gen.x_voxel_size,
-        dz=gen.z_voxel_size
+        dz=gen.z_voxel_size,
+        transform_to_align_to_DM=True,
     )
+    print(f"output = {Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval')}")
 
-    # plt.style.use("dark_background")
-    # vis.diagnostic_assessment(
-    #     psf=noisy_img,
-    #     gt_psf=gt_psf,
-    #     predicted_psf=p_psf,
-    #     corrected_psf=corrected_psf,
-    #     psnr=psnr,
-    #     maxcounts=maxcounts,
-    #     y=y_wave,
-    #     pred=p_wave,
-    #     save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval_db'),
-    #     display=False,
-    #     dxy=gen.x_voxel_size,
-    #     dz=gen.z_voxel_size
-    # )
+    plt.style.use("dark_background")
+    vis.diagnostic_assessment(
+        psf=noisy_img,
+        gt_psf=gt_psf,
+        predicted_psf=p_psf,
+        corrected_psf=corrected_psf,
+        psnr=psnr,
+        maxcounts=maxcounts,
+        y=y_wave,
+        pred=p_wave,
+        save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval_db'),
+        display=False,
+        dxy=gen.x_voxel_size,
+        dz=gen.z_voxel_size,
+        transform_to_align_to_DM=True,
+    )
 
 
 @profile
@@ -991,7 +995,7 @@ def eval_dataset(
     datadir: Path,
     flat: Any = None,
     postfix: str = 'sample_predictions_zernike_coefficients.csv',
-    gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv',
+    gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv' # 'pr_zernike_coffs.csv',
     # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
 ):
     func = partial(
@@ -1003,11 +1007,11 @@ def eval_dataset(
     )
 
     jobs = []
-    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif')):
-        if 'CamB' in str(file) or 'pupil' in str(file):
+    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime): # sort by creation time
+        if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
             continue
 
-        state = file.stem.split('_')[0]
+        state = file.stem.split('_')[0] # state = 'after0'    file='after0_lightsheet_ansi_z03_n02_m-2_amp0p1_test_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0000754431msecAbs_-01x_-01y_-01z_0000t.tif'
         modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
         modes = [m for m in modes if m]
         logger.info(modes)
@@ -1021,18 +1025,18 @@ def eval_dataset(
             mode = modes[0]
             prefix = f"ansi_z{mode}*"
 
-        logger.info(f"Looking for: {prefix}")
+        # logger.info(f"Looking for: {prefix}")
 
         try:
             gt_path = list(datadir.rglob(f'{state}_widefield_{prefix}_{gt_postfix}'))[0]
-            logger.info(f"GT: {gt_path.name}")
+            logger.info(f"GT:    {gt_path.name}")
         except IndexError:
             logger.warning(f'GT not found for: {file.name}')
             continue
 
         try:
             prediction_path = list(datadir.rglob(f'{state}_lightsheet_{prefix}_{postfix}'))[0]
-            logger.info(f"Pred: {prediction_path.name}")
+            logger.info(f"Pred:  {prediction_path.name}")
         except IndexError:
             logger.warning(f'Prediction not found for: {file.name}')
             prediction_path = None
@@ -1048,6 +1052,7 @@ def eval_dataset(
                 if not p.is_alive():
                     jobs.remove(p)
             time.sleep(10)
+    logger.info("Done")
 
 
 @profile
