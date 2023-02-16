@@ -23,6 +23,7 @@ import matplotlib.patches as patches
 from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from line_profiler_pycharm import profile
+from skimage.filters import difference_of_gaussians, window
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -186,6 +187,7 @@ def prep_sample(
     debug: Any = None,
     remove_background: bool = True,
     normalize: bool = True,
+    bandpass_filter: bool = False,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
 
@@ -200,34 +202,46 @@ def prep_sample(
         debug (Any, optional): plot or save .svg's. Defaults to None.
         remove_background (bool, optional): Defaults to True.
         normalize (bool, optional): Defaults to True.
+        bandpass_filter (bool, optional): Defaults to True.
+        https://scikit-image.org/docs/stable/auto_examples/filters/plot_dog.html
 
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
-    sample = np.nan_to_num(sample, nan=0)
+    sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
+
+    if debug is not None:
+        debug = Path(debug)
+        if debug.is_dir():
+            debug.mkdir(parents=True, exist_ok=True)
+        fig, axes = plt.subplots(2, 3, figsize=(9, 6))
+
+        axes[0, 1].set_title(f"{str(sample.shape)} @ {sample_voxel_size}")
+        axes[0, 0].set_ylabel('Input (MIP)')
+        m = axes[0, 0].imshow(np.max(sample, axis=0), cmap='hot')
+        axes[0, 1].imshow(np.max(sample, axis=1), cmap='hot')
+        axes[0, 2].imshow(np.max(sample, axis=2), cmap='hot')
+        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-2)
+        cb = plt.colorbar(m, cax=cax)
+        cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
 
     if remove_background:
         sample = remove_background_noise(sample)
+
+    if bandpass_filter:
+        filtered_image = difference_of_gaussians(
+            image=sample,
+            low_sigma=.75,
+            high_sigma=None,
+            mode='nearest',
+        )
+        sample = filtered_image * window('hann', sample.shape)
+        sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
 
     if normalize:
         sample /= np.nanmax(sample)
 
     if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-        if debug is not None:
-            debug = Path(debug)
-            if debug.is_dir():
-                debug.mkdir(parents=True, exist_ok=True)
-            fig, axes = plt.subplots(2, 3, figsize=(9, 6))
-
-            axes[0, 1].set_title(f"{str(sample.shape)} @ {sample_voxel_size}")
-            axes[0, 0].set_ylabel('Input (MIP)')
-            m = axes[0, 0].imshow(np.max(sample, axis=0), cmap='hot')
-            axes[0, 1].imshow(np.max(sample, axis=1), cmap='hot')
-            axes[0, 2].imshow(np.max(sample, axis=2), cmap='hot')
-            cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-2)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-
         sample = transform.rescale(
             sample,
             (
@@ -238,17 +252,18 @@ def prep_sample(
             order=3,
             anti_aliasing=True,
         )
+        sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
 
-        if debug is not None:
-            axes[1, 1].set_title(f"{str(sample.shape)} @ {model_voxel_size}")
-            axes[1, 0].set_ylabel('Resampled (MIP)')
-            m = axes[1, 0].imshow(np.max(sample, axis=0), cmap='hot')
-            axes[1, 1].imshow(np.max(sample, axis=1), cmap='hot')
-            axes[1, 2].imshow(np.max(sample, axis=2), cmap='hot')
-            cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-2)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-            plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    if debug is not None:
+        axes[1, 1].set_title(f"{str(sample.shape)} @ {model_voxel_size}")
+        axes[1, 0].set_ylabel('Resampled (MIP)')
+        m = axes[1, 0].imshow(np.max(sample, axis=0), cmap='hot')
+        axes[1, 1].imshow(np.max(sample, axis=1), cmap='hot')
+        axes[1, 2].imshow(np.max(sample, axis=2), cmap='hot')
+        cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-2)
+        cb = plt.colorbar(m, cax=cax)
+        cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+        plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return sample
 
