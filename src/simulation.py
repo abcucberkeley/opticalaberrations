@@ -164,15 +164,15 @@ def create_synthetic_sample(
 
 if __name__ == "__main__":
     modes = 15
-    x_voxel_size = .108
-    y_voxel_size = .108
-    z_voxel_size = .108
+    x_voxel_size = .104
+    y_voxel_size = .104
+    z_voxel_size = .2
     lam_detection = .510
-    psf_type = 'widefield'
+    psf_type = '../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
     input_shape = (64, 64, 64)
     na_detection = 1.0
     refractive_index = 1.33
-    snr = 100
+    snr = 1000
     noise = False
     outdir = Path('../test_samples/')
     zernikes = np.zeros(modes)
@@ -192,168 +192,168 @@ if __name__ == "__main__":
     )
 
     # ANSI index
-    # filename = f'mode_7'
-    # zernikes[7] = .1  # mu rms
-    #
-    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    #
-    # psf = create_synthetic_sample(
-    #     wavefront=wavefront,
-    #     filename=filename,
-    #     outdir=outdir,
-    #     gen=gen,
-    #     noise=noise,
-    # )
-    #
-    # embeddings_psf = gen.embedding(
-    #     psf,
-    #     plot=outdir / f"psf",
-    #     remove_interference=False,
-    # )
+    filename = f'ideal'
+    zernikes[7] = 0  # mu rms
 
-    num_objs = 50
-    reference = beads(gen=gen, object_size=0, num_objs=num_objs)
-
-    zernikes = np.zeros(modes)
-    zernikes[5] = .05  # mu rms
-    zernikes[11] = .05  # mu rms
     wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    f1 = gen.single_psf(wavefront, normed=True, noise=False)
 
-    if num_objs > 1:
-        f1 = fftconvolution(sample=reference, kernel=f1)
-
-    embeddings_f1 = gen.embedding(
-        f1,
-        plot=outdir / f"f1_num_objs_{num_objs}",
-        remove_interference=False,
+    psf = create_synthetic_sample(
+        wavefront=wavefront,
+        filename=filename,
+        outdir=outdir,
+        gen=gen,
+        noise=noise,
     )
 
-    zernikes = np.zeros(modes)
-    zernikes[5] = -.05  # mu rms
-    zernikes[11] = .05  # mu rms
-    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    f2 = gen.single_psf(wavefront, normed=True, noise=False)
-
-    if num_objs > 1:
-        f2 = fftconvolution(sample=reference, kernel=f2)
-
-    embeddings_f2 = gen.embedding(
-        f2,
-        plot=outdir / f"f2_num_objs_{num_objs}",
-        remove_interference=False,
-    )
-
-    zernikes = np.zeros(modes)
-    zernikes[11] = .05  # mu rms
-    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    psf = gen.single_psf(wavefront, normed=True, noise=False)
     embeddings_psf = gen.embedding(
         psf,
-        plot=outdir / f"psf_num_objs_{num_objs}",
+        plot=outdir / f"psf",
         remove_interference=False,
     )
 
-    if num_objs > 1:
-        psf = fftconvolution(sample=reference, kernel=psf)
-
-    ratio = gen.fft(f1) / gen.fft(f2)
-    pseudo_psf = np.abs(gen.ifft(ratio))
-    pseudo_psf /= np.nanmax(pseudo_psf)
-    pseudo_psf = resize_with_crop_or_pad(pseudo_psf, crop_shape=(32, 32, 32))
-
-    alpha = gen.compute_emb(
-        ratio,
-        val='abs',
-        ratio=True,
-        norm=True,
-        embedding_option='spatial_planes',
-    )
-
-    phi = gen.compute_emb(
-        ratio,
-        val='angle',
-        ratio=False,
-        na_mask=True,
-        norm=False,
-        embedding_option='spatial_planes',
-    )
-    ratio_emb = np.concatenate([alpha, phi], axis=0)
-
-    gen.plot_embeddings(
-        inputs=pseudo_psf,
-        emb=ratio_emb,
-        save_path=outdir / f"pseudo_psf_num_objs_{num_objs}",
-    )
-
-    zernikes = np.zeros(modes)
-    zernikes[11] = .05  # mu rms
-    wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    img = gen.single_psf(wavefront, normed=True, noise=False)
-
-    if num_objs > 1:
-        img = fftconvolution(sample=reference, kernel=img)
-
-    embeddings_img = gen.embedding(
-        img,
-        plot=outdir / f"img_num_objs_{num_objs}",
-        remove_interference=False,
-    )
-
-    from skimage.feature import hog
-
-    structure = np.zeros_like(img)
-    for plane in range(img.shape[0]):
-        fd, hog_image = hog(
-            img[plane],
-            orientations=9,
-            pixels_per_cell=(3, 3),
-            cells_per_block=(3, 3),
-            visualize=True,
-            block_norm='L2-Hys'
-        )
-        structure[plane] = hog_image
-
-
-    # t_loc_otsu = rank.otsu(img, ball(15))
-    # t_glob_otsu = threshold_otsu(img)
-    # structure = np.zeros_like(img)
-    # structure[img >= t_glob_otsu] = img[img >= t_glob_otsu]**3
-    structure /= np.nanmax(structure)
-
+    # num_objs = 50
+    # reference = beads(gen=gen, object_size=0, num_objs=num_objs)
+    #
+    # zernikes = np.zeros(modes)
+    # zernikes[5] = .05  # mu rms
+    # zernikes[11] = .05  # mu rms
+    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    # f1 = gen.single_psf(wavefront, normed=True, noise=False)
+    #
     # if num_objs > 1:
-    #     structure = fftconvolution(sample=structure, kernel=gen.ipsf)
-
-    embeddings_structure = gen.embedding(
-        structure,
-        plot=outdir / f"structure_num_objs_{num_objs}",
-        remove_interference=False,
-    )
-
-    ratio = gen.fft(img) / gen.fft(structure)
-    reconstructed_psf = np.abs(gen.ifft(ratio))
-    reconstructed_psf /= np.nanmax(reconstructed_psf)
-
-    alpha = gen.compute_emb(
-        ratio,
-        val='abs',
-        ratio=True,
-        norm=True,
-        embedding_option='spatial_planes',
-    )
-
-    phi = gen.compute_emb(
-        ratio,
-        val='angle',
-        ratio=False,
-        na_mask=True,
-        norm=False,
-        embedding_option='spatial_planes',
-    )
-    ratio_emb = np.concatenate([alpha, phi], axis=0)
-
-    gen.plot_embeddings(
-        inputs=reconstructed_psf,
-        emb=ratio_emb,
-        save_path=outdir / f"fourier_embeddings_num_objs_{num_objs}",
-    )
+    #     f1 = fftconvolution(sample=reference, kernel=f1)
+    #
+    # embeddings_f1 = gen.embedding(
+    #     f1,
+    #     plot=outdir / f"f1_num_objs_{num_objs}",
+    #     remove_interference=False,
+    # )
+    #
+    # zernikes = np.zeros(modes)
+    # zernikes[5] = -.05  # mu rms
+    # zernikes[11] = .05  # mu rms
+    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    # f2 = gen.single_psf(wavefront, normed=True, noise=False)
+    #
+    # if num_objs > 1:
+    #     f2 = fftconvolution(sample=reference, kernel=f2)
+    #
+    # embeddings_f2 = gen.embedding(
+    #     f2,
+    #     plot=outdir / f"f2_num_objs_{num_objs}",
+    #     remove_interference=False,
+    # )
+    #
+    # zernikes = np.zeros(modes)
+    # zernikes[11] = .05  # mu rms
+    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    # psf = gen.single_psf(wavefront, normed=True, noise=False)
+    # embeddings_psf = gen.embedding(
+    #     psf,
+    #     plot=outdir / f"psf_num_objs_{num_objs}",
+    #     remove_interference=False,
+    # )
+    #
+    # if num_objs > 1:
+    #     psf = fftconvolution(sample=reference, kernel=psf)
+    #
+    # ratio = gen.fft(f1) / gen.fft(f2)
+    # pseudo_psf = np.abs(gen.ifft(ratio))
+    # pseudo_psf /= np.nanmax(pseudo_psf)
+    # pseudo_psf = resize_with_crop_or_pad(pseudo_psf, crop_shape=(32, 32, 32))
+    #
+    # alpha = gen.compute_emb(
+    #     ratio,
+    #     val='abs',
+    #     ratio=True,
+    #     norm=True,
+    #     embedding_option='spatial_planes',
+    # )
+    #
+    # phi = gen.compute_emb(
+    #     ratio,
+    #     val='angle',
+    #     ratio=False,
+    #     na_mask=True,
+    #     norm=False,
+    #     embedding_option='spatial_planes',
+    # )
+    # ratio_emb = np.concatenate([alpha, phi], axis=0)
+    #
+    # gen.plot_embeddings(
+    #     inputs=pseudo_psf,
+    #     emb=ratio_emb,
+    #     save_path=outdir / f"pseudo_psf_num_objs_{num_objs}",
+    # )
+    #
+    # zernikes = np.zeros(modes)
+    # zernikes[11] = .05  # mu rms
+    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    # img = gen.single_psf(wavefront, normed=True, noise=False)
+    #
+    # if num_objs > 1:
+    #     img = fftconvolution(sample=reference, kernel=img)
+    #
+    # embeddings_img = gen.embedding(
+    #     img,
+    #     plot=outdir / f"img_num_objs_{num_objs}",
+    #     remove_interference=False,
+    # )
+    #
+    # from skimage.feature import hog
+    #
+    # structure = np.zeros_like(img)
+    # for plane in range(img.shape[0]):
+    #     fd, hog_image = hog(
+    #         img[plane],
+    #         orientations=9,
+    #         pixels_per_cell=(3, 3),
+    #         cells_per_block=(3, 3),
+    #         visualize=True,
+    #         block_norm='L2-Hys'
+    #     )
+    #     structure[plane] = hog_image
+    #
+    #
+    # # t_loc_otsu = rank.otsu(img, ball(15))
+    # # t_glob_otsu = threshold_otsu(img)
+    # # structure = np.zeros_like(img)
+    # # structure[img >= t_glob_otsu] = img[img >= t_glob_otsu]**3
+    # structure /= np.nanmax(structure)
+    #
+    # # if num_objs > 1:
+    # #     structure = fftconvolution(sample=structure, kernel=gen.ipsf)
+    #
+    # embeddings_structure = gen.embedding(
+    #     structure,
+    #     plot=outdir / f"structure_num_objs_{num_objs}",
+    #     remove_interference=False,
+    # )
+    #
+    # ratio = gen.fft(img) / gen.fft(structure)
+    # reconstructed_psf = np.abs(gen.ifft(ratio))
+    # reconstructed_psf /= np.nanmax(reconstructed_psf)
+    #
+    # alpha = gen.compute_emb(
+    #     ratio,
+    #     val='abs',
+    #     ratio=True,
+    #     norm=True,
+    #     embedding_option='spatial_planes',
+    # )
+    #
+    # phi = gen.compute_emb(
+    #     ratio,
+    #     val='angle',
+    #     ratio=False,
+    #     na_mask=True,
+    #     norm=False,
+    #     embedding_option='spatial_planes',
+    # )
+    # ratio_emb = np.concatenate([alpha, phi], axis=0)
+    #
+    # gen.plot_embeddings(
+    #     inputs=reconstructed_psf,
+    #     emb=ratio_emb,
+    #     save_path=outdir / f"fourier_embeddings_num_objs_{num_objs}",
+    # )

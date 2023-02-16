@@ -300,14 +300,14 @@ def theoretical_psf(psf_shape, voxel_size, lam_detection, refractive_index, na_d
 
 
 @profile
-def remove_interference_pattern(psf, otf, plot, peaks=None, min_distance=5, kernel_size=15):
+def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kernel_size=15):
     """
     Normalize interference pattern from the given FFT
     Args:
         psf: input image
         otf: FFT of the given input
         plot: a toggle for visualization
-        peaks: pre-defined mask of the exact bead locations
+        pois: pre-defined mask of the exact bead locations
         min_distance: minimum distance for detecting adjacent beads
         kernel_size: size of the window for template matching
     """
@@ -332,9 +332,9 @@ def remove_interference_pattern(psf, otf, plot, peaks=None, min_distance=5, kern
     convolued_psf -= np.nanmin(convolued_psf)
     convolued_psf /= np.nanmax(convolued_psf)
 
-    if peaks is None:
+    if pois is None:
         # Bead detection
-        peaks = []
+        pois = []
         detected_peaks = peak_local_max(
             convolued_psf,
             min_distance=min_distance,
@@ -356,21 +356,21 @@ def remove_interference_pattern(psf, otf, plot, peaks=None, min_distance=5, kern
                     continue
                 else:
                     beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
-                    peaks.append(p)
+                    pois.append(p)
 
             except Exception:
                 # keep peak if we are at the border of the image
                 beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
-                peaks.append(p)
+                pois.append(p)
 
-        peaks = np.array(peaks)
+        pois = np.array(pois)
     else:
-        beads = peaks.copy()
+        beads = pois.copy()
         beads[beads < .05] = 0.
-        peaks = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
+        pois = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
 
-    if peaks.shape[0] > 0:
-        # logger.info(f"Detected objects: {peaks.shape[0]}")
+    if pois.shape[0] > 0:
+        # logger.info(f"Detected objects: {pois.shape[0]}")
 
         interference_pattern = fft(beads)
         corrected_otf = otf / interference_pattern
@@ -382,13 +382,12 @@ def remove_interference_pattern(psf, otf, plot, peaks=None, min_distance=5, kern
             fig, axes = plt.subplots(4, 3, figsize=(8, 8), sharey=False, sharex=False)
 
             for ax in range(3):
-                for p in range(peaks.shape[0]):
+                for p in range(pois.shape[0]):
                     if ax == 0:
-
-                        axes[0, ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
-                        axes[2, ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                        axes[0, ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
+                        axes[2, ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
                         axes[0, ax].add_patch(patches.Rectangle(
-                            xy=(peaks[p, 2] - half_length, peaks[p, 1] - half_length),
+                            xy=(pois[p, 2] - half_length, pois[p, 1] - half_length),
                             width=kernel_size,
                             height=kernel_size,
                             fill=None,
@@ -396,10 +395,10 @@ def remove_interference_pattern(psf, otf, plot, peaks=None, min_distance=5, kern
                             alpha=1
                         ))
                     elif ax == 1:
-                        axes[0, ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
-                        axes[2, ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                        axes[0, ax].plot(pois[p, 2], pois[p, 0], marker='.', ls='', color=f'C{p}')
+                        axes[2, ax].plot(pois[p, 2], pois[p, 0], marker='.', ls='', color=f'C{p}')
                         axes[0, ax].add_patch(patches.Rectangle(
-                            xy=(peaks[p, 2] - half_length, peaks[p, 0] - half_length),
+                            xy=(pois[p, 2] - half_length, pois[p, 0] - half_length),
                             width=kernel_size,
                             height=kernel_size,
                             fill=None,
@@ -408,10 +407,10 @@ def remove_interference_pattern(psf, otf, plot, peaks=None, min_distance=5, kern
                         ))
 
                     elif ax == 2:
-                        axes[0, ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
-                        axes[2, ax].plot(peaks[p, 1], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                        axes[0, ax].plot(pois[p, 1], pois[p, 0], marker='.', ls='', color=f'C{p}')
+                        axes[2, ax].plot(pois[p, 1], pois[p, 0], marker='.', ls='', color=f'C{p}')
                         axes[0, ax].add_patch(patches.Rectangle(
-                            xy=(peaks[p, 1] - half_length, peaks[p, 0] - half_length),
+                            xy=(pois[p, 1] - half_length, pois[p, 0] - half_length),
                             width=kernel_size,
                             height=kernel_size,
                             fill=None,
@@ -598,7 +597,7 @@ def fourier_embeddings(
         log10: bool = False,
         input_coverage: float = 1.0,
         freq_strength_threshold: float = 0.01,
-        peaks: Any = None,
+        pois: Any = None,
         remove_interference: bool = True,
         embedding_option: Any = None,
         edge_filter: bool = False,
@@ -619,7 +618,7 @@ def fourier_embeddings(
         phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
         plot: optional toggle to visualize embeddings
         remove_interference: a toggle to normalize out the interference pattern from the OTF
-        peaks: masked array of the peaks of interest to compute the interference pattern between objects
+        pois: masked array of the pois of interest to compute the interference pattern between objects
         input_coverage: optional crop to the realspace image
         log10: optional toggle to take log10 of the FFT
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
@@ -675,7 +674,7 @@ def fourier_embeddings(
             alpha[alpha > 1] = 1
 
         if remove_interference:
-            otf = remove_interference_pattern(psf, otf, plot=plot, peaks=peaks)
+            otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois)
 
         phi = compute_emb(
             otf,

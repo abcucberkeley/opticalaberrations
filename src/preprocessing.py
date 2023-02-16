@@ -23,6 +23,7 @@ import matplotlib.patches as patches
 from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from line_profiler_pycharm import profile
+from tqdm import tqdm
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -216,13 +217,16 @@ def prep_sample(
                 s /= np.nanmax(s)
 
             if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-                s = resize(
+                s = transform.rescale(
                     s,
-                    sample_voxel_size=sample_voxel_size,
-                    voxel_size=model_voxel_size,
-                    debug=debug/f"{i}_preprocessing" if debug is not None else None
+                    (
+                        sample_voxel_size[0] / model_voxel_size[0],
+                        sample_voxel_size[1] / model_voxel_size[1],
+                        sample_voxel_size[2] / model_voxel_size[2],
+                    ),
+                    order=3,
+                    anti_aliasing=True,
                 )
-            # s = s.transpose(0, 2, 1)
             samples.append(s)
 
         return np.array(samples)
@@ -235,14 +239,16 @@ def prep_sample(
             sample /= np.nanmax(sample)
 
         if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-            sample = resize(
+            sample = transform.rescale(
                 sample,
-                sample_voxel_size=sample_voxel_size,
-                voxel_size=model_voxel_size,
-                debug=debug
+                (
+                    sample_voxel_size[0] / model_voxel_size[0],
+                    sample_voxel_size[1] / model_voxel_size[1],
+                    sample_voxel_size[2] / model_voxel_size[2],
+                ),
+                order=3,
+                anti_aliasing=True,
             )
-
-        # sample = sample.transpose(0, 2, 1)
         return sample
 
 
@@ -251,14 +257,15 @@ def find_roi(
     path: Union[Path, np.array],
     window_size: tuple = (64, 64, 64),
     plot: Any = None,
-    num_peaks: Any = None,
+    num_rois: Any = None,
     min_dist: Any = 1,
     max_dist: Any = None,
     min_intensity: Any = 100,
-    peaks: Any = None,
+    pois: Any = None,
     max_neighbor: int = 5,
     voxel_size: tuple = (.200, .108, .108),
     savepath: Any = None,
+    timestamp: int = 17
 ):
 
     plt.rcParams.update({
@@ -274,31 +281,40 @@ def find_roi(
         dataset = path
     elif path.suffix == '.tif':
         dataset = imread(path).astype(np.float)
-        logger.info(f"Sample: {dataset.shape}")
     elif path.suffix == '.zarr':
         dataset = zarr.open_array(str(path), mode='r', order='F')
-        logger.info(f"Sample: {dataset.shape}")
     else:
         logger.error(f"Unknown file format: {path.name}")
         return
 
-    if isinstance(peaks, str) or isinstance(peaks, Path):
+    if isinstance(pois, str) or isinstance(pois, Path):
         try:
-            with h5py.File(peaks, 'r') as file:
+            with h5py.File(pois, 'r') as file:
                 file = file.get('frameInfo')
-                peaks = pd.DataFrame(
-                    np.hstack((file['x'], file['y'], file['z'], file['A'])),
-                    columns=['x', 'y', 'z', 'A']
+                pois = pd.DataFrame(
+                    np.hstack((file['x'], file['y'], file['z'], file['A'], file['c'], file['isPSF'])),
+                    columns=['x', 'y', 'z', 'A', 'c', 'isPSF']
                 ).round(0).astype(int)
         except OSError:
-            file = scipy.io.loadmat(peaks)
+            file = scipy.io.loadmat(pois)
             file = file.get('frameInfo')
-            peaks = pd.DataFrame(
-                np.vstack((file['x'][0][0][0], file['y'][0][0][0], file['z'][0][0][0], file['A'][0][0][0])).T,
-                columns=['x', 'y', 'z', 'A']
+            pois = pd.DataFrame(
+                np.vstack((
+                    file['x'][0][timestamp+1][0],
+                    file['y'][0][timestamp+1][0],
+                    file['z'][0][timestamp+1][0],
+                    file['A'][0][timestamp+1][0],
+                    file['c'][0][timestamp+1][0],
+                    file['isPSF'][0][timestamp+1][0],
+                )).T,
+                columns=['x', 'y', 'z', 'A', 'c', 'isPSF']
             ).round(0).astype(int)
 
-    points = peaks[['z', 'y', 'x']].values
+        # index by zero like every other good language (stupid, matlab!)
+        pois[['z', 'y', 'x']] -= 1
+
+    pois = pois[pois['isPSF'] == 1]
+    points = pois[['z', 'y', 'x']].values
     scaled_peaks = np.zeros_like(points)
     scaled_peaks[:, 0] = points[:, 0] * voxel_size[0]
     scaled_peaks[:, 1] = points[:, 1] * voxel_size[1]
@@ -308,23 +324,23 @@ def find_roi(
     dist, idx = kd.query(scaled_peaks, k=11, workers=-1)
     for n in range(1, 11):
         if n == 1:
-            peaks[f'dist'] = dist[:, n]
+            pois[f'dist'] = dist[:, n]
         else:
-            peaks[f'dist_{n}'] = dist[:, n]
+            pois[f'dist_{n}'] = dist[:, n]
 
     # filter out points too close to the edge
-    lzedge = peaks['z'] >= window_size[0]//4
-    hzedge = peaks['z'] <= dataset.shape[0] - window_size[0]//4
-    lyedge = peaks['y'] >= window_size[1]//4
-    hyedge = peaks['y'] <= dataset.shape[1] - window_size[1]//4
-    lxedge = peaks['x'] >= window_size[2]//4
-    hxedge = peaks['x'] <= dataset.shape[2] - window_size[2]//4
-    peaks = peaks[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
+    lzedge = pois['z'] >= window_size[0]//4
+    hzedge = pois['z'] <= dataset.shape[0] - window_size[0]//4
+    lyedge = pois['y'] >= window_size[1]//4
+    hyedge = pois['y'] <= dataset.shape[1] - window_size[1]//4
+    lxedge = pois['x'] >= window_size[2]//4
+    hxedge = pois['x'] <= dataset.shape[2] - window_size[2]//4
+    pois = pois[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="C0")
-        sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
+        sns.scatterplot(ax=axes[0], x=pois['dist'], y=pois['A'], s=5, color="C0")
+        sns.kdeplot(ax=axes[0], x=pois['dist'], y=pois['A'], levels=5, color="grey", linewidths=1)
         axes[0].set_ylabel('Intensity')
         axes[0].set_xlabel('Distance (microns)')
         axes[0].set_yscale('log')
@@ -332,7 +348,7 @@ def find_roi(
         axes[0].set_xlim(0, None)
         axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        x = np.sort(peaks['dist'])
+        x = np.sort(pois['dist'])
         y = np.arange(len(x)) / float(len(x))
         axes[1].plot(x, y, color='dimgrey')
         axes[1].set_xlabel('Distance (microns)')
@@ -340,7 +356,7 @@ def find_roi(
         axes[1].set_xlim(0, None)
         axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
+        sns.histplot(ax=axes[2], data=pois, x="dist", kde=True)
         axes[2].set_xlabel('Distance')
         axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
@@ -349,30 +365,30 @@ def find_roi(
         plt.savefig(f'{plot}_detected_points.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     if min_dist is not None:
-        peaks = peaks[peaks['dist'] >= min_dist]
+        pois = pois[pois['dist'] >= min_dist]
 
     if max_dist is not None:
-        peaks = peaks[peaks['dist'] <= max_dist]
+        pois = pois[pois['dist'] <= max_dist]
 
     if min_intensity is not None:
-        peaks = peaks[peaks['A'] >= min_intensity]
+        pois = pois[pois['A'] >= min_intensity]
 
-    neighbors = peaks.columns[peaks.columns.str.startswith('dist')].tolist()
+    neighbors = pois.columns[pois.columns.str.startswith('dist')].tolist()
     min_dist = np.min(window_size)*np.min(voxel_size)
-    peaks['neighbors'] = peaks[peaks[neighbors] <= min_dist].count(axis=1)
-    peaks.sort_values(by=['neighbors', 'dist', 'A'], ascending=[True, False, False], inplace=True)
-    peaks = peaks[peaks['neighbors'] <= max_neighbor]
+    pois['neighbors'] = pois[pois[neighbors] <= min_dist].count(axis=1)
+    pois.sort_values(by=['neighbors', 'dist', 'A'], ascending=[True, False, False], inplace=True)
+    pois = pois[pois['neighbors'] <= max_neighbor]
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="C0")
-        sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
+        sns.scatterplot(ax=axes[0], x=pois['dist'], y=pois['A'], s=5, color="C0")
+        sns.kdeplot(ax=axes[0], x=pois['dist'], y=pois['A'], levels=5, color="grey", linewidths=1)
         axes[0].set_ylabel('Intensity')
         axes[0].set_xlabel('Distance')
         axes[0].set_xlim(0, None)
         axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        x = np.sort(peaks['dist'])
+        x = np.sort(pois['dist'])
         y = np.arange(len(x)) / float(len(x))
         axes[1].plot(x, y, color='dimgrey')
         axes[1].set_xlabel('Distance')
@@ -380,7 +396,7 @@ def find_roi(
         axes[1].set_xlim(0, None)
         axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
+        sns.histplot(ax=axes[2], data=pois, x="dist", kde=True)
         axes[2].set_xlabel('Distance')
         axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
@@ -388,11 +404,12 @@ def find_roi(
         plt.tight_layout()
         plt.savefig(f'{plot}_selected_points.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
-    peaks = peaks.head(num_peaks)
-    peaks.to_csv(f"{plot}_stats.csv")
+    pois = pois.head(num_rois)
+    pois.to_csv(f"{plot}_stats.csv")
 
     logger.info(f"Predicted points of interest")
-    peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
+    print(pois.iloc[:, :5])
+    pois = pois[['z', 'y', 'x']].values[:num_rois]
     widths = [w // 2 for w in window_size]
 
     if plot:
@@ -404,11 +421,11 @@ def find_roi(
                 cmap='Greys_r',
             )
 
-            for p in range(peaks.shape[0]):
+            for p in range(pois.shape[0]):
                 if ax == 0:
-                    axes[ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                    axes[ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
                     axes[ax].add_patch(patches.Rectangle(
-                        xy=(peaks[p, 2] - window_size[2] // 2, peaks[p, 1] - window_size[1] // 2),
+                        xy=(pois[p, 2] - window_size[2] // 2, pois[p, 1] - window_size[1] // 2),
                         width=window_size[1],
                         height=window_size[2],
                         fill=None,
@@ -417,9 +434,9 @@ def find_roi(
                     ))
                     axes[ax].set_title('XY')
                 elif ax == 1:
-                    axes[ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                    axes[ax].plot(pois[p, 2], pois[p, 0], marker='.', ls='', color=f'C{p}')
                     axes[ax].add_patch(patches.Rectangle(
-                        xy=(peaks[p, 2] - window_size[2] // 2, peaks[p, 0] - window_size[0] // 2),
+                        xy=(pois[p, 2] - window_size[2] // 2, pois[p, 0] - window_size[0] // 2),
                         width=window_size[1],
                         height=window_size[2],
                         fill=None,
@@ -432,20 +449,19 @@ def find_roi(
         plt.savefig(f'{plot}_mips.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     rois = []
-    logger.info(f"Locating ROIs: {[peaks.shape[0]]}")
-    for p in range(peaks.shape[0]):
+    logger.info(f"Locating ROIs: {[pois.shape[0]]}")
+    for p in range(pois.shape[0]):
         start = [
-            peaks[p, s] - widths[s] if peaks[p, s] >= widths[s] else 0
+            pois[p, s] - widths[s] if pois[p, s] >= widths[s] else 0
             for s in range(3)
         ]
         end = [
-            peaks[p, s] + widths[s] if peaks[p, s] + widths[s] < dataset.shape[s] else dataset.shape[s]
+            pois[p, s] + widths[s] if pois[p, s] + widths[s] < dataset.shape[s] else dataset.shape[s]
             for s in range(3)
         ]
         r = dataset[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
 
         if r.size != 0:
-            r = resize_with_crop_or_pad(r, crop_shape=window_size)
             rois.append(r)
 
             if savepath is not None:
@@ -475,24 +491,25 @@ def get_tiles(
         dataset = path
     elif path.suffix == '.tif':
         dataset = imread(path).astype(np.float)
-        logger.info(f"Sample: {dataset.shape}")
     elif path.suffix == '.zarr':
         dataset = zarr.open_array(str(path), mode='r', order='F')
-        logger.info(f"Sample: {dataset.shape}")
     else:
         logger.error(f"Unknown file format: {path.name}")
         return
 
-    logger.info(f"Sample: {[dataset.shape]}")
+    logger.info(f"Tiling...")
+
     windows = sliding_window_view(dataset, window_shape=window_size)[::strides, ::strides, ::strides]
     zplanes, nrows, ncols = windows.shape[:3]
     windows = np.reshape(windows, (-1, *window_size))
 
-    logger.info(f"Locating ROIs: {[windows.shape[0]]}")
-
     if savepath is not None:
         savepath.mkdir(parents=True, exist_ok=True)
-        for i, w in enumerate(windows):
-            imsave(savepath/f"roi_{i:02}.tif", w)
+        i = 0
+        for z in range(zplanes):
+            for y in range(nrows):
+                for x in range(ncols):
+                    imsave(savepath/f"z{z}-y{y}-x{x}.tif", windows[i])
+                    i += 1
 
     return windows, zplanes, nrows, ncols

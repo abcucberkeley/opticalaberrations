@@ -299,8 +299,8 @@ def predict(
                             threshold=prediction_threshold,
                             ignore_modes=ignore_modes,
                             freq_strength_threshold=freq_strength_threshold,
-                            # plot=Path(f"{outdir.with_suffix('')}_predictions_{tile}") if plot else None,
-                            # plot_rotations=Path(f"{outdir.with_suffix('')}_predictions_{tile}") if plot_rotations else None,
+                            plot=outdir/tile if plot else None,
+                            plot_rotations=outdir/tile if plot_rotations else None,
                         )
 
                     predictions[tile] = p.flatten()
@@ -472,7 +472,6 @@ def predict_rois(
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
 ):
-
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         preloaded,
         model,
@@ -480,25 +479,15 @@ def predict_rois(
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
 
-    logger.info(f"Loading file: {img.name}")
-    sample = load_sample(
-        img,
-        model_voxel_size=premodelpsfgen.voxel_size,
-        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-        remove_background=True,
-        normalize=True,
-    )
-
     outdir = Path(f"{img.with_suffix('')}_rois")
-    logger.info(f"Sample: {sample.shape}")
 
     rois = preprocessing.find_roi(
-        sample,
-        # savepath=outdir,
-        peaks=pois,
+        img,
+        savepath=outdir,
+        pois=pois,
         window_size=tuple(3*[window_size]),
         plot=f"{outdir}_predictions" if plot else None,
-        num_peaks=num_rois,
+        num_rois=num_rois,
         min_dist=minimum_distance,
         max_dist=None,
         max_neighbor=20,
@@ -506,8 +495,19 @@ def predict_rois(
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
     )
 
-    ncols = int(np.ceil(len(rois)/5))
-    nrows = int(np.ceil(len(rois)/ncols))
+    rois = np.array([
+        load_sample(
+            r,
+            model_voxel_size=premodelpsfgen.voxel_size,
+            sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+            remove_background=True,
+            normalize=True,
+        ) for r in rois
+    ])
+
+    logger.info(f"ROIs: {rois.shape}")
+    ncols = int(np.ceil(len(rois) / 5))
+    nrows = int(np.ceil(len(rois) / ncols))
 
     predict(
         rois=rois,
@@ -568,10 +568,9 @@ def predict_tiles(
     outdir = Path(f"{img.with_suffix('')}_tiles")
     logger.info(f"Sample: {sample.shape}")
 
-    logger.info(f"Tiling...")
     rois, ztiles, nrows, ncols = preprocessing.get_tiles(
         sample,
-        # savepath=outdir,
+        savepath=outdir,
         strides=window_size,
         window_size=tuple(3*[window_size]),
     )
