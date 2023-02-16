@@ -23,7 +23,6 @@ import matplotlib.patches as patches
 from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from line_profiler_pycharm import profile
-from tqdm import tqdm
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -205,51 +204,53 @@ def prep_sample(
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
-    if len(np.squeeze(sample).shape) == 4:
-        samples = []
-        for i in range(sample.shape[0]):
-            s = sample[i]
+    sample = np.nan_to_num(sample, nan=0)
 
-            if remove_background:
-                s = remove_background_noise(s)
+    if remove_background:
+        sample = remove_background_noise(sample)
 
-            if normalize:
-                s /= np.nanmax(s)
+    if normalize:
+        sample /= np.nanmax(sample)
 
-            if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-                s = transform.rescale(
-                    s,
-                    (
-                        sample_voxel_size[0] / model_voxel_size[0],
-                        sample_voxel_size[1] / model_voxel_size[1],
-                        sample_voxel_size[2] / model_voxel_size[2],
-                    ),
-                    order=3,
-                    anti_aliasing=True,
-                )
-            samples.append(s)
+    if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
+        if debug is not None:
+            debug = Path(debug)
+            if debug.is_dir():
+                debug.mkdir(parents=True, exist_ok=True)
+            fig, axes = plt.subplots(2, 3, figsize=(9, 6))
 
-        return np.array(samples)
+            axes[0, 1].set_title(f"{str(sample.shape)} @ {sample_voxel_size}")
+            axes[0, 0].set_ylabel('Input (MIP)')
+            m = axes[0, 0].imshow(np.max(sample, axis=0), cmap='hot')
+            axes[0, 1].imshow(np.max(sample, axis=1), cmap='hot')
+            axes[0, 2].imshow(np.max(sample, axis=2), cmap='hot')
+            cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-2)
+            cb = plt.colorbar(m, cax=cax)
+            cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
 
-    else:
-        if remove_background:
-            sample = remove_background_noise(sample)
+        sample = transform.rescale(
+            sample,
+            (
+                sample_voxel_size[0] / model_voxel_size[0],
+                sample_voxel_size[1] / model_voxel_size[1],
+                sample_voxel_size[2] / model_voxel_size[2],
+            ),
+            order=3,
+            anti_aliasing=True,
+        )
 
-        if normalize:
-            sample /= np.nanmax(sample)
+        if debug is not None:
+            axes[1, 1].set_title(f"{str(sample.shape)} @ {model_voxel_size}")
+            axes[1, 0].set_ylabel('Resampled (MIP)')
+            m = axes[1, 0].imshow(np.max(sample, axis=0), cmap='hot')
+            axes[1, 1].imshow(np.max(sample, axis=1), cmap='hot')
+            axes[1, 2].imshow(np.max(sample, axis=2), cmap='hot')
+            cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-2)
+            cb = plt.colorbar(m, cax=cax)
+            cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+            plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-        if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-            sample = transform.rescale(
-                sample,
-                (
-                    sample_voxel_size[0] / model_voxel_size[0],
-                    sample_voxel_size[1] / model_voxel_size[1],
-                    sample_voxel_size[2] / model_voxel_size[2],
-                ),
-                order=3,
-                anti_aliasing=True,
-            )
-        return sample
+    return sample
 
 
 @profile
@@ -408,7 +409,6 @@ def find_roi(
     pois.to_csv(f"{plot}_stats.csv")
 
     logger.info(f"Predicted points of interest")
-    print(pois.iloc[:, :5])
     pois = pois[['z', 'y', 'x']].values[:num_rois]
     widths = [w // 2 for w in window_size]
 

@@ -222,6 +222,7 @@ def load_sample(
     sample_voxel_size: tuple,
     remove_background: bool = True,
     normalize: bool = True,
+    debug: Any = None
 ):
     try:
         if isinstance(data, np.ndarray):
@@ -238,7 +239,8 @@ def load_sample(
             model_voxel_size=model_voxel_size,
             sample_voxel_size=sample_voxel_size,
             remove_background=remove_background,
-            normalize=normalize
+            normalize=normalize,
+            debug=debug
         )
 
         return img
@@ -481,10 +483,10 @@ def predict_rois(
     )
 
     outdir = Path(f"{img.with_suffix('')}_rois")
+    outdir.mkdir(exist_ok=True, parents=True)
 
     rois = preprocessing.find_roi(
         img,
-        savepath=outdir,
         pois=pois,
         window_size=tuple(3*[window_size]),
         plot=f"{outdir}_predictions" if plot else None,
@@ -494,17 +496,18 @@ def predict_rois(
         max_neighbor=20,
         min_intensity=min_intensity,
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        # savepath=outdir,
     )
 
-    rois = np.array([
-        load_sample(
-            r,
-            model_voxel_size=premodelpsfgen.voxel_size,
-            sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-            remove_background=True,
-            normalize=True,
-        ) for r in rois
-    ])
+    rescale = partial(
+        load_sample,
+        model_voxel_size=premodelpsfgen.voxel_size,
+        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        remove_background=True,
+        normalize=True,
+        # debug=outdir/f"roi_{i:02}.tif"
+    )
+    rois = np.array([rescale(r) for i, r in enumerate(rois)])
 
     logger.info(f"ROIs: {rois.shape}")
     ncols = int(np.ceil(len(rois) / 5))
@@ -567,6 +570,8 @@ def predict_tiles(
         normalize=True,
     )
     outdir = Path(f"{img.with_suffix('')}_tiles")
+    outdir.mkdir(exist_ok=True, parents=True)
+
     logger.info(f"Sample: {sample.shape}")
 
     rois, ztiles, nrows, ncols = preprocessing.get_tiles(
