@@ -399,7 +399,7 @@ def eval_rotation(
                     fit_ax = fig.add_subplot(gs[row, 1])
 
                     ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
-                    ax.plot(rotations, init_preds[:, twin.index_ansi], ':', label=f"m{twin.index_ansi}")
+                    ax.plot(rotations, init_preds[:, twin.index_ansi], label=f"m{twin.index_ansi}")
 
                     ax.set_xlim(0, 360)
                     ax.set_xticks(range(0, 405, 45))
@@ -410,7 +410,7 @@ def eval_rotation(
                     ax.set_xlabel('Digital rotation (deg)')
 
                     title_color = 'g' if rho > 0 else 'r'
-                    fit_ax.plot(xdata, m * xdata + b, color=title_color, lw='.75')
+                    fit_ax.plot([0,xdata[-1]], m * [0,xdata[-1]] + b, color=title_color, lw='.75') # plot fit line from zero to end of data
                     fit_ax.scatter(xdata, ydata, s=2, color='grey')
                     
                     fit_ax.set_title(
