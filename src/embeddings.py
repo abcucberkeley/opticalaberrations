@@ -328,15 +328,15 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
 
     # convolve template with the input image
     # we're actually doing cross-corr NOT convolution
-    convolued_psf = convolution.convolve_fft(blured_psf, kernel, allow_huge=True, boundary='wrap')
-    convolued_psf -= np.nanmin(convolued_psf)
-    convolued_psf /= np.nanmax(convolued_psf)
+    convolved_psf = convolution.convolve_fft(blured_psf, kernel, allow_huge=True, boundary='wrap')
+    convolved_psf -= np.nanmin(convolved_psf)
+    convolved_psf /= np.nanmax(convolved_psf)
 
     if pois is None:
         # Bead detection
         pois = []
         detected_peaks = peak_local_max(
-            convolued_psf,
+            convolved_psf,
             min_distance=min_distance,
             threshold_rel=.05,
             exclude_border=0,
@@ -347,12 +347,12 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
         beads = np.zeros_like(psf)
         for p in detected_peaks:
             try:
-                fov = convolued_psf[
+                fov = convolved_psf[
                     p[0]-(min_distance+1):p[0]+(min_distance+1),
                     p[1]-(min_distance+1):p[1]+(min_distance+1),
                     p[2]-(min_distance+1):p[2]+(min_distance+1),
                 ]
-                if np.max(fov) > convolued_psf[p[0], p[1], p[2]]:
+                if np.max(fov) > convolved_psf[p[0], p[1], p[2]]:
                     continue
                 else:
                     beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
@@ -420,7 +420,7 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
 
                 m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='Greys_r', alpha=.66)
                 m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='magma')
-                m3 = axes[2, ax].imshow(np.nanmax(convolued_psf, axis=ax), cmap='Greys_r')
+                m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r')
                 m4 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot')
 
             for ax, m, label in zip(
@@ -449,7 +449,7 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
             for ax in range(3):
                 m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='Greys_r', alpha=.66)
                 m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='Greys_r')
-                m3 = axes[2, ax].imshow(np.nanmax(convolued_psf, axis=ax), cmap='Greys_r')
+                m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r')
 
             for ax, m, label in zip(
                     range(3),
