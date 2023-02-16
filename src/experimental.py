@@ -222,7 +222,7 @@ def load_sample(
     sample_voxel_size: tuple,
     remove_background: bool = True,
     normalize: bool = True,
-    bandpass_filter: bool = True,
+    bandpass_filter: bool = False,
     debug: Any = None
 ):
     try:
