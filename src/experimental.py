@@ -1226,6 +1226,7 @@ def phase_retrieval(
         psf=psf,
         otf=otf,
         plot=f"{img.with_suffix('')}_phase_retrieval" if plot else None,
+        max_num_peaks=1,
     )
     data = np.int_(psfgen.ifft(otf) * np.nanmax(data))
 

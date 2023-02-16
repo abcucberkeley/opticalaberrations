@@ -574,7 +574,7 @@ class SyntheticPSF:
         return shifted_otf
 
     @profile
-    def remove_interference_pattern(self, psf, otf, plot, peaks=None, min_distance=5, kernel_size=15):
+    def remove_interference_pattern(self, psf, otf, plot, peaks=None, min_distance=5, kernel_size=15, max_num_peaks=100):
         """
         Normalize interference pattern from the given FFT
         Args:
@@ -615,7 +615,7 @@ class SyntheticPSF:
                 threshold_rel=.05,
                 exclude_border=0,
                 p_norm=2,
-                num_peaks=100
+                num_peaks=max_num_peaks
             ).astype(int)
 
             beads = np.zeros_like(psf)
