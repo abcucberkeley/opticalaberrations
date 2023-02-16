@@ -13,7 +13,6 @@ import tensorflow as tf
 
 from typing import Any, Sequence, Union
 import numpy as np
-from scipy import stats as st
 import pandas as pd
 from tifffile import imread, imsave
 import seaborn as sns
@@ -891,6 +890,7 @@ def eval_mode(
     gt_postfix: str = '',
 ):
     save_postfix = 'pr' if postfix.startswith('pr') else 'ml'
+    save_path = Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval')
 
     noisy_img = np.squeeze(get_image(input_path).astype(float))
     maxcounts = np.max(noisy_img)
@@ -916,7 +916,7 @@ def eval_mode(
             prediction_threshold=0.,
         )
         prediction_path = Path(
-            f"{str(gt_path.with_suffix('')).replace(f'_{gt_postfix}', '')}_sample_predictions_zernike_coefficients.csv"
+            f"{str(gt_path.with_suffix('')).replace(f'_{gt_postfix}', '')}_{postfix}"
         )
 
     try:
@@ -936,7 +936,7 @@ def eval_mode(
 
     p_wave = Wavefront(p, lam_detection=gen.lam_detection, modes=len(p))
     y_wave = Wavefront(y, lam_detection=gen.lam_detection, modes=len(p))
-    diff = y_wave - p_wave
+    diff = Wavefront(y-p, lam_detection=gen.lam_detection, modes=len(p))
 
     prep = partial(
         preprocessing.prep_sample,
@@ -972,30 +972,26 @@ def eval_mode(
         maxcounts=maxcounts,
         y=y_wave,
         pred=p_wave,
-        save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval'),
+        save_path=save_path,
         display=False,
         dxy=gen.x_voxel_size,
         dz=gen.z_voxel_size,
         transform_to_align_to_DM=True,
     )
-    print(f"output = {Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval')}")
 
-    plt.style.use("dark_background")
-    vis.diagnostic_assessment(
-        psf=noisy_img,
-        gt_psf=gt_psf,
-        predicted_psf=p_psf,
-        corrected_psf=corrected_psf,
-        psnr=psnr,
-        maxcounts=maxcounts,
-        y=y_wave,
-        pred=p_wave,
-        save_path=Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval_db'),
-        display=False,
-        dxy=gen.x_voxel_size,
-        dz=gen.z_voxel_size,
-        transform_to_align_to_DM=True,
-    )
+    coefficients = [
+        {'n': z.n, 'm': z.m, 'amplitude': a}
+        for z, a in diff.zernikes.items()
+    ]
+
+    coefficients = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
+    coefficients.index.name = 'ansi'
+    coefficients.to_csv(f'{save_path}.csv')
+
+    p2v = utils.peak2valley(diff, wavelength=gen.lam_detection, na=1.0)
+    logger.info(f"File: {save_path.name}")
+    logger.info(f"P2V: {round(p2v, 3)}")
+    return p2v
 
 
 @profile
@@ -1004,10 +1000,9 @@ def eval_dataset(
     datadir: Path,
     flat: Any = None,
     postfix: str = 'sample_predictions_zernike_coefficients.csv',
-    gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv' # 'pr_zernike_coffs.csv',
-    # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
+    gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv'
 ):
-    func = partial(
+    evaluate = partial(
         eval_mode,
         model_path=model,
         flat_path=flat,
@@ -1015,8 +1010,11 @@ def eval_dataset(
         gt_postfix=gt_postfix,
     )
 
-    jobs = []
-    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime): # sort by creation time
+    active_jobs, jobs = [], []
+    manager = mp.Manager()
+    results = manager.dict()
+
+    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime):  # sort by creation time
         if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
             continue
 
@@ -1034,8 +1032,6 @@ def eval_dataset(
             mode = modes[0]
             prefix = f"ansi_z{mode}*"
 
-        # logger.info(f"Looking for: {prefix}")
-
         try:
             gt_path = list(datadir.rglob(f'{state}_widefield_{prefix}_{gt_postfix}'))[0]
             logger.info(f"GT:    {gt_path.name}")
@@ -1050,18 +1046,35 @@ def eval_dataset(
             logger.warning(f'Prediction not found for: {file.name}')
             prediction_path = None
 
-        worker = partial(func, prediction_path=prediction_path, gt_path=gt_path)
+        def worker(*args):
+            p2v = evaluate(file, prediction_path=prediction_path, gt_path=gt_path)
+            results[file] = dict(
+                state=state,
+                p2v_residual=p2v,
+                prediction_file=str(prediction_path),
+                ground_truth_file=str(gt_path),
+            )
+
         p = mp.Process(target=worker, args=(file,))
         p.start()
+        active_jobs.append(p)
         jobs.append(p)
         logger.info(f'-'*50)
 
-        while len(jobs) >= 10:
-            for p in jobs:
+        while len(active_jobs) >= 10:
+            for p in active_jobs:
                 if not p.is_alive():
-                    jobs.remove(p)
+                    active_jobs.remove(p)
             time.sleep(10)
-    logger.info("Done")
+
+    for proc in jobs:
+        proc.join()
+
+    df = pd.DataFrame.from_dict(results.values())
+    df.index.name = 'id'
+    df.to_csv(Path(f'{datadir}/eval.csv'))
+    logger.info(f'{datadir}/eval.csv')
+    print(df)
 
 
 @profile
