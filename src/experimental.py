@@ -383,7 +383,7 @@ def predict_sample(
         sample_voxel_size=psfgen.voxel_size,
         remove_background=True,
         normalize=True,
-        #bandpass_filter=True,
+        bandpass_filter=False,
     )
 
     inputs = np.expand_dims(inputs, axis=0)
