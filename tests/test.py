@@ -14,6 +14,7 @@ from synthetic import SyntheticPSF
 from preprocessing import remove_background_noise
 from utils import peak2valley, fftconvolution, resize_with_crop_or_pad
 from vis import plot_wavefront
+from embeddings import fourier_embeddings, plot_embeddings
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -141,8 +142,9 @@ def create_synthetic_sample(
     noisy_img /= np.max(noisy_img)
 
     for e in set(embedding_option):
-        embeddings = gen.embedding(
-            noisy_img,
+        embeddings = fourier_embeddings(
+            inputs=noisy_img,
+            iotf=gen.iotf,
             remove_interference=remove_interference,
             embedding_option=e,
             alpha_val=alpha_val,
@@ -205,8 +207,9 @@ if __name__ == "__main__":
         noise=noise,
     )
 
-    embeddings_psf = gen.embedding(
-        psf,
+    embeddings_psf = fourier_embeddings(
+        inputs=psf,
+        iotf=gen.iotf,
         plot=outdir / f"psf",
         remove_interference=False,
     )
@@ -223,8 +226,9 @@ if __name__ == "__main__":
     # if num_objs > 1:
     #     f1 = fftconvolution(sample=reference, kernel=f1)
     #
-    # embeddings_f1 = gen.embedding(
+    # embeddings_f1 = fourier_embeddings(
     #     f1,
+    #     iotf=gen.iotf,
     #     plot=outdir / f"f1_num_objs_{num_objs}",
     #     remove_interference=False,
     # )
@@ -238,8 +242,9 @@ if __name__ == "__main__":
     # if num_objs > 1:
     #     f2 = fftconvolution(sample=reference, kernel=f2)
     #
-    # embeddings_f2 = gen.embedding(
+    # embeddings_f2 = fourier_embeddings(
     #     f2,
+    #     iotf=gen.iotf,
     #     plot=outdir / f"f2_num_objs_{num_objs}",
     #     remove_interference=False,
     # )
@@ -248,8 +253,9 @@ if __name__ == "__main__":
     # zernikes[11] = .05  # mu rms
     # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
     # psf = gen.single_psf(wavefront, normed=True, noise=False)
-    # embeddings_psf = gen.embedding(
+    # embeddings_psf = fourier_embeddings(
     #     psf,
+    #     iotf=gen.iotf,
     #     plot=outdir / f"psf_num_objs_{num_objs}",
     #     remove_interference=False,
     # )
@@ -280,7 +286,7 @@ if __name__ == "__main__":
     # )
     # ratio_emb = np.concatenate([alpha, phi], axis=0)
     #
-    # gen.plot_embeddings(
+    # plot_embeddings(
     #     inputs=pseudo_psf,
     #     emb=ratio_emb,
     #     save_path=outdir / f"pseudo_psf_num_objs_{num_objs}",
@@ -294,8 +300,9 @@ if __name__ == "__main__":
     # if num_objs > 1:
     #     img = fftconvolution(sample=reference, kernel=img)
     #
-    # embeddings_img = gen.embedding(
+    # embeddings_img = fourier_embeddings(
     #     img,
+    #     iotf=gen.iotf,
     #     plot=outdir / f"img_num_objs_{num_objs}",
     #     remove_interference=False,
     # )
@@ -324,8 +331,9 @@ if __name__ == "__main__":
     # # if num_objs > 1:
     # #     structure = fftconvolution(sample=structure, kernel=gen.ipsf)
     #
-    # embeddings_structure = gen.embedding(
+    # embeddings_structure = fourier_embeddings(
     #     structure,
+    #     iotf=gen.iotf,
     #     plot=outdir / f"structure_num_objs_{num_objs}",
     #     remove_interference=False,
     # )
@@ -352,7 +360,7 @@ if __name__ == "__main__":
     # )
     # ratio_emb = np.concatenate([alpha, phi], axis=0)
     #
-    # gen.plot_embeddings(
+    # plot_embeddings(
     #     inputs=reconstructed_psf,
     #     emb=ratio_emb,
     #     save_path=outdir / f"fourier_embeddings_num_objs_{num_objs}",

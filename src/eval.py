@@ -195,7 +195,7 @@ def iter_evaluate(
         metadata=True
     )
     # this runs multiple samples (aka images) at a time.
-    # ys is a 2D array, rows are each sample, columns give abberation in zernike coeffs
+    # ys is a 2D array, rows are each sample, columns give aberration in zernike coeffs
     metadata = np.array(list(metadata.take(-1)))
     ys = np.array([i.numpy() for i in metadata[:, 0]])
     snrs = np.array([i.numpy() for i in metadata[:, 1]])

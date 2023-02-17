@@ -92,7 +92,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--peaks", default=None, help="matlab file that outlines peaks-coordinates"
+        "--pois", default=None, help="matlab file that outlines peaks of interest coordinates"
     )
 
     return parser.parse_args(args)

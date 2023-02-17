@@ -22,6 +22,7 @@ from utils import mean_min_distance
 from preprocessing import resize_with_crop_or_pad, remove_background_noise
 from utils import peak2valley, fftconvolution, multiprocess
 from synthetic import SyntheticPSF
+from embeddings import fourier_embeddings
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -185,8 +186,9 @@ def sim(
             odir = outdir/e
             odir.mkdir(exist_ok=True, parents=True)
 
-            embeddings = gen.embedding(
-                noisy_img,
+            embeddings = fourier_embeddings(
+                inputs=noisy_img,
+                iotf=gen.iotf,
                 embedding_option=e,
                 alpha_val=alpha_val,
                 phi_val=phi_val,

@@ -27,7 +27,7 @@ class Wavefront:
         :param amplitudes: dictionary, nd array, tuple or list, Amplitudes of Zernike polynomials
         :param order: string, Zernike nomenclature, 'noll' or 'ansi', default is 'ansi'
         :param lam_detection: wavelength in microns
-        :param modes: number of modes to be selected from.  Also self.length = modes
+        :param modes: number of modes to be selected from.
         :param mode_weights: How likely to pick modes to be selected. 'pyramid', 'decay', or all else uniform (uniform=default)
         :param distribution: Once modes are selected. Amplitude distribution 'single', 'powerlaw', 'dirichlet', or 'mixed'=random choice of distribution      
 
@@ -49,17 +49,17 @@ class Wavefront:
         self.order = order
         self.lam_detection = lam_detection
         self.prefixed = [0, 1, 2, 4] if order == 'ansi' else [0, 1, 2, 3]
-        self.length = modes
+        self.modes = modes
         self.gamma = gamma
         self.signed = signed
         self.rotate = rotate
 
         if mode_weights == 'pyramid':
-            self.mode_weights = self._pyramid_weights(num_modes=self.length - len(self.prefixed))   # Provide the probabilities (aka weights) over the desired range of modes.  Don't include "prefixed": piston,tip,tilt,defocus.
+            self.mode_weights = self._pyramid_weights(num_modes=self.modes - len(self.prefixed))   # Provide the probabilities (aka weights) over the desired range of modes.  Don't include "prefixed": piston,tip,tilt,defocus.
         elif mode_weights == 'decay':
-            self.mode_weights = self._decayed_weights(num_modes=self.length - len(self.prefixed))
+            self.mode_weights = self._decayed_weights(num_modes=self.modes - len(self.prefixed))
         else:
-            self.mode_weights = self._uniform_weights(num_modes=self.length - len(self.prefixed))
+            self.mode_weights = self._uniform_weights(num_modes=self.modes - len(self.prefixed))
 
         self.distribution = np.random.choice(['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet'], size=1)[0] \
             if distribution == 'mixed' else distribution
@@ -67,7 +67,7 @@ class Wavefront:
         if np.isscalar(self.ranges) or isinstance(self.ranges, tuple):
             lims = (self.ranges-.0001, self.ranges+.0001) if np.isscalar(self.ranges) else self.ranges
 
-            ## amps is an array with size matched to self.length (e.g. 55).
+            ## amps is an array with size matched to self.modes (e.g. 55).
             if self.distribution == 'single':
                 #  The first element has a random value picked from the range given by "lims", all others zeros
                 amps = self._single(lims)
@@ -85,11 +85,17 @@ class Wavefront:
                 amps = self._dirichlet(lims)
 
             else:  # draw amplitude for each zernike mode from a uniform dist
-                amps = np.random.uniform(*lims, size=self.length)
+                amps = np.random.uniform(*lims, size=self.modes)
 
-            amplitudes = np.zeros(self.length)      # initialize modes 55
+            amplitudes = np.zeros(self.modes)      # initialize modes 55
             moi = self._pick_modes()                # pick order of modes from most "interesting" to least (51 modes)
             amplitudes[moi] = amps[:len(moi)]       # assign amplitudes  amps[:len(moi)] is 51, so amplitudes[piston, tip,tilt, defocus] will always be zero
+            amplitudes = self._formatter(amplitudes, order)
+
+            self.zernikes = {
+                Zernike(j, order=order): a
+                for j, a in amplitudes.items()
+            }
 
             if self.rotate:
                 for j, a in amplitudes.items():
@@ -105,13 +111,6 @@ class Wavefront:
                             )
                             self.zernikes[z] = a * np.cos(randomangle)
                             self.zernikes[twin] = a * np.sin(randomangle)
-
-            amplitudes = self._formatter(amplitudes, order)
-
-            self.zernikes = {
-                Zernike(j, order=order): a
-                for j, a in amplitudes.items()
-            }
 
         elif isinstance(amplitudes, Path) or isinstance(amplitudes, str):
             amplitudes = self._fit_zernikes(amplitudes)
@@ -193,7 +192,7 @@ class Wavefront:
     def _pyramid_weights(self, num_modes, starting_ansi_index=15):
         hashtable = {
             Zernike(j, order=self.order): a
-            for j, a in self._formatter(np.zeros(self.length), self.order).items()
+            for j, a in self._formatter(np.zeros(self.modes), self.order).items()
         }
 
         i = starting_ansi_index - len(self.prefixed) if starting_ansi_index >= len(self.prefixed) else 0
@@ -210,14 +209,14 @@ class Wavefront:
     def _pick_modes(self):
         """Return the number modes (with piston, tip, tilt, defocus removed) in an order given by the probabilites given by mode_weights.  Like an NBA draft order selection.  The highest probability team will get the #1 draft pick the highest amount of times.
         """
-        modes = np.arange(self.length).astype(int)
+        modes = np.arange(self.modes).astype(int)
         modes = np.delete(modes, self.prefixed)  # remove bias, tip, tilt, and defocus from being selected
-        options = np.random.choice(a=modes, p=self.mode_weights, size=1000) # we need to draw self.length number of unique modes.  If we draw a mode that is already picked, we just throw that result away and redraw.  To do this we just draw a lot (e.g. 1000 times), and remove duplicates.
+        options = np.random.choice(a=modes, p=self.mode_weights, size=1000) # we need to draw self.modes number of unique modes.  If we draw a mode that is already picked, we just throw that result away and redraw.  To do this we just draw a lot (e.g. 1000 times), and remove duplicates.
         u, picked = np.sort(np.unique(options,  return_index=True))         # remove duplicates, and by just retaining the first occurances (np.unique's return_index array) but it's ordered by u, so we just sort.
         return options[picked]
 
     def _single(self, range_lims):
-        amplitudes = np.zeros(self.length)
+        amplitudes = np.zeros(self.modes)
 
         if self.signed:
             amp = np.random.choice([
@@ -231,7 +230,7 @@ class Wavefront:
         return amplitudes
 
     def _bimodal(self, range_lims):
-        amplitudes = np.zeros(self.length)
+        amplitudes = np.zeros(self.modes)
 
         if self.signed:
             a = np.random.choice([
@@ -247,7 +246,7 @@ class Wavefront:
         return amplitudes
 
     def _multinomial(self, range_lims, maxpeaks=6):
-        amplitudes = np.zeros(self.length)
+        amplitudes = np.zeros(self.modes)
 
         if self.signed:
             a = np.random.choice([
@@ -265,13 +264,13 @@ class Wavefront:
         return amplitudes
 
     def _powerlaw(self, range_lims):
-        weights = np.random.pareto(self.gamma, size=self.length)
+        weights = np.random.pareto(self.gamma, size=self.modes)
         weights /= np.sum(weights)
         weights = np.sort(weights)[::-1]
         amplitudes = np.random.uniform(*range_lims) * weights
 
         if self.signed:
-            amplitudes *= np.random.choice([-1, 1], size=self.length)
+            amplitudes *= np.random.choice([-1, 1], size=self.modes)
 
         return amplitudes
 
@@ -281,15 +280,15 @@ class Wavefront:
 
         # draw negative and positive random numbers that add up to 1
         if sign == 0:
-            pos_weights = np.random.dirichlet(np.ones(self.length), size=1)[0] * 2
-            neg_weights = np.random.dirichlet(np.ones(self.length), size=1)[0] * -1
+            pos_weights = np.random.dirichlet(np.ones(self.modes), size=1)[0] * 2
+            neg_weights = np.random.dirichlet(np.ones(self.modes), size=1)[0] * -1
             weights = pos_weights + neg_weights
             amplitudes = weights * np.random.choice([
                 np.random.uniform(*range_lims),
                 np.random.uniform(*-np.array(range_lims))
             ])
         else:
-            weights = np.random.dirichlet(np.ones(self.length), size=1)[0]
+            weights = np.random.dirichlet(np.ones(self.modes), size=1)[0]
             amplitudes = weights * np.random.uniform(*range_lims)
 
         amplitudes = np.sort(amplitudes)[::-1]
@@ -368,7 +367,7 @@ class Wavefront:
         if rotate:
             wavefront = np.flip(np.rot90(wavefront), axis=0)
 
-        zernikes = [Zernike(i) for i in range(self.length)]
+        zernikes = [Zernike(i) for i in range(self.modes)]
         # crop to where pupil is
         wavefront = wavefront[:, ~np.isnan(wavefront).all(axis=0)]
         wavefront = wavefront[~np.isnan(wavefront).all(axis=1), :]

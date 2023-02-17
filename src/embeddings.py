@@ -6,7 +6,6 @@ import sys
 from typing import Any, Union
 
 import numpy as np
-import cupy as cp
 from skimage import transform
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -21,10 +20,13 @@ from scipy import ndimage
 import matplotlib.patches as patches
 from astropy import convolution
 from cupyx.scipy.ndimage import rotate
-
-from psf import PsfGenerator3D
-from wavefront import Wavefront
+from skspatial.objects import Plane, Points
 from utils import resize_with_crop_or_pad
+
+try:
+    import cupy as cp
+except ImportError as e:
+    logging.warning(f"Cupy not supported on your system: {e}")
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -57,7 +59,7 @@ def ifft(otf):
 
 
 @profile
-def normalize(emb, otf, freq_strength_threshold: float = 0.):
+def rescale(emb, otf, freq_strength_threshold: float = 0.):
     emb /= np.nanpercentile(np.abs(otf), 99.99)
     emb[emb > 1] = 1
     emb[emb < -1] = -1
@@ -67,6 +69,15 @@ def normalize(emb, otf, freq_strength_threshold: float = 0.):
         emb[np.abs(emb) < freq_strength_threshold] = 0.
 
     return emb
+
+
+def center_crop(inputs, window_size):
+    center = [(i - 1) // 2 for i in inputs.shape]
+    return inputs[
+      center[0]-window_size//2:center[0]+window_size//2,
+      center[1]-window_size//2:center[1]+window_size//2,
+      center[2]-window_size//2:center[2]+window_size//2,
+    ]
 
 
 @profile
@@ -270,33 +281,87 @@ def plot_embeddings(
 
 
 @profile
-def theoretical_psf(psf_shape, voxel_size, lam_detection, refractive_index, na_detection, psf_type):
-    """Generates an unabberated PSF of the "desired" PSF shape and voxel size, centered.
+def shift_otf(psf, otf, plot, window_size=8):
+    """ Center around most isolated bead """
+    beads = peak_local_max(
+        psf,
+        min_distance=window_size*2,
+        threshold_rel=.33,
+        exclude_border=False,
+        p_norm=2,
+        num_peaks=1
+    ).astype(np.float64)
 
-    Args:
-        normed (bool, optional): normalized will set maximum to 1. Defaults to True.
+    center = [(i - 1) // 2 for i in psf.shape]
+    shift = np.mean(beads, axis=0) - center
 
-    Returns:
-        _type_: 3D PSF
-    """
-    psfgen = PsfGenerator3D(
-        psf_shape=psf_shape,
-        units=voxel_size,
-        lam_detection=lam_detection,
-        n=refractive_index,
-        na_detection=na_detection,
-        psf_type=psf_type
-    )
+    z = np.arange(0, psf.shape[0])
+    y = np.arange(0, psf.shape[1])
+    x = np.arange(0, psf.shape[2])
+    Z, Y, X = np.meshgrid(z, y, x, indexing='ij')
 
-    wavefront = Wavefront(
-        amplitudes=np.zeros(15),
-        order='ansi',
-        lam_detection=lam_detection
-    )
+    slope = [(shift[i] * 2 * np.pi) / psf.shape[i] for i in range(3)]
+    shifted_otf = otf * np.e ** (1j * (Z * slope[0] + Y * slope[1] + X * slope[2]))
 
-    psf = psfgen.incoherent_psf(wavefront)
-    psf /= np.max(psf)
-    return psf
+    # get a realspace image of the shifted OTF
+    shifted_image = ifft(shifted_otf)
+
+    # compute a new OTF of the most isolated bead
+    shifted_otf = fft(center_crop(shifted_image, window_size=window_size))
+
+    if plot is not None:
+        fig, axes = plt.subplots(1, 3, figsize=(8, 4), sharey=False, sharex=False)
+        for ax in range(3):
+            axes[ax].imshow(np.nanmax(shifted_image, axis=ax), aspect='equal', cmap='Greys_r')
+
+            for p in range(beads.shape[0]):
+                if ax == 0:
+                    axes[ax].plot(beads[p, 2], beads[p, 1], marker='.', ls='', color=f'C{p}')
+                elif ax == 1:
+                    axes[ax].plot(beads[p, 2], beads[p, 0], marker='.', ls='', color=f'C{p}')
+                elif ax == 2:
+                    axes[ax].plot(beads[p, 1], beads[p, 0], marker='.', ls='', color=f'C{p}')
+
+            axes[ax].axis('off')
+
+        plt.tight_layout()
+        plt.savefig(f'{plot}_shift.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+
+    return shifted_otf
+
+
+@profile
+def remove_phase_ramp(masked_phase, plot):
+    fig, axes = plt.subplots(3, 3, figsize=(8, 8))
+
+    for i in range(masked_phase.shape[0]):
+        phase_slice = masked_phase[i].copy()
+        x = y = np.arange(0, phase_slice.shape[0])
+        X, Y = np.meshgrid(x, y)
+
+        # ignores zero points
+        points = [(x, y, v) for x, y, v in zip(X.ravel(), Y.ravel(), phase_slice.ravel()) if v != 0]
+        points = Points(points)
+        plane = Plane.best_fit(points)
+        X, Y, Z = plane.to_mesh((x - plane.point[0]), y - plane.point[1])
+        Z[phase_slice == 0] = 0.
+        masked_phase[i] -= Z
+
+        if plot is not None:
+            axes[i, 0].set_title(f"phase_slice")
+            axes[i, 0].imshow(phase_slice, vmin=-.5, vmax=.5, cmap='Spectral_r')
+            axes[i, 0].axis('off')
+
+            axes[i, 1].set_title(f"Z")
+            axes[i, 1].imshow(Z, vmin=-.5, vmax=.5, cmap='Spectral_r')
+            axes[i, 1].axis('off')
+
+            axes[i, 2].set_title(f"emb[{i}] - Z")
+            axes[i, 2].imshow(masked_phase[i], vmin=-.5, vmax=.5, cmap='Spectral_r')
+            axes[i, 2].axis('off')
+            plt.savefig(f"{plot}_phase_ramp.svg")
+
+    return np.nan_to_num(masked_phase, nan=0)
 
 
 @profile
@@ -551,7 +616,7 @@ def compute_emb(
         emb = np.abs(otf)
 
     if norm:
-        emb = normalize(emb, otf, freq_strength_threshold=freq_strength_threshold)
+        emb = rescale(emb, otf, freq_strength_threshold=freq_strength_threshold)
 
     if ratio:
         emb /= iotf

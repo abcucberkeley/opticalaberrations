@@ -11,7 +11,7 @@ from subprocess import call
 import multiprocessing as mp
 import tensorflow as tf
 
-from typing import Any, Sequence, Union
+from typing import Any, Union
 import numpy as np
 import pandas as pd
 from tifffile import imread, imsave
@@ -75,12 +75,12 @@ def zernikies_to_actuators(
     dm_calibration = pd.read_csv(dm_calibration, header=None).values
 
     if dm_calibration.shape[-1] > coefficients.size:
-        dm_calibration = dm_calibration[:, :coefficients.size]  # if we have <55 coefficients, crop the calibration matrix columns
+        # if we have <55 coefficients, crop the calibration matrix columns
+        dm_calibration = dm_calibration[:, :coefficients.size]
     else:
-        coefficients = coefficients[:dm_calibration.shape[-1]]  # if we have >55 coefficients, crop the coefficients array
+        # if we have >55 coefficients, crop the coefficients array
+        coefficients = coefficients[:dm_calibration.shape[-1]]
 
-    #coefficients = np.expand_dims(coefficients, axis=-1)
-    #offset = np.dot(dm_calibration, coefficients)[:, 0]
     offset = np.dot(dm_calibration, coefficients)
     return dm_state - (offset * scalar)
 

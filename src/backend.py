@@ -46,6 +46,7 @@ import data_utils
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
+from embeddings import fourier_embeddings, fft
 
 from tensorflow.keras import Model
 from phasenet import PhaseNet
@@ -86,7 +87,7 @@ def load_metadata(
         model_path (Path): path to .h5 model, or path to the containing folder.
         psf_shape (Union[tuple, list], optional): dimensions of the SyntheticPSF to return. Defaults to (64, 64, 64).
         psf_type (str, optional): "widefield" or "confocal". Defaults to None which reads the value from the .h5 file.
-        n_modes (int, optional): # of Zernike modes to describe abberation. Defaults to None which reads the value from the .h5 file.
+        n_modes (int, optional): # of Zernike modes to describe aberration. Defaults to None which reads the value from the .h5 file.
         z_voxel_size (float, optional):  Defaults to None which reads the value from the .h5 file.
         **kwargs:  Get passed into SyntheticPSF generator.
 
@@ -196,7 +197,7 @@ def bootstrap_predict(
     padsize: Any = None,
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
-    peaks: Any = None,
+    pois: Any = None,
     remove_interference: bool = True,
     ignore_modes: list = (0, 1, 2, 4),
     threshold: float = 0.,
@@ -221,7 +222,7 @@ def bootstrap_predict(
         alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
         phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
         remove_interference: a toggle to normalize out the interference pattern from the OTF
-        peaks: masked array of the peaks of interest to compute the interference pattern
+        pois: masked array of the peaks of interest to compute the interference pattern
         threshold: set predictions below threshold to zero (wavelength)
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
         desc: test to display for the progressbar
@@ -243,15 +244,16 @@ def bootstrap_predict(
 
     if not emb:
         logger.info("Computing FFTs")
-        embeddings = psfgen.fft(inputs)
+        embeddings = fft(inputs)
         generate_fourier_embeddings = partial(
-            psfgen.embedding,
+            fourier_embeddings,
+            iotf=psfgen.iotf,
             plot=plot,
             padsize=padsize,
             no_phase=no_phase,
             alpha_val=alpha_val,
             phi_val=phi_val,
-            peaks=peaks,
+            pois=pois,
             remove_interference=remove_interference,
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
@@ -301,7 +303,7 @@ def eval_rotation(
     plot: Any = None,
 ):
     """
-        We can think of the mode and its twin as the X and Y basis, and the abberation being a
+        We can think of the mode and its twin as the X and Y basis, and the aberration being a
         vector on this coordinate system. A problem occurs when the ground truth vector lies near
         where one of the vectors flips sign (and the model was trained to only respond with positive
         values for that vector).  Either a discontinuity or a degeneracy occurs in this area leading to
@@ -481,7 +483,7 @@ def predict_rotation(
     padsize: Any = None,
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
-    peaks: Any = None,
+    pois: Any = None,
     ignore_modes: list = (0, 1, 2, 4),
     threshold: float = 0.,
     freq_strength_threshold: float = .01,
@@ -506,7 +508,7 @@ def predict_rotation(
         alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
         phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
         remove_interference: a toggle to normalize out the interference pattern from the OTF
-        peaks: masked array of the peaks of interest to compute the interference pattern
+        pois: masked array of the peaks of interest to compute the interference pattern
         threshold: set predictions below threshold to zero (wavelength)
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
         threshold: set predictions below threshold to zero (wavelength)
@@ -522,15 +524,16 @@ def predict_rotation(
 
     if not emb:
         logger.info("Computing FFTs")
-        embeddings = psfgen.fft(inputs)
+        embeddings = fft(inputs)
         generate_fourier_embeddings = partial(
-            psfgen.embedding,
+            fourier_embeddings,
+            iotf=psfgen.iotf,
             plot=plot,
             padsize=padsize,
             no_phase=no_phase,
             alpha_val=alpha_val,
             phi_val=phi_val,
-            peaks=peaks,
+            pois=pois,
             remove_interference=remove_interference,
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
@@ -652,7 +655,7 @@ def predict_sign(
             percent_changes_error = np.std(pchange, axis=0)
 
         plt.style.use("default")
-        vis.plot_sign_correction(
+        vis.sign_correction(
             init_preds_wave,
             init_preds_wave_error,
             followup_preds_wave,
@@ -665,7 +668,7 @@ def predict_sign(
         )
 
         plt.style.use("dark_background")
-        vis.plot_sign_correction(
+        vis.sign_correction(
             init_preds_wave,
             init_preds_wave_error,
             followup_preds_wave,

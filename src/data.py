@@ -7,7 +7,7 @@ import tensorflow as tf
 
 import cli
 import shapes
-import vis
+import simulations
 import data_utils
 
 logging.basicConfig(
@@ -68,40 +68,40 @@ def main(args=None):
         shapes.simobjects()
 
     elif args.cmd == "inputs":
-        vis.plot_inputs()
+        simulations.plot_inputs()
 
     elif args.cmd == "dist":
-        vis.plot_training_dist()
+        simulations.plot_training_dist()
 
     elif args.cmd == "signal":
-        vis.plot_signal()
+        simulations.plot_signal()
 
     elif args.cmd == "fov":
-        vis.plot_fov()
+        simulations.plot_fov()
 
     elif args.cmd == "embeddings":
-        vis.plot_embeddings()
+        simulations.plot_embeddings()
 
     elif args.cmd == "rotations":
-        vis.plot_rotations()
+        simulations.plot_rotations()
 
     elif args.cmd == "shapes_embeddings":
-        vis.plot_shapes_embeddings()
+        simulations.plot_shapes_embeddings()
 
     elif args.cmd == "gaussian":
-        vis.plot_gaussian_filters()
+        simulations.plot_gaussian_filters()
 
     elif args.cmd == "simulation":
-        vis.plot_simulation()
+        simulations.plot_simulation()
 
     elif args.cmd == "zernikes_pyramid":
-        vis.plot_zernike_pyramid()
+        simulations.plot_zernike_pyramid()
 
     elif args.cmd == "embeddings_pyramid":
-        vis.plot_embedding_pyramid()
+        simulations.plot_embedding_pyramid()
 
     elif args.cmd == "psnr":
-        vis.plot_psnr()
+        simulations.plot_psnr()
 
     elif args.cmd == "similarity":
         shapes.similarity()
