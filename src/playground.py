@@ -9,12 +9,18 @@ from pathlib import Path
 from tifffile import imsave
 import raster_geometry as rg
 
+from skimage.filters import scharr
+from skimage.filters import meijering, sato, frangi, hessian
+from skimage.morphology import skeletonize
+from skimage.filters.rank import entropy
+
+
 from wavefront import Wavefront
 from synthetic import SyntheticPSF
-from preprocessing import remove_background_noise
+from preprocessing import remove_background_noise, prep_sample
 from utils import peak2valley, fftconvolution, resize_with_crop_or_pad
 from vis import plot_wavefront
-from embeddings import fourier_embeddings, plot_embeddings
+from embeddings import fft, ifft, compute_emb, fourier_embeddings, plot_embeddings
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -166,8 +172,8 @@ def create_synthetic_sample(
 
 if __name__ == "__main__":
     modes = 15
-    x_voxel_size = .104
-    y_voxel_size = .104
+    x_voxel_size = .108
+    y_voxel_size = .108
     z_voxel_size = .2
     lam_detection = .510
     psf_type = '../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
@@ -194,8 +200,11 @@ if __name__ == "__main__":
     )
 
     # ANSI index
-    filename = f'ideal'
-    zernikes[7] = 0  # mu rms
+    filename = f'mode_7'
+    zernikes[7] = .1  # mu rms
+
+    num_objs = 10
+    reference = beads(gen=gen, object_size=0, num_objs=num_objs)
 
     wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
 
@@ -207,161 +216,66 @@ if __name__ == "__main__":
         noise=noise,
     )
 
-    embeddings_psf = fourier_embeddings(
-        inputs=psf,
-        iotf=gen.iotf,
-        plot=outdir / f"psf",
-        remove_interference=False,
+    inputs = fftconvolution(sample=reference, kernel=psf)
+
+    '''
+        https://scikit-image.org/docs/stable/auto_examples/edges/plot_ridge_filter.html#sphx-glr-auto-examples-edges-plot-ridge-filter-py
+        https://scikit-image.org/docs/stable/auto_examples/edges/plot_skeleton.html#sphx-glr-auto-examples-edges-plot-skeleton-py
+        https://scikit-image.org/docs/stable/auto_examples/segmentation/plot_morphsnakes.html#sphx-glr-auto-examples-segmentation-plot-morphsnakes-py
+        https://scikit-image.org/docs/stable/auto_examples/filters/plot_entropy.html#sphx-glr-auto-examples-filters-plot-entropy-py
+    '''
+    structure = prep_sample(
+        inputs,
+        sample_voxel_size=gen.voxel_size,
+        model_voxel_size=gen.voxel_size,
+        remove_background=False,
+        normalize=True,
+        bandpass_filter=True,
+        debug=outdir / f"test",
     )
 
-    # num_objs = 50
-    # reference = beads(gen=gen, object_size=0, num_objs=num_objs)
-    #
-    # zernikes = np.zeros(modes)
-    # zernikes[5] = .05  # mu rms
-    # zernikes[11] = .05  # mu rms
-    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    # f1 = gen.single_psf(wavefront, normed=True, noise=False)
-    #
-    # if num_objs > 1:
-    #     f1 = fftconvolution(sample=reference, kernel=f1)
-    #
-    # embeddings_f1 = fourier_embeddings(
-    #     f1,
-    #     iotf=gen.iotf,
-    #     plot=outdir / f"f1_num_objs_{num_objs}",
-    #     remove_interference=False,
-    # )
-    #
-    # zernikes = np.zeros(modes)
-    # zernikes[5] = -.05  # mu rms
-    # zernikes[11] = .05  # mu rms
-    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    # f2 = gen.single_psf(wavefront, normed=True, noise=False)
-    #
-    # if num_objs > 1:
-    #     f2 = fftconvolution(sample=reference, kernel=f2)
-    #
-    # embeddings_f2 = fourier_embeddings(
-    #     f2,
-    #     iotf=gen.iotf,
-    #     plot=outdir / f"f2_num_objs_{num_objs}",
-    #     remove_interference=False,
-    # )
-    #
-    # zernikes = np.zeros(modes)
-    # zernikes[11] = .05  # mu rms
-    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    # psf = gen.single_psf(wavefront, normed=True, noise=False)
-    # embeddings_psf = fourier_embeddings(
-    #     psf,
-    #     iotf=gen.iotf,
-    #     plot=outdir / f"psf_num_objs_{num_objs}",
-    #     remove_interference=False,
-    # )
-    #
-    # if num_objs > 1:
-    #     psf = fftconvolution(sample=reference, kernel=psf)
-    #
-    # ratio = gen.fft(f1) / gen.fft(f2)
-    # pseudo_psf = np.abs(gen.ifft(ratio))
-    # pseudo_psf /= np.nanmax(pseudo_psf)
-    # pseudo_psf = resize_with_crop_or_pad(pseudo_psf, crop_shape=(32, 32, 32))
-    #
-    # alpha = gen.compute_emb(
-    #     ratio,
-    #     val='abs',
-    #     ratio=True,
-    #     norm=True,
-    #     embedding_option='spatial_planes',
-    # )
-    #
-    # phi = gen.compute_emb(
-    #     ratio,
-    #     val='angle',
-    #     ratio=False,
-    #     na_mask=True,
-    #     norm=False,
-    #     embedding_option='spatial_planes',
-    # )
-    # ratio_emb = np.concatenate([alpha, phi], axis=0)
-    #
-    # plot_embeddings(
-    #     inputs=pseudo_psf,
-    #     emb=ratio_emb,
-    #     save_path=outdir / f"pseudo_psf_num_objs_{num_objs}",
-    # )
-    #
-    # zernikes = np.zeros(modes)
-    # zernikes[11] = .05  # mu rms
-    # wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
-    # img = gen.single_psf(wavefront, normed=True, noise=False)
-    #
-    # if num_objs > 1:
-    #     img = fftconvolution(sample=reference, kernel=img)
-    #
-    # embeddings_img = fourier_embeddings(
-    #     img,
-    #     iotf=gen.iotf,
-    #     plot=outdir / f"img_num_objs_{num_objs}",
-    #     remove_interference=False,
-    # )
-    #
-    # from skimage.feature import hog
-    #
-    # structure = np.zeros_like(img)
-    # for plane in range(img.shape[0]):
-    #     fd, hog_image = hog(
-    #         img[plane],
-    #         orientations=9,
-    #         pixels_per_cell=(3, 3),
-    #         cells_per_block=(3, 3),
-    #         visualize=True,
-    #         block_norm='L2-Hys'
-    #     )
-    #     structure[plane] = hog_image
-    #
-    #
-    # # t_loc_otsu = rank.otsu(img, ball(15))
-    # # t_glob_otsu = threshold_otsu(img)
-    # # structure = np.zeros_like(img)
-    # # structure[img >= t_glob_otsu] = img[img >= t_glob_otsu]**3
-    # structure /= np.nanmax(structure)
-    #
-    # # if num_objs > 1:
-    # #     structure = fftconvolution(sample=structure, kernel=gen.ipsf)
-    #
-    # embeddings_structure = fourier_embeddings(
-    #     structure,
-    #     iotf=gen.iotf,
-    #     plot=outdir / f"structure_num_objs_{num_objs}",
-    #     remove_interference=False,
-    # )
-    #
-    # ratio = gen.fft(img) / gen.fft(structure)
-    # reconstructed_psf = np.abs(gen.ifft(ratio))
-    # reconstructed_psf /= np.nanmax(reconstructed_psf)
-    #
-    # alpha = gen.compute_emb(
-    #     ratio,
-    #     val='abs',
-    #     ratio=True,
-    #     norm=True,
-    #     embedding_option='spatial_planes',
-    # )
-    #
-    # phi = gen.compute_emb(
-    #     ratio,
-    #     val='angle',
-    #     ratio=False,
-    #     na_mask=True,
-    #     norm=False,
-    #     embedding_option='spatial_planes',
-    # )
-    # ratio_emb = np.concatenate([alpha, phi], axis=0)
-    #
-    # plot_embeddings(
-    #     inputs=reconstructed_psf,
-    #     emb=ratio_emb,
-    #     save_path=outdir / f"fourier_embeddings_num_objs_{num_objs}",
-    # )
+    inputs = prep_sample(
+        inputs,
+        sample_voxel_size=gen.voxel_size,
+        model_voxel_size=gen.voxel_size,
+        remove_background=False,
+        normalize=True,
+        bandpass_filter=False,
+    )
+
+    embeddings_psf = fourier_embeddings(
+        inputs=inputs,
+        iotf=gen.iotf,
+        plot=outdir / f"test",
+        embedding_option=gen.embedding_option,
+        remove_interference=True,
+    )
+
+    ratio = fft(inputs) / fft(structure)
+    reconstructed_psf = np.abs(ifft(ratio))
+    reconstructed_psf /= np.nanmax(reconstructed_psf)
+
+    alpha = compute_emb(
+        ratio,
+        iotf=gen.iotf,
+        val='abs',
+        ratio=True,
+        norm=True,
+        embedding_option='spatial_planes',
+    )
+
+    phi = compute_emb(
+        ratio,
+        iotf=gen.iotf,
+        val='angle',
+        ratio=False,
+        norm=False,
+        embedding_option='spatial_planes',
+    )
+    ratio_emb = np.concatenate([alpha, phi], axis=0)
+
+    plot_embeddings(
+        inputs=reconstructed_psf,
+        emb=ratio_emb,
+        save_path=outdir / f"fourier_embeddings_num_objs_{num_objs}",
+    )

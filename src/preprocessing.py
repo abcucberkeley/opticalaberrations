@@ -256,7 +256,7 @@ def prep_sample(
 
     if debug is not None:
         axes[1, 1].set_title(f"{str(sample.shape)} @ {model_voxel_size}")
-        axes[1, 0].set_ylabel('Resampled (MIP)')
+        axes[1, 0].set_ylabel('Processed (MIP)')
         m = axes[1, 0].imshow(np.max(sample, axis=0), cmap='hot')
         axes[1, 1].imshow(np.max(sample, axis=1), cmap='hot')
         axes[1, 2].imshow(np.max(sample, axis=2), cmap='hot')

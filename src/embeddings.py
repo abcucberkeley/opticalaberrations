@@ -664,7 +664,7 @@ def fourier_embeddings(
         freq_strength_threshold: float = 0.01,
         pois: Any = None,
         remove_interference: bool = True,
-        embedding_option: Any = None,
+        embedding_option: str = 'spatial_planes',
         edge_filter: bool = False,
         digital_rotations: Any = None,
 ):
