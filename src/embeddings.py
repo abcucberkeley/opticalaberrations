@@ -365,7 +365,7 @@ def remove_phase_ramp(masked_phase, plot):
 
 
 @profile
-def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kernel_size=15):
+def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kernel_size=15, max_num_peaks=100):
     """
     Normalize interference pattern from the given FFT
     Args:
@@ -393,7 +393,7 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
 
     # convolve template with the input image
     # we're actually doing cross-corr NOT convolution
-    convolved_psf = convolution.convolve_fft(blured_psf, kernel, allow_huge=True, boundary='wrap')
+    convolved_psf = convolution.convolve_fft(blured_psf, kernel, allow_huge=True, boundary='fill')
     convolved_psf -= np.nanmin(convolved_psf)
     convolved_psf /= np.nanmax(convolved_psf)
 
@@ -403,10 +403,10 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
         detected_peaks = peak_local_max(
             convolved_psf,
             min_distance=min_distance,
-            threshold_rel=.05,
+            threshold_rel=.1,
             exclude_border=0,
             p_norm=2,
-            num_peaks=100
+            num_peaks=max_num_peaks
         ).astype(int)
 
         beads = np.zeros_like(psf)
@@ -758,16 +758,19 @@ def fourier_embeddings(
         plt.style.use("default")
         plot_embeddings(inputs=psf, emb=emb, save_path=plot)
 
-    if psf.shape[-1] != 1:
-        emb = np.expand_dims(emb, axis=-1)
-
     if digital_rotations is not None:
+        rotated_embeddings = []
         gpu_embeddings = cp.array(emb)
-        emb = np.stack([
-            cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
-            for angle in tqdm(digital_rotations, desc=f"Generating digital rotations")
-        ], axis=0)
+
+        for angle in tqdm(digital_rotations, desc=f"Generating digital rotations"):
+            r = cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
+            rotated_embeddings.append(r)
+
         del gpu_embeddings
+        emb = np.array(rotated_embeddings)
+
+    if emb.shape[-1] != 1:
+        emb = np.expand_dims(emb, axis=-1)
 
     return emb
 
