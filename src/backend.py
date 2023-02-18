@@ -523,9 +523,8 @@ def predict_rotation(
         emb = model.input_shape[1] == inputs.shape[1]
 
     if not emb:
-        logger.info("Generating Fourier embeddings")
-        inputs = fourier_embeddings(
-            inputs,
+        generate_fourier_embeddings = partial(
+            fourier_embeddings,
             iotf=psfgen.iotf,
             plot=plot,
             padsize=padsize,
@@ -538,6 +537,15 @@ def predict_rotation(
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=rotations
         )
+
+        logger.info("Computing FFTs")
+        otfs = fft(inputs)
+        inputs = np.concatenate(utils.multiprocess(
+            generate_fourier_embeddings,
+            [(i, emb) for i, emb in zip(inputs, otfs)],
+            cores=cpu_workers,
+            desc=f"Generating Fourier embeddings"
+        ), axis=0)
 
     init_preds, stdev = bootstrap_predict(
         model,

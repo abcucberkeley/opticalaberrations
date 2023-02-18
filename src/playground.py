@@ -201,9 +201,9 @@ if __name__ == "__main__":
 
     # ANSI index
     filename = f'mode_7'
-    zernikes[7] = .1  # mu rms
+    zernikes[7] = .2  # mu rms
 
-    num_objs = 10
+    num_objs = 25
     reference = beads(gen=gen, object_size=0, num_objs=num_objs)
 
     wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
@@ -218,64 +218,44 @@ if __name__ == "__main__":
 
     inputs = fftconvolution(sample=reference, kernel=psf)
 
-    '''
-        https://scikit-image.org/docs/stable/auto_examples/edges/plot_ridge_filter.html#sphx-glr-auto-examples-edges-plot-ridge-filter-py
-        https://scikit-image.org/docs/stable/auto_examples/edges/plot_skeleton.html#sphx-glr-auto-examples-edges-plot-skeleton-py
-        https://scikit-image.org/docs/stable/auto_examples/segmentation/plot_morphsnakes.html#sphx-glr-auto-examples-segmentation-plot-morphsnakes-py
-        https://scikit-image.org/docs/stable/auto_examples/filters/plot_entropy.html#sphx-glr-auto-examples-filters-plot-entropy-py
-    '''
-    structure = prep_sample(
-        inputs,
-        sample_voxel_size=gen.voxel_size,
-        model_voxel_size=gen.voxel_size,
-        remove_background=False,
-        normalize=True,
-        bandpass_filter=True,
-        debug=outdir / f"test",
+    rand_noise = gen._random_noise(
+        image=inputs,
+        mean=gen.mean_background_noise,
+        sigma=gen.sigma_background_noise
     )
+    inputs *= snr ** 2
+    inputs += rand_noise
 
     inputs = prep_sample(
         inputs,
         sample_voxel_size=gen.voxel_size,
         model_voxel_size=gen.voxel_size,
-        remove_background=False,
+        remove_background=True,
         normalize=True,
-        bandpass_filter=False,
+        edge_filter=False,
     )
 
-    embeddings_psf = fourier_embeddings(
+    fourier_embeddings(
         inputs=inputs,
         iotf=gen.iotf,
-        plot=outdir / f"test",
+        plot=outdir / f"fourier_embeddings_num_objs_{num_objs}",
         embedding_option=gen.embedding_option,
         remove_interference=True,
     )
 
-    ratio = fft(inputs) / fft(structure)
-    reconstructed_psf = np.abs(ifft(ratio))
-    reconstructed_psf /= np.nanmax(reconstructed_psf)
-
-    alpha = compute_emb(
-        ratio,
-        iotf=gen.iotf,
-        val='abs',
-        ratio=True,
-        norm=True,
-        embedding_option='spatial_planes',
+    masked_inputs = prep_sample(
+        inputs,
+        sample_voxel_size=gen.voxel_size,
+        model_voxel_size=gen.voxel_size,
+        remove_background=False,
+        normalize=True,
+        edge_filter=True,
     )
 
-    phi = compute_emb(
-        ratio,
+    fourier_embeddings(
+        inputs=masked_inputs,
         iotf=gen.iotf,
-        val='angle',
-        ratio=False,
-        norm=False,
-        embedding_option='spatial_planes',
-    )
-    ratio_emb = np.concatenate([alpha, phi], axis=0)
-
-    plot_embeddings(
-        inputs=reconstructed_psf,
-        emb=ratio_emb,
-        save_path=outdir / f"fourier_embeddings_num_objs_{num_objs}",
+        plot=outdir / f"masked_fourier_embeddings_num_objs_{num_objs}",
+        embedding_option=gen.embedding_option,
+        remove_interference=True,
     )

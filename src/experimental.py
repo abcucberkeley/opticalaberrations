@@ -221,7 +221,7 @@ def load_sample(
     sample_voxel_size: tuple,
     remove_background: bool = True,
     normalize: bool = True,
-    bandpass_filter: bool = False,
+    edge_filter: bool = False,
     debug: Any = None
 ):
     try:
@@ -240,7 +240,7 @@ def load_sample(
             sample_voxel_size=sample_voxel_size,
             remove_background=remove_background,
             normalize=normalize,
-            bandpass_filter=bandpass_filter,
+            edge_filter=edge_filter,
             debug=debug
         )
 
@@ -382,7 +382,7 @@ def predict_sample(
         sample_voxel_size=psfgen.voxel_size,
         remove_background=True,
         normalize=True,
-        bandpass_filter=False,
+        edge_filter=False,
     )
 
     inputs = np.expand_dims(inputs, axis=0)
@@ -507,7 +507,7 @@ def predict_rois(
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
         remove_background=True,
         normalize=True,
-        bandpass_filter=True,
+        edge_filter=True,
     )
     rois = np.array([rescale(r, debug=outdir/f"roi_{i:02}.svg") for i, r in enumerate(rois)])
 
@@ -570,7 +570,7 @@ def predict_tiles(
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
         remove_background=True,
         normalize=True,
-        bandpass_filter=True,
+        edge_filter=True,
     )
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
