@@ -380,7 +380,6 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
 
     # get max pixel in the image
     half_length = kernel_size // 2
-    poi = np.unravel_index(np.argmax(blured_psf, axis=None), psf.shape)
     poi = list(np.unravel_index(np.argmax(blured_psf, axis=None), blured_psf.shape))
 
     # crop a window around the object for template matching
@@ -612,7 +611,8 @@ def compute_emb(
 
         emb = np.angle(emb)
         emb = np.ma.masked_array(emb, mask=~na_mask, fill_value=0)
-        emb = unwrap_phase(emb)
+        if len(np.ma.nonzero(emb)) > 100:
+            emb = unwrap_phase(emb)
         emb = emb.filled(0)
         emb = np.nan_to_num(emb, nan=0)
 
