@@ -759,19 +759,14 @@ def fourier_embeddings(
         plot_embeddings(inputs=psf, emb=emb, save_path=plot)
 
     if digital_rotations is not None:
-        rotated_embeddings = []
         gpu_embeddings = cp.array(emb)
-
-        for angle in tqdm(digital_rotations, desc=f"Generating digital rotations"):
-            r = cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
-            rotated_embeddings.append(r)
-
+        emb = np.array([
+            cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
+            for angle in tqdm(digital_rotations, desc=f"Generating digital rotations")
+        ])
         del gpu_embeddings
-        emb = np.array(rotated_embeddings)
 
     if emb.shape[-1] != 1:
         emb = np.expand_dims(emb, axis=-1)
 
     return emb
-
-

@@ -24,6 +24,10 @@ from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from line_profiler_pycharm import profile
 from skimage.filters import difference_of_gaussians, window
+from skimage.morphology import ball
+from skimage.morphology import erosion, opening, dilation
+from canny import CannyEdgeDetector3D
+
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -187,7 +191,8 @@ def prep_sample(
     debug: Any = None,
     remove_background: bool = True,
     normalize: bool = True,
-    bandpass_filter: bool = False,
+    edge_filter: bool = False,
+    filter_mask_dilation: bool = True
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
 
@@ -202,8 +207,7 @@ def prep_sample(
         debug (Any, optional): plot or save .svg's. Defaults to None.
         remove_background (bool, optional): Defaults to True.
         normalize (bool, optional): Defaults to True.
-        bandpass_filter (bool, optional): Defaults to True.
-        https://scikit-image.org/docs/stable/auto_examples/filters/plot_dog.html
+        edge_filter (bool, optional): Defaults to True.
 
     Returns:
         _type_: 3D array (or series of 3D arrays)
@@ -228,18 +232,23 @@ def prep_sample(
     if remove_background:
         sample = remove_background_noise(sample)
 
-    if bandpass_filter:
-        filtered_image = difference_of_gaussians(
-            image=sample,
-            low_sigma=.75,
-            high_sigma=None,
-            mode='nearest',
-        )
-        sample = filtered_image * window('hann', sample.shape)
-        sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
-
     if normalize:
         sample /= np.nanmax(sample)
+
+    if edge_filter:
+        mask = CannyEdgeDetector3D(
+            sample,
+            sigma=.5,
+            lowthresholdratio=0.3,
+            highthresholdratio=0.2,
+            weak_voxel=1.5*(st.mode(sample, axis=None).mode[0] + 1e-6),
+            strong_voxel=np.nanmax(sample)
+        ).detect().astype(np.float)
+
+        if filter_mask_dilation:
+            mask = dilation(mask, ball(2)).astype(float)
+
+        sample *= mask
 
     if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
         sample = transform.rescale(

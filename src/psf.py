@@ -107,7 +107,7 @@ class PsfGenerator3D:
         return np.fft.fftshift(res, axes=(0,))
 
     @profile
-    def incoherent_psf(self, phi):
+    def incoherent_psf(self, phi, lls_defocus_offset=None):
         """
         Returns the incoherent psf for a given wavefront phi
            (which is just the squared absolute value of the coherent one)
@@ -115,6 +115,7 @@ class PsfGenerator3D:
 
         Args:
             phi: Zernike/ZernikeWavefront object
+            lls_defocus_offset: the offset between the excitation and detection focal plan (microns)
         """
         _psf = np.abs(self.coherent_psf(phi)) ** 2
         _psf = np.array([p / np.sum(p) for p in _psf])
@@ -140,8 +141,20 @@ class PsfGenerator3D:
                 order=3,
                 anti_aliasing=True,
             )
+
+            focal_plane_index = lattice.shape[0] // 2
+
+            if lls_defocus_offset is not None:
+                if np.isscalar(lls_defocus_offset):
+                    focal_plane_index += np.round(lls_defocus_offset/self.dz).astype(int)
+                else:
+                    logger.error(f"Unknown format for `lls_defocus_offset`: {lls_defocus_offset}")
+
             w = _psf.shape[0]//2
-            center = lattice.shape[0]//2
-            lattice = lattice[center-w:center+w, np.newaxis, np.newaxis]
-            _psf = _psf * lattice
-            return _psf
+            lattice = lattice[
+                focal_plane_index-w:focal_plane_index+w,
+                np.newaxis,
+                np.newaxis
+            ]
+
+            return _psf * lattice
