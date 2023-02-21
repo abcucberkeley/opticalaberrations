@@ -12,6 +12,7 @@ import tensorflow as tf
 import ujson
 
 import embeddings
+from utils import peak2valley
 from wavefront import Wavefront
 from zernike import Zernike
 from synthetic import SyntheticPSF
@@ -45,16 +46,20 @@ def get_image(path):
 
 
 def get_metadata(path, codename: str):
-    if isinstance(path, tf.Tensor):
-        path = Path(str(path.numpy(), "utf-8"))
-    else:
-        path = Path(str(path))
+    try:
+        if isinstance(path, tf.Tensor):
+            path = Path(str(path.numpy(), "utf-8"))
+        else:
+            path = Path(str(path))
 
-    with open(path.with_suffix('.json')) as f:
-        hashtbl = ujson.load(f)
-        f.close()
+        with open(path.with_suffix('.json')) as f:
+            hashtbl = ujson.load(f)
+            f.close()
 
-    return hashtbl[codename]
+        return hashtbl[codename]
+
+    except KeyError:
+        return None
 
 
 @profile
@@ -76,10 +81,22 @@ def get_sample(
             hashtbl = ujson.load(f)
             f.close()
 
-        amps = hashtbl['zernikes']
+        zernikes = hashtbl['zernikes']
         snr = hashtbl['snr']
-        p2v = hashtbl['peak2peak']
+
         npoints = hashtbl['npoints']
+
+        try:
+            lls_defocus_offset = hashtbl['lls_defocus_offset']
+        except KeyError:
+            lls_defocus_offset = 0.
+
+        zernikes.append(lls_defocus_offset)
+
+        try:
+            p2v = hashtbl['peak2peak']
+        except KeyError:
+            p2v = peak2valley(zernikes)
 
         try:
             avg_min_distance = hashtbl['avg_min_distance']
@@ -87,9 +104,8 @@ def get_sample(
             avg_min_distance = 0.
 
         if metadata:
-            return amps, snr, p2v, npoints, avg_min_distance, str(path)
+            return zernikes, snr, p2v, npoints, avg_min_distance, str(path)
         else:
-
             img = get_image(path)
 
             if input_coverage != 1.:
@@ -108,9 +124,9 @@ def get_sample(
 
             if no_phase and img.shape[0] == 6:
                 img = img[:3]
-                wave = Wavefront(amps)
+                wave = Wavefront(zernikes)
 
-                for i, a in enumerate(amps):
+                for i, a in enumerate(zernikes):
                     mode = Zernike(i)
                     twin = Zernike((mode.n, mode.m * -1))
 
@@ -119,12 +135,12 @@ def get_sample(
                     else:
                         if mode.m != 0 and wave.zernikes.get(twin) is not None:
                             if np.sign(a) == -1:
-                                amps[mode.index_ansi] *= -1
-                                amps[twin.index_ansi] *= -1
+                                zernikes[mode.index_ansi] *= -1
+                                zernikes[twin.index_ansi] *= -1
                         else:
-                            amps[i] = np.abs(a)
+                            zernikes[i] = np.abs(a)
 
-            return img, amps
+            return img, zernikes
 
     except Exception as e:
         logger.warning(f"Corrupted file {path}: {e}")
@@ -187,7 +203,12 @@ def load_dataset(
         max_amplitude=max_amplitude,
         snr_range=snr_range
     )
-    files = multiprocess(check, Path(datadir).rglob('*[!_gt|!_realspace].tif'), cores=-1, desc='Loading dataset hashtable')
+    files = multiprocess(
+        check,
+        Path(datadir).rglob('*[!_gt|!_realspace].tif'),
+        cores=-1,
+        desc='Loading dataset hashtable'
+    )
     files = [f for f in files if f is not None]
 
     if samplelimit is not None:

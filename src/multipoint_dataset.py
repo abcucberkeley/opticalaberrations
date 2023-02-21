@@ -202,14 +202,14 @@ def sim(
             odir = outdir/e
             odir.mkdir(exist_ok=True, parents=True)
 
-            embeddings = fourier_embeddings(
+            embeddings = np.squeeze(fourier_embeddings(
                 inputs=noisy_img,
                 iotf=gen.iotf,
                 embedding_option=e,
                 alpha_val=alpha_val,
                 phi_val=phi_val,
                 plot=odir/filename
-            )
+            ))
 
             save_synthetic_sample(
                 odir/filename,

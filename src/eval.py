@@ -184,6 +184,7 @@ def iter_evaluate(
         batch_size=batch_size,
         psf_shape=3*[model.input_shape[2]]
     )
+    predicted_modes = model.output_shape[-1]
 
     metadata = data_utils.collect_dataset(
         datapath,
@@ -197,7 +198,7 @@ def iter_evaluate(
     # this runs multiple samples (aka images) at a time.
     # ys is a 2D array, rows are each sample, columns give aberration in zernike coeffs
     metadata = np.array(list(metadata.take(-1)))
-    ys = np.array([i.numpy() for i in metadata[:, 0]])
+    ys = np.array([i.numpy() for i in metadata[:, 0]])[:, :predicted_modes]
     snrs = np.array([i.numpy() for i in metadata[:, 1]])
     p2v = np.array([i.numpy() for i in metadata[:, 2]])
     npoints = np.array([i.numpy() for i in metadata[:, 3]])
