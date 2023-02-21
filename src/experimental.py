@@ -32,7 +32,7 @@ from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
 from backend import load_metadata, dual_stage_prediction, predict_rotation
-
+from embeddings import remove_interference_pattern
 import logging
 logger = logging.getLogger('')
 
@@ -1235,7 +1235,7 @@ def phase_retrieval(
 
     psf = data / np.nanmax(data)
     otf = psfgen.fft(psf)
-    otf = psfgen.remove_interference_pattern(
+    otf = remove_interference_pattern(
         psf=psf,
         otf=otf,
         plot=f"{img.with_suffix('')}_phase_retrieval" if plot else None,
