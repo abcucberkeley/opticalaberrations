@@ -10,7 +10,7 @@ from skimage import transform
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from skimage.filters import scharr
+from skimage.filters import scharr, window
 from skimage.restoration import unwrap_phase
 from skimage.feature import peak_local_max
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -380,10 +380,12 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
 
     # get max pixel in the image
     half_length = kernel_size // 2
-    poi = np.unravel_index(np.argmax(blured_psf, axis=None), psf.shape)
+    poi = list(np.unravel_index(np.argmax(blured_psf, axis=None), blured_psf.shape))
 
     # crop a window around the object for template matching
-    poi = np.clip(poi, a_min=half_length, a_max=(psf.shape[0]-half_length)-1)
+    poi[0] = np.clip(poi[0], a_min=half_length, a_max=(psf.shape[0] - half_length) - 1)
+    poi[1] = np.clip(poi[1], a_min=half_length, a_max=(psf.shape[1] - half_length) - 1)
+    poi[2] = np.clip(poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
     init_pos = [p-half_length for p in poi]
     kernel = blured_psf[
         init_pos[0]:init_pos[0]+kernel_size,
@@ -440,7 +442,8 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
         interference_pattern = fft(beads)
         corrected_otf = otf / interference_pattern
 
-        corrected_psf = ifft(corrected_otf)
+        corrected_psf = ifft(corrected_otf) * window(('tukey', 0.8), corrected_otf.shape)
+        corrected_otf = fft(corrected_psf)
         corrected_psf /= np.nanmax(corrected_psf)
 
         if plot is not None:
@@ -486,12 +489,12 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
                 m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='Greys_r', alpha=.66)
                 m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='magma')
                 m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r')
-                m4 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot')
+                m4 = axes[-1, ax].imshow(np.nanmax(corrected_psf**.5, axis=ax), cmap='hot')
 
             for ax, m, label in zip(
                     range(4),
                     [m1, m2, m3, m4],
-                    [f'Inputs (MIP)', 'Kernel', 'Detected POIs', f'Normalized (MIP)']
+                    [f'Inputs (MIP)', 'Kernel', 'Detected POIs', f'Normalized\n(MIP gamma=0.5)']
             ):
                 cax = inset_axes(axes[ax, -1], width="10%", height="100%", loc='center right', borderpad=-3)
                 cb = plt.colorbar(m, cax=cax)
@@ -608,7 +611,8 @@ def compute_emb(
 
         emb = np.angle(emb)
         emb = np.ma.masked_array(emb, mask=~na_mask, fill_value=0)
-        emb = unwrap_phase(emb)
+        if len(np.ma.nonzero(emb)[0]) > 100:
+            emb = unwrap_phase(emb)
         emb = emb.filled(0)
         emb = np.nan_to_num(emb, nan=0)
 

@@ -1,5 +1,6 @@
 import matplotlib
 matplotlib.use('Agg')
+from matplotlib import gridspec
 
 import re
 import json
@@ -32,7 +33,7 @@ from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
 from backend import load_metadata, dual_stage_prediction, predict_rotation
-
+from embeddings import remove_interference_pattern
 import logging
 logger = logging.getLogger('')
 
@@ -984,14 +985,15 @@ def eval_mode(
         for z, a in diff.zernikes.items()
     ]
 
-    coefficients = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
-    coefficients.index.name = 'ansi'
-    coefficients.to_csv(f'{save_path}.csv')
+    # coefficients = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
+    # coefficients.index.name = 'ansi'
+    # coefficients.to_csv(f'{save_path}.csv')
 
-    p2v = utils.peak2valley(diff, wavelength=gen.lam_detection, na=1.0)
+    p2v    = utils.peak2valley(diff, wavelength=gen.lam_detection, na=1.0)
+    p2v_gt = utils.peak2valley(y   , wavelength=gen.lam_detection, na=1.0)
     logger.info(f"File: {save_path.name}")
-    logger.info(f"P2V: {round(p2v, 3)}")
-    return p2v
+    logger.info(f"P2V: {round(p2v, 3)}   GT_P2V: {round(p2v_gt, 3)}")
+    return p2v, p2v_gt, y, p
 
 
 @profile
@@ -1002,6 +1004,7 @@ def eval_dataset(
     postfix: str = 'sample_predictions_zernike_coefficients.csv',
     gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv'
 ):
+
     evaluate = partial(
         eval_mode,
         model_path=model,
@@ -1009,6 +1012,31 @@ def eval_dataset(
         postfix=postfix,
         gt_postfix=gt_postfix,
     )
+
+
+    def worker(file, prediction_path, gt_path, state, results, modes):
+        p2v, p2v_gt, y, p = evaluate(file, prediction_path=prediction_path, gt_path=gt_path)
+        iteration_labels = ['before',
+                            'after0',
+                            'after1',
+                            'after2',
+                            'after3',
+                            'after4',
+                            'after5',
+                            ]
+        results[file] = dict(
+            state=state,
+            iteration_index=iteration_labels.index(state),
+            modes=' mixed with '.join(str(e) for e in modes),
+            p2v_residual=p2v,
+            p2v_gt=p2v_gt,
+            prediction_file=str(prediction_path),
+            ground_truth_file=str(gt_path),
+            model=model,
+            num_model_modes=len(p),
+        )
+        return results
+
 
     active_jobs, jobs = [], []
     manager = mp.Manager()
@@ -1021,7 +1049,7 @@ def eval_dataset(
         state = file.stem.split('_')[0] # state = 'after0'    file='after0_lightsheet_ansi_z03_n02_m-2_amp0p1_test_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0000754431msecAbs_-01x_-01y_-01z_0000t.tif'
         modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
         modes = [m for m in modes if m]
-        logger.info(modes)
+        logger.info(f"ansi_z{modes}")
         logger.info(f"Input: {file.name[:75]}....tif")
 
         if len(modes) > 1:
@@ -1046,35 +1074,47 @@ def eval_dataset(
             logger.warning(f'Prediction not found for: {file.name}')
             prediction_path = None
 
-        def worker(*args):
-            p2v = evaluate(file, prediction_path=prediction_path, gt_path=gt_path)
-            results[file] = dict(
-                state=state,
-                p2v_residual=p2v,
-                prediction_file=str(prediction_path),
-                ground_truth_file=str(gt_path),
-            )
-
-        p = mp.Process(target=worker, args=(file,))
-        p.start()
-        active_jobs.append(p)
-        jobs.append(p)
+        results = worker(file, prediction_path, gt_path, state, results, modes)
         logger.info(f'-'*50)
+        df = pd.DataFrame.from_dict(results.values())
+        df.index.name = 'id'
+        df.to_csv(Path(f'{datadir}/p2v_eval.csv'))
+        logger.info(f'{datadir}/p2v_eval.csv')
 
-        while len(active_jobs) >= 10:
-            for p in active_jobs:
-                if not p.is_alive():
-                    active_jobs.remove(p)
-            time.sleep(10)
+        # Permanently changes the pandas settings
+        pd.set_option('display.max_rows', None)
+        pd.set_option('display.max_columns', None)
+        pd.set_option('display.width', 600)
+        pd.set_option('display.max_colwidth', 20)
 
-    for proc in jobs:
-        proc.join()
+        fig = plt.figure()
+        # set height ratios for subplots
+        gs = gridspec.GridSpec(2, 1, height_ratios=[2, 1])
 
-    df = pd.DataFrame.from_dict(results.values())
-    df.index.name = 'id'
-    df.to_csv(Path(f'{datadir}/eval.csv'))
-    logger.info(f'{datadir}/eval.csv')
+        # the first subplot
+        ax0 = plt.subplot(gs[0])
+        ax1 = plt.subplot(gs[1])
+
+        for mode, grp in df.groupby(['modes']):
+            ax0 = grp.plot(ax=ax0, kind='line', x='iteration_index', y='p2v_gt', label=mode)
+            ax1 = grp.plot(ax=ax1, kind='line', x='iteration_index', y='p2v_residual', label=mode, legend=False)
+
+        ax0.set_ylabel('Remaining abberation\n(P-V in waves)')
+        ax1.set_ylabel('PR-Model\n(P-V in waves)')
+        ax0.set_xlabel('')
+        ax1.set_xlabel('Iteration')
+        plt.setp(ax0.get_xticklabels(), visible=False)
+        ax1.set_xticks(np.arange(0, max(df['iteration_index'])+1, 1.0))
+        ax0.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        ax0.set_title(f"{results[file]['num_model_modes']} mode Model \n {file.parent.stem}")
+        plt.subplots_adjust(hspace=.0)
+        plt.tight_layout()
+        plt.savefig(Path(f'{datadir}/p2v_eval.png'))
+
     print(df)
+
+
+
 
 
 @profile
@@ -1235,7 +1275,7 @@ def phase_retrieval(
 
     psf = data / np.nanmax(data)
     otf = psfgen.fft(psf)
-    otf = psfgen.remove_interference_pattern(
+    otf = remove_interference_pattern(
         psf=psf,
         otf=otf,
         plot=f"{img.with_suffix('')}_phase_retrieval" if plot else None,
