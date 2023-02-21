@@ -131,30 +131,33 @@ class PsfGenerator3D:
         else:
             if isinstance(self.psf_type, str) or isinstance(self.psf_type, Path):
                 with h5py.File(self.psf_type, 'r') as file:
-                    lattice = file.get('DitheredxzPSFCrossSection')[:, 0]
+                    lattice_profile = file.get('DitheredxzPSFCrossSection')[:, 0]
             else:
-                lattice = self.psf_type
+                lattice_profile = self.psf_type
 
-            lattice = rescale(
-                lattice,
+            if lls_defocus_offset is not None:
+                if np.isscalar(lls_defocus_offset):
+                    w = lattice_profile.shape[0] // 2
+                    focal_plane_index = w + np.round(lls_defocus_offset / .0367).astype(int)
+                    lattice_profile = lattice_profile[
+                        max(0, focal_plane_index-w):min(focal_plane_index+w, lattice_profile.shape[0])
+                    ]
+                else:
+                    logger.error(f"Unknown format for `lls_defocus_offset`: {lls_defocus_offset}")
+
+            lattice_profile = rescale(
+                lattice_profile,
                 (.0367/self.dz),
                 order=3,
                 anti_aliasing=True,
             )
 
-            focal_plane_index = lattice.shape[0] // 2
-
-            if lls_defocus_offset is not None:
-                if np.isscalar(lls_defocus_offset):
-                    focal_plane_index += np.round(lls_defocus_offset/self.dz).astype(int)
-                else:
-                    logger.error(f"Unknown format for `lls_defocus_offset`: {lls_defocus_offset}")
-
             w = _psf.shape[0]//2
-            lattice = lattice[
+            focal_plane_index = lattice_profile.shape[0] // 2
+            lattice_profile = lattice_profile[
                 focal_plane_index-w:focal_plane_index+w,
                 np.newaxis,
                 np.newaxis
             ]
 
-            return _psf * lattice
+            return _psf * lattice_profile
