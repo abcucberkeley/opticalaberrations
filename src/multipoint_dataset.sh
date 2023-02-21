@@ -31,9 +31,11 @@ CPUS=4
 MEM='80G'
 TIMELIMIT='1:00:00'
 SHAPE=64
+MIN_LLS_OFFSET=-1
+MAX_LLS_OFFSET=1
 
 MODES=15
-TITLE='spatial_planes_embeddings'
+TITLE='lls_defocus_embeddings'
 DATASET='test'
 
 MODE_DIST='pyramid'
@@ -100,6 +102,8 @@ do
             j="${j} --max_psnr ${xPSNR[$SNR-1]}"
             j="${j} --min_amplitude ${amps1[$AMP-1]}"
             j="${j} --max_amplitude ${amps2[$AMP-1]}"
+            j="${j} --min_lls_defocus_offset $MIN_LLS_OFFSET"
+            j="${j} --max_lls_defocus_offset $MAX_LLS_OFFSET"
             j="${j} --filename ${SAMPLES[$S-1]}"
             j="${j} --x_voxel_size ${xVOXEL}"
             j="${j} --y_voxel_size ${yVOXEL}"

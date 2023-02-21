@@ -70,6 +70,7 @@ def get_sample(
         input_coverage=1.0,
         embedding_option='spatial_planes',
         iotf=None,
+        lls_defocus: bool = False
 ):
     try:
         if isinstance(path, tf.Tensor):
@@ -91,7 +92,8 @@ def get_sample(
         except KeyError:
             lls_defocus_offset = 0.
 
-        zernikes.append(lls_defocus_offset)
+        if lls_defocus:
+            zernikes.append(lls_defocus_offset)
 
         try:
             p2v = hashtbl['peak2peak']
@@ -263,7 +265,8 @@ def collect_dataset(
     embedding_option='spatial_planes',
     snr_range=None,
     iotf=None,
-    metadata=False
+    metadata=False,
+    lls_defocus: bool = False
 ):
     if metadata:
         # amps, snr, peak2peak, npoints, avg_min_distance, filename
@@ -278,7 +281,8 @@ def collect_dataset(
         input_coverage=input_coverage,
         iotf=iotf,
         embedding_option=embedding_option,
-        metadata=metadata
+        metadata=metadata,
+        lls_defocus=lls_defocus
     )
 
     if split is not None:
