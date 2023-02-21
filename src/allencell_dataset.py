@@ -170,7 +170,7 @@ def create_synthetic_sample(
             phi = np.zeros(modes)
             phi[i] = np.random.uniform(min_amplitude, max_amplitude)
 
-            kernel, amps, snr, maxcounts = gen.single_psf(
+            kernel, amps, snr, maxcounts, lls_defocus_offset = gen.single_psf(
                 phi=phi,
                 normed=True,
                 noise=False,
@@ -193,7 +193,7 @@ def create_synthetic_sample(
             )
 
     else:
-        kernel, amps, snr, maxcounts = gen.single_psf(
+        kernel, amps, snr, maxcounts, lls_defocus_offset = gen.single_psf(
             phi=(min_amplitude, max_amplitude),
             normed=True,
             noise=False,

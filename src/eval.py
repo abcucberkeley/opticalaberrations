@@ -736,7 +736,7 @@ def random_samples(
                     )
 
                     # aberrated PSF without noise
-                    psf, y, snr, maxcounts = gen.single_psf(
+                    psf, y, snr, maxcounts, lls_defocus_offset = gen.single_psf(
                         phi=phi,
                         normed=True,
                         noise=False,

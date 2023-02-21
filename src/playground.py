@@ -110,7 +110,7 @@ def create_synthetic_sample(
     imsave(f"{outdir}/{filename}_wavefront.tif", wavefront.wave(size=128))
 
     # aberrated PSF without noise
-    psf, amps, phi, maxcounts = gen.single_psf(
+    psf, amps, estsnr, maxcounts, lls_defocus_offset = gen.single_psf(
         wavefront,
         normed=True,
         noise=False,

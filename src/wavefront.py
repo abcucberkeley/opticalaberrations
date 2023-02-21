@@ -54,8 +54,10 @@ class Wavefront:
         self.signed = signed
         self.rotate = rotate
 
+        # Provide the probabilities (aka weights) over the desired range of modes.
+        # Don't include "prefixed": piston,tip,tilt,defocus.
         if mode_weights == 'pyramid':
-            self.mode_weights = self._pyramid_weights(num_modes=self.modes - len(self.prefixed))   # Provide the probabilities (aka weights) over the desired range of modes.  Don't include "prefixed": piston,tip,tilt,defocus.
+            self.mode_weights = self._pyramid_weights(num_modes=self.modes - len(self.prefixed))
         elif mode_weights == 'decay':
             self.mode_weights = self._decayed_weights(num_modes=self.modes - len(self.prefixed))
         else:

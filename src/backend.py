@@ -807,7 +807,7 @@ def deconstruct(
             cpu_workers=cpu_workers,
         )
         gen = SyntheticPSF(**psfargs)
-        psf, y, psnr, maxcounts = next(gen.generator(debug=True))
+        psf, y, psnr, maxcounts, lls_defocus_offset = next(gen.generator(debug=True))
         p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1)
 
         p = Wavefront(p, lam_detection=wavelength)

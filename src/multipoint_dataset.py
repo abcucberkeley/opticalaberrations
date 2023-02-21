@@ -32,7 +32,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, avg_min_distance, gen, npoints=1, gt=None, realspace=None):
+def save_synthetic_sample(
+    savepath,
+    inputs,
+    amps,
+    snr,
+    maxcounts,
+    p2v,
+    avg_min_distance,
+    gen,
+    lls_defocus_offset=0.,
+    npoints=1,
+    gt=None,
+    realspace=None
+):
 
     if gt is not None:
         imsave(f"{savepath}_gt.tif", gt)
@@ -49,6 +62,7 @@ def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, avg_min_d
             n_modes=int(gen.n_modes),
             order=str(gen.order),
             zernikes=amps.tolist(),
+            lls_defocus_offset=float(lls_defocus_offset),
             snr=int(snr),
             shape=inputs.shape,
             maxcounts=int(maxcounts),
@@ -121,13 +135,15 @@ def sim(
     embedding_option: list = (),
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
+    lls_defocus_offset: Any = 0.
 ):
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
     reference = np.zeros(gen.psf_shape)
 
     # aberrated PSF without noise
-    kernel, amps, phi, maxcounts = gen.single_psf(
+    kernel, amps, estsnr, maxcounts, lls_defocus_offset = gen.single_psf(
         phi=gen.amplitude_ranges,
+        lls_defocus_offset=lls_defocus_offset,
         normed=True,
         noise=False,
         meta=True,
@@ -206,7 +222,8 @@ def sim(
                 gt=reference,
                 gen=gen,
                 realspace=noisy_img,
-                avg_min_distance=avg_min_distance
+                avg_min_distance=avg_min_distance,
+                lls_defocus_offset=lls_defocus_offset
             )
     else:
         save_synthetic_sample(
@@ -219,7 +236,8 @@ def sim(
             avg_min_distance=avg_min_distance,
             p2v=peak2valley(amps, wavelength=gen.lam_detection),
             gt=reference,
-            gen=gen
+            gen=gen,
+            lls_defocus_offset=lls_defocus_offset
         )
 
 
@@ -253,6 +271,8 @@ def create_synthetic_sample(
     embedding_option: list,
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
+    min_lls_defocus_offset: float = 0.,
+    max_lls_defocus_offset: float = 0.,
 ):
     gen = SyntheticPSF(
         order='ansi',
@@ -304,6 +324,7 @@ def create_synthetic_sample(
         normalize=normalize,
         alpha_val=alpha_val,
         phi_val=phi_val,
+        lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset)
     )
 
 
@@ -424,6 +445,16 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--min_lls_defocus_offset", default=0, type=float,
+        help="min value for the offset between the excitation and detection focal plan (microns)"
+    )
+
+    parser.add_argument(
+        "--max_lls_defocus_offset", default=0, type=float,
+        help="max value for the offset between the excitation and detection focal plan (microns)"
+    )
+
+    parser.add_argument(
         "--refractive_index", default=1.33, type=float,
         help="the quotient of the speed of light as it passes through two media"
     )
@@ -482,6 +513,8 @@ def main(args=None):
         rotate=args.rotate,
         min_amplitude=args.min_amplitude,
         max_amplitude=args.max_amplitude,
+        min_lls_defocus_offset=args.min_lls_defocus_offset,
+        max_lls_defocus_offset=args.max_lls_defocus_offset,
         x_voxel_size=args.x_voxel_size,
         y_voxel_size=args.y_voxel_size,
         z_voxel_size=args.z_voxel_size,

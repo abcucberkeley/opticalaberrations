@@ -270,13 +270,14 @@ class SyntheticPSF:
 
     @profile
     def single_psf(
-            self,
-            phi: Any = None,
-            normed: bool = True,
-            noise: bool = False,
-            meta: bool = False,
-            no_phase: bool = False,
-            snr_post_aberration: bool = True
+        self,
+        phi: Any = None,
+        normed: bool = True,
+        noise: bool = False,
+        meta: bool = False,
+        no_phase: bool = False,
+        snr_post_aberration: bool = True,
+        lls_defocus_offset: Any = None
     ):
         """
         Args:
@@ -286,11 +287,13 @@ class SyntheticPSF:
             meta: return extra variables for debugging
             no_phase: used only when meta=true.
             snr_post_aberration: increase photons in aberrated psf to match snr of ideal psf
+            lls_defocus_offset: optional shift of the excitation and detection focal plan (microns)
         """
 
         if not isinstance(phi, Wavefront):
             phi = Wavefront(
-                phi, order=self.order,
+                phi,
+                order=self.order,
                 distribution=self.distribution,
                 mode_weights=self.mode_weights,
                 modes=self.n_modes,
@@ -300,7 +303,10 @@ class SyntheticPSF:
                 lam_detection=self.lam_detection,
             )
 
-        psf = self.psfgen.incoherent_psf(phi)
+        if isinstance(lls_defocus_offset, tuple):
+            lls_defocus_offset = np.random.uniform(*lls_defocus_offset)
+
+        psf = self.psfgen.incoherent_psf(phi, lls_defocus_offset=lls_defocus_offset)
         snr = self._randuniform(self.snr)
 
         if snr_post_aberration:
@@ -332,7 +338,7 @@ class SyntheticPSF:
             if no_phase:
                 phi.amplitudes = np.abs(phi.amplitudes)
 
-            return psf, phi.amplitudes, psnr, maxcount
+            return psf, phi.amplitudes, psnr, maxcount, lls_defocus_offset
         else:
             return psf
 
@@ -365,7 +371,7 @@ class SyntheticPSF:
         )
 
         while True:
-            inputs, amplitudes, psnrs, maxcounts = zip(
+            inputs, amplitudes, psnrs, maxcounts, lls_defocus_offsets = zip(
                 *self.batch(gen, [self.amplitude_ranges]*self.batch_size)
             )
 
@@ -373,8 +379,9 @@ class SyntheticPSF:
             y = np.stack(amplitudes, axis=0)
             psnrs = np.stack(psnrs, axis=0)
             maxcounts = np.stack(maxcounts, axis=0)
+            lls_defocus_offsets = np.stack(lls_defocus_offsets, axis=0)
 
             if debug:
-                yield x, y, psnrs, maxcounts
+                yield x, y, psnrs, maxcounts, lls_defocus_offsets
             else:
                 yield x, y

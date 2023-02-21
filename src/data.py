@@ -30,7 +30,6 @@ def parse_args(args):
     subparsers.add_parser("fov")
     subparsers.add_parser("dist")
     subparsers.add_parser("signal")
-    subparsers.add_parser("psnr")
     subparsers.add_parser("embeddings")
     subparsers.add_parser("zernikes_pyramid")
     subparsers.add_parser("embeddings_pyramid")
@@ -99,9 +98,6 @@ def main(args=None):
 
     elif args.cmd == "embeddings_pyramid":
         simulations.plot_embedding_pyramid()
-
-    elif args.cmd == "psnr":
-        simulations.plot_psnr()
 
     elif args.cmd == "similarity":
         shapes.similarity()

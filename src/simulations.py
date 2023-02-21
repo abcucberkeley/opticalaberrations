@@ -562,7 +562,7 @@ def plot_embeddings(
             phi = np.zeros(n_modes)
             phi[mode] = amp
 
-            psf, amps, snr, maxcounts = gen.single_psf(
+            psf, amps, snr, maxcounts, lls_defocus_offset = gen.single_psf(
                 phi=phi,
                 normed=True,
                 noise=False,
@@ -688,7 +688,7 @@ def plot_rotations(
                 v[z.index_ansi] = amp * np.cos(deg / 360 * 2 * np.pi)
                 v[twin.index_ansi] = amp * np.sin(deg / 360 * 2 * np.pi)
 
-            psf, amps, snr, maxcounts = gen.single_psf(
+            psf, amps, snr, maxcounts, lls_defocus_offset = gen.single_psf(
                 phi=v,
                 normed=True,
                 noise=False,
@@ -825,7 +825,7 @@ def plot_shapes_embeddings(
                 phi = np.zeros(n_modes)
                 phi[mode] = amp
 
-                psf, amps, snr, maxcounts = gen.single_psf(
+                psf, amps, snr, maxcounts, lls_defocus_offset = gen.single_psf(
                     phi=phi,
                     normed=True,
                     noise=False,
@@ -1212,75 +1212,6 @@ def plot_signal(n_modes=55, wavelength=.605):
     signal = pd.concat([signal.drop([0], axis=1), signal[0].apply(pd.Series)], axis=1).reset_index()
     logger.info(signal)
     signal.to_csv('../data/signal.csv')
-
-
-def plot_psnr(psf_cmap='hot', gamma=.75):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-    })
-
-    def psf_slice(xy, zx, zy, vol):
-        vol = vol ** gamma
-        vol = np.nan_to_num(vol)
-        mid_plane = vol.shape[0] // 2
-
-        # m = xy.imshow(vol[mid_plane, :, :], cmap=psf_cmap, vmin=0, vmax=1)
-        # zx.imshow(vol[:, mid_plane, :], cmap=psf_cmap, vmin=0, vmax=1)
-        # zy.imshow(vol[:, :, mid_plane], cmap=psf_cmap, vmin=0, vmax=1)
-
-        levels = np.arange(0, 1.01, .01)
-        m = xy.contourf(vol[mid_plane, :, :], cmap=psf_cmap, levels=levels, vmin=0, vmax=1)
-        zx.contourf(vol[:, mid_plane, :], cmap=psf_cmap, levels=levels, vmin=0, vmax=1)
-        zy.contourf(vol[:, :, mid_plane], cmap=psf_cmap, levels=levels, vmin=0, vmax=1)
-
-        cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-2)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-
-        return m
-
-    scales = sorted(set([int(t) for t in np.logspace(0, 2, num=8)]))
-    logger.info(f"PSNRs: {scales}")
-
-    fig, axes = plt.subplots(len(scales), 3, figsize=(8, 16))
-    for i, snr in tqdm(enumerate(scales), total=len(scales)):
-        psfargs = dict(
-            lam_detection=.605,
-            amplitude_ranges=0,
-            psf_shape=(64, 64, 64),
-            x_voxel_size=.1,
-            y_voxel_size=.1,
-            z_voxel_size=.1,
-            batch_size=10,
-            snr=snr,
-            cpu_workers=-1,
-        )
-        psfs, ys, psnrs, maxcounts = next(SyntheticPSF(**psfargs).generator(debug=True))
-        target_psnr = np.ceil(np.nanquantile(psnrs, .95))
-
-        psf_slice(
-            xy=axes[i, 0],
-            zx=axes[i, 1],
-            zy=axes[i, 2],
-            vol=psfs[np.random.randint(psfs.shape[0]), :, :, :, 0],
-        )
-
-        axes[i, 0].set_title(f'r-SNR: {snr}')
-        axes[i, 1].set_title(f"PSNR: {target_psnr:.2f}")
-        axes[i, 2].set_title(f"$\gamma$: {gamma:.2f}")
-
-    axes[-1, 0].set_xlabel('XY')
-    axes[-1, 1].set_xlabel('ZX')
-    axes[-1, 2].set_xlabel('ZY')
-    plt.tight_layout()
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.3, hspace=.3)
-    plt.savefig(f'../data/noise.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
 
 
 def plot_dmodes(
