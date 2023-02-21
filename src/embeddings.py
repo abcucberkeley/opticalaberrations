@@ -611,7 +611,7 @@ def compute_emb(
 
         emb = np.angle(emb)
         emb = np.ma.masked_array(emb, mask=~na_mask, fill_value=0)
-        if len(np.ma.nonzero(emb)) > 100:
+        if len(np.ma.nonzero(emb)[0]) > 100:
             emb = unwrap_phase(emb)
         emb = emb.filled(0)
         emb = np.nan_to_num(emb, nan=0)
