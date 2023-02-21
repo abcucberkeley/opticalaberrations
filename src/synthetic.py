@@ -290,6 +290,9 @@ class SyntheticPSF:
             lls_defocus_offset: optional shift of the excitation and detection focal plan (microns)
         """
 
+        if isinstance(lls_defocus_offset, tuple):
+            lls_defocus_offset = self._randuniform(lls_defocus_offset)
+
         if not isinstance(phi, Wavefront):
             phi = Wavefront(
                 phi,
@@ -302,9 +305,6 @@ class SyntheticPSF:
                 rotate=self.rotate,
                 lam_detection=self.lam_detection,
             )
-
-        if isinstance(lls_defocus_offset, tuple):
-            lls_defocus_offset = np.random.uniform(*lls_defocus_offset)
 
         psf = self.psfgen.incoherent_psf(phi, lls_defocus_offset=lls_defocus_offset)
         snr = self._randuniform(self.snr)
