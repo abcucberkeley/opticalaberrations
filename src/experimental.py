@@ -6,7 +6,9 @@ import re
 import json
 import time
 from functools import partial
+import fnmatch
 import os
+
 from pathlib import Path
 from subprocess import call
 import multiprocessing as mp
@@ -991,7 +993,7 @@ def eval_mode(
 
     p2v    = utils.peak2valley(diff, wavelength=gen.lam_detection, na=1.0)
     p2v_gt = utils.peak2valley(y   , wavelength=gen.lam_detection, na=1.0)
-    logger.info(f"File: {save_path.name}")
+    logger.info(f"File:  {save_path.name}")
     logger.info(f"P2V: {round(p2v, 3)}   GT_P2V: {round(p2v_gt, 3)}")
     return p2v, p2v_gt, y, p
 
@@ -1005,6 +1007,9 @@ def eval_dataset(
     gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv'
 ):
 
+    MLresultsdir = Path(datadir / 'MLResults')
+    MLresults_list = list(MLresultsdir.glob('**/*'))    # only get directory list once for speed
+
     evaluate = partial(
         eval_mode,
         model_path=model,
@@ -1012,7 +1017,6 @@ def eval_dataset(
         postfix=postfix,
         gt_postfix=gt_postfix,
     )
-
 
     def worker(file, prediction_path, gt_path, state, results, modes):
         p2v, p2v_gt, y, p = evaluate(file, prediction_path=prediction_path, gt_path=gt_path)
@@ -1027,7 +1031,7 @@ def eval_dataset(
         results[file] = dict(
             state=state,
             iteration_index=iteration_labels.index(state),
-            modes=' mixed with '.join(str(e) for e in modes),
+            modes=', '.join(str(e) for e in modes),
             p2v_residual=p2v,
             p2v_gt=p2v_gt,
             prediction_file=str(prediction_path),
@@ -1042,15 +1046,49 @@ def eval_dataset(
     manager = mp.Manager()
     results = manager.dict()
 
+    logger.info('Precheck that all GT and prediction files are present...')
     for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime):  # sort by creation time
         if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
             continue
 
-        state = file.stem.split('_')[0] # state = 'after0'    file='after0_lightsheet_ansi_z03_n02_m-2_amp0p1_test_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0000754431msecAbs_-01x_-01y_-01z_0000t.tif'
+        state = file.stem.split('_')[0]
+        modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
+        modes = [m for m in modes if m]
+
+        if len(modes) > 1:
+            prefix = f"ansi_"
+            for m in modes:
+                prefix += f"z{m}*"
+        else:
+            mode = modes[0]
+            prefix = f"ansi_z{mode}*"
+
+        gt_path = None
+        for gtfile in MLresults_list:
+            if fnmatch.fnmatch(gtfile.name, f'{state}_widefield_{prefix}_{gt_postfix}'):
+                gt_path = gtfile
+                continue
+        if gt_path is None:
+            expected_GT_tif = list(datadir.glob(f'{state}_widefield_{prefix}_*.tif'))[0]
+            logger.warning(f'GT not found for: {expected_GT_tif}')
+
+        prediction_path = None
+        for predfile in MLresults_list:
+            if fnmatch.fnmatch(predfile.name, f'{state}_lightsheet_{prefix}_{postfix}'):
+                prediction_path = predfile
+                continue
+        if prediction_path is None: logger.warning(f'Prediction not found for: {file.name}')
+
+    logger.info('Beginning evaluations')
+    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime):  # sort by creation time
+        if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
+            continue
+
+        state = file.stem.split('_')[0]
         modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
         modes = [m for m in modes if m]
         logger.info(f"ansi_z{modes}")
-        logger.info(f"Input: {file.name[:75]}....tif")
+        logger.info(f"Input: {file.name[:75]}... {file.suffix}")
 
         if len(modes) > 1:
             prefix = f"ansi_"
@@ -1061,25 +1099,24 @@ def eval_dataset(
             prefix = f"ansi_z{mode}*"
 
         try:
-            gt_path = list(datadir.rglob(f'{state}_widefield_{prefix}_{gt_postfix}'))[0]
+            gt_path = list(MLresultsdir.glob(f'{state}_widefield_{prefix}_{gt_postfix}'))[0]
             logger.info(f"GT:    {gt_path.name}")
         except IndexError:
             logger.warning(f'GT not found for: {file.name}')
             continue
 
         try:
-            prediction_path = list(datadir.rglob(f'{state}_lightsheet_{prefix}_{postfix}'))[0]
+            prediction_path = list(MLresultsdir.glob(f'{state}_lightsheet_{prefix}_{postfix}'))[0]
             logger.info(f"Pred:  {prediction_path.name}")
         except IndexError:
             logger.warning(f'Prediction not found for: {file.name}')
             prediction_path = None
 
         results = worker(file, prediction_path, gt_path, state, results, modes)
-        logger.info(f'-'*50)
         df = pd.DataFrame.from_dict(results.values())
         df.index.name = 'id'
-        df.to_csv(Path(f'{datadir}/p2v_eval.csv'))
-        logger.info(f'{datadir}/p2v_eval.csv')
+        df.to_csv(Path(f'{datadir}\\p2v_eval.csv'))
+        logger.info(f'{datadir}\\p2v_eval.csv')
 
         # Permanently changes the pandas settings
         pd.set_option('display.max_rows', None)
@@ -1087,7 +1124,7 @@ def eval_dataset(
         pd.set_option('display.width', 600)
         pd.set_option('display.max_colwidth', 20)
 
-        fig = plt.figure()
+        fig = plt.figure(figsize=(11,8))
         # set height ratios for subplots
         gs = gridspec.GridSpec(2, 1, height_ratios=[2, 1])
 
@@ -1105,11 +1142,14 @@ def eval_dataset(
         ax1.set_xlabel('Iteration')
         plt.setp(ax0.get_xticklabels(), visible=False)
         ax1.set_xticks(np.arange(0, max(df['iteration_index'])+1, 1.0))
+        ax1.set_xlim(0, max(df['iteration_index']))
+        ax0.set_xlim(0, max(df['iteration_index']))
         ax0.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         ax0.set_title(f"{results[file]['num_model_modes']} mode Model \n {file.parent.stem}")
         plt.subplots_adjust(hspace=.0)
         plt.tight_layout()
         plt.savefig(Path(f'{datadir}/p2v_eval.png'))
+        logger.info(f'-' * 50)
 
     print(df)
 
@@ -1280,6 +1320,7 @@ def phase_retrieval(
         otf=otf,
         plot=f"{img.with_suffix('')}_phase_retrieval" if plot else None,
         max_num_peaks=1,
+        windowing=False,
     )
     data = np.int_(psfgen.ifft(otf) * np.nanmax(data))
 
