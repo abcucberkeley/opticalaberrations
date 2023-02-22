@@ -365,7 +365,7 @@ def remove_phase_ramp(masked_phase, plot):
 
 
 @profile
-def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kernel_size=15, max_num_peaks=100):
+def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kernel_size=15, max_num_peaks=100, windowing=True):
     """
     Normalize interference pattern from the given FFT
     Args:
@@ -441,9 +441,12 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
 
         interference_pattern = fft(beads)
         corrected_otf = otf / interference_pattern
+        if windowing:
+            corrected_psf = ifft(corrected_otf) * window(('tukey', 0.8), corrected_otf.shape)
+            corrected_otf = fft(corrected_psf)
+        else:
+            corrected_psf = ifft(corrected_otf)
 
-        corrected_psf = ifft(corrected_otf) * window(('tukey', 0.8), corrected_otf.shape)
-        corrected_otf = fft(corrected_psf)
         corrected_psf /= np.nanmax(corrected_psf)
 
         if plot is not None:
@@ -743,7 +746,7 @@ def fourier_embeddings(
             alpha[alpha > 1] = 1
 
         if remove_interference:
-            otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois)
+            otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois, windowing=True)
 
         phi = compute_emb(
             otf,
