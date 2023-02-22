@@ -36,7 +36,7 @@ MAX_LLS_OFFSET=1
 
 MODES=15
 TITLE='lls_defocus_embeddings'
-DATASET='test'
+DATASET='train'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"

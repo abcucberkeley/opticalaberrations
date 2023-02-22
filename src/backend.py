@@ -1165,7 +1165,8 @@ def train(
         roi: Any = None,
         refractive_index: float = 1.33,
         no_phase: bool = False,
-        plot_patches: bool = False
+        plot_patches: bool = False,
+        lls_defocus: bool = False
 ):
     network = network.lower()
     opt = opt.lower()
@@ -1180,7 +1181,7 @@ def train(
             name='OpticalNet',
             roi=roi,
             patches=patch_size,
-            modes=pmodes,
+            modes=pmodes+1 if lls_defocus else pmodes,
             depth_scalar=depth_scalar,
             width_scalar=width_scalar,
             activation=activation,
@@ -1193,7 +1194,7 @@ def train(
             name='OpticalTransformer',
             roi=roi,
             patches=patch_size,
-            modes=pmodes,
+            modes=pmodes+1 if lls_defocus else pmodes,
             na_det=1.0,
             refractive_index=refractive_index,
             psf_type=psf_type,
@@ -1211,7 +1212,7 @@ def train(
     elif network == 'opticalresnet':
         model = opticalresnet.OpticalResNet(
             name='OpticalResNet',
-            modes=pmodes,
+            modes=pmodes+1 if lls_defocus else pmodes,
             na_det=1.0,
             refractive_index=refractive_index,
             lambda_det=wavelength,
@@ -1229,7 +1230,7 @@ def train(
     elif network == 'baseline':
         model = baseline.Baseline(
             name='Baseline',
-            modes=pmodes,
+            modes=pmodes+1 if lls_defocus else pmodes,
             depth_scalar=depth_scalar,
             width_scalar=width_scalar,
             activation=activation,
@@ -1237,12 +1238,12 @@ def train(
     elif network == 'otfnet':
         model = otfnet.OTFNet(
             name='OTFNet',
-            modes=pmodes
+            modes=pmodes+1 if lls_defocus else pmodes
         )
     elif network == 'phasenet':
         model = PhaseNet(
             name='PhaseNet',
-            modes=pmodes
+            modes=pmodes+1 if lls_defocus else pmodes
         )
     else:
         model = load(Path(network))
@@ -1397,6 +1398,7 @@ def train(
             samplelimit=samplelimit,
             max_amplitude=max_amplitude,
             no_phase=no_phase,
+            lls_defocus=lls_defocus,
             snr_range=(min_psnr, max_psnr)
         )
 

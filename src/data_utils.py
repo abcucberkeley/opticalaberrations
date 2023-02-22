@@ -212,9 +212,11 @@ def load_dataset(
         desc='Loading dataset hashtable'
     )
     files = [f for f in files if f is not None]
+    logger.info(f'Registered files: {len(files)}')
 
     if samplelimit is not None:
         files = np.random.choice(files, samplelimit, replace=False).tolist()
+        logger.info(f'Selected files: {len(files)}')
 
     dataset_size = len(files) * multiplier
     ds = tf.data.Dataset.from_tensor_slices(files)
