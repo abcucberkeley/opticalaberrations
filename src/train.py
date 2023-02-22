@@ -170,6 +170,11 @@ def parse_args(args):
         help='toggle to use exclude phase from the model embeddings'
     )
 
+    train_parser.add_argument(
+        '--lls_defocus', action='store_true',
+        help='toggle to predict the offset between the excitation and detection focal plan '
+    )
+
     return train_parser.parse_known_args(args)[0]
 
 
@@ -221,7 +226,7 @@ def main(args=None):
             fixedlr=args.fixedlr,
             warmup=args.warmup,
             decay_period=args.decay_period,
-            pmodes=args.modes+1 if args.pmodes is None else args.pmodes,
+            pmodes=args.modes if args.pmodes is None else args.pmodes,
             min_psnr=args.min_psnr,
             max_psnr=args.max_psnr,
             max_amplitude=args.max_amplitude,
@@ -231,6 +236,7 @@ def main(args=None):
             depth_scalar=args.depth_scalar,
             width_scalar=args.width_scalar,
             no_phase=args.no_phase,
+            lls_defocus=args.lls_defocus,
         )
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")

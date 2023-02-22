@@ -5,7 +5,7 @@ yVOXEL=.108
 zVOXEL=.200
 LAMBDA=.510
 SHAPE=64
-DATASET='spatial_planes_embeddings'
+DATASET='lls_defocus_embeddings'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/x108-y108-z200/i$SHAPE/z15"
 BATCH=512
@@ -19,7 +19,7 @@ do
   do
     for M in phase/opticalnet
     do
-      MODEL="../models/new/$DATASET/z$MODES/$M"
+      MODEL="../models/new/spatial_planes_embeddings/z$MODES/$M"
 
       python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
       --task "$MODEL --eval_sign $EVALSIGN modes" \
