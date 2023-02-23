@@ -165,6 +165,7 @@ class SyntheticPSF:
                 anti_aliasing=True,
             )
         self.iotf = self._normalize(self.iotf, self.iotf)
+        self.iotf *= self.na_mask()
 
     def _randuniform(self, var):
         """Returns a random number (uniform chance) in the range provided by var. If var is a scalar, var is simply returned.
