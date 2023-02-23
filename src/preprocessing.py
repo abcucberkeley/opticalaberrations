@@ -12,11 +12,8 @@ import seaborn as sns
 import zarr
 import h5py
 import scipy.io
-import matplotlib.colors as mcolors
-from matplotlib import gridspec
 from tqdm.contrib import itertools
 from tifffile import imread, imsave
-from skimage import transform
 from scipy.spatial import KDTree
 from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.pyplot as plt
@@ -28,6 +25,8 @@ from skimage.morphology import ball
 from skimage.morphology import dilation
 from canny import CannyEdgeDetector3D
 from scipy.ndimage import zoom
+
+from vis import plot_mip
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -74,6 +73,7 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
     else:
         return np.pad(psf[tuple(slicer)], pad, **kwargs)
 
+
 def remove_background_noise(image, read_noise_bias: float = 5):
     """ A simple function to remove background noise from a given image """
     mode = int(st.mode(image, axis=None).mode[0])
@@ -111,32 +111,63 @@ def prep_sample(
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+    })
+
     sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
 
     if debug is not None:
         debug = Path(debug)
-        if debug.is_dir():
-            debug.mkdir(parents=True, exist_ok=True)
-        fig, axes = plt.subplots(2, ncols=4, figsize=(9, 6))
+        if debug.is_dir(): debug.mkdir(parents=True, exist_ok=True)
 
-        axes[0, 1].set_title(f"{str(sample.shape)} @ {sample_voxel_size}")
-        axes[0, 0].set_ylabel('Input (MIP) [$\gamma$=0.5]')
-        m = axes[0, 0].imshow(np.max(sample, axis=0)**0.5, cmap='hot')
-        axes[0, 1].imshow(np.max(sample, axis=1)**0.5, cmap='hot')
-        axes[0, 2].imshow(np.max(sample, axis=2)**0.5, cmap='hot')
-        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-2)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-        axes[0, 3].hist(sample.flatten(), bins=201, range=(90,290), label='Input')
-        axes[0, 3].yaxis.tick_right()
-        axes[0, 3].set_xlim(0,290)
+        fig, axes = plt.subplots(2, ncols=4, figsize=(12, 5))
+
+        axes[0, 1].set_title(f"{str(sample.shape)}")
+        m = plot_mip(
+            vol=sample,
+            xy=axes[0, 0],
+            xz=axes[0, 1],
+            yz=axes[0, 2],
+            dxy=sample_voxel_size[-1],
+            dz=sample_voxel_size[0],
+            label='Input (MIP) [$\gamma$=0.5]'
+        )
+
+        sns.histplot(
+            sample.flatten(),
+            bins=200,
+            ax=axes[0, -1],
+            label='Input',
+            color='C0',
+        )
+        axes[0, -1].yaxis.tick_right()
+        axes[0, -1].yaxis.set_label_position("right")
+        axes[0, -1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+        axes[0, -1].legend(frameon=False, loc='upper right', ncol=1)
+        axes[0, -1].set_yscale('symlog')
 
     if remove_background:
         sample = remove_background_noise(sample)
 
         if debug is not None:
-            axes[0, 3].hist(sample.flatten(), bins=201, range=(1,201), label='After background subtraction')
-            axes[0, 3].yaxis.tick_right()
+            sns.histplot(
+                sample.flatten(),
+                bins=200,
+                ax=axes[0, -1],
+                label='No background',
+                color='C1',
+                alpha=.5
+            )
+            axes[0, -1].yaxis.tick_right()
+            axes[0, -1].yaxis.set_label_position("right")
+            axes[0, -1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+            axes[0, -1].legend(frameon=False, loc='upper right', ncol=1)
+            axes[0, -1].set_yscale('symlog')
 
     if normalize:
         sample /= np.nanmax(sample)
@@ -157,7 +188,6 @@ def prep_sample(
         sample *= mask
 
     if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-        print(f"resample by {sample_voxel_size[2] / model_voxel_size[2]}")
         sample = zoom(
             sample,
             (
@@ -168,18 +198,32 @@ def prep_sample(
             order=3,
             grid_mode=False,
         )
-        print(f'Resizing X by {sample_voxel_size[2] / model_voxel_size[2]}')
         sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
 
     if debug is not None:
-        axes[1, 1].set_title(f"{str(sample.shape)} @ {model_voxel_size}")
-        axes[1, 0].set_ylabel('Processed (MIP) [$\gamma$=0.5]')
-        m = axes[1, 0].imshow(np.max(sample, axis=0)**0.5, cmap='hot')
-        axes[1, 1].imshow(np.max(sample, axis=1)**0.5, cmap='hot')
-        axes[1, 2].imshow(np.max(sample, axis=2)**0.5, cmap='hot')
-        cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-2)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+        axes[1, 1].set_title(f"{str(sample.shape)}")
+        m = plot_mip(
+            vol=sample,
+            xy=axes[1, 0],
+            xz=axes[1, 1],
+            yz=axes[1, 2],
+            dxy=model_voxel_size[-1],
+            dz=model_voxel_size[0],
+            label='Processed (MIP) [$\gamma$=0.5]'
+        )
+
+        sns.histplot(
+            sample.flatten(),
+            bins=200,
+            ax=axes[1, -1],
+            color='dimgrey',
+        )
+        axes[1, -1].yaxis.tick_right()
+        axes[1, -1].yaxis.set_label_position("right")
+        axes[1, -1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+        axes[1, -1].set_yscale('symlog')
+
+        plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.3, wspace=0.15)
         plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return sample

@@ -32,6 +32,47 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
+def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2):
+    def formatter(x, pos, dd):
+        return f'{np.ceil(x * dd).astype(int):1d}'
+
+    vol = vol ** gamma
+    vol = np.nan_to_num(vol)
+
+    m = xy.imshow(np.max(vol, axis=0), cmap=cmap)
+    xz.imshow(np.max(vol, axis=1), cmap=cmap)
+    yz.imshow(np.max(vol, axis=2), cmap=cmap)
+
+    cax = inset_axes(xy, width="10%", height="100%", loc='center left', borderpad=-5)
+    cb = plt.colorbar(m, cax=cax)
+    cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+    cax.set_ylabel(f"{label}")
+    cax.yaxis.set_label_position("left")
+
+    xy.yaxis.set_ticks_position('right')
+    xy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
+    xy.yaxis.set_major_formatter(partial(formatter, dd=dxy))
+    xy.xaxis.set_major_locator(plt.MaxNLocator(6))
+    xy.yaxis.set_major_locator(plt.MaxNLocator(6))
+
+    xz.yaxis.set_ticks_position('right')
+    xz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
+    xz.yaxis.set_major_formatter(partial(formatter, dd=dz))
+    xz.xaxis.set_major_locator(plt.MaxNLocator(6))
+    xz.yaxis.set_major_locator(plt.MaxNLocator(6))
+
+    yz.yaxis.set_ticks_position('right')
+    yz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
+    yz.yaxis.set_major_formatter(partial(formatter, dd=dz))
+    yz.xaxis.set_major_locator(plt.MaxNLocator(6))
+    yz.yaxis.set_major_locator(plt.MaxNLocator(6))
+
+    xy.set_xlabel('XY ($\mu$m)')
+    yz.set_xlabel('XZ ($\mu$m)')
+    xz.set_xlabel('YZ ($\mu$m)')
+    return m
+
+
 def plot_wavefront(
     iax,
     phi,
@@ -145,8 +186,6 @@ def diagnostic_assessment(
         transform_to_align_to_DM = False,
 ):
     if pltstyle is not None: plt.style.use(pltstyle)
-    def formatter(x, pos, dd):
-        return f'{np.ceil(x * dd).astype(int):1d}'
 
     def wavefront(iax, phi, label='', nas=(.65, .75, .85, .95)):
         def na_mask(radius):
@@ -179,101 +218,6 @@ def diagnostic_assessment(
         err = '\n'.join([f'$P2V ({{NA={na:.2f}}})$:\t{p:.2f} $\lambda$' for na, p in zip(nas, pcts)])
         iax.set_title(f'{label} [{p2v:.2f} $\lambda$]\n{err}')
         return mat
-
-    def psf_slice(xy, zx, zy, vol, label=''):
-        if vol.shape[0] == 6:
-            vmin, vmax, vcenter, step = 0, 2, 1, .1
-            highcmap = plt.get_cmap('YlOrRd', 256)
-            lowcmap = plt.get_cmap('YlGnBu_r', 256)
-            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            cmap = mcolors.ListedColormap(cmap)
-
-            inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=xy, wspace=0.1, hspace=0.1)
-            ax = fig.add_subplot(inner[0])
-            ax.imshow(vol[0], cmap=cmap, vmin=vmin, vmax=vmax)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_ylabel('Input')
-            ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-            ax = fig.add_subplot(inner[1])
-            ax.imshow(vol[3], cmap='coolwarm', vmin=-1, vmax=1)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xlabel(r'$\varpupil = \angle \tau$')
-            xy.axis('off')
-
-            inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=zx, wspace=0.1, hspace=0.1)
-            ax = fig.add_subplot(inner[0])
-            ax.imshow(vol[1], cmap=cmap, vmin=vmin, vmax=vmax)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-
-            ax = fig.add_subplot(inner[1])
-            ax.imshow(vol[4], cmap='coolwarm', vmin=-1, vmax=1)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xlabel(r'$\varpupil = \angle \tau$')
-            zx.axis('off')
-
-            inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=zy, wspace=0.1, hspace=0.1)
-            ax = fig.add_subplot(inner[0])
-            m = ax.imshow(vol[2], cmap=cmap, vmin=vmin, vmax=vmax)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-
-            ax = fig.add_subplot(inner[1])
-            ax.imshow(vol[5], cmap='coolwarm', vmin=-1, vmax=1)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xlabel(r'$\varpupil = \angle \tau$')
-            zy.axis('off')
-
-            cax = inset_axes(zy, width="10%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-            cax.yaxis.set_label_position("right")
-
-        elif vol.shape[0] == 3:
-            m = xy.imshow(vol[0], cmap='Spectral_r', vmin=0, vmax=1)
-            zx.imshow(vol[1], cmap='Spectral_r', vmin=0, vmax=1)
-            zy.imshow(vol[2], cmap='Spectral_r', vmin=0, vmax=1)
-        else:
-            vol = vol ** gamma
-            vol = np.nan_to_num(vol)
-
-            m = xy.imshow(np.max(vol, axis=0), cmap=psf_cmap, vmin=0, vmax=1)
-            zx.imshow(np.max(vol, axis=1), cmap=psf_cmap, vmin=0, vmax=1)
-            zy.imshow(np.max(vol, axis=2), cmap=psf_cmap, vmin=0, vmax=1)
-
-            cax = inset_axes(xy, width="10%", height="100%", loc='center left', borderpad=-5)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-            cax.set_ylabel(f"{label}")
-            cax.yaxis.set_label_position("left")
-
-        xy.yaxis.set_ticks_position('right')
-        xy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
-        xy.yaxis.set_major_formatter(partial(formatter, dd=dxy))
-        xy.xaxis.set_major_locator(plt.MaxNLocator(6))
-        xy.yaxis.set_major_locator(plt.MaxNLocator(6))
-
-        zx.yaxis.set_ticks_position('right')
-        zx.xaxis.set_major_formatter(partial(formatter, dd=dxy))
-        zx.yaxis.set_major_formatter(partial(formatter, dd=dz))
-        zx.xaxis.set_major_locator(plt.MaxNLocator(6))
-        zx.yaxis.set_major_locator(plt.MaxNLocator(6))
-
-        zy.yaxis.set_ticks_position('right')
-        zy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
-        zy.yaxis.set_major_formatter(partial(formatter, dd=dz))
-        zy.xaxis.set_major_locator(plt.MaxNLocator(6))
-        zy.yaxis.set_major_locator(plt.MaxNLocator(6))
-
-        return m
 
     plt.rcParams.update({
         'font.size': 12,
@@ -370,16 +314,16 @@ def diagnostic_assessment(
     ax_yz.set_title(f"Max photon count: {maxcounts:.0f}")
 
     if transform_to_align_to_DM:
-        psf = np.transpose(np.rot90(psf, k=2, axes=(1,2)), axes=(0,2,1))    # 180 rotate, then transpose
-    psf_slice(ax_xy, ax_xz, ax_yz, psf, label='Input (MIP)')
-    psf_slice(ax_pxy, ax_pxz, ax_pyz, predicted_psf, label='Predicted')
-    psf_slice(ax_cxy, ax_cxz, ax_cyz, corrected_psf, label='Corrected')
+        psf = np.transpose(np.rot90(psf, k=2, axes=(1, 2)), axes=(0, 2, 1))    # 180 rotate, then transpose
+    plot_mip(xy=ax_xy, xz=ax_xz, yz=ax_yz, vol=psf, label='Input (MIP)')
+    plot_mip(xy=ax_pxy, xz=ax_pxz, yz=ax_pyz, vol=predicted_psf, label='Predicted')
+    plot_mip(xy=ax_cxy, xz=ax_cxz, yz=ax_cyz, vol=corrected_psf, label='Corrected')
 
     if gt_psf is not None:
         ax_xygt = fig.add_subplot(gs[3, 0])
         ax_xzgt = fig.add_subplot(gs[3, 1])
         ax_yzgt = fig.add_subplot(gs[3, 2])
-        psf_slice(ax_xygt, ax_xzgt, ax_yzgt, gt_psf, label='Simulated')
+        plot_mip(xy=ax_xygt, xz=ax_xzgt, yz=ax_yzgt, vol=gt_psf, label='Simulated')
 
     ax_zcoff.barh(
         np.arange(len(pred.amplitudes)) - bar_width / 2,

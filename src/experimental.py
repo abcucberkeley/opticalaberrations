@@ -406,6 +406,7 @@ def predict_sample(
         remove_background=True,
         normalize=True,
         edge_filter=False,
+        debug=img
     )
 
     inputs = np.expand_dims(inputs, axis=0)
