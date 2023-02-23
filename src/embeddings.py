@@ -6,7 +6,6 @@ import sys
 from typing import Any, Union
 
 import numpy as np
-from skimage import transform
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -21,8 +20,8 @@ import matplotlib.patches as patches
 from astropy import convolution
 from cupyx.scipy.ndimage import rotate
 from skspatial.objects import Plane, Points
+
 from utils import resize_with_crop_or_pad
-from scipy.ndimage import zoom
 
 try:
     import cupy as cp
@@ -578,26 +577,8 @@ def compute_emb(
     na_mask = np.where(na_mask >= threshold, na_mask, 0.).astype(bool)
 
     if otf.shape != iotf.shape:
-        real = zoom(
-            np.real(otf),
-            (
-                iotf.shape[0] / otf.shape[0],
-                iotf.shape[1] / otf.shape[1],
-                iotf.shape[2] / otf.shape[2],
-            ),
-            order=3,
-            grid_mode=False,
-        )
-        imag = zoom(
-            np.imag(otf),
-            (
-                iotf.shape[0] / otf.shape[0],
-                iotf.shape[1] / otf.shape[1],
-                iotf.shape[2] / otf.shape[2],
-            ),
-            order=3,
-            grid_mode=False,
-        )
+        real = resize_with_crop_or_pad(np.real(otf), crop_shape=iotf.shape)
+        imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=iotf.shape)
         otf = real + 1j * imag
 
     if val == 'real':
@@ -675,6 +656,7 @@ def fourier_embeddings(
         embedding_option: str = 'spatial_planes',
         edge_filter: bool = False,
         digital_rotations: Any = None,
+        poi_shape: tuple = (64, 64)
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -697,6 +679,7 @@ def fourier_embeddings(
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
         edge_filter: a toggle for running an edge filter pass on the alpha embeddings
         digital_rotations: optional digital rotations to the embeddings
+        poi_shape: shape for the planes of interests (POIs)
         embedding_option: type of embedding to use.
             Capitalizing on the radial symmetry of the FFT,
             we have a few options to minimize the size of the embedding.
@@ -761,6 +744,9 @@ def fourier_embeddings(
         )
 
         emb = np.concatenate([alpha, phi], axis=0)
+
+    if emb.shape != poi_shape:
+        emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *poi_shape))
 
     if plot is not None:
         plt.style.use("default")

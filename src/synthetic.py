@@ -8,7 +8,6 @@ from typing import Any, Union
 
 import numpy as np
 from pathlib import Path
-from scipy.ndimage import zoom
 from functools import partial
 import multiprocessing as mp
 from typing import Iterable
@@ -152,18 +151,6 @@ class SyntheticPSF:
 
         self.iotf = np.abs(self.fft(self.ipsf, padsize=None))
         self.iotf = np.nan_to_num(self.iotf, nan=0)
-
-        if self.iotf.shape != self.psf_shape:
-            self.iotf = zoom(
-                self.iotf,
-                (
-                    self.psf_shape[0] / self.iotf.shape[0],
-                    self.psf_shape[1] / self.iotf.shape[1],
-                    self.psf_shape[2] / self.iotf.shape[2],
-                ),
-                order=3,
-                grid_mode=False,
-            )
         self.iotf = self._normalize(self.iotf, self.iotf)
         self.iotf *= self.na_mask()
 

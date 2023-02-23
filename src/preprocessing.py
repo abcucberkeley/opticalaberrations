@@ -18,13 +18,10 @@ from scipy.spatial import KDTree
 from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from matplotlib.ticker import FormatStrFormatter
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from line_profiler_pycharm import profile
 from skimage.morphology import ball
 from skimage.morphology import dilation
 from canny import CannyEdgeDetector3D
-from scipy.ndimage import zoom
 
 from vis import plot_mip
 
@@ -37,12 +34,12 @@ logger = logging.getLogger(__name__)
 
 
 @profile
-def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
+def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, **kwargs):
     """Crops or pads array.  Output will have dimensions "crop_shape". No interpolation. Padding type
     can be customized with **kwargs, like "reflect" to get mirror pad.
 
     Args:
-        psf (np.array): N-dim array
+        img (np.array): N-dim array
         crop_shape (Sequence): desired output dimensions
         **kwargs: arguments to pass to np.pad
 
@@ -50,7 +47,7 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
         N-dim array with desired output shape
     """
     rank = len(crop_shape)
-    psf_shape = psf.shape[1:-1] if len(psf.shape) == 5 else psf.shape
+    psf_shape = img.shape[1:-1] if len(img.shape) == 5 else img.shape
     index = [[0, psf_shape[d]] for d in range(rank)]
     pad = [[0, 0] for _ in range(rank)]
     slicer = [slice(None)] * rank
@@ -65,13 +62,13 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
 
         slicer[i] = slice(index[i][0], index[i][1])
 
-    if len(psf.shape) == 5:
-        if psf.shape[0] != 1:
-            return np.array([np.pad(s[slicer], pad, **kwargs) for s in np.squeeze(psf)])[..., np.newaxis]
+    if len(img.shape) == 5:
+        if img.shape[0] != 1:
+            return np.array([np.pad(s[slicer], pad, **kwargs) for s in np.squeeze(img)])[..., np.newaxis]
         else:
-            return np.pad(np.squeeze(psf)[slicer], pad, **kwargs)[np.newaxis, ..., np.newaxis]
+            return np.pad(np.squeeze(img)[slicer], pad, **kwargs)[np.newaxis, ..., np.newaxis]
     else:
-        return np.pad(psf[tuple(slicer)], pad, **kwargs)
+        return np.pad(img[tuple(slicer)], pad, **kwargs)
 
 
 def remove_background_noise(image, read_noise_bias: float = 5):
@@ -127,8 +124,7 @@ def prep_sample(
 
         fig, axes = plt.subplots(2, ncols=4, figsize=(12, 5))
 
-        axes[0, 1].set_title(f"{str(sample.shape)}")
-        m = plot_mip(
+        plot_mip(
             vol=sample,
             xy=axes[0, 0],
             xz=axes[0, 1],
@@ -188,27 +184,23 @@ def prep_sample(
         sample *= mask
 
     if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-        sample = zoom(
+        sample = resize_with_crop_or_pad(
             sample,
-            (
-                sample_voxel_size[0] / model_voxel_size[0],
-                sample_voxel_size[1] / model_voxel_size[1],
-                sample_voxel_size[2] / model_voxel_size[2],
-            ),
-            order=3,
-            grid_mode=False,
+            crop_shape=(
+                int(sample.shape[0] * model_voxel_size[0] / sample_voxel_size[0]),
+                int(sample.shape[1] * model_voxel_size[1] / sample_voxel_size[1]),
+                int(sample.shape[2] * model_voxel_size[2] / sample_voxel_size[2]),
+            )
         )
-        sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
 
     if debug is not None:
-        axes[1, 1].set_title(f"{str(sample.shape)}")
-        m = plot_mip(
+        plot_mip(
             vol=sample,
             xy=axes[1, 0],
             xz=axes[1, 1],
             yz=axes[1, 2],
-            dxy=model_voxel_size[-1],
-            dz=model_voxel_size[0],
+            dxy=sample_voxel_size[-1],
+            dz=sample_voxel_size[0],
             label='Processed (MIP) [$\gamma$=0.5]'
         )
 
