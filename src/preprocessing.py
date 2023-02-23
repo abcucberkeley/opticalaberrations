@@ -27,7 +27,7 @@ from skimage.filters import difference_of_gaussians, window
 from skimage.morphology import ball
 from skimage.morphology import erosion, opening, dilation
 from canny import CannyEdgeDetector3D
-
+from scipy.ndimage import zoom
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -218,19 +218,26 @@ def prep_sample(
         debug = Path(debug)
         if debug.is_dir():
             debug.mkdir(parents=True, exist_ok=True)
-        fig, axes = plt.subplots(2, 3, figsize=(9, 6))
+        fig, axes = plt.subplots(2, ncols=4, figsize=(9, 6))
 
         axes[0, 1].set_title(f"{str(sample.shape)} @ {sample_voxel_size}")
-        axes[0, 0].set_ylabel('Input (MIP)')
-        m = axes[0, 0].imshow(np.max(sample, axis=0), cmap='hot')
-        axes[0, 1].imshow(np.max(sample, axis=1), cmap='hot')
-        axes[0, 2].imshow(np.max(sample, axis=2), cmap='hot')
+        axes[0, 0].set_ylabel('Input (MIP) [$\gamma$=0.5]')
+        m = axes[0, 0].imshow(np.max(sample, axis=0)**0.5, cmap='hot')
+        axes[0, 1].imshow(np.max(sample, axis=1)**0.5, cmap='hot')
+        axes[0, 2].imshow(np.max(sample, axis=2)**0.5, cmap='hot')
         cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-2)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+        axes[0, 3].hist(sample.flatten(), bins=201, range=(90,290), label='Input')
+        axes[0, 3].yaxis.tick_right()
+        axes[0, 3].set_xlim(0,290)
 
     if remove_background:
         sample = remove_background_noise(sample)
+
+        if debug is not None:
+            axes[0, 3].hist(sample.flatten(), bins=201, range=(1,201), label='After background subtraction')
+            axes[0, 3].yaxis.tick_right()
 
     if normalize:
         sample /= np.nanmax(sample)
@@ -251,7 +258,7 @@ def prep_sample(
         sample *= mask
 
     if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-        sample = transform.rescale(
+        sample = zoom(
             sample,
             (
                 sample_voxel_size[0] / model_voxel_size[0],
@@ -259,16 +266,17 @@ def prep_sample(
                 sample_voxel_size[2] / model_voxel_size[2],
             ),
             order=3,
-            anti_aliasing=True,
+            grid_mode=False,
         )
+        print(f'Resizing X by {sample_voxel_size[2] / model_voxel_size[2]}')
         sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
 
     if debug is not None:
         axes[1, 1].set_title(f"{str(sample.shape)} @ {model_voxel_size}")
-        axes[1, 0].set_ylabel('Processed (MIP)')
-        m = axes[1, 0].imshow(np.max(sample, axis=0), cmap='hot')
-        axes[1, 1].imshow(np.max(sample, axis=1), cmap='hot')
-        axes[1, 2].imshow(np.max(sample, axis=2), cmap='hot')
+        axes[1, 0].set_ylabel('Processed (MIP) [$\gamma$=0.5]')
+        m = axes[1, 0].imshow(np.max(sample, axis=0)**0.5, cmap='hot')
+        axes[1, 1].imshow(np.max(sample, axis=1)**0.5, cmap='hot')
+        axes[1, 2].imshow(np.max(sample, axis=2)**0.5, cmap='hot')
         cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-2)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
