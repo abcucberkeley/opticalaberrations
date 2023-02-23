@@ -114,50 +114,6 @@ def generate_fourier_embeddings(
 
 
 @profile
-def predict(
-    model: tf.keras.Model,
-    inputs: tf.data.Dataset,
-    psfgen: SyntheticPSF,
-    batch_size: int = 128,
-    ignore_modes: list = (0, 1, 2, 4),
-    threshold: float = 0.,
-    verbose: bool = True,
-    desc: str = 'MiniBatch-probabilistic-predictions',
-):
-    """
-    Average predictions and compute stdev
-
-    Args:
-        model: pre-trained keras model
-        inputs: encoded tokens to be processed
-        psfgen: Synthetic PSF object
-        ignore_modes: list of modes to ignore
-        batch_size: number of samples per batch
-        threshold: set predictions below threshold to zero (wavelength)
-        desc: test to display for the progressbar
-        verbose: a toggle for progress bar
-
-    Returns:
-        average prediction, stdev
-    """
-    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
-    ignore_modes = list(map(int, ignore_modes))
-    logger.info(f"Ignoring modes: {ignore_modes}")
-    logger.info(f"[BS={batch_size}] {desc}")
-    inputs = inputs.batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
-
-    for i in inputs.take(1):
-        logger.info(f"Input: {i.numpy().shape}")
-
-    preds = model.predict(inputs, batch_size=batch_size, verbose=verbose)
-
-    preds[:, ignore_modes] = 0.
-    preds[np.abs(preds) <= threshold] = 0.
-
-    return preds
-
-
-@profile
 def iter_evaluate(
     datapath,
     modelpath,
@@ -251,38 +207,16 @@ def iter_evaluate(
             inputs = tf.data.Dataset.from_tensor_slices(ids)
             inputs = inputs.map(lambda image_id: tf.py_function(updated_embeddings, [image_id], tf.float32))
 
-        for i in inputs.take(1):
-            logger.info(f"dataset: {i.numpy().shape}")
-
-        ps = predict(
+        ps, stdev = backend.predict_dataset(
             model,
             inputs,
             psfgen=gen,
             batch_size=batch_size,
             threshold=threshold,
-            desc=f'Predicting (iter #{k})'
+            desc=f'Predicting (iter #{k})',
+            digital_rotations=rotations if digital_rotations else None,
+            plot_rotations=False,
         )
-
-        if digital_rotations:
-            eval_mode_rotations = partial(
-                backend.eval_rotation,
-                rotations=rotations,
-                psfgen=gen,
-                threshold=threshold,
-                no_phase=no_phase,
-                plot=True
-            )
-
-            ps = np.stack(np.split(ps, rotations.shape[0]), axis=1)
-
-            jobs = utils.multiprocess(
-                eval_mode_rotations,
-                ps,
-                cores=-1,
-                desc="Evaluate predictions"
-            )
-            jobs = np.array([list(zip(*j)) for j in jobs])
-            ps, stdev = jobs[..., 0], jobs[..., -1]
 
         if eval_sign == 'positive_only':
             ys = np.abs(ys)

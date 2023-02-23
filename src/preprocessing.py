@@ -14,6 +14,7 @@ import h5py
 import scipy.io
 import matplotlib.colors as mcolors
 from matplotlib import gridspec
+from tqdm.contrib import itertools
 from tifffile import imread, imsave
 from skimage import transform
 from scipy.spatial import KDTree
@@ -23,9 +24,8 @@ import matplotlib.patches as patches
 from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from line_profiler_pycharm import profile
-from skimage.filters import difference_of_gaussians, window
 from skimage.morphology import ball
-from skimage.morphology import erosion, opening, dilation
+from skimage.morphology import dilation
 from canny import CannyEdgeDetector3D
 
 
@@ -432,7 +432,6 @@ def find_roi(
     pois = pois.head(num_rois)
     pois.to_csv(f"{plot}_stats.csv")
 
-    logger.info(f"Predicted points of interest")
     pois = pois[['z', 'y', 'x']].values[:num_rois]
     widths = [w // 2 for w in window_size]
 
@@ -529,11 +528,11 @@ def get_tiles(
 
     if savepath is not None:
         savepath.mkdir(parents=True, exist_ok=True)
+
         i = 0
-        for z in range(zplanes):
-            for y in range(nrows):
-                for x in range(ncols):
-                    imsave(savepath/f"z{z}-y{y}-x{x}.tif", windows[i])
-                    i += 1
+        for z, y, x in itertools.product(range(zplanes), range(nrows), range(ncols), desc=f'Processing ROIs'):
+            tile = f"z{0}-y{y}-x{x}"
+            imsave(savepath / f"{tile}.tif", windows[i])
+            i += 1
 
     return windows, zplanes, nrows, ncols
