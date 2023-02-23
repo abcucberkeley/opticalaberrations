@@ -27,7 +27,7 @@ from line_profiler_pycharm import profile
 from skimage.morphology import ball
 from skimage.morphology import dilation
 from canny import CannyEdgeDetector3D
-
+from scipy.ndimage import zoom
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -73,107 +73,6 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
             return np.pad(np.squeeze(psf)[slicer], pad, **kwargs)[np.newaxis, ..., np.newaxis]
     else:
         return np.pad(psf[tuple(slicer)], pad, **kwargs)
-
-
-@profile
-def resize(
-    vol,
-    voxel_size: Sequence,
-    sample_voxel_size: Sequence = (.1, .1, .1),
-    minimum_shape: tuple = (64, 64, 64),
-    debug: Any = None
-):
-    """ Up/down-scales volume to output voxel size using 3rd order interpolation. 
-    Output volume is padded if array has fewer voxels than "minimum_shape". 
-
-    Args:
-        vol (_type_): 3D volume
-        voxel_size (3 element Sequence): Output voxel size
-        sample_voxel_size (3 element Sequence, optional): Input voxel size. Defaults to (.1, .1, .1).
-        minimum_shape (tuple, optional): Pad array if vol (after resizing) is too small. Defaults to (64, 64, 64).
-        debug : "True" to show figure, "not None" will write {debug}_rescaling.svg file. Defaults to None.
-    """
-    def plot(cls, img):
-        if img.shape[0] == 6:
-            vmin, vmax, vcenter, step = 0, 2, 1, .1
-            highcmap = plt.get_cmap('YlOrRd', 256)
-            lowcmap = plt.get_cmap('YlGnBu_r', 256)
-            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            cmap = mcolors.ListedColormap(cmap)
-
-            for i in range(3):
-                inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=cls[i], wspace=0.1, hspace=0.1)
-                ax = fig.add_subplot(inner[0])
-                m = ax.imshow(img[i], cmap=cmap, vmin=vmin, vmax=vmax)
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-                ax = fig.add_subplot(inner[1])
-                ax.imshow(img[i + 3], cmap='coolwarm', vmin=vmin, vmax=vmax)
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_xlabel(r'$\varphi = \angle \tau$')
-                cls[i].axis('off')
-        else:
-            m = cls[0].imshow(np.max(img, axis=0)**.5, cmap='hot', vmin=0, vmax=1)
-            cls[1].imshow(np.max(img, axis=1)**.5, cmap='hot', vmin=0, vmax=1)
-            cls[2].imshow(np.max(img, axis=2)**.5, cmap='hot', vmin=0, vmax=1)
-            # m = cls[0].imshow(img[img.shape[0] // 2, :, :]**.5, cmap='hot', vmin=0, vmax=1)
-            # cls[1].imshow(img[:, img.shape[1] // 2, :]**.5, cmap='hot', vmin=0, vmax=1)
-            # cls[2].imshow(img[:, :, img.shape[2] // 2]**.5, cmap='hot', vmin=0, vmax=1)
-
-        cax = inset_axes(cls[2], width="10%", height="100%", loc='center right', borderpad=-2)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-
-    resampled_vol = transform.rescale(
-        vol,
-        (
-            sample_voxel_size[0] / voxel_size[0],
-            sample_voxel_size[1] / voxel_size[1],
-            sample_voxel_size[2] / voxel_size[2],
-        ),
-        order=3,
-        anti_aliasing=True,
-    )
-
-    mode = np.abs(st.mode(resampled_vol, axis=None).mode[0])
-    resized_vol = resize_with_crop_or_pad(
-        resampled_vol,
-        crop_shape=[s if s >= m else m for s, m in zip(resampled_vol.shape, minimum_shape)],
-        constant_values=mode
-    )
-
-    if debug is not None:
-        debug = Path(debug)
-        if debug.is_dir():
-            debug.mkdir(parents=True, exist_ok=True)
-
-        fig, axes = plt.subplots(3, 3, figsize=(11, 11))
-
-        axes[0, 1].set_title(f"{str(vol.shape)} @ {sample_voxel_size}")
-        axes[0, 0].set_ylabel('Input (MIP)')
-        plot(axes[0, :], vol)
-
-        axes[1, 1].set_title(f"{str(resampled_vol.shape)} @ {voxel_size}")
-        axes[1, 0].set_ylabel('Resampled (MIP)')
-        plot(axes[1, :], resampled_vol)
-        imsave(f'{debug}_resampled_psf.tif', resampled_vol)
-
-        axes[2, 1].set_title(str(resized_vol.shape))
-        axes[2, 0].set_ylabel('Resized (MIP)')
-        plot(axes[2, :], resized_vol)
-        imsave(f'{debug}_resized_psf.tif', resized_vol)
-
-        if debug == True:
-            plt.show()
-        else:
-            plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-    return resized_vol
-
 
 def remove_background_noise(image, read_noise_bias: float = 5):
     """ A simple function to remove background noise from a given image """
@@ -251,7 +150,8 @@ def prep_sample(
         sample *= mask
 
     if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-        sample = transform.rescale(
+        print(f"resample by {sample_voxel_size[2] / model_voxel_size[2]}")
+        sample = zoom(
             sample,
             (
                 sample_voxel_size[0] / model_voxel_size[0],
@@ -259,7 +159,8 @@ def prep_sample(
                 sample_voxel_size[2] / model_voxel_size[2],
             ),
             order=3,
-            anti_aliasing=True,
+            grid_mode=False,
+
         )
         sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
 
