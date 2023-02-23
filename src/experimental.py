@@ -510,8 +510,9 @@ def predict_rois(
     outdir = Path(f"{img.with_suffix('')}_rois")
     outdir.mkdir(exist_ok=True, parents=True)
 
-    rois = preprocessing.find_roi(
+    rois, ztiles, nrows, ncols = preprocessing.find_roi(
         img,
+        savepath=outdir,
         pois=pois,
         window_size=tuple(3*[window_size]),
         plot=f"{outdir}_predictions" if plot else None,
@@ -523,16 +524,6 @@ def predict_rois(
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
     )
 
-    ncols = int(np.ceil(len(rois) / 5))
-    nrows = int(np.ceil(len(rois) / ncols))
-
-    i = 0
-    for y, x in itertools.product(range(nrows), range(ncols), desc=f'Processing ROIs'):
-        tile = f"z{0}-y{y}-x{x}"
-        imsave(outdir / f"{tile}.tif", rois[i])
-        rois[i] = outdir / f"{tile}.tif"
-        i += 1
-
     predict(
         rois=rois,
         outdir=outdir,
@@ -541,7 +532,7 @@ def predict_rois(
         prediction_threshold=prediction_threshold,
         batch_size=batch_size,
         wavelength=wavelength,
-        ztiles=1,
+        ztiles=ztiles,
         nrows=nrows,
         ncols=ncols,
         ignore_modes=ignore_modes,
@@ -561,7 +552,7 @@ def predict_tiles(
     wavelength: float = .605,
     num_predictions: int = 1,
     batch_size: int = 1,
-    window_size: int = 64,
+    window_size: int = 128,
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
     sign_threshold: float = .9,
@@ -581,14 +572,7 @@ def predict_tiles(
     )
 
     logger.info(f"Loading file: {img.name}")
-    sample = load_sample(
-        img,
-        model_voxel_size=premodelpsfgen.voxel_size,
-        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-        remove_background=True,
-        normalize=True,
-        edge_filter=True,
-    )
+    sample = np.squeeze(get_image(img).astype(float))
     logger.info(f"Sample: {sample.shape}")
 
     outdir = Path(f"{img.with_suffix('')}_tiles")
@@ -600,15 +584,6 @@ def predict_tiles(
         strides=window_size,
         window_size=tuple(3*[window_size]),
     )
-    logger.info(f"Tiles: {rois.shape}")
-
-    if plot:
-        vis.tiles(
-            data=sample,
-            strides=window_size,
-            window_size=window_size,
-            save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
-        )
 
     predict(
         rois=rois,
@@ -627,6 +602,14 @@ def predict_tiles(
         plot_rotations=plot_rotations,
         sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
+
+    if plot:
+        vis.tiles(
+            data=sample,
+            strides=window_size,
+            window_size=window_size,
+            save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
+        )
 
 
 @profile
@@ -657,13 +640,13 @@ def aggregate_predictions(
         model_pred,
         index_col=0,
         header=0,
-        usecols=lambda col: col == 'ansi' or col.startswith('p')
+        usecols=lambda col: col == 'ansi' or col.startswith('z')
     )
     original_pcols = predictions.columns
 
     if ignore_tile is not None:
         for tile in ignore_tile:
-            col = f"p-{tile}"
+            col = tile
             if col in predictions.columns:
                 predictions.loc[:, col] = np.zeros_like(predictions.index)
             else:

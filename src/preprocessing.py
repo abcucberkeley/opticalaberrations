@@ -280,6 +280,7 @@ def prep_sample(
 @profile
 def find_roi(
     path: Union[Path, np.array],
+    savepath: Path,
     window_size: tuple = (64, 64, 64),
     plot: Any = None,
     num_rois: Any = None,
@@ -289,9 +290,12 @@ def find_roi(
     pois: Any = None,
     max_neighbor: int = 5,
     voxel_size: tuple = (.200, .108, .108),
-    savepath: Any = None,
     timestamp: int = 17
 ):
+    ztiles = 1
+    ncols = int(np.ceil(num_rois / 5))
+    nrows = int(np.ceil(num_rois / ncols))
+    savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
@@ -472,8 +476,10 @@ def find_roi(
         plt.savefig(f'{plot}_mips.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     rois = []
-    logger.info(f"Locating ROIs: {[pois.shape[0]]}")
-    for p in range(pois.shape[0]):
+    for p, (z, y, x) in enumerate(itertools.product(
+        range(ztiles), range(nrows), range(ncols),
+        desc=f"Locating tiles: {[pois.shape[0]]}")
+    ):
         start = [
             pois[p, s] - widths[s] if pois[p, s] >= widths[s] else 0
             for s in range(3)
@@ -485,22 +491,22 @@ def find_roi(
         r = dataset[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
 
         if r.size != 0:
-            rois.append(r)
+            tile = f"z{0}-y{y}-x{x}"
+            imsave(savepath / f"{tile}.tif", r)
+            rois.append(savepath / f"{tile}.tif")
 
-            if savepath is not None:
-                savepath.mkdir(parents=True, exist_ok=True)
-                imsave(savepath / f"roi_{p:02}.tif", r)
-
-    return np.array(rois)
+    return np.array(rois), ztiles, nrows, ncols
 
 
 @profile
 def get_tiles(
     path: Union[Path, np.array],
+    savepath: Path,
     window_size: tuple = (64, 64, 64),
     strides: int = 64,
-    savepath: Any = None,
 ):
+    savepath.mkdir(parents=True, exist_ok=True)
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -520,19 +526,17 @@ def get_tiles(
         logger.error(f"Unknown file format: {path.name}")
         return
 
-    logger.info(f"Tiling...")
-
     windows = sliding_window_view(dataset, window_shape=window_size)[::strides, ::strides, ::strides]
-    zplanes, nrows, ncols = windows.shape[:3]
+    ztiles, nrows, ncols = windows.shape[:3]
     windows = np.reshape(windows, (-1, *window_size))
 
-    if savepath is not None:
-        savepath.mkdir(parents=True, exist_ok=True)
+    rois = []
+    for i, (z, y, x) in enumerate(itertools.product(
+        range(ztiles), range(nrows), range(ncols),
+        desc=f"Locating tiles: {[windows.shape[0]]}")
+    ):
+        tile = f"z{0}-y{y}-x{x}"
+        imsave(savepath / f"{tile}.tif", windows[i])
+        rois.append(savepath / f"{tile}.tif")
 
-        i = 0
-        for z, y, x in itertools.product(range(zplanes), range(nrows), range(ncols), desc=f'Processing ROIs'):
-            tile = f"z{0}-y{y}-x{x}"
-            imsave(savepath / f"{tile}.tif", windows[i])
-            i += 1
-
-    return windows, zplanes, nrows, ncols
+    return np.array(rois), ztiles, nrows, ncols
