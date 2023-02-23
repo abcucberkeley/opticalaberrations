@@ -1132,9 +1132,18 @@ def eval_dataset(
         ax0 = plt.subplot(gs[0])
         ax1 = plt.subplot(gs[1])
 
+        n = 10
+        #ax0.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
+        #ax1.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
+        plotnumber=0
         for mode, grp in df.groupby(['modes']):
-            ax0 = grp.plot(ax=ax0, kind='line', x='iteration_index', y='p2v_gt', label=mode)
-            ax1 = grp.plot(ax=ax1, kind='line', x='iteration_index', y='p2v_residual', label=mode, legend=False)
+            plotnumber += 1
+            if plotnumber > n: linestyle = 'dashed'
+            elif plotnumber > n * 2: linestyle = 'dotted'
+            elif plotnumber > n * 3: linestyle = 'dashdot'
+            else: linestyle = 'solid'
+            ax0 = grp.plot(ax=ax0, kind='line', x='iteration_index', y='p2v_gt', label=mode, linestyle=linestyle)
+            ax1 = grp.plot(ax=ax1, kind='line', x='iteration_index', y='p2v_residual', label=mode, legend=False, linestyle=linestyle)
 
         ax0.set_ylabel('Remaining abberation\n(P-V in waves)')
         ax1.set_ylabel('PR-Model\n(P-V in waves)')
@@ -1148,7 +1157,7 @@ def eval_dataset(
         ax0.set_title(f"{results[file]['num_model_modes']} mode Model \n {file.parent.stem}")
         plt.subplots_adjust(hspace=.0)
         plt.tight_layout()
-        plt.savefig(Path(f'{datadir}/p2v_eval.png'))
+        plt.savefig(Path(f'{datadir}/p2v_eval_{file.parent.stem}.png'))
         logger.info(f'-' * 50)
 
     print(df)
