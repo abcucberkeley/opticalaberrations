@@ -22,6 +22,7 @@ from astropy import convolution
 from cupyx.scipy.ndimage import rotate
 from skspatial.objects import Plane, Points
 from utils import resize_with_crop_or_pad
+from scipy.ndimage import zoom
 
 try:
     import cupy as cp
@@ -577,7 +578,7 @@ def compute_emb(
     na_mask = np.where(na_mask >= threshold, na_mask, 0.).astype(bool)
 
     if otf.shape != iotf.shape:
-        real = transform.rescale(
+        real = zoom(
             np.real(otf),
             (
                 iotf.shape[0] / otf.shape[0],
@@ -585,9 +586,9 @@ def compute_emb(
                 iotf.shape[2] / otf.shape[2],
             ),
             order=3,
-            anti_aliasing=True,
+            grid_mode=False,
         )
-        imag = transform.rescale(
+        imag = zoom(
             np.imag(otf),
             (
                 iotf.shape[0] / otf.shape[0],
@@ -595,7 +596,7 @@ def compute_emb(
                 iotf.shape[2] / otf.shape[2],
             ),
             order=3,
-            anti_aliasing=True,
+            grid_mode=False,
         )
         otf = real + 1j * imag
 

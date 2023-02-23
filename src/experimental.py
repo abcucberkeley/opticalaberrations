@@ -4,7 +4,6 @@ from matplotlib import gridspec
 
 import re
 import json
-import time
 from functools import partial
 import fnmatch
 import os
@@ -21,6 +20,7 @@ from tifffile import imread, imsave
 import seaborn as sns
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from tqdm.contrib import itertools
 from line_profiler_pycharm import profile
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import pyotf.phaseretrieval as pr
@@ -29,13 +29,14 @@ from pyotf.zernike import osa2degrees
 
 import utils
 import vis
+import backend
 import preprocessing
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
-from backend import load_metadata, dual_stage_prediction, predict_rotation
-from embeddings import remove_interference_pattern
+from embeddings import remove_interference_pattern, fourier_embeddings
+
 import logging
 logger = logging.getLogger('')
 
@@ -219,7 +220,7 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
 
 @profile
 def load_sample(
-    data: Path,
+    data: Union[tf.Tensor, Path, str],
     model_voxel_size: tuple,
     sample_voxel_size: tuple,
     remove_background: bool = True,
@@ -253,68 +254,87 @@ def load_sample(
         logger.warning(e)
 
 
+def preprocess(
+    file: [tf.Tensor, Path],
+    psfgen: SyntheticPSF,
+    freq_strength_threshold: float = .01,
+    sample_voxel_size: tuple = (.2, .108, .108),
+    digita_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    plot: bool = True,
+    no_phase: bool = True,
+):
+    if isinstance(file, tf.Tensor):
+        file = Path(str(file.numpy(), "utf-8"))
+
+    sample = load_sample(
+        file,
+        model_voxel_size=psfgen.voxel_size,
+        sample_voxel_size=sample_voxel_size,
+        remove_background=True,
+        normalize=True,
+        edge_filter=True,
+        debug=file.with_suffix('') if plot else None,
+    )
+
+    return fourier_embeddings(
+        sample,
+        iotf=psfgen.iotf,
+        plot=file.with_suffix('') if plot else None,
+        no_phase=no_phase,
+        remove_interference=True,
+        embedding_option=psfgen.embedding_option,
+        freq_strength_threshold=freq_strength_threshold,
+        digital_rotations=digita_rotations
+    )
+
+
 @profile
 def predict(
     rois: np.ndarray,
     outdir: Path,
     model: tf.keras.Model,
     psfgen: SyntheticPSF,
-    wavelength: float = .605,
-    prev: Any = None,
-    estimate_sign_with_decon: bool = False,
+    wavelength: float = .510,
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
     batch_size: int = 1,
+    sample_voxel_size: tuple = (.2, .108, .108),
+    digita_rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
     plot: bool = True,
     plot_rotations: bool = False,
     ztiles: int = 1,
     nrows: int = 1,
     ncols: int = 1,
 ):
-    i = 0
-    predictions = pd.DataFrame([])
     no_phase = True if model.input_shape[1] == 3 else False
 
-    with tqdm(total=rois.shape[0]) as pbar:
-        for z in range(ztiles):
-            for y in range(nrows):
-                for x in range(ncols):
-                    tile = f"p-z{z}-y{y}-x{x}"
-                    pbar.set_description(f"Processing [{tile}]")
+    inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(rois))
+    generate_fourier_embeddings = partial(
+        preprocess,
+        psfgen=psfgen,
+        freq_strength_threshold=freq_strength_threshold,
+        sample_voxel_size=sample_voxel_size,
+        digita_rotations=digita_rotations,
+        plot=plot,
+        no_phase=no_phase,
+    )
+    inputs = inputs.map(lambda x: tf.py_function(generate_fourier_embeddings, [x], tf.float32))
 
-                    if no_phase:
-                        p, std, pchange = dual_stage_prediction(
-                            model,
-                            inputs=rois[i][np.newaxis, ..., np.newaxis],
-                            threshold=prediction_threshold,
-                            gen=psfgen,
-                            modelgen=psfgen,
-                            batch_size=batch_size,
-                            prev_pred=prev,
-                            ignore_modes=ignore_modes,
-                            freq_strength_threshold=freq_strength_threshold,
-                            # plot=Path(f"{outdir.with_suffix('')}_predictions_{tile}") if plot else None,
-                        )
-                    else:
-                        p, std = predict_rotation(
-                            model,
-                            inputs=rois[i][np.newaxis, ..., np.newaxis],
-                            psfgen=psfgen,
-                            no_phase=False,
-                            batch_size=batch_size,
-                            threshold=prediction_threshold,
-                            ignore_modes=ignore_modes,
-                            freq_strength_threshold=freq_strength_threshold,
-                            plot=outdir/tile if plot else None,
-                            plot_rotations=outdir/tile if plot_rotations else None,
-                        )
+    ps, stdev = backend.predict_dataset(
+        model,
+        inputs,
+        psfgen=psfgen,
+        batch_size=batch_size,
+        threshold=prediction_threshold,
+        desc=f'Predicting ROIs in ({outdir.name})',
+        digital_rotations=digita_rotations,
+        ignore_modes=ignore_modes,
+        plot_rotations=[f.with_suffix('') for f in rois] if plot_rotations else None,
+    )
 
-                    predictions[tile] = p.flatten()
-                    i += 1
-                    pbar.update(i)
-
-    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
+    predictions = pd.DataFrame(ps.T, columns=[f.with_suffix('').name for f in rois])
+    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('z')]
     predictions['mean'] = predictions[pcols].mean(axis=1)
     predictions['median'] = predictions[pcols].median(axis=1)
     predictions['min'] = predictions[pcols].min(axis=1)
@@ -392,7 +412,7 @@ def predict_sample(
     no_phase = True if model.input_shape[1] == 3 else False
 
     if no_phase:
-        p, std, pchange = dual_stage_prediction(
+        p, std, pchange = backend.dual_stage_prediction(
             model,
             inputs=inputs,
             threshold=prediction_threshold,
@@ -409,7 +429,7 @@ def predict_sample(
             plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
         )
     else:
-        p, std = predict_rotation(
+        p, std = backend.predict_rotation(
             model,
             inputs=inputs,
             psfgen=modelpsfgen,
@@ -490,8 +510,9 @@ def predict_rois(
     outdir = Path(f"{img.with_suffix('')}_rois")
     outdir.mkdir(exist_ok=True, parents=True)
 
-    rois = preprocessing.find_roi(
+    rois, ztiles, nrows, ncols = preprocessing.find_roi(
         img,
+        savepath=outdir,
         pois=pois,
         window_size=tuple(3*[window_size]),
         plot=f"{outdir}_predictions" if plot else None,
@@ -501,22 +522,7 @@ def predict_rois(
         max_neighbor=20,
         min_intensity=min_intensity,
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-        # savepath=outdir,
     )
-
-    rescale = partial(
-        load_sample,
-        model_voxel_size=premodelpsfgen.voxel_size,
-        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-        remove_background=True,
-        normalize=True,
-        edge_filter=True,
-    )
-    rois = np.array([rescale(r, debug=outdir/f"roi_{i:02}.svg") for i, r in enumerate(rois)])
-
-    logger.info(f"ROIs: {rois.shape}")
-    ncols = int(np.ceil(len(rois) / 5))
-    nrows = int(np.ceil(len(rois) / ncols))
 
     predict(
         rois=rois,
@@ -526,15 +532,14 @@ def predict_rois(
         prediction_threshold=prediction_threshold,
         batch_size=batch_size,
         wavelength=wavelength,
-        prev=prev,
-        ztiles=1,
+        ztiles=ztiles,
         nrows=nrows,
         ncols=ncols,
         ignore_modes=ignore_modes,
-        estimate_sign_with_decon=estimate_sign_with_decon,
         freq_strength_threshold=freq_strength_threshold,
         plot=plot,
         plot_rotations=plot_rotations,
+        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
 
 
@@ -547,7 +552,7 @@ def predict_tiles(
     wavelength: float = .605,
     num_predictions: int = 1,
     batch_size: int = 1,
-    window_size: int = 64,
+    window_size: int = 128,
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
     sign_threshold: float = .9,
@@ -567,18 +572,11 @@ def predict_tiles(
     )
 
     logger.info(f"Loading file: {img.name}")
-    sample = load_sample(
-        img,
-        model_voxel_size=premodelpsfgen.voxel_size,
-        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-        remove_background=True,
-        normalize=True,
-        edge_filter=True,
-    )
+    sample = np.squeeze(get_image(img).astype(float))
+    logger.info(f"Sample: {sample.shape}")
+
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
-
-    logger.info(f"Sample: {sample.shape}")
 
     rois, ztiles, nrows, ncols = preprocessing.get_tiles(
         sample,
@@ -586,15 +584,6 @@ def predict_tiles(
         strides=window_size,
         window_size=tuple(3*[window_size]),
     )
-    logger.info(f"Tiles: {rois.shape}")
-
-    if plot:
-        vis.tiles(
-            data=sample,
-            strides=window_size,
-            window_size=window_size,
-            save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
-        )
 
     predict(
         rois=rois,
@@ -604,8 +593,6 @@ def predict_tiles(
         prediction_threshold=prediction_threshold,
         batch_size=batch_size,
         wavelength=wavelength,
-        prev=prev,
-        estimate_sign_with_decon=estimate_sign_with_decon,
         ztiles=ztiles,
         nrows=nrows,
         ncols=ncols,
@@ -613,7 +600,16 @@ def predict_tiles(
         freq_strength_threshold=freq_strength_threshold,
         plot=plot,
         plot_rotations=plot_rotations,
+        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
+
+    if plot:
+        vis.tiles(
+            data=sample,
+            strides=window_size,
+            window_size=window_size,
+            save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
+        )
 
 
 @profile
@@ -638,19 +634,19 @@ def aggregate_predictions(
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
 
-    modelpsfgen = load_metadata(model) if preloaded is None else preloaded.modelpsfgen
+    modelpsfgen = backend.load_metadata(model) if preloaded is None else preloaded.modelpsfgen
 
     predictions = pd.read_csv(
         model_pred,
         index_col=0,
         header=0,
-        usecols=lambda col: col == 'ansi' or col.startswith('p')
+        usecols=lambda col: col == 'ansi' or col.startswith('z')
     )
     original_pcols = predictions.columns
 
     if ignore_tile is not None:
         for tile in ignore_tile:
-            col = f"p-{tile}"
+            col = tile
             if col in predictions.columns:
                 predictions.loc[:, col] = np.zeros_like(predictions.index)
             else:
@@ -898,7 +894,7 @@ def eval_mode(
     noisy_img = np.squeeze(get_image(input_path).astype(float))
     maxcounts = np.max(noisy_img)
     psnr = np.sqrt(maxcounts)
-    gen = load_metadata(
+    gen = backend.load_metadata(
         model_path,
         snr=psnr,
         psf_shape=noisy_img.shape,

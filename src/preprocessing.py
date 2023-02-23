@@ -14,6 +14,7 @@ import h5py
 import scipy.io
 import matplotlib.colors as mcolors
 from matplotlib import gridspec
+from tqdm.contrib import itertools
 from tifffile import imread, imsave
 from skimage import transform
 from scipy.spatial import KDTree
@@ -23,9 +24,8 @@ import matplotlib.patches as patches
 from matplotlib.ticker import FormatStrFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from line_profiler_pycharm import profile
-from skimage.filters import difference_of_gaussians, window
 from skimage.morphology import ball
-from skimage.morphology import erosion, opening, dilation
+from skimage.morphology import dilation
 from canny import CannyEdgeDetector3D
 from scipy.ndimage import zoom
 
@@ -73,107 +73,6 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
             return np.pad(np.squeeze(psf)[slicer], pad, **kwargs)[np.newaxis, ..., np.newaxis]
     else:
         return np.pad(psf[tuple(slicer)], pad, **kwargs)
-
-
-@profile
-def resize(
-    vol,
-    voxel_size: Sequence,
-    sample_voxel_size: Sequence = (.1, .1, .1),
-    minimum_shape: tuple = (64, 64, 64),
-    debug: Any = None
-):
-    """ Up/down-scales volume to output voxel size using 3rd order interpolation. 
-    Output volume is padded if array has fewer voxels than "minimum_shape". 
-
-    Args:
-        vol (_type_): 3D volume
-        voxel_size (3 element Sequence): Output voxel size
-        sample_voxel_size (3 element Sequence, optional): Input voxel size. Defaults to (.1, .1, .1).
-        minimum_shape (tuple, optional): Pad array if vol (after resizing) is too small. Defaults to (64, 64, 64).
-        debug : "True" to show figure, "not None" will write {debug}_rescaling.svg file. Defaults to None.
-    """
-    def plot(cls, img):
-        if img.shape[0] == 6:
-            vmin, vmax, vcenter, step = 0, 2, 1, .1
-            highcmap = plt.get_cmap('YlOrRd', 256)
-            lowcmap = plt.get_cmap('YlGnBu_r', 256)
-            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            cmap = mcolors.ListedColormap(cmap)
-
-            for i in range(3):
-                inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=cls[i], wspace=0.1, hspace=0.1)
-                ax = fig.add_subplot(inner[0])
-                m = ax.imshow(img[i], cmap=cmap, vmin=vmin, vmax=vmax)
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-                ax = fig.add_subplot(inner[1])
-                ax.imshow(img[i + 3], cmap='coolwarm', vmin=vmin, vmax=vmax)
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_xlabel(r'$\varphi = \angle \tau$')
-                cls[i].axis('off')
-        else:
-            m = cls[0].imshow(np.max(img, axis=0)**.5, cmap='hot', vmin=0, vmax=1)
-            cls[1].imshow(np.max(img, axis=1)**.5, cmap='hot', vmin=0, vmax=1)
-            cls[2].imshow(np.max(img, axis=2)**.5, cmap='hot', vmin=0, vmax=1)
-            # m = cls[0].imshow(img[img.shape[0] // 2, :, :]**.5, cmap='hot', vmin=0, vmax=1)
-            # cls[1].imshow(img[:, img.shape[1] // 2, :]**.5, cmap='hot', vmin=0, vmax=1)
-            # cls[2].imshow(img[:, :, img.shape[2] // 2]**.5, cmap='hot', vmin=0, vmax=1)
-
-        cax = inset_axes(cls[2], width="10%", height="100%", loc='center right', borderpad=-2)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-
-    resampled_vol = transform.rescale(
-        vol,
-        (
-            sample_voxel_size[0] / voxel_size[0],
-            sample_voxel_size[1] / voxel_size[1],
-            sample_voxel_size[2] / voxel_size[2],
-        ),
-        order=3,
-        anti_aliasing=True,
-    )
-
-    mode = np.abs(st.mode(resampled_vol, axis=None).mode[0])
-    resized_vol = resize_with_crop_or_pad(
-        resampled_vol,
-        crop_shape=[s if s >= m else m for s, m in zip(resampled_vol.shape, minimum_shape)],
-        constant_values=mode
-    )
-
-    if debug is not None:
-        debug = Path(debug)
-        if debug.is_dir():
-            debug.mkdir(parents=True, exist_ok=True)
-
-        fig, axes = plt.subplots(3, 3, figsize=(11, 11))
-
-        axes[0, 1].set_title(f"{str(vol.shape)} @ {sample_voxel_size}")
-        axes[0, 0].set_ylabel('Input (MIP)')
-        plot(axes[0, :], vol)
-
-        axes[1, 1].set_title(f"{str(resampled_vol.shape)} @ {voxel_size}")
-        axes[1, 0].set_ylabel('Resampled (MIP)')
-        plot(axes[1, :], resampled_vol)
-        imsave(f'{debug}_resampled_psf.tif', resampled_vol)
-
-        axes[2, 1].set_title(str(resized_vol.shape))
-        axes[2, 0].set_ylabel('Resized (MIP)')
-        plot(axes[2, :], resized_vol)
-        imsave(f'{debug}_resized_psf.tif', resized_vol)
-
-        if debug == True:
-            plt.show()
-        else:
-            plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-    return resized_vol
-
 
 def remove_background_noise(image, read_noise_bias: float = 5):
     """ A simple function to remove background noise from a given image """
@@ -258,6 +157,7 @@ def prep_sample(
         sample *= mask
 
     if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
+        print(f"resample by {sample_voxel_size[2] / model_voxel_size[2]}")
         sample = zoom(
             sample,
             (
@@ -288,6 +188,7 @@ def prep_sample(
 @profile
 def find_roi(
     path: Union[Path, np.array],
+    savepath: Path,
     window_size: tuple = (64, 64, 64),
     plot: Any = None,
     num_rois: Any = None,
@@ -297,9 +198,12 @@ def find_roi(
     pois: Any = None,
     max_neighbor: int = 5,
     voxel_size: tuple = (.200, .108, .108),
-    savepath: Any = None,
     timestamp: int = 17
 ):
+    ztiles = 1
+    ncols = int(np.ceil(num_rois / 5))
+    nrows = int(np.ceil(num_rois / ncols))
+    savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
@@ -440,7 +344,6 @@ def find_roi(
     pois = pois.head(num_rois)
     pois.to_csv(f"{plot}_stats.csv")
 
-    logger.info(f"Predicted points of interest")
     pois = pois[['z', 'y', 'x']].values[:num_rois]
     widths = [w // 2 for w in window_size]
 
@@ -481,8 +384,10 @@ def find_roi(
         plt.savefig(f'{plot}_mips.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     rois = []
-    logger.info(f"Locating ROIs: {[pois.shape[0]]}")
-    for p in range(pois.shape[0]):
+    for p, (z, y, x) in enumerate(itertools.product(
+        range(ztiles), range(nrows), range(ncols),
+        desc=f"Locating tiles: {[pois.shape[0]]}")
+    ):
         start = [
             pois[p, s] - widths[s] if pois[p, s] >= widths[s] else 0
             for s in range(3)
@@ -494,22 +399,22 @@ def find_roi(
         r = dataset[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
 
         if r.size != 0:
-            rois.append(r)
+            tile = f"z{0}-y{y}-x{x}"
+            imsave(savepath / f"{tile}.tif", r)
+            rois.append(savepath / f"{tile}.tif")
 
-            if savepath is not None:
-                savepath.mkdir(parents=True, exist_ok=True)
-                imsave(savepath / f"roi_{p:02}.tif", r)
-
-    return np.array(rois)
+    return np.array(rois), ztiles, nrows, ncols
 
 
 @profile
 def get_tiles(
     path: Union[Path, np.array],
+    savepath: Path,
     window_size: tuple = (64, 64, 64),
     strides: int = 64,
-    savepath: Any = None,
 ):
+    savepath.mkdir(parents=True, exist_ok=True)
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -529,19 +434,17 @@ def get_tiles(
         logger.error(f"Unknown file format: {path.name}")
         return
 
-    logger.info(f"Tiling...")
-
     windows = sliding_window_view(dataset, window_shape=window_size)[::strides, ::strides, ::strides]
-    zplanes, nrows, ncols = windows.shape[:3]
+    ztiles, nrows, ncols = windows.shape[:3]
     windows = np.reshape(windows, (-1, *window_size))
 
-    if savepath is not None:
-        savepath.mkdir(parents=True, exist_ok=True)
-        i = 0
-        for z in range(zplanes):
-            for y in range(nrows):
-                for x in range(ncols):
-                    imsave(savepath/f"z{z}-y{y}-x{x}.tif", windows[i])
-                    i += 1
+    rois = []
+    for i, (z, y, x) in enumerate(itertools.product(
+        range(ztiles), range(nrows), range(ncols),
+        desc=f"Locating tiles: {[windows.shape[0]]}")
+    ):
+        tile = f"z{0}-y{y}-x{x}"
+        imsave(savepath / f"{tile}.tif", windows[i])
+        rois.append(savepath / f"{tile}.tif")
 
-    return windows, zplanes, nrows, ncols
+    return np.array(rois), ztiles, nrows, ncols

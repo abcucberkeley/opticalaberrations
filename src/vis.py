@@ -644,10 +644,11 @@ def wavefronts(
         i = 0
         for y in range(nrows):
             for x in range(ncols):
-                pred = Wavefront(predictions[f"p-z{z}-y{y}-x{x}"].values, lam_detection=wavelength)
+                roi = f"z{z}-y{y}-x{x}"
+                pred = Wavefront(predictions[roi].values, lam_detection=wavelength)
                 pred_wave = pred.wave(size=100)
                 plot_wavefront(grid[i], pred_wave)
-                grid[i].set_title(f"z{z}-y{y}-x{x}", pad=1)
+                grid[i].set_title(roi, pad=1)
                 i += 1
 
         cbar = grid.cbar_axes[0].colorbar(mat)

@@ -523,8 +523,8 @@ def predict_rotation(
         emb = model.input_shape[1] == inputs.shape[1]
 
     if not emb:
-        generate_fourier_embeddings = partial(
-            fourier_embeddings,
+        inputs = fourier_embeddings(
+            inputs,
             iotf=psfgen.iotf,
             plot=plot,
             padsize=padsize,
@@ -537,15 +537,6 @@ def predict_rotation(
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=rotations
         )
-
-        logger.info("Computing FFTs")
-        otfs = fft(inputs)
-        inputs = np.concatenate(utils.multiprocess(
-            generate_fourier_embeddings,
-            [(i, emb) for i, emb in zip(inputs, otfs)],
-            cores=cpu_workers,
-            desc=f"Generating Fourier embeddings"
-        ), axis=0)
 
     init_preds, stdev = bootstrap_predict(
         model,
@@ -775,6 +766,88 @@ def dual_stage_prediction(
         pchanges = np.zeros_like(preds)
 
     return preds, stdev, pchanges
+
+
+@profile
+def predict_dataset(
+    model: tf.keras.Model,
+    inputs: tf.data.Dataset,
+    psfgen: SyntheticPSF,
+    batch_size: int = 128,
+    ignore_modes: list = (0, 1, 2, 4),
+    threshold: float = 0.,
+    verbose: bool = True,
+    desc: str = 'MiniBatch-probabilistic-predictions',
+    digital_rotations: Any = None,
+    plot_rotations: Any = None
+):
+    """
+    Average predictions and compute stdev
+
+    Args:
+        model: pre-trained keras model
+        inputs: encoded tokens to be processed
+        psfgen: Synthetic PSF object
+        ignore_modes: list of modes to ignore
+        batch_size: number of samples per batch
+        threshold: set predictions below threshold to zero (wavelength)
+        desc: test to display for the progressbar
+        verbose: a toggle for progress bar
+        digital_rotations: an array of digital rotations to apply to evaluate model's confidence
+        plot_rotations: optional toggle to plot digital rotations
+
+    Returns:
+        average prediction, stdev
+    """
+
+    no_phase = True if model.input_shape[1] == 3 else False
+    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
+    ignore_modes = list(map(int, ignore_modes))
+    logger.info(f"Ignoring modes: {ignore_modes}")
+    logger.info(f"[BS={batch_size}] {desc}")
+    inputs = inputs.batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
+
+    if digital_rotations is not None:
+        inputs = inputs.map(lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:])))
+        inputs = inputs.unbatch().batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
+
+    preds = model.predict(inputs, batch_size=batch_size, verbose=verbose)
+
+    preds[:, ignore_modes] = 0.
+    preds[np.abs(preds) <= threshold] = 0.
+
+    if digital_rotations is not None:
+        eval_mode_rotations = partial(
+            eval_rotation,
+            rotations=digital_rotations,
+            psfgen=psfgen,
+            threshold=threshold,
+            no_phase=no_phase,
+        )
+
+        preds = np.stack(np.split(preds, digital_rotations.shape[0]), axis=1)
+
+        if plot_rotations is not None:
+            predictions, stdev = np.zeros((preds.shape[0], preds.shape[-1])), np.zeros((preds.shape[0], preds.shape[-1]))
+            for i, (p, savepath) in tqdm(
+                    enumerate(zip(preds, plot_rotations)),
+                    total=preds.shape[0],
+                    desc="Evaluate predictions"
+            ):
+                predictions[i], stdev[i] = eval_mode_rotations(p, plot=savepath)
+            return predictions, stdev
+        else:
+            jobs = utils.multiprocess(
+                eval_mode_rotations,
+                preds,
+                cores=-1,
+                desc="Evaluate predictions"
+            )
+            jobs = np.array([list(zip(*j)) for j in jobs])
+            preds, stdev = jobs[..., 0], jobs[..., -1]
+            return preds, stdev
+    else:
+        return preds, np.zeros_like(preds)
 
 
 def deconstruct(
