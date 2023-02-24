@@ -83,7 +83,7 @@ def remove_background_noise(image, read_noise_bias: float = 5):
 def prep_sample(
     sample: np.array,
     sample_voxel_size: tuple,
-    model_voxel_size: tuple,
+    model_fov: tuple,
     debug: Any = None,
     remove_background: bool = True,
     normalize: bool = True,
@@ -94,12 +94,12 @@ def prep_sample(
 
         -Background subtraction
         -Normalization to 0-1
-        -Resample to model_voxel_size
+        -Crop (or zero pad) to model field of view
 
     Args:
         sample (np.array): Input 3D array (or series of 3D arrays)
         sample_voxel_size (tuple): 
-        model_voxel_size (tuple): 
+        model_fov (tuple):
         debug (Any, optional): plot or save .svg's. Defaults to None.
         remove_background (bool, optional): Defaults to True.
         normalize (bool, optional): Defaults to True.
@@ -183,14 +183,35 @@ def prep_sample(
 
         sample *= mask
 
-    if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
+    def round_to_even(n):
+        answer = round(n)
+        if not answer % 2:
+            return int(answer)
+        if abs(answer + 1 - n) < abs(answer - 1 - n):
+            return int(answer + 1)
+        else:
+            return int(answer - 1)
+
+    def round_to_odd(n):
+        answer = round(n)
+        if answer % 2:
+            return int(answer)
+        if abs(answer + 1 - n) < abs(answer - 1 - n):
+            return int(answer + 1)
+        else:
+            return int(answer - 1)
+
+
+    # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
+    number_of_desired_sample_pixels = (
+            round_to_even(model_fov[0] / sample_voxel_size[0]),
+            round_to_even(model_fov[1] / sample_voxel_size[1]),
+            round_to_even(model_fov[2] / sample_voxel_size[2]),
+        )
+    if not all(s1 == s2 for s1, s2 in zip(number_of_desired_sample_pixels, sample.shape)):
         sample = resize_with_crop_or_pad(
             sample,
-            crop_shape=(
-                int(sample.shape[0] * model_voxel_size[0] / sample_voxel_size[0]),
-                int(sample.shape[1] * model_voxel_size[1] / sample_voxel_size[1]),
-                int(sample.shape[2] * model_voxel_size[2] / sample_voxel_size[2]),
-            )
+            crop_shape=number_of_desired_sample_pixels
         )
 
     if debug is not None:

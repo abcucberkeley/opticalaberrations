@@ -100,6 +100,7 @@ class SyntheticPSF:
 
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
         self.amplitude_ranges = amplitude_ranges
+        self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size))
 
         self.psfgen = PsfGenerator3D(
             psf_shape=self.psf_shape,
@@ -143,7 +144,7 @@ class SyntheticPSF:
 
             self.ipsf = prep_sample(
                 np.squeeze(self.ipsf),
-                model_voxel_size=self.voxel_size,
+                model_fov=self.psf_fov,
                 sample_voxel_size=voxel_size,
                 remove_background=remove_background,
                 normalize=normalize

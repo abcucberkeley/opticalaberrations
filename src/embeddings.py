@@ -556,7 +556,7 @@ def compute_emb(
     Gives the "lower dimension" representation of the data that will be shown to the model.
 
     Args:
-        otf: fft of the input data
+        otf: fft of the input data. Must have the same frequency spacing as iotf (which means the same real-space FOV in microns)
         iotf: ideal theoretical or empirical OTF
         val: what to compute (either 'real', 'imag' imaginary, or phase 'angle' from the complex OTF)
         ratio: optional toggle to return ratio of data to ideal OTF
@@ -577,8 +577,8 @@ def compute_emb(
     na_mask = np.where(na_mask >= threshold, na_mask, 0.).astype(bool)
 
     if otf.shape != iotf.shape:
-        real = resize_with_crop_or_pad(np.real(otf), crop_shape=iotf.shape)
-        imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=iotf.shape)
+        real = resize_with_crop_or_pad(np.real(otf), crop_shape=iotf.shape) # only center crop
+        imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=iotf.shape) # only center crop
         otf = real + 1j * imag
 
     if val == 'real':

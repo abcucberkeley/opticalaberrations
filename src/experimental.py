@@ -7,6 +7,7 @@ import json
 from functools import partial
 import fnmatch
 import os
+import ujson
 
 from pathlib import Path
 from subprocess import call
@@ -20,7 +21,6 @@ from tifffile import imread, imsave
 import seaborn as sns
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from tqdm.contrib import itertools
 from line_profiler_pycharm import profile
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import pyotf.phaseretrieval as pr
@@ -221,7 +221,7 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
 @profile
 def load_sample(
     data: Union[tf.Tensor, Path, str],
-    model_voxel_size: tuple,
+    model_fov: tuple,
     sample_voxel_size: tuple,
     remove_background: bool = True,
     normalize: bool = True,
@@ -240,7 +240,7 @@ def load_sample(
 
         img = preprocessing.prep_sample(
             np.squeeze(img),
-            model_voxel_size=model_voxel_size,
+            model_fov=model_fov,
             sample_voxel_size=sample_voxel_size,
             remove_background=remove_background,
             normalize=normalize,
@@ -268,12 +268,12 @@ def preprocess(
 
     sample = load_sample(
         file,
-        model_voxel_size=psfgen.voxel_size,
+        model_fov=psfgen.voxel_size,
         sample_voxel_size=sample_voxel_size,
         remove_background=True,
         normalize=True,
         edge_filter=True,
-        debug=file.with_suffix('') if plot else None,
+        debug=file.with_suffix('') if plot else None
     )
 
     return fourier_embeddings(
@@ -379,8 +379,10 @@ def predict_sample(
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
 ):
+
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
+    modelpath = model
     model, modelpsfgen = reloadmodel_if_needed(
         preloaded,
         model,
@@ -401,13 +403,41 @@ def predict_sample(
 
     inputs = load_sample(
         img,
-        model_voxel_size=modelpsfgen.voxel_size,
+        model_fov=modelpsfgen.psf_fov,
         sample_voxel_size=psfgen.voxel_size,
         remove_background=True,
         normalize=True,
-        edge_filter=False,
-        debug=img
+        edge_filter=False
     )
+
+
+    with Path(f"{img.with_suffix('')}_sample_predictions_settings.json").open('w') as f:
+        json = dict(
+            path=str(img),
+            model=str(modelpath),
+            input_shape=list(inputs.shape),
+            sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
+            model_voxel_size=list(modelpsfgen.voxel_size),
+            psf_fov=list(modelpsfgen.psf_fov),
+            wavelength=float(wavelength),
+            dm_calibration=str(dm_calibration),
+            dm_state=str(dm_state),
+            dm_damping_scalar=float(dm_damping_scalar),
+            prediction_threshold=float(prediction_threshold),
+            freq_strength_threshold=float(freq_strength_threshold),
+            prev=str(prev),
+            ignore_modes=list(ignore_modes),
+            ideal_empirical_psf=str(ideal_empirical_psf),
+        )
+
+        ujson.dump(
+            json,
+            f,
+            indent=4,
+            sort_keys=False,
+            ensure_ascii=False,
+            escape_forward_slashes=False
+        )
 
     inputs = np.expand_dims(inputs, axis=0)
     no_phase = True if model.input_shape[1] == 3 else False
@@ -451,15 +481,15 @@ def predict_sample(
         {'n': z.n, 'm': z.m, 'amplitude': a}
         for z, a in p.zernikes.items()
     ]
-    coefficients = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
-    coefficients.index.name = 'ansi'
-    coefficients.to_csv(f"{img.with_suffix('')}_sample_predictions_zernike_coefficients.csv")
+    df = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
+    df.index.name = 'ansi'
+    df.to_csv(f"{img.with_suffix('')}_sample_predictions_zernike_coefficients.csv")
 
     if dm_calibration is not None:
         dm_state = load_dm(dm_state)
         estimate_and_save_new_dm(
             savepath=Path(f"{img.with_suffix('')}_sample_predictions_corrected_actuators.csv"),
-            coefficients=coefficients['amplitude'].values,
+            coefficients=df['amplitude'].values,
             dm_calibration=dm_calibration,
             dm_state=dm_state,
             dm_damping_scalar=dm_damping_scalar
@@ -892,6 +922,10 @@ def eval_mode(
     save_postfix = 'pr' if postfix.startswith('pr') else 'ml'
     save_path = Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval')
 
+    with open(str(prediction_path).replace('_zernike_coefficients.csv', '_settings.json')) as f:
+        predictions_settings = ujson.load(f)
+        f.close()
+
     noisy_img = np.squeeze(get_image(input_path).astype(float))
     maxcounts = np.max(noisy_img)
     psnr = np.sqrt(maxcounts)
@@ -942,14 +976,13 @@ def eval_mode(
         preprocessing.prep_sample,
         normalize=normalize,
         remove_background=remove_background,
-        sample_voxel_size=gen.voxel_size,
-        model_voxel_size=gen.voxel_size,
+        model_fov=gen.psf_fov
     )
 
-    noisy_img = prep(noisy_img)
-    p_psf = prep(gen.single_psf(p_wave, normed=False, noise=True))
-    gt_psf = prep(gen.single_psf(y_wave, normed=False, noise=True))
-    corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True))
+    noisy_img = prep(noisy_img, sample_voxel_size=predictions_settings['sample_voxel_size'])
+    p_psf = prep(gen.single_psf(p_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
+    gt_psf = prep(gen.single_psf(y_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
+    corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
 
     if flat_path is not None:
         rfilter = f"{str(gt_path.name).replace(gt_postfix, '')}"
@@ -1016,7 +1049,12 @@ def eval_dataset(
     )
 
     def worker(file, prediction_path, gt_path, state, results, modes):
-        p2v, p2v_gt, y, p = evaluate(file, prediction_path=prediction_path, gt_path=gt_path)
+        p2v, p2v_gt, y, p = evaluate(
+            input_path=file,
+            prediction_path=prediction_path,
+            gt_path=gt_path,
+        )
+
         iteration_labels = ['before',
                             'after0',
                             'after1',
@@ -1066,8 +1104,7 @@ def eval_dataset(
                 gt_path = gtfile
                 continue
         if gt_path is None:
-            expected_GT_tif = list(datadir.glob(f'{state}_widefield_{prefix}_*.tif'))[0]
-            logger.warning(f'GT not found for: {expected_GT_tif}')
+            logger.warning(f'GT not found for: {state}_widefield_{prefix}_*.tif')
 
         prediction_path = None
         for predfile in MLresults_list:
@@ -1157,7 +1194,7 @@ def eval_dataset(
         plt.savefig(Path(f'{datadir}/p2v_eval_{file.parent.stem}.png'))
         logger.info(f'-' * 50)
 
-    print(df)
+    print(df.groupby(['modes']))
 
 
 
