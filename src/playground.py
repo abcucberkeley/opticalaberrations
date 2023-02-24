@@ -9,16 +9,10 @@ from pathlib import Path
 from tifffile import imsave
 import raster_geometry as rg
 
-from skimage.filters import scharr
-from skimage.filters import meijering, sato, frangi, hessian
-from skimage.morphology import skeletonize
-from skimage.filters.rank import entropy
-
-
 from wavefront import Wavefront
 from synthetic import SyntheticPSF
 from preprocessing import remove_background_noise, prep_sample
-from utils import peak2valley, fftconvolution, resize_with_crop_or_pad
+from utils import fftconvolution, resize_with_crop_or_pad
 from vis import plot_wavefront
 from embeddings import fft, ifft, compute_emb, fourier_embeddings, plot_embeddings
 
@@ -116,6 +110,8 @@ def create_synthetic_sample(
         noise=False,
         meta=True,
     )
+    p2v = wavefront.peak2valley()
+
     snr = gen._randuniform(gen.snr)
     img = psf * snr ** 2
 
@@ -139,7 +135,7 @@ def create_synthetic_sample(
         amps=amps,
         snr=psnr,
         maxcounts=maxcounts,
-        p2v=peak2valley(amps, wavelength=gen.lam_detection)
+        p2v=p2v
     )
 
     if noise:
@@ -164,7 +160,7 @@ def create_synthetic_sample(
             amps=amps,
             snr=psnr,
             maxcounts=maxcounts,
-            p2v=peak2valley(amps, wavelength=gen.lam_detection)
+            p2v=p2v
         )
 
     return noisy_img

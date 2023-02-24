@@ -235,7 +235,7 @@ def iter_evaluate(
         current = pd.DataFrame(ids, columns=['id'])
         current['niter'] = k
         current['aberration'] = p2v
-        current['residuals'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in res]
+        current['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in res]
         current['snr'] = snrs
         current['neighbors'] = npoints
         current['distance'] = dists
@@ -398,10 +398,10 @@ def snrheatmap(
 
         try:
             df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
-                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+                lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
             )
             df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
-                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+                lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
             )
 
             bins = np.arange(0, 10.25, .25)
@@ -492,10 +492,10 @@ def densityheatmap(
 
             try:
                 df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
-                    lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+                    lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
                 )
                 df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
-                    lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+                    lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
                 )
 
                 bins = np.arange(0, 10.25, .25)
@@ -590,10 +590,10 @@ def iterheatmap(
 
         try:
             df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
-                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+                lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
             )
             df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
-                lambda x: utils.peak2valley(Wavefront({z: x}, lam_detection=modelspecs.lam_detection))
+                lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
             )
 
             means = pd.pivot_table(
@@ -794,10 +794,10 @@ def eval_object(
     gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]])
     no_phase = True if model.input_shape[1] == 3 else False
 
-    p2v = utils.peak2valley(phi, na=na, wavelength=gen.lam_detection)
+    w = Wavefront(phi, lam_detection=gen.lam_detection)
+    p2v = w.peak2valley(na=na)
     df = pd.DataFrame([], columns=['aberration', 'prediction', 'residuals', 'object_size'])
 
-    w = Wavefront(phi, lam_detection=gen.lam_detection)
     kernel = gen.single_psf(
         phi=w,
         normed=True,
@@ -855,8 +855,8 @@ def eval_object(
         residuals = ys - preds
 
         p = pd.DataFrame([p2v for i in inputs], columns=['aberration'])
-        p['prediction'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in preds]
-        p['residuals'] = [utils.peak2valley(i, na=na, wavelength=gen.lam_detection) for i in residuals]
+        p['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
+        p['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
         p['object_size'] = 1 if isize == 0 else isize * 2
 
         for z in range(preds.shape[-1]):

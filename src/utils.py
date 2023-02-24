@@ -145,7 +145,7 @@ def compute_signal_lost(phi, gen, res):
     hashtbl = {}
     w = Wavefront(phi, order='ansi')
     psf = gen.single_psf(w, normed=True, noise=False)
-    abr = 0 if np.count_nonzero(phi) == 0 else round(peak2valley(phi, wavelength=gen.lam_detection))
+    abr = 0 if np.count_nonzero(phi) == 0 else round(w.peak2valley())
 
     for k, r in enumerate(res):
         window = resize_with_crop_or_pad(psf, crop_shape=tuple(3*[r]))

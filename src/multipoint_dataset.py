@@ -20,9 +20,10 @@ import raster_geometry as rg
 import cli
 from utils import mean_min_distance
 from preprocessing import resize_with_crop_or_pad, remove_background_noise
-from utils import peak2valley, fftconvolution, multiprocess
+from utils import fftconvolution, multiprocess
 from synthetic import SyntheticPSF
 from embeddings import fourier_embeddings
+from wavefront import Wavefront
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -149,6 +150,8 @@ def sim(
         meta=True,
     )
 
+    p2v = Wavefront(amps, lam_detection=gen.lam_detection).peak2valley(na=1.0)
+
     for i in range(npoints):
         sphere_radius = np.random.choice([0, 1, 2], p=[.95, .04, .01])
 
@@ -218,7 +221,7 @@ def sim(
                 snr=psnr,
                 maxcounts=maxcounts,
                 npoints=npoints,
-                p2v=peak2valley(amps, wavelength=gen.lam_detection),
+                p2v=p2v,
                 gt=reference,
                 gen=gen,
                 realspace=noisy_img,
@@ -234,7 +237,7 @@ def sim(
             maxcounts=maxcounts,
             npoints=npoints,
             avg_min_distance=avg_min_distance,
-            p2v=peak2valley(amps, wavelength=gen.lam_detection),
+            p2v=p2v,
             gt=reference,
             gen=gen,
             lls_defocus_offset=lls_defocus_offset

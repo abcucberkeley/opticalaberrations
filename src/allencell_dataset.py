@@ -10,9 +10,8 @@ from scipy.signal import fftconvolve as scipy_fftconvolve
 from skimage.filters import threshold_otsu
 
 import cli
-from preprocessing import resize
-from utils import peak2valley
 from synthetic import SyntheticPSF
+from wavefront import Wavefront
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -107,7 +106,7 @@ def convolve(
         snr=snr,
         maxcounts=maxcounts,
         save_kernel=save_kernel,
-        p2v=peak2valley(amps, wavelength=gen.lam_detection),
+        p2v=Wavefront(amps, lam_detection=gen.lam_detection).peak2valley(),
     )
 
 

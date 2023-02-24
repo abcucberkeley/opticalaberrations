@@ -12,7 +12,6 @@ import tensorflow as tf
 import ujson
 
 import embeddings
-from utils import peak2valley
 from wavefront import Wavefront
 from zernike import Zernike
 from synthetic import SyntheticPSF
@@ -98,7 +97,7 @@ def get_sample(
         try:
             p2v = hashtbl['peak2peak']
         except KeyError:
-            p2v = peak2valley(zernikes)
+            p2v = Wavefront(zernikes, lam_detection=float(hashtbl['wavelength'])).peak2valley()
 
         try:
             avg_min_distance = hashtbl['avg_min_distance']

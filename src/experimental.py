@@ -1021,8 +1021,8 @@ def eval_mode(
     # coefficients.index.name = 'ansi'
     # coefficients.to_csv(f'{save_path}.csv')
 
-    p2v    = utils.peak2valley(diff, wavelength=gen.lam_detection, na=1.0)
-    p2v_gt = utils.peak2valley(y   , wavelength=gen.lam_detection, na=1.0)
+    p2v = diff.peak2valley(na=1.0)
+    p2v_gt = y.peak2valley(na=1.0)
     logger.info(f"File:  {save_path.name}")
     logger.info(f"P2V: {round(p2v, 3)}   GT_P2V: {round(p2v_gt, 3)}")
     return p2v, p2v_gt, y, p
