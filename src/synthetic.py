@@ -278,10 +278,6 @@ class SyntheticPSF:
             snr_post_aberration: increase photons in aberrated psf to match snr of ideal psf
             lls_defocus_offset: optional shift of the excitation and detection focal plan (microns)
         """
-
-        if isinstance(lls_defocus_offset, tuple):
-            lls_defocus_offset = self._randuniform(lls_defocus_offset)
-
         if not isinstance(phi, Wavefront):
             phi = Wavefront(
                 phi,
@@ -294,6 +290,12 @@ class SyntheticPSF:
                 rotate=self.rotate,
                 lam_detection=self.lam_detection,
             )
+
+        if isinstance(lls_defocus_offset, tuple):
+            if phi.peak2valley(na=1.0) <= 1.:
+                lls_defocus_offset = self._randuniform(lls_defocus_offset)
+            else:
+                lls_defocus_offset = 0.
 
         psf = self.psfgen.incoherent_psf(phi, lls_defocus_offset=lls_defocus_offset)
         snr = self._randuniform(self.snr)

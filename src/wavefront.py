@@ -253,6 +253,16 @@ class Wavefront:
     def wave(self, size=55, normed=True):
         return np.flip(np.rot90(self.polynomial(size=size, normed=normed)), axis=0)
 
+    def peak2valley(self, na: float = 1.0) -> float:
+        """ measure peak-to-valley of the aberration in waves"""
+        wavefront = self.wave(100)
+        center = (int(wavefront.shape[0] / 2), int(wavefront.shape[1] / 2))
+        Y, X = np.ogrid[:wavefront.shape[0], :wavefront.shape[1]]
+        dist_from_center = np.sqrt((X - center[0]) ** 2 + (Y - center[1]) ** 2)
+        mask = dist_from_center <= (na * wavefront.shape[0]) / 2
+        wavefront *= mask
+        return abs(np.nanmax(wavefront) - np.nanmin(wavefront))
+
     def _fit_zernikes(self, wavefront, rotate=True, microns=True):
         wavefront = np.ascontiguousarray(imread(wavefront).astype(float))
 
