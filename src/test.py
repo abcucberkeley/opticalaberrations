@@ -122,6 +122,7 @@ def main(args=None):
         eval.random_samples(
             model=args.model,
             eval_sign=args.eval_sign,
+            batch_size=args.batch_size,
             digital_rotations=args.digital_rotations,
         )
     elif args.target == 'snrheatmap':

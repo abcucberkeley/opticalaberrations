@@ -243,10 +243,8 @@ def bootstrap_predict(
         emb = model.input_shape[1] == inputs.shape[1]
 
     if not emb:
-        logger.info("Computing FFTs")
-        embeddings = fft(inputs)
-        generate_fourier_embeddings = partial(
-            fourier_embeddings,
+        model_inputs = fourier_embeddings(
+            inputs,
             iotf=psfgen.iotf,
             plot=plot,
             padsize=padsize,
@@ -258,13 +256,6 @@ def bootstrap_predict(
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
         )
-
-        model_inputs = np.array(utils.multiprocess(
-            generate_fourier_embeddings,
-            [(i, emb) for i, emb in zip(inputs, embeddings)],
-            cores=cpu_workers,
-            desc=f"Generating Fourier embeddings"
-        ))
     else:
         # pass raw PSFs to the model
         model_inputs = inputs

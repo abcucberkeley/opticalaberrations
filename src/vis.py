@@ -12,7 +12,6 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1 import ImageGrid
 from numpy.lib.stride_tricks import sliding_window_view
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-import matplotlib.gridspec as gridspec
 import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
 from typing import Any

@@ -630,7 +630,8 @@ def iterheatmap(
 def random_samples(
     model: Path,
     psnr: int = 30,
-    eval_sign: str = 'positive_only',
+    batch_size: int = 128,
+    eval_sign: str = 'signed',
     digital_rotations: bool = False,
 ):
     m = backend.load(model)
@@ -695,21 +696,23 @@ def random_samples(
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
-                    if eval_sign == 'rotations':
+                    if digital_rotations:
                         p, stdev = backend.predict_rotation(
                             m,
-                            noisy_img[np.newaxis, :, :, :, np.newaxis],
+                            noisy_img,
                             psfgen=gen,
                             no_phase=no_phase,
+                            batch_size=batch_size,
                             plot=save_path / f'{s}',
                             plot_rotations=save_path / f'{s}',
                         )
                     else:
                         p, stdev = backend.bootstrap_predict(
                             m,
-                            noisy_img[np.newaxis, :, :, :, np.newaxis],
+                            noisy_img,
                             psfgen=gen,
                             no_phase=no_phase,
+                            batch_size=batch_size,
                             plot=save_path / f'{s}',
                         )
 
