@@ -762,22 +762,6 @@ def random_samples(
                     )
                     _ = pool.apply_async(task)  # issue task
 
-                    task = partial(
-                        vis.diagnostic_assessment,
-                        psf=noisy_img,
-                        gt_psf=gt_psf,
-                        predicted_psf=p_psf,
-                        corrected_psf=corrected_noisy_img,
-                        psnr=psnr,
-                        maxcounts=maxcounts,
-                        y=y_wave,
-                        pred=p_wave,
-                        save_path=save_path / f'{s}_db',
-                        display=False,
-                        pltstyle='dark_background'
-                    )                
-                    _ = pool.apply_async(task)  # issue task
-
     pool.close()    # close the pool
     pool.join()     # wait for all tasks to complete
 

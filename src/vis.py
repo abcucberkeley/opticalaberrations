@@ -76,7 +76,7 @@ def plot_wavefront(
     iax,
     phi,
     label=None,
-    nas=(.55, .65, .75, .85, .95),
+    nas=(.65, .75, .85, .95),
     vcolorbar=False,
     hcolorbar=False,
     vmin=None,
@@ -140,11 +140,13 @@ def plot_wavefront(
     phi = phi.flatten()
 
     if label is not None:
+        p2v = abs(np.nanmin(phi) - np.nanmax(phi))
         err = '\n'.join([
-            f'$NA_{{{na}}}$={abs(p[1]-p[0]):.2f}$\lambda$'
+            f'$NA_{{{na:.2f}}}$={abs(p[1]-p[0]):.2f}$\lambda$'
             for na, p in zip(nas, pcts)
         ])
         iax.set_title(f'{label}\n{err}')
+        iax.set_title(f'{label} [{p2v:.2f}$\lambda$]\n{err}')
 
     iax.axis('off')
     iax.set_aspect("equal")
@@ -185,38 +187,6 @@ def diagnostic_assessment(
         transform_to_align_to_DM = False,
 ):
     if pltstyle is not None: plt.style.use(pltstyle)
-
-    def wavefront(iax, phi, label='', nas=(.65, .75, .85, .95)):
-        def na_mask(radius):
-            center = (int(phi.shape[0]/2), int(phi.shape[1]/2))
-            Y, X = np.ogrid[:phi.shape[0], :phi.shape[1]]
-            dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
-            mask = dist_from_center <= radius
-            return mask
-
-        mat = iax.imshow(
-            phi,
-            cmap=wave_cmap,
-            vmin=vmin,
-            vmax=vmax,
-        )
-
-        pcts = []
-        for d in nas:
-            r = (d * phi.shape[0]) / 2
-            circle = patches.Circle((50, 50), r, ls='--', ec="dimgrey", fc="none", zorder=3)
-            iax.add_patch(circle)
-
-            mask = phi * na_mask(radius=r)
-            pcts.append(abs(np.nanmin(mask) - np.nanmax(mask)))
-
-        circle = patches.Circle((50, 50), 50, ec="dimgrey", fc="none", zorder=3)
-        iax.add_patch(circle)
-
-        p2v = abs(np.nanmin(phi) - np.nanmax(phi))
-        err = '\n'.join([f'$P2V ({{NA={na:.2f}}})$:\t{p:.2f} $\lambda$' for na, p in zip(nas, pcts)])
-        iax.set_title(f'{label} [{p2v:.2f} $\lambda$]\n{err}')
-        return mat
 
     plt.rcParams.update({
         'font.size': 12,
@@ -274,24 +244,9 @@ def diagnostic_assessment(
     vmax = np.round(np.nanmax(y_wave))
     vmax = dlimit if np.abs(vmax) == 0 else vmax
 
-    step = .05
-    highcmap = plt.get_cmap('magma_r', 256)
-    middlemap = plt.get_cmap('gist_gray', 256)
-    lowcmap = plt.get_cmap('gist_earth_r', 256)
-
-    ll = np.arange(vmin, -.1 + step, step)
-    hh = np.arange(.1, vmax + step, step)
-
-    levels = np.vstack((
-        lowcmap(.66 * ll / ll.min()),
-        middlemap([.9, 1, .9]),
-        highcmap(.66 * hh / hh.max())
-    ))
-    wave_cmap = mcolors.ListedColormap(levels)
-
-    mat = wavefront(ax_gt, y_wave, label='Ground truth')
-    wavefront(ax_pred, pred_wave, label='Predicted')
-    wavefront(ax_diff, diff, label='Residuals')
+    mat = plot_wavefront(ax_gt, y_wave, label='Ground truth', vmin=vmin, vmax=vmax)
+    plot_wavefront(ax_pred, pred_wave, label='Predicted', vmin=vmin, vmax=vmax)
+    plot_wavefront(ax_diff, diff, label='Residuals', vmin=vmin, vmax=vmax)
 
     cbar = fig.colorbar(
         mat,
@@ -314,9 +269,36 @@ def diagnostic_assessment(
 
     if transform_to_align_to_DM:
         psf = np.transpose(np.rot90(psf, k=2, axes=(1, 2)), axes=(0, 2, 1))    # 180 rotate, then transpose
-    plot_mip(xy=ax_xy, xz=ax_xz, yz=ax_yz, vol=psf, label='Input (MIP)')
-    plot_mip(xy=ax_pxy, xz=ax_pxz, yz=ax_pyz, vol=predicted_psf, label='Predicted')
-    plot_mip(xy=ax_cxy, xz=ax_cxz, yz=ax_cyz, vol=corrected_psf, label='Corrected')
+    plot_mip(
+        xy=ax_xy,
+        xz=ax_xz,
+        yz=ax_yz,
+        vol=psf,
+        label='Input (MIP)',
+        cmap=psf_cmap,
+        dxy=dxy,
+        dz=dz
+    )
+    plot_mip(
+        xy=ax_pxy,
+        xz=ax_pxz,
+        yz=ax_pyz,
+        vol=predicted_psf,
+        label='Predicted',
+        cmap=psf_cmap,
+        dxy=dxy,
+        dz=dz
+    )
+    plot_mip(
+        xy=ax_cxy,
+        xz=ax_cxz,
+        yz=ax_cyz,
+        vol=corrected_psf,
+        label='Corrected',
+        cmap=psf_cmap,
+        dxy=dxy,
+        dz=dz
+    )
 
     if gt_psf is not None:
         ax_xygt = fig.add_subplot(gs[3, 0])
