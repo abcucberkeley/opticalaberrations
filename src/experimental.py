@@ -379,7 +379,7 @@ def predict_sample(
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
 ):
-
+    lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
     modelpath = model
@@ -410,35 +410,6 @@ def predict_sample(
         edge_filter=False
     )
 
-
-    with Path(f"{img.with_suffix('')}_sample_predictions_settings.json").open('w') as f:
-        json = dict(
-            path=str(img),
-            model=str(modelpath),
-            input_shape=list(inputs.shape),
-            sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
-            model_voxel_size=list(modelpsfgen.voxel_size),
-            psf_fov=list(modelpsfgen.psf_fov),
-            wavelength=float(wavelength),
-            dm_calibration=str(dm_calibration),
-            dm_state=str(dm_state),
-            dm_damping_scalar=float(dm_damping_scalar),
-            prediction_threshold=float(prediction_threshold),
-            freq_strength_threshold=float(freq_strength_threshold),
-            prev=str(prev),
-            ignore_modes=list(ignore_modes),
-            ideal_empirical_psf=str(ideal_empirical_psf),
-        )
-
-        ujson.dump(
-            json,
-            f,
-            indent=4,
-            sort_keys=False,
-            ensure_ascii=False,
-            escape_forward_slashes=False
-        )
-
     inputs = np.expand_dims(inputs, axis=0)
     no_phase = True if model.input_shape[1] == 3 else False
 
@@ -460,7 +431,7 @@ def predict_sample(
             plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
         )
     else:
-        p, std = backend.predict_rotation(
+        res = backend.predict_rotation(
             model,
             inputs=inputs,
             psfgen=modelpsfgen,
@@ -473,6 +444,10 @@ def predict_sample(
             plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
             plot_rotations=Path(f"{img.with_suffix('')}_sample_predictions") if plot_rotations else None,
         )
+        try:
+            p, std = res
+        except ValueError:
+            p, std, lls_defocus = res
 
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
     std = Wavefront(std, order='ansi', lam_detection=wavelength)
@@ -497,6 +472,36 @@ def predict_sample(
 
     psf = psfgen.single_psf(phi=p, normed=True, noise=False)
     imsave(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
+
+    with Path(f"{img.with_suffix('')}_sample_predictions_settings.json").open('w') as f:
+        json = dict(
+            path=str(img),
+            model=str(modelpath),
+            input_shape=list(inputs.shape),
+            sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
+            model_voxel_size=list(modelpsfgen.voxel_size),
+            psf_fov=list(modelpsfgen.psf_fov),
+            wavelength=float(wavelength),
+            dm_calibration=str(dm_calibration),
+            dm_state=str(dm_state),
+            dm_damping_scalar=float(dm_damping_scalar),
+            prediction_threshold=float(prediction_threshold),
+            freq_strength_threshold=float(freq_strength_threshold),
+            prev=str(prev),
+            ignore_modes=list(ignore_modes),
+            ideal_empirical_psf=str(ideal_empirical_psf),
+            lls_defocus=float(lls_defocus),
+            zernikes=list(coefficients)
+        )
+
+        ujson.dump(
+            json,
+            f,
+            indent=4,
+            sort_keys=False,
+            ensure_ascii=False,
+            escape_forward_slashes=False
+        )
 
     if plot:
         vis.diagnosis(

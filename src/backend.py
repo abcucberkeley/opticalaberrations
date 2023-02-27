@@ -562,7 +562,12 @@ def predict_rotation(
     )
     jobs = np.array([list(zip(*j)) for j in jobs])
     preds, stdev = jobs[..., 0], jobs[..., -1]
-    return preds, stdev
+
+    if init_preds.shape[-1] == psfgen.n_modes:
+        return preds, stdev
+    else:
+        lls_defocus = np.mean(init_preds[:, -1])
+        return preds, stdev, lls_defocus
 
 
 @profile
