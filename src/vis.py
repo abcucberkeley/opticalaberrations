@@ -352,7 +352,7 @@ def diagnostic_assessment(
 
 
 @profile
-def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None):
+def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None, lls_defocus: float = 0.):
 
     plt.rcParams.update({
         'font.size': 10,
@@ -366,9 +366,14 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None):
     pred_wave = pred.wave(size=100)
 
     fig = plt.figure(figsize=(10, 6))
-    gs = fig.add_gridspec(1, 3)
-    ax_wavefront = fig.add_subplot(gs[0, -1])
-    ax_zcoff = fig.add_subplot(gs[0, :-1])
+    gs = fig.add_gridspec(4, 3)
+
+    if lls_defocus != 0.:
+        ax_wavefront = fig.add_subplot(gs[:-1, -1])
+        ax_zcoff = fig.add_subplot(gs[:, :-1])
+    else:
+        ax_wavefront = fig.add_subplot(gs[:, -1])
+        ax_zcoff = fig.add_subplot(gs[:, :-1])
 
     plot_wavefront(
         ax_wavefront,
@@ -409,6 +414,36 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None):
     ax_zcoff.set_xticks(range(0, len(pred.amplitudes)+5, min(5, int(np.ceil(len(pred.amplitudes)+5)/8))), minor=False) # at least 8 ticks
     ax_zcoff.set_xlim((-.5, len(pred.amplitudes)))
     ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
+
+    if lls_defocus != 0.:
+        ax_defocus = fig.add_subplot(gs[-1, -1])
+
+        data = [lls_defocus]
+        bars = ax_defocus.barh(range(len(data)), data)
+
+        for bar in bars:
+            bar.set_zorder(1)
+            bar.set_facecolor("none")
+            x, y = bar.get_xy()
+            w, h = bar.get_width(), bar.get_height()
+            grad = np.atleast_2d(np.linspace(0, 1 * w / max(data), 256))
+            ax_defocus.imshow(
+                grad,
+                extent=[x, x + w, y, y + h],
+                aspect="auto",
+                zorder=0,
+                cmap='magma'
+            )
+
+        ax_defocus.set_title(f'LLS defocus ($\mu$m)')
+        ax_defocus.spines['top'].set_visible(False)
+        ax_defocus.spines['left'].set_visible(False)
+        ax_defocus.spines['right'].set_visible(False)
+        ax_defocus.set_yticks([])
+        ax_defocus.grid(True, which="both", axis='x', lw=1, ls='--', zorder=0)
+        ax_defocus.axvline(0, ls='-', color='k')
+        ax_defocus.xaxis.set_major_formatter(FormatStrFormatter('%.3f'))
+        ax_defocus.set_xticklabels(ax_defocus.get_xticks(), rotation=45)
 
     plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
     plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.1)

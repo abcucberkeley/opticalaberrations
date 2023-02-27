@@ -508,6 +508,7 @@ def predict_sample(
             pred=p,
             pred_std=std,
             save_path=Path(f"{img.with_suffix('')}_sample_predictions_diagnosis"),
+            lls_defocus=lls_defocus
         )
 
 
