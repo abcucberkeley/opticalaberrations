@@ -1127,7 +1127,7 @@ def eval_dataset(
         ax0.set_title(f"{results[file]['num_model_modes']} mode Model \n {file.parent.stem}")
         plt.subplots_adjust(hspace=.0)
         plt.tight_layout()
-        return plt
+        return fig
 
     active_jobs, jobs = [], []
     manager = mp.Manager()
@@ -1203,20 +1203,22 @@ def eval_dataset(
         df = pd.DataFrame.from_dict(results.values())
         df.index.name = 'id'
         if plot_evals:
-            plt = plot_eval_vs_iter(df)
+            df = pd.DataFrame.from_dict(results.values())
+            df.index.name = 'id'
+            fig = plot_eval_vs_iter(df)
             plt.savefig(Path(f'{datadir}/p2v_eval_{file.parent.stem}.png'))
-        df.to_csv(Path(f'{datadir}\\p2v_eval.csv'))
-        logger.info(f'{datadir}\\p2v_eval.csv')
-
-
-
+            df.to_csv(Path(f'{datadir}\\p2v_eval.csv'))
+            logger.info(f'{datadir}\\p2v_eval.csv')
         logger.info(f'-' * 50)
 
-    plt = plot_eval_vs_iter(df)
-    plt.savefig(Path(f'{datadir}/p2v_eval_{file.parent.stem}.png'))
     df = pd.DataFrame.from_dict(results.values())
     df.index.name = 'id'
     print(df)
+    fig = plot_eval_vs_iter(df)
+    plt.savefig(Path(f'{datadir}/p2v_eval_{file.parent.stem}.png'))
+    df.to_csv(Path(f'{datadir}\\p2v_eval.csv'))
+    logger.info(f'{datadir}\\p2v_eval.csv')
+
 
 
 
