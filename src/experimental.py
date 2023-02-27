@@ -918,6 +918,7 @@ def eval_mode(
     remove_background: bool = True,
     postfix: str = '',
     gt_postfix: str = '',
+    plot: bool = True,
 ):
     save_postfix = 'pr' if postfix.startswith('pr') else 'ml'
     save_path = Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval')
@@ -995,22 +996,23 @@ def eval_mode(
             save_path=dm_wavefront
         )
 
-    plt.style.use("default")
-    vis.diagnostic_assessment(
-        psf=noisy_img,
-        gt_psf=gt_psf,
-        predicted_psf=p_psf,
-        corrected_psf=corrected_psf,
-        psnr=psnr,
-        maxcounts=maxcounts,
-        y=y_wave,
-        pred=p_wave,
-        save_path=save_path,
-        display=False,
-        dxy=gen.x_voxel_size,
-        dz=gen.z_voxel_size,
-        transform_to_align_to_DM=True,
-    )
+    if plot:
+        plt.style.use("default")
+        vis.diagnostic_assessment(
+            psf=noisy_img,
+            gt_psf=gt_psf,
+            predicted_psf=p_psf,
+            corrected_psf=corrected_psf,
+            psnr=psnr,
+            maxcounts=maxcounts,
+            y=y_wave,
+            pred=p_wave,
+            save_path=save_path,
+            display=False,
+            dxy=gen.x_voxel_size,
+            dz=gen.z_voxel_size,
+            transform_to_align_to_DM=True,
+        )
 
     coefficients = [
         {'n': z.n, 'm': z.m, 'amplitude': a}
@@ -1022,7 +1024,7 @@ def eval_mode(
     # coefficients.to_csv(f'{save_path}.csv')
 
     p2v = diff.peak2valley(na=1.0)
-    p2v_gt = y.peak2valley(na=1.0)
+    p2v_gt = y_wave.peak2valley(na=1.0)
     logger.info(f"File:  {save_path.name}")
     logger.info(f"P2V: {round(p2v, 3)}   GT_P2V: {round(p2v_gt, 3)}")
     return p2v, p2v_gt, y, p
@@ -1034,7 +1036,8 @@ def eval_dataset(
     datadir: Path,
     flat: Any = None,
     postfix: str = 'sample_predictions_zernike_coefficients.csv',
-    gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv'
+    gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv',
+    plot_evals: bool = True,
 ):
 
     MLresultsdir = Path(datadir / 'MLResults')
@@ -1046,6 +1049,7 @@ def eval_dataset(
         flat_path=flat,
         postfix=postfix,
         gt_postfix=gt_postfix,
+        plot=plot_evals,
     )
 
     def worker(file, prediction_path, gt_path, state, results, modes):
@@ -1076,6 +1080,49 @@ def eval_dataset(
         )
         return results
 
+    def plot_eval_vs_iter(df):
+        # Permanently changes the pandas settings
+        pd.set_option('display.max_rows', None)
+        pd.set_option('display.max_columns', None)
+        pd.set_option('display.width', 600)
+        pd.set_option('display.max_colwidth', 20)
+
+        fig = plt.figure(figsize=(11, 8))
+        # set height ratios for subplots
+        gs = gridspec.GridSpec(2, 1, height_ratios=[2, 1])
+
+        # the first subplot
+        ax0 = plt.subplot(gs[0])
+        ax1 = plt.subplot(gs[1])
+
+        n = 10
+        # ax0.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
+        # ax1.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
+        plotnumber = 0
+        for mode, grp in df.groupby(['modes']):
+            plotnumber += 1
+            linestyle = 'solid'
+            if plotnumber > n: linestyle = 'dashed'
+            if plotnumber > n * 2: linestyle = 'dotted'
+            if plotnumber > n * 3: linestyle = 'dashdot'
+            if plotnumber > n * 4: linestyle = (0, (3, 1, 1, 1, 1, 1))
+            ax0 = grp.plot(ax=ax0, kind='line', x='iteration_index', y='p2v_gt', label=mode, linestyle=linestyle)
+            ax1 = grp.plot(ax=ax1, kind='line', x='iteration_index', y='p2v_residual', label=mode, legend=False,
+                           linestyle=linestyle)
+
+        ax0.set_ylabel('Remaining abberation\n(P-V in waves)')
+        ax1.set_ylabel('PR-Model\n(P-V in waves)')
+        ax0.set_xlabel('')
+        ax1.set_xlabel('Iteration')
+        plt.setp(ax0.get_xticklabels(), visible=False)
+        ax1.set_xticks(np.arange(0, max(df['iteration_index']) + 1, 1.0))
+        ax1.set_xlim(0, max(df['iteration_index']))
+        ax0.set_xlim(0, max(df['iteration_index']))
+        ax0.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=2, fontsize='small')
+        ax0.set_title(f"{results[file]['num_model_modes']} mode Model \n {file.parent.stem}")
+        plt.subplots_adjust(hspace=.0)
+        plt.tight_layout()
+        return plt
 
     active_jobs, jobs = [], []
     manager = mp.Manager()
@@ -1132,69 +1179,39 @@ def eval_dataset(
             mode = modes[0]
             prefix = f"ansi_z{mode}*"
 
-        try:
-            gt_path = list(MLresultsdir.glob(f'{state}_widefield_{prefix}_{gt_postfix}'))[0]
-            logger.info(f"GT:    {gt_path.name}")
-        except IndexError:
-            logger.warning(f'GT not found for: {file.name}')
-            continue
+        gt_path = None
+        for gtfile in MLresults_list:
+            if fnmatch.fnmatch(gtfile.name, f'{state}_widefield_{prefix}_{gt_postfix}'):
+                gt_path = gtfile
+                continue
+        if gt_path is None:
+            logger.warning(f'GT not found for: {state}_widefield_{prefix}_*.tif')
 
-        try:
-            prediction_path = list(MLresultsdir.glob(f'{state}_lightsheet_{prefix}_{postfix}'))[0]
-            logger.info(f"Pred:  {prediction_path.name}")
-        except IndexError:
-            logger.warning(f'Prediction not found for: {file.name}')
-            prediction_path = None
+        prediction_path = None
+        for predfile in MLresults_list:
+            if fnmatch.fnmatch(predfile.name, f'{state}_lightsheet_{prefix}_{postfix}'):
+                prediction_path = predfile
+                continue
+        if prediction_path is None: logger.warning(f'Prediction not found for: {file.name}')
 
         results = worker(file, prediction_path, gt_path, state, results, modes)
         df = pd.DataFrame.from_dict(results.values())
         df.index.name = 'id'
+        if plot_evals:
+            plt = plot_eval_vs_iter(df)
+            plt.savefig(Path(f'{datadir}/p2v_eval_{file.parent.stem}.png'))
         df.to_csv(Path(f'{datadir}\\p2v_eval.csv'))
         logger.info(f'{datadir}\\p2v_eval.csv')
 
-        # Permanently changes the pandas settings
-        pd.set_option('display.max_rows', None)
-        pd.set_option('display.max_columns', None)
-        pd.set_option('display.width', 600)
-        pd.set_option('display.max_colwidth', 20)
 
-        fig = plt.figure(figsize=(11,8))
-        # set height ratios for subplots
-        gs = gridspec.GridSpec(2, 1, height_ratios=[2, 1])
 
-        # the first subplot
-        ax0 = plt.subplot(gs[0])
-        ax1 = plt.subplot(gs[1])
-
-        n = 10
-        #ax0.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
-        #ax1.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
-        plotnumber=0
-        for mode, grp in df.groupby(['modes']):
-            plotnumber += 1
-            if plotnumber > n: linestyle = 'dashed'
-            elif plotnumber > n * 2: linestyle = 'dotted'
-            elif plotnumber > n * 3: linestyle = 'dashdot'
-            else: linestyle = 'solid'
-            ax0 = grp.plot(ax=ax0, kind='line', x='iteration_index', y='p2v_gt', label=mode, linestyle=linestyle)
-            ax1 = grp.plot(ax=ax1, kind='line', x='iteration_index', y='p2v_residual', label=mode, legend=False, linestyle=linestyle)
-
-        ax0.set_ylabel('Remaining abberation\n(P-V in waves)')
-        ax1.set_ylabel('PR-Model\n(P-V in waves)')
-        ax0.set_xlabel('')
-        ax1.set_xlabel('Iteration')
-        plt.setp(ax0.get_xticklabels(), visible=False)
-        ax1.set_xticks(np.arange(0, max(df['iteration_index'])+1, 1.0))
-        ax1.set_xlim(0, max(df['iteration_index']))
-        ax0.set_xlim(0, max(df['iteration_index']))
-        ax0.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        ax0.set_title(f"{results[file]['num_model_modes']} mode Model \n {file.parent.stem}")
-        plt.subplots_adjust(hspace=.0)
-        plt.tight_layout()
-        plt.savefig(Path(f'{datadir}/p2v_eval_{file.parent.stem}.png'))
         logger.info(f'-' * 50)
 
-    print(df.groupby(['modes']))
+    plt = plot_eval_vs_iter(df)
+    plt.savefig(Path(f'{datadir}/p2v_eval_{file.parent.stem}.png'))
+    df = pd.DataFrame.from_dict(results.values())
+    df.index.name = 'id'
+    print(df)
 
 
 
