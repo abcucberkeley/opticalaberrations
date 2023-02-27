@@ -333,6 +333,8 @@ def parse_args(args):
     eval_dataset.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
     eval_dataset.add_argument("--flat", default=None, type=Path, help="path to the flat DM acts file")
+    eval_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
+
 
     eval_dm = subparsers.add_parser("eval_dm")
     eval_dm.add_argument("datadir", type=Path, help="path to dataset directory")
@@ -529,6 +531,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             model=args.model,
             datadir=args.datadir,
             flat=args.flat,
+            plot_evals=not args.skip_eval_plots,
         )
     elif args.func == 'eval_mode':
         experimental.eval_mode(
