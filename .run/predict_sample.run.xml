@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="predict_sample ../pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z15/phase.h5 ../examples/single/single.tif ../examples/Zernike_Korra_Bax273.csv --current_dm None --dm_damping_scalar 1.0 --wavelength 0.51 --lateral_voxel_size 0.108 --axial_voxel_size 0.1 --prediction_threshold 0.1 --freq_strength_threshold 0.01 --sign_threshold 0.9 --num_predictions 1 --batch_size 256 --prev None --plot --plot_rotations" />
+    <option name="PARAMETERS" value="predict_sample ../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5 ../examples/single/single.tif ../examples/Zernike_Korra_Bax273.csv --current_dm None --dm_damping_scalar 1.0 --wavelength 0.51 --lateral_voxel_size 0.108 --axial_voxel_size 0.1 --prediction_threshold 0.1 --freq_strength_threshold 0.01 --sign_threshold 0.9 --num_predictions 1 --batch_size 128 --prev None --plot --plot_rotations" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

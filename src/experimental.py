@@ -1020,14 +1020,14 @@ def eval_mode(
             transform_to_align_to_DM=True,
         )
 
-    coefficients = [
+    residuals = [
         {'n': z.n, 'm': z.m, 'amplitude': a}
         for z, a in diff.zernikes.items()
     ]
 
-    # coefficients = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
-    # coefficients.index.name = 'ansi'
-    # coefficients.to_csv(f'{save_path}.csv')
+    residuals = pd.DataFrame(residuals, columns=['n', 'm', 'amplitude'])
+    residuals.index.name = 'ansi'
+    residuals.to_csv(f'{save_path}_residuals.csv')
 
     p2v = diff.peak2valley(na=1.0)
     p2v_gt = y_wave.peak2valley(na=1.0)

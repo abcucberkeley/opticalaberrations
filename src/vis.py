@@ -380,7 +380,6 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None, lls_defocu
         pred_wave,
         label='Predicted wavefront',
         vcolorbar=True,
-        nas=(.55, .65, .75, .85, .95, 1.)
     )
 
     if pred_std is not None:

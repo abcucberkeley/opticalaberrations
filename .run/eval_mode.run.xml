@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="eval_mode ../pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z15/phase.h5 $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_lightsheet_ansi_z07_n03_m-1_amp0p1_single.tif $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_widefield_ansi_z07_n03_m-1_amp0p1_single_matlab_pupil_waves.tif $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_lightsheet_ansi_z07_n03_m-1_amp0p1_single_sample_predictions_zernike_coefficients.csv" />
+    <option name="PARAMETERS" value="eval_mode ../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5 $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_lightsheet_ansi_z07_n03_m-1_amp0p1_single.tif $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_widefield_ansi_z07_n03_m-1_amp0p1_single_matlab_pupil_waves.tif $USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_lightsheet_ansi_z07_n03_m-1_amp0p1_single_sample_predictions_zernike_coefficients.csv" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

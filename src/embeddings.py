@@ -503,12 +503,12 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
                 ax1 = fig.add_subplot(interference[0])
                 ax1.imshow(np.nanmax(beads, axis=ax), cmap='hot')
                 ax1.axis('off')
-                ax1.set_title(r'$\mathscr{O}$')
+                ax1.set_title(r'$\mathcal{S}$')
 
                 ax2 = fig.add_subplot(interference[1])
                 m4 = ax2.imshow(np.nanmax(abs(interference_pattern), axis=ax), cmap='magma')
                 ax2.axis('off')
-                ax2.set_title(r'$|\mathscr{F}(\mathscr{O})|$')
+                ax2.set_title(r'$|\mathscr{F}(\mathcal{S})|$')
 
                 m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot')
 
@@ -525,14 +525,14 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
             for ax in axes.flatten():
                 ax.axis('off')
 
-            axes[0, 0].set_title('XY $(\mathscr{i})$')
-            axes[0, 1].set_title('XZ $(\mathscr{i})$')
-            axes[0, 2].set_title('YZ $(\mathscr{i})$')
+            axes[0, 0].set_title('XY')
+            axes[0, 1].set_title('XZ')
+            axes[0, 2].set_title('YZ')
             axes[-1, 1].set_title(
-                r"$\mathscr{F}^{-1} \left( \mathscr{F}(\mathscr{i}) / \mathscr{F}(\mathscr{O}) \right)$"
+                r"$\mathscr{F}^{-1} \left( \mathscr{F}(\mathscr{i}) / \mathscr{F}(\mathcal{S}) \right)$"
             )
 
-            plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.1, wspace=0.1)
+            plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.2, wspace=0.1)
             plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
             # plt.savefig(f'{plot}_interference_pattern.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
