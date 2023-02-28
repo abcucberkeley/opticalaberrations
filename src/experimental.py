@@ -1124,7 +1124,7 @@ def eval_dataset(
         ax1.set_xlim(0, max(df['iteration_index']))
         ax0.set_xlim(0, max(df['iteration_index']))
         ax0.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=int(len(df.groupby(['modes']))/40) + 1, fontsize='x-small', labelspacing=0.2)
-        ax0.set_title(f"{results[file]['num_model_modes']} mode Model \n {file.parent.parent.stem}_{file.parent.stem}")
+        ax0.set_title(f"{results[file]['num_model_modes']} mode Model \n {file.parent.parent.parent.stem}\\{file.parent.parent.stem}\\{file.parent.stem}")
         plt.subplots_adjust(hspace=.0)
         plt.tight_layout()
         return fig
