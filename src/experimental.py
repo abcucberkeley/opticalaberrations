@@ -508,6 +508,7 @@ def predict_sample(
             pred=p,
             pred_std=std,
             save_path=Path(f"{img.with_suffix('')}_sample_predictions_diagnosis"),
+            lls_defocus=lls_defocus
         )
 
 
@@ -1020,14 +1021,14 @@ def eval_mode(
         )
         logger.info(f"File:  {save_path.name}")
 
-    coefficients = [
+    residuals = [
         {'n': z.n, 'm': z.m, 'amplitude': a}
         for z, a in diff.zernikes.items()
     ]
 
-    # coefficients = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
-    # coefficients.index.name = 'ansi'
-    # coefficients.to_csv(f'{save_path}.csv')
+    residuals = pd.DataFrame(residuals, columns=['n', 'm', 'amplitude'])
+    residuals.index.name = 'ansi'
+    residuals.to_csv(f'{save_path}_residuals.csv')
 
     p2v = diff.peak2valley(na=1.0)
     p2v_gt = y_wave.peak2valley(na=1.0)

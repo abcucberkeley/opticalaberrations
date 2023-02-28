@@ -97,7 +97,6 @@ def create_synthetic_sample(
         ax,
         wavefront.wave(100),
         label=filename,
-        nas=(.55, .65, .75, .85, .95, 1.),
         vcolorbar=True,
     )
     plt.savefig(f"{outdir}/{filename}_wavefront.png", bbox_inches='tight', pad_inches=.25)
