@@ -926,6 +926,9 @@ def eval_mode(
     gt_postfix: str = '',
     plot: bool = True,
 ):
+    logger.info(f"Pred: {prediction_path.name}")
+    logger.info(f"GT: {gt_path.name}")
+
     save_postfix = 'pr' if postfix.startswith('pr') else 'ml'
     save_path = Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval')
 
@@ -979,18 +982,6 @@ def eval_mode(
     y_wave = Wavefront(y, lam_detection=gen.lam_detection, modes=len(p))
     diff = Wavefront(y-p, lam_detection=gen.lam_detection, modes=len(p))
 
-    prep = partial(
-        preprocessing.prep_sample,
-        normalize=normalize,
-        remove_background=remove_background,
-        model_fov=gen.psf_fov
-    )
-
-    noisy_img = prep(noisy_img, sample_voxel_size=predictions_settings['sample_voxel_size'])
-    p_psf = prep(gen.single_psf(p_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
-    gt_psf = prep(gen.single_psf(y_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
-    corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
-
     if flat_path is not None:
         rfilter = f"{str(gt_path.name).replace(gt_postfix, '')}"
         dm_path = Path(str(list(input_path.parent.glob(f"{rfilter}*JSONsettings.json"))[0]))
@@ -1003,6 +994,18 @@ def eval_mode(
         )
 
     if plot:
+        prep = partial(
+            preprocessing.prep_sample,
+            normalize=normalize,
+            remove_background=remove_background,
+            model_fov=gen.psf_fov
+        )
+
+        noisy_img = prep(noisy_img, sample_voxel_size=predictions_settings['sample_voxel_size'])
+        p_psf = prep(gen.single_psf(p_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
+        gt_psf = prep(gen.single_psf(y_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
+        corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
+
         plt.style.use("default")
         vis.diagnostic_assessment(
             psf=noisy_img,
@@ -1019,21 +1022,142 @@ def eval_mode(
             dz=gen.z_voxel_size,
             transform_to_align_to_DM=True,
         )
-        logger.info(f"File:  {save_path.name}")
 
     residuals = [
-        {'n': z.n, 'm': z.m, 'amplitude': a}
-        for z, a in diff.zernikes.items()
+        {
+            'n': z.n,
+            'm': z.m,
+            'prediction': p_wave.zernikes[z],
+            'ground_truth': y_wave.zernikes[z],
+            'residuals': diff.zernikes[z],
+        }
+        for z in p_wave.zernikes.keys()
     ]
 
-    residuals = pd.DataFrame(residuals, columns=['n', 'm', 'amplitude'])
+    residuals = pd.DataFrame(residuals, columns=['n', 'm', 'prediction', 'ground_truth', 'residuals'])
     residuals.index.name = 'ansi'
     residuals.to_csv(f'{save_path}_residuals.csv')
 
     p2v = diff.peak2valley(na=1.0)
     p2v_gt = y_wave.peak2valley(na=1.0)
     logger.info(f"P2V: {round(p2v, 3)}   GT_P2V: {round(p2v_gt, 3)}")
-    return p2v, p2v_gt, y, p
+    logger.info('-'*50)
+
+
+def plot_eval_dataset(
+    datadir: Path,
+    postfix: str = 'sample_predictions_zernike_coefficients_ml_eval_residuals.csv',
+):
+    iteration_labels = [
+        'before',
+        'after0',
+        'after1',
+        'after2',
+        'after3',
+        'after4',
+        'after5',
+    ]
+
+    # Permanently changes the pandas settings
+    pd.set_option('display.max_rows', None)
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', 600)
+    pd.set_option('display.max_colwidth', 20)
+    results = {}
+
+    for file in tqdm(
+            sorted(datadir.rglob(f'*{postfix}'), key=os.path.getctime),
+            desc='Collecting results'
+    ):  # sort by creation time
+        state = file.stem.split('_')[0]
+        modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
+        modes = [m for m in modes if m.isdigit()]
+        res = pd.read_csv(file)
+
+        p = Wavefront(res['prediction'].values, modes=res.shape[0])
+        y = Wavefront(res['ground_truth'].values, modes=res.shape[0])
+        diff = Wavefront(res['residuals'].values, modes=res.shape[0])
+
+        results[file] = {
+            'modes': ', '.join(str(e) for e in modes),
+            'state': state,
+            'iteration_index': iteration_labels.index(state),
+            'p2v_residual': diff.peak2valley(),
+            'p2v_gt': y.peak2valley(),
+            'p2v_pred': p.peak2valley(),
+            'num_model_modes': p.modes
+        }
+
+    df = pd.DataFrame.from_dict(results.values())
+    fig = plt.figure(figsize=(11, 8))
+    # set height ratios for subplots
+    gs = gridspec.GridSpec(2, 1, height_ratios=[2, 1])
+
+    # the first subplot
+    ax0 = plt.subplot(gs[0])
+    ax1 = plt.subplot(gs[1])
+
+    n = 10
+    # ax0.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
+    # ax1.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
+    plotnumber = 0
+
+    for mode, grp in df.groupby(['modes']):
+        grp = grp.sort_values('iteration_index')
+
+        plotnumber += 1
+        linestyle = 'solid'
+        if plotnumber > n: linestyle = 'dashed'
+        if plotnumber > n * 2: linestyle = 'dotted'
+        if plotnumber > n * 3: linestyle = 'dashdot'
+        if plotnumber > n * 4: linestyle = (0, (3, 1, 1, 1, 1, 1))
+
+        ax0 = grp.plot(
+            ax=ax0,
+            kind='line',
+            x='iteration_index',
+            y='p2v_gt',
+            label=mode,
+            linestyle=linestyle
+        )
+        ax1 = grp.plot(
+            ax=ax1,
+            kind='line',
+            x='iteration_index',
+            y='p2v_residual',
+            label=mode,
+            legend=False,
+            linestyle=linestyle
+        )
+
+    ax0.set_ylabel('Remaining abberation\n(P-V in waves)')
+    ax1.set_ylabel('PR-Model\n(P-V in waves)')
+    ax0.set_xlabel('')
+    ax1.set_xlabel('Iteration')
+    ax0.set_ylim(0, 5)
+    ax1.set_ylim(0, 2)
+    plt.setp(ax0.get_xticklabels(), visible=False)
+    ax1.set_xticks(np.arange(0, max(df['iteration_index']) + 1, 1.0))
+    ax1.set_xlim(0, max(df['iteration_index']))
+    ax0.set_xlim(0, max(df['iteration_index']))
+    ax0.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    ax0.set_title(f"{df['num_model_modes'].unique()} mode Model")
+
+    ax0.legend(
+        loc='center left', bbox_to_anchor=(1, 0.5),
+        ncol=int(len(df.groupby(['modes'])) / 40) + 1,
+        fontsize='x-small',
+        labelspacing=0.2
+    )
+    savepath = Path(f'{datadir}/p2v_eval')
+    logger.info(f'{savepath}')
+
+    df.to_csv(f'{savepath}.csv')
+
+    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2, hspace=.0)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
 
 
 @profile
@@ -1044,178 +1168,68 @@ def eval_dataset(
     postfix: str = 'sample_predictions_zernike_coefficients.csv',
     gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv',
     plot_evals: bool = True,
+    precomputed: bool = False
 ):
 
-    MLresultsdir = Path(datadir / 'MLResults')
-    MLresults_list = list(MLresultsdir.glob('**/*'))    # only get directory list once for speed
+    if not precomputed:
+        pool = mp.Pool(processes=mp.cpu_count())
+        MLresultsdir = Path(datadir / 'MLResults')
+        MLresults_list = list(MLresultsdir.glob('**/*'))    # only get directory list once for speed
 
-    evaluate = partial(
-        eval_mode,
-        model_path=model,
-        flat_path=flat,
-        postfix=postfix,
-        gt_postfix=gt_postfix,
-        plot=plot_evals,
-    )
-
-    def worker(file, prediction_path, gt_path, state, results, modes):
-        p2v, p2v_gt, y, p = evaluate(
-            input_path=file,
-            prediction_path=prediction_path,
-            gt_path=gt_path,
+        evaluate = partial(
+            eval_mode,
+            model_path=model,
+            flat_path=flat,
+            postfix=postfix,
+            gt_postfix=gt_postfix,
+            plot=plot_evals,
         )
 
-        iteration_labels = ['before',
-                            'after0',
-                            'after1',
-                            'after2',
-                            'after3',
-                            'after4',
-                            'after5',
-                            ]
-        results[file] = dict(
-            state=state,
-            iteration_index=iteration_labels.index(state),
-            modes=', '.join(str(e) for e in modes),
-            p2v_residual=p2v,
-            p2v_gt=p2v_gt,
-            prediction_file=str(prediction_path),
-            ground_truth_file=str(gt_path),
-            model=model,
-            num_model_modes=len(p),
-        )
-        return results
-
-    def plot_eval_vs_iter(df):
-        # Permanently changes the pandas settings
-        pd.set_option('display.max_rows', None)
-        pd.set_option('display.max_columns', None)
-        pd.set_option('display.width', 600)
-        pd.set_option('display.max_colwidth', 20)
-
-        fig = plt.figure(figsize=(11, 8))
-        # set height ratios for subplots
-        gs = gridspec.GridSpec(2, 1, height_ratios=[2, 1])
-
-        # the first subplot
-        ax0 = plt.subplot(gs[0])
-        ax1 = plt.subplot(gs[1])
-
-        n = 10
-        # ax0.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
-        # ax1.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
-        plotnumber = 0
-        for mode, grp in df.groupby(['modes']):
-            plotnumber += 1
-            linestyle = 'solid'
-            if plotnumber > n: linestyle = 'dashed'
-            if plotnumber > n * 2: linestyle = 'dotted'
-            if plotnumber > n * 3: linestyle = 'dashdot'
-            if plotnumber > n * 4: linestyle = (0, (3, 1, 1, 1, 1, 1))
-            ax0 = grp.plot(ax=ax0, kind='line', x='iteration_index', y='p2v_gt', label=mode, linestyle=linestyle)
-            ax1 = grp.plot(ax=ax1, kind='line', x='iteration_index', y='p2v_residual', label=mode, legend=False,
-                           linestyle=linestyle)
-
-        ax0.set_ylabel('Remaining abberation\n(P-V in waves)')
-        ax1.set_ylabel('PR-Model\n(P-V in waves)')
-        ax0.set_xlabel('')
-        ax1.set_xlabel('Iteration')
-        plt.setp(ax0.get_xticklabels(), visible=False)
-        ax1.set_xticks(np.arange(0, max(df['iteration_index']) + 1, 1.0))
-        ax1.set_xlim(0, max(df['iteration_index']))
-        ax0.set_xlim(0, max(df['iteration_index']))
-        ax0.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=int(len(df.groupby(['modes']))/40) + 1, fontsize='x-small', labelspacing=0.2)
-        ax0.set_title(f"{results[file]['num_model_modes']} mode Model \n {file.parent.parent.parent.stem}\\{file.parent.parent.stem}\\{file.parent.stem}")
-        plt.subplots_adjust(hspace=.0)
-        plt.tight_layout()
-        return fig
-
-    active_jobs, jobs = [], []
-    manager = mp.Manager()
-    results = manager.dict()
-
-    logger.info('Precheck that all GT and prediction files are present...')
-    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime):  # sort by creation time
-        if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
-            continue
-
-        state = file.stem.split('_')[0]
-        modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
-        modes = [m for m in modes if m]
-
-        if len(modes) > 1:
-            prefix = f"ansi_"
-            for m in modes:
-                prefix += f"z{m}*"
-        else:
-            mode = modes[0]
-            prefix = f"ansi_z{mode}*"
-
-        gt_path = None
-        for gtfile in MLresults_list:
-            if fnmatch.fnmatch(gtfile.name, f'{state}_widefield_{prefix}_{gt_postfix}'):
-                gt_path = gtfile
+        logger.info('Beginning evaluations')
+        for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime):  # sort by creation time
+            if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
                 continue
-        if gt_path is None:
-            logger.warning(f'GT not found for: {state}_widefield_{prefix}_*.tif')
 
-        prediction_path = None
-        for predfile in MLresults_list:
-            if fnmatch.fnmatch(predfile.name, f'{state}_lightsheet_{prefix}_{postfix}'):
-                prediction_path = predfile
-                continue
-        if prediction_path is None: logger.warning(f'Prediction not found for: {file.name}')
+            state = file.stem.split('_')[0]
+            modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
+            modes = [m for m in modes if m]
+            logger.info(f"ansi_z{modes}")
 
-    logger.info('Beginning evaluations')
-    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime):  # sort by creation time
-        if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
-            continue
+            if len(modes) > 1:
+                prefix = f"ansi_"
+                for m in modes:
+                    prefix += f"z{m}*"
+            else:
+                mode = modes[0]
+                prefix = f"ansi_z{mode}*"
 
-        state = file.stem.split('_')[0]
-        modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
-        modes = [m for m in modes if m]
-        logger.info(f"ansi_z{modes}")
-        logger.info(f"Input: {file.name[:75]}... {file.suffix}")
+            gt_path = None
+            for gtfile in MLresults_list:
+                if fnmatch.fnmatch(gtfile.name, f'{state}_widefield_{prefix}_{gt_postfix}'):
+                    gt_path = gtfile
+                    continue
+            if gt_path is None:
+                logger.warning(f'GT not found for: {state}_widefield_{prefix}_*.tif')
 
-        if len(modes) > 1:
-            prefix = f"ansi_"
-            for m in modes:
-                prefix += f"z{m}*"
-        else:
-            mode = modes[0]
-            prefix = f"ansi_z{mode}*"
+            prediction_path = None
+            for predfile in MLresults_list:
+                if fnmatch.fnmatch(predfile.name, f'{state}_lightsheet_{prefix}_{postfix}'):
+                    prediction_path = predfile
+                    continue
+            if prediction_path is None: logger.warning(f'Prediction not found for: {file.name}')
 
-        gt_path = None
-        for gtfile in MLresults_list:
-            if fnmatch.fnmatch(gtfile.name, f'{state}_widefield_{prefix}_{gt_postfix}'):
-                gt_path = gtfile
-                continue
-        if gt_path is None:
-            logger.warning(f'GT not found for: {state}_widefield_{prefix}_*.tif')
+            task = partial(
+                evaluate,
+                input_path=file,
+                prediction_path=prediction_path,
+                gt_path=gt_path
+            )
+            _ = pool.apply_async(task)  # issue task
 
-        prediction_path = None
-        for predfile in MLresults_list:
-            if fnmatch.fnmatch(predfile.name, f'{state}_lightsheet_{prefix}_{postfix}'):
-                prediction_path = predfile
-                continue
-        if prediction_path is None: logger.warning(f'Prediction not found for: {file.name}')
+        pool.close()    # close the pool
+        pool.join()     # wait for all tasks to complete
 
-        results = worker(file, prediction_path, gt_path, state, results, modes)
-        df = pd.DataFrame.from_dict(results.values())
-        df.index.name = 'id'
-        fig = plot_eval_vs_iter(df)
-        savepath = Path(f'{datadir}/p2v_eval_{file.parent.parent.stem}_{file.parent.stem}.png')
-        plt.savefig(savepath)
-        logger.info(f'{savepath}')
-        savepath = Path(f'{datadir}\\p2v_eval.csv')
-        df.to_csv(savepath)
-        logger.info(f'{savepath}')
-        logger.info(f'-' * 50)
-
-    df = pd.DataFrame.from_dict(results.values())
-    df.index.name = 'id'
-    print(df)
-
+    plot_eval_dataset(datadir)
 
 
 @profile

@@ -334,6 +334,7 @@ def parse_args(args):
     eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
     eval_dataset.add_argument("--flat", default=None, type=Path, help="path to the flat DM acts file")
     eval_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
+    eval_dataset.add_argument("--precomputed", action='store_true')
 
 
     eval_dm = subparsers.add_parser("eval_dm")
@@ -532,6 +533,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             datadir=args.datadir,
             flat=args.flat,
             plot_evals=not args.skip_eval_plots,
+            precomputed=args.precomputed,
         )
     elif args.func == 'eval_mode':
         experimental.eval_mode(
