@@ -1178,7 +1178,7 @@ def eval_dataset(
         plt.savefig(savepath)
         logger.info(f'{savepath}')
         savepath = Path(f'{datadir}\\p2v_eval.csv')
-        df.to_csv(savepath)
+        df.to_csv(savepath, header=False, index=False)
         logger.info(f'{savepath}')
         logger.info(f'-' * 50)
 
@@ -1187,19 +1187,69 @@ def eval_dataset(
     print(df)
 
 
+def calibrate_dm(datadir, dm_calibration):
+    dataframes = []
+    file = list(sorted(datadir.parent.glob('*_dm_matrix.csv')))[0]
+    df = pd.read_csv(file, header=None)
+    dm = pd.read_csv(dm_calibration, header=None)
+    logger.info(f'{df.shape[0]} ML modes, {df.shape[1]} DM applied modes in {file}')
+    logger.info(f'{dm.shape[1]} modes, {dm.shape[0]} actuators in {dm_calibration}')
 
+    scalers = np.identity(dm.shape[1])
+    scalers[np.diag_indices_from(df)] /= np.diag(df)
+    calibration = np.dot(dm, scalers)
+    calibration = pd.DataFrame(calibration)
+
+
+    fig, ax = plt.subplots(figsize=(20, 20))
+    ax = sns.heatmap(df, ax=ax, annot=True, fmt=".2f", vmin=-1, vmax=1, cmap='coolwarm', square=True,
+                     cbar_kws={'label': 'Ratio of ML prediction to GT', 'shrink': .8})
+    ax.set(ylabel="ML saw these modes", xlabel="DM applied this mode", )
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position('top')
+
+    for t in ax.texts:
+        if abs(float(t.get_text())) >= 0.01:
+            t.set_text(t.get_text())
+        else:
+            t.set_text("")
+
+    output_file = Path(f"{datadir.parent}/calibration")
+    plt.savefig(f"{output_file}.png", bbox_inches='tight', pad_inches=.25)
+
+    dm = calibration / dm
+    fig, ax = plt.subplots(figsize=(20, 20))
+    ax = sns.heatmap(dm, ax=ax, vmin=-2, vmax=2, cmap='coolwarm', square=True,
+                     cbar_kws={'label': 'Fractional change (new/old)', 'shrink': .8})
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position('top')
+    ax.set(ylabel="Actuators", xlabel="Zernike modes", )
+    plt.savefig(f"{output_file}_diff.png", bbox_inches='tight', pad_inches=.25)
+    logger.info(f"Saved result to: {output_file}.png")
+    calibration.to_csv(f"{output_file}.csv", header=False, index=False)
+    logger.info(f"Saved result to: {output_file}.csv")
+    logger.info(f'{calibration.shape[1]} modes, {calibration.shape[0]} actuators in {output_file}.csv')
 @profile
 def eval_dm(
     datadir: Path,
-    num_modes: int = 15,
-    gt_postfix: str = 'pr_pupil_waves.tif',
-    # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
+    gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
     postfix: str = 'sample_predictions_zernike_coefficients.csv'
 ):
+    settings_path = Path(list(datadir.rglob(f'*_settings.json'))[0])
+    with open(settings_path) as f:
+        predictions_settings = ujson.load(f)
+        model_path = Path(predictions_settings['model'])
+        gen = backend.load_metadata(
+            model_path
+        )
+        num_modes = gen.n_modes
+        logger.info(f'{num_modes} number of modes used in prediction')
+        f.close()
+
 
     data = np.identity(num_modes)
-    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif')):
-        if 'CamB' in str(file):
+    for file in sorted(datadir.glob('*before*_lightsheet_ansi_z*.tif')):
+        if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
             continue
 
         state = file.stem.split('_')[0]
@@ -1216,18 +1266,16 @@ def eval_dm(
             mode = modes[0]
             prefix = f"ansi_z{mode}*"
 
-        logger.info(f"Looking for: {prefix}")
-
         try:
             gt_path = list(datadir.rglob(f'{state}_widefield_{prefix}_{gt_postfix}'))[0]
-            logger.info(f"GT: {gt_path.name}")
+            logger.info(f"GT:    {gt_path.name}")
         except IndexError:
             logger.warning(f'GT not found for: {file.name}')
             continue
 
         try:
             prediction_path = list(datadir.rglob(f'{state}_lightsheet_{prefix}_{postfix}'))[0]
-            logger.info(f"Pred: {prediction_path.name}")
+            logger.info(f"Pred:  {prediction_path.name}")
         except IndexError:
             logger.warning(f'Prediction not found for: {file.name}')
             prediction_path = None
@@ -1243,12 +1291,13 @@ def eval_dm(
             y = pd.read_csv(gt_path, header=0).iloc[:, -1].values[:len(p)]
 
         magnitude = y[np.argmax(np.abs(y))]
+        logger.info(f'{magnitude} applied to mode {np.argmax(np.abs(y))}' )
 
         for i in range(p.shape[0]):
             data[i, int(mode)] = p[i] / magnitude   # normalize by the magnitude of the mode we put on the mirror
 
     df = pd.DataFrame(data)
-    fig, ax = plt.subplots(figsize=(10, 10))
+    fig, ax = plt.subplots(figsize=(20, 20))
     ax = sns.heatmap(
         data, ax=ax, annot=True, fmt=".2f", vmin=-1, vmax=1,
         cmap='coolwarm', square=True, cbar_kws={'label': 'Ratio of ML prediction to GT', 'shrink': .8}
@@ -1266,52 +1315,10 @@ def eval_dm(
     ax.set_title(f'DM magnitude = {magnitude} um RMS {chr(10)} {datadir.parts[-2]}')
 
     output_file = Path(f'{datadir}/../{datadir.parts[-1]}_dm_matrix')
-    df.to_csv(f"{output_file}.csv")
+    df.to_csv(f"{output_file}.csv", header=False, index=False)
+    logger.info(f"Saved result to: {output_file}.csv")
     plt.savefig(f"{output_file}.png", bbox_inches='tight', pad_inches=.25)
-    logger.info(f"Saved result to: {output_file}")
-
-
-def calibrate_dm(datadir, dm_calibration):
-    dataframes = []
-    for file in sorted(datadir.glob('*dm_matrix.csv')):
-        df = pd.read_csv(file, header=0, index_col=0)
-        dataframes.append(df)
-
-    df = pd.concat(dataframes)
-    avg = df.groupby(df.index).mean()
-    dm = pd.read_csv(dm_calibration, header=None)
-
-    scalers = np.identity(dm.shape[1])
-    scalers[np.diag_indices_from(avg)] /= np.diag(avg)
-    calibration = np.dot(dm, scalers)
-    calibration = pd.DataFrame(calibration)
-
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ax = sns.heatmap(avg, ax=ax, annot=True, fmt=".2f", vmin=-1, vmax=1, cmap='coolwarm', square=True,
-                     cbar_kws={'label': 'Ratio of ML prediction to GT', 'shrink': .8})
-    ax.set(ylabel="ML saw these modes", xlabel="DM applied this mode", )
-    ax.xaxis.tick_top()
-    ax.xaxis.set_label_position('top')
-
-    for t in ax.texts:
-        if abs(float(t.get_text())) >= 0.01:
-            t.set_text(t.get_text())
-        else:
-            t.set_text("")
-
-    output_file = Path(f"{datadir}/calibration")
-    plt.savefig(f"{output_file}.png", bbox_inches='tight', pad_inches=.25)
-
-    dm = calibration / dm
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ax = sns.heatmap(dm, ax=ax, vmin=0, vmax=2, cmap='coolwarm', square=True, cbar_kws={'shrink': .8})
-    ax.xaxis.tick_top()
-    ax.xaxis.set_label_position('top')
-    ax.set(ylabel="Actuators", xlabel="Zernike modes", )
-    plt.savefig(f"{output_file}_diff.png", bbox_inches='tight', pad_inches=.25)
-
-    calibration.to_csv(f"{output_file}.csv", header=False, index=False)
-    logger.info(f"Saved result to: {output_file}")
+    logger.info(f"Saved result to: {output_file}.png")
 
 
 def phase_retrieval(
