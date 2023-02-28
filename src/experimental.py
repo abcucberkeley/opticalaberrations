@@ -1018,6 +1018,7 @@ def eval_mode(
             dz=gen.z_voxel_size,
             transform_to_align_to_DM=True,
         )
+        logger.info(f"File:  {save_path.name}")
 
     coefficients = [
         {'n': z.n, 'm': z.m, 'amplitude': a}
@@ -1030,7 +1031,6 @@ def eval_mode(
 
     p2v = diff.peak2valley(na=1.0)
     p2v_gt = y_wave.peak2valley(na=1.0)
-    logger.info(f"File:  {save_path.name}")
     logger.info(f"P2V: {round(p2v, 3)}   GT_P2V: {round(p2v_gt, 3)}")
     return p2v, p2v_gt, y, p
 
@@ -1123,8 +1123,8 @@ def eval_dataset(
         ax1.set_xticks(np.arange(0, max(df['iteration_index']) + 1, 1.0))
         ax1.set_xlim(0, max(df['iteration_index']))
         ax0.set_xlim(0, max(df['iteration_index']))
-        ax0.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=2, fontsize='small')
-        ax0.set_title(f"{results[file]['num_model_modes']} mode Model \n {file.parent.stem}")
+        ax0.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=int(len(df.groupby(['modes']))/40) + 1, fontsize='x-small', labelspacing=0.2)
+        ax0.set_title(f"{results[file]['num_model_modes']} mode Model \n {file.parent.parent.stem}_{file.parent.stem}")
         plt.subplots_adjust(hspace=.0)
         plt.tight_layout()
         return fig
@@ -1202,25 +1202,18 @@ def eval_dataset(
         results = worker(file, prediction_path, gt_path, state, results, modes)
         df = pd.DataFrame.from_dict(results.values())
         df.index.name = 'id'
-        if plot_evals:
-            df = pd.DataFrame.from_dict(results.values())
-            df.index.name = 'id'
-            fig = plot_eval_vs_iter(df)
-            plt.savefig(Path(f'{datadir}/p2v_eval_{file.parent.stem}.png'))
-            df.to_csv(Path(f'{datadir}\\p2v_eval.csv'))
-            logger.info(f'{datadir}\\p2v_eval.csv')
+        fig = plot_eval_vs_iter(df)
+        savepath = Path(f'{datadir}/p2v_eval_{file.parent.parent.stem}_{file.parent.stem}.png')
+        plt.savefig(savepath)
+        logger.info(f'{savepath}')
+        savepath = Path(f'{datadir}\\p2v_eval.csv')
+        df.to_csv(savepath)
+        logger.info(f'{savepath}')
         logger.info(f'-' * 50)
 
     df = pd.DataFrame.from_dict(results.values())
     df.index.name = 'id'
     print(df)
-    fig = plot_eval_vs_iter(df)
-    plt.savefig(Path(f'{datadir}/p2v_eval_{file.parent.stem}.png'))
-    df.to_csv(Path(f'{datadir}\\p2v_eval.csv'))
-    logger.info(f'{datadir}\\p2v_eval.csv')
-
-
-
 
 
 
