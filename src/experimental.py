@@ -979,17 +979,7 @@ def eval_mode(
     y_wave = Wavefront(y, lam_detection=gen.lam_detection, modes=len(p))
     diff = Wavefront(y-p, lam_detection=gen.lam_detection, modes=len(p))
 
-    prep = partial(
-        preprocessing.prep_sample,
-        normalize=normalize,
-        remove_background=remove_background,
-        model_fov=gen.psf_fov
-    )
 
-    noisy_img = prep(noisy_img, sample_voxel_size=predictions_settings['sample_voxel_size'])
-    p_psf = prep(gen.single_psf(p_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
-    gt_psf = prep(gen.single_psf(y_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
-    corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
 
     if flat_path is not None:
         rfilter = f"{str(gt_path.name).replace(gt_postfix, '')}"
@@ -1003,6 +993,18 @@ def eval_mode(
         )
 
     if plot:
+        prep = partial(
+            preprocessing.prep_sample,
+            normalize=normalize,
+            remove_background=remove_background,
+            model_fov=gen.psf_fov
+        )
+
+        noisy_img = prep(noisy_img, sample_voxel_size=predictions_settings['sample_voxel_size'])
+        p_psf = prep(gen.single_psf(p_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
+        gt_psf = prep(gen.single_psf(y_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
+        corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
+
         plt.style.use("default")
         vis.diagnostic_assessment(
             psf=noisy_img,
@@ -1133,38 +1135,6 @@ def eval_dataset(
     active_jobs, jobs = [], []
     manager = mp.Manager()
     results = manager.dict()
-
-    logger.info('Precheck that all GT and prediction files are present...')
-    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime):  # sort by creation time
-        if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
-            continue
-
-        state = file.stem.split('_')[0]
-        modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
-        modes = [m for m in modes if m]
-
-        if len(modes) > 1:
-            prefix = f"ansi_"
-            for m in modes:
-                prefix += f"z{m}*"
-        else:
-            mode = modes[0]
-            prefix = f"ansi_z{mode}*"
-
-        gt_path = None
-        for gtfile in MLresults_list:
-            if fnmatch.fnmatch(gtfile.name, f'{state}_widefield_{prefix}_{gt_postfix}'):
-                gt_path = gtfile
-                continue
-        if gt_path is None:
-            logger.warning(f'GT not found for: {state}_widefield_{prefix}_*.tif')
-
-        prediction_path = None
-        for predfile in MLresults_list:
-            if fnmatch.fnmatch(predfile.name, f'{state}_lightsheet_{prefix}_{postfix}'):
-                prediction_path = predfile
-                continue
-        if prediction_path is None: logger.warning(f'Prediction not found for: {file.name}')
 
     logger.info('Beginning evaluations')
     for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime):  # sort by creation time
