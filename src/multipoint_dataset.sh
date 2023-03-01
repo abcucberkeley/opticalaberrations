@@ -27,8 +27,8 @@ LAMBDA=.510
 NA=1.0
 ALPHA='abs'
 PHI='angle'
-CPUS=4
-MEM='80G'
+CPUS=1
+MEM='20G'
 TIMELIMIT='1:00:00'
 SHAPE=64
 MIN_LLS_OFFSET=-1
@@ -36,14 +36,14 @@ MAX_LLS_OFFSET=1
 
 MODES=15
 TITLE='lls_defocus_embeddings'
-DATASET='train'
+DATASET='test'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
-  SAMPLES_PER_JOB=100
+  SAMPLES_PER_JOB=10
   SAMPLES_PER_BIN=200
   OBJS=(1 2 5 10 25)
   mPSNR=($(seq 11 10 51))
@@ -138,7 +138,7 @@ do
 
             task="${task} --cpus-per-task=${CPUS}"
             task="${task} --mem='${MEM}'"
-            task="${task} --job-name=${DIST}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
+            task="${task} --job-name=${TITLE}-${DATASET}-${DISTRIBUTIONS[$DIST-1]}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
             task="${task} --time=${TIMELIMIT}"
             task="${task} --export=ALL"
             task="${task} --wrap=\"${j}\""

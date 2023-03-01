@@ -1,6 +1,9 @@
 import matplotlib
 matplotlib.use('Agg')
 
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
+
 import logging
 import sys
 from pathlib import Path
@@ -16,7 +19,6 @@ from tqdm.contrib import itertools
 from tifffile import imread, imsave
 from scipy.spatial import KDTree
 from numpy.lib.stride_tricks import sliding_window_view
-import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from line_profiler_pycharm import profile
 from skimage.morphology import ball
@@ -31,6 +33,26 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def round_to_even(n):
+    answer = round(n)
+    if not answer % 2:
+        return int(answer)
+    if abs(answer + 1 - n) < abs(answer - 1 - n):
+        return int(answer + 1)
+    else:
+        return int(answer - 1)
+
+
+def round_to_odd(n):
+    answer = round(n)
+    if answer % 2:
+        return int(answer)
+    if abs(answer + 1 - n) < abs(answer - 1 - n):
+        return int(answer + 1)
+    else:
+        return int(answer - 1)
 
 
 @profile
@@ -146,6 +168,7 @@ def prep_sample(
         axes[0, -1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
         axes[0, -1].legend(frameon=False, loc='upper right', ncol=1)
         axes[0, -1].set_yscale('symlog')
+        axes[0, -1].set_xlim(0, None)
 
     if remove_background:
         sample = remove_background_noise(sample)
@@ -164,6 +187,7 @@ def prep_sample(
             axes[0, -1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
             axes[0, -1].legend(frameon=False, loc='upper right', ncol=1)
             axes[0, -1].set_yscale('symlog')
+            axes[0, -1].set_xlim(0, None)
 
     if normalize:
         sample /= np.nanmax(sample)
@@ -183,31 +207,13 @@ def prep_sample(
 
         sample *= mask
 
-    def round_to_even(n):
-        answer = round(n)
-        if not answer % 2:
-            return int(answer)
-        if abs(answer + 1 - n) < abs(answer - 1 - n):
-            return int(answer + 1)
-        else:
-            return int(answer - 1)
-
-    def round_to_odd(n):
-        answer = round(n)
-        if answer % 2:
-            return int(answer)
-        if abs(answer + 1 - n) < abs(answer - 1 - n):
-            return int(answer + 1)
-        else:
-            return int(answer - 1)
-
-
     # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
     number_of_desired_sample_pixels = (
-            round_to_even(model_fov[0] / sample_voxel_size[0]),
-            round_to_even(model_fov[1] / sample_voxel_size[1]),
-            round_to_even(model_fov[2] / sample_voxel_size[2]),
-        )
+        round_to_even(model_fov[0] / sample_voxel_size[0]),
+        round_to_even(model_fov[1] / sample_voxel_size[1]),
+        round_to_even(model_fov[2] / sample_voxel_size[2]),
+    )
+
     if not all(s1 == s2 for s1, s2 in zip(number_of_desired_sample_pixels, sample.shape)):
         sample = resize_with_crop_or_pad(
             sample,
@@ -235,6 +241,7 @@ def prep_sample(
         axes[1, -1].yaxis.set_label_position("right")
         axes[1, -1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
         axes[1, -1].set_yscale('symlog')
+        axes[1, -1].set_xlim(0, None)
 
         plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.3, wspace=0.15)
         plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)

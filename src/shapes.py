@@ -1,12 +1,14 @@
 import matplotlib
 matplotlib.use('Agg')
 
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
+
 from functools import partial
 
 import numpy as np
 import raster_geometry as rg
 from skimage import measure, transform
-import matplotlib.pyplot as plt
 from tifffile import imread, imsave
 from scipy import signal
 from pathlib import Path

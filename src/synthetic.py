@@ -1,10 +1,12 @@
 import matplotlib
-
 matplotlib.use('Agg')
 
 import logging
 import sys
 from typing import Any, Union
+
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
 
 import numpy as np
 from pathlib import Path
