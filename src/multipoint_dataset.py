@@ -17,6 +17,9 @@ from tifffile import imsave
 import numpy as np
 import raster_geometry as rg
 
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
+
 import cli
 from utils import mean_min_distance
 from preprocessing import resize_with_crop_or_pad, remove_background_noise

@@ -1,5 +1,6 @@
 import matplotlib
 matplotlib.use('Agg')
+
 from multiprocessing import Pool
 
 import logging
@@ -7,9 +8,11 @@ import sys
 from functools import partial
 from pathlib import Path
 from typing import Any
-import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
+
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
 
 import swifter
 import numpy as np

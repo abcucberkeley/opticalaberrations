@@ -1,13 +1,14 @@
-from functools import partial
-
 import matplotlib
 matplotlib.use('Agg')
 
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
+
 import warnings
 from pathlib import Path
+from functools import partial
 import logging
 import sys
-import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1 import ImageGrid
 from numpy.lib.stride_tricks import sliding_window_view

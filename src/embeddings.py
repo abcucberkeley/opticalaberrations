@@ -5,9 +5,11 @@ import logging
 import sys
 from typing import Any, Union
 
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
+
 import numpy as np
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from skimage.filters import scharr, window
 from skimage.restoration import unwrap_phase

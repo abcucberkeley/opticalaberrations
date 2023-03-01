@@ -4,6 +4,9 @@ matplotlib.use('Agg')
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
+
 import logging
 import sys
 import h5py
@@ -16,13 +19,10 @@ from line_profiler_pycharm import profile
 
 import pandas as pd
 from skimage.restoration import richardson_lucy
-import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 import scipy as sp
-import cupy as cp
-from cupyx.scipy.ndimage import rotate
 from tqdm import tqdm
 
 import tensorflow as tf

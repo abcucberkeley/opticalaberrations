@@ -1,6 +1,5 @@
 import matplotlib
 matplotlib.use('Agg')
-from matplotlib import gridspec
 
 import re
 import json
@@ -8,6 +7,9 @@ from functools import partial
 import fnmatch
 import os
 import ujson
+
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
 
 from pathlib import Path
 from subprocess import call
@@ -19,7 +21,7 @@ import numpy as np
 import pandas as pd
 from tifffile import imread, imsave
 import seaborn as sns
-import matplotlib.pyplot as plt
+from matplotlib import gridspec
 from tqdm import tqdm
 from line_profiler_pycharm import profile
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -268,7 +270,7 @@ def preprocess(
 
     sample = load_sample(
         file,
-        model_fov=psfgen.voxel_size,
+        model_fov=psfgen.psf_fov,
         sample_voxel_size=sample_voxel_size,
         remove_background=True,
         normalize=True,

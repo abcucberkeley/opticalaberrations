@@ -7,12 +7,14 @@ import sys
 from typing import Union, Any, List, Generator
 from line_profiler_pycharm import profile
 
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
+
 import io
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from scipy.special import binom
-import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
 from scipy.spatial import KDTree
 from astropy import convolution
