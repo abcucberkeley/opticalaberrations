@@ -1082,7 +1082,7 @@ def plot_eval_dataset(
         diff = Wavefront(res['residuals'].values, modes=res.shape[0])
 
         results[file] = {
-            'modes': ', '.join(str(e) for e in modes),
+            'modes': '-'.join(str(e) for e in modes),
             'state': state,
             'iteration_index': iteration_labels.index(state),
             'p2v_residual': diff.peak2valley(),
@@ -1092,6 +1092,8 @@ def plot_eval_dataset(
         }
 
     df = pd.DataFrame.from_dict(results.values())
+    df.sort_values(by=['modes', 'iteration_index'], ascending=[True, True], inplace=True)
+
     fig = plt.figure(figsize=(11, 8))
     # set height ratios for subplots
     gs = gridspec.GridSpec(2, 1, height_ratios=[2, 1])
@@ -1413,7 +1415,7 @@ def phase_retrieval(
 
     logger.info("Starting phase retrieval iterations")
     data_prepped = prep_data_for_PR(np.flip(data, axis=0), multiplier=1.1)
-    #data_prepped = cp.asarray(data_prepped) # use GPU. Comment this line to use CPU.
+    data_prepped = cp.asarray(data_prepped) # use GPU. Comment this line to use CPU.
     pr_result = pr.retrieve_phase(
         data_prepped,
         params,
