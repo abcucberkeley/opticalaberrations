@@ -26,7 +26,7 @@ import scipy as sp
 from tqdm import tqdm
 
 import tensorflow as tf
-from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model, save_model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.optimizers import SGD
 from tensorflow_addons.optimizers import AdamW
@@ -69,54 +69,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
-
-
-@profile
-def load_metadata(
-        model_path: Path,
-        psf_shape: Union[tuple, list] = (64, 64, 64),
-        psf_type=None,
-        n_modes=None,
-        z_voxel_size=None,
-        **kwargs
-):
-    """ The model .h5, HDF5 file, is also used to store metadata parameters (wavelength, x_voxel_size, etc) that 
-    the model was trained with.  The metadata is read from file and is returned within the returned SyntheticPSF class.
-
-    Args:
-        model_path (Path): path to .h5 model, or path to the containing folder.
-        psf_shape (Union[tuple, list], optional): dimensions of the SyntheticPSF to return. Defaults to (64, 64, 64).
-        psf_type (str, optional): "widefield" or "confocal". Defaults to None which reads the value from the .h5 file.
-        n_modes (int, optional): # of Zernike modes to describe aberration. Defaults to None which reads the value from the .h5 file.
-        z_voxel_size (float, optional):  Defaults to None which reads the value from the .h5 file.
-        **kwargs:  Get passed into SyntheticPSF generator.
-
-    Returns:
-        SyntheticPSF class: ideal PSF that the model was trained on.
-    """
-    # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
-    if not model_path.suffix == '.h5':       
-        model_path = list(model_path.rglob('*.h5'))[0]  # locate the model if the parent folder path is given
-
-    with h5py.File(model_path, 'r') as file:
-
-        try:
-            embedding_option = str(file.get('embedding_option')[()]).strip("b'").strip("\'").strip('\"')
-        except Exception:
-            embedding_option = 'spatial_planes'
-
-        psfgen = SyntheticPSF(
-            psf_type=np.array(file.get('psf_type')[:]) if psf_type is None else psf_type,
-            psf_shape=psf_shape,
-            n_modes=int(file.get('n_modes')[()]) if n_modes is None else n_modes,
-            lam_detection=float(file.get('wavelength')[()]),
-            x_voxel_size=float(file.get('x_voxel_size')[()]),
-            y_voxel_size=float(file.get('y_voxel_size')[()]),
-            z_voxel_size=float(file.get('z_voxel_size')[()]) if z_voxel_size is None else z_voxel_size,
-            embedding_option=embedding_option,
-            **kwargs
-        )
-    return psfgen
 
 
 @profile
@@ -184,6 +136,102 @@ def load(model_path: Path, mosaic=False):
         except Exception as e:
             logger.exception(e)
             exit()
+
+
+@profile
+def load_metadata(
+        model_path: Path,
+        psf_shape: Union[tuple, list] = (64, 64, 64),
+        psf_type=None,
+        n_modes=None,
+        z_voxel_size=None,
+        **kwargs
+):
+    """ The model .h5, HDF5 file, is also used to store metadata parameters (wavelength, x_voxel_size, etc) that 
+    the model was trained with.  The metadata is read from file and is returned within the returned SyntheticPSF class.
+
+    Args:
+        model_path (Path): path to .h5 model, or path to the containing folder.
+        psf_shape (Union[tuple, list], optional): dimensions of the SyntheticPSF to return. Defaults to (64, 64, 64).
+        psf_type (str, optional): "widefield" or "confocal". Defaults to None which reads the value from the .h5 file.
+        n_modes (int, optional): # of Zernike modes to describe aberration. Defaults to None which reads the value from the .h5 file.
+        z_voxel_size (float, optional):  Defaults to None which reads the value from the .h5 file.
+        **kwargs:  Get passed into SyntheticPSF generator.
+
+    Returns:
+        SyntheticPSF class: ideal PSF that the model was trained on.
+    """
+    # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
+    if not model_path.suffix == '.h5':       
+        model_path = list(model_path.rglob('*.h5'))[0]  # locate the model if the parent folder path is given
+
+    with h5py.File(model_path, 'r') as file:
+
+        try:
+            embedding_option = str(file.get('embedding_option')[()]).strip("b'").strip("\'").strip('\"')
+        except Exception:
+            embedding_option = 'spatial_planes'
+
+        psfgen = SyntheticPSF(
+            psf_type=np.array(file.get('psf_type')[:]) if psf_type is None else psf_type,
+            psf_shape=psf_shape,
+            n_modes=int(file.get('n_modes')[()]) if n_modes is None else n_modes,
+            lam_detection=float(file.get('wavelength')[()]),
+            x_voxel_size=float(file.get('x_voxel_size')[()]),
+            y_voxel_size=float(file.get('y_voxel_size')[()]),
+            z_voxel_size=float(file.get('z_voxel_size')[()]) if z_voxel_size is None else z_voxel_size,
+            embedding_option=embedding_option,
+            **kwargs
+        )
+    return psfgen
+
+
+def save_metadata(
+    filepath: Path,
+    wavelength: float,
+    psf_type: str,
+    x_voxel_size: float,
+    y_voxel_size: float,
+    z_voxel_size: float,
+    n_modes: int,
+    embedding_option: str = 'spatial_planes'
+):
+    def add_param(h5file, name, data):
+        try:
+            if name not in h5file.keys():
+                h5file.create_dataset(name, data=data)
+            else:
+                del h5file[name]
+                h5file.create_dataset(name, data=data)
+
+            if isinstance(data, str):
+                assert h5file.get(name)[()] == data, f"Failed to write {name}"
+            else:
+                assert np.allclose(h5file.get(name)[()], data), f"Failed to write {name}"
+
+            logger.info(f"`{name}`: {h5file.get(name)[()]}")
+
+        except Exception as e:
+            logger.error(e)
+
+    try:
+        file = filepath if str(filepath).endswith('.h5') else list(filepath.rglob('*.h5'))[0]
+    except IndexError:
+        model = load(filepath)
+        file = Path(f"{filepath}.h5")
+        save_model(model, file, save_format='h5')
+
+    with h5py.File(file, 'r+') as file:
+        add_param(file, name='n_modes', data=n_modes)
+        add_param(file, name='wavelength', data=wavelength)
+        add_param(file, name='x_voxel_size', data=x_voxel_size)
+        add_param(file, name='y_voxel_size', data=y_voxel_size)
+        add_param(file, name='z_voxel_size', data=z_voxel_size)
+        add_param(file, name='embedding_option', data=embedding_option)
+
+        if isinstance(psf_type, str) or isinstance(psf_type, Path):
+            with h5py.File(psf_type, 'r+') as f:
+                add_param(file, name='psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
 
 
 @profile
@@ -916,48 +964,6 @@ def deconstruct(
             pred=p,
             save_path=save_path / f'{i}_dmodes',
         )
-
-
-def save_metadata(
-    filepath: Path,
-    wavelength: float,
-    psf_type: str,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
-    n_modes: int,
-    embedding_option: str = 'spatial_planes'
-):
-    def add_param(h5file, name, data):
-        try:
-            if name not in h5file.keys():
-                h5file.create_dataset(name, data=data)
-            else:
-                del h5file[name]
-                h5file.create_dataset(name, data=data)
-
-            if isinstance(data, str):
-                assert h5file.get(name)[()] == data, f"Failed to write {name}"
-            else:
-                assert np.allclose(h5file.get(name)[()], data), f"Failed to write {name}"
-
-            logger.info(f"`{name}`: {h5file.get(name)[()]}")
-
-        except Exception as e:
-            logger.error(e)
-
-    file = filepath if str(filepath).endswith('.h5') else list(filepath.rglob('*.h5'))[0]
-    with h5py.File(file, 'r+') as file:
-        add_param(file, name='n_modes', data=n_modes)
-        add_param(file, name='wavelength', data=wavelength)
-        add_param(file, name='x_voxel_size', data=x_voxel_size)
-        add_param(file, name='y_voxel_size', data=y_voxel_size)
-        add_param(file, name='z_voxel_size', data=z_voxel_size)
-        add_param(file, name='embedding_option', data=embedding_option)
-
-        if isinstance(psf_type, str) or isinstance(psf_type, Path):
-            with h5py.File(psf_type, 'r+') as f:
-                add_param(file, name='psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
 
 
 def kernels(modelpath: Path, activation='relu'):
