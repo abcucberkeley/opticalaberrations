@@ -29,7 +29,7 @@ https://docs.github.com/en/repositories/working-with-files/managing-large-files/
 
 Once you have Anaconda installed on your system, clone the repo using the following commands:
 ```shell
-git clone https://github.com/abcucberkeley/opticalaberrations.git
+git clone --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
 ```
 
 ### For `Linux`
