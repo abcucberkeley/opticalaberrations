@@ -675,11 +675,12 @@ def random_samples(
                     )
 
                     # aberrated PSF without noise
-                    psf, y, snr, maxcounts, lls_defocus_offset = gen.single_psf(
+                    psf, y, snr, maxcounts, y_lls_defocus = gen.single_psf(
                         phi=phi,
                         normed=True,
                         noise=False,
                         meta=True,
+                        lls_defocus_offset=(-1, 1)
                     )
 
                     img = utils.fftconvolution(sample=reference, kernel=psf)
@@ -721,8 +722,9 @@ def random_samples(
 
                     try:
                         p, std = res
+                        p_lls_defocus = None
                     except ValueError:
-                        p, std, lls_defocus = res
+                        p, std, p_lls_defocus = res
 
                     if eval_sign == 'positive_only':
                         y = np.abs(y)
@@ -764,6 +766,8 @@ def random_samples(
                         maxcounts=maxcounts,
                         y=y_wave,
                         pred=p_wave,
+                        y_lls_defocus=y_lls_defocus,
+                        p_lls_defocus=p_lls_defocus,
                         save_path=save_path / f'{s}',
                         display=False,
                         pltstyle='default'

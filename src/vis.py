@@ -178,14 +178,16 @@ def diagnostic_assessment(
         y: Wavefront,
         pred: Wavefront,
         save_path: Path,
+        y_lls_defocus: Any = None,
+        p_lls_defocus: Any = None,
         display: bool = False,
         psf_cmap: str = 'hot',
         gamma: float = .5,
         bar_width: float = .35,
         dxy: float = .108,
         dz: float = .2,
-        pltstyle = None,
-        transform_to_align_to_DM = False,
+        pltstyle: Any = None,
+        transform_to_align_to_DM: bool = False,
 ):
     if pltstyle is not None: plt.style.use(pltstyle)
 
@@ -236,7 +238,11 @@ def diagnostic_assessment(
     ax_cxz = fig.add_subplot(gs[-1, 1])
     ax_cyz = fig.add_subplot(gs[-1, 2])
 
-    ax_zcoff = fig.add_subplot(gs[:, -1])
+    if p_lls_defocus is not None:
+        ax_zcoff = fig.add_subplot(gs[:-1, -1])
+        ax_defocus = fig.add_subplot(gs[-1, -1])
+    else:
+        ax_zcoff = fig.add_subplot(gs[:, -1])
 
     dlimit = .25
     vmin = np.round(np.nanmin(y_wave))
@@ -270,6 +276,7 @@ def diagnostic_assessment(
 
     if transform_to_align_to_DM:
         psf = np.transpose(np.rot90(psf, k=2, axes=(1, 2)), axes=(0, 2, 1))    # 180 rotate, then transpose
+
     plot_mip(
         xy=ax_xy,
         xz=ax_xz,
@@ -340,12 +347,44 @@ def diagnostic_assessment(
     ax_zcoff.legend(reversed(handles), reversed(labels), frameon=False, loc='upper center', bbox_to_anchor=(.5, 1.05))
     ax_zcoff.xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
 
+    if p_lls_defocus is not None:
+        ax_defocus.barh(
+            [1 - bar_width / 2],
+            [p_lls_defocus],
+            capsize=10,
+            alpha=.75,
+            color='C0',
+            align='center',
+            ecolor='C0',
+            label='Predictions',
+            height=bar_width
+        )
+        ax_defocus.barh(
+            [1 + bar_width / 2],
+            [y_lls_defocus],
+            capsize=10,
+            alpha=.75,
+            color='C1',
+            align='center',
+            ecolor='C1',
+            label='Ground truth',
+            height=bar_width
+        )
+
+        ax_defocus.set_xlabel(f'LLS defocus ($\mu$m)')
+        ax_defocus.spines['top'].set_visible(False)
+        ax_defocus.spines['left'].set_visible(False)
+        ax_defocus.spines['right'].set_visible(False)
+        ax_defocus.set_yticks([])
+        ax_defocus.grid(True, which="both", axis='x', lw=1, ls='--', zorder=0)
+        ax_defocus.axvline(0, ls='-', color='k')
+        ax_defocus.xaxis.set_major_formatter(FormatStrFormatter("%.3f"))
+
     for ax in [ax_gt, ax_pred, ax_diff]:
         ax.axis('off')
 
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2, hspace=.2)
+    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2, hspace=.3)
     plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-    # plt.savefig(f'{save_path}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     if display:
         plt.tight_layout()
