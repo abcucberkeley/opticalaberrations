@@ -743,7 +743,7 @@ def dual_stage_prediction(
 
     prev_pred = None if (prev_pred is None or str(prev_pred) == 'None') else prev_pred
 
-    init_preds, stdev = predict_rotation(
+    res = predict_rotation(
         model,
         inputs,
         psfgen=modelgen,
@@ -756,6 +756,11 @@ def dual_stage_prediction(
         plot=plot,
         plot_rotations=plot,
     )
+
+    try:
+        init_preds, stdev = res
+    except ValueError:
+        init_preds, stdev, lls_defocus = res
 
     if estimate_sign_with_decon:
         logger.info(f"Estimating signs w/ Decon")
@@ -774,7 +779,7 @@ def dual_stage_prediction(
         else:
             followup_inputs = followup_inputs[..., np.newaxis]
 
-        followup_preds, stdev = predict_rotation(
+        res = predict_rotation(
             model,
             followup_inputs,
             psfgen=modelgen,
@@ -785,6 +790,11 @@ def dual_stage_prediction(
             ignore_modes=ignore_modes,
             freq_strength_threshold=freq_strength_threshold,
         )
+
+        try:
+            followup_preds, stdev = res
+        except ValueError:
+            followup_preds, stdev, lls_defocus = res
 
         preds, pchanges = predict_sign(
             init_preds=init_preds,

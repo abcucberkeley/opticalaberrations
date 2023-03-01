@@ -15,16 +15,14 @@ MAX=10000
 
 for EVALSIGN in positive_only signed
 do
-  for MODES in 15 28 45
+  for MODES in 15 28
   do
-    for M in phase/opticalnet
-    do
-      MODEL="../models/new/spatial_planes_embeddings/z$MODES/$M"
+      MODEL="../models/new/$DATASET/opticalnet-z$MODES/opticalnet"
 
-      python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-      --task "$MODEL --eval_sign $EVALSIGN modes" \
-      --taskname 'test' \
-      --name $MODEL/$EVALSIGN/evalmodes
+      #python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
+      #--task "$MODEL --eval_sign $EVALSIGN modes" \
+      #--taskname 'test' \
+      #--name $MODEL/$EVALSIGN/evalmodes
 
       python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
       --task "$MODEL --eval_sign $EVALSIGN random" \
@@ -51,6 +49,5 @@ do
           --name $MODEL/$EVALSIGN/snrheatmaps_${COV}
         done
       done
-    done
   done
 done
