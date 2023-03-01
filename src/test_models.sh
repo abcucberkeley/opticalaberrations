@@ -25,7 +25,7 @@ do
       #--name $MODEL/$EVALSIGN/evalmodes
 
       python manager.py slurm test.py --partition abc --mem '250GB' --cpus 12 --gpus 0 \
-      --task "$MODEL --eval_sign $EVALSIGN random" \
+      --task "$MODEL --eval_sign $EVALSIGN --digital_rotations random" \
       --taskname random \
       --name $MODEL/$EVALSIGN/samples
 
