@@ -25,9 +25,9 @@ from matplotlib import gridspec
 from tqdm import tqdm
 from line_profiler_pycharm import profile
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-import pyotf.phaseretrieval as pr
-from pyotf.utils import prep_data_for_PR
-from pyotf.zernike import osa2degrees
+import pyotf.pyotf.phaseretrieval as pr
+from pyotf.pyotf.utils import prep_data_for_PR
+from pyotf.pyotf.zernike import osa2degrees
 
 import utils
 import vis

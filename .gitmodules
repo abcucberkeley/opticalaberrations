@@ -1,0 +1,4 @@
+[submodule "src/pyotf"]
+	path = src/pyotf
+	url = https://github.com/dmilkie/pyotf
+	branch = master
