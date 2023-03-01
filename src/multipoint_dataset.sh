@@ -36,7 +36,7 @@ MAX_LLS_OFFSET=1
 
 MODES=15
 TITLE='lls_defocus_embeddings'
-DATASET='train'
+DATASET='test'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -138,7 +138,7 @@ do
 
             task="${task} --cpus-per-task=${CPUS}"
             task="${task} --mem='${MEM}'"
-            task="${task} --job-name=${DIST}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
+            task="${task} --job-name=${TITLE}-${DATASET}-${DISTRIBUTIONS[$DIST-1]}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
             task="${task} --time=${TIMELIMIT}"
             task="${task} --export=ALL"
             task="${task} --wrap=\"${j}\""
