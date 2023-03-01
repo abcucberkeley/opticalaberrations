@@ -700,7 +700,7 @@ def random_samples(
                     save_path.mkdir(exist_ok=True, parents=True)
 
                     if digital_rotations:
-                        p, stdev = backend.predict_rotation(
+                        res = backend.predict_rotation(
                             m,
                             noisy_img,
                             psfgen=gen,
@@ -710,7 +710,7 @@ def random_samples(
                             plot_rotations=save_path / f'{s}',
                         )
                     else:
-                        p, stdev = backend.bootstrap_predict(
+                        res = backend.bootstrap_predict(
                             m,
                             noisy_img,
                             psfgen=gen,
@@ -718,6 +718,11 @@ def random_samples(
                             batch_size=batch_size,
                             plot=save_path / f'{s}',
                         )
+
+                    try:
+                        p, std = res
+                    except ValueError:
+                        p, std, lls_defocus = res
 
                     if eval_sign == 'positive_only':
                         y = np.abs(y)
@@ -811,7 +816,7 @@ def eval_object(
         ys = np.array([phi for i in inputs])
 
         if eval_sign == 'rotations':
-            preds, stdev = backend.predict_rotation(
+            res = backend.predict_rotation(
                 model,
                 inputs,
                 psfgen=gen,
@@ -820,7 +825,7 @@ def eval_object(
                 cpu_workers=1
             )
         else:
-            preds, stdev = backend.bootstrap_predict(
+            res = backend.bootstrap_predict(
                 model,
                 inputs,
                 psfgen=gen,
@@ -829,6 +834,11 @@ def eval_object(
                 no_phase=no_phase,
                 cpu_workers=1
             )
+
+        try:
+            preds, stdev = res
+        except ValueError:
+            preds, stdev, lls_defocus = res
 
         if eval_sign == 'positive_only':
             ys = np.abs(ys)
