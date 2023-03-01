@@ -18,6 +18,7 @@ import tensorflow as tf
 
 from typing import Any, Union
 import numpy as np
+import cupy as cp
 import pandas as pd
 from tifffile import imread, imsave
 import seaborn as sns
@@ -1360,6 +1361,7 @@ def calibrate_dm(datadir, dm_calibration):
     logger.info(f"Saved result to: {output_file}")
 
 
+@profile
 def phase_retrieval(
     img: Path,
     num_modes: int,
@@ -1411,6 +1413,7 @@ def phase_retrieval(
 
     logger.info("Starting phase retrieval iterations")
     data_prepped = prep_data_for_PR(np.flip(data, axis=0), multiplier=1.1)
+    #data_prepped = cp.asarray(data_prepped) # use GPU. Comment this line to use CPU.
     pr_result = pr.retrieve_phase(
         data_prepped,
         params,
@@ -1427,7 +1430,7 @@ def phase_retrieval(
 
     pupil[pupil == 0.] = np.nan # put NaN's outside of pupil
     pupil_path = Path(f"{img.with_suffix('')}_phase_retrieval_wavefront.tif")
-    imsave(pupil_path, pupil)
+    imsave(pupil_path, cp.asnumpy(pupil))
 
     threshold = utils.waves2microns(prediction_threshold, wavelength=psfgen.lam_detection)
     ignore_modes = list(map(int, ignore_modes))
@@ -1435,7 +1438,7 @@ def phase_retrieval(
     if use_pyotf_zernikes:
         # use pyotf definition of zernikes and fit using them.  I suspect m=0 modes have opposite sign to our definition.
         pred = np.zeros(num_modes)
-        pred[1:] = pr_result.zd_result.pcoefs
+        pred[1:] = cp.asnumpy(pr_result.zd_result.pcoefs)
         pred[ignore_modes] = 0.
         pred[np.abs(pred) <= threshold] = 0.
         pred = Wavefront(pred, modes=num_modes, order='ansi', lam_detection=wavelength)
