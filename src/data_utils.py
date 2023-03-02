@@ -35,7 +35,6 @@ def get_image(path):
 
     with TiffFile(path) as tif:
         img = tif.asarray()
-        tif.close()
 
         if np.isnan(np.sum(img)):
             logger.error("NaN!")
@@ -53,7 +52,6 @@ def get_metadata(path, codename: str):
 
         with open(path.with_suffix('.json')) as f:
             hashtbl = ujson.load(f)
-            f.close()
 
         return hashtbl[codename]
 
@@ -79,7 +77,6 @@ def get_sample(
 
         with open(path.with_suffix('.json')) as f:
             hashtbl = ujson.load(f)
-            f.close()
 
         zernikes = hashtbl['zernikes']
         snr = hashtbl['snr']
@@ -151,10 +148,10 @@ def get_sample(
 def check_sample(path):
     try:
         with open(path.with_suffix('.json')) as f:
-            f.close()
+            pass
 
         with TiffFile(path) as tif:
-            tif.close()
+            pass
         return 1
 
     except Exception as e:

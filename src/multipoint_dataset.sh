@@ -5,19 +5,7 @@ ENV=~/anaconda3/envs/ml/bin/python
 NODES='abc'
 
 #PSF_TYPE='widefield'
-#xVOXEL=.15
-#yVOXEL=.15
-#zVOXEL=.6
-#LAMBDA=.605
-#NA=1.0
-
 #PSF_TYPE='confocal'
-#xVOXEL=.1
-#yVOXEL=.1
-#zVOXEL=.5
-#LAMBDA=.920
-#NA=1.0
-
 #PSF_TYPE='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 xVOXEL=.108
@@ -77,7 +65,7 @@ do
       do
         for S in `seq 1 ${#SAMPLES[@]}`
         do
-            while [ $(squeue -u thayeralshaabi -h -t pending -r | wc -l) -gt 300 ]
+            while [ $(squeue -u $USER -h -t pending -r | wc -l) -gt 300 ]
             do
               sleep 10s
             done
@@ -94,7 +82,6 @@ do
             j="${j} --rotate"
             j="${j} --noise"
             j="${j} --normalize"
-            j="${j} --gamma .75"
             j="${j} --outdir ${OUTDIR}"
             j="${j} --modes ${MODES}"
             j="${j} --input_shape ${SHAPE}"
@@ -125,9 +112,9 @@ do
             task="${task} --qos=abc_normal --nice=1111111111"
 
             if [ "$NODES" = "all" ];then
-              if [ $(squeue -u thayeralshaabi -h -t pending -r -p dgx | wc -l) -eq 0 ];then
+              if [ $(squeue -u $USER -h -t pending -r -p dgx | wc -l) -eq 0 ];then
                 task="${task} --partition=dgx"
-              elif [ $(squeue -u thayeralshaabi -h -t pending -r -p abc_a100 | wc -l) -eq 0 ];then
+              elif [ $(squeue -u $USER -h -t pending -r -p abc_a100 | wc -l) -eq 0 ];then
                 task="${task} --partition=abc_a100"
               else
                 task="${task} --partition=abc"
@@ -144,9 +131,9 @@ do
             task="${task} --wrap=\"${j}\""
             echo $task | bash
 
-            echo "DGX : R[$(squeue -u thayeralshaabi -h -t running -r -p dgx | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p dgx | wc -l)]"
-            echo "A100: R[$(squeue -u thayeralshaabi -h -t running -r -p abc_a100 | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p abc_a100 | wc -l)]"
-            echo "ABC : R[$(squeue -u thayeralshaabi -h -t running -r -p abc | wc -l)], P[$(squeue -u thayeralshaabi -h -t pending -r -p abc | wc -l)]"
+            echo "DGX : R[$(squeue -u $USER -h -t running -r -p dgx | wc -l)], P[$(squeue -u $USER -h -t pending -r -p dgx | wc -l)]"
+            echo "A100: R[$(squeue -u $USER -h -t running -r -p abc_a100 | wc -l)], P[$(squeue -u $USER -h -t pending -r -p abc_a100 | wc -l)]"
+            echo "ABC : R[$(squeue -u $USER -h -t running -r -p abc | wc -l)], P[$(squeue -u $USER -h -t pending -r -p abc | wc -l)]"
         done
       done
     done
