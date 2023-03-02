@@ -861,14 +861,13 @@ def plot_dm_actuators(
 
     with open(dm_path) as f:
         offsets = json.load(f)
-        f.close()
 
     offsets = np.array(offsets["ALPAO_Offsets"])
 
     if flat_path.suffix == '.json':
         with open(flat_path) as f:
             flat_offsets = json.load(f)
-            f.close()
+
         flat_offsets = np.array(flat_offsets["ALPAO_Offsets"])
     else:
         flat_offsets = pd.read_csv(flat_path, header=None).iloc[:, 0].values
@@ -937,7 +936,6 @@ def eval_mode(
 
     with open(str(prediction_path).replace('_zernike_coefficients.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
-        f.close()
 
     noisy_img = np.squeeze(get_image(input_path).astype(float))
     maxcounts = np.max(noisy_img)

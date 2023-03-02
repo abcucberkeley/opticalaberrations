@@ -142,7 +142,6 @@ class SyntheticPSF:
         else:
             with TiffFile(ideal_empirical_psf) as tif:
                 self.ipsf = tif.asarray()
-                tif.close()
 
             self.ipsf = prep_sample(
                 np.squeeze(self.ipsf),
