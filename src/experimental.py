@@ -1152,7 +1152,7 @@ def plot_eval_dataset(
             linestyle=linestyle
         )
 
-    ax0.set_ylabel('Remaining abberation\n(P-V in waves NA=1.0)')
+    ax0.set_ylabel('Remaining aberration\n(P-V in waves NA=1.0)')
     ax1.set_ylabel('PR-Model\n(P-V in waves NA=1.0)')
     ax0.set_xlabel('')
     ax1.set_xlabel('Iteration')
