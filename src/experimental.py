@@ -1041,7 +1041,7 @@ def eval_mode(
 
     p2v = diff.peak2valley(na=1.0)
     p2v_gt = y_wave.peak2valley(na=1.0)
-    logger.info(f"P2V: {round(p2v, 3)}   GT_P2V: {round(p2v_gt, 3)}")
+    logger.info(f"P2V: {p2v:9.3f}   GT_P2V: {p2v_gt:9.3f)}   {save_path}_residuals.csv")
     logger.info('-'*50)
 
 
@@ -1068,7 +1068,7 @@ def plot_eval_dataset(
 
     for file in tqdm(
             sorted(datadir.rglob(f'*{postfix}'), key=os.path.getctime),
-            desc='Collecting results'
+            desc=f'Collecting *{postfix} results'
     ):  # sort by creation time
         state = file.stem.split('_')[0]
         modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
@@ -1078,6 +1078,9 @@ def plot_eval_dataset(
         p = Wavefront(res['prediction'].values, modes=res.shape[0])
         y = Wavefront(res['ground_truth'].values, modes=res.shape[0])
         diff = Wavefront(res['residuals'].values, modes=res.shape[0])
+        file = Path(file)
+
+        eval_file = Path(str(file).replace('_residuals.csv', '.svg'))
 
         results[file] = {
             'modes': '-'.join(str(e) for e in modes),
@@ -1086,8 +1089,13 @@ def plot_eval_dataset(
             'p2v_residual': diff.peak2valley(),
             'p2v_gt': y.peak2valley(),
             'p2v_pred': p.peak2valley(),
-            'num_model_modes': p.modes
+            'num_model_modes': p.modes,
+            'eval_file': eval_file,
         }
+
+    if results == {}:
+        logger.error(f'Did not find results in {datadir}\\*{postfix}    Please reurun without --precomputed flag.')
+        return
 
     df = pd.DataFrame.from_dict(results.values())
     df.sort_values(by=['modes', 'iteration_index'], ascending=[True, True], inplace=True)
@@ -1154,12 +1162,14 @@ def plot_eval_dataset(
         labelspacing=0.2
     )
     savepath = Path(f'{datadir}/p2v_eval')
-    logger.info(f'{savepath}')
+
 
     df.to_csv(f'{savepath}.csv')
+    logger.info(f'{savepath}.csv')
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2, hspace=.0)
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    logger.info(f'{savepath}.png')
 
 
 
