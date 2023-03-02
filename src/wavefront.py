@@ -9,6 +9,7 @@ from typing import Union
 
 from distributions import uniform_weights, decayed_weights, pyramid_weights, pick_modes
 from distributions import single, bimodal, multinomial, powerlaw, dirichlet, uniform
+from functools import lru_cache
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -253,14 +254,17 @@ class Wavefront:
     def wave(self, size=55, normed=True):
         return np.flip(np.rot90(self.polynomial(size=size, normed=normed)), axis=0)
 
+    @lru_cache(maxsize=None)
+    def na_mask(self, na: float = 1.0, wavefrontshape: tuple = (256,256)):
+        center = (int(wavefrontshape[0] / 2), int(wavefrontshape[1] / 2))
+        Y, X = np.ogrid[:wavefrontshape[0], :wavefrontshape[1]]
+        dist_from_center = np.sqrt((X - center[0]) ** 2 + (Y - center[1]) ** 2)
+        return dist_from_center <= (na * wavefrontshape[0]) / 2
+
     def peak2valley(self, na: float = 1.0) -> float:
         """ measure peak-to-valley of the aberration in waves"""
-        wavefront = self.wave(100)
-        center = (int(wavefront.shape[0] / 2), int(wavefront.shape[1] / 2))
-        Y, X = np.ogrid[:wavefront.shape[0], :wavefront.shape[1]]
-        dist_from_center = np.sqrt((X - center[0]) ** 2 + (Y - center[1]) ** 2)
-        mask = dist_from_center <= (na * wavefront.shape[0]) / 2
-        wavefront *= mask
+        wavefront = self.wave(256)
+        wavefront *= self.na_mask(na=na, wavefrontshape=wavefront.shape)
         return abs(np.nanmax(wavefront) - np.nanmin(wavefront))
 
     def _fit_zernikes(self, wavefront, rotate=True, microns=True):

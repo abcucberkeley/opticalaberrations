@@ -330,7 +330,6 @@ def parse_args(args):
     eval_mode.add_argument("--gt_postfix", type=str, default='ground_truth_zernike_coefficients.csv')
 
     eval_dataset = subparsers.add_parser("eval_dataset")
-    eval_dataset.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
     eval_dataset.add_argument("--flat", default=None, type=Path, help="path to the flat DM acts file")
     eval_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
@@ -529,7 +528,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         )
     elif args.func == 'eval_dataset':
         experimental.eval_dataset(
-            model=args.model,
             datadir=args.datadir,
             flat=args.flat,
             plot_evals=not args.skip_eval_plots,

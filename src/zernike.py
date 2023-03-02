@@ -96,7 +96,7 @@ def nm_polynomial(n, m, rho, theta, normed=True):
         return prefac * radial * np.sin(m0 * theta)
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=1)
 def rho_theta(size):
     r = np.linspace(-1, 1, size)
     X, Y = np.meshgrid(r, r, indexing='ij')
@@ -105,7 +105,7 @@ def rho_theta(size):
     return rho, theta
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=1)
 def outside_mask(size):
     rho, theta = rho_theta(size)
     return nm_polynomial(0, 0, rho, theta, normed=False) < 1
@@ -163,6 +163,7 @@ class Zernike:
         self.index_ansi = nm_to_ansi(self.n, self.m)
         self._mutable = False
 
+    @lru_cache(maxsize=55)
     def polynomial(self, size, normed=True, outside=np.nan):
         """
             For visualization of Zernike polynomial on a disc of unit radius

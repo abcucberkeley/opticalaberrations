@@ -1048,6 +1048,7 @@ def eval_mode(
 
 
 def plot_eval_dataset(
+    model,
     datadir: Path,
     postfix: str = 'sample_predictions_zernike_coefficients_ml_eval_residuals.csv',
 ):
@@ -1088,11 +1089,21 @@ def plot_eval_dataset(
             'modes': '-'.join(str(e) for e in modes),
             'state': state,
             'iteration_index': iteration_labels.index(state),
-            'p2v_residual': diff.peak2valley(),
-            'p2v_gt': y.peak2valley(),
-            'p2v_pred': p.peak2valley(),
             'num_model_modes': p.modes,
             'eval_file': eval_file,
+            'model': model,
+            'p2v_residual_na=1.00': diff.peak2valley(na=1.0),
+            'p2v_gt_na=1.00': y.peak2valley(na=1.0),
+            'p2v_pred_na=1.00': p.peak2valley(na=1.0),
+            'p2v_residual_na=0.99': diff.peak2valley(na=0.99),
+            'p2v_gt_na=0.99': y.peak2valley(na=0.99),
+            'p2v_pred_na=0.99': p.peak2valley(na=0.99),
+            'p2v_residual_na=0.95': diff.peak2valley(na=0.95),
+            'p2v_gt_na=0.95': y.peak2valley(na=0.95),
+            'p2v_pred_na=0.95': p.peak2valley(na=0.95),
+            'p2v_residual_na=0.85': diff.peak2valley(na=0.85),
+            'p2v_gt_na=0.85': y.peak2valley(na=0.85),
+            'p2v_pred_na=0.85': p.peak2valley(na=0.85),
         }
 
     if results == {}:
@@ -1129,7 +1140,7 @@ def plot_eval_dataset(
             ax=ax0,
             kind='line',
             x='iteration_index',
-            y='p2v_gt',
+            y='p2v_gt_na=1.00',
             label=mode,
             linestyle=linestyle
         )
@@ -1137,14 +1148,14 @@ def plot_eval_dataset(
             ax=ax1,
             kind='line',
             x='iteration_index',
-            y='p2v_residual',
+            y='p2v_residual_na=1.00',
             label=mode,
             legend=False,
             linestyle=linestyle
         )
 
-    ax0.set_ylabel('Remaining abberation\n(P-V in waves)')
-    ax1.set_ylabel('PR-Model\n(P-V in waves)')
+    ax0.set_ylabel('Remaining abberation\n(P-V in waves NA=1.0)')
+    ax1.set_ylabel('PR-Model\n(P-V in waves NA=1.0)')
     ax0.set_xlabel('')
     ax1.set_xlabel('Iteration')
     ax0.set_ylim(0, 5)
@@ -1177,7 +1188,6 @@ def plot_eval_dataset(
 
 @profile
 def eval_dataset(
-    model: Path,
     datadir: Path,
     flat: Any = None,
     postfix: str = 'sample_predictions_zernike_coefficients.csv',
@@ -1185,6 +1195,9 @@ def eval_dataset(
     plot_evals: bool = True,
     precomputed: bool = False
 ):
+    with open(list(Path(datadir / 'MLResults').glob('*_settings.json'))[0]) as f:
+        predictions_settings = ujson.load(f)
+        model = Path(predictions_settings['model'])  # get model from .json file
 
     if not precomputed:
         pool = mp.Pool(processes=mp.cpu_count())
@@ -1244,7 +1257,7 @@ def eval_dataset(
         pool.close()    # close the pool
         pool.join()     # wait for all tasks to complete
 
-    plot_eval_dataset(datadir)
+    plot_eval_dataset(model, datadir)
 
 
 @profile
