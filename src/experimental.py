@@ -227,8 +227,10 @@ def load_sample(
     model_fov: tuple,
     sample_voxel_size: tuple,
     remove_background: bool = True,
+    read_noise_bias: float = 5,
     normalize: bool = True,
-    edge_filter: bool = False,
+    edge_filter: bool = True,
+    filter_mask_dilation: bool = True,
     debug: Any = None
 ):
     try:
@@ -246,8 +248,10 @@ def load_sample(
             model_fov=model_fov,
             sample_voxel_size=sample_voxel_size,
             remove_background=remove_background,
+            read_noise_bias=read_noise_bias,
             normalize=normalize,
             edge_filter=edge_filter,
+            filter_mask_dilation=filter_mask_dilation,
             debug=debug
         )
 
@@ -426,8 +430,10 @@ def predict_sample(
         model_fov=modelpsfgen.psf_fov,
         sample_voxel_size=psfgen.voxel_size,
         remove_background=True,
+        read_noise_bias=5,
         normalize=True,
-        edge_filter=False
+        edge_filter=False,
+        filter_mask_dilation=True,
     )
 
     inputs = np.expand_dims(inputs, axis=0)
