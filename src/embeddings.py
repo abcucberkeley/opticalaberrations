@@ -788,7 +788,11 @@ def fourier_embeddings(
         gpu_embeddings = cp.array(emb)
         emb = np.array([
             cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
-            for angle in tqdm(digital_rotations, desc=f"Generating digital rotations")
+            for angle in tqdm(
+                digital_rotations,
+                desc=f"Generating digital rotations [{plot.name}]"
+                if plot is not None else "Generating digital rotations",
+            )
         ])
         del gpu_embeddings
 

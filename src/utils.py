@@ -63,6 +63,10 @@ def multiprocess(func: Any, jobs: Union[Generator, List, np.ndarray], desc: str 
     return logs
 
 
+def vectorize(samples, func, desc):
+    return np.array(multiprocess(func, samples, desc=desc))
+
+
 def microns2waves(a, wavelength):
     return a/wavelength
 

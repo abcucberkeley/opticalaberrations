@@ -223,7 +223,7 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
 
 @profile
 def load_sample(
-    data: Union[tf.Tensor, Path, str],
+    data: Union[tf.Tensor, Path, str, np.ndarray],
     model_fov: tuple,
     sample_voxel_size: tuple,
     remove_background: bool = True,
@@ -258,16 +258,22 @@ def load_sample(
 
 
 def preprocess(
-    file: [tf.Tensor, Path],
+    file: [tf.Tensor, Path, str],
     psfgen: SyntheticPSF,
     freq_strength_threshold: float = .01,
     sample_voxel_size: tuple = (.2, .108, .108),
     digita_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
     plot: bool = True,
-    no_phase: bool = True,
+    no_phase: bool = False,
 ):
+    if isinstance(file, bytes):
+        file = Path(str(file, "utf-8"))
+
     if isinstance(file, tf.Tensor):
         file = Path(str(file.numpy(), "utf-8"))
+
+    if isinstance(file, str):
+        file = Path(file)
 
     sample = load_sample(
         file,
@@ -312,17 +318,28 @@ def predict(
 ):
     no_phase = True if model.input_shape[1] == 3 else False
 
-    inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(rois))
     generate_fourier_embeddings = partial(
-        preprocess,
-        psfgen=psfgen,
-        freq_strength_threshold=freq_strength_threshold,
-        sample_voxel_size=sample_voxel_size,
-        digita_rotations=digita_rotations,
-        plot=plot,
-        no_phase=no_phase,
+        utils.vectorize,
+        func=partial(
+            preprocess,
+            psfgen=psfgen,
+            freq_strength_threshold=freq_strength_threshold,
+            sample_voxel_size=sample_voxel_size,
+            digita_rotations=digita_rotations,
+            plot=plot,
+            no_phase=no_phase,
+        ),
+        desc='Generate Fourier embeddings'
     )
-    inputs = inputs.map(lambda x: tf.py_function(generate_fourier_embeddings, [x], tf.float32))
+
+    inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(rois))
+    inputs = inputs.batch(batch_size).map(
+        lambda x: tf.py_function(
+            generate_fourier_embeddings,
+            inp=[x],
+            Tout=tf.float32,
+        ),
+    ).unbatch()
 
     ps, stdev = backend.predict_dataset(
         model,
