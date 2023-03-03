@@ -22,7 +22,6 @@ import cupy as cp
 import pandas as pd
 from tifffile import imread, imsave
 import seaborn as sns
-from matplotlib import gridspec
 from tqdm import tqdm
 from line_profiler_pycharm import profile
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -1068,11 +1067,8 @@ def eval_mode(
     logger.info('-'*50)
 
 
-def plot_eval_dataset(
-    model,
-    datadir: Path,
-    postfix: str = 'sample_predictions_zernike_coefficients_ml_eval_residuals.csv',
-):
+def process_eval_file(file: Path):
+    results = {}
     iteration_labels = [
         'before',
         'after0',
@@ -1083,128 +1079,112 @@ def plot_eval_dataset(
         'after5',
     ]
 
+    state = file.stem.split('_')[0]
+    modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
+    modes = [m for m in modes if m.isdigit()]
+    res = pd.read_csv(file)
+
+    p = Wavefront(res['prediction'].values, modes=res.shape[0])
+    y = Wavefront(res['ground_truth'].values, modes=res.shape[0])
+    diff = Wavefront(res['residuals'].values, modes=res.shape[0])
+    file = Path(file)
+    eval_file = Path(str(file).replace('_residuals.csv', '.svg'))
+
+    for i, na in enumerate([1.0, .95, .85]):
+        results[i] = {
+            'modes': '-'.join(str(e) for e in modes),
+            'state': state,
+            'iteration_index': iteration_labels.index(state),
+            'num_model_modes': p.modes,
+            'eval_file': str(eval_file),
+            'na': na,
+            'p2v_residual': diff.peak2valley(na=na),
+            'p2v_gt': y.peak2valley(na=na),
+            'p2v_pred': p.peak2valley(na=na)
+        }
+
+        for k, m in enumerate(modes):
+            results[i].update({f'mode_{k}': m})
+
+    return results
+
+
+def plot_eval_dataset(
+    model,
+    datadir: Path,
+    postfix: str = 'sample_predictions_zernike_coefficients_ml_eval_residuals.csv',
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    savepath = Path(f'{datadir}/p2v_eval')
+
     # Permanently changes the pandas settings
     pd.set_option('display.max_rows', None)
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', 600)
     pd.set_option('display.max_colwidth', 20)
-    results = {}
 
-    for file in tqdm(
-            sorted(datadir.rglob(f'*{postfix}'), key=os.path.getctime),
-            desc=f'Collecting *{postfix} results'
-    ):  # sort by creation time
-        state = file.stem.split('_')[0]
-        modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
-        modes = [m for m in modes if m.isdigit()]
-        res = pd.read_csv(file)
+    results = utils.multiprocess(
+        process_eval_file,
+        sorted(datadir.rglob(f'*{postfix}'), key=os.path.getctime),  # sort by creation time
+        desc=f'Collecting *{postfix} results'
+    )
 
-        p = Wavefront(res['prediction'].values, modes=res.shape[0])
-        y = Wavefront(res['ground_truth'].values, modes=res.shape[0])
-        diff = Wavefront(res['residuals'].values, modes=res.shape[0])
-        file = Path(file)
-
-        eval_file = Path(str(file).replace('_residuals.csv', '.svg'))
-
-        results[file] = {
-            'modes': '-'.join(str(e) for e in modes),
-            'state': state,
-            'iteration_index': iteration_labels.index(state),
-            'num_model_modes': p.modes,
-            'eval_file': eval_file,
-            'model': model,
-            'p2v_residual_na=1.00': diff.peak2valley(na=1.0),
-            'p2v_gt_na=1.00': y.peak2valley(na=1.0),
-            'p2v_pred_na=1.00': p.peak2valley(na=1.0),
-            'p2v_residual_na=0.99': diff.peak2valley(na=0.99),
-            'p2v_gt_na=0.99': y.peak2valley(na=0.99),
-            'p2v_pred_na=0.99': p.peak2valley(na=0.99),
-            'p2v_residual_na=0.95': diff.peak2valley(na=0.95),
-            'p2v_gt_na=0.95': y.peak2valley(na=0.95),
-            'p2v_pred_na=0.95': p.peak2valley(na=0.95),
-            'p2v_residual_na=0.85': diff.peak2valley(na=0.85),
-            'p2v_gt_na=0.85': y.peak2valley(na=0.85),
-            'p2v_pred_na=0.85': p.peak2valley(na=0.85),
-        }
-
-    if results == {}:
+    if results == []:
         logger.error(f'Did not find results in {datadir}\\*{postfix}    Please reurun without --precomputed flag.')
         return
 
-    df = pd.DataFrame.from_dict(results.values())
-    df.sort_values(by=['modes', 'iteration_index'], ascending=[True, True], inplace=True)
-
-    fig = plt.figure(figsize=(11, 8))
-    # set height ratios for subplots
-    gs = gridspec.GridSpec(2, 1, height_ratios=[2, 1])
-
-    # the first subplot
-    ax0 = plt.subplot(gs[0])
-    ax1 = plt.subplot(gs[1])
-
-    n = 10
-    # ax0.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
-    # ax1.set_prop_cycle('color', [plt.cm.jet(i) for i in np.linspace(0, 1, n)])
-    plotnumber = 0
-
-    for mode, grp in df.groupby(['modes']):
-        grp = grp.sort_values('iteration_index')
-
-        plotnumber += 1
-        linestyle = 'solid'
-        if plotnumber > n: linestyle = 'dashed'
-        if plotnumber > n * 2: linestyle = 'dotted'
-        if plotnumber > n * 3: linestyle = 'dashdot'
-        if plotnumber > n * 4: linestyle = (0, (3, 1, 1, 1, 1, 1))
-
-        ax0 = grp.plot(
-            ax=ax0,
-            kind='line',
-            x='iteration_index',
-            y='p2v_gt_na=1.00',
-            label=mode,
-            linestyle=linestyle
-        )
-        ax1 = grp.plot(
-            ax=ax1,
-            kind='line',
-            x='iteration_index',
-            y='p2v_residual_na=1.00',
-            label=mode,
-            legend=False,
-            linestyle=linestyle
-        )
-
-    ax0.set_ylabel('Remaining aberration\n(P-V in waves NA=1.0)')
-    ax1.set_ylabel('PR-Model\n(P-V in waves NA=1.0)')
-    ax0.set_xlabel('')
-    ax1.set_xlabel('Iteration')
-    ax0.set_ylim(0, 5)
-    ax1.set_ylim(0, 2)
-    plt.setp(ax0.get_xticklabels(), visible=False)
-    ax1.set_xticks(np.arange(0, max(df['iteration_index']) + 1, 1.0))
-    ax1.set_xlim(0, max(df['iteration_index']))
-    ax0.set_xlim(0, max(df['iteration_index']))
-    ax0.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-    ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-    ax0.set_title(f"{df['num_model_modes'].unique()} mode Model")
-
-    ax0.legend(
-        loc='center left', bbox_to_anchor=(1, 0.5),
-        ncol=int(len(df.groupby(['modes'])) / 40) + 1,
-        fontsize='x-small',
-        labelspacing=0.2
-    )
-    savepath = Path(f'{datadir}/p2v_eval')
-
+    df = pd.DataFrame([v for d in results for k, v in d.items()])
+    df.sort_values(by=['modes', 'iteration_index', 'na'], ascending=[True, True, False], inplace=True)
+    df['model'] = str(model)
 
     df.to_csv(f'{savepath}.csv')
     logger.info(f'{savepath}.csv')
 
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2, hspace=.0)
-    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    logger.info(f'{savepath}.png')
+    for col, label in zip(
+            ["p2v_gt", "p2v_residual"],
+            [r"Remaining aberration (P-V $\lambda$)", "PR-Model (P-V $\lambda$)"]
+    ):
+        fig = plt.figure(figsize=(11, 8))
+        g = sns.relplot(
+            data=df,
+            x="iteration_index",
+            y=col,
+            hue="na",
+            col="mode_1",
+            col_wrap=4,
+            kind="line",
+            height=3,
+            aspect=1.,
+            palette='tab10',
+            facet_kws=dict(sharex=True),
+        )
 
+        (
+            g.map(plt.axhline, y=.5, color="red", dashes=(2, 1), zorder=0)
+            .map(plt.grid, which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
+            .set_axis_labels("Iteration", label)
+            .set_titles("Mode: {col_name}")
+            .set(xlim=(0, max(df['iteration_index'])))
+            .set(ylim=(0, 5))
+            .tight_layout(w_pad=0)
+        )
+
+        leg = g._legend
+        leg.set_bbox_to_anchor([.95, .93])
+        leg.set_title('NA')
+        g.fig.suptitle(f"{df['num_model_modes'].unique()} mode Model")
+
+        plt.subplots_adjust(top=0.95, right=0.95, wspace=.1, hspace=.2)
+        plt.savefig(f'{savepath}_{col}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        logger.info(f'{savepath}_{col}.png')
 
 
 @profile
