@@ -505,23 +505,24 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
                 m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot')
                 m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66)
 
-                interference = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=axes[3, ax], wspace=0.05, hspace=0)
-                ax1 = fig.add_subplot(interference[0])
-                ax1.imshow(np.nanmax(beads, axis=ax), cmap='hot')
-                ax1.axis('off')
-                ax1.set_title(r'$\mathcal{S}$')
+                if False:
+                    interference = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=axes[3, ax], wspace=0.05, hspace=0)
+                    ax1 = fig.add_subplot(interference[0])
+                    ax1.imshow(np.nanmax(beads, axis=ax), cmap='hot')
+                    ax1.axis('off')
+                    ax1.set_title(r'$\mathcal{S}$')
 
-                ax2 = fig.add_subplot(interference[1])
-                m4 = ax2.imshow(np.nanmax(abs(interference_pattern), axis=ax), cmap='magma')
-                ax2.axis('off')
-                ax2.set_title(r'$|\mathscr{F}(\mathcal{S})|$')
+                    ax2 = fig.add_subplot(interference[1])
+                    m4 = ax2.imshow(np.nanmax(abs(interference_pattern), axis=ax), cmap='magma')
+                    ax2.axis('off')
+                    ax2.set_title(r'$|\mathscr{F}(\mathcal{S})|$')
 
                 m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot')
 
             for ax, m, label in zip(
-                    range(5),
-                    [m1, m2, m3, m4, m5],
-                    [r'Inputs', 'Kernel', 'Peak detection', 'Interference', r'Reconstructed']
+                    range(4),
+                    [m1, m2, m3, m5],
+                    [r'Inputs', 'Kernel', 'Peak detection', r'Reconstructed']
             ):
                 cax = inset_axes(axes[ax, -1], width="10%", height="90%", loc='center right', borderpad=-3)
                 cb = plt.colorbar(m, cax=cax)
