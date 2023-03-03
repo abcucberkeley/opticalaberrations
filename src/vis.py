@@ -674,6 +674,7 @@ def wavefronts(
         plt.savefig(f'{save_path}_z{z}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
         autoscale_svg(f'{save_path}_z{z}.svg')
 
+
 def sign_correction(
     init_preds_wave,
     init_preds_wave_error,
