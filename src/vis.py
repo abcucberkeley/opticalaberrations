@@ -21,6 +21,7 @@ import matplotlib.patches as patches
 from line_profiler_pycharm import profile
 
 from wavefront import Wavefront
+import re
 
 
 logging.basicConfig(
@@ -30,6 +31,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
+def autoscale_svg(file: Path):
+    # Read in the file
+    with open(file, 'r') as f:
+        filedata = f.read()
+
+    # Replace the target string
+    filedata = re.sub('height="[0-9]+(\.[0-9]+)pt"', '', filedata)
+    filedata = re.sub('width="[0-9]+(\.[0-9]+)pt"', '', filedata)
+
+    # Write the file out again
+    with open(file, 'w') as f:
+        f.write(filedata)
 
 
 def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2):
@@ -385,6 +398,7 @@ def diagnostic_assessment(
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2, hspace=.3)
     plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    autoscale_svg(f'{save_path}.svg')
 
     if display:
         plt.tight_layout()
@@ -486,6 +500,7 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None, lls_defocu
 
     plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
     plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.1)
+    autoscale_svg(f'{save_path}.svg')
 
 
 @profile
@@ -547,7 +562,7 @@ def prediction(
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
     plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
+    autoscale_svg(f'{save_path}.svg')
 
 @profile
 def tiles(
@@ -600,7 +615,7 @@ def tiles(
         cbar.ax.set_xlabel(rf"$\gamma$={gamma}")
 
         plt.savefig(f'{save_path}_z{z}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
+        autoscale_svg(f'{save_path}_z{z}.svg')
 
 @profile
 def wavefronts(
@@ -657,7 +672,7 @@ def wavefronts(
         cbar.ax.set_title(f'$\lambda = {wavelength}~\mu$m')
 
         plt.savefig(f'{save_path}_z{z}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
+        autoscale_svg(f'{save_path}_z{z}.svg')
 
 def sign_correction(
     init_preds_wave,
@@ -761,7 +776,7 @@ def sign_correction(
 
     plt.tight_layout()
     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-    # plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    autoscale_svg(f'{savepath}.svg')
 
 
 def sign_eval(
@@ -806,4 +821,5 @@ def sign_eval(
 
     plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    autoscale_svg(f'{savepath}.svg')
     # plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)

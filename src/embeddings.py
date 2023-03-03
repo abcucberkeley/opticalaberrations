@@ -25,6 +25,7 @@ from skspatial.objects import Plane, Points
 import matplotlib.gridspec as gridspec
 
 from utils import resize_with_crop_or_pad
+from vis import autoscale_svg
 
 try:
     import cupy as cp
@@ -280,6 +281,7 @@ def plot_embeddings(
         plt.show()
     else:
         plt.savefig(f'{save_path}_embeddings.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        autoscale_svg(f'{save_path}_embeddings.svg')
         # plt.savefig(f'{save_path}_embeddings.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
@@ -329,6 +331,7 @@ def shift_otf(psf, otf, plot, window_size=8):
 
         plt.tight_layout()
         plt.savefig(f'{plot}_shift.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+        autoscale_svg(f'{plot}_shift.svg')
 
     return shifted_otf
 
@@ -363,6 +366,7 @@ def remove_phase_ramp(masked_phase, plot):
             axes[i, 2].imshow(masked_phase[i], vmin=-.5, vmax=.5, cmap='Spectral_r')
             axes[i, 2].axis('off')
             plt.savefig(f"{plot}_phase_ramp.svg")
+            autoscale_svg(f"{plot}_phase_ramp.svg")
 
     return np.nan_to_num(masked_phase, nan=0)
 
@@ -536,6 +540,7 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
 
             plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.2, wspace=0.1)
             plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+            autoscale_svg(f'{plot}_interference_pattern.svg')
             # plt.savefig(f'{plot}_interference_pattern.png', bbox_inches='tight', dpi=300, pad_inches=.25)
 
         return corrected_otf
@@ -569,6 +574,7 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
 
             plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
             plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+            autoscale_svg(f'{plot}_interference_pattern.svg')
 
         return otf
 
