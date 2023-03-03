@@ -267,9 +267,9 @@ def diagnostic_assessment(
     cbar.ax.set_title(r'$\lambda$', pad=20)
     cbar.ax.yaxis.set_ticks_position('left')
 
-    ax_cxy.set_xlabel('XY ($\mu$m)')
-    ax_cxz.set_xlabel('XZ ($\mu$m)')
-    ax_cyz.set_xlabel('YZ ($\mu$m)')
+    ax_cxy.set_xlabel(r'XY ($\mu$m)')
+    ax_cxz.set_xlabel(r'XZ ($\mu$m)')
+    ax_cyz.set_xlabel(r'YZ ($\mu$m)')
     ax_xy.set_title(f"$\gamma$: {gamma:.2f}")
     ax_xz.set_title(f"PSNR: {psnr:.2f}")
     ax_yz.set_title(f"Max photon count: {maxcounts:.0f}")

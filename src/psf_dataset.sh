@@ -16,8 +16,8 @@ CPUS=1
 MEM='20G'
 TIMELIMIT='1:00:00'
 SHAPE=64
-MIN_LLS_OFFSET=-1
-MAX_LLS_OFFSET=1
+MIN_LLS_OFFSET=0
+MAX_LLS_OFFSET=0
 
 MODES=15
 TITLE='psfs'
@@ -25,11 +25,11 @@ MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}"
 
 SAMPLES_PER_JOB=100
-SAMPLES_PER_BIN=500
+SAMPLES_PER_BIN=200
 mPSNR=($(seq 11 10 51))
 xPSNR=($(seq 20 10 60))
-amps1=($(seq 0 .01 .29))
-amps2=($(seq .01 .01 .3))
+amps1=($(seq 0 .01 .24))
+amps2=($(seq .01 .01 .25))
 SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
 DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
 
