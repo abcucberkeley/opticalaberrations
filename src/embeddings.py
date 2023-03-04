@@ -377,8 +377,19 @@ def gaussian_kernel(kernlen: tuple=[21,21,21], std=3):
     kernel = np.exp(-(xx ** 2 + yy ** 2 + zz ** 2) / (2 * std ** 2))
     return kernel
 
+
 @profile
-def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kernel_size=15, max_num_peaks=20, windowing=True):
+def remove_interference_pattern(
+        psf,
+        otf,
+        plot,
+        pois=None,
+        min_distance=5,
+        kernel_size=15,
+        max_num_peaks=20,
+        windowing=True,
+        plot_interference_pattern=False,
+):
     """
     Normalize interference pattern from the given FFT
     Args:
@@ -463,8 +474,6 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
         pois = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
 
     if pois.shape[0] > 0:
-        # logger.info(f"Detected objects: {pois.shape[0]}")
-
         interference_pattern = fft(beads)
         corrected_otf = otf / interference_pattern
         if windowing:
@@ -477,12 +486,19 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
         corrected_psf /= np.nanmax(corrected_psf)
 
         if plot is not None:
-            fig, axes = plt.subplots(4, 3, figsize=(8, 11), sharey=False, sharex=False)
+            fig, axes = plt.subplots(
+                nrows=5 if plot_interference_pattern else 4,
+                ncols=3,
+                figsize=(8, 11),
+                sharey=False,
+                sharex=False
+            )
+
             for ax in range(3):
                 for p in range(pois.shape[0]):
                     if ax == 0:
-                        axes[2, ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
                         axes[0, ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
+                        axes[2, ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
                         axes[2, ax].add_patch(patches.Rectangle(
                             xy=(pois[p, 2] - half_length, pois[p, 1] - half_length),
                             width=kernel_size,
@@ -492,6 +508,7 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
                             alpha=1
                         ))
                     elif ax == 1:
+                        axes[0, ax].plot(pois[p, 2], pois[p, 0], marker='.', ls='', color=f'C{p}')
                         axes[2, ax].plot(pois[p, 2], pois[p, 0], marker='.', ls='', color=f'C{p}')
                         axes[2, ax].add_patch(patches.Rectangle(
                             xy=(pois[p, 2] - half_length, pois[p, 0] - half_length),
@@ -503,6 +520,7 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
                         ))
 
                     elif ax == 2:
+                        axes[0, ax].plot(pois[p, 1], pois[p, 0], marker='.', ls='', color=f'C{p}')
                         axes[2, ax].plot(pois[p, 1], pois[p, 0], marker='.', ls='', color=f'C{p}')
                         axes[2, ax].add_patch(patches.Rectangle(
                             xy=(pois[p, 1] - half_length, pois[p, 0] - half_length),
@@ -516,7 +534,7 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
                 m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot')
                 m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66)
 
-                if False:
+                if plot_interference_pattern:
                     interference = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=axes[3, ax], wspace=0.05, hspace=0)
                     ax1 = fig.add_subplot(interference[0])
                     ax1.imshow(np.nanmax(beads, axis=ax), cmap='hot')
@@ -531,9 +549,10 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
                 m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot')
 
             for ax, m, label in zip(
-                    range(4),
-                    [m1, m2, m3, m5],
-                    [r'Inputs', 'Kernel', 'Peak detection', r'Reconstructed']
+                    range(5) if plot_interference_pattern else range(4),
+                    [m1, m2, m3, m4, m5] if plot_interference_pattern else [m1, m2, m3, m5],
+                    ['Inputs', 'Kernel', 'Peak detection', 'Interference', 'Reconstructed']
+                    if plot_interference_pattern else ['Inputs', 'Kernel', 'Peak detection', 'Reconstructed']
             ):
                 cax = inset_axes(axes[ax, -1], width="10%", height="90%", loc='center right', borderpad=-3)
                 cb = plt.colorbar(m, cax=cax)
@@ -546,9 +565,6 @@ def remove_interference_pattern(psf, otf, plot, pois=None, min_distance=5, kerne
             axes[0, 0].set_title('XY')
             axes[0, 1].set_title('XZ')
             axes[0, 2].set_title('YZ')
-            axes[-1, 1].set_title(
-                r"$\mathscr{F}^{-1} \left( \mathscr{F}(\mathscr{i}) / \mathscr{F}(\mathcal{S}) \right)$"
-            )
 
             plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.2, wspace=0.1)
             plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)

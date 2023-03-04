@@ -15,7 +15,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
-from typing import Any
+from typing import Any, Union
 import numpy as np
 import matplotlib.patches as patches
 from line_profiler_pycharm import profile
@@ -31,7 +31,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
-def autoscale_svg(file: Path):
+
+
+def autoscale_svg(file: Union[Path, str]):
     # Read in the file
     with open(file, 'r') as f:
         filedata = f.read()

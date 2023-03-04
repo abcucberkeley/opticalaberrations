@@ -1061,11 +1061,6 @@ def eval_mode(
     residuals.index.name = 'ansi'
     residuals.to_csv(f'{save_path}_residuals.csv')
 
-    p2v = diff.peak2valley(na=1.0)
-    p2v_gt = y_wave.peak2valley(na=1.0)
-    logger.info(f"P2V: {p2v:9.3f}   GT_P2V: {p2v_gt:9.3f)}   {save_path}_residuals.csv")
-    logger.info('-'*50)
-
 
 def process_eval_file(file: Path, nas=(1.0, .95, .85)):
     results = {}
@@ -1213,9 +1208,14 @@ def eval_dataset(
     plot_evals: bool = True,
     precomputed: bool = False
 ):
+    # get model from .json file
     with open(list(Path(datadir / 'MLResults').glob('*_settings.json'))[0]) as f:
         predictions_settings = ujson.load(f)
-        model = Path(predictions_settings['model'])  # get model from .json file
+        model = Path(predictions_settings['model'])
+
+        if not model.exists():
+            logger.error(f'Model not found {model}')
+            return
 
     if not precomputed:
         pool = mp.Pool(processes=mp.cpu_count())
