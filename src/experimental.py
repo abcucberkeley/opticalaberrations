@@ -1067,7 +1067,7 @@ def eval_mode(
     logger.info('-'*50)
 
 
-def process_eval_file(file: Path):
+def process_eval_file(file: Path, nas=(1.0, .95, .85)):
     results = {}
     iteration_labels = [
         'before',
@@ -1090,7 +1090,7 @@ def process_eval_file(file: Path):
     file = Path(file)
     eval_file = Path(str(file).replace('_residuals.csv', '.svg'))
 
-    for i, na in enumerate([1.0, .95, .85]):
+    for i, na in enumerate(nas):
         results[i] = {
             'modes': '-'.join(str(e) for e in modes),
             'state': state,
@@ -1100,11 +1100,25 @@ def process_eval_file(file: Path):
             'na': na,
             'p2v_residual': diff.peak2valley(na=na),
             'p2v_gt': y.peak2valley(na=na),
-            'p2v_pred': p.peak2valley(na=na)
+            'p2v_pred': p.peak2valley(na=na),
+            f'mode_1': modes[0],
+            f'mode_2': modes[1],
         }
 
-        for k, m in enumerate(modes):
-            results[i].update({f'mode_{k}': m})
+        if modes[0] != modes[1]:
+            results[i+len(nas)] = {
+                'modes': '-'.join(str(e) for e in modes[::-1]),
+                'state': state,
+                'iteration_index': iteration_labels.index(state),
+                'num_model_modes': p.modes,
+                'eval_file': str(eval_file),
+                'na': na,
+                'p2v_residual': diff.peak2valley(na=na),
+                'p2v_gt': y.peak2valley(na=na),
+                'p2v_pred': p.peak2valley(na=na),
+                f'mode_1': modes[1],
+                f'mode_2': modes[0],
+            }
 
     return results
 
@@ -1164,11 +1178,14 @@ def plot_eval_dataset(
             height=3,
             aspect=1.,
             palette='tab10',
+            ci='sd',
+            # units="modes",
+            # estimator=None,
             facet_kws=dict(sharex=True),
         )
 
         (
-            g.map(plt.axhline, y=.5, color="red", dashes=(2, 1), zorder=0)
+            g.map(plt.axhline, y=.5, color="red", dashes=(2, 1), zorder=3)
             .map(plt.grid, which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
             .set_axis_labels("Iteration", label)
             .set_titles("Mode: {col_name}")
