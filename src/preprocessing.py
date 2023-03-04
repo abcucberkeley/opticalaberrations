@@ -108,6 +108,7 @@ def prep_sample(
     model_fov: tuple,
     debug: Any = None,
     remove_background: bool = True,
+    read_noise_bias: float = 5,
     normalize: bool = True,
     edge_filter: bool = False,
     filter_mask_dilation: bool = True
@@ -171,7 +172,7 @@ def prep_sample(
         axes[0, -1].set_xlim(0, None)
 
     if remove_background:
-        sample = remove_background_noise(sample)
+        sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)
 
         if debug is not None:
             sns.histplot(
@@ -203,7 +204,7 @@ def prep_sample(
         ).detect().astype(np.float)
 
         if filter_mask_dilation:
-            mask = dilation(mask, ball(2)).astype(float)
+            mask = dilation(mask, ball(1)).astype(float)
 
         sample *= mask
 

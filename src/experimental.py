@@ -429,7 +429,7 @@ def predict_sample(
         model_fov=modelpsfgen.psf_fov,
         sample_voxel_size=psfgen.voxel_size,
         remove_background=True,
-        read_noise_bias=5,
+        read_noise_bias=50,
         normalize=True,
         edge_filter=False,
         filter_mask_dilation=True,
