@@ -141,11 +141,11 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--decay_period", default=300, type=int, help='number of epochs to decay over before restarting LR'
+        "--decay_period", default=500, type=int, help='number of epochs to decay over before restarting LR'
     )
 
     train_parser.add_argument(
-        "--epochs", default=300, type=int, help="number of training epochs"
+        "--epochs", default=500, type=int, help="number of training epochs"
     )
 
     train_parser.add_argument(

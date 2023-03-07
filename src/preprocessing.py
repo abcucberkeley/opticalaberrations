@@ -265,9 +265,6 @@ def find_roi(
     voxel_size: tuple = (.200, .108, .108),
     timestamp: int = 17
 ):
-    ztiles = 1
-    ncols = int(np.ceil(num_rois / 5))
-    nrows = int(np.ceil(num_rois / ncols))
     savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
@@ -449,6 +446,10 @@ def find_roi(
         plt.savefig(f'{plot}_mips.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     rois = []
+    ztiles = 1
+    ncols = int(np.ceil(len(pois) / 5))
+    nrows = int(np.ceil(len(pois) / ncols))
+
     for p, (z, y, x) in enumerate(itertools.product(
         range(ztiles), range(nrows), range(ncols),
         desc=f"Locating tiles: {[pois.shape[0]]}")
@@ -508,7 +509,7 @@ def get_tiles(
         range(ztiles), range(nrows), range(ncols),
         desc=f"Locating tiles: {[windows.shape[0]]}")
     ):
-        tile = f"z{0}-y{y}-x{x}"
+        tile = f"z{z}-y{y}-x{x}"
         imsave(savepath / f"{tile}.tif", windows[i])
         rois.append(savepath / f"{tile}.tif")
 

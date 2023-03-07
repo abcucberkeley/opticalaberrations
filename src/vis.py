@@ -605,7 +605,7 @@ def tiles(
         i = 0
         for y in range(nrows):
             for x in range(ncols):
-                im = grid[i].imshow(tiles[i], cmap='hot', vmin=0, vmax=1, aspect='equal')
+                im = grid[i].imshow(tiles[i], cmap='hot', vmin=np.nanmin(sample), vmax=np.nanmax(sample), aspect='equal')
                 grid[i].set_title(f"z{z}-y{y}-x{x}", pad=1)
                 grid[i].axis('off')
                 i += 1

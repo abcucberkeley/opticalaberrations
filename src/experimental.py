@@ -284,7 +284,7 @@ def preprocess(
         sample_voxel_size=sample_voxel_size,
         remove_background=True,
         normalize=True,
-        edge_filter=True,
+        edge_filter=False,
         debug=file.with_suffix('') if plot else None
     )
 
@@ -344,17 +344,41 @@ def predict(
         ),
     ).unbatch()
 
-    ps, stdev = backend.predict_dataset(
-        model,
-        inputs,
-        psfgen=psfgen,
-        batch_size=batch_size,
-        threshold=prediction_threshold,
-        desc=f'Predicting ROIs in ({outdir.name})',
-        digital_rotations=digita_rotations,
-        ignore_modes=ignore_modes,
-        plot_rotations=[f.with_suffix('') for f in rois] if plot_rotations else None,
-    )
+    ps, std = [], []
+    for tile, file in zip(inputs.as_numpy_iterator(), rois):
+        res = backend.predict_rotation(
+            model,
+            inputs=tile,
+            psfgen=psfgen,
+            no_phase=no_phase,
+            batch_size=batch_size,
+            threshold=prediction_threshold,
+            ignore_modes=ignore_modes,
+            freq_strength_threshold=freq_strength_threshold,
+            plot=file.with_suffix('') if plot else None,
+            plot_rotations=file.with_suffix('') if plot_rotations else None,
+            rotations=digita_rotations,
+            desc=f'Predicting ROIs in ({outdir.name})',
+        )
+
+        try:
+            p, s = res
+            lls_defocus = 0.
+        except ValueError:
+            p, s, lls_defocus = res
+
+        if plot:
+            vis.diagnosis(
+                pred=Wavefront(p, lam_detection=wavelength),
+                pred_std=Wavefront(s, lam_detection=wavelength),
+                save_path=Path(f"{file.with_suffix('')}_diagnosis"),
+                lls_defocus=lls_defocus
+            )
+
+        ps.append(p)
+        std.append(s)
+
+    ps, std = np.concatenate(ps), np.concatenate(std)
 
     predictions = pd.DataFrame(ps.T, columns=[f.with_suffix('').name for f in rois])
     pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('z')]
@@ -720,7 +744,7 @@ def aggregate_predictions(
 
     # drop null predictions
     predictions = predictions.loc[:, (predictions != 0).any(axis=0)]
-    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('p')]
+    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('z')]
 
     p_modes = predictions[pcols].values
     p_modes[p_modes != 0] = 1
@@ -845,7 +869,7 @@ def aggregate_predictions(
     psf = psfgen.single_psf(phi=p, normed=True, noise=False)
     imsave(f"{model_pred.with_suffix('')}_aggregated_psf.tif", psf)
 
-    _, ztiles, nrows, ncols = [c.split('-') for c in pcols][-1]
+    ztiles, nrows, ncols = [c.split('-') for c in pcols][-1]
 
     if plot:
         vis.wavefronts(
