@@ -488,8 +488,13 @@ def remove_interference_pattern(
         interference_pattern = fft(beads)
         corrected_otf = otf / interference_pattern
         if windowing:
-            #corrected_psf = ifft(corrected_otf) * window(('tukey', 0.8), corrected_otf.shape)
-            corrected_psf = ifft(corrected_otf) * gaussian_kernel(corrected_otf.shape, std=4)
+            window_size = (18,18,18)
+            window_border = np.floor((corrected_otf.shape - np.array(window_size)) // 2).astype(int)
+            window_extent = corrected_otf.shape - window_border * 2
+            window_border= np.vstack((window_border,window_border)).transpose() # pad needs amount on both sides of each axis.
+            windowing_function = np.pad(window(('tukey', 0.8), window_extent), pad_width=window_border)
+            corrected_psf = ifft(corrected_otf) * windowing_function
+            #corrected_psf = ifft(corrected_otf) * gaussian_kernel(corrected_otf.shape, std=4)
             corrected_otf = fft(corrected_psf)
         else:
             corrected_psf = ifft(corrected_otf)
