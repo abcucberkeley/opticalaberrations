@@ -449,6 +449,7 @@ def remove_interference_pattern(
         ).astype(int)
 
         beads = np.zeros_like(psf)
+        psf_peaks = np.zeros_like(psf)
         for p in detected_peaks:
             try:
                 fov = convolved_psf[
@@ -457,10 +458,20 @@ def remove_interference_pattern(
                     p[2]-(min_distance+1):p[2]+(min_distance+1),
                 ]
                 if np.max(fov) > convolved_psf[p[0], p[1], p[2]]:
-                    continue
+                    continue    # we are not at the summit if a max nearby is available.
                 else:
                     beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
-                    pois.append(p)
+                    pois.append(p)  # keep
+                    psf_peaks[
+                        p[0]-(min_distance+1):p[0]+(min_distance+1),
+                        p[1]-(min_distance+1):p[1]+(min_distance+1),
+                        p[2]-(min_distance+1):p[2]+(min_distance+1),
+                        ]=psf[
+                        p[0]-(min_distance+1):p[0]+(min_distance+1),
+                        p[1]-(min_distance+1):p[1]+(min_distance+1),
+                        p[2]-(min_distance+1):p[2]+(min_distance+1),
+                        ]
+
 
             except Exception:
                 # keep peak if we are at the border of the image
@@ -494,43 +505,44 @@ def remove_interference_pattern(
                 sharex=False
             )
 
+            transparency=0.6
             for ax in range(3):
                 for p in range(pois.shape[0]):
                     if ax == 0:
-                        axes[0, ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
-                        axes[2, ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
+                        axes[0, ax].plot(pois[p, 2], pois[p, 1], marker='x', ls='', color=f'C{p}')
+                        axes[2, ax].plot(pois[p, 2], pois[p, 1], marker='x', ls='', color=f'C{p}', alpha=transparency)
                         axes[2, ax].add_patch(patches.Rectangle(
-                            xy=(pois[p, 2] - half_length, pois[p, 1] - half_length),
-                            width=kernel_size,
-                            height=kernel_size,
+                            xy=(pois[p, 2] - min_distance, pois[p, 1] - min_distance),
+                            width=min_distance*2,
+                            height=min_distance*2,
                             fill=None,
                             color=f'C{p}',
-                            alpha=1
+                            alpha=transparency
                         ))
                     elif ax == 1:
-                        axes[0, ax].plot(pois[p, 2], pois[p, 0], marker='.', ls='', color=f'C{p}')
-                        axes[2, ax].plot(pois[p, 2], pois[p, 0], marker='.', ls='', color=f'C{p}')
+                        axes[0, ax].plot(pois[p, 2], pois[p, 0], marker='x', ls='', color=f'C{p}')
+                        axes[2, ax].plot(pois[p, 2], pois[p, 0], marker='x', ls='', color=f'C{p}', alpha=transparency)
                         axes[2, ax].add_patch(patches.Rectangle(
-                            xy=(pois[p, 2] - half_length, pois[p, 0] - half_length),
-                            width=kernel_size,
-                            height=kernel_size,
+                            xy=(pois[p, 2] - min_distance, pois[p, 0] - min_distance),
+                            width=min_distance*2,
+                            height=min_distance*2,
                             fill=None,
                             color=f'C{p}',
-                            alpha=1
+                            alpha=transparency
                         ))
 
                     elif ax == 2:
-                        axes[0, ax].plot(pois[p, 1], pois[p, 0], marker='.', ls='', color=f'C{p}')
-                        axes[2, ax].plot(pois[p, 1], pois[p, 0], marker='.', ls='', color=f'C{p}')
+                        axes[0, ax].plot(pois[p, 1], pois[p, 0], marker='x', ls='', color=f'C{p}')
+                        axes[2, ax].plot(pois[p, 1], pois[p, 0], marker='x', ls='', color=f'C{p}', alpha=transparency)
                         axes[2, ax].add_patch(patches.Rectangle(
-                            xy=(pois[p, 1] - half_length, pois[p, 0] - half_length),
-                            width=kernel_size,
-                            height=kernel_size,
+                            xy=(pois[p, 1] - min_distance, pois[p, 0] - min_distance),
+                            width=min_distance*2,
+                            height=min_distance*2,
                             fill=None,
                             color=f'C{p}',
-                            alpha=1
+                            alpha=transparency
                         ))
-                m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='hot')
+                m1 = axes[0, ax].imshow(np.nanmax(psf_peaks, axis=ax), cmap='hot')
                 m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot')
                 m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66)
 
@@ -551,8 +563,8 @@ def remove_interference_pattern(
             for ax, m, label in zip(
                     range(5) if plot_interference_pattern else range(4),
                     [m1, m2, m3, m4, m5] if plot_interference_pattern else [m1, m2, m3, m5],
-                    ['Inputs', 'Kernel', 'Peak detection', 'Interference', 'Reconstructed']
-                    if plot_interference_pattern else ['Inputs', 'Kernel', 'Peak detection', 'Reconstructed']
+                    [f'Inputs ({pois.shape[0]} peaks)', 'kernel', 'Peak detection', 'Interference', 'Reconstructed']
+                    if plot_interference_pattern else [f'Inputs ({pois.shape[0]} peaks)', 'kernel', 'Peak detection', 'Reconstructed']
             ):
                 cax = inset_axes(axes[ax, -1], width="10%", height="90%", loc='center right', borderpad=-3)
                 cb = plt.colorbar(m, cax=cax)
@@ -566,7 +578,7 @@ def remove_interference_pattern(
             axes[0, 1].set_title('XZ')
             axes[0, 2].set_title('YZ')
 
-            plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.2, wspace=0.1)
+            plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.1, wspace=0.1)
             plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
             autoscale_svg(f'{plot}_interference_pattern.svg')
             # plt.savefig(f'{plot}_interference_pattern.png', bbox_inches='tight', dpi=300, pad_inches=.25)
