@@ -436,7 +436,7 @@ def remove_interference_pattern(
     ]
 
     # convolve template with the input image
-    # kernel = gaussian_kernel(kernlen=[kernel_size]*3, std=1)
+    kernel = gaussian_kernel(kernlen=[kernel_size]*3, std=1)
     convolved_psf = convolution.convolve_fft(blured_psf, kernel, allow_huge=True, boundary='fill')
     convolved_psf -= np.nanmin(convolved_psf)
     convolved_psf /= np.nanmax(convolved_psf)
@@ -483,8 +483,8 @@ def remove_interference_pattern(
         corrected_otf = otf / interference_pattern
 
         if windowing:
-            corrected_psf = ifft(corrected_otf) * window(('tukey', 0.8), corrected_otf.shape)
-            # corrected_psf = ifft(corrected_otf) * gaussian_kernel(corrected_otf.shape, std=4)
+            # corrected_psf = ifft(corrected_otf) * window(('tukey', 0.8), corrected_otf.shape)
+            corrected_psf = ifft(corrected_otf) * gaussian_kernel(corrected_otf.shape, std=4)
             corrected_otf = fft(corrected_psf)
         else:
             corrected_psf = ifft(corrected_otf)
@@ -796,8 +796,8 @@ def fourier_embeddings(
             emb[emb > 1] = 1
     else:
 
-        # if remove_interference:
-        #     otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois, windowing=True)
+        if remove_interference:
+            otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois, windowing=True)
 
         alpha = compute_emb(
             otf,
@@ -815,8 +815,8 @@ def fourier_embeddings(
             alpha /= np.nanpercentile(alpha, 90)
             alpha[alpha > 1] = 1
 
-        if remove_interference:
-            otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois, windowing=True)
+        # if remove_interference:
+        #     otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois, windowing=True)
 
         phi = compute_emb(
             otf,

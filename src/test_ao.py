@@ -15,14 +15,20 @@ if platform.system() == "Windows":
     script  = repo/'src/ao.py'  # Script to run
 
 
-n = 'single'                                            # The subfolder within /examples where the test data should exist.
-image = repo/f'examples/{n}/{n}.tif'                   # Test image file
-pois = repo/f'examples/{n}/results/Detection3D.mat'
+datadir = 'flat'
+filename = 'flat.tif'
 
-dm_calibration = repo/'examples/Zernike_Korra_Bax273.csv'           # Deformable Mirror offsets that produce the Zernike functions
-model = repo/'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5'
-psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'    # excitation PSF being used.  This is sythesized.
+# image = repo/f'examples/{datadir}/{filename}'
+# pois = repo/f'examples/{datadir}/results/Detection3D.mat'
 
+image = Path(f'/home/supernova/nvme2/Data/20221003_Korra_TestForThayer/20230306/Fish/leftFish/{datadir}/{filename}')
+pois = Path(f'/home/supernova/nvme2/Data/20221003_Korra_TestForThayer/20230306/Fish/leftFish/{datadir}/results/Detection3D.mat')
+
+# Deformable Mirror offsets that produce the Zernike functions
+dm_calibration = repo/'examples/Zernike_Korra_Bax273.csv'
+model = repo/'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-28.h5'
+psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
+# excitation PSF being used.  This is sythesized.
 
 # extra `detect_rois` flags
 psf = repo/'examples/psf.tif'
@@ -32,7 +38,7 @@ prev = None
 current_dm = None
 wavelength = .510
 dm_damping_scalar = .9
-lateral_voxel_size = .108
+lateral_voxel_size = .097
 axial_voxel_size = .2
 sign_threshold = .9
 freq_strength_threshold = .01
