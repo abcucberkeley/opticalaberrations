@@ -477,7 +477,7 @@ def get_tiles(
     path: Union[Path, np.array],
     savepath: Path,
     window_size: tuple = (64, 64, 64),
-    strides: int = 64,
+    strides: tuple = (64, 64, 64),
 ):
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -500,7 +500,7 @@ def get_tiles(
         logger.error(f"Unknown file format: {path.name}")
         return
 
-    windows = sliding_window_view(dataset, window_shape=window_size)[::strides, ::strides, ::strides]
+    windows = sliding_window_view(dataset, window_shape=window_size)[::strides[0], ::strides[1], ::strides[2]]
     ztiles, nrows, ncols = windows.shape[:3]
     windows = np.reshape(windows, (-1, *window_size))
 

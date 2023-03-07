@@ -210,7 +210,7 @@ def parse_args(args):
         "--batch_size", default=100, type=int, help='maximum batch size for the model'
     )
     predict_tiles.add_argument(
-        "--window_size", default=64, type=int, help='size of the window to crop each tile'
+        "--window_size", default=(64,96,96), type=tuple, help='size of the window to crop each tile'
     )
     predict_tiles.add_argument(
         "--prev", default=None, type=Path,

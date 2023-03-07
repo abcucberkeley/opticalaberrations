@@ -638,7 +638,7 @@ def predict_tiles(
     wavelength: float = .605,
     num_predictions: int = 1,
     batch_size: int = 1,
-    window_size: int = 128,
+    window_size: tuple = (64, 64, 64),
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
     sign_threshold: float = .9,
@@ -668,7 +668,7 @@ def predict_tiles(
         sample,
         savepath=outdir,
         strides=window_size,
-        window_size=tuple(3*[window_size]),
+        window_size=window_size,
     )
 
     predict(

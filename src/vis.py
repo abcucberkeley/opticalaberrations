@@ -570,8 +570,8 @@ def prediction(
 def tiles(
     data: np.ndarray,
     save_path: Path,
-    strides: int = 64,
-    window_size: int = 64,
+    strides: tuple = (64, 96, 96),
+    window_size: tuple = (64, 96, 96),
     gamma: float = .5,
 ):
     plt.rcParams.update({
@@ -582,13 +582,13 @@ def tiles(
         'ytick.labelsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
-    ztiles = np.array_split(range(data.shape[0]), data.shape[0]//window_size)
+    ztiles = np.array_split(range(data.shape[0]), data.shape[0]//window_size[0])
 
     for z, idx in enumerate(ztiles):
         sample = np.max(data[idx], axis=0)
-        tiles = sliding_window_view(sample, window_shape=[window_size, window_size])[::strides, ::strides]
+        tiles = sliding_window_view(sample, window_shape=[window_size[1], window_size[2]])[::strides[1], ::strides[2]]
         nrows, ncols = tiles.shape[0], tiles.shape[1]
-        tiles = np.reshape(tiles, (-1, window_size, window_size))
+        tiles = np.reshape(tiles, (-1, window_size[1], window_size[2]))
 
         fig = plt.figure(figsize=(3*nrows, 3*ncols))
         grid = ImageGrid(
