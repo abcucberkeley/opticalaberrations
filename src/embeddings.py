@@ -456,7 +456,6 @@ def remove_interference_pattern(
         ).astype(int)
 
         beads = np.zeros_like(psf)
-        psf_peaks = np.zeros_like(psf)
         for p in detected_peaks:
             try:
                 fov = convolved_psf[
@@ -468,17 +467,7 @@ def remove_interference_pattern(
                     continue    # we are not at the summit if a max nearby is available.
                 else:
                     beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
-                    pois.append(p)  # keep
-                    psf_peaks[
-                        p[0]-(min_distance+1):p[0]+(min_distance+1),
-                        p[1]-(min_distance+1):p[1]+(min_distance+1),
-                        p[2]-(min_distance+1):p[2]+(min_distance+1),
-                        ]=psf[
-                        p[0]-(min_distance+1):p[0]+(min_distance+1),
-                        p[1]-(min_distance+1):p[1]+(min_distance+1),
-                        p[2]-(min_distance+1):p[2]+(min_distance+1),
-                        ]
-
+                    pois.append(p)  # keep peak
 
             except Exception:
                 # keep peak if we are at the border of the image
@@ -491,6 +480,18 @@ def remove_interference_pattern(
         beads[beads < .05] = 0.
         pois = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
 
+    psf_peaks = np.zeros_like(psf)  # create a volume masked around each peak
+    for p in pois:
+        psf_peaks[
+        p[0] - (min_distance + 1):p[0] + (min_distance + 1),
+        p[1] - (min_distance + 1):p[1] + (min_distance + 1),
+        p[2] - (min_distance + 1):p[2] + (min_distance + 1),
+        ] = psf[
+            p[0] - (min_distance + 1):p[0] + (min_distance + 1),
+            p[1] - (min_distance + 1):p[1] + (min_distance + 1),
+            p[2] - (min_distance + 1):p[2] + (min_distance + 1),
+            ]
+
     if pois.shape[0] > 0:
         interference_pattern = fft(beads)
         corrected_otf = otf / interference_pattern
@@ -502,7 +503,6 @@ def remove_interference_pattern(
             window_border= np.vstack((window_border,window_border)).transpose() # pad needs amount on both sides of each axis.
             windowing_function = np.pad(window(('tukey', 0.8), window_extent), pad_width=window_border)
             corrected_psf = ifft(corrected_otf) * windowing_function
-            #corrected_psf = ifft(corrected_otf) * gaussian_kernel(corrected_otf.shape, std=4)
             corrected_otf = fft(corrected_psf)
         else:
             corrected_psf = ifft(corrected_otf)
