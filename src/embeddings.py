@@ -497,7 +497,7 @@ def remove_interference_pattern(
         corrected_otf = otf / interference_pattern
 
         if windowing:
-            window_size = (18,18,18)
+            window_size = (21,21,21)
             window_border = np.floor((corrected_otf.shape - np.array(window_size)) // 2).astype(int)
             window_extent = corrected_otf.shape - window_border * 2
             window_border= np.vstack((window_border,window_border)).transpose() # pad needs amount on both sides of each axis.
@@ -815,8 +815,8 @@ def fourier_embeddings(
             emb[emb > 1] = 1
     else:
 
-        if remove_interference:
-            otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois, windowing=True)
+        # if remove_interference:
+        #     otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois, windowing=True)
 
         alpha = compute_emb(
             otf,
@@ -834,8 +834,8 @@ def fourier_embeddings(
             alpha /= np.nanpercentile(alpha, 90)
             alpha[alpha > 1] = 1
 
-        # if remove_interference:
-        #     otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois, windowing=True)
+        if remove_interference:
+            otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois, windowing=True)
 
         phi = compute_emb(
             otf,

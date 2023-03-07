@@ -23,6 +23,7 @@ import matplotlib.patches as patches
 from line_profiler_pycharm import profile
 from skimage.morphology import ball
 from skimage.morphology import dilation
+from skimage.filters import window, difference_of_gaussians
 from canny import CannyEdgeDetector3D
 
 from vis import plot_mip
@@ -56,7 +57,7 @@ def round_to_odd(n):
 
 
 @profile
-def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, **kwargs):
+def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str='linear_ramp', **kwargs):
     """Crops or pads array.  Output will have dimensions "crop_shape". No interpolation. Padding type
     can be customized with **kwargs, like "reflect" to get mirror pad.
 
@@ -86,17 +87,23 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, **kwargs):
 
     if len(img.shape) == 5:
         if img.shape[0] != 1:
-            return np.array([np.pad(s[slicer], pad, **kwargs) for s in np.squeeze(img)])[..., np.newaxis]
+            return np.array([np.pad(s[slicer], pad, mode=mode, **kwargs) for s in np.squeeze(img)])[..., np.newaxis]
         else:
-            return np.pad(np.squeeze(img)[slicer], pad, **kwargs)[np.newaxis, ..., np.newaxis]
+            return np.pad(np.squeeze(img)[slicer], pad, mode=mode, **kwargs)[np.newaxis, ..., np.newaxis]
     else:
-        return np.pad(img[tuple(slicer)], pad, **kwargs)
+        return np.pad(img[tuple(slicer)], pad, mode=mode, **kwargs)
 
 
 def remove_background_noise(image, read_noise_bias: float = 5):
-    """ A simple function to remove background noise from a given image """
-    mode = int(st.mode(image, axis=None).mode[0])
-    image -= mode + read_noise_bias
+    """ A simple function to remove background noise from a given image.
+        Also uses difference of gaussians to bandpass (reject past nyquist, reject DC/background/scattering
+        To avoid boundary effects (cross in OTF), a tukey window is applied so that the edges of the volume go to zero.
+
+        """
+    filtered_image = difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
+    image = filtered_image * window(('tukey', 0.2), image.shape) # 1.0 = Hann, 0.0 = rect window
+    # mode = int(st.mode(image, axis=None).mode[0])
+    # image -= mode + read_noise_bias
     image[image < 0] = 0
     return image
 
@@ -171,6 +178,18 @@ def prep_sample(
         axes[0, -1].set_yscale('symlog')
         axes[0, -1].set_xlim(0, None)
 
+    # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
+    number_of_desired_sample_pixels = (
+        round_to_even(model_fov[0] / sample_voxel_size[0]),
+        round_to_even(model_fov[1] / sample_voxel_size[1]),
+        round_to_even(model_fov[2] / sample_voxel_size[2]),
+    )
+    if not all(s1 == s2 for s1, s2 in zip(number_of_desired_sample_pixels, sample.shape)):
+        sample = resize_with_crop_or_pad(
+            sample,
+            crop_shape=number_of_desired_sample_pixels
+        )
+
     if remove_background:
         sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)
 
@@ -208,18 +227,7 @@ def prep_sample(
 
         sample *= mask
 
-    # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
-    number_of_desired_sample_pixels = (
-        round_to_even(model_fov[0] / sample_voxel_size[0]),
-        round_to_even(model_fov[1] / sample_voxel_size[1]),
-        round_to_even(model_fov[2] / sample_voxel_size[2]),
-    )
 
-    if not all(s1 == s2 for s1, s2 in zip(number_of_desired_sample_pixels, sample.shape)):
-        sample = resize_with_crop_or_pad(
-            sample,
-            crop_shape=number_of_desired_sample_pixels
-        )
 
     if debug is not None:
         plot_mip(
