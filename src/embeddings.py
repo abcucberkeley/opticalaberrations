@@ -8,6 +8,7 @@ from typing import Any, Union
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
+import signal
 import numpy as np
 from tqdm import tqdm
 import matplotlib.colors as mcolors
@@ -38,6 +39,11 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def timer(signum, frame):
+    raise TimeoutError("Timed out!")
+
 
 @profile
 def fft(inputs, padsize=None):
@@ -661,11 +667,20 @@ def compute_emb(
             na_mask[np.abs(emb) < freq_strength_threshold] = 0.
 
         emb = np.angle(emb)
-        emb = np.ma.masked_array(emb, mask=~na_mask, fill_value=0)
-        if len(np.ma.nonzero(emb)[0]) > 100:
-            emb = unwrap_phase(emb)
-        emb = emb.filled(0)
-        emb = np.nan_to_num(emb, nan=0)
+        emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
+
+        try:
+            if len(np.ma.nonzero(emb)[0]) > 100:
+                signal.signal(signal.SIGALRM, timer)
+                signal.alarm(30)
+                
+                emb = np.ma.masked_array(emb, mask=~na_mask, fill_value=0)
+                emb = unwrap_phase(emb)
+                emb = emb.filled(0)
+                emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
+
+        except TimeoutError as e:
+            logger.warning(f"`unwrap_phase`: {e}")
 
     else:
         emb = np.abs(otf)
@@ -722,7 +737,8 @@ def fourier_embeddings(
         embedding_option: str = 'spatial_planes',
         edge_filter: bool = False,
         digital_rotations: Any = None,
-        poi_shape: tuple = (64, 64)
+        poi_shape: tuple = (64, 64),
+        debug_rotations: bool = False
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -824,14 +840,31 @@ def fourier_embeddings(
 
     if digital_rotations is not None:
         gpu_embeddings = cp.array(emb)
-        emb = np.array([
-            cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
-            for angle in tqdm(
-                digital_rotations,
-                desc=f"Generating digital rotations [{plot.name}]"
-                if plot is not None else "Generating digital rotations",
-            )
-        ])
+        if debug_rotations:
+            emb = np.zeros((digital_rotations.shape[0], *emb.shape))
+
+            for i, angle in enumerate(tqdm(
+                    digital_rotations,
+                    desc=f"Generating digital rotations [{plot.name}]"
+                    if plot is not None else "Generating digital rotations",
+            )):
+                for plane in range(emb.shape[1]):
+                    emb[i, plane, :, :] = np.array([
+                        cp.asnumpy(rotate(gpu_embeddings[plane], angle=angle, reshape=False, axes=(-2, -1)))
+                    ])
+
+                    plt.figure()
+                    plt.imshow(emb[i, 0, :, :])
+                    plt.savefig(f'{plot}_{angle}.svg')
+        else:
+            emb = np.array([
+                cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
+                for angle in tqdm(
+                    digital_rotations,
+                    desc=f"Generating digital rotations [{plot.name}]"
+                    if plot is not None else "Generating digital rotations",
+                )
+            ])
         del gpu_embeddings
 
     if emb.shape[-1] != 1:
