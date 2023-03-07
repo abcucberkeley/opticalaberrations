@@ -172,10 +172,10 @@ if __name__ == "__main__":
     z_voxel_size = .2
     lam_detection = .510
     psf_type = '../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
-    input_shape = (64, 64, 64)
+    input_shape = (128, 128, 128)
     na_detection = 1.0
     refractive_index = 1.33
-    snr = 1000
+    snr = 30
     noise = False
     outdir = Path('../test_samples/')
     zernikes = np.zeros(modes)
@@ -195,13 +195,14 @@ if __name__ == "__main__":
     )
 
     # ANSI index
-    filename = f'mode_7'
-    zernikes[7] = .2  # mu rms
+    filename = f'single'
+    zernikes[3] = .2  # mu rms
 
-    num_objs = 25
+    num_objs = 100
     reference = beads(gen=gen, object_size=0, num_objs=num_objs)
 
     wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection)
+    p2v = wavefront.peak2valley()
 
     psf = create_synthetic_sample(
         wavefront=wavefront,
@@ -213,44 +214,62 @@ if __name__ == "__main__":
 
     inputs = fftconvolution(sample=reference, kernel=psf)
 
-    rand_noise = gen._random_noise(
-        image=inputs,
-        mean=gen.mean_background_noise,
-        sigma=gen.sigma_background_noise
-    )
-    inputs *= snr ** 2
-    inputs += rand_noise
+    snr = gen._randuniform(gen.snr)
+    inputs = inputs * snr ** 2
 
-    inputs = prep_sample(
+    if noise:
+        rand_noise = gen._random_noise(
+            image=inputs,
+            mean=gen.mean_background_noise,
+            sigma=gen.sigma_background_noise
+        )
+        inputs = rand_noise + inputs
+        maxcounts = np.max(inputs)
+        psnr = np.sqrt(maxcounts)
+    else:
+        maxcounts = np.max(inputs)
+        psnr = np.sqrt(maxcounts)
+        inputs = inputs
+
+    save_synthetic_sample(
+        outdir / f'num_objs_{num_objs}',
         inputs,
-        sample_voxel_size=gen.voxel_size,
-        model_voxel_size=gen.voxel_size,
-        remove_background=True,
-        normalize=True,
-        edge_filter=False,
+        amps=zernikes,
+        snr=psnr,
+        maxcounts=maxcounts,
+        p2v=p2v
     )
 
-    fourier_embeddings(
-        inputs=inputs,
-        iotf=gen.iotf,
-        plot=outdir / f"fourier_embeddings_num_objs_{num_objs}",
-        embedding_option=gen.embedding_option,
-        remove_interference=True,
-    )
+    # inputs = prep_sample(
+    #     inputs,
+    #     sample_voxel_size=gen.voxel_size,
+    #     model_voxel_size=gen.voxel_size,
+    #     remove_background=True,
+    #     normalize=True,
+    #     edge_filter=False,
+    # )
 
-    masked_inputs = prep_sample(
-        inputs,
-        sample_voxel_size=gen.voxel_size,
-        model_voxel_size=gen.voxel_size,
-        remove_background=False,
-        normalize=True,
-        edge_filter=True,
-    )
-
-    fourier_embeddings(
-        inputs=masked_inputs,
-        iotf=gen.iotf,
-        plot=outdir / f"masked_fourier_embeddings_num_objs_{num_objs}",
-        embedding_option=gen.embedding_option,
-        remove_interference=True,
-    )
+    # fourier_embeddings(
+    #     inputs=inputs,
+    #     iotf=gen.iotf,
+    #     plot=outdir / f"fourier_embeddings_num_objs_{num_objs}",
+    #     embedding_option=gen.embedding_option,
+    #     remove_interference=True,
+    # )
+    #
+    # masked_inputs = prep_sample(
+    #     inputs,
+    #     sample_voxel_size=gen.voxel_size,
+    #     model_voxel_size=gen.voxel_size,
+    #     remove_background=False,
+    #     normalize=True,
+    #     edge_filter=True,
+    # )
+    #
+    # fourier_embeddings(
+    #     inputs=masked_inputs,
+    #     iotf=gen.iotf,
+    #     plot=outdir / f"masked_fourier_embeddings_num_objs_{num_objs}",
+    #     embedding_option=gen.embedding_option,
+    #     remove_interference=True,
+    # )

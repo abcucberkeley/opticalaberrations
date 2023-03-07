@@ -20,7 +20,7 @@ image = repo/f'examples/{n}/{n}.tif'                   # Test image file
 pois = repo/f'examples/{n}/results/Detection3D.mat'
 
 dm_calibration = repo/'examples/Zernike_Korra_Bax273.csv'           # Deformable Mirror offsets that produce the Zernike functions
-model = repo/'pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z15/phase.h5'
+model = repo/'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5'
 psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'    # excitation PSF being used.  This is sythesized.
 
 
@@ -33,14 +33,15 @@ current_dm = None
 wavelength = .510
 dm_damping_scalar = .9
 lateral_voxel_size = .108
-axial_voxel_size = .1
+axial_voxel_size = .2
 sign_threshold = .9
 freq_strength_threshold = .01
 prediction_threshold = 0.
 num_predictions = 1
 window_size = 64
-batch_size = 256
+batch_size = 512
 plot = True
+plot_rotations = True
 estimate_sign_with_decon = False
 ignore_modes = []
 
@@ -95,6 +96,7 @@ predict_sample += f" --num_predictions {num_predictions}"
 predict_sample += f" --batch_size {batch_size}"
 predict_sample += f" --prev {prev}"
 predict_sample += f" --plot" if plot else ""
+predict_sample += f" --plot_rotations" if plot_rotations else ""
 predict_sample += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 # predict_sample += f" --ideal_empirical_psf {image}"
 
@@ -122,6 +124,7 @@ predict_rois += f" --num_predictions {num_predictions}"
 predict_rois += f" --batch_size {batch_size}"
 predict_rois += f" --prev {prev}"
 predict_rois += f" --plot" if plot else ""
+predict_rois += f" --plot_rotations" if plot_rotations else ""
 predict_rois += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
 for mode in ignore_modes:
@@ -145,6 +148,7 @@ predict_tiles += f" --num_predictions {num_predictions}"
 predict_tiles += f" --batch_size {batch_size}"
 predict_tiles += f" --prev {prev}"
 predict_tiles += f" --plot" if plot else ""
+predict_tiles += f" --plot_rotations" if plot_rotations else ""
 predict_tiles += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
 for mode in ignore_modes:
@@ -203,7 +207,7 @@ decon_tiles_predictions += f" --plot" if plot else ""
 call(predict_sample, shell=True)
 # call(decon_sample_predictions, shell=True)
 
-# call(detect_rois, shell=True)
+call(detect_rois, shell=True)
 call(predict_rois, shell=True)
 call(aggregate_roi_predictions, shell=True)
 # call(decon_roi_predictions, shell=True)

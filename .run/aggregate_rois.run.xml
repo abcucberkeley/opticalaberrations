@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="aggregate_predictions ../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5 ../examples/AOLLSM_clathrinDetectionFiles/2016-08-Janelia_AOLS_PaperRelatedMoviesFiguresAnalysis_CLTA_mNeonGreen_mem_mCardinal_55hpf_analyzed/Exp11-3/ex11_CamB_ch0_CAM1_stack0000_488nm_0000000msec_0372011707msecAbs_002x_002y_000z_0017t_tiles_predictions.csv ../examples/Zernike_Korra_Bax273.csv --current_dm None --dm_damping_scalar 1. --prediction_threshold 0.25 --majority_threshold 0.5 --min_percentile 1 --max_percentile 99 --final_prediction mean --lateral_voxel_size 0.104 --axial_voxel_size 0.2 --wavelength 0.51 --plot" />
+    <option name="PARAMETERS" value="aggregate_predictions ../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-28.h5 ../examples/single/single_rois_predictions.csv ../examples/Zernike_Korra_Bax273.csv --current_dm None --dm_damping_scalar 1. --prediction_threshold 0.25 --majority_threshold 0.5 --min_percentile 1 --max_percentile 99 --final_prediction mean --lateral_voxel_size 0.104 --axial_voxel_size 0.2 --wavelength 0.51 --plot" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
