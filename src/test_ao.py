@@ -20,7 +20,7 @@ image = repo/f'examples/{n}/{n}.tif'                   # Test image file
 pois = repo/f'examples/{n}/results/Detection3D.mat'
 
 dm_calibration = repo/'examples/Zernike_Korra_Bax273.csv'           # Deformable Mirror offsets that produce the Zernike functions
-model = repo/'pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z15/phase.h5'
+model = repo/'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5'
 psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'    # excitation PSF being used.  This is sythesized.
 
 
@@ -122,6 +122,7 @@ predict_rois += f" --num_predictions {num_predictions}"
 predict_rois += f" --batch_size {batch_size}"
 predict_rois += f" --prev {prev}"
 predict_rois += f" --plot" if plot else ""
+predict_rois += f" --plot_rotations" if plot else ""
 predict_rois += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
 for mode in ignore_modes:
@@ -199,15 +200,20 @@ decon_tiles_predictions += f" --plot" if plot else ""
 # but some (e.g., 'decon') need the outputs from the preceeding call
 
 # call(deskew, shell=True)
-
+print('\nRunning predict_sample ...')
 call(predict_sample, shell=True)
 # call(decon_sample_predictions, shell=True)
 
-# call(detect_rois, shell=True)
+print('\nRunning detect_rois ...')
+call(detect_rois, shell=True)
+print('\nRunning predict_rois ...')
 call(predict_rois, shell=True)
+print('\nRunning aggregate_roi_predictions ...')
 call(aggregate_roi_predictions, shell=True)
 # call(decon_roi_predictions, shell=True)
 
+print('\nRunning predict_tiles ...')
 call(predict_tiles, shell=True)
+print('\nRunning aggregate_tile_predictions ...')
 call(aggregate_tile_predictions, shell=True)
 # call(decon_tiles_predictions, shell=True)
