@@ -442,8 +442,8 @@ def remove_interference_pattern(
         detected_peaks = peak_local_max(
             convolved_psf,
             min_distance=min_distance,
-            threshold_rel=.1,
-            exclude_border=10,
+            threshold_rel=.3,
+            exclude_border=int(np.floor(kernel_size//2)),
             p_norm=2,
             num_peaks=max_num_peaks
         ).astype(int)
