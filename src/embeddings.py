@@ -3,6 +3,8 @@ matplotlib.use('Agg')
 
 import logging
 import sys
+import platform
+is_windows = any(platform.win32_ver())
 from typing import Any, Union
 
 import matplotlib.pyplot as plt
@@ -687,7 +689,7 @@ def compute_emb(
         emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
 
         try:
-            if len(np.ma.nonzero(emb)[0]) > 100:
+            if len(np.ma.nonzero(emb)[0]) > 100 and not is_windows:
                 signal.signal(signal.SIGALRM, timer)
                 signal.alarm(30)
                 
