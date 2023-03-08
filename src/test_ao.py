@@ -17,17 +17,13 @@ if platform.system() == "Windows":
 
 datadir = 'flat'
 filename = 'flat.tif'
+# nvme2 = '10.17.209.7'
+nvme2 = '/home/supernova/nvme2'
+image = Path(f'/{nvme2}/Data/20221003_Korra_TestForThayer/20230306/Fish/leftFish/{datadir}/{filename}')
+pois = Path(f'/{nvme2}/Data/20221003_Korra_TestForThayer/20230306/Fish/leftFish/{datadir}/results/Detection3D.mat')
 
 # image = repo/f'examples/{datadir}/{filename}'
 # pois = repo/f'examples/{datadir}/results/Detection3D.mat'
-nvme2 = '10.17.209.7'
-image = Path(f'/{nvme2}/Data/20221003_Korra_TestForThayer/20230306/Fish/leftFish/{datadir}/{filename}')
-pois = Path(
-    f'/{nvme2}/Data/20221003_Korra_TestForThayer/20230306/Fish/leftFish/{datadir}/results/Detection3D.mat')
-
-dm_calibration = repo/'examples/Zernike_Korra_Bax273.csv'           # Deformable Mirror offsets that produce the Zernike functions
-model = repo/'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5'
-psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'    # excitation PSF being used.  This is sythesized.
 
 # Deformable Mirror offsets that produce the Zernike functions
 dm_calibration = repo/'examples/Zernike_Korra_Bax273.csv'
@@ -49,7 +45,7 @@ sign_threshold = .9
 freq_strength_threshold = .01
 prediction_threshold = 0.
 num_predictions = 1
-window_size = 64
+window_size = '64-96-96'  # z-y-x
 batch_size = 512
 plot = True
 plot_rotations = True
@@ -61,7 +57,7 @@ majority_threshold = .5
 min_percentile = 1
 max_percentile = 99
 final_prediction = 'mean'
-ignore_tiles = ['z0-y0-x0', 'z0-y0-x3', 'z0-y3-x0', 'z0-y3-x3', 'z0-y3-x2', 'z1-y0-x3']
+ignore_tiles = []
 
 # extra `predict_rois` flags
 num_rois = 10

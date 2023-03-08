@@ -483,25 +483,28 @@ def remove_interference_pattern(
     psf_peaks = np.zeros_like(psf)  # create a volume masked around each peak
     for p in pois:
         psf_peaks[
-        p[0] - (min_distance + 1):p[0] + (min_distance + 1),
-        p[1] - (min_distance + 1):p[1] + (min_distance + 1),
-        p[2] - (min_distance + 1):p[2] + (min_distance + 1),
+            p[0] - (min_distance + 1):p[0] + (min_distance + 1),
+            p[1] - (min_distance + 1):p[1] + (min_distance + 1),
+            p[2] - (min_distance + 1):p[2] + (min_distance + 1),
         ] = psf[
             p[0] - (min_distance + 1):p[0] + (min_distance + 1),
             p[1] - (min_distance + 1):p[1] + (min_distance + 1),
             p[2] - (min_distance + 1):p[2] + (min_distance + 1),
-            ]
+        ]
 
     if pois.shape[0] > 0:
         interference_pattern = fft(beads)
         corrected_otf = otf / interference_pattern
 
         if windowing:
-            window_size = (21,21,21)
+            window_size = (21, 21, 21)
             window_border = np.floor((corrected_otf.shape - np.array(window_size)) // 2).astype(int)
             window_extent = corrected_otf.shape - window_border * 2
-            window_border= np.vstack((window_border,window_border)).transpose() # pad needs amount on both sides of each axis.
+
+            # pad needs amount on both sides of each axis.
+            window_border = np.vstack((window_border, window_border)).transpose()
             windowing_function = np.pad(window(('tukey', 0.8), window_extent), pad_width=window_border)
+
             corrected_psf = ifft(corrected_otf) * windowing_function
             corrected_otf = fft(corrected_psf)
         else:

@@ -132,7 +132,7 @@ def parse_args(args):
         "--batch_size", default=100, type=int, help='maximum batch size for the model'
     )
     predict_rois.add_argument(
-        "--window_size", default=64, type=int, help='size of the window to crop around each point of interest'
+        "--window_size", default='64-64-64', type=str, help='size of the window to crop around each point of interest'
     )
     predict_rois.add_argument(
         "--prev", default=None, type=Path,
@@ -210,7 +210,7 @@ def parse_args(args):
         "--batch_size", default=100, type=int, help='maximum batch size for the model'
     )
     predict_tiles.add_argument(
-        "--window_size", default=(64,96,96), type=tuple, help='size of the window to crop each tile'
+        "--window_size", default='64-64-64', type=str, help='size of the window to crop each tile'
     )
     predict_tiles.add_argument(
         "--prev", default=None, type=Path,
@@ -470,7 +470,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
             wavelength=args.wavelength,
-            window_size=args.window_size,
+            window_size=tuple(int(i) for i in args.window_size.split('-')),
             num_predictions=args.num_predictions,
             num_rois=args.num_rois,
             min_intensity=args.min_intensity,
@@ -498,7 +498,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             lateral_voxel_size=args.lateral_voxel_size,
             num_predictions=args.num_predictions,
             wavelength=args.wavelength,
-            window_size=args.window_size,
+            window_size=tuple(int(i) for i in args.window_size.split('-')),
             plot=args.plot,
             plot_rotations=args.plot_rotations,
             batch_size=args.batch_size,

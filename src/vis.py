@@ -566,12 +566,13 @@ def prediction(
     plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
     autoscale_svg(f'{save_path}.svg')
 
+
 @profile
 def tiles(
     data: np.ndarray,
     save_path: Path,
-    strides: tuple = (64, 96, 96),
-    window_size: tuple = (64, 96, 96),
+    strides: tuple = (64, 64, 64),
+    window_size: tuple = (64, 64, 64),
     gamma: float = .5,
 ):
     plt.rcParams.update({
@@ -619,6 +620,7 @@ def tiles(
         plt.savefig(f'{save_path}_z{z}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
         autoscale_svg(f'{save_path}_z{z}.svg')
 
+
 @profile
 def wavefronts(
     predictions: pd.DataFrame,
@@ -626,7 +628,7 @@ def wavefronts(
     nrows: int,
     ncols: int,
     save_path: Path,
-    wavelength: float = .605,
+    wavelength: float = .510,
     threshold: float = .01,
     scale: str = 'mean',
 ):

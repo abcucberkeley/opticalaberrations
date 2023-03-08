@@ -177,6 +177,11 @@ def prep_sample(
         axes[0, -1].legend(frameon=False, loc='upper right', ncol=1)
         axes[0, -1].set_yscale('symlog')
         axes[0, -1].set_xlim(0, None)
+        axes[0, -1].set_title(
+            f'Voxel: ${int(sample_voxel_size[2]*1000)}^X$, '
+            f'${int(sample_voxel_size[1]*1000)}^Y$, '
+            f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
+        )
 
     # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
     number_of_desired_sample_pixels = (
@@ -184,6 +189,7 @@ def prep_sample(
         round_to_even(model_fov[1] / sample_voxel_size[1]),
         round_to_even(model_fov[2] / sample_voxel_size[2]),
     )
+
     if not all(s1 == s2 for s1, s2 in zip(number_of_desired_sample_pixels, sample.shape)):
         sample = resize_with_crop_or_pad(
             sample,
@@ -226,8 +232,6 @@ def prep_sample(
             mask = dilation(mask, ball(1)).astype(float)
 
         sample *= mask
-
-
 
     if debug is not None:
         plot_mip(

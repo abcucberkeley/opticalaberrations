@@ -392,7 +392,6 @@ def predict(
 
     if plot:
         vis.wavefronts(
-            scale='max',
             predictions=predictions,
             nrows=nrows,
             ncols=ncols,
@@ -571,7 +570,7 @@ def predict_rois(
     wavelength: float = .605,
     num_predictions: int = 1,
     batch_size: int = 1,
-    window_size: int = 64,
+    window_size: tuple = (64, 64, 64),
     num_rois: int = 10,
     min_intensity: int = 200,
     prediction_threshold: float = 0.,
@@ -600,7 +599,7 @@ def predict_rois(
         img,
         savepath=outdir,
         pois=pois,
-        window_size=tuple(3*[window_size]),
+        window_size=window_size,
         plot=f"{outdir}_predictions" if plot else None,
         num_rois=num_rois,
         min_dist=minimum_distance,
@@ -876,7 +875,6 @@ def aggregate_predictions(
             ztiles=calc_length(ztiles),
             nrows=calc_length(nrows),
             ncols=calc_length(ncols),
-            scale='max',
             predictions=predictions,
             wavelength=wavelength,
             save_path=Path(f"{model_pred.with_suffix('')}_aggregated_wavefronts"),
