@@ -139,10 +139,6 @@ def parse_args(args):
         help="previous predictions .csv file (Default: `None`)"
     )
     predict_rois.add_argument(
-        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat', type=Path,
-        help='type of the desired PSF'
-    )
-    predict_rois.add_argument(
         "--num_rois", default=10, type=int,
         help='max number of detected points to use for estimating aberrations'
     )
@@ -215,10 +211,6 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--prev", default=None, type=Path,
         help="previous predictions .csv file (Default: `None`)"
-    )
-    predict_tiles.add_argument(
-        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat', type=Path,
-        help='type of the desired PSF'
     )
     predict_tiles.add_argument(
         "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
