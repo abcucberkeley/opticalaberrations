@@ -595,8 +595,12 @@ def predict_rois(
     outdir = Path(f"{img.with_suffix('')}_rois")
     outdir.mkdir(exist_ok=True, parents=True)
 
+    logger.info(f"Loading file: {img.name}")
+    sample = np.squeeze(get_image(img).astype(float))
+    logger.info(f"Sample: {sample.shape}")
+
     rois, ztiles, nrows, ncols = preprocessing.find_roi(
-        img,
+        sample,
         savepath=outdir,
         pois=pois,
         window_size=window_size,
@@ -608,6 +612,35 @@ def predict_rois(
         min_intensity=min_intensity,
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
     )
+
+    with Path(f"{img.with_suffix('')}_rois_predictions_settings.json").open('w') as f:
+        json = dict(
+            path=str(img),
+            model=str(model),
+            input_shape=list(sample.shape),
+            sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
+            model_voxel_size=list(premodelpsfgen.voxel_size),
+            psf_fov=list(premodelpsfgen.psf_fov),
+            wavelength=float(wavelength),
+            prediction_threshold=float(prediction_threshold),
+            freq_strength_threshold=float(freq_strength_threshold),
+            prev=str(prev),
+            ignore_modes=list(ignore_modes),
+            ideal_empirical_psf=str(ideal_empirical_psf),
+            number_of_tiles=int(len(rois)),
+            ztiles=int(ztiles),
+            ytiles=int(nrows),
+            xtiles=int(ncols),
+        )
+
+        ujson.dump(
+            json,
+            f,
+            indent=4,
+            sort_keys=False,
+            ensure_ascii=False,
+            escape_forward_slashes=False
+        )
 
     predict(
         rois=rois,
@@ -663,11 +696,17 @@ def predict_tiles(
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
 
-    modelpath = model
+    rois, ztiles, nrows, ncols = preprocessing.get_tiles(
+        sample,
+        savepath=outdir,
+        strides=window_size,
+        window_size=window_size,
+    )
+
     with Path(f"{img.with_suffix('')}_tiles_predictions_settings.json").open('w') as f:
         json = dict(
             path=str(img),
-            model=str(modelpath),
+            model=str(model),
             input_shape=list(sample.shape),
             sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
             model_voxel_size=list(premodelpsfgen.voxel_size),
@@ -678,7 +717,10 @@ def predict_tiles(
             prev=str(prev),
             ignore_modes=list(ignore_modes),
             ideal_empirical_psf=str(ideal_empirical_psf),
-            window_size=list(window_size),
+            number_of_tiles=int(len(rois)),
+            ztiles=int(ztiles),
+            ytiles=int(nrows),
+            xtiles=int(ncols),
         )
 
         ujson.dump(
@@ -689,13 +731,6 @@ def predict_tiles(
             ensure_ascii=False,
             escape_forward_slashes=False
         )
-
-    rois, ztiles, nrows, ncols = preprocessing.get_tiles(
-        sample,
-        savepath=outdir,
-        strides=window_size,
-        window_size=window_size,
-    )
 
     predict(
         rois=rois,
