@@ -81,16 +81,6 @@ def rescale(emb, otf, freq_strength_threshold: float = 0.):
 
     return emb
 
-
-def center_crop(inputs, window_size):
-    center = [(i - 1) // 2 for i in inputs.shape]
-    return inputs[
-      center[0]-window_size//2:center[0]+window_size//2,
-      center[1]-window_size//2:center[1]+window_size//2,
-      center[2]-window_size//2:center[2]+window_size//2,
-    ]
-
-
 @profile
 def principle_planes(emb):
     return np.stack([
@@ -291,56 +281,6 @@ def plot_embeddings(
         autoscale_svg(f'{save_path}_embeddings.svg')
         # plt.savefig(f'{save_path}_embeddings.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-
-@profile
-def shift_otf(psf, otf, plot, window_size=8):
-    """ Center around most isolated bead """
-    beads = peak_local_max(
-        psf,
-        min_distance=window_size*2,
-        threshold_rel=.33,
-        exclude_border=False,
-        p_norm=2,
-        num_peaks=1
-    ).astype(np.float64)
-
-    center = [(i - 1) // 2 for i in psf.shape]
-    shift = np.mean(beads, axis=0) - center
-
-    z = np.arange(0, psf.shape[0])
-    y = np.arange(0, psf.shape[1])
-    x = np.arange(0, psf.shape[2])
-    Z, Y, X = np.meshgrid(z, y, x, indexing='ij')
-
-    slope = [(shift[i] * 2 * np.pi) / psf.shape[i] for i in range(3)]
-    shifted_otf = otf * np.e ** (1j * (Z * slope[0] + Y * slope[1] + X * slope[2]))
-
-    # get a realspace image of the shifted OTF
-    shifted_image = ifft(shifted_otf)
-
-    # compute a new OTF of the most isolated bead
-    shifted_otf = fft(center_crop(shifted_image, window_size=window_size))
-
-    if plot is not None:
-        fig, axes = plt.subplots(1, 3, figsize=(8, 4), sharey=False, sharex=False)
-        for ax in range(3):
-            axes[ax].imshow(np.nanmax(shifted_image, axis=ax), aspect='equal', cmap='Greys_r')
-
-            for p in range(beads.shape[0]):
-                if ax == 0:
-                    axes[ax].plot(beads[p, 2], beads[p, 1], marker='.', ls='', color=f'C{p}')
-                elif ax == 1:
-                    axes[ax].plot(beads[p, 2], beads[p, 0], marker='.', ls='', color=f'C{p}')
-                elif ax == 2:
-                    axes[ax].plot(beads[p, 1], beads[p, 0], marker='.', ls='', color=f'C{p}')
-
-            axes[ax].axis('off')
-
-        plt.tight_layout()
-        plt.savefig(f'{plot}_shift.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
-        autoscale_svg(f'{plot}_shift.svg')
-
-    return shifted_otf
 
 
 @profile
