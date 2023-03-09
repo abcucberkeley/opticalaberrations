@@ -94,16 +94,20 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str='line
         return np.pad(img[tuple(slicer)], pad, mode=mode, **kwargs)
 
 
-def remove_background_noise(image, read_noise_bias: float = 5):
-    """ A simple function to remove background noise from a given image.
+def remove_background_noise(image, read_noise_bias: float = 5, method: str = 'difference_of_gaussians'):
+    """
+    A simple function to remove background noise from a given image.
         Also uses difference of gaussians to bandpass (reject past nyquist, reject DC/background/scattering
         To avoid boundary effects (cross in OTF), a tukey window is applied so that the edges of the volume go to zero.
+    """
 
-        """
-    filtered_image = difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
-    image = filtered_image * window(('tukey', 0.2), image.shape) # 1.0 = Hann, 0.0 = rect window
-    # mode = int(st.mode(image, axis=None).mode[0])
-    # image -= mode + read_noise_bias
+    if method == 'mode':
+        mode = int(st.mode(image, axis=None).mode[0])
+        image -= mode + read_noise_bias
+    else:
+        filtered_image = difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
+        image = filtered_image * window(('tukey', 0.2), image.shape)  # 1.0 = Hann, 0.0 = rect window
+
     image[image < 0] = 0
     return image
 
