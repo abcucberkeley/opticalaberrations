@@ -19,12 +19,11 @@ CPUS=1
 MEM='20G'
 TIMELIMIT='1:00:00'
 SHAPE=64
-MIN_LLS_OFFSET=-1
-MAX_LLS_OFFSET=1
+MAX_LLS_OFFSET=0
 
 MODES=15
-TITLE='lls_defocus_embeddings'
-DATASET='test'
+TITLE='fourier_embeddings'
+DATASET='train'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -33,11 +32,11 @@ if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   SAMPLES_PER_JOB=10
   SAMPLES_PER_BIN=200
-  OBJS=(1 2 5 10 25)
-  mPSNR=($(seq 11 10 51))
-  xPSNR=($(seq 20 10 60))
-  amps1=($(seq 0 .01 .29))
-  amps2=($(seq .01 .01 .3))
+  OBJS=(1 2 5 10 25 50 75 100 125 150)
+  mPSNR=($(seq 1 10 41))
+  xPSNR=($(seq 10 10 50))
+  amps1=($(seq 0 .01 .24))
+  amps2=($(seq .01 .01 .25))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
 
@@ -45,7 +44,7 @@ else
   TYPE='--emb'
   SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=100
-  OBJS=(1 3 5 10 25 50 75 100 125 150)
+  OBJS=(1 5 10 25 50 100 150 200 250 300)
   mPSNR=($(seq 1 10 91))
   xPSNR=($(seq 10 10 100))
   amps1=($(seq 0 .05 .45))
@@ -89,7 +88,7 @@ do
             j="${j} --max_psnr ${xPSNR[$SNR-1]}"
             j="${j} --min_amplitude ${amps1[$AMP-1]}"
             j="${j} --max_amplitude ${amps2[$AMP-1]}"
-            j="${j} --min_lls_defocus_offset $MIN_LLS_OFFSET"
+            j="${j} --min_lls_defocus_offset -$MAX_LLS_OFFSET"
             j="${j} --max_lls_defocus_offset $MAX_LLS_OFFSET"
             j="${j} --filename ${SAMPLES[$S-1]}"
             j="${j} --x_voxel_size ${xVOXEL}"
@@ -118,6 +117,14 @@ do
                 task="${task} --partition=abc_a100"
               else
                 task="${task} --partition=abc"
+              fi
+            elif [ "$NODES" = "gpus" ];then
+              if [ $(squeue -u $USER -h -t pending -r -p dgx | wc -l) -eq 0 ];then
+                task="${task} --partition=dgx"
+              elif [ $(squeue -u $USER -h -t pending -r -p abc_a100 | wc -l) -eq 0 ];then
+                task="${task} --partition=abc_a100"
+              else
+                task="${task} --partition=abc --constraint titan"
               fi
             else
               task="${task} --partition=abc"

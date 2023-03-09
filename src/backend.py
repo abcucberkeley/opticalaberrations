@@ -58,7 +58,6 @@ from spatial import SpatialAttention
 from roi import ROI
 import opticalnet
 import opticalresnet
-import opticaltransformer
 import baseline
 import otfnet
 
@@ -75,17 +74,7 @@ tf.get_logger().setLevel(logging.ERROR)
 def load(model_path: Path, mosaic=False):
     model_path = Path(model_path)
 
-    if 'transformer' in str(model_path):
-        custom_objects = {
-            "ROI": ROI,
-            "Stem": opticaltransformer.Stem,
-            "Patchify": opticaltransformer.Patchify,
-            "Merge": opticaltransformer.Merge,
-            "PatchEncoder": opticaltransformer.PatchEncoder,
-            "MLP": opticaltransformer.MLP,
-            "Transformer": opticaltransformer.Transformer,
-        }
-    elif 'resnet' in str(model_path):
+    if 'resnet' in str(model_path):
         custom_objects = {
             "Stem": Stem,
             "MaskedActivation": MaskedActivation,
@@ -1274,26 +1263,6 @@ def train(
             no_phase=no_phase
         )
 
-    elif network == 'opticaltransformer':
-        model = opticaltransformer.OpticalTransformer(
-            name='OpticalTransformer',
-            roi=roi,
-            patches=patch_size,
-            modes=pmodes+1 if lls_defocus else pmodes,
-            na_det=1.0,
-            refractive_index=refractive_index,
-            psf_type=psf_type,
-            lambda_det=wavelength,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            mask_shape=input_shape,
-            activation=activation,
-            mul=mul,
-            no_phase=no_phase
-        )
     elif network == 'opticalresnet':
         model = opticalresnet.OpticalResNet(
             name='OpticalResNet',

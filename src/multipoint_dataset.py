@@ -22,7 +22,7 @@ plt.set_loglevel('error')
 
 import cli
 from utils import mean_min_distance
-from preprocessing import resize_with_crop_or_pad, remove_background_noise
+from preprocessing import prep_sample, resize_with_crop_or_pad
 from utils import fftconvolution, multiprocess
 from synthetic import SyntheticPSF
 from embeddings import fourier_embeddings
@@ -109,7 +109,7 @@ def beads(
                 shape=gen.psf_shape,
                 radius=object_size,
                 position=np.random.uniform(low=(.5 - radius), high=(.5 + radius), size=3)
-            ).astype(np.float) * np.random.random()
+            ).astype(np.float32) * np.random.random()
         else:
             if radius > 0:
                 reference[
@@ -163,7 +163,7 @@ def sim(
                 shape=gen.psf_shape,
                 radius=sphere_radius,
                 position=np.random.uniform(low=.2, high=.8, size=3)
-            ).astype(np.float) * np.random.random()
+            ).astype(np.float32) * np.random.random()
         else:
             if radius > 0:
                 reference[
@@ -187,29 +187,35 @@ def sim(
             mean=gen.mean_background_noise,
             sigma=gen.sigma_background_noise
         )
-        noisy_img = rand_noise + img
-        maxcounts = np.max(noisy_img)
+        inputs = rand_noise + img
+        maxcounts = np.max(inputs)
     else:
         maxcounts = np.max(img)
-        noisy_img = img
+        inputs = img
 
     if random_crop is not None:
         crop = int(np.random.uniform(low=random_crop, high=gen.psf_shape[0]+1))
-        noisy_img = resize_with_crop_or_pad(noisy_img, crop_shape=[crop]*3)
-
-    if remove_background:
-        noisy_img = remove_background_noise(noisy_img)
-
-    if normalize:
-        noisy_img /= np.max(noisy_img)
+        inputs = resize_with_crop_or_pad(inputs, crop_shape=[crop]*3)
 
     if emb:
         for e in set(embedding_option):
             odir = outdir/e
             odir.mkdir(exist_ok=True, parents=True)
 
+            inputs = prep_sample(
+                inputs,
+                sample_voxel_size=gen.voxel_size,
+                model_fov=gen.psf_fov,
+                remove_background=remove_background,
+                normalize=normalize,
+                edge_filter=False,
+                filter_mask_dilation=False,
+                read_noise_bias=5,
+                debug=odir/filename,
+            )
+
             embeddings = np.squeeze(fourier_embeddings(
-                inputs=noisy_img,
+                inputs=inputs,
                 iotf=gen.iotf,
                 embedding_option=e,
                 alpha_val=alpha_val,
@@ -227,14 +233,26 @@ def sim(
                 p2v=p2v,
                 gt=reference,
                 gen=gen,
-                realspace=noisy_img,
+                realspace=inputs,
                 avg_min_distance=avg_min_distance,
                 lls_defocus_offset=lls_defocus_offset
             )
     else:
+        inputs = prep_sample(
+            inputs,
+            sample_voxel_size=gen.voxel_size,
+            model_fov=gen.psf_fov,
+            remove_background=remove_background,
+            normalize=normalize,
+            edge_filter=False,
+            filter_mask_dilation=False,
+            read_noise_bias=5,
+            # debug=outdir/filename,
+        )
+
         save_synthetic_sample(
             outdir/filename,
-            noisy_img,
+            inputs,
             amps=amps,
             snr=psnr,
             maxcounts=maxcounts,
@@ -294,9 +312,9 @@ def create_synthetic_sample(
         amplitude_ranges=(min_amplitude, max_amplitude),
         lam_detection=lam_detection,
         psf_shape=3*[input_shape],
-        x_voxel_size=x_voxel_size,
-        y_voxel_size=y_voxel_size,
-        z_voxel_size=z_voxel_size,
+        x_voxel_size=np.random.uniform(low=x_voxel_size-.025, high=x_voxel_size+.025),
+        y_voxel_size=np.random.uniform(low=y_voxel_size-.025, high=y_voxel_size+.025),
+        z_voxel_size=np.random.uniform(low=z_voxel_size-.05, high=z_voxel_size+.05),
         refractive_index=refractive_index,
         na_detection=na_detection,
     )
@@ -312,7 +330,7 @@ def create_synthetic_sample(
 
     outdir = outdir / f"psnr_{min_psnr}-{max_psnr}"
     outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-                          f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+                      f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
     outdir = outdir / f"npoints_{npoints}"
     outdir.mkdir(exist_ok=True, parents=True)
