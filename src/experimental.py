@@ -663,6 +663,39 @@ def predict_tiles(
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
 
+    modelpath = model
+    model, modelpsfgen = reloadmodel_if_needed(
+        preloaded,
+        model,
+        ideal_empirical_psf=ideal_empirical_psf,
+        ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+    )
+    with Path(f"{img.with_suffix('')}_tiles_predictions_settings.json").open('w') as f:
+        json = dict(
+            path=str(img),
+            model=str(modelpath),
+            input_shape=list(sample.shape),
+            sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
+            model_voxel_size=list(modelpsfgen.voxel_size),
+            psf_fov=list(modelpsfgen.psf_fov),
+            wavelength=float(wavelength),
+            prediction_threshold=float(prediction_threshold),
+            freq_strength_threshold=float(freq_strength_threshold),
+            prev=str(prev),
+            ignore_modes=list(ignore_modes),
+            ideal_empirical_psf=str(ideal_empirical_psf),
+            window_size=list(window_size),
+        )
+
+        ujson.dump(
+            json,
+            f,
+            indent=4,
+            sort_keys=False,
+            ensure_ascii=False,
+            escape_forward_slashes=False
+        )
+
     rois, ztiles, nrows, ncols = preprocessing.get_tiles(
         sample,
         savepath=outdir,
