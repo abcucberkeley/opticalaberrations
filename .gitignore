@@ -151,3 +151,4 @@ dmypy.json
 
 pretrained_models/**/*.*
 !pretrained_models/**/*.h5
+examples/DM_State_510nm.csv
