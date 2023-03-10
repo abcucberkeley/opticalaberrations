@@ -363,7 +363,7 @@ def remove_interference_pattern(
         'legend.fontsize': 12,
         'axes.autolimit_mode': 'round_numbers'
     })
-
+    if otf is None: otf = fft(psf)
     blured_psf = ndimage.gaussian_filter(psf, sigma=1.1)
 
     # get max pixel in the image
@@ -438,7 +438,6 @@ def remove_interference_pattern(
 
     if pois.shape[0] > 0:
         interference_pattern = fft(beads)
-        if otf is None: otf = fft(psf)
         corrected_otf = otf / interference_pattern
 
         if windowing:
