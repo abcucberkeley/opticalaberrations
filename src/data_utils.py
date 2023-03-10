@@ -202,8 +202,8 @@ def load_dataset(
         snr_range=snr_range
     )
     files = multiprocess(
-        check,
-        Path(datadir).rglob('*[!_gt|!_realspace].tif'),
+        func=check,
+        jobs=Path(datadir).rglob('*[!_gt|!_realspace].tif'),
         cores=-1,
         desc='Loading dataset hashtable'
     )
@@ -239,7 +239,7 @@ def load_dataset(
 
 @profile
 def check_dataset(datadir):
-    jobs = multiprocess(check_sample, Path(datadir).rglob('*.tif'), cores=-1)
+    jobs = multiprocess(func=check_sample, jobs=Path(datadir).rglob('*.tif'), cores=-1)
     corrupted = [j for j in jobs if j != 1]
     corrupted = pd.DataFrame(corrupted, columns=['path'])
     logger.info(f"Corrupted files [{corrupted.index.shape[0]}]")

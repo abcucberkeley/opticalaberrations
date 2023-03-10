@@ -894,7 +894,7 @@ def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
         classes = aberrations.copy()
         classes[:, i] = waves
         job = partial(eval_object, modelpath=model, eval_sign=eval_sign, savepath=savepath)
-        preds = utils.multiprocess(job, list(classes), cores=-1)
+        preds = utils.multiprocess(func=job, jobs=list(classes), cores=-1)
         df = pd.DataFrame([]).append(preds, ignore_index=True)
 
         bins = np.arange(0, 10.25, .25)

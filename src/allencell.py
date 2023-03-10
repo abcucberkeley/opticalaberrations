@@ -114,7 +114,7 @@ def split_channels(
             save_path.mkdir(exist_ok=True, parents=True)
 
             utils.multiprocess(
-                partial(
+                func=partial(
                     split,
                     label=k,
                     save_path=save_path,
@@ -129,7 +129,7 @@ def split_channels(
         save_path.mkdir(exist_ok=True, parents=True)
 
         utils.multiprocess(
-            partial(
+            func=partial(
                 split,
                 label=k,
                 save_path=save_path,
@@ -195,7 +195,7 @@ def create_sample(
 ):
     data = imread(sample)
     utils.multiprocess(
-        partial(
+        func=partial(
             convolve,
             sample=data,
             psf_shape=psf_shape,

@@ -551,7 +551,7 @@ def main(args=None):
     )
 
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]
-    multiprocess(sample, jobs=jobs, cores=args.cpu_workers)
+    multiprocess(func=sample, jobs=jobs, cores=args.cpu_workers)
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 

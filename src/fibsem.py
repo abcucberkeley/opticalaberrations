@@ -186,7 +186,7 @@ def create_dataset(
         for j in range(0, windows.shape[1], psf_shape[1]//2):
             for k in range(0, windows.shape[2], psf_shape[2]//2):
                 utils.multiprocess(
-                    partial(
+                    func=partial(
                         convolve,
                         sample=windows[i, j, k],
                         sample_voxel_size=conv_voxel_size,
