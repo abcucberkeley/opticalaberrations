@@ -111,17 +111,17 @@ do
             task="${task} --qos=abc_normal --nice=1111111111"
 
             if [ "$NODES" = "all" ];then
-              if [ $(squeue -u $USER -h -t pending -r -p dgx | wc -l) -eq 100 ];then
+              if [ $(squeue -u $USER -h -t pending -r -p dgx | wc -l) -lt 100 ];then
                 task="${task} --partition=dgx"
-              elif [ $(squeue -u $USER -h -t pending -r -p abc_a100 | wc -l) -eq 100 ];then
+              elif [ $(squeue -u $USER -h -t pending -r -p abc_a100 | wc -l) -lt 100 ];then
                 task="${task} --partition=abc_a100"
               else
                 task="${task} --partition=abc"
               fi
             elif [ "$NODES" = "gpus" ];then
-              if [ $(squeue -u $USER -h -t pending -r -p dgx | wc -l) -eq 100 ];then
+              if [ $(squeue -u $USER -h -t pending -r -p dgx | wc -l) -lt 100 ];then
                 task="${task} --partition=dgx"
-              elif [ $(squeue -u $USER -h -t pending -r -p abc_a100 | wc -l) -eq 100 ];then
+              elif [ $(squeue -u $USER -h -t pending -r -p abc_a100 | wc -l) -lt 100 ];then
                 task="${task} --partition=abc_a100"
               else
                 task="${task} --partition=abc --constraint titan"
