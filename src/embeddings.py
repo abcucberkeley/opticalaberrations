@@ -5,7 +5,7 @@ import logging
 import sys
 import platform
 is_windows = any(platform.win32_ver())
-from typing import Any, Union
+from typing import Any, Union, Optional
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -13,11 +13,13 @@ plt.set_loglevel('error')
 import signal
 import numpy as np
 from tqdm import tqdm
+from functools import partial
+from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.colors as mcolors
 from skimage.filters import scharr, window
 from skimage.restoration import unwrap_phase
 from skimage.feature import peak_local_max
-from skimage.transform import resize
+from skimage.transform import resize, rescale
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
@@ -28,8 +30,9 @@ from cupyx.scipy.ndimage import rotate
 from skspatial.objects import Plane, Points
 import matplotlib.gridspec as gridspec
 
-from utils import resize_with_crop_or_pad
+from utils import resize_with_crop_or_pad, multiprocess
 from vis import autoscale_svg
+from preprocessing import round_to_even
 
 try:
     import cupy as cp
@@ -71,7 +74,7 @@ def ifft(otf):
 
 
 @profile
-def rescale(emb, otf, freq_strength_threshold: float = 0.):
+def normalize(emb, otf, freq_strength_threshold: float = 0.):
     emb /= np.nanpercentile(np.abs(otf), 99.99)
     emb[emb > 1] = 1
     emb[emb < -1] = -1
@@ -332,14 +335,14 @@ def gaussian_kernel(kernlen: tuple = (21, 21, 21), std=3):
 @profile
 def remove_interference_pattern(
         psf,
-        otf,
-        plot,
-        pois=None,
-        min_distance=5,
-        kernel_size=15,
-        max_num_peaks=20,
-        windowing=True,
-        plot_interference_pattern=False,
+        otf: Optional[np.ndarray] = None,
+        plot: Optional[str] = None,
+        pois: Optional[np.ndarray] = None,
+        min_distance: int = 5,
+        kernel_size: int = 15,
+        max_num_peaks: int = 20,
+        windowing: bool = True,
+        plot_interference_pattern: bool = False,
 ):
     """
     Normalize interference pattern from the given FFT
@@ -435,6 +438,7 @@ def remove_interference_pattern(
 
     if pois.shape[0] > 0:
         interference_pattern = fft(beads)
+        if otf is None: otf = fft(psf)
         corrected_otf = otf / interference_pattern
 
         if windowing:
@@ -649,7 +653,7 @@ def compute_emb(
         emb = np.abs(otf)
 
     if norm:
-        emb = rescale(emb, otf, freq_strength_threshold=freq_strength_threshold)
+        emb = normalize(emb, otf, freq_strength_threshold=freq_strength_threshold)
 
     if ratio:
         emb /= iotf
@@ -679,6 +683,43 @@ def compute_emb(
     else:
         logger.warning(f"embedding_option is unrecognized : {embedding_option}")
         return emb
+
+
+def rotate_embeddings(
+    emb: np.ndarray,
+    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    plot: Any = None,
+    debug_rotations: bool = False
+):
+    gpu_embeddings = cp.array(emb)
+
+    if debug_rotations:
+        emb = np.zeros((digital_rotations.shape[0], *emb.shape))
+
+        for i, angle in enumerate(tqdm(
+                digital_rotations,
+                desc=f"Generating digital rotations [{plot.name}]"
+                if plot is not None else "Generating digital rotations",
+        )):
+            for plane in range(emb.shape[1]):
+                emb[i, plane, :, :] = np.array([
+                    cp.asnumpy(rotate(gpu_embeddings[plane], angle=angle, reshape=False, axes=(-2, -1)))
+                ])
+
+                plt.figure()
+                plt.imshow(emb[i, 0, :, :])
+                plt.savefig(f'{plot}_{angle}.svg')
+    else:
+        emb = np.array([
+            cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
+            for angle in tqdm(
+                digital_rotations,
+                desc=f"Generating digital rotations [{plot.name}]"
+                if plot is not None else "Generating digital rotations",
+            )
+        ])
+    del gpu_embeddings
+    return emb
 
 
 @profile
@@ -803,33 +844,147 @@ def fourier_embeddings(
         plot_embeddings(inputs=psf, emb=emb, save_path=plot)
 
     if digital_rotations is not None:
-        gpu_embeddings = cp.array(emb)
-        if debug_rotations:
-            emb = np.zeros((digital_rotations.shape[0], *emb.shape))
+        emb = rotate_embeddings(
+            emb=emb,
+            digital_rotations=digital_rotations,
+            plot=plot,
+            debug_rotations=debug_rotations
+        )
 
-            for i, angle in enumerate(tqdm(
-                    digital_rotations,
-                    desc=f"Generating digital rotations [{plot.name}]"
-                    if plot is not None else "Generating digital rotations",
-            )):
-                for plane in range(emb.shape[1]):
-                    emb[i, plane, :, :] = np.array([
-                        cp.asnumpy(rotate(gpu_embeddings[plane], angle=angle, reshape=False, axes=(-2, -1)))
-                    ])
+    if emb.shape[-1] != 1:
+        emb = np.expand_dims(emb, axis=-1)
 
-                    plt.figure()
-                    plt.imshow(emb[i, 0, :, :])
-                    plt.savefig(f'{plot}_{angle}.svg')
-        else:
-            emb = np.array([
-                cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
-                for angle in tqdm(
-                    digital_rotations,
-                    desc=f"Generating digital rotations [{plot.name}]"
-                    if plot is not None else "Generating digital rotations",
-                )
-            ])
-        del gpu_embeddings
+    return emb
+
+
+@profile
+def rolling_fourier_embeddings(
+        inputs: np.array,
+        iotf: np.array,
+        model_fov: tuple,
+        sample_voxel_size: tuple,
+        ratio: bool = True,
+        norm: bool = True,
+        no_phase: bool = False,
+        alpha_val: str = 'abs',
+        phi_val: str = 'angle',
+        plot: Any = None,
+        log10: bool = False,
+        freq_strength_threshold: float = 0.01,
+        embedding_option: str = 'spatial_planes',
+        digital_rotations: Any = None,
+        poi_shape: tuple = (64, 64),
+        debug_rotations: bool = False,
+        remove_interference: bool = True,
+        cpu_workers: int = -1
+):
+    """
+    Gives the "lower dimension" representation of the data that will be shown to the model.
+
+    Args:
+        inputs: 3D array.
+        iotf: ideal theoretical or empirical OTF
+        ratio: Returns ratio of data to ideal PSF,
+            which helps put all the FFT voxels on a similar scale. Otherwise, straight values.
+        norm: optional toggle to normalize the data [0, 1]
+        padsize: pad the input to the desired size for the FFT
+        no_phase: ignore/drop the phase component of the FFT
+        alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
+        phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
+        plot: optional toggle to visualize embeddings
+        log10: optional toggle to take log10 of the FFT
+        freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
+        digital_rotations: optional digital rotations to the embeddings
+        poi_shape: shape for the planes of interests (POIs)
+        embedding_option: type of embedding to use.
+            Capitalizing on the radial symmetry of the FFT,
+            we have a few options to minimize the size of the embedding.
+    """
+    window_size = (
+        round_to_even(model_fov[0] / sample_voxel_size[0]),
+        round_to_even(model_fov[1] / sample_voxel_size[1]),
+        round_to_even(model_fov[2] / sample_voxel_size[2]),
+    )
+
+    rois = sliding_window_view(
+        inputs,
+        window_shape=window_size
+    )[::window_size[0], ::window_size[1], ::window_size[2]]
+    rois = np.reshape(rois, (-1, *window_size))
+
+    otfs = multiprocess(
+        func=fft,
+        jobs=rois,
+        cores=cpu_workers,
+        desc='Compute FFTs'
+    )
+    avg_otf = resize_with_crop_or_pad(np.mean(otfs, axis=0), crop_shape=iotf.shape)
+
+    if no_phase:
+        emb = compute_emb(
+            avg_otf,
+            iotf,
+            val=alpha_val,
+            ratio=ratio,
+            norm=norm,
+            log10=log10,
+            embedding_option=embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+        )
+    else:
+        alpha = compute_emb(
+            avg_otf,
+            iotf,
+            val=alpha_val,
+            ratio=ratio,
+            norm=norm,
+            log10=log10,
+            embedding_option=embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+        )
+
+        if remove_interference:
+            interference = partial(
+                remove_interference_pattern,
+                plot=plot,
+                windowing=True
+            )
+            otfs = multiprocess(
+                func=interference,
+                jobs=rois,
+                cores=cpu_workers,
+                desc='Remove interference patterns'
+            )
+            avg_otf = resize_with_crop_or_pad(np.mean(otfs, axis=0), crop_shape=iotf.shape)
+
+        phi = compute_emb(
+            avg_otf,
+            iotf,
+            val=phi_val,
+            ratio=False,
+            norm=False,
+            log10=False,
+            embedding_option='spatial_planes',
+            freq_strength_threshold=freq_strength_threshold,
+        )
+
+        emb = np.concatenate([alpha, phi], axis=0)
+
+    if emb.shape[1:] != poi_shape:
+        emb = resize(emb, output_shape=(3 if no_phase else 6, *poi_shape))
+        # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *poi_shape))
+
+    if plot is not None:
+        plt.style.use("default")
+        plot_embeddings(inputs=inputs, emb=emb, save_path=plot)
+
+    if digital_rotations is not None:
+        emb = rotate_embeddings(
+            emb=emb,
+            digital_rotations=digital_rotations,
+            plot=plot,
+            debug_rotations=debug_rotations
+        )
 
     if emb.shape[-1] != 1:
         emb = np.expand_dims(emb, axis=-1)

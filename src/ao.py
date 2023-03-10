@@ -122,6 +122,82 @@ def parse_args(args):
         "--ideal_empirical_psf", default=None, type=Path,
         help='path to an ideal empirical psf (Default: `None` ie. will be simulated automatically)'
     )
+    predict_sample.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+
+    predict_large_fov = subparsers.add_parser("predict_large_fov")
+    predict_large_fov.add_argument("model", type=Path, help="path to pretrained tensorflow model")
+    predict_large_fov.add_argument("input", type=Path, help="path to input .tif file")
+    predict_large_fov.add_argument(
+        "dm_calibration", type=Path,
+        help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
+    )
+    predict_large_fov.add_argument(
+        "--current_dm", default=None, type=Path,
+        help="optional path to current DM .csv file (Default: `blank mirror`)"
+    )
+    predict_large_fov.add_argument(
+        "--prev", default=None, type=Path,
+        help="previous predictions .csv file (Default: `None`)"
+    )
+    predict_large_fov.add_argument(
+        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+    predict_large_fov.add_argument(
+        "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
+    )
+    predict_large_fov.add_argument(
+        "--wavelength", default=.510, type=float,
+        help='wavelength in microns'
+    )
+    predict_large_fov.add_argument(
+        "--dm_damping_scalar", default=.75, type=float,
+        help='scale DM actuators by an arbitrary multiplier'
+    )
+    predict_large_fov.add_argument(
+        "--freq_strength_threshold", default=.01, type=float,
+        help='minimum frequency threshold in fourier space '
+             '(percentages; values below that will be set to the desired minimum)'
+    )
+    predict_large_fov.add_argument(
+        "--prediction_threshold", default=0., type=float,
+        help='set predictions below threshold to zero (waves)'
+    )
+    predict_large_fov.add_argument(
+        "--sign_threshold", default=.9, type=float,
+        help='flip sign of modes above given threshold relative to your initial prediction'
+    )
+    predict_large_fov.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
+    predict_large_fov.add_argument(
+        "--plot_rotations", action='store_true',
+        help='a toggle for plotting predictions for digital rotations'
+    )
+    predict_large_fov.add_argument(
+        "--num_predictions", default=1, type=int,
+        help="number of predictions per sample to estimate model's confidence"
+    )
+    predict_large_fov.add_argument(
+        "--batch_size", default=100, type=int, help='maximum batch size for the model'
+    )
+    predict_large_fov.add_argument(
+        "--estimate_sign_with_decon", action='store_true',
+        help='a toggle for estimating signs of each Zernike mode via decon'
+    )
+    predict_large_fov.add_argument(
+        "--ignore_mode", action='append', default=[0, 1, 2, 4],
+        help='ANSI index for mode you wish to ignore'
+    )
+    predict_large_fov.add_argument(
+        "--ideal_empirical_psf", default=None, type=Path,
+        help='path to an ideal empirical psf (Default: `None` ie. will be simulated automatically)'
+    )
+    predict_large_fov.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
 
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -197,6 +273,9 @@ def parse_args(args):
         "--ideal_empirical_psf", default=None, type=Path,
         help='path to an ideal empirical psf (Default: `None` ie. will be simulated automatically)'
     )
+    predict_rois.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -258,6 +337,9 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--ideal_empirical_psf", default=None, type=Path,
         help='path to an ideal empirical psf (Default: `None` ie. will be simulated automatically)'
+    )
+    predict_tiles.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
@@ -450,6 +532,32 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             estimate_sign_with_decon=args.estimate_sign_with_decon,
             ignore_modes=args.ignore_mode,
             ideal_empirical_psf=args.ideal_empirical_psf,
+            cpu_workers=args.cpu_workers,
+            preloaded=preloaded
+        )
+
+    elif args.func == 'predict_large_fov':
+        experimental.predict_large_fov(
+            model=args.model,
+            img=args.input,
+            dm_calibration=args.dm_calibration,
+            dm_state=args.current_dm,
+            prev=args.prev,
+            axial_voxel_size=args.axial_voxel_size,
+            lateral_voxel_size=args.lateral_voxel_size,
+            wavelength=args.wavelength,
+            dm_damping_scalar=args.dm_damping_scalar,
+            freq_strength_threshold=args.freq_strength_threshold,
+            prediction_threshold=args.prediction_threshold,
+            sign_threshold=args.sign_threshold,
+            num_predictions=args.num_predictions,
+            plot=args.plot,
+            plot_rotations=args.plot_rotations,
+            batch_size=args.batch_size,
+            estimate_sign_with_decon=args.estimate_sign_with_decon,
+            ignore_modes=args.ignore_mode,
+            ideal_empirical_psf=args.ideal_empirical_psf,
+            cpu_workers=args.cpu_workers,
             preloaded=preloaded
         )
 
@@ -476,6 +584,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             estimate_sign_with_decon=args.estimate_sign_with_decon,
             ignore_modes=args.ignore_mode,
             ideal_empirical_psf=args.ideal_empirical_psf,
+            cpu_workers=args.cpu_workers,
             preloaded=preloaded
         )
     elif args.func == 'predict_tiles':
@@ -497,6 +606,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             estimate_sign_with_decon=args.estimate_sign_with_decon,
             ignore_modes=args.ignore_mode,
             ideal_empirical_psf=args.ideal_empirical_psf,
+            cpu_workers=args.cpu_workers,
             preloaded=preloaded
         )
     elif args.func == 'aggregate_predictions':

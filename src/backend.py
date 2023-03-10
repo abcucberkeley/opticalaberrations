@@ -520,7 +520,7 @@ def predict_rotation(
     plot_rotations: Any = None,
     remove_interference: bool = True,
     desc: str = 'Predict-rotations',
-    rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
+    digital_rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
     cpu_workers: int = -1
 ):
     """
@@ -563,7 +563,7 @@ def predict_rotation(
             remove_interference=remove_interference,
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
-            digital_rotations=rotations
+            digital_rotations=digital_rotations
         )
 
     init_preds, stdev = bootstrap_predict(
@@ -583,17 +583,17 @@ def predict_rotation(
 
     eval_mode_rotations = partial(
         eval_rotation,
-        rotations=rotations,
+        rotations=digital_rotations,
         psfgen=psfgen,
         threshold=threshold,
         plot=plot_rotations,
         no_phase=no_phase,
     )
 
-    init_preds = np.stack(np.split(init_preds, rotations.shape[0]), axis=1)
+    init_preds = np.stack(np.split(init_preds, digital_rotations.shape[0]), axis=1)
     jobs = utils.multiprocess(
-        eval_mode_rotations,
-        init_preds,
+        jobs=init_preds,
+        func=eval_mode_rotations,
         cores=cpu_workers,
         desc="Evaluate predictions"
     )
@@ -881,8 +881,8 @@ def predict_dataset(
             return predictions, stdev
         else:
             jobs = utils.multiprocess(
-                eval_mode_rotations,
-                preds,
+                func=eval_mode_rotations,
+                jobs=preds,
                 cores=-1,
                 desc="Evaluate predictions"
             )

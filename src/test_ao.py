@@ -15,18 +15,18 @@ if platform.system() == "Windows":
     script  = repo/'src/ao.py'  # Script to run
 
 
-datadir = 'flat'
-filename = 'flat.tif'
-# nvme2 = '10.17.209.7'
-nvme2 = '/home/supernova/nvme2'
-image = Path(f'/{nvme2}/Data/20221003_Korra_TestForThayer/20230306/Fish/leftFish/{datadir}/{filename}')
-pois = Path(f'/{nvme2}/Data/20221003_Korra_TestForThayer/20230306/Fish/leftFish/{datadir}/results/Detection3D.mat')
+datadir = 'single'
+filename = 'single.tif'
+# # nvme2 = '10.17.209.7'
+# nvme2 = '/home/supernova/nvme2'
+# image = Path(f'/{nvme2}/Data/20221003_Korra_TestForThayer/20230306/Fish/leftFish/{datadir}/{filename}')
+# pois = Path(f'/{nvme2}/Data/20221003_Korra_TestForThayer/20230306/Fish/leftFish/{datadir}/results/Detection3D.mat')
 
-# image = repo/f'examples/{datadir}/{filename}'
-# pois = repo/f'examples/{datadir}/results/Detection3D.mat'
+image = repo/f'examples/{datadir}/{filename}'
+pois = repo/f'examples/{datadir}/results/Detection3D.mat'
 
 # Deformable Mirror offsets that produce the Zernike functions
-dm_calibration = repo/'examples/Zernike_Korra_Bax273.csv'
+dm_calibration = repo/'calibration/aang/28_mode_calibration.csv'
 model = repo/'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-28.h5'
 psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 # excitation PSF being used.  This is sythesized.
@@ -46,7 +46,7 @@ freq_strength_threshold = .01
 prediction_threshold = 0.
 num_predictions = 1
 window_size = '64-96-96'  # z-y-x
-batch_size = 512
+batch_size = 128
 plot = True
 plot_rotations = True
 estimate_sign_with_decon = False
@@ -110,10 +110,25 @@ predict_sample += f" --estimate_sign_with_decon" if estimate_sign_with_decon els
 for mode in ignore_modes:
     predict_sample += f" --ignore_mode {mode}"
 
+predict_large_fov = f"{python} {script} predict_large_fov"
+predict_large_fov += f" {model} {image} {dm_calibration}"
+predict_large_fov += f" --current_dm {current_dm}"
+predict_large_fov += f" --dm_damping_scalar {dm_damping_scalar}"
+predict_large_fov += f" --wavelength {wavelength}"
+predict_large_fov += f" --lateral_voxel_size {lateral_voxel_size}"
+predict_large_fov += f" --axial_voxel_size {axial_voxel_size}"
+predict_large_fov += f" --prediction_threshold {prediction_threshold}"
+predict_large_fov += f" --freq_strength_threshold {freq_strength_threshold}"
+predict_large_fov += f" --sign_threshold {sign_threshold}"
+predict_large_fov += f" --num_predictions {num_predictions}"
+predict_large_fov += f" --batch_size {batch_size}"
+predict_large_fov += f" --prev {prev}"
+predict_large_fov += f" --plot" if plot else ""
+predict_large_fov += f" --plot_rotations" if plot_rotations else ""
+predict_large_fov += f" --estimate_sign_with_decon" if estimate_sign_with_decon else ""
 
-prev = None  # replace with initial predictions .csv file (*_predictions_zernike_coefficients.csv)
-# image = repo/'data/agarose/exp1.tif'  # replace with second image
-predict_sample_signed = f"{predict_sample} --prev {prev}"
+for mode in ignore_modes:
+    predict_large_fov += f" --ignore_mode {mode}"
 
 predict_rois = f"{python} {script} predict_rois"
 predict_rois += f" {model} {image} {pois}"
@@ -210,8 +225,13 @@ decon_tiles_predictions += f" --plot" if plot else ""
 # but some (e.g., 'decon') need the outputs from the preceeding call
 
 # call(deskew, shell=True)
+
 print('\nRunning predict_sample ...')
 call(predict_sample, shell=True)
+# call(decon_sample_predictions, shell=True)
+
+print('\nRunning predict_large_fov ...')
+call(predict_large_fov, shell=True)
 # call(decon_sample_predictions, shell=True)
 
 print('\nRunning detect_rois ...')

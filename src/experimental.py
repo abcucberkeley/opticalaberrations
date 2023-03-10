@@ -37,7 +37,7 @@ from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
-from embeddings import remove_interference_pattern, fourier_embeddings
+from embeddings import remove_interference_pattern, fourier_embeddings, rolling_fourier_embeddings
 
 import logging
 logger = logging.getLogger('')
@@ -265,7 +265,7 @@ def preprocess(
     modelpsfgen: SyntheticPSF,
     samplepsfgen: SyntheticPSF,
     freq_strength_threshold: float = .01,
-    digita_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
     remove_background: bool = True,
     read_noise_bias: float = 5,
     normalize: bool = True,
@@ -307,7 +307,7 @@ def preprocess(
         remove_interference=True,
         embedding_option=modelpsfgen.embedding_option,
         freq_strength_threshold=freq_strength_threshold,
-        digital_rotations=digita_rotations,
+        digital_rotations=digital_rotations,
         poi_shape=modelpsfgen.psf_shape[1:]
     )
 
@@ -324,23 +324,24 @@ def predict(
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
     batch_size: int = 1,
-    digita_rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
+    digital_rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
     plot: bool = True,
     plot_rotations: bool = False,
     ztiles: int = 1,
     nrows: int = 1,
     ncols: int = 1,
+    cpu_workers: int = -1
 ):
     no_phase = True if model.input_shape[1] == 3 else False
 
     generate_fourier_embeddings = partial(
-        utils.vectorize,
+        utils.multiprocess,
         func=partial(
             preprocess,
             modelpsfgen=modelpsfgen,
             samplepsfgen=samplepsfgen,
             freq_strength_threshold=freq_strength_threshold,
-            digita_rotations=digita_rotations,
+            digital_rotations=digital_rotations,
             plot=plot,
             no_phase=no_phase,
             remove_background=True,
@@ -349,7 +350,8 @@ def predict(
             edge_filter=False,
             filter_mask_dilation=True,
         ),
-        desc='Generate Fourier embeddings'
+        desc='Generate Fourier embeddings',
+        cores=cpu_workers
     )
 
     inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(rois))
@@ -374,7 +376,7 @@ def predict(
             freq_strength_threshold=freq_strength_threshold,
             plot=file.with_suffix('') if plot else None,
             plot_rotations=file.with_suffix('') if plot_rotations else None,
-            rotations=digita_rotations,
+            digital_rotations=digital_rotations,
             desc=f'Predicting ROIs in ({outdir.name})',
         )
 
@@ -441,6 +443,8 @@ def predict_sample(
     ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
+    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    cpu_workers: int = -1
 ):
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
@@ -469,9 +473,10 @@ def predict_sample(
     )
 
     embeddings = preprocess(
-        img,
+        sample,
         modelpsfgen=premodelpsfgen,
         samplepsfgen=samplepsfgen,
+        digital_rotations=digital_rotations,
         remove_background=True,
         read_noise_bias=50,
         normalize=True,
@@ -508,6 +513,7 @@ def predict_sample(
             threshold=prediction_threshold,
             ignore_modes=ignore_modes,
             freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
             plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
             plot_rotations=Path(f"{img.with_suffix('')}_sample_predictions") if plot_rotations else None,
         )
@@ -580,6 +586,164 @@ def predict_sample(
 
 
 @profile
+def predict_large_fov(
+    img: Path,
+    model: Path,
+    dm_calibration: Any,
+    dm_state: Any,
+    axial_voxel_size: float,
+    lateral_voxel_size: float,
+    wavelength: float = .605,
+    dm_damping_scalar: float = 1,
+    prediction_threshold: float = 0.0,
+    freq_strength_threshold: float = .01,
+    sign_threshold: float = .9,
+    verbose: bool = False,
+    plot: bool = False,
+    plot_rotations: bool = False,
+    num_predictions: int = 1,
+    batch_size: int = 1,
+    prev: Any = None,
+    estimate_sign_with_decon: bool = False,
+    ignore_modes: list = (0, 1, 2, 4),
+    preloaded: Preloadedmodelclass = None,
+    ideal_empirical_psf: Any = None,
+    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    cpu_workers: int = -1
+):
+    lls_defocus = 0.
+    dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
+    sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
+        preloaded,
+        model,
+        ideal_empirical_psf=ideal_empirical_psf,
+        ideal_empirical_psf_voxel_size=sample_voxel_size
+    )
+    no_phase = True if preloadedmodel.input_shape[1] == 3 else False
+
+    logger.info(f"Loading file: {img.name}")
+    sample = load_sample(
+        img,
+        sample_voxel_size=sample_voxel_size,
+        remove_background=True,
+        read_noise_bias=50,
+        normalize=True,
+        edge_filter=False,
+        filter_mask_dilation=True,
+        debug=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
+    )
+    logger.info(f"Sample: {sample.shape}")
+
+    samplepsfgen = SyntheticPSF(
+        psf_type=premodelpsfgen.psf_type,
+        snr=100,
+        psf_shape=sample.shape,
+        n_modes=preloadedmodel.output_shape[1],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
+
+    embeddings = rolling_fourier_embeddings(
+        sample,
+        iotf=premodelpsfgen.iotf,
+        model_fov=premodelpsfgen.psf_fov,
+        sample_voxel_size=sample_voxel_size,
+        plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
+        no_phase=no_phase,
+        embedding_option=premodelpsfgen.embedding_option,
+        freq_strength_threshold=freq_strength_threshold,
+        poi_shape=premodelpsfgen.psf_shape[1:],
+        digital_rotations=digital_rotations,
+        cpu_workers=cpu_workers
+    )
+
+    res = backend.predict_rotation(
+        preloadedmodel,
+        inputs=embeddings,
+        psfgen=premodelpsfgen,
+        no_phase=False,
+        verbose=verbose,
+        batch_size=batch_size,
+        threshold=prediction_threshold,
+        ignore_modes=ignore_modes,
+        freq_strength_threshold=freq_strength_threshold,
+        digital_rotations=digital_rotations,
+        plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
+        plot_rotations=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot_rotations else None,
+    )
+    try:
+        p, std = res
+    except ValueError:
+        p, std, lls_defocus = res
+
+    p = Wavefront(p, order='ansi', lam_detection=wavelength)
+    std = Wavefront(std, order='ansi', lam_detection=wavelength)
+
+    coefficients = [
+        {'n': z.n, 'm': z.m, 'amplitude': a}
+        for z, a in p.zernikes.items()
+    ]
+    df = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
+    df.index.name = 'ansi'
+    df.to_csv(f"{img.with_suffix('')}_large_fov_predictions_zernike_coefficients.csv")
+
+    if dm_calibration is not None:
+        dm_state = load_dm(dm_state)
+        estimate_and_save_new_dm(
+            savepath=Path(f"{img.with_suffix('')}_large_fov_predictions_corrected_actuators.csv"),
+            coefficients=df['amplitude'].values,
+            dm_calibration=dm_calibration,
+            dm_state=dm_state,
+            dm_damping_scalar=dm_damping_scalar
+        )
+
+    psf = samplepsfgen.single_psf(phi=p, normed=True, noise=False)
+    imsave(f"{img.with_suffix('')}_large_fov_predictions_psf.tif", psf)
+
+    with Path(f"{img.with_suffix('')}_large_fov_predictions_settings.json").open('w') as f:
+        json = dict(
+            path=str(img),
+            model=str(model),
+            input_shape=list(sample.shape),
+            sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
+            model_voxel_size=list(premodelpsfgen.voxel_size),
+            psf_fov=list(premodelpsfgen.psf_fov),
+            wavelength=float(wavelength),
+            dm_calibration=str(dm_calibration),
+            dm_state=str(dm_state),
+            dm_damping_scalar=float(dm_damping_scalar),
+            prediction_threshold=float(prediction_threshold),
+            freq_strength_threshold=float(freq_strength_threshold),
+            prev=str(prev),
+            ignore_modes=list(ignore_modes),
+            ideal_empirical_psf=str(ideal_empirical_psf),
+            lls_defocus=float(lls_defocus),
+            zernikes=list(coefficients)
+        )
+
+        ujson.dump(
+            json,
+            f,
+            indent=4,
+            sort_keys=False,
+            ensure_ascii=False,
+            escape_forward_slashes=False
+        )
+
+    if plot:
+        vis.diagnosis(
+            pred=p,
+            pred_std=std,
+            save_path=Path(f"{img.with_suffix('')}_large_fov_predictions_diagnosis"),
+            lls_defocus=lls_defocus
+        )
+
+
+@profile
 def predict_rois(
     img: Path,
     model: Path,
@@ -603,6 +767,8 @@ def predict_rois(
     sign_threshold: float = .9,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
+    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    cpu_workers: int = -1
 ):
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         preloaded,
@@ -688,7 +854,8 @@ def predict_rois(
         freq_strength_threshold=freq_strength_threshold,
         plot=plot,
         plot_rotations=plot_rotations,
-        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+        digital_rotations=digital_rotations,
+        cpu_workers=cpu_workers
     )
 
 
@@ -712,6 +879,8 @@ def predict_tiles(
     ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
+    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    cpu_workers: int = -1
 ):
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         preloaded,
@@ -790,7 +959,8 @@ def predict_tiles(
         freq_strength_threshold=freq_strength_threshold,
         plot=plot,
         plot_rotations=plot_rotations,
-        sample_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+        digital_rotations=digital_rotations,
+        cpu_workers=cpu_workers
     )
 
     if plot:
@@ -1268,8 +1438,8 @@ def plot_eval_dataset(
     pd.set_option('display.max_colwidth', 20)
 
     results = utils.multiprocess(
-        process_eval_file,
-        sorted(datadir.rglob(f'*{postfix}'), key=os.path.getctime),  # sort by creation time
+        func=process_eval_file,
+        jobs=sorted(datadir.rglob(f'*{postfix}'), key=os.path.getctime),  # sort by creation time
         desc=f'Collecting *{postfix} results'
     )
 
