@@ -394,6 +394,9 @@ def parse_args(args):
         "--ignore_tile", action='append', default=None,
         help='IDs [e.g., "z0-y0-x0"] for tiles you wish to ignore'
     )
+    aggregate_predictions.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
 
     eval_mode = subparsers.add_parser("eval_mode")
     eval_mode.add_argument("model_path", type=Path, help="path to pretrained tensorflow model (.h5)")
@@ -402,22 +405,33 @@ def parse_args(args):
     eval_mode.add_argument("prediction_path", type=Path, help="path to model predictions (.csv)")
     eval_mode.add_argument("--prediction_postfix", type=str, default='sample_predictions_zernike_coefficients.csv')
     eval_mode.add_argument("--gt_postfix", type=str, default='ground_truth_zernike_coefficients.csv')
+    eval_mode.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
 
     eval_dataset = subparsers.add_parser("eval_dataset")
     eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
     eval_dataset.add_argument("--flat", default=None, type=Path, help="path to the flat DM acts file")
     eval_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
     eval_dataset.add_argument("--precomputed", action='store_true')
-
+    eval_dataset.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
 
     eval_dm = subparsers.add_parser("eval_dm")
     eval_dm.add_argument("datadir", type=Path, help="path to dataset directory")
+    eval_dm.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
 
     calibrate_dm = subparsers.add_parser("calibrate_dm")
     calibrate_dm.add_argument("datadir", type=Path, help="path to DM eval directory")
     calibrate_dm.add_argument(
         "dm_calibration", type=Path,
         help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
+    )
+    calibrate_dm.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
 
 
@@ -469,6 +483,9 @@ def parse_args(args):
     phase_retrieval.add_argument(
         "--use_pyotf_zernikes", action='store_true',
         help='a toggle to use pyOTF zernike definitions'
+    )
+    phase_retrieval.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
 
     return parser.parse_args(args)
