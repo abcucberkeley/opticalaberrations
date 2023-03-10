@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 @profile
-def multiprocess(func: Any, jobs: Union[Generator, List, np.ndarray], desc: str = 'Processing', cores: int = -1):
+def multiprocess(jobs: Union[Generator, List, np.ndarray], func: Any, desc: str = 'Processing', cores: int = -1):
     """ Multiprocess a generic function
     Args:
         func: a python function
@@ -60,11 +60,7 @@ def multiprocess(func: Any, jobs: Union[Generator, List, np.ndarray], desc: str 
     else:
         logging.error('Jobs must be a positive integer')
         return False
-    return logs
-
-
-def vectorize(samples, func, desc):
-    return np.array(multiprocess(func, samples, desc=desc))
+    return np.array(logs)
 
 
 def microns2waves(a, wavelength):
