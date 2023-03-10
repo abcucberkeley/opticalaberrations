@@ -534,7 +534,6 @@ def predict_sample(
     df.to_csv(f"{img.with_suffix('')}_sample_predictions_zernike_coefficients.csv")
 
     if dm_calibration is not None:
-        dm_state = load_dm(dm_state)
         estimate_and_save_new_dm(
             savepath=Path(f"{img.with_suffix('')}_sample_predictions_corrected_actuators.csv"),
             coefficients=df['amplitude'].values,
@@ -692,7 +691,6 @@ def predict_large_fov(
     df.to_csv(f"{img.with_suffix('')}_large_fov_predictions_zernike_coefficients.csv")
 
     if dm_calibration is not None:
-        dm_state = load_dm(dm_state)
         estimate_and_save_new_dm(
             savepath=Path(f"{img.with_suffix('')}_large_fov_predictions_corrected_actuators.csv"),
             coefficients=df['amplitude'].values,
@@ -1109,8 +1107,7 @@ def aggregate_predictions(
     predictions.index.name = 'ansi'
     predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated.csv")
 
-    dm_state = load_dm(dm_state)
-    dm = estimate_and_save_new_dm(
+    estimate_and_save_new_dm(
         savepath=Path(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv"),
         coefficients=predictions[final_prediction].values,
         dm_calibration=dm_calibration,
@@ -1799,7 +1796,6 @@ def phase_retrieval(
     coefficients.to_csv(f"{img.with_suffix('')}_phase_retrieval_zernike_coefficients.csv")
 
     if dm_calibration is not None:
-        dm_state = load_dm(dm_state)
         estimate_and_save_new_dm(
             savepath=Path(f"{img.with_suffix('')}_phase_retrieval_corrected_actuators.csv"),
             coefficients=coefficients['amplitude'].values,
