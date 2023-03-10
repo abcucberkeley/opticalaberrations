@@ -223,8 +223,8 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
 @profile
 def load_sample(
     data: Union[tf.Tensor, Path, str, np.ndarray],
-    model_fov: tuple,
     sample_voxel_size: tuple,
+    model_fov: Any = None,
     remove_background: bool = True,
     read_noise_bias: float = 5,
     normalize: bool = True,
@@ -262,12 +262,18 @@ def load_sample(
 
 def preprocess(
     file: [tf.Tensor, Path, str],
-    psfgen: SyntheticPSF,
+    modelpsfgen: SyntheticPSF,
+    samplepsfgen: SyntheticPSF,
     freq_strength_threshold: float = .01,
-    sample_voxel_size: tuple = (.2, .108, .108),
     digita_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
-    plot: bool = True,
+    remove_background: bool = True,
+    read_noise_bias: float = 5,
+    normalize: bool = True,
+    edge_filter: bool = True,
+    filter_mask_dilation: bool = True,
+    plot: Any = None,
     no_phase: bool = False,
+    match_model_fov: bool = True,
 ):
     if isinstance(file, bytes):
         file = Path(str(file, "utf-8"))
@@ -278,25 +284,31 @@ def preprocess(
     if isinstance(file, str):
         file = Path(file)
 
+    if isinstance(plot, bool) and plot:
+        plot = file.with_suffix('')
+
     sample = load_sample(
         file,
-        model_fov=psfgen.psf_fov,
-        sample_voxel_size=sample_voxel_size,
-        remove_background=True,
-        normalize=True,
-        edge_filter=False,
-        debug=file.with_suffix('') if plot else None
+        model_fov=modelpsfgen.psf_fov if match_model_fov else None,
+        sample_voxel_size=samplepsfgen.voxel_size,
+        remove_background=remove_background,
+        normalize=normalize,
+        edge_filter=edge_filter,
+        filter_mask_dilation=filter_mask_dilation,
+        read_noise_bias=read_noise_bias,
+        debug=plot
     )
 
     return fourier_embeddings(
         sample,
-        iotf=psfgen.iotf,
-        plot=file.with_suffix('') if plot else None,
+        iotf=modelpsfgen.iotf if match_model_fov else samplepsfgen.iotf,
+        plot=plot,
         no_phase=no_phase,
         remove_interference=True,
-        embedding_option=psfgen.embedding_option,
+        embedding_option=modelpsfgen.embedding_option,
         freq_strength_threshold=freq_strength_threshold,
-        digital_rotations=digita_rotations
+        digital_rotations=digita_rotations,
+        poi_shape=modelpsfgen.psf_shape[1:]
     )
 
 
@@ -305,13 +317,13 @@ def predict(
     rois: np.ndarray,
     outdir: Path,
     model: tf.keras.Model,
-    psfgen: SyntheticPSF,
+    modelpsfgen: SyntheticPSF,
+    samplepsfgen: SyntheticPSF,
     wavelength: float = .510,
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
     batch_size: int = 1,
-    sample_voxel_size: tuple = (.2, .108, .108),
     digita_rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
     plot: bool = True,
     plot_rotations: bool = False,
@@ -325,12 +337,17 @@ def predict(
         utils.vectorize,
         func=partial(
             preprocess,
-            psfgen=psfgen,
+            modelpsfgen=modelpsfgen,
+            samplepsfgen=samplepsfgen,
             freq_strength_threshold=freq_strength_threshold,
-            sample_voxel_size=sample_voxel_size,
             digita_rotations=digita_rotations,
             plot=plot,
             no_phase=no_phase,
+            remove_background=True,
+            read_noise_bias=50,
+            normalize=True,
+            edge_filter=False,
+            filter_mask_dilation=True,
         ),
         desc='Generate Fourier embeddings'
     )
@@ -349,7 +366,7 @@ def predict(
         res = backend.predict_rotation(
             model,
             inputs=tile,
-            psfgen=psfgen,
+            psfgen=modelpsfgen,
             no_phase=no_phase,
             batch_size=batch_size,
             threshold=prediction_threshold,
@@ -428,49 +445,51 @@ def predict_sample(
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
-    modelpath = model
-    model, modelpsfgen = reloadmodel_if_needed(
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         preloaded,
         model,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
+    no_phase = True if preloadedmodel.input_shape[1] == 3 else False
 
-    psfgen = SyntheticPSF(
-        psf_type=modelpsfgen.psf_type,
+    logger.info(f"Loading file: {img.name}")
+    sample = np.squeeze(get_image(img).astype(float))
+    logger.info(f"Sample: {sample.shape}")
+
+    samplepsfgen = SyntheticPSF(
+        psf_type=premodelpsfgen.psf_type,
         snr=100,
-        psf_shape=modelpsfgen.psf_shape,
-        n_modes=model.output_shape[1],
+        psf_shape=sample.shape,
+        n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
         y_voxel_size=lateral_voxel_size,
         z_voxel_size=axial_voxel_size
     )
 
-    inputs = load_sample(
+    embeddings = preprocess(
         img,
-        model_fov=modelpsfgen.psf_fov,
-        sample_voxel_size=psfgen.voxel_size,
+        modelpsfgen=premodelpsfgen,
+        samplepsfgen=samplepsfgen,
         remove_background=True,
         read_noise_bias=50,
         normalize=True,
         edge_filter=False,
         filter_mask_dilation=True,
+        plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
-
-    inputs = np.expand_dims(inputs, axis=0)
-    no_phase = True if model.input_shape[1] == 3 else False
 
     if no_phase:
         p, std, pchange = backend.dual_stage_prediction(
-            model,
-            inputs=inputs,
+            preloadedmodel,
+            inputs=embeddings,
             threshold=prediction_threshold,
             sign_threshold=sign_threshold,
             n_samples=num_predictions,
             verbose=verbose,
-            gen=psfgen,
-            modelgen=modelpsfgen,
+            gen=samplepsfgen,
+            modelgen=premodelpsfgen,
             batch_size=batch_size,
             prev_pred=prev,
             estimate_sign_with_decon=estimate_sign_with_decon,
@@ -480,9 +499,9 @@ def predict_sample(
         )
     else:
         res = backend.predict_rotation(
-            model,
-            inputs=inputs,
-            psfgen=modelpsfgen,
+            preloadedmodel,
+            inputs=embeddings,
+            psfgen=premodelpsfgen,
             no_phase=False,
             verbose=verbose,
             batch_size=batch_size,
@@ -518,17 +537,17 @@ def predict_sample(
             dm_damping_scalar=dm_damping_scalar
         )
 
-    psf = psfgen.single_psf(phi=p, normed=True, noise=False)
+    psf = samplepsfgen.single_psf(phi=p, normed=True, noise=False)
     imsave(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
 
     with Path(f"{img.with_suffix('')}_sample_predictions_settings.json").open('w') as f:
         json = dict(
             path=str(img),
-            model=str(modelpath),
-            input_shape=list(inputs.shape),
+            model=str(model),
+            input_shape=list(sample.shape),
             sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
-            model_voxel_size=list(modelpsfgen.voxel_size),
-            psf_fov=list(modelpsfgen.psf_fov),
+            model_voxel_size=list(premodelpsfgen.voxel_size),
+            psf_fov=list(premodelpsfgen.psf_fov),
             wavelength=float(wavelength),
             dm_calibration=str(dm_calibration),
             dm_state=str(dm_state),
@@ -613,12 +632,23 @@ def predict_rois(
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
     )
 
+    samplepsfgen = SyntheticPSF(
+        psf_type=premodelpsfgen.psf_type,
+        snr=100,
+        psf_shape=sample.shape,
+        n_modes=preloadedmodel.output_shape[1],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
+
     with Path(f"{img.with_suffix('')}_rois_predictions_settings.json").open('w') as f:
         json = dict(
             path=str(img),
             model=str(model),
             input_shape=list(sample.shape),
-            sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
+            sample_voxel_size=list(samplepsfgen.voxel_size),
             model_voxel_size=list(premodelpsfgen.voxel_size),
             psf_fov=list(premodelpsfgen.psf_fov),
             wavelength=float(wavelength),
@@ -646,7 +676,8 @@ def predict_rois(
         rois=rois,
         outdir=outdir,
         model=preloadedmodel,
-        psfgen=premodelpsfgen,
+        modelpsfgen=premodelpsfgen,
+        samplepsfgen=samplepsfgen,
         prediction_threshold=prediction_threshold,
         batch_size=batch_size,
         wavelength=wavelength,
@@ -703,12 +734,23 @@ def predict_tiles(
         window_size=window_size,
     )
 
+    samplepsfgen = SyntheticPSF(
+        psf_type=premodelpsfgen.psf_type,
+        snr=100,
+        psf_shape=sample.shape,
+        n_modes=preloadedmodel.output_shape[1],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
+
     with Path(f"{img.with_suffix('')}_tiles_predictions_settings.json").open('w') as f:
         json = dict(
             path=str(img),
             model=str(model),
             input_shape=list(sample.shape),
-            sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
+            sample_voxel_size=list(samplepsfgen.voxel_size),
             model_voxel_size=list(premodelpsfgen.voxel_size),
             psf_fov=list(premodelpsfgen.psf_fov),
             wavelength=float(wavelength),
@@ -736,7 +778,8 @@ def predict_tiles(
         rois=rois,
         outdir=outdir,
         model=preloadedmodel,
-        psfgen=premodelpsfgen,
+        modelpsfgen=premodelpsfgen,
+        samplepsfgen=samplepsfgen,
         prediction_threshold=prediction_threshold,
         batch_size=batch_size,
         wavelength=wavelength,

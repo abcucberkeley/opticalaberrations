@@ -116,13 +116,13 @@ def remove_background_noise(image, read_noise_bias: float = 5, method: str = 'di
 def prep_sample(
     sample: np.array,
     sample_voxel_size: tuple,
-    model_fov: tuple,
+    model_fov: Any = None,
     debug: Any = None,
     remove_background: bool = True,
     read_noise_bias: float = 5,
     normalize: bool = True,
     edge_filter: bool = False,
-    filter_mask_dilation: bool = True
+    filter_mask_dilation: bool = True,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
 
@@ -131,13 +131,15 @@ def prep_sample(
         -Crop (or zero pad) to model field of view
 
     Args:
-        sample (np.array): Input 3D array (or series of 3D arrays)
-        sample_voxel_size (tuple): 
-        model_fov (tuple):
-        debug (Any, optional): plot or save .svg's. Defaults to None.
-        remove_background (bool, optional): Defaults to True.
-        normalize (bool, optional): Defaults to True.
-        edge_filter (bool, optional): Defaults to True.
+        sample: Input 3D array (or series of 3D arrays)
+        sample_voxel_size: voxel size for the given input image (z, y, x)
+        model_fov: optional sample range to match what the model was trained on
+        debug: plot or save .svg's
+        remove_background: subtract background.
+        normalize: scale values between 0 and 1.
+        edge_filter: look for share edges in the given image using a 3D Canny detector.
+        filter_mask_dilation: optional toggle to dilate the edge filter mask
+        read_noise_bias: bias offset for camera noise
 
     Returns:
         _type_: 3D array (or series of 3D arrays)
@@ -187,18 +189,19 @@ def prep_sample(
             f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
         )
 
-    # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
-    number_of_desired_sample_pixels = (
-        round_to_even(model_fov[0] / sample_voxel_size[0]),
-        round_to_even(model_fov[1] / sample_voxel_size[1]),
-        round_to_even(model_fov[2] / sample_voxel_size[2]),
-    )
-
-    if not all(s1 == s2 for s1, s2 in zip(number_of_desired_sample_pixels, sample.shape)):
-        sample = resize_with_crop_or_pad(
-            sample,
-            crop_shape=number_of_desired_sample_pixels
+    if model_fov is not None:
+        # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
+        number_of_desired_sample_pixels = (
+            round_to_even(model_fov[0] / sample_voxel_size[0]),
+            round_to_even(model_fov[1] / sample_voxel_size[1]),
+            round_to_even(model_fov[2] / sample_voxel_size[2]),
         )
+
+        if not all(s1 == s2 for s1, s2 in zip(number_of_desired_sample_pixels, sample.shape)):
+            sample = resize_with_crop_or_pad(
+                sample,
+                crop_shape=number_of_desired_sample_pixels
+            )
 
     if remove_background:
         sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)

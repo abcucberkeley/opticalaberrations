@@ -17,6 +17,7 @@ import matplotlib.colors as mcolors
 from skimage.filters import scharr, window
 from skimage.restoration import unwrap_phase
 from skimage.feature import peak_local_max
+from skimage.transform import resize
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
@@ -793,8 +794,9 @@ def fourier_embeddings(
 
         emb = np.concatenate([alpha, phi], axis=0)
 
-    if emb.shape != poi_shape:
-        emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *poi_shape))
+    if emb.shape[1:] != poi_shape:
+        emb = resize(emb, output_shape=(3 if no_phase else 6, *poi_shape))
+        # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *poi_shape))
 
     if plot is not None:
         plt.style.use("default")
