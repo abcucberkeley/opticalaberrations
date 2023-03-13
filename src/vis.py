@@ -83,8 +83,8 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2):
     yz.yaxis.set_major_locator(plt.MaxNLocator(6))
 
     xy.set_xlabel('XY ($\mu$m)')
-    yz.set_xlabel('XZ ($\mu$m)')
-    xz.set_xlabel('YZ ($\mu$m)')
+    xz.set_xlabel('XZ ($\mu$m)')
+    yz.set_xlabel('YZ ($\mu$m)')
     return m
 
 
