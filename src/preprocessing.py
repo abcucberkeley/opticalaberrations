@@ -195,7 +195,7 @@ def prep_sample(
         debug = Path(debug)
         if debug.is_dir(): debug.mkdir(parents=True, exist_ok=True)
 
-        fig, axes = plt.subplots(2, ncols=4, figsize=(12, 5))
+        fig, axes = plt.subplots(2, ncols=3, figsize=(8, 5))
 
         plot_mip(
             vol=sample,
@@ -204,23 +204,15 @@ def prep_sample(
             yz=axes[0, 2],
             dxy=sample_voxel_size[-1],
             dz=sample_voxel_size[0],
-            label='Input (MIP) [$\gamma$=0.5]'
+            label='Input (MIP) [$\gamma$=.5]'
         )
 
-        sns.histplot(
-            sample.flatten(),
-            bins=200,
-            ax=axes[0, -1],
-            label='Input',
-            color='C0',
+        axes[0, 0].set_title(
+            f'${int(sample_voxel_size[2]*1000)}^X$, '
+            f'${int(sample_voxel_size[1]*1000)}^Y$, '
+            f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
         )
-        axes[0, -1].yaxis.tick_right()
-        axes[0, -1].yaxis.set_label_position("right")
-        axes[0, -1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-        axes[0, -1].legend(frameon=False, loc='upper right', ncol=1)
-        axes[0, -1].set_yscale('symlog')
-        axes[0, -1].set_xlim(0, None)
-        axes[0, -1].set_title(f"Measured SNR: {snr}")
+        axes[0, 1].set_title(f"PSNR: {snr}")
 
     if model_fov is not None:
         # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
@@ -238,23 +230,8 @@ def prep_sample(
 
     if remove_background:
         sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)
-
-        if debug is not None:
-            sns.histplot(
-                sample.flatten(),
-                bins=200,
-                ax=axes[0, -1],
-                label='No background',
-                color='C1',
-                alpha=.5
-            )
-            axes[0, -1].yaxis.tick_right()
-            axes[0, -1].yaxis.set_label_position("right")
-            axes[0, -1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-            axes[0, -1].legend(frameon=False, loc='upper right', ncol=1)
-            axes[0, -1].set_yscale('symlog')
-            axes[0, -1].set_xlim(0, None)
-            axes[0, -1].set_title(f"Measured SNR: {snr} $\\rightarrow$ {measure_snr(sample)}")
+        snr = measure_snr(sample)
+        axes[0, 1].set_title(f"PSNR: {snr}")
 
     if windowing:
         sample = tukey_window(sample)
@@ -286,23 +263,6 @@ def prep_sample(
             dxy=sample_voxel_size[-1],
             dz=sample_voxel_size[0],
             label='Processed (MIP) [$\gamma$=0.5]'
-        )
-
-        sns.histplot(
-            sample.flatten(),
-            bins=200,
-            ax=axes[1, -1],
-            color='dimgrey',
-        )
-        axes[1, -1].yaxis.tick_right()
-        axes[1, -1].yaxis.set_label_position("right")
-        axes[1, -1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
-        axes[1, -1].set_yscale('symlog')
-        axes[1, -1].set_xlim(0, None)
-        axes[1, -1].set_title(
-            f'Voxel: ${int(sample_voxel_size[2]*1000)}^X$, '
-            f'${int(sample_voxel_size[1]*1000)}^Y$, '
-            f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
         )
 
         plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.3, wspace=0.15)
