@@ -43,6 +43,9 @@ def parse_args(args):
         help='a toggle for plotting predictions'
     )
 
+    psnr = subparsers.add_parser("psnr")
+    psnr.add_argument("input", type=Path, help="path to input .tif file")
+
     preprocessing = subparsers.add_parser("preprocessing")
     preprocessing.add_argument("input", type=Path, help="path to input .tif file")
     preprocessing.add_argument(
@@ -60,10 +63,10 @@ def parse_args(args):
     )
     preprocessing.add_argument(
         "--edge_filter", action='store_true',
-        help='a toggle to look for share edges in the given image using a 3D Canny detector'
+        help='a toggle to look for sharp edges in the given image using a 3D Canny detector'
     )
     preprocessing.add_argument(
-        "--edge_filter", action='store_true',
+        "--filter_mask_dilation", action='store_true',
         help='optional toggle to dilate the edge filter mask'
     )
     preprocessing.add_argument(
@@ -73,6 +76,43 @@ def parse_args(args):
     preprocessing.add_argument(
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
+    )
+
+    embeddings = subparsers.add_parser("embeddings")
+    embeddings.add_argument("model", type=Path, help="path to pretrained tensorflow model")
+    embeddings.add_argument("input", type=Path, help="path to input .tif file")
+    embeddings.add_argument(
+        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+    embeddings.add_argument(
+        "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
+    )
+    embeddings.add_argument(
+        "--wavelength", default=.510, type=float,
+        help='wavelength in microns'
+    )
+    embeddings.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
+    embeddings.add_argument(
+        "--match_model_fov", action='store_true',
+        help='a toggle for plotting predictions'
+    )
+    embeddings.add_argument(
+        "--ideal_empirical_psf", default=None, type=Path,
+        help='path to an ideal empirical psf (Default: `None` ie. will be simulated automatically)'
+    )
+    embeddings.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+    embeddings.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
+    embeddings.add_argument(
+        "--match_model_fov", action='store_true',
+        help='crop image to match model FOV'
     )
 
     detect_rois = subparsers.add_parser("detect_rois")
@@ -560,16 +600,39 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             lateral_voxel_size=args.lateral_voxel_size,
         )
 
-    elif args.func == 'preprocessing':
+    elif args.func == 'psnr':
+        sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
         experimental.load_sample(
             data=args.input,
-            sample_voxel_size=(args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size),
+            remove_background=True,
+            return_psnr=True,
+            plot=None,
+        )
+
+    elif args.func == 'preprocessing':
+        sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
+        experimental.load_sample(
+            data=args.input,
+            sample_voxel_size=sample_voxel_size,
             remove_background=args.remove_background,
             read_noise_bias=args.read_noise_bias,
             normalize=args.normalize,
             edge_filter=args.edge_filter,
             filter_mask_dilation=args.filter_mask_dilation,
+            plot=args.input.with_suffix('') if args.plot else None,
+        )
+
+    elif args.func == 'embeddings':
+        experimental.generate_embeddings(
+            model=args.model,
+            img=args.input,
+            axial_voxel_size=args.axial_voxel_size,
+            lateral_voxel_size=args.lateral_voxel_size,
+            wavelength=args.wavelength,
             plot=args.plot,
+            ideal_empirical_psf=args.ideal_empirical_psf,
+            cpu_workers=args.cpu_workers,
+            preloaded=preloaded,
         )
 
     elif args.func == 'predict_sample':

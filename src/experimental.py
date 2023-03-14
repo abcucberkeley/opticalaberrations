@@ -16,7 +16,7 @@ from subprocess import call
 import multiprocessing as mp
 import tensorflow as tf
 
-from typing import Any, Union
+from typing import Any, Union, Optional
 import numpy as np
 import cupy as cp
 import pandas as pd
@@ -230,7 +230,8 @@ def load_sample(
     normalize: bool = True,
     edge_filter: bool = True,
     filter_mask_dilation: bool = True,
-    plot: Any = None
+    plot: Any = None,
+    return_psnr: bool = False
 ):
 
     if isinstance(data, np.ndarray):
@@ -242,24 +243,25 @@ def load_sample(
         path = Path(str(data))
         img = get_image(path).astype(float)
 
-    img = preprocessing.prep_sample(
-        np.squeeze(img),
-        model_fov=model_fov,
-        sample_voxel_size=sample_voxel_size,
-        remove_background=remove_background,
-        read_noise_bias=read_noise_bias,
-        normalize=normalize,
-        edge_filter=edge_filter,
-        filter_mask_dilation=filter_mask_dilation,
-        plot=plot,
-    )
+        img = preprocessing.prep_sample(
+            np.squeeze(img),
+            model_fov=model_fov,
+            sample_voxel_size=sample_voxel_size,
+            remove_background=remove_background,
+            read_noise_bias=read_noise_bias,
+            normalize=normalize,
+            edge_filter=edge_filter,
+            filter_mask_dilation=filter_mask_dilation,
+            plot=plot,
+            return_psnr=return_psnr
+        )
 
     return img
 
 
 
 def preprocess(
-    file: [tf.Tensor, Path, str],
+    file: Union[tf.Tensor, Path, str],
     modelpsfgen: SyntheticPSF,
     samplepsfgen: SyntheticPSF,
     freq_strength_threshold: float = .01,
@@ -308,6 +310,84 @@ def preprocess(
         digital_rotations=digital_rotations,
         poi_shape=modelpsfgen.psf_shape[1:]
     )
+
+
+def generate_embeddings(
+    file: Union[tf.Tensor, Path, str],
+    model: Union[tf.keras.Model, Path, str],
+    axial_voxel_size: float,
+    lateral_voxel_size: float,
+    wavelength: float = .510,
+    freq_strength_threshold: float = .01,
+    digital_rotations: Optional[np.ndarray] = None,
+    remove_background: bool = True,
+    read_noise_bias: float = 5,
+    normalize: bool = True,
+    edge_filter: bool = True,
+    filter_mask_dilation: bool = True,
+    plot: bool = False,
+    match_model_fov: bool = True,
+    preloaded: Preloadedmodelclass = None,
+    ideal_empirical_psf: Any = None,
+    cpu_workers: int = -1
+):
+    sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+
+    model, modelpsfgen = reloadmodel_if_needed(
+        preloaded,
+        model,
+        ideal_empirical_psf=ideal_empirical_psf,
+        ideal_empirical_psf_voxel_size=sample_voxel_size
+    )
+
+    sample = load_sample(
+        file,
+        sample_voxel_size=sample_voxel_size,
+        remove_background=remove_background,
+        normalize=normalize,
+        edge_filter=edge_filter,
+        filter_mask_dilation=filter_mask_dilation,
+        read_noise_bias=read_noise_bias,
+        plot=file.with_suffix('') if plot else None,
+    )
+
+    samplepsfgen = SyntheticPSF(
+        psf_type=modelpsfgen.psf_type,
+        snr=100,
+        psf_shape=sample.shape,
+        n_modes=model.output_shape[1],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
+
+    if match_model_fov:
+        return fourier_embeddings(
+            sample,
+            iotf=modelpsfgen.iotf,
+            plot=file.with_suffix('') if plot else None,
+            no_phase=True if model.input_shape[1] == 3 else False,
+            remove_interference=True,
+            embedding_option=modelpsfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
+            poi_shape=modelpsfgen.psf_shape[1:]
+        )
+    else:
+        return rolling_fourier_embeddings(
+            sample,
+            iotf=modelpsfgen.iotf,
+            model_fov=modelpsfgen.psf_fov,
+            sample_voxel_size=sample_voxel_size,
+            plot=file.with_suffix('') if plot else None,
+            no_phase=True if model.input_shape[1] == 3 else False,
+            embedding_option=modelpsfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+            poi_shape=modelpsfgen.psf_shape[1:],
+            digital_rotations=digital_rotations,
+            cpu_workers=cpu_workers
+        )
 
 
 @profile

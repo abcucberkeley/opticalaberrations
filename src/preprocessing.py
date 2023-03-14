@@ -177,7 +177,7 @@ def prep_sample(
         filter_mask_dilation: optional toggle to dilate the edge filter mask
         read_noise_bias: bias offset for camera noise
         windowing: optional toggle to apply to mask the input with a window to avoid boundary effects
-
+        return_psnr: return estimated psnr instead of the image
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
