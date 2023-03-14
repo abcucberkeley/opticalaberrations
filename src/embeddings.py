@@ -945,16 +945,69 @@ def rolling_fourier_embeddings(
         if remove_interference:
             interference = partial(
                 remove_interference_pattern,
-                plot=plot,
+                plot=None, #plot,
                 windowing=True
             )
-            otfs = multiprocess(
+            phi_otfs = multiprocess(
                 func=interference,
-                jobs=rois,
+                jobs=rois,          # remove interference using original real space data
                 cores=cpu_workers,
                 desc='Remove interference patterns'
             )
-            avg_otf = resize_with_crop_or_pad(np.mean(otfs, axis=0), crop_shape=iotf.shape)
+
+            # could also filter "No objects were detected" cases if remove_interference_pattern returned a flag for that.
+            found_spots_in_tile = np.zeros(phi_otfs.shape[0], dtype=bool)
+            for m in range(phi_otfs.shape[0]):
+                found_spots_in_tile[m] = not np.array_equal(phi_otfs[m], otfs[m], equal_nan=True)
+
+            phi_otfs = phi_otfs[found_spots_in_tile]
+
+            avg_otf = resize_with_crop_or_pad(np.mean(phi_otfs, axis=0), crop_shape=iotf.shape)
+
+            if plot:
+                avg_psf = ifft(avg_otf)
+
+                fig, axes = plt.subplots(
+                    nrows=4,
+                    ncols=3,
+                    figsize=(8, 11),
+                    sharey=False,
+                    sharex=False
+                )
+                for row in range(min(3, phi_otfs.shape[0])):
+                    for ax in range(3):
+                        m5 = axes[row, ax].imshow(np.nanmax(ifft(phi_otfs[row]), axis=ax), cmap='hot')
+
+                    label = f'Reconstructed tile\n ({row} out of {phi_otfs.shape[0]})'
+
+                    cax = inset_axes(axes[row, -1], width="10%", height="90%", loc='center right', borderpad=-3)
+                    cb = plt.colorbar(m5, cax=cax)
+                    cax.yaxis.set_label_position("right")
+                    cax.set_ylabel(label)
+
+                    for ax in axes.flatten():
+                        ax.axis('off')
+
+                for ax in range(3):
+                    m5 = axes[3, ax].imshow(np.nanmax(avg_psf, axis=ax), cmap='hot')
+
+                label = 'Reconstructed\navg'
+
+                cax = inset_axes(axes[-1,-1], width="10%", height="90%", loc='center right', borderpad=-3)
+                cb = plt.colorbar(m5, cax=cax)
+                cax.yaxis.set_label_position("right")
+                cax.set_ylabel(label)
+
+                for ax in axes.flatten():
+                    ax.axis('off')
+
+                axes[0, 0].set_title('XY')
+                axes[0, 1].set_title('XZ')
+                axes[0, 2].set_title('YZ')
+
+                plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
+                plt.savefig(f'{plot}_avg_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+                autoscale_svg(f'{plot}_avg_interference_pattern.svg')
 
         phi = compute_emb(
             avg_otf,
