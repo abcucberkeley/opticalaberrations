@@ -117,7 +117,7 @@ def remove_background_noise(
         mode = int(st.mode(image, axis=None).mode[0])
         image -= mode + read_noise_bias
     else:
-        filtered_image = difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
+        image = difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
     image[image < 0] = 0
     return image
 
@@ -192,7 +192,7 @@ def prep_sample(
     sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
     snr = measure_snr(sample)
 
-    if plot is not None:
+    if plot is not None and not plot:
         plot = Path(plot)
         if plot.is_dir(): plot.mkdir(parents=True, exist_ok=True)
 
