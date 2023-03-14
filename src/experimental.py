@@ -232,32 +232,30 @@ def load_sample(
     filter_mask_dilation: bool = True,
     plot: Any = None
 ):
-    try:
-        if isinstance(data, np.ndarray):
-            img = data
-        elif isinstance(data, tf.Tensor):
-            path = Path(str(data.numpy(), "utf-8"))
-            img = get_image(path).astype(float)
-        else:
-            path = Path(str(data))
-            img = get_image(path).astype(float)
 
-        img = preprocessing.prep_sample(
-            np.squeeze(img),
-            model_fov=model_fov,
-            sample_voxel_size=sample_voxel_size,
-            remove_background=remove_background,
-            read_noise_bias=read_noise_bias,
-            normalize=normalize,
-            edge_filter=edge_filter,
-            filter_mask_dilation=filter_mask_dilation,
-            plot=plot
-        )
+    if isinstance(data, np.ndarray):
+        img = data
+    elif isinstance(data, tf.Tensor):
+        path = Path(str(data.numpy(), "utf-8"))
+        img = get_image(path).astype(float)
+    else:
+        path = Path(str(data))
+        img = get_image(path).astype(float)
 
-        return img
+    img = preprocessing.prep_sample(
+        np.squeeze(img),
+        model_fov=model_fov,
+        sample_voxel_size=sample_voxel_size,
+        remove_background=remove_background,
+        read_noise_bias=read_noise_bias,
+        normalize=normalize,
+        edge_filter=edge_filter,
+        filter_mask_dilation=filter_mask_dilation,
+        plot=plot,
+    )
 
-    except Exception as e:
-        logger.warning(e)
+    return img
+
 
 
 def preprocess(
