@@ -18,6 +18,7 @@ import scipy.io
 from tqdm.contrib import itertools
 from tifffile import imread, imsave
 from scipy.spatial import KDTree
+# from scipy.signal.windows import tukey
 from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.patches as patches
 from line_profiler_pycharm import profile
@@ -93,8 +94,8 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str='line
     else:
         return np.pad(img[tuple(slicer)], pad, mode=mode, **kwargs)
 
-
-def remove_background_noise(image, read_noise_bias: float = 5, method: str = 'difference_of_gaussians'):
+@profile
+def remove_background_noise(image, read_noise_bias: float = 5, method: str = 'difference_of_gaussians', alpha = 0.5):
     """
     A simple function to remove background noise from a given image.
         Also uses difference of gaussians to bandpass (reject past nyquist, reject DC/background/scattering
@@ -106,8 +107,23 @@ def remove_background_noise(image, read_noise_bias: float = 5, method: str = 'di
         image -= mode + read_noise_bias
     else:
         filtered_image = difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
-        image = filtered_image * window(('tukey', 0.2), image.shape)  # 1.0 = Hann, 0.0 = rect window
 
+        # 1.0 = Hann, 0.0 = rect window
+        # window_z = tukey(image.shape[0], alpha=alpha)
+        # window_y = tukey(image.shape[1], alpha=alpha)
+        # window_x = tukey(image.shape[2], alpha=alpha)
+        #
+        # zv, yv, xv = np.meshgrid(window_z, window_y, window_x, indexing='ij', copy=True)
+        #
+        # w = np.multiply(np.multiply(zv, yv), xv)
+
+        # nominally we would use a 3D window, but that will create a spherical mask inscribing the volume
+        # but this will cut a lot of data, we can do better by using cylindrical mask, because we don't use
+        # an XZ or YZ projection of the FFT.
+        w = window(('tukey', alpha), image.shape[1:])  # 1.0 = Hann, 0.0 = rect window
+        image = filtered_image * w[np.newaxis,...]
+
+        # image = filtered_image * window(('tukey', alpha), image.shape)  # 1.0 = Hann, 0.0 = rect window
     image[image < 0] = 0
     return image
 
