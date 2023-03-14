@@ -7,7 +7,7 @@ plt.set_loglevel('error')
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Sequence, Union
+from typing import Any, Sequence, Union, Optional
 import numpy as np
 from scipy import stats as st
 import pandas as pd
@@ -18,7 +18,6 @@ import scipy.io
 from tqdm.contrib import itertools
 from tifffile import imread, imsave
 from scipy.spatial import KDTree
-# from scipy.signal.windows import tukey
 from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.patches as patches
 from line_profiler_pycharm import profile
@@ -57,14 +56,23 @@ def round_to_odd(n):
         return int(answer - 1)
 
 
+def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> np.float:
+    """ Return estimated signal-to-noise ratio or inf if the given image has no noise """
+    a = np.asanyarray(a)
+    signal = np.max(a, axis=axis) - np.median(a, axis=axis)
+    noise = np.std(a, axis=axis)
+    return np.round(np.where(noise == 0, np.inf, signal/noise), 2)
+
+
 @profile
-def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str='linear_ramp', **kwargs):
+def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 'linear_ramp', **kwargs):
     """Crops or pads array.  Output will have dimensions "crop_shape". No interpolation. Padding type
     can be customized with **kwargs, like "reflect" to get mirror pad.
 
     Args:
         img (np.array): N-dim array
         crop_shape (Sequence): desired output dimensions
+        mode: mode to use for padding
         **kwargs: arguments to pass to np.pad
 
     Returns:
@@ -94,37 +102,47 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str='line
     else:
         return np.pad(img[tuple(slicer)], pad, mode=mode, **kwargs)
 
-@profile
-def remove_background_noise(image, read_noise_bias: float = 5, method: str = 'difference_of_gaussians', alpha = 0.5):
-    """
-    A simple function to remove background noise from a given image.
-        Also uses difference of gaussians to bandpass (reject past nyquist, reject DC/background/scattering
-        To avoid boundary effects (cross in OTF), a tukey window is applied so that the edges of the volume go to zero.
-    """
 
+@profile
+def remove_background_noise(
+        image,
+        read_noise_bias: float = 5,
+        method: str = 'difference_of_gaussians',
+):
+    """
+        A simple function to remove background noise from a given image.
+        Also uses difference of gaussians to bandpass (reject past nyquist, reject DC/background/scattering
+    """
     if method == 'mode':
         mode = int(st.mode(image, axis=None).mode[0])
         image -= mode + read_noise_bias
     else:
         filtered_image = difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
-
-        # 1.0 = Hann, 0.0 = rect window
-        # window_z = tukey(image.shape[0], alpha=alpha)
-        # window_y = tukey(image.shape[1], alpha=alpha)
-        # window_x = tukey(image.shape[2], alpha=alpha)
-        #
-        # zv, yv, xv = np.meshgrid(window_z, window_y, window_x, indexing='ij', copy=True)
-        #
-        # w = np.multiply(np.multiply(zv, yv), xv)
-
-        # nominally we would use a 3D window, but that will create a spherical mask inscribing the volume
-        # but this will cut a lot of data, we can do better by using cylindrical mask, because we don't use
-        # an XZ or YZ projection of the FFT.
-        w = window(('tukey', alpha), image.shape[1:])  # 1.0 = Hann, 0.0 = rect window
-        image = filtered_image * w[np.newaxis,...]
-
-        # image = filtered_image * window(('tukey', alpha), image.shape)  # 1.0 = Hann, 0.0 = rect window
     image[image < 0] = 0
+    return image
+
+
+def tukey_window(image: np.ndarray, alpha: float = .5):
+    """
+        To avoid boundary effects (cross in OTF), a tukey window is applied so that the edges of the volume go to zero.
+        Args:
+            image: input image
+            alpha: the fraction of the window inside the cosine tapered region
+                1.0 = Hann, 0.0 = rect window
+    """
+    # 1.0 = Hann, 0.0 = rect window
+    # window_z = tukey(image.shape[0], alpha=alpha)
+    # window_y = tukey(image.shape[1], alpha=alpha)
+    # window_x = tukey(image.shape[2], alpha=alpha)
+    # zv, yv, xv = np.meshgrid(window_z, window_y, window_x, indexing='ij', copy=True)
+    # w = np.multiply(np.multiply(zv, yv), xv)
+
+    # nominally we would use a 3D window, but that will create a spherical mask inscribing the volume
+    # but this will cut a lot of data, we can do better by using cylindrical mask, because we don't use
+    # an XZ or YZ projection of the FFT.
+    w = window(('tukey', alpha), image.shape[1:])  # 1.0 = Hann, 0.0 = rect window
+    image *= w[np.newaxis, ...]
+    # image = filtered_image * window(('tukey', alpha), image.shape)
     return image
 
 
@@ -139,6 +157,7 @@ def prep_sample(
     normalize: bool = True,
     edge_filter: bool = False,
     filter_mask_dilation: bool = True,
+    windowing: bool = True,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
 
@@ -156,6 +175,7 @@ def prep_sample(
         edge_filter: look for share edges in the given image using a 3D Canny detector.
         filter_mask_dilation: optional toggle to dilate the edge filter mask
         read_noise_bias: bias offset for camera noise
+        windowing: optional toggle to apply to mask the input with a window to avoid boundary effects
 
     Returns:
         _type_: 3D array (or series of 3D arrays)
@@ -169,6 +189,7 @@ def prep_sample(
     })
 
     sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
+    snr = measure_snr(sample)
 
     if debug is not None:
         debug = Path(debug)
@@ -199,11 +220,7 @@ def prep_sample(
         axes[0, -1].legend(frameon=False, loc='upper right', ncol=1)
         axes[0, -1].set_yscale('symlog')
         axes[0, -1].set_xlim(0, None)
-        axes[0, -1].set_title(
-            f'Voxel: ${int(sample_voxel_size[2]*1000)}^X$, '
-            f'${int(sample_voxel_size[1]*1000)}^Y$, '
-            f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
-        )
+        axes[0, -1].set_title(f"Measured SNR: {snr}")
 
     if model_fov is not None:
         # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
@@ -237,6 +254,10 @@ def prep_sample(
             axes[0, -1].legend(frameon=False, loc='upper right', ncol=1)
             axes[0, -1].set_yscale('symlog')
             axes[0, -1].set_xlim(0, None)
+            axes[0, -1].set_title(f"Measured SNR: {snr} $\\rightarrow$ {measure_snr(sample)}")
+
+    if windowing:
+        sample = tukey_window(sample)
 
     if normalize:
         sample /= np.nanmax(sample)
@@ -278,6 +299,11 @@ def prep_sample(
         axes[1, -1].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
         axes[1, -1].set_yscale('symlog')
         axes[1, -1].set_xlim(0, None)
+        axes[1, -1].set_title(
+            f'Voxel: ${int(sample_voxel_size[2]*1000)}^X$, '
+            f'${int(sample_voxel_size[1]*1000)}^Y$, '
+            f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
+        )
 
         plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.3, wspace=0.15)
         plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
