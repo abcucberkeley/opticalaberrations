@@ -8,6 +8,13 @@ import cli
 import experimental
 from preloaded import Preloadedmodelclass
 
+import subprocess
+import multiprocessing as mp
+import sys
+wherepython = str(subprocess.run("where python", capture_output=True).stdout, "utf-8").split()[0]
+mp.set_executable(wherepython)
+
+
 
 def parse_args(args):
     parser = cli.argparser()
