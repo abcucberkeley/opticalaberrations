@@ -149,15 +149,16 @@ def tukey_window(image: np.ndarray, alpha: float = .5):
 @profile
 def prep_sample(
     sample: np.array,
-    sample_voxel_size: tuple,
+    sample_voxel_size: tuple = (.2, .108, .108),
     model_fov: Any = None,
-    debug: Any = None,
     remove_background: bool = True,
     read_noise_bias: float = 5,
     normalize: bool = True,
     edge_filter: bool = False,
     filter_mask_dilation: bool = True,
     windowing: bool = True,
+    return_psnr: bool = True,
+    plot: Any = None,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
 
@@ -169,7 +170,7 @@ def prep_sample(
         sample: Input 3D array (or series of 3D arrays)
         sample_voxel_size: voxel size for the given input image (z, y, x)
         model_fov: optional sample range to match what the model was trained on
-        debug: plot or save .svg's
+        plot: plot or save .svg's
         remove_background: subtract background.
         normalize: scale values between 0 and 1.
         edge_filter: look for share edges in the given image using a 3D Canny detector.
@@ -191,9 +192,9 @@ def prep_sample(
     sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
     snr = measure_snr(sample)
 
-    if debug is not None:
-        debug = Path(debug)
-        if debug.is_dir(): debug.mkdir(parents=True, exist_ok=True)
+    if plot is not None:
+        plot = Path(plot)
+        if plot.is_dir(): plot.mkdir(parents=True, exist_ok=True)
 
         fig, axes = plt.subplots(2, ncols=3, figsize=(8, 5))
 
@@ -254,7 +255,7 @@ def prep_sample(
 
         sample *= mask
 
-    if debug is not None:
+    if plot is not None:
         plot_mip(
             vol=sample,
             xy=axes[1, 0],
@@ -266,9 +267,12 @@ def prep_sample(
         )
 
         plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.3, wspace=0.15)
-        plt.savefig(f'{debug}_preprocessing.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{plot}_preprocessing.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-    return sample
+    if return_psnr:
+        return snr
+    else:
+        return sample
 
 
 @profile
