@@ -157,7 +157,7 @@ def prep_sample(
     edge_filter: bool = False,
     filter_mask_dilation: bool = True,
     windowing: bool = True,
-    return_psnr: bool = True,
+    return_psnr: bool = False,
     plot: Any = None,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
@@ -177,7 +177,7 @@ def prep_sample(
         filter_mask_dilation: optional toggle to dilate the edge filter mask
         read_noise_bias: bias offset for camera noise
         windowing: optional toggle to apply to mask the input with a window to avoid boundary effects
-
+        return_psnr: return estimated psnr instead of the image
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """

@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="embeddings" type="PythonConfigurationType" factoryName="Python" folderName="utils">
+  <configuration default="false" name="embeddings_planes" type="PythonConfigurationType" factoryName="Python" folderName="utils">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
