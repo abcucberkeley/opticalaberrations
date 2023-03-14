@@ -232,7 +232,8 @@ def prep_sample(
     if remove_background:
         sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)
         snr = measure_snr(sample)
-        axes[0, 1].set_title(f"PSNR: {snr}")
+        if plot is not None:
+            axes[0, 1].set_title(f"PSNR: {snr}")
 
     if windowing:
         sample = tukey_window(sample)

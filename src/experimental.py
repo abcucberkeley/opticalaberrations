@@ -233,15 +233,15 @@ def load_sample(
     plot: Any = None,
     return_psnr: bool = False
 ):
-    try:
-        if isinstance(data, np.ndarray):
-            img = data
-        elif isinstance(data, tf.Tensor):
-            path = Path(str(data.numpy(), "utf-8"))
-            img = get_image(path).astype(float)
-        else:
-            path = Path(str(data))
-            img = get_image(path).astype(float)
+
+    if isinstance(data, np.ndarray):
+        img = data
+    elif isinstance(data, tf.Tensor):
+        path = Path(str(data.numpy(), "utf-8"))
+        img = get_image(path).astype(float)
+    else:
+        path = Path(str(data))
+        img = get_image(path).astype(float)
 
         img = preprocessing.prep_sample(
             np.squeeze(img),
@@ -256,10 +256,8 @@ def load_sample(
             return_psnr=return_psnr
         )
 
-        return img
+    return img
 
-    except Exception as e:
-        logger.warning(e)
 
 
 def preprocess(
