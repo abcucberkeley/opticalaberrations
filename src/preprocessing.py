@@ -266,7 +266,7 @@ def prep_sample(
         )
 
         plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.3, wspace=0.15)
-        plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{debug}_preprocessing.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return sample
 

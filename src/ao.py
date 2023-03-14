@@ -43,6 +43,38 @@ def parse_args(args):
         help='a toggle for plotting predictions'
     )
 
+    preprocessing = subparsers.add_parser("preprocessing")
+    preprocessing.add_argument("input", type=Path, help="path to input .tif file")
+    preprocessing.add_argument(
+        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+    preprocessing.add_argument(
+        "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
+    )
+    preprocessing.add_argument(
+        "--read_noise_bias", default=5, type=int, help='bias offset for camera noise'
+    )
+    preprocessing.add_argument(
+        "--normalize", action='store_true',
+        help='a toggle for rescaling the image to the max value'
+    )
+    preprocessing.add_argument(
+        "--edge_filter", action='store_true',
+        help='a toggle to look for share edges in the given image using a 3D Canny detector'
+    )
+    preprocessing.add_argument(
+        "--edge_filter", action='store_true',
+        help='optional toggle to dilate the edge filter mask'
+    )
+    preprocessing.add_argument(
+        "--remove_background", action='store_true',
+        help='a toggle for background subtraction'
+    )
+    preprocessing.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
+
     detect_rois = subparsers.add_parser("detect_rois")
     detect_rois.add_argument("input", type=Path, help="path to input .tif file")
     detect_rois.add_argument("--psf", default=None, type=Path, help="path to PSF .tif file")
@@ -526,6 +558,18 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             psf=args.psf,
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
+        )
+
+    elif args.func == 'preprocessing':
+        experimental.load_sample(
+            data=args.input,
+            sample_voxel_size=(args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size),
+            remove_background=args.remove_background,
+            read_noise_bias=args.read_noise_bias,
+            normalize=args.normalize,
+            edge_filter=args.edge_filter,
+            filter_mask_dilation=args.filter_mask_dilation,
+            plot=args.plot,
         )
 
     elif args.func == 'predict_sample':

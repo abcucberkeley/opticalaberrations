@@ -230,7 +230,7 @@ def load_sample(
     normalize: bool = True,
     edge_filter: bool = True,
     filter_mask_dilation: bool = True,
-    debug: Any = None
+    plot: Any = None
 ):
     try:
         if isinstance(data, np.ndarray):
@@ -251,7 +251,7 @@ def load_sample(
             normalize=normalize,
             edge_filter=edge_filter,
             filter_mask_dilation=filter_mask_dilation,
-            debug=debug
+            plot=plot
         )
 
         return img
@@ -296,7 +296,7 @@ def preprocess(
         edge_filter=edge_filter,
         filter_mask_dilation=filter_mask_dilation,
         read_noise_bias=read_noise_bias,
-        debug=plot
+        plot=plot
     )
 
     return fourier_embeddings(
@@ -631,7 +631,7 @@ def predict_large_fov(
         normalize=True,
         edge_filter=False,
         filter_mask_dilation=True,
-        debug=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
+        plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
     )
     logger.info(f"Sample: {sample.shape}")
 
