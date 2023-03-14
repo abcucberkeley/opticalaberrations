@@ -157,7 +157,7 @@ def prep_sample(
     edge_filter: bool = False,
     filter_mask_dilation: bool = True,
     windowing: bool = True,
-    return_psnr: bool = True,
+    return_psnr: bool = False,
     plot: Any = None,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
@@ -232,7 +232,8 @@ def prep_sample(
     if remove_background:
         sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)
         snr = measure_snr(sample)
-        axes[0, 1].set_title(f"PSNR: {snr}")
+        if plot is not None:
+            axes[0, 1].set_title(f"PSNR: {snr}")
 
     if windowing:
         sample = tukey_window(sample)
