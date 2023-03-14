@@ -6,6 +6,7 @@ import multiprocessing as mp
 import sys
 from typing import Union, Any, List, Generator
 from line_profiler_pycharm import profile
+import subprocess
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -45,6 +46,9 @@ def multiprocess(jobs: Union[Generator, List, np.ndarray], func: Any, desc: str 
     Returns:
         an array of outputs for every function call
     """
+    # get where python is in the environment, because LabVIEW launches its kernel from niPythonHost.exe, and mp needs python.exe
+    wherepython = str(subprocess.run("where python", capture_output=True).stdout, "utf-8").split()[0]
+    mp.set_executable(wherepython)
     mp.set_start_method('spawn', force=True)
     jobs = list(jobs)
     if cores == 1 or len(jobs) == 1:
