@@ -92,10 +92,6 @@ def parse_args(args):
         help='wavelength in microns'
     )
     embeddings.add_argument(
-        "--plot", action='store_true',
-        help='a toggle for plotting predictions'
-    )
-    embeddings.add_argument(
         "--match_model_fov", action='store_true',
         help='a toggle for plotting predictions'
     )
@@ -109,10 +105,6 @@ def parse_args(args):
     embeddings.add_argument(
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
-    )
-    embeddings.add_argument(
-        "--match_model_fov", action='store_true',
-        help='crop image to match model FOV'
     )
 
     detect_rois = subparsers.add_parser("detect_rois")
