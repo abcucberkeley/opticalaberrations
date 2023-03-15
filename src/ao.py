@@ -610,6 +610,9 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             remove_background=True,
             return_psnr=True,
             plot=None,
+            normalize=False,
+            edge_filter=False,
+            filter_mask_dilation=False,
         )
 
     elif args.func == 'preprocessing':
