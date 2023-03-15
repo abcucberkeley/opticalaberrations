@@ -157,7 +157,6 @@ def prep_sample(
     edge_filter: bool = False,
     filter_mask_dilation: bool = True,
     windowing: bool = True,
-    return_psnr: bool = False,
     plot: Any = None,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
@@ -190,7 +189,7 @@ def prep_sample(
     })
 
     sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
-    psnr = measure_snr(sample)
+
 
     if plot is not None:
         plot = Path(plot)
@@ -234,6 +233,8 @@ def prep_sample(
         psnr = measure_snr(sample)
         if plot is not None:
             axes[0, 1].set_title(f"PSNR: {psnr}")
+    else:
+        psnr = measure_snr(sample)
 
     if windowing:
         sample = tukey_window(sample)
