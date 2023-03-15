@@ -26,18 +26,19 @@ from line_profiler_pycharm import profile
 from scipy import ndimage
 import matplotlib.patches as patches
 from astropy import convolution
-from cupyx.scipy.ndimage import rotate
 from skspatial.objects import Plane, Points
 import matplotlib.gridspec as gridspec
+
+try:
+    import cupy as cp
+    from cupyx.scipy.ndimage import rotate
+except ImportError as e:
+    from scipy.ndimage import rotate
+    logging.warning(f"Cupy not supported on your system: {e}")
 
 from utils import resize_with_crop_or_pad, multiprocess
 from vis import autoscale_svg
 from preprocessing import round_to_even
-
-try:
-    import cupy as cp
-except ImportError as e:
-    logging.warning(f"Cupy not supported on your system: {e}")
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -638,7 +639,7 @@ def compute_emb(
         try:
             if len(np.ma.nonzero(emb)[0]) > 100 and not is_windows:
                 signal.signal(signal.SIGALRM, timer)
-                signal.alarm(30)
+                signal.alarm(60)
                 
                 emb = np.ma.masked_array(emb, mask=~na_mask, fill_value=0)
                 emb = unwrap_phase(emb)
@@ -690,7 +691,12 @@ def rotate_embeddings(
     plot: Any = None,
     debug_rotations: bool = False
 ):
-    gpu_embeddings = cp.array(emb)
+    gpu_support = 'cupy' in sys.modules
+
+    if gpu_support:
+        memarray = cp.array(emb)
+    else:
+        memarray = emb.copy()
 
     if debug_rotations:
         emb = np.zeros((digital_rotations.shape[0], *emb.shape))
@@ -701,23 +707,34 @@ def rotate_embeddings(
                 if plot is not None else "Generating digital rotations",
         )):
             for plane in range(emb.shape[1]):
-                emb[i, plane, :, :] = np.array([
-                    cp.asnumpy(rotate(gpu_embeddings[plane], angle=angle, reshape=False, axes=(-2, -1)))
-                ])
+                r = rotate(memarray[plane], angle=angle, reshape=False, axes=(-2, -1))
+                if gpu_support:
+                    r = cp.asnumpy(r)
+                emb[i, plane, :, :] = r
 
                 plt.figure()
                 plt.imshow(emb[i, 0, :, :])
-                plt.savefig(f'{plot}_{angle}.svg')
+                plt.savefig(f'{plot}_rot{angle}.svg')
     else:
-        emb = np.array([
-            cp.asnumpy(rotate(gpu_embeddings, angle=angle, reshape=False, axes=(-2, -1)))
-            for angle in tqdm(
-                digital_rotations,
-                desc=f"Generating digital rotations [{plot.name}]"
-                if plot is not None else "Generating digital rotations",
-            )
-        ])
-    del gpu_embeddings
+        if gpu_support:
+            emb = np.array([
+                cp.asnumpy(rotate(memarray, angle=angle, reshape=False, axes=(-2, -1)))
+                for angle in tqdm(
+                    digital_rotations,
+                    desc=f"Generating digital rotations [{plot.name}]"
+                    if plot is not None else "Generating digital rotations",
+                )
+            ])
+        else:
+            emb = np.array([
+                rotate(memarray, angle=angle, reshape=False, axes=(-2, -1))
+                for angle in tqdm(
+                    digital_rotations,
+                    desc=f"Generating digital rotations [{plot.name}]"
+                    if plot is not None else "Generating digital rotations",
+                )
+            ])
+
     return emb
 
 

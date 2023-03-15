@@ -18,16 +18,12 @@ import tensorflow as tf
 
 from typing import Any, Union, Optional
 import numpy as np
-import cupy as cp
 import pandas as pd
 from tifffile import imread, imsave
 import seaborn as sns
 from tqdm import tqdm
 from line_profiler_pycharm import profile
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-import pyotf.pyotf.phaseretrieval as pr
-from pyotf.pyotf.utils import prep_data_for_PR
-from pyotf.pyotf.zernike import osa2degrees
 
 import utils
 import vis
@@ -41,6 +37,11 @@ from embeddings import remove_interference_pattern, fourier_embeddings, rolling_
 
 import logging
 logger = logging.getLogger('')
+
+try:
+    import cupy as cp
+except ImportError as e:
+    logging.warning(f"Cupy not supported on your system: {e}")
 
 
 @profile
@@ -1791,6 +1792,15 @@ def phase_retrieval(
     prediction_threshold: float = 0.0,
     use_pyotf_zernikes: bool = False
 ):
+
+    try:
+        import pyotf.pyotf.phaseretrieval as pr
+        from pyotf.pyotf.utils import prep_data_for_PR
+        from pyotf.pyotf.zernike import osa2degrees
+    except ImportError as e:
+        logger.error(e)
+        return -1
+
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
     data = np.int_(imread(img))

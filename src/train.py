@@ -6,7 +6,11 @@ import sys
 import time
 from pathlib import Path
 import tensorflow as tf
-import cupy as cp
+
+try:
+    import cupy as cp
+except ImportError as e:
+    logging.warning(f"Cupy not supported on your system: {e}")
 
 import cli
 import backend
