@@ -47,6 +47,9 @@ def parse_args(args):
 
     psnr = subparsers.add_parser("psnr")
     psnr.add_argument("input", type=Path, help="path to input .tif file")
+    psnr.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
 
     preprocessing = subparsers.add_parser("preprocessing")
     preprocessing.add_argument("input", type=Path, help="path to input .tif file")
