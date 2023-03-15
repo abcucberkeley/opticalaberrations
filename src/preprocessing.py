@@ -158,6 +158,7 @@ def prep_sample(
     filter_mask_dilation: bool = True,
     windowing: bool = True,
     plot: Any = None,
+    return_psnr: bool = False,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
 
