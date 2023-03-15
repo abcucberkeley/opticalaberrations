@@ -223,7 +223,7 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
 @profile
 def load_sample(
     data: Union[tf.Tensor, Path, str, np.ndarray],
-    sample_voxel_size: tuple,
+    sample_voxel_size: tuple = (.2, .108, .108),
     model_fov: Any = None,
     remove_background: bool = True,
     read_noise_bias: float = 5,
@@ -257,7 +257,6 @@ def load_sample(
         )
 
     return img
-
 
 
 def preprocess(
@@ -323,7 +322,7 @@ def generate_embeddings(
     remove_background: bool = True,
     read_noise_bias: float = 5,
     normalize: bool = True,
-    edge_filter: bool = True,
+    edge_filter: bool = False,
     filter_mask_dilation: bool = True,
     plot: bool = False,
     match_model_fov: bool = True,

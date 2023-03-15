@@ -190,9 +190,9 @@ def prep_sample(
     })
 
     sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
-    snr = measure_snr(sample)
+    psnr = measure_snr(sample)
 
-    if plot is not None and not plot:
+    if plot is not None:
         plot = Path(plot)
         if plot.is_dir(): plot.mkdir(parents=True, exist_ok=True)
 
@@ -213,7 +213,7 @@ def prep_sample(
             f'${int(sample_voxel_size[1]*1000)}^Y$, '
             f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
         )
-        axes[0, 1].set_title(f"PSNR: {snr}")
+        axes[0, 1].set_title(f"PSNR: {psnr}")
 
     if model_fov is not None:
         # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
@@ -231,9 +231,9 @@ def prep_sample(
 
     if remove_background:
         sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)
-        snr = measure_snr(sample)
+        psnr = measure_snr(sample)
         if plot is not None:
-            axes[0, 1].set_title(f"PSNR: {snr}")
+            axes[0, 1].set_title(f"PSNR: {psnr}")
 
     if windowing:
         sample = tukey_window(sample)
@@ -271,7 +271,8 @@ def prep_sample(
         plt.savefig(f'{plot}_preprocessing.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     if return_psnr:
-        return snr
+        logger.info(f"PSNR: {psnr}")
+        return psnr
     else:
         return sample
 

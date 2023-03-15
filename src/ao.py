@@ -1,4 +1,6 @@
 import os
+import subprocess
+import multiprocessing as mp
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import logging
@@ -7,13 +9,6 @@ from pathlib import Path
 import cli
 import experimental
 from preloaded import Preloadedmodelclass
-
-import subprocess
-import multiprocessing as mp
-import sys
-wherepython = str(subprocess.run("where python", capture_output=True).stdout, "utf-8").split()[0]
-mp.set_executable(wherepython)
-
 
 
 def parse_args(args):
@@ -100,7 +95,11 @@ def parse_args(args):
     )
     embeddings.add_argument(
         "--match_model_fov", action='store_true',
-        help='a toggle for plotting predictions'
+        help='a toggle for cropping input image to match the model\'s FOV'
+    )
+    embeddings.add_argument(
+        "--edge_filter", action='store_true',
+        help='a toggle to look for share edges in the given image using a 3D Canny detector.'
     )
     embeddings.add_argument(
         "--ideal_empirical_psf", default=None, type=Path,
@@ -564,6 +563,9 @@ def parse_args(args):
 
 def main(args=None, preloaded: Preloadedmodelclass = None):
 
+    if os.name == 'nt':
+        mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
+
     timeit = time.time()
     args = parse_args(args)
 
@@ -600,7 +602,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         )
 
     elif args.func == 'psnr':
-        sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
         experimental.load_sample(
             data=args.input,
             remove_background=True,
@@ -623,13 +624,14 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
 
     elif args.func == 'embeddings':
         experimental.generate_embeddings(
+            file=args.input,
             model=args.model,
-            img=args.input,
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
             wavelength=args.wavelength,
             plot=args.plot,
             ideal_empirical_psf=args.ideal_empirical_psf,
+            edge_filter=args.edge_filter,
             cpu_workers=args.cpu_workers,
             preloaded=preloaded,
         )
