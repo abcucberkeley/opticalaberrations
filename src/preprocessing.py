@@ -213,7 +213,7 @@ def prep_sample(
             f'${int(sample_voxel_size[1]*1000)}^Y$, '
             f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
         )
-        axes[0, 1].set_title(f"PSNR: {psnr}")
+
 
     if model_fov is not None:
         # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
@@ -232,10 +232,11 @@ def prep_sample(
     if remove_background:
         sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)
         psnr = measure_snr(sample)
-        if plot is not None:
-            axes[0, 1].set_title(f"PSNR: {psnr}")
     else:
         psnr = measure_snr(sample)
+    if plot is not None:
+        axes[0, 1].set_title(f"PSNR: {psnr}")
+
 
     if windowing:
         sample = tukey_window(sample)
