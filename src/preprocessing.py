@@ -149,16 +149,16 @@ def tukey_window(image: np.ndarray, alpha: float = .5):
 @profile
 def prep_sample(
     sample: np.array,
+    return_psnr: bool = False,
+    normalize: bool = True,
+    windowing: bool = True,
     sample_voxel_size: tuple = (.2, .108, .108),
     model_fov: Any = None,
     remove_background: bool = True,
     read_noise_bias: float = 5,
-    normalize: bool = True,
     edge_filter: bool = False,
     filter_mask_dilation: bool = True,
-    windowing: bool = True,
     plot: Any = None,
-    return_psnr: bool = False,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
 
@@ -181,18 +181,17 @@ def prep_sample(
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-    })
-
     sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
 
 
     if plot is not None:
+        plt.rcParams.update({
+            'font.size': 10,
+            'axes.titlesize': 12,
+            'axes.labelsize': 12,
+            'xtick.labelsize': 10,
+            'ytick.labelsize': 10,
+        })
         plot = Path(plot)
         if plot.is_dir(): plot.mkdir(parents=True, exist_ok=True)
 
