@@ -129,6 +129,21 @@ def percentile_filter(data: np.ndarray, min_pct: int = 5, max_pct: int = 95) -> 
 
 
 @profile
+def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
+    if isinstance(data, np.ndarray):
+        img = data
+    elif isinstance(data, bytes):
+        file = Path(str(data, "utf-8"))
+    elif isinstance(data, tf.Tensor):
+        path = Path(str(data.numpy(), "utf-8"))
+        img = get_image(path).astype(float)
+    else:
+        path = Path(str(data))
+        img = get_image(path).astype(float)
+    return np.squeeze(img)
+
+
+@profile
 def deskew(
     img: Path,
     axial_voxel_size: float,
@@ -221,45 +236,6 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
         )
 
 
-@profile
-def load_sample(
-    data: Union[tf.Tensor, Path, str, np.ndarray],
-    return_psnr: bool = False,
-    sample_voxel_size: tuple = (.2, .108, .108),
-    model_fov: Any = None,
-    remove_background: bool = True,
-    read_noise_bias: float = 5,
-    normalize: bool = True,
-    edge_filter: bool = False,
-    filter_mask_dilation: bool = True,
-    plot: Any = None,
-):
-
-    if isinstance(data, np.ndarray):
-        img = data
-    elif isinstance(data, tf.Tensor):
-        path = Path(str(data.numpy(), "utf-8"))
-        img = get_image(path).astype(float)
-    else:
-        path = Path(str(data))
-        img = get_image(path).astype(float)
-
-        img = preprocessing.prep_sample(
-            np.squeeze(img),
-            model_fov=model_fov,
-            sample_voxel_size=sample_voxel_size,
-            remove_background=remove_background,
-            read_noise_bias=read_noise_bias,
-            normalize=normalize,
-            edge_filter=edge_filter,
-            filter_mask_dilation=filter_mask_dilation,
-            plot=plot,
-            return_psnr=return_psnr
-        )
-
-    return img
-
-
 def preprocess(
     file: Union[tf.Tensor, Path, str],
     modelpsfgen: SyntheticPSF,
@@ -275,20 +251,13 @@ def preprocess(
     no_phase: bool = False,
     match_model_fov: bool = True,
 ):
-    if isinstance(file, bytes):
-        file = Path(str(file, "utf-8"))
-
-    if isinstance(file, tf.Tensor):
-        file = Path(str(file.numpy(), "utf-8"))
-
-    if isinstance(file, str):
-        file = Path(file)
-
     if isinstance(plot, bool) and plot:
         plot = file.with_suffix('')
 
-    sample = load_sample(
-        file,
+    sample = load_sample(file)
+
+    sample = preprocessing.prep_sample(
+        sample,
         model_fov=modelpsfgen.psf_fov if match_model_fov else None,
         sample_voxel_size=samplepsfgen.voxel_size,
         remove_background=remove_background,
@@ -340,8 +309,10 @@ def generate_embeddings(
         ideal_empirical_psf_voxel_size=sample_voxel_size
     )
 
-    sample = load_sample(
-        file,
+    sample = load_sample(file)
+
+    sample = preprocessing.prep_sample(
+        sample,
         sample_voxel_size=sample_voxel_size,
         remove_background=remove_background,
         normalize=normalize,
@@ -536,7 +507,7 @@ def predict_sample(
     no_phase = True if preloadedmodel.input_shape[1] == 3 else False
 
     logger.info(f"Loading file: {img.name}")
-    sample = np.squeeze(get_image(img).astype(float))
+    sample = load_sample(img)
     logger.info(f"Sample: {sample.shape}")
 
     samplepsfgen = SyntheticPSF(
@@ -700,9 +671,11 @@ def predict_large_fov(
     )
     no_phase = True if preloadedmodel.input_shape[1] == 3 else False
 
-    logger.info(f"Loading file: {img.name}")
-    sample = load_sample(
-        img,
+    sample = load_sample(img)
+    logger.info(f"Sample: {sample.shape}")
+
+    sample = preprocessing.prep_sample(
+        sample,
         sample_voxel_size=sample_voxel_size,
         remove_background=True,
         read_noise_bias=50,
@@ -711,7 +684,6 @@ def predict_large_fov(
         filter_mask_dilation=True,
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
     )
-    logger.info(f"Sample: {sample.shape}")
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
