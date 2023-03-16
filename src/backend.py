@@ -497,6 +497,7 @@ def eval_rotation(
     if plot is not None:
         plt.tight_layout()
         plt.savefig(f'{plot}_rotations.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        vis.autoscale_svg(f'{plot}_rotations.svg')
 
     return preds, stdevs
 

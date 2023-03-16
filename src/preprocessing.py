@@ -26,7 +26,7 @@ from skimage.morphology import dilation
 from skimage.filters import window, difference_of_gaussians
 from canny import CannyEdgeDetector3D
 
-from vis import plot_mip
+from vis import plot_mip, autoscale_svg
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -269,6 +269,7 @@ def prep_sample(
         axes[1, 1].set_title(f"PSNR: {measure_snr(sample)}")
         plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.3, wspace=0.15)
         plt.savefig(f'{plot}_preprocessing.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        autoscale_svg(f'{plot}_preprocessing.svg')
 
     if return_psnr:
         logger.info(f"PSNR: {psnr}")
