@@ -700,16 +700,26 @@ def predict_large_fov(
     )
     no_phase = True if preloadedmodel.input_shape[1] == 3 else False
 
+    read_noise_bias = 50
     logger.info(f"Loading file: {img.name}")
     sample = load_sample(
         img,
         sample_voxel_size=sample_voxel_size,
         remove_background=True,
-        read_noise_bias=50,
+        read_noise_bias=read_noise_bias,
         normalize=True,
         edge_filter=False,
         filter_mask_dilation=True,
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
+    )
+    pnsr = load_sample(
+        img,
+        remove_background=True,
+        read_noise_bias=read_noise_bias,
+        normalize=False,
+        edge_filter=False,
+        filter_mask_dilation=True,
+        plot=None,
     )
     logger.info(f"Sample: {sample.shape}")
 
@@ -798,7 +808,8 @@ def predict_large_fov(
             ignore_modes=list(ignore_modes),
             ideal_empirical_psf=str(ideal_empirical_psf),
             lls_defocus=float(lls_defocus),
-            zernikes=list(coefficients)
+            zernikes=list(coefficients),
+            psnr=psnr,
         )
 
         ujson.dump(
