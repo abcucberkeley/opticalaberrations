@@ -183,7 +183,6 @@ def prep_sample(
     """
     sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
 
-
     if plot is not None:
         plt.rcParams.update({
             'font.size': 10,
@@ -236,7 +235,6 @@ def prep_sample(
     if plot is not None:
         axes[0, 1].set_title(f"PSNR: {psnr}")
 
-
     if windowing:
         sample = tukey_window(sample)
 
@@ -268,7 +266,7 @@ def prep_sample(
             dz=sample_voxel_size[0],
             label='Processed (MIP) [$\gamma$=0.5]'
         )
-
+        axes[1, 1].set_title(f"PSNR: {measure_snr(sample)}")
         plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.3, wspace=0.15)
         plt.savefig(f'{plot}_preprocessing.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 

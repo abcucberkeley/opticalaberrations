@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 import cli
 import experimental
+from preprocessing import prep_sample
 from preloaded import Preloadedmodelclass
 
 
@@ -605,8 +606,9 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         )
 
     elif args.func == 'psnr':
-        experimental.load_sample(
-            data=args.input,
+        sample = experimental.load_sample(args.input)
+        prep_sample(
+            sample,
             remove_background=True,
             return_psnr=True,
             plot=None,
@@ -617,8 +619,9 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
 
     elif args.func == 'preprocessing':
         sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
-        experimental.load_sample(
-            data=args.input,
+        sample = experimental.load_sample(args.input)
+        prep_sample(
+            sample,
             sample_voxel_size=sample_voxel_size,
             remove_background=args.remove_background,
             read_noise_bias=args.read_noise_bias,
