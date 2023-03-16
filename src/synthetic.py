@@ -8,6 +8,7 @@ from typing import Any, Union
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
+import h5py
 import numpy as np
 from pathlib import Path
 from functools import partial
@@ -79,7 +80,6 @@ class SyntheticPSF:
         """
 
         self.n_modes = n_modes
-        self.psf_type = psf_type
         self.order = order
         self.refractive_index = refractive_index
         self.lam_detection = lam_detection
@@ -99,10 +99,20 @@ class SyntheticPSF:
         self.signed = signed
         self.rotate = rotate
         self.embedding_option = embedding_option
-
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
         self.amplitude_ranges = amplitude_ranges
         self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size))
+
+        if Path(psf_type).exists():
+            with h5py.File(psf_type, 'r') as file:
+                self.psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
+        else:
+            self.psf_type = psf_type
+
+        # ideal psf (theoretical, no noise)
+        self.ipsf = self.theoretical_psf(normed=True)
+        self.iotf = np.abs(self.fft(self.ipsf, padsize=None))
+        self.iotf = self._normalize(self.iotf, self.iotf)
 
         self.psfgen = PsfGenerator3D(
             psf_shape=self.psf_shape,
@@ -110,13 +120,8 @@ class SyntheticPSF:
             lam_detection=self.lam_detection,
             n=self.refractive_index,
             na_detection=self.na_detection,
-            psf_type=psf_type
+            psf_type=self.psf_type
         )
-
-        # ideal psf (theoretical, no noise)
-        self.ipsf = self.theoretical_psf(normed=True)
-        self.iotf = np.abs(self.fft(self.ipsf, padsize=None))
-        self.iotf = self._normalize(self.iotf, self.iotf)
 
     @profile
     def update_ideal_psf_with_empirical(

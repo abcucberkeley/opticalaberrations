@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 from skimage.transform import rescale
 from line_profiler_pycharm import profile
-import h5py
+
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -129,11 +129,7 @@ class PsfGenerator3D:
             _psf /= np.max(_psf)
             return _psf
         else:
-            if isinstance(self.psf_type, str) or isinstance(self.psf_type, Path):
-                with h5py.File(self.psf_type, 'r') as file:
-                    lattice_profile = file.get('DitheredxzPSFCrossSection')[:, 0]
-            else:
-                lattice_profile = self.psf_type
+            lattice_profile = self.psf_type
 
             if lls_defocus_offset is not None:
                 if np.isscalar(lls_defocus_offset):
@@ -149,7 +145,6 @@ class PsfGenerator3D:
                 lattice_profile,
                 (.0367/self.dz),
                 order=3,
-                anti_aliasing=True,
             )
 
             w = _psf.shape[0]//2
