@@ -1,10 +1,13 @@
+
 import matplotlib
 matplotlib.use('Agg')
 
-import logging
-import sys
 import platform
 is_windows = any(platform.win32_ver())
+
+import logging
+import sys
+import itertools
 from typing import Any, Union, Optional
 
 import matplotlib.pyplot as plt
@@ -14,12 +17,11 @@ import signal
 import numpy as np
 from tqdm import tqdm
 from functools import partial
-from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.colors as mcolors
 from skimage.filters import scharr, window
 from skimage.restoration import unwrap_phase
 from skimage.feature import peak_local_max
-from skimage.transform import resize, rescale
+from skimage.transform import resize
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
@@ -37,8 +39,7 @@ except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
 from utils import resize_with_crop_or_pad, multiprocess
-from vis import autoscale_svg
-from preprocessing import round_to_even
+from vis import savesvg
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -236,13 +237,37 @@ def plot_embeddings(
     else:
         fig, axes = plt.subplots(3, 3, figsize=(8, 8))
 
-    m = axes[0, 0].imshow(np.max(inputs, axis=0) ** gamma, cmap='hot', vmin=0, vmax=1)
-    axes[0, 1].imshow(np.max(inputs, axis=1) ** gamma, cmap='hot', vmin=0, vmax=1)
-    axes[0, 2].imshow(np.max(inputs, axis=2) ** gamma, cmap='hot', vmin=0, vmax=1)
-    cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-    cb = plt.colorbar(m, cax=cax)
-    cax.yaxis.set_label_position("right")
-    cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
+    if inputs.ndim == 4:
+        for proj in range(3):
+            if inputs.shape[0] > 5 and not inputs.shape[0] % 5:
+                ncols = 5
+            elif inputs.shape[0] > 4 and not inputs.shape[0] % 4:
+                ncols = 4
+            elif inputs.shape[0] > 3 and not inputs.shape[0] % 3:
+                ncols = 3
+            else:
+                ncols = 2
+
+            nrows = inputs.shape[0] // ncols
+            grid = gridspec.GridSpecFromSubplotSpec(nrows, ncols, subplot_spec=axes[0, proj], wspace=.01, hspace=.01)
+
+            for idx, (i, j) in enumerate(itertools.product(range(nrows), range(ncols))):
+                ax = fig.add_subplot(grid[i, j])
+                m = ax.imshow(np.max(inputs[idx], axis=proj) ** gamma, cmap='hot', vmin=0, vmax=1)
+                ax.axis('off')
+
+        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+        cb = plt.colorbar(m, cax=cax)
+        cax.yaxis.set_label_position("right")
+        cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
+    else:
+        m = axes[0, 0].imshow(np.max(inputs, axis=0) ** gamma, cmap='hot', vmin=0, vmax=1)
+        axes[0, 1].imshow(np.max(inputs, axis=1) ** gamma, cmap='hot', vmin=0, vmax=1)
+        axes[0, 2].imshow(np.max(inputs, axis=2) ** gamma, cmap='hot', vmin=0, vmax=1)
+        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+        cb = plt.colorbar(m, cax=cax)
+        cax.yaxis.set_label_position("right")
+        cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
 
     m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
     axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
@@ -282,10 +307,7 @@ def plot_embeddings(
     if save_path == True:
         plt.show()
     else:
-        plt.savefig(f'{save_path}_embeddings.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-        autoscale_svg(f'{save_path}_embeddings.svg')
-        # plt.savefig(f'{save_path}_embeddings.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
+        savesvg(fig, f'{save_path}_embeddings.svg')
 
 
 @profile
@@ -317,8 +339,7 @@ def remove_phase_ramp(masked_phase, plot):
             axes[i, 2].set_title(f"emb[{i}] - Z")
             axes[i, 2].imshow(masked_phase[i], vmin=-.5, vmax=.5, cmap='Spectral_r')
             axes[i, 2].axis('off')
-            plt.savefig(f"{plot}_phase_ramp.svg")
-            autoscale_svg(f"{plot}_phase_ramp.svg")
+            savesvg(fig, f"{plot}_phase_ramp.svg")
 
     return np.nan_to_num(masked_phase, nan=0)
 
@@ -538,11 +559,7 @@ def remove_interference_pattern(
             axes[0, 0].set_title('XY')
             axes[0, 1].set_title('XZ')
             axes[0, 2].set_title('YZ')
-
-            plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.1, wspace=0.1)
-            plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
-            autoscale_svg(f'{plot}_interference_pattern.svg')
-            # plt.savefig(f'{plot}_interference_pattern.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+            savesvg(fig, f'{plot}_interference_pattern.svg')
 
         return corrected_otf
     else:
@@ -572,10 +589,7 @@ def remove_interference_pattern(
             axes[0, 0].set_title('XY')
             axes[0, 1].set_title('XZ')
             axes[0, 2].set_title('YZ')
-
-            plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
-            plt.savefig(f'{plot}_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
-            autoscale_svg(f'{plot}_interference_pattern.svg')
+            savesvg(fig, f'{plot}_interference_pattern.svg')
 
         return otf
 
@@ -712,9 +726,10 @@ def rotate_embeddings(
                     r = cp.asnumpy(r)
                 emb[i, plane, :, :] = r
 
-                plt.figure()
+                fig = plt.figure()
                 plt.imshow(emb[i, 0, :, :])
-                plt.savefig(f'{plot}_rot{angle}.svg')
+                savesvg(fig, f'{plot}_rot{angle}.svg')
+
     else:
         if gpu_support:
             emb = np.array([
@@ -875,10 +890,8 @@ def fourier_embeddings(
 
 @profile
 def rolling_fourier_embeddings(
-        inputs: np.array,
+        rois: np.array,
         iotf: np.array,
-        model_fov: tuple,
-        sample_voxel_size: tuple,
         ratio: bool = True,
         norm: bool = True,
         no_phase: bool = False,
@@ -898,7 +911,7 @@ def rolling_fourier_embeddings(
     Gives the "lower dimension" representation of the data that will be shown to the model.
 
     Args:
-        inputs: 3D array.
+        rois: an array of 3D tiles to generate an average embedding
         iotf: ideal theoretical or empirical OTF
         ratio: Returns ratio of data to ideal PSF,
             which helps put all the FFT voxels on a similar scale. Otherwise, straight values.
@@ -916,17 +929,6 @@ def rolling_fourier_embeddings(
             Capitalizing on the radial symmetry of the FFT,
             we have a few options to minimize the size of the embedding.
     """
-    window_size = (
-        round_to_even(model_fov[0] / sample_voxel_size[0]),
-        round_to_even(model_fov[1] / sample_voxel_size[1]),
-        round_to_even(model_fov[2] / sample_voxel_size[2]),
-    )
-
-    rois = sliding_window_view(
-        inputs,
-        window_shape=window_size
-    )[::window_size[0], ::window_size[1], ::window_size[2]]
-    rois = np.reshape(rois, (-1, *window_size))
 
     otfs = multiprocess(
         func=fft,
@@ -962,7 +964,7 @@ def rolling_fourier_embeddings(
         if remove_interference:
             interference = partial(
                 remove_interference_pattern,
-                plot=None, #plot,
+                plot=None,
                 windowing=True
             )
             phi_otfs = multiprocess(
@@ -1021,10 +1023,7 @@ def rolling_fourier_embeddings(
                 axes[0, 0].set_title('XY')
                 axes[0, 1].set_title('XZ')
                 axes[0, 2].set_title('YZ')
-
-                plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
-                plt.savefig(f'{plot}_avg_interference_pattern.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
-                autoscale_svg(f'{plot}_avg_interference_pattern.svg')
+                savesvg(fig, f'{plot}_avg_interference_pattern.svg')
 
         phi = compute_emb(
             avg_otf,
@@ -1045,7 +1044,7 @@ def rolling_fourier_embeddings(
 
     if plot is not None:
         plt.style.use("default")
-        plot_embeddings(inputs=inputs, emb=emb, save_path=plot)
+        plot_embeddings(inputs=rois, emb=emb, save_path=plot)
 
     if digital_rotations is not None:
         emb = rotate_embeddings(

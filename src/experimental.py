@@ -24,6 +24,7 @@ import seaborn as sns
 from tqdm import tqdm
 from line_profiler_pycharm import profile
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from numpy.lib.stride_tricks import sliding_window_view
 
 import utils
 import vis
@@ -34,6 +35,7 @@ from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern, fourier_embeddings, rolling_fourier_embeddings
+from preprocessing import round_to_even
 
 import logging
 logger = logging.getLogger('')
@@ -133,7 +135,7 @@ def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
     if isinstance(data, np.ndarray):
         img = data
     elif isinstance(data, bytes):
-        img = Path(str(data, "utf-8"))
+        file = Path(str(data, "utf-8"))
     elif isinstance(data, tf.Tensor):
         path = Path(str(data.numpy(), "utf-8"))
         img = get_image(path).astype(float)
@@ -236,51 +238,6 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
         )
 
 
-def preprocess(
-    file: Union[tf.Tensor, Path, str],
-    modelpsfgen: SyntheticPSF,
-    samplepsfgen: SyntheticPSF,
-    freq_strength_threshold: float = .01,
-    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
-    remove_background: bool = True,
-    read_noise_bias: float = 5,
-    normalize: bool = True,
-    edge_filter: bool = True,
-    filter_mask_dilation: bool = True,
-    plot: Any = None,
-    no_phase: bool = False,
-    match_model_fov: bool = True,
-):
-    if isinstance(plot, bool) and plot:
-        plot = file.with_suffix('')
-
-    sample = load_sample(file)
-
-    sample = preprocessing.prep_sample(
-        sample,
-        model_fov=modelpsfgen.psf_fov if match_model_fov else None,
-        sample_voxel_size=samplepsfgen.voxel_size,
-        remove_background=remove_background,
-        normalize=normalize,
-        edge_filter=edge_filter,
-        filter_mask_dilation=filter_mask_dilation,
-        read_noise_bias=read_noise_bias,
-        plot=plot
-    )
-
-    return fourier_embeddings(
-        sample,
-        iotf=modelpsfgen.iotf if match_model_fov else samplepsfgen.iotf,
-        plot=plot,
-        no_phase=no_phase,
-        remove_interference=True,
-        embedding_option=modelpsfgen.embedding_option,
-        freq_strength_threshold=freq_strength_threshold,
-        digital_rotations=digital_rotations,
-        poi_shape=modelpsfgen.psf_shape[1:]
-    )
-
-
 def generate_embeddings(
     file: Union[tf.Tensor, Path, str],
     model: Union[tf.keras.Model, Path, str],
@@ -361,6 +318,92 @@ def generate_embeddings(
         )
 
 
+def preprocess(
+    file: Union[tf.Tensor, Path, str],
+    modelpsfgen: SyntheticPSF,
+    samplepsfgen: SyntheticPSF,
+    freq_strength_threshold: float = .01,
+    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    remove_background: bool = True,
+    read_noise_bias: float = 5,
+    normalize: bool = True,
+    edge_filter: bool = True,
+    filter_mask_dilation: bool = True,
+    plot: Any = None,
+    no_phase: bool = False,
+    match_model_fov: bool = True,
+):
+    if isinstance(plot, bool) and plot:
+        plot = file.with_suffix('')
+
+    sample = load_sample(file)
+
+    if match_model_fov:
+        sample = preprocessing.prep_sample(
+            sample,
+            model_fov=modelpsfgen.psf_fov,
+            sample_voxel_size=samplepsfgen.voxel_size,
+            remove_background=remove_background,
+            normalize=normalize,
+            edge_filter=edge_filter,
+            filter_mask_dilation=filter_mask_dilation,
+            read_noise_bias=read_noise_bias,
+            plot=plot
+        )
+
+        return fourier_embeddings(
+            sample,
+            iotf=modelpsfgen.iotf,
+            plot=plot,
+            no_phase=no_phase,
+            remove_interference=True,
+            embedding_option=modelpsfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
+            poi_shape=modelpsfgen.psf_shape[1:]
+        )
+    else:
+        window_size = (
+            round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
+            round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
+            round_to_even(modelpsfgen.psf_fov[2] / samplepsfgen.voxel_size[2]),
+        )
+
+        rois = sliding_window_view(
+            sample,
+            window_shape=window_size
+        )[::window_size[0], ::window_size[1], ::window_size[2]]
+        rois = np.reshape(rois, (-1, *window_size))
+
+        prep = partial(
+            preprocessing.prep_sample,
+            sample_voxel_size=samplepsfgen.voxel_size,
+            remove_background=remove_background,
+            normalize=normalize,
+            edge_filter=edge_filter,
+            filter_mask_dilation=filter_mask_dilation,
+            read_noise_bias=read_noise_bias,
+        )
+
+        rois = utils.multiprocess(
+            func=prep,
+            jobs=rois,
+            desc='Preprocessing'
+        )
+
+        return rolling_fourier_embeddings(
+            rois,
+            iotf=modelpsfgen.iotf,
+            plot=plot,
+            no_phase=no_phase,
+            remove_interference=True,
+            embedding_option=modelpsfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
+            poi_shape=modelpsfgen.psf_shape[1:]
+        )
+
+
 @profile
 def predict(
     rois: np.ndarray,
@@ -394,7 +437,6 @@ def predict(
             plot=None,
             no_phase=no_phase,
             remove_background=True,
-            read_noise_bias=50,
             normalize=True,
             edge_filter=False,
             filter_mask_dilation=True,
@@ -508,15 +550,6 @@ def predict_sample(
 
     logger.info(f"Loading file: {img.name}")
     sample = load_sample(img)
-    psnr = preprocessing.prep_sample(
-        sample,
-        return_psnr=True,
-        remove_background=True,
-        normalize=False,
-        edge_filter=False,
-        filter_mask_dilation=False,
-    )
-
     logger.info(f"Sample: {sample.shape}")
 
     samplepsfgen = SyntheticPSF(
@@ -536,7 +569,6 @@ def predict_sample(
         samplepsfgen=samplepsfgen,
         digital_rotations=digital_rotations,
         remove_background=True,
-        read_noise_bias=50,
         normalize=True,
         edge_filter=False,
         filter_mask_dilation=True,
@@ -621,8 +653,7 @@ def predict_sample(
             ignore_modes=list(ignore_modes),
             ideal_empirical_psf=str(ideal_empirical_psf),
             lls_defocus=float(lls_defocus),
-            zernikes=list(coefficients),
-            psnr=psnr,
+            zernikes=list(coefficients)
         )
 
         ujson.dump(
@@ -683,24 +714,6 @@ def predict_large_fov(
 
     sample = load_sample(img)
     logger.info(f"Sample: {sample.shape}")
-    psnr = preprocessing.prep_sample(
-        sample,
-        return_psnr=True,
-        remove_background=True,
-        normalize=False,
-        edge_filter=False,
-        filter_mask_dilation=False,
-    )
-    sample = preprocessing.prep_sample(
-        sample,
-        return_psnr=False,
-        sample_voxel_size=sample_voxel_size,
-        remove_background=True,
-        normalize=True,
-        edge_filter=False,
-        filter_mask_dilation=True,
-        plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
-    )
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
@@ -713,18 +726,18 @@ def predict_large_fov(
         z_voxel_size=axial_voxel_size
     )
 
-    embeddings = rolling_fourier_embeddings(
+    embeddings = preprocess(
         sample,
-        iotf=premodelpsfgen.iotf,
-        model_fov=premodelpsfgen.psf_fov,
-        sample_voxel_size=sample_voxel_size,
-        plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
-        no_phase=no_phase,
-        embedding_option=premodelpsfgen.embedding_option,
-        freq_strength_threshold=freq_strength_threshold,
-        poi_shape=premodelpsfgen.psf_shape[1:],
+        modelpsfgen=premodelpsfgen,
+        samplepsfgen=samplepsfgen,
         digital_rotations=digital_rotations,
-        cpu_workers=cpu_workers
+        no_phase=no_phase,
+        freq_strength_threshold=freq_strength_threshold,
+        remove_background=True,
+        normalize=True,
+        edge_filter=False,
+        match_model_fov=False,
+        plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
     )
 
     res = backend.predict_rotation(
@@ -787,8 +800,7 @@ def predict_large_fov(
             ignore_modes=list(ignore_modes),
             ideal_empirical_psf=str(ideal_empirical_psf),
             lls_defocus=float(lls_defocus),
-            zernikes=list(coefficients),
-            psnr=psnr,
+            zernikes=list(coefficients)
         )
 
         ujson.dump(
@@ -1157,8 +1169,7 @@ def aggregate_predictions(
                 axes.legend(ncol=2, frameon=False)
                 axes.set_xlabel(f'Zernike coefficients ($\mu$m)')
 
-            plt.tight_layout()
-            plt.savefig(f"{model_pred.with_suffix('')}_aggregated.svg", bbox_inches='tight', dpi=300, pad_inches=.25)
+            vis.savesvg(fig, f"{model_pred.with_suffix('')}_aggregated.svg")
     else:
         logger.warning(f"No modes detected with the current configs")
         predictions['mean'] = predictions[pcols].mean(axis=1)
@@ -1297,7 +1308,7 @@ def plot_dm_actuators(
 
     ax2.grid(True, which="both", axis='both', lw=.1, ls='--', zorder=0)
     ax2.legend(frameon=False, ncol=2, loc='upper right')
-    plt.savefig(save_path)
+    vis.savesvg(fig, save_path)
 
 
 def eval_mode(
@@ -1893,4 +1904,4 @@ def phase_retrieval(
 
         fig, axes = pr_result.plot()
         axes[0].set_title("Phase in waves")
-        plt.savefig(Path(f"{img.with_suffix('')}_phase_retrieval_convergence.svg"), bbox_inches='tight', pad_inches=.25)
+        vis.savesvg(fig, Path(f"{img.with_suffix('')}_phase_retrieval_convergence.svg"))
