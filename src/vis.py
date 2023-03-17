@@ -240,7 +240,7 @@ def diagnostic_assessment(
     ax_gt = fig.add_subplot(gs[:2, 0])
     ax_pred = fig.add_subplot(gs[:2, 1])
     ax_diff = fig.add_subplot(gs[:2, 2])
-    cax = fig.add_axes([0.1, 0.725, 0.02, .175])
+    cax = fig.add_axes([0.05, 0.7, 0.02, .175])
 
     # input
     ax_xy = fig.add_subplot(gs[2, 0])
@@ -263,12 +263,13 @@ def diagnostic_assessment(
     else:
         ax_zcoff = fig.add_subplot(gs[:, -1])
 
-    dlimit = .25
-    vmin = np.round(np.nanmin(y_wave))
-    vmin = -1*dlimit if np.abs(vmin) == 0 else vmin
+    dlimit = .25    #hardcap the extreme limits to 0.25
 
-    vmax = np.round(np.nanmax(y_wave))
-    vmax = dlimit if np.abs(vmax) == 0 else vmax
+    vmin = np.floor(np.nanmin(y_wave) * 2) / 2  # round down to nearest 0.5 wave
+    vmin = -1 * dlimit if vmin > -0.01 else vmin
+
+    vmax = np.ceil(np.nanmax(y_wave) * 2) / 2  # round up to nearest 0.5 wave
+    vmax = dlimit if vmax < 0.01 else vmax
 
     mat = plot_wavefront(ax_gt, y_wave, label='Ground truth', vmin=vmin, vmax=vmax)
     plot_wavefront(ax_pred, pred_wave, label='Predicted', vmin=vmin, vmax=vmax)
