@@ -251,7 +251,7 @@ def plot_embeddings(
 
         for proj in range(3):
             grid = gridspec.GridSpecFromSubplotSpec(
-                nrows, ncols, subplot_spec=axes[0, proj], wspace=.01, hspace=.01
+                nrows*ztiles, ncols, subplot_spec=axes[0, proj], wspace=.01, hspace=.01
             )
 
             for idx, (i, j) in enumerate(itertools.product(range(nrows), range(ncols))):
