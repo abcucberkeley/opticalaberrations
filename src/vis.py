@@ -33,9 +33,13 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
-def autoscale_svg(file: Union[Path, str]):
+def savesvg(fig: plt.Figure, savepath: Union[Path, str]):
+
+    plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
+    plt.savefig(savepath, bbox_inches='tight', dpi=300, pad_inches=.25)
+
     # Read in the file
-    with open(file, 'r') as f:
+    with open(savepath, 'r') as f:
         filedata = f.read()
 
     # Replace the target string
@@ -43,7 +47,7 @@ def autoscale_svg(file: Union[Path, str]):
     filedata = re.sub('width="[0-9]+(\.[0-9]+)pt"', '', filedata)
 
     # Write the file out again
-    with open(file, 'w') as f:
+    with open(savepath, 'w') as f:
         f.write(filedata)
 
 
@@ -398,9 +402,7 @@ def diagnostic_assessment(
     for ax in [ax_gt, ax_pred, ax_diff]:
         ax.axis('off')
 
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2, hspace=.3)
-    plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-    autoscale_svg(f'{save_path}.svg')
+    savesvg(fig, f'{save_path}.svg')
 
     if display:
         plt.tight_layout()
@@ -500,9 +502,7 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None, lls_defocu
         ax_defocus.xaxis.set_major_formatter(FormatStrFormatter('%.3f'))
         ax_defocus.set_xticklabels(ax_defocus.get_xticks(), rotation=45)
 
-    plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
-    plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.1)
-    autoscale_svg(f'{save_path}.svg')
+    savesvg(fig, f'{save_path}.svg')
 
 
 @profile
@@ -561,11 +561,7 @@ def prediction(
 
     slice(ax_xy, ax_xz, original_image, label='Input (MIP)', maxproj=True)
     slice(ax_pxy, ax_pxz, corrected_image, label='Corrected (MIP)', maxproj=True)
-
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{save_path}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-    autoscale_svg(f'{save_path}.svg')
-
+    savesvg(fig, f'{save_path}.svg')
 
 @profile
 def tiles(
@@ -616,9 +612,7 @@ def tiles(
         cbar.ax.xaxis.set_label_position('top')
         cbar.ax.set_yticks([])
         cbar.ax.set_xlabel(rf"$\gamma$={gamma}")
-
-        plt.savefig(f'{save_path}_z{z}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-        autoscale_svg(f'{save_path}_z{z}.svg')
+        savesvg(fig, f'{save_path}_z{z}.svg')
 
 
 @profile
@@ -674,9 +668,7 @@ def wavefronts(
         cbar.ax.xaxis.set_label_position('top')
         cbar.ax.set_yticks([])
         cbar.ax.set_title(f'$\lambda = {wavelength}~\mu$m')
-
-        plt.savefig(f'{save_path}_z{z}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-        autoscale_svg(f'{save_path}_z{z}.svg')
+        savesvg(fig, f'{save_path}_z{z}.svg')
 
 
 def sign_correction(
@@ -778,10 +770,7 @@ def sign_correction(
     axes[2].spines.top.set_visible(False)
     axes[2].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
     axes[2].set_ylabel(r'Zernike coefficients ($\mu$m RMS)')
-
-    plt.tight_layout()
-    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-    autoscale_svg(f'{savepath}.svg')
+    savesvg(fig, f'{savepath}.svg')
 
 
 def sign_eval(
@@ -823,8 +812,4 @@ def sign_eval(
 
     axes[0, 0].set_ylabel('Input (MIP)')
     axes[1, 0].set_ylabel('Followup (MIP)')
-
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-    autoscale_svg(f'{savepath}.svg')
-    # plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    savesvg(fig, f'{savepath}.svg')

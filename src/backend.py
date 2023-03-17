@@ -495,8 +495,7 @@ def eval_rotation(
                 ax.set_xlabel('Digital rotation (deg)')
 
     if plot is not None:
-        plt.tight_layout()
-        plt.savefig(f'{plot}_rotations.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        vis.savesvg(fig, f'{plot}_rotations.svg')
 
     return preds, stdevs
 
@@ -1024,8 +1023,7 @@ def kernels(modelpath: Path, activation='relu'):
         ax.imshow(img)
         ax.set_aspect('equal')
         ax.axis('off')
-
-        plt.savefig(f'{modelpath}/kernels_{layer.name}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        vis.savesvg(fig, f'{modelpath}/kernels_{layer.name}.svg')
 
 
 def featuremaps(

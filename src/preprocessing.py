@@ -26,7 +26,7 @@ from skimage.morphology import dilation
 from skimage.filters import window, difference_of_gaussians
 from canny import CannyEdgeDetector3D
 
-from vis import plot_mip
+from vis import plot_mip, savesvg
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -212,7 +212,6 @@ def prep_sample(
             f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
         )
 
-
     if model_fov is not None:
         # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
         number_of_desired_sample_pixels = (
@@ -267,8 +266,8 @@ def prep_sample(
             label='Processed (MIP) [$\gamma$=0.5]'
         )
         axes[1, 1].set_title(f"PSNR: {measure_snr(sample)}")
-        plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.3, wspace=0.15)
-        plt.savefig(f'{plot}_preprocessing.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        savesvg(fig, f'{plot}_preprocessing.svg')
+
 
     if return_psnr:
         logger.info(f"PSNR: {psnr}")
@@ -386,9 +385,7 @@ def find_roi(
         axes[2].set_xlabel('Distance')
         axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        plt.tight_layout()
-        plt.savefig(f'{plot}_detected_points.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+        savesvg(fig, f'{plot}_detected_points.svg')
 
     if min_dist is not None:
         pois = pois[pois['dist'] >= min_dist]
@@ -426,9 +423,8 @@ def find_roi(
         axes[2].set_xlabel('Distance')
         axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        savesvg(fig, f'{plot}_selected_points.svg')
 
-        plt.tight_layout()
-        plt.savefig(f'{plot}_selected_points.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
     pois = pois.head(num_rois)
     pois.to_csv(f"{plot}_stats.csv")
@@ -468,9 +464,7 @@ def find_roi(
                         alpha=1
                     ))
                     axes[ax].set_title('XZ')
-
-        plt.tight_layout()
-        plt.savefig(f'{plot}_mips.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+        savesvg(fig, f'{plot}_mips.svg')
 
     rois = []
     ztiles = 1
