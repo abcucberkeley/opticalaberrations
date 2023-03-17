@@ -211,7 +211,7 @@ def sim(
                 edge_filter=False,
                 filter_mask_dilation=False,
                 read_noise_bias=5,
-                # debug=odir/filename,
+                # plot=odir/filename,
             )
 
             embeddings = np.squeeze(fourier_embeddings(
@@ -247,7 +247,7 @@ def sim(
             edge_filter=False,
             filter_mask_dilation=False,
             read_noise_bias=5,
-            # debug=outdir/filename,
+            # plot=outdir/filename,
         )
 
         save_synthetic_sample(
