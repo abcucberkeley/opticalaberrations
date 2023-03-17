@@ -135,7 +135,7 @@ def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
     if isinstance(data, np.ndarray):
         img = data
     elif isinstance(data, bytes):
-        file = Path(str(data, "utf-8"))
+        img = Path(str(data, "utf-8"))
     elif isinstance(data, tf.Tensor):
         path = Path(str(data.numpy(), "utf-8"))
         img = get_image(path).astype(float)
@@ -550,11 +550,19 @@ def predict_sample(
 
     logger.info(f"Loading file: {img.name}")
     sample = load_sample(img)
+    psnr = preprocessing.prep_sample(
+        sample,
+        return_psnr=True,
+        remove_background=True,
+        normalize=False,
+        edge_filter=False,
+        filter_mask_dilation=False,
+    )
     logger.info(f"Sample: {sample.shape}")
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
-        snr=100,
+        snr=psnr,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -574,6 +582,7 @@ def predict_sample(
         filter_mask_dilation=True,
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
+
 
     if no_phase:
         p, std, pchange = backend.dual_stage_prediction(
@@ -653,7 +662,8 @@ def predict_sample(
             ignore_modes=list(ignore_modes),
             ideal_empirical_psf=str(ideal_empirical_psf),
             lls_defocus=float(lls_defocus),
-            zernikes=list(coefficients)
+            zernikes=list(coefficients),
+            psnr=psnr
         )
 
         ujson.dump(
@@ -713,11 +723,19 @@ def predict_large_fov(
     no_phase = True if preloadedmodel.input_shape[1] == 3 else False
 
     sample = load_sample(img)
+    psnr = preprocessing.prep_sample(
+        sample,
+        return_psnr=True,
+        remove_background=True,
+        normalize=False,
+        edge_filter=False,
+        filter_mask_dilation=False,
+    )
     logger.info(f"Sample: {sample.shape}")
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
-        snr=100,
+        snr=psnr,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -800,7 +818,8 @@ def predict_large_fov(
             ignore_modes=list(ignore_modes),
             ideal_empirical_psf=str(ideal_empirical_psf),
             lls_defocus=float(lls_defocus),
-            zernikes=list(coefficients)
+            zernikes=list(coefficients),
+            psnr=psnr,
         )
 
         ujson.dump(
@@ -968,7 +987,15 @@ def predict_tiles(
     )
 
     logger.info(f"Loading file: {img.name}")
-    sample = np.squeeze(get_image(img).astype(float))
+    sample = load_sample(img)
+    psnr = preprocessing.prep_sample(
+        sample,
+        return_psnr=True,
+        remove_background=True,
+        normalize=False,
+        edge_filter=False,
+        filter_mask_dilation=False,
+    )
     logger.info(f"Sample: {sample.shape}")
 
     outdir = Path(f"{img.with_suffix('')}_tiles")
@@ -983,7 +1010,7 @@ def predict_tiles(
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
-        snr=100,
+        snr=psnr,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -1010,6 +1037,7 @@ def predict_tiles(
             ztiles=int(ztiles),
             ytiles=int(nrows),
             xtiles=int(ncols),
+            psnr=psnr,
         )
 
         ujson.dump(
