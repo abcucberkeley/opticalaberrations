@@ -406,7 +406,8 @@ def remove_interference_pattern(
     ]
 
     # convolve template with the input image
-    kernel = gaussian_kernel(kernlen=[kernel_size]*3, std=1)
+    effective_kernel_width = 1
+    kernel = gaussian_kernel(kernlen=[kernel_size]*3, std=effective_kernel_width)
     convolved_psf = convolution.convolve_fft(blured_psf, kernel, allow_huge=True, boundary='fill')
     convolved_psf -= np.nanmin(convolved_psf)
     convolved_psf /= np.nanmax(convolved_psf)
@@ -418,7 +419,7 @@ def remove_interference_pattern(
             convolved_psf,
             min_distance=min_distance,
             threshold_rel=.3,
-            exclude_border=int(np.floor(kernel_size//2)),
+            exclude_border=int(np.floor(effective_kernel_width)),
             p_norm=2,
             num_peaks=max_num_peaks
         ).astype(int)
@@ -448,16 +449,16 @@ def remove_interference_pattern(
         beads[beads < .05] = 0.
         pois = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
 
-    psf_peaks = np.zeros_like(psf)  # create a volume masked around each peak
+    psf_peaks = np.zeros_like(psf)  # create a volume masked around each peak, don't go past vol bounds
     for p in pois:
         psf_peaks[
-            p[0] - (min_distance + 1):p[0] + (min_distance + 1),
-            p[1] - (min_distance + 1):p[1] + (min_distance + 1),
-            p[2] - (min_distance + 1):p[2] + (min_distance + 1),
+            max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
+            max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
+            max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
         ] = psf[
-            p[0] - (min_distance + 1):p[0] + (min_distance + 1),
-            p[1] - (min_distance + 1):p[1] + (min_distance + 1),
-            p[2] - (min_distance + 1):p[2] + (min_distance + 1),
+            max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
+            max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
+            max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
         ]
 
     if pois.shape[0] > 0:
@@ -547,7 +548,7 @@ def remove_interference_pattern(
             for ax, m, label in zip(
                     range(5) if plot_interference_pattern else range(4),
                     [m1, m2, m3, m4, m5] if plot_interference_pattern else [m1, m2, m3, m5],
-                    [f'Inputs ({pois.shape[0]} peaks)', 'kernel', 'Peak detection', 'Interference', 'Reconstructed']
+                    [f'Inputs ({pois.shape[0]} peaks)', 'Kernel', 'Peak detection', 'Interference', 'Reconstructed']
                     if plot_interference_pattern else [f'Inputs ({pois.shape[0]} peaks)', 'kernel', 'Peak detection', 'Reconstructed']
             ):
                 cax = inset_axes(axes[ax, -1], width="10%", height="90%", loc='center right', borderpad=-3)
@@ -568,17 +569,23 @@ def remove_interference_pattern(
         logger.warning("No objects were detected")
 
         if plot is not None:
-            fig, axes = plt.subplots(3, 3, figsize=(8, 8), sharey=False, sharex=False)
+            fig, axes = plt.subplots(
+                nrows=5 if plot_interference_pattern else 4,
+                ncols=3,
+                figsize=(8, 11),
+                sharey=False,
+                sharex=False
+            )
 
             for ax in range(3):
-                m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='Greys_r', alpha=.66)
-                m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='Greys_r')
-                m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r')
+                m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='hot')
+                m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot')
+                m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66)
 
             for ax, m, label in zip(
                     range(3),
                     [m1, m2, m3],
-                    [f'Inputs (MIP)', 'Kernel', 'Detected POIs']
+                    [f'Inputs (MIP)', 'Kernel', 'Peak detection\n(No objects were detected)']
             ):
                 cax = inset_axes(axes[ax, -1], width="10%", height="100%", loc='center right', borderpad=-3)
                 cb = plt.colorbar(m, cax=cax)
