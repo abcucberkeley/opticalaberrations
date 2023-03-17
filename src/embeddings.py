@@ -204,7 +204,10 @@ def plot_embeddings(
         inputs: np.array,
         emb: np.array,
         save_path: Any,
-        gamma: float = .5
+        gamma: float = .5,
+        nrows: Optional[int] = None,
+        ncols: Optional[int] = None,
+        ztiles: Optional[int] = None,
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -238,20 +241,18 @@ def plot_embeddings(
         fig, axes = plt.subplots(3, 3, figsize=(8, 8))
 
     if inputs.ndim == 4:
-        for proj in range(3):
-            if inputs.shape[0] > 5 and not inputs.shape[0] % 5:
-                ncols = 5
-            elif inputs.shape[0] > 4 and not inputs.shape[0] % 4:
-                ncols = 4
-            elif inputs.shape[0] > 3 and not inputs.shape[0] % 3:
-                ncols = 3
-            elif inputs.shape[0] > 2 and not inputs.shape[0] % 2:
-                ncols = 2
-            else:
-                ncols = 1
+        if ncols is None or nrows is None:
+            for c in range(10, 0, -1):
+                if inputs.shape[0] > c and not inputs.shape[0] % c:
+                    ncols = c
+                    break
 
             nrows = inputs.shape[0] // ncols
-            grid = gridspec.GridSpecFromSubplotSpec(nrows, ncols, subplot_spec=axes[0, proj], wspace=.01, hspace=.01)
+
+        for proj in range(3):
+            grid = gridspec.GridSpecFromSubplotSpec(
+                nrows, ncols, subplot_spec=axes[0, proj], wspace=.01, hspace=.01
+            )
 
             for idx, (i, j) in enumerate(itertools.product(range(nrows), range(ncols))):
                 ax = fig.add_subplot(grid[i, j])
@@ -914,7 +915,10 @@ def rolling_fourier_embeddings(
         poi_shape: tuple = (64, 64),
         debug_rotations: bool = False,
         remove_interference: bool = True,
-        cpu_workers: int = -1
+        cpu_workers: int = -1,
+        nrows: Optional[int] = None,
+        ncols: Optional[int] = None,
+        ztiles: Optional[int] = None,
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -1053,7 +1057,7 @@ def rolling_fourier_embeddings(
 
     if plot is not None:
         plt.style.use("default")
-        plot_embeddings(inputs=rois, emb=emb, save_path=plot)
+        plot_embeddings(inputs=rois, emb=emb, save_path=plot, nrows=nrows, ncols=ncols, ztiles=ztiles)
 
     if digital_rotations is not None:
         emb = rotate_embeddings(

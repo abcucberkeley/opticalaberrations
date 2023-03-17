@@ -373,6 +373,7 @@ def preprocess(
             sample,
             window_shape=window_size
         )[::window_size[0], ::window_size[1], ::window_size[2]]
+        ztiles, nrows, ncols = rois.shape[:3]
         rois = np.reshape(rois, (-1, *window_size))
 
         prep = partial(
@@ -400,7 +401,10 @@ def preprocess(
             embedding_option=modelpsfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
-            poi_shape=modelpsfgen.psf_shape[1:]
+            poi_shape=modelpsfgen.psf_shape[1:],
+            nrows=nrows,
+            ncols=ncols,
+            ztiles=ztiles
         )
 
 
