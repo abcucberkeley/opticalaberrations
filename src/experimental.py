@@ -1334,7 +1334,7 @@ def eval_mode(
 
     noisy_img = np.squeeze(get_image(input_path).astype(float))
     maxcounts = np.max(noisy_img)
-    psnr = np.sqrt(maxcounts)
+    psnr = predictions_settings['psnr']
     gen = backend.load_metadata(
         model_path,
         snr=psnr,
