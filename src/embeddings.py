@@ -245,8 +245,10 @@ def plot_embeddings(
                 ncols = 4
             elif inputs.shape[0] > 3 and not inputs.shape[0] % 3:
                 ncols = 3
-            else:
+            elif inputs.shape[0] > 2 and not inputs.shape[0] % 2:
                 ncols = 2
+            else:
+                ncols = 1
 
             nrows = inputs.shape[0] // ncols
             grid = gridspec.GridSpecFromSubplotSpec(nrows, ncols, subplot_spec=axes[0, proj], wspace=.01, hspace=.01)
