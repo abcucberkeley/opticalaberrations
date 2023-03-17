@@ -53,10 +53,10 @@ def multiprocess(jobs: Union[Generator, List, np.ndarray], func: Any, desc: str 
         logs = []
         for j in tqdm(jobs, total=len(jobs), desc=desc):
             logs.append(func(j))
-    elif cores == -1:
+    elif cores == -1 and len(jobs) > 0:
         with mp.Pool(min(mp.cpu_count(), len(jobs))) as p:
             logs = list(tqdm(p.imap(func, jobs), total=len(jobs), desc=desc))
-    elif cores > 1:
+    elif cores > 1 and len(jobs) > 0:
         with mp.Pool(cores) as p:
             logs = list(tqdm(p.imap(func, jobs), total=len(jobs), desc=desc))
     else:

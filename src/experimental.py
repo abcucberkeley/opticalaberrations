@@ -1326,7 +1326,7 @@ def eval_mode(
     logger.info(f"Pred: {prediction_path.name}")
     logger.info(f"GT: {gt_path.name}")
 
-    save_postfix = 'pr' if postfix.startswith('pr') else 'ml'
+    save_postfix = 'pr' if postfix.startswith('phase_retrieval') else 'ml'
     save_path = Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval')
 
     with open(str(prediction_path).replace('_zernike_coefficients.csv', '_settings.json')) as f:
@@ -1470,10 +1470,10 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
             'p2v_gt': y.peak2valley(na=na),
             'p2v_pred': p.peak2valley(na=na),
             f'mode_1': modes[0],
-            f'mode_2': modes[1],
+            f'mode_2': None if len(modes) < 2 else modes[1],
         }
 
-        if modes[0] != modes[1]:
+        if len(modes) > 1 and modes[0] != modes[1]:
             results[i+len(nas)] = {
                 'modes': '-'.join(str(e) for e in modes[::-1]),
                 'state': state,
@@ -1484,7 +1484,7 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
                 'p2v_residual': diff.peak2valley(na=na),
                 'p2v_gt': y.peak2valley(na=na),
                 'p2v_pred': p.peak2valley(na=na),
-                f'mode_1': modes[1],
+                f'mode_1': None if len(modes) < 2 else modes[1],
                 f'mode_2': modes[0],
             }
 
@@ -1494,7 +1494,7 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
 def plot_eval_dataset(
     model,
     datadir: Path,
-    postfix: str = 'sample_predictions_zernike_coefficients_ml_eval_residuals.csv',
+    postfix: str = 'predictions_zernike_coefficients_ml_eval_residuals.csv',
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -1576,7 +1576,7 @@ def plot_eval_dataset(
 def eval_dataset(
     datadir: Path,
     flat: Any = None,
-    postfix: str = 'sample_predictions_zernike_coefficients.csv',
+    postfix: str = 'predictions_zernike_coefficients.csv',
     gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv',
     plot_evals: bool = True,
     precomputed: bool = False
