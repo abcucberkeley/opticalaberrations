@@ -263,9 +263,8 @@ def prep_sample(
             yz=axes[1, 2],
             dxy=sample_voxel_size[-1],
             dz=sample_voxel_size[0],
-            label='Processed (MIP) [$\gamma$=0.5]'
+            label='Processed (MIP) [$\gamma$=.5]'
         )
-        axes[1, 1].set_title(f"PSNR: {measure_snr(sample)}")
         savesvg(fig, f'{plot}_preprocessing.svg')
 
 
