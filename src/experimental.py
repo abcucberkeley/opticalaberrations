@@ -238,92 +238,12 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
         )
 
 
-def generate_embeddings(
-    file: Union[tf.Tensor, Path, str],
-    model: Union[tf.keras.Model, Path, str],
-    axial_voxel_size: float,
-    lateral_voxel_size: float,
-    wavelength: float = .510,
-    freq_strength_threshold: float = .01,
-    digital_rotations: Optional[np.ndarray] = None,
-    remove_background: bool = True,
-    read_noise_bias: float = 5,
-    normalize: bool = True,
-    edge_filter: bool = False,
-    filter_mask_dilation: bool = True,
-    plot: bool = False,
-    match_model_fov: bool = True,
-    preloaded: Preloadedmodelclass = None,
-    ideal_empirical_psf: Any = None,
-    cpu_workers: int = -1
-):
-    sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
-
-    model, modelpsfgen = reloadmodel_if_needed(
-        preloaded,
-        model,
-        ideal_empirical_psf=ideal_empirical_psf,
-        ideal_empirical_psf_voxel_size=sample_voxel_size
-    )
-
-    sample = load_sample(file)
-
-    sample = preprocessing.prep_sample(
-        sample,
-        sample_voxel_size=sample_voxel_size,
-        remove_background=remove_background,
-        normalize=normalize,
-        edge_filter=edge_filter,
-        filter_mask_dilation=filter_mask_dilation,
-        read_noise_bias=read_noise_bias,
-        plot=file.with_suffix('') if plot else None,
-    )
-
-    samplepsfgen = SyntheticPSF(
-        psf_type=modelpsfgen.psf_type,
-        snr=100,
-        psf_shape=sample.shape,
-        n_modes=model.output_shape[1],
-        lam_detection=wavelength,
-        x_voxel_size=lateral_voxel_size,
-        y_voxel_size=lateral_voxel_size,
-        z_voxel_size=axial_voxel_size
-    )
-
-    if match_model_fov:
-        return fourier_embeddings(
-            sample,
-            iotf=modelpsfgen.iotf,
-            plot=file.with_suffix('') if plot else None,
-            no_phase=True if model.input_shape[1] == 3 else False,
-            remove_interference=True,
-            embedding_option=modelpsfgen.embedding_option,
-            freq_strength_threshold=freq_strength_threshold,
-            digital_rotations=digital_rotations,
-            poi_shape=modelpsfgen.psf_shape[1:]
-        )
-    else:
-        return rolling_fourier_embeddings(
-            sample,
-            iotf=modelpsfgen.iotf,
-            model_fov=modelpsfgen.psf_fov,
-            sample_voxel_size=sample_voxel_size,
-            plot=file.with_suffix('') if plot else None,
-            no_phase=True if model.input_shape[1] == 3 else False,
-            embedding_option=modelpsfgen.embedding_option,
-            freq_strength_threshold=freq_strength_threshold,
-            poi_shape=modelpsfgen.psf_shape[1:],
-            digital_rotations=digital_rotations,
-            cpu_workers=cpu_workers
-        )
-
-
 def preprocess(
     file: Union[tf.Tensor, Path, str],
     modelpsfgen: SyntheticPSF,
     samplepsfgen: SyntheticPSF,
     freq_strength_threshold: float = .01,
-    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    digital_rotations: Optional[np.ndarray] = np.arange(0, 360 + 1, 1).astype(int),
     remove_background: bool = True,
     read_noise_bias: float = 5,
     normalize: bool = True,
@@ -406,6 +326,78 @@ def preprocess(
             ncols=ncols,
             ztiles=ztiles
         )
+
+
+def generate_embeddings(
+    file: Union[tf.Tensor, Path, str],
+    model: Union[tf.keras.Model, Path, str],
+    axial_voxel_size: float,
+    lateral_voxel_size: float,
+    wavelength: float = .510,
+    freq_strength_threshold: float = .01,
+    remove_background: bool = True,
+    read_noise_bias: float = 5,
+    normalize: bool = True,
+    edge_filter: bool = False,
+    filter_mask_dilation: bool = True,
+    plot: bool = False,
+    match_model_fov: bool = True,
+    preloaded: Preloadedmodelclass = None,
+    ideal_empirical_psf: Any = None,
+):
+
+    model, modelpsfgen = reloadmodel_if_needed(
+        preloaded,
+        model,
+        ideal_empirical_psf=ideal_empirical_psf,
+        ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+    )
+
+    sample = load_sample(file)
+    psnr = preprocessing.prep_sample(
+        sample,
+        return_psnr=True,
+        remove_background=True,
+        normalize=False,
+        edge_filter=False,
+        filter_mask_dilation=False,
+    )
+    logger.info(f"Sample: {sample.shape}")
+
+    samplepsfgen = SyntheticPSF(
+        psf_type=modelpsfgen.psf_type,
+        snr=psnr,
+        psf_shape=sample.shape,
+        n_modes=model.output_shape[1],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
+
+    sample = preprocessing.prep_sample(
+        sample,
+        sample_voxel_size=samplepsfgen.voxel_size,
+        remove_background=remove_background,
+        normalize=normalize,
+        edge_filter=edge_filter,
+        filter_mask_dilation=filter_mask_dilation,
+        read_noise_bias=read_noise_bias,
+        plot=file.with_suffix('') if plot else None,
+    )
+
+    return preprocess(
+        sample,
+        modelpsfgen=modelpsfgen,
+        samplepsfgen=samplepsfgen,
+        freq_strength_threshold=freq_strength_threshold,
+        remove_background=True,
+        normalize=True,
+        edge_filter=False,
+        match_model_fov=match_model_fov,
+        digital_rotations=None,
+        plot=file.with_suffix('') if plot else None,
+    )
 
 
 @profile

@@ -641,7 +641,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             plot=args.plot,
             ideal_empirical_psf=args.ideal_empirical_psf,
             edge_filter=args.edge_filter,
-            cpu_workers=args.cpu_workers,
             preloaded=preloaded,
         )
 
