@@ -290,7 +290,6 @@ def diagnostic_assessment(
     ax_cxy.set_xlabel(r'XY ($\mu$m)')
     ax_cxz.set_xlabel(r'XZ ($\mu$m)')
     ax_cyz.set_xlabel(r'YZ ($\mu$m)')
-    ax_xy.set_title(f"$\gamma$: {gamma:.2f}")
     ax_xz.set_title(f"PSNR: {psnr:.2f}")
     ax_yz.set_title(f"Max photon count: {maxcounts:.0f}")
 
@@ -302,7 +301,7 @@ def diagnostic_assessment(
         xz=ax_xz,
         yz=ax_yz,
         vol=psf,
-        label='Input (MIP)',
+        label=f'Input (MIP) [$\gamma$={gamma}]',
         cmap=psf_cmap,
         dxy=dxy,
         dz=dz
@@ -312,7 +311,7 @@ def diagnostic_assessment(
         xz=ax_pxz,
         yz=ax_pyz,
         vol=predicted_psf,
-        label='Predicted',
+        label=f'Predicted [$\gamma$={gamma}]',
         cmap=psf_cmap,
         dxy=dxy,
         dz=dz
@@ -322,7 +321,7 @@ def diagnostic_assessment(
         xz=ax_cxz,
         yz=ax_cyz,
         vol=corrected_psf,
-        label='Corrected',
+        label=f'Corrected [$\gamma$={gamma}]',
         cmap=psf_cmap,
         dxy=dxy,
         dz=dz
@@ -332,7 +331,12 @@ def diagnostic_assessment(
         ax_xygt = fig.add_subplot(gs[3, 0])
         ax_xzgt = fig.add_subplot(gs[3, 1])
         ax_yzgt = fig.add_subplot(gs[3, 2])
-        plot_mip(xy=ax_xygt, xz=ax_xzgt, yz=ax_yzgt, vol=gt_psf, label='Simulated')
+        plot_mip(
+            xy=ax_xygt,
+            xz=ax_xzgt,
+            yz=ax_yzgt,
+            vol=gt_psf,
+            label=f'Simulated [$\gamma$={gamma}]')
 
     ax_zcoff.barh(
         np.arange(len(pred.amplitudes)) - bar_width / 2,
