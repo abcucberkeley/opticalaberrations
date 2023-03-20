@@ -680,6 +680,7 @@ def predict_sample(
             lls_defocus=lls_defocus
         )
 
+    return df
 
 @profile
 def predict_large_fov(
@@ -835,6 +836,8 @@ def predict_large_fov(
             save_path=Path(f"{img.with_suffix('')}_large_fov_predictions_diagnosis"),
             lls_defocus=lls_defocus
         )
+
+    return df
 
 
 @profile

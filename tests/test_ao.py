@@ -146,3 +146,21 @@ def test_phase_retrieval(kargs):
         plot=kargs['plot'],
     )
     assert zernikes.shape == kargs['zernikes_shape']
+
+
+def test_predict_sample(kargs):
+    zernikes = experimental.predict_sample(
+        model=kargs['model'],
+        img=kargs['inputs'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        prev=kargs['prev'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=kargs['plot'],
+        plot_rotations=kargs['plot'],
+        batch_size=kargs['batch_size'],
+        ignore_modes=kargs['ignore_modes'],
+    )
+    assert zernikes.shape == kargs['zernikes_shape']
