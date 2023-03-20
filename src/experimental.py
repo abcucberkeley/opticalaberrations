@@ -1432,10 +1432,18 @@ def eval_mode(
             model_fov=gen.psf_fov
         )
 
+
         noisy_img = prep(noisy_img, sample_voxel_size=predictions_settings['sample_voxel_size'])
-        p_psf = prep(gen.single_psf(p_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
-        gt_psf = prep(gen.single_psf(y_wave, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
-        corrected_psf = prep(gen.single_psf(diff, normed=False, noise=True), sample_voxel_size=gen.voxel_size)
+        psfgen = backend.load_metadata(
+            model_path,
+            snr=psnr,
+            psf_shape=(64,64,64),
+            psf_type='widefield' if save_postfix == 'pr' else None,
+            z_voxel_size=.1 if save_postfix == 'pr' else None,
+        )
+        p_psf = psfgen.single_psf(p_wave, normed=True, noise=False)
+        gt_psf = psfgen.single_psf(y_wave, normed=True, noise=False)
+        corrected_psf = psfgen.single_psf(diff, normed=True, noise=False)
 
         plt.style.use("default")
         vis.diagnostic_assessment(
@@ -1461,11 +1469,12 @@ def eval_mode(
             'prediction': p_wave.zernikes[z],
             'ground_truth': y_wave.zernikes[z],
             'residuals': diff.zernikes[z],
+            'psnr': psnr,
         }
         for z in p_wave.zernikes.keys()
     ]
 
-    residuals = pd.DataFrame(residuals, columns=['n', 'm', 'prediction', 'ground_truth', 'residuals'])
+    residuals = pd.DataFrame(residuals, columns=['n', 'm', 'prediction', 'ground_truth', 'residuals', 'psnr'])
     residuals.index.name = 'ansi'
     residuals.to_csv(f'{save_path}_residuals.csv')
 
@@ -1506,6 +1515,7 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
             'p2v_pred': p.peak2valley(na=na),
             f'mode_1': modes[0],
             f'mode_2': None if len(modes) < 2 else modes[1],
+            'psnr': np.mean(res['psnr']),
         }
 
         if len(modes) > 1 and modes[0] != modes[1]:
@@ -1521,7 +1531,8 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
                 'p2v_pred': p.peak2valley(na=na),
                 f'mode_1': None if len(modes) < 2 else modes[1],
                 f'mode_2': modes[0],
-            }
+                'psnr': np.mean(res['psnr']),
+            }   # if we have mixed modes, duplicate for the opposite combination (e.g. 12,13 copied to -> 13,12)
 
     return results
 
@@ -1566,8 +1577,8 @@ def plot_eval_dataset(
     logger.info(f'{savepath}.csv')
 
     for col, label in zip(
-            ["p2v_gt", "p2v_residual"],
-            [r"Remaining aberration (P-V $\lambda$)", "PR-Model (P-V $\lambda$)"]
+            ["p2v_gt", "p2v_residual", "psnr"],
+            [r"Remaining aberration (P-V $\lambda$)", "PR-Model (P-V $\lambda$)", "PSNR"]
     ):
         fig = plt.figure(figsize=(11, 8))
         g = sns.relplot(
@@ -1593,14 +1604,14 @@ def plot_eval_dataset(
             .set_axis_labels("Iteration", label)
             .set_titles("Mode: {col_name}")
             .set(xlim=(0, max(df['iteration_index'])))
-            .set(ylim=(0, 5))
+            .set(ylim=(0, np.ceil(np.max(df['psnr']))) if col == 'psnr' else (0, 5))
             .tight_layout(w_pad=0)
         )
 
         leg = g._legend
         leg.set_bbox_to_anchor([.95, .93])
         leg.set_title('NA')
-        g.fig.suptitle(f"{df['num_model_modes'].unique()} mode Model")
+        #g.fig.suptitle(f"{df['num_model_modes'].unique()} mode Model")
 
         plt.subplots_adjust(top=0.95, right=0.95, wspace=.1, hspace=.2)
         plt.savefig(f'{savepath}_{col}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
