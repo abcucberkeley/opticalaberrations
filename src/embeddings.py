@@ -367,6 +367,7 @@ def remove_interference_pattern(
         kernel_size: int = 15,
         max_num_peaks: int = 20,
         windowing: bool = True,
+        window_size: tuple = (21, 21, 21),
         plot_interference_pattern: bool = False,
 ):
     """
@@ -975,10 +976,12 @@ def rolling_fourier_embeddings(
         )
 
         if remove_interference:
+            window_size = (21, 21, 21)
             interference = partial(
                 remove_interference_pattern,
                 plot=None,
-                windowing=True
+                windowing=True,
+                window_size=window_size,
             )
             phi_otfs = multiprocess(
                 func=interference,
@@ -997,7 +1000,8 @@ def rolling_fourier_embeddings(
             avg_otf = resize_with_crop_or_pad(np.mean(phi_otfs, axis=0), crop_shape=iotf.shape)
 
             if plot:
-                avg_psf = ifft(avg_otf)
+                gamma = 0.6
+                avg_psf = resize_with_crop_or_pad(ifft(avg_otf), crop_shape=window_size)
 
                 fig, axes = plt.subplots(
                     nrows=4,
@@ -1007,12 +1011,13 @@ def rolling_fourier_embeddings(
                     sharex=False
                 )
                 for row in range(min(3, phi_otfs.shape[0])):
+                    phi_psf = resize_with_crop_or_pad(ifft(phi_otfs[row]), crop_shape=window_size)
                     for ax in range(3):
-                        m5 = axes[row, ax].imshow(np.nanmax(ifft(phi_otfs[row]), axis=ax), cmap='hot')
+                        m5 = axes[row, ax].imshow(np.nanmax(phi_psf, axis=ax)**gamma, cmap='magma')
 
-                    label = f'Reconstructed tile\n ({row} out of {phi_otfs.shape[0]})'
+                    label = f'Reconstructed\nTile {row} of {phi_otfs.shape[0]}. $\gamma$={gamma}'
 
-                    cax = inset_axes(axes[row, -1], width="10%", height="90%", loc='center right', borderpad=-3)
+                    cax = inset_axes(axes[row, -1], width="10%", height="90%", loc='center right', borderpad=-2)
                     cb = plt.colorbar(m5, cax=cax)
                     cax.yaxis.set_label_position("right")
                     cax.set_ylabel(label)
@@ -1021,11 +1026,11 @@ def rolling_fourier_embeddings(
                         ax.axis('off')
 
                 for ax in range(3):
-                    m5 = axes[3, ax].imshow(np.nanmax(avg_psf, axis=ax), cmap='hot')
+                    m5 = axes[3, ax].imshow(np.nanmax(avg_psf, axis=ax)**gamma, cmap='magma')
 
-                label = 'Reconstructed\navg'
+                label = f'Reconstructed\navg $\gamma$={gamma}'
 
-                cax = inset_axes(axes[-1,-1], width="10%", height="90%", loc='center right', borderpad=-3)
+                cax = inset_axes(axes[-1,-1], width="10%", height="90%", loc='center right', borderpad=-2)
                 cb = plt.colorbar(m5, cax=cax)
                 cax.yaxis.set_label_position("right")
                 cax.set_ylabel(label)
