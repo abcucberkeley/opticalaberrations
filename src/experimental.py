@@ -16,7 +16,7 @@ from subprocess import call
 import multiprocessing as mp
 import tensorflow as tf
 
-from typing import Any, Union, Optional
+from typing import Any, Union, Optional, Generator
 import numpy as np
 import pandas as pd
 from tifffile import imread, imsave
@@ -344,6 +344,7 @@ def generate_embeddings(
     match_model_fov: bool = True,
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
+    digital_rotations: Optional[Union[Generator, list, np.ndarray]] = None
 ):
 
     model, modelpsfgen = reloadmodel_if_needed(
@@ -395,7 +396,7 @@ def generate_embeddings(
         normalize=True,
         edge_filter=False,
         match_model_fov=match_model_fov,
-        digital_rotations=None,
+        digital_rotations=digital_rotations,
         plot=file.with_suffix('') if plot else None,
     )
 
@@ -679,6 +680,7 @@ def predict_sample(
             lls_defocus=lls_defocus
         )
 
+    return df
 
 @profile
 def predict_large_fov(
@@ -834,6 +836,8 @@ def predict_large_fov(
             save_path=Path(f"{img.with_suffix('')}_large_fov_predictions_diagnosis"),
             lls_defocus=lls_defocus
         )
+
+    return df
 
 
 @profile
@@ -1862,7 +1866,7 @@ def phase_retrieval(
 
     logger.info("Starting phase retrieval iterations")
     data_prepped = prep_data_for_PR(np.flip(data, axis=0), multiplier=1.1)
-    data_prepped = cp.asarray(data_prepped) # use GPU. Comment this line to use CPU.
+    data_prepped = cp.asarray(data_prepped)  # use GPU. Comment this line to use CPU.
     pr_result = pr.retrieve_phase(
         data_prepped,
         params,
@@ -1929,3 +1933,5 @@ def phase_retrieval(
         fig, axes = pr_result.plot()
         axes[0].set_title("Phase in waves")
         vis.savesvg(fig, Path(f"{img.with_suffix('')}_phase_retrieval_convergence.svg"))
+
+    return coefficients

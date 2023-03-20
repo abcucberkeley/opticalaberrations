@@ -20,18 +20,22 @@ from src import preprocessing
 @pytest.fixture(scope="session")
 def kargs():
     repo = Path.cwd()
-
+    num_modes = 15
     kargs = dict(
         inputs=repo / f'examples/single/single.tif',
         input_shape=(256, 256, 256),
         embeddings_shape=(6, 64, 64, 1),
+        digital_rotations=range(0, 361),
+        rotations_shape=(361, 6, 64, 64, 1),
+        num_modes=num_modes,
+        zernikes_shape=(num_modes, 3),
+        model=repo / f'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-{num_modes}.h5',
         dm_calibration=repo/'calibration/aang/28_mode_calibration.csv',
-        model=repo/'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-28.h5',
         psf_type=repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         pois=repo/f'examples/single/results/Detection3D.mat',
         ideal_psf=repo/'examples/psf.tif',
         prev=None,
-        current_dm=None,
+        dm_state=None,
         wavelength=.510,
         dm_damping_scalar=1.0,
         lateral_voxel_size=.108,
@@ -91,26 +95,90 @@ def test_preprocessing(kargs):
 
 def test_fourier_embeddings(kargs):
     emb = experimental.generate_embeddings(
-            file=kargs['inputs'],
-            model=kargs['model'],
-            axial_voxel_size=kargs['axial_voxel_size'],
-            lateral_voxel_size=kargs['lateral_voxel_size'],
-            wavelength=kargs['wavelength'],
-            plot=kargs['plot'],
-            match_model_fov=True
-        )
+        file=kargs['inputs'],
+        model=kargs['model'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=kargs['plot'],
+        match_model_fov=True
+    )
     assert emb.shape == kargs['embeddings_shape']
 
 
 def test_rolling_fourier_embeddings(kargs):
     emb = experimental.generate_embeddings(
-            file=kargs['inputs'],
-            model=kargs['model'],
-            axial_voxel_size=kargs['axial_voxel_size'],
-            lateral_voxel_size=kargs['lateral_voxel_size'],
-            wavelength=kargs['wavelength'],
-            plot=kargs['plot'],
-            match_model_fov=False
-        )
+        file=kargs['inputs'],
+        model=kargs['model'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=kargs['plot'],
+        match_model_fov=False
+    )
     assert emb.shape == kargs['embeddings_shape']
 
+
+def test_embeddings_with_digital_rotations(kargs):
+    emb = experimental.generate_embeddings(
+        file=kargs['inputs'],
+        model=kargs['model'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=kargs['plot'],
+        digital_rotations=kargs['digital_rotations'],
+        match_model_fov=False
+    )
+    assert emb.shape == kargs['rotations_shape']
+
+
+def test_phase_retrieval(kargs):
+    zernikes = experimental.phase_retrieval(
+        img=kargs['inputs'],
+        num_modes=kargs['num_modes'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        ignore_modes=kargs['ignore_modes'],
+        plot=kargs['plot'],
+    )
+    assert zernikes.shape == kargs['zernikes_shape']
+
+
+def test_predict_sample(kargs):
+    zernikes = experimental.predict_sample(
+        model=kargs['model'],
+        img=kargs['inputs'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        prev=kargs['prev'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=kargs['plot'],
+        plot_rotations=kargs['plot'],
+        batch_size=kargs['batch_size'],
+        ignore_modes=kargs['ignore_modes'],
+    )
+    assert zernikes.shape == kargs['zernikes_shape']
+
+
+def test_predict_large_fov(kargs):
+    zernikes = experimental.predict_large_fov(
+        model=kargs['model'],
+        img=kargs['inputs'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        prev=kargs['prev'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=kargs['plot'],
+        plot_rotations=kargs['plot'],
+        batch_size=kargs['batch_size'],
+        ignore_modes=kargs['ignore_modes'],
+    )
+    assert zernikes.shape == kargs['zernikes_shape']

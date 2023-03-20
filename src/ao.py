@@ -110,6 +110,10 @@ def parse_args(args):
         help='path to an ideal empirical psf (Default: `None` ie. will be simulated automatically)'
     )
     embeddings.add_argument(
+        "--digital_rotations", default=None, type=list,
+        help='optional flag for applying digital rotations'
+    )
+    embeddings.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
     embeddings.add_argument(
@@ -641,6 +645,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             plot=args.plot,
             ideal_empirical_psf=args.ideal_empirical_psf,
             edge_filter=args.edge_filter,
+            digital_rotations=args.digital_rotations,
             preloaded=preloaded,
         )
 

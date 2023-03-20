@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="test_fourier_embeddings" type="tests" factoryName="Autodetect" folderName="tests">
+  <configuration default="false" name="test_fourier_embeddings" type="tests" factoryName="Autodetect">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
