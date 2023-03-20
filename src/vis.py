@@ -234,7 +234,7 @@ def diagnostic_assessment(
     pred_wave = pred.wave(size=100)
     diff = y_wave - pred_wave
 
-    fig = plt.figure(figsize=(17, 15))
+    fig = plt.figure(figsize=(17, 17))
     gs = fig.add_gridspec(5 if gt_psf is None else 6, 4)
 
     ax_gt = fig.add_subplot(gs[:2, 0])
@@ -366,6 +366,7 @@ def diagnostic_assessment(
     handles, labels = ax_zcoff.get_legend_handles_labels()
     ax_zcoff.legend(reversed(handles), reversed(labels), frameon=False, loc='upper center', bbox_to_anchor=(.5, 1.05))
     ax_zcoff.xaxis.set_major_formatter(FormatStrFormatter("%.2f"))
+    ax_zcoff.yaxis.tick_right()
 
     if p_lls_defocus is not None:
         ax_defocus.barh(
