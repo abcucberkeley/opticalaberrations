@@ -242,6 +242,7 @@ def plot_embeddings(
 
     if inputs.ndim == 4:
         if ncols is None or nrows is None:
+            inputs = np.max(inputs, axis=0)  # show max projections of all z-tiles
             for c in range(10, 0, -1):
                 if inputs.shape[0] > c and not inputs.shape[0] % c:
                     ncols = c
@@ -251,7 +252,7 @@ def plot_embeddings(
 
         for proj in range(3):
             grid = gridspec.GridSpecFromSubplotSpec(
-                nrows*ztiles, ncols, subplot_spec=axes[0, proj], wspace=.01, hspace=.01
+                nrows, ncols, subplot_spec=axes[0, proj], wspace=.01, hspace=.01
             )
 
             for idx, (i, j) in enumerate(itertools.product(range(nrows), range(ncols))):
