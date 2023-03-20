@@ -1863,7 +1863,7 @@ def phase_retrieval(
 
     logger.info("Starting phase retrieval iterations")
     data_prepped = prep_data_for_PR(np.flip(data, axis=0), multiplier=1.1)
-    data_prepped = cp.asarray(data_prepped) # use GPU. Comment this line to use CPU.
+    data_prepped = cp.asarray(data_prepped)  # use GPU. Comment this line to use CPU.
     pr_result = pr.retrieve_phase(
         data_prepped,
         params,
@@ -1930,3 +1930,5 @@ def phase_retrieval(
         fig, axes = pr_result.plot()
         axes[0].set_title("Phase in waves")
         vis.savesvg(fig, Path(f"{img.with_suffix('')}_phase_retrieval_convergence.svg"))
+
+    return coefficients
