@@ -16,7 +16,7 @@ from subprocess import call
 import multiprocessing as mp
 import tensorflow as tf
 
-from typing import Any, Union, Optional
+from typing import Any, Union, Optional, Generator
 import numpy as np
 import pandas as pd
 from tifffile import imread, imsave
@@ -344,6 +344,7 @@ def generate_embeddings(
     match_model_fov: bool = True,
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
+    digital_rotations: Optional[Union[Generator, list, np.ndarray]] = None
 ):
 
     model, modelpsfgen = reloadmodel_if_needed(
@@ -395,7 +396,7 @@ def generate_embeddings(
         normalize=True,
         edge_filter=False,
         match_model_fov=match_model_fov,
-        digital_rotations=None,
+        digital_rotations=digital_rotations,
         plot=file.with_suffix('') if plot else None,
     )
 

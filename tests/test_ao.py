@@ -25,6 +25,8 @@ def kargs():
         inputs=repo / f'examples/single/single.tif',
         input_shape=(256, 256, 256),
         embeddings_shape=(6, 64, 64, 1),
+        digital_rotations=range(0, 361),
+        rotations_shape=(361, 6, 64, 64, 1),
         dm_calibration=repo/'calibration/aang/28_mode_calibration.csv',
         model=repo/'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-28.h5',
         psf_type=repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
@@ -114,3 +116,16 @@ def test_rolling_fourier_embeddings(kargs):
         )
     assert emb.shape == kargs['embeddings_shape']
 
+
+def test_embeddings_with_digital_rotations(kargs):
+    emb = experimental.generate_embeddings(
+            file=kargs['inputs'],
+            model=kargs['model'],
+            axial_voxel_size=kargs['axial_voxel_size'],
+            lateral_voxel_size=kargs['lateral_voxel_size'],
+            wavelength=kargs['wavelength'],
+            plot=kargs['plot'],
+            digital_rotations=kargs['digital_rotations'],
+            match_model_fov=False
+        )
+    assert emb.shape == kargs['rotations_shape']
