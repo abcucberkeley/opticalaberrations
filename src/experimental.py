@@ -507,6 +507,8 @@ def predict(
             save_path=Path(f"{outdir.with_suffix('')}_predictions_wavefronts"),
         )
 
+    return predictions
+
 
 @profile
 def predict_sample(
@@ -681,6 +683,7 @@ def predict_sample(
         )
 
     return df
+
 
 @profile
 def predict_large_fov(
@@ -1049,7 +1052,7 @@ def predict_tiles(
             escape_forward_slashes=False
         )
 
-    predict(
+    predictions = predict(
         rois=rois,
         outdir=outdir,
         model=preloadedmodel,
@@ -1076,6 +1079,8 @@ def predict_tiles(
             window_size=window_size,
             save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
         )
+
+    return predictions
 
 
 @profile
@@ -1264,6 +1269,8 @@ def aggregate_predictions(
             pred_std=pred_std,
             save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis"),
         )
+
+    return coefficients
 
 
 def plot_dm_actuators(
