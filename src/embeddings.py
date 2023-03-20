@@ -503,7 +503,7 @@ def remove_interference_pattern(
             fig, axes = plt.subplots(
                 nrows=5 if plot_interference_pattern else 4,
                 ncols=3,
-                figsize=(8, 11),
+                figsize=(10, 11),
                 sharey=False,
                 sharex=False
             )
