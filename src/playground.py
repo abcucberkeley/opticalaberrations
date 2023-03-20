@@ -195,8 +195,8 @@ if __name__ == "__main__":
     )
 
     # ANSI index
-    filename = f'single'
-    zernikes[3] = .2  # mu rms
+    filename = f'ideal'
+    # zernikes[3] = .2  # mu rms
 
     num_objs = 100
     reference = beads(gen=gen, object_size=0, num_objs=num_objs)
@@ -240,36 +240,36 @@ if __name__ == "__main__":
         p2v=p2v
     )
 
-    # inputs = prep_sample(
-    #     inputs,
-    #     sample_voxel_size=gen.voxel_size,
-    #     model_voxel_size=gen.voxel_size,
-    #     remove_background=True,
-    #     normalize=True,
-    #     edge_filter=False,
-    # )
+    inputs = prep_sample(
+        inputs,
+        sample_voxel_size=gen.voxel_size,
+        model_fov=gen.psf_fov,
+        remove_background=True,
+        normalize=True,
+        edge_filter=False,
+    )
 
-    # fourier_embeddings(
-    #     inputs=inputs,
-    #     iotf=gen.iotf,
-    #     plot=outdir / f"fourier_embeddings_num_objs_{num_objs}",
-    #     embedding_option=gen.embedding_option,
-    #     remove_interference=True,
-    # )
-    #
-    # masked_inputs = prep_sample(
-    #     inputs,
-    #     sample_voxel_size=gen.voxel_size,
-    #     model_voxel_size=gen.voxel_size,
-    #     remove_background=False,
-    #     normalize=True,
-    #     edge_filter=True,
-    # )
-    #
-    # fourier_embeddings(
-    #     inputs=masked_inputs,
-    #     iotf=gen.iotf,
-    #     plot=outdir / f"masked_fourier_embeddings_num_objs_{num_objs}",
-    #     embedding_option=gen.embedding_option,
-    #     remove_interference=True,
-    # )
+    fourier_embeddings(
+        inputs=inputs,
+        iotf=gen.iotf,
+        plot=outdir / f"fourier_embeddings_num_objs_{num_objs}",
+        embedding_option=gen.embedding_option,
+        remove_interference=True,
+    )
+
+    masked_inputs = prep_sample(
+        inputs,
+        sample_voxel_size=gen.voxel_size,
+        model_fov=gen.psf_fov,
+        remove_background=False,
+        normalize=True,
+        edge_filter=True,
+    )
+
+    fourier_embeddings(
+        inputs=masked_inputs,
+        iotf=gen.iotf,
+        plot=outdir / f"masked_fourier_embeddings_num_objs_{num_objs}",
+        embedding_option=gen.embedding_option,
+        remove_interference=True,
+    )
