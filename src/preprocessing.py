@@ -55,14 +55,17 @@ def round_to_odd(n):
     else:
         return int(answer - 1)
 
+def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float:
+    """ Return estimated noise """
+    noise = np.std(a, axis=axis)
+    return noise
 
 def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> np.float:
     """ Return estimated signal-to-noise ratio or inf if the given image has no noise """
     a = np.asanyarray(a)
     signal = np.max(a, axis=axis) - np.median(a, axis=axis)
-    noise = np.std(a, axis=axis)
+    noise = measure_noise(a, axis=axis)
     return np.round(np.where(noise == 0, np.inf, signal/noise), 2)
-
 
 @profile
 def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 'linear_ramp', **kwargs):

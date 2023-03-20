@@ -39,6 +39,7 @@ except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
 from utils import resize_with_crop_or_pad, multiprocess
+import preprocessing
 from vis import savesvg
 
 logging.basicConfig(
@@ -370,6 +371,7 @@ def remove_interference_pattern(
         windowing: bool = True,
         window_size: tuple = (21, 21, 21),
         plot_interference_pattern: bool = False,
+        min_psnr: float = 15.0,
 ):
     """
     Normalize interference pattern from the given FFT
@@ -453,6 +455,20 @@ def remove_interference_pattern(
         pois = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
 
     psf_peaks = np.zeros_like(psf)  # create a volume masked around each peak, don't go past vol bounds
+    noise = preprocessing.measure_noise(psf)
+    baseline = np.median(psf)
+    good_psnr = np.zeros(pois.shape[0], dtype=bool)
+    for i, p in enumerate(pois):
+        good_psnr[i] = (np.max(
+            psf[
+            max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
+            max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
+            max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
+            ]) - baseline) / noise > min_psnr
+
+    logger.info(f"{pois.shape[0]} objects detected. {np.count_nonzero(good_psnr)} were above {min_psnr} min_psnr")
+    pois = pois[good_psnr]  # remove points that are below peak snr
+
     for p in pois:
         psf_peaks[
             max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
@@ -469,7 +485,6 @@ def remove_interference_pattern(
         corrected_otf = otf / interference_pattern
 
         if windowing:
-            window_size = (21, 21, 21)
             window_border = np.floor((corrected_otf.shape - np.array(window_size)) // 2).astype(int)
             window_extent = corrected_otf.shape - window_border * 2
 
@@ -1001,7 +1016,7 @@ def rolling_fourier_embeddings(
             avg_otf = resize_with_crop_or_pad(np.mean(phi_otfs, axis=0), crop_shape=iotf.shape)
 
             if plot:
-                gamma = 0.6
+                gamma = 0.5
                 avg_psf = resize_with_crop_or_pad(ifft(avg_otf), crop_shape=window_size)
 
                 fig, axes = plt.subplots(
