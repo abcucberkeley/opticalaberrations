@@ -45,7 +45,7 @@ jobs:
           miniconda-version: "latest"
           auto-update-conda: true
           activate-environment: ml
-          environment-file: linux.yml
+          environment-file: macos.yml
           auto-activate-base: false
       - name: Sh
         shell: sh -l {0}
