@@ -29,7 +29,7 @@ def parse_args(args):
     )
 
     slurm.add_argument(
-        "--outdir", default='/clusterfs/fiona/thayer/opticalaberrations/models', type=str,
+        "--outdir", default='/clusterfs/nvme/thayer/opticalaberrations/models', type=str,
         help='output directory'
     )
 

@@ -146,6 +146,7 @@ dependencies:
   - pyparsing=3.0.4
   - pyqt=5.9.2
   - pysocks=1.7.1
+  - pytest=7.1.2
   - python=3.9.12
   - python-dateutil=2.8.2
   - python-flatbuffers=1.12
