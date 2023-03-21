@@ -1429,15 +1429,15 @@ def eval_mode(
             preprocessing.prep_sample,
             normalize=normalize,
             remove_background=remove_background,
-            model_fov=gen.psf_fov
+            model_fov=gen.psf_fov,
+            plot=input_path.with_suffix(''),
         )
-
 
         noisy_img = prep(noisy_img, sample_voxel_size=predictions_settings['sample_voxel_size'])
         psfgen = backend.load_metadata(
             model_path,
             snr=psnr,
-            psf_shape=(64,64,64),
+            psf_shape=(64, 64, 64),
             psf_type='widefield' if save_postfix == 'pr' else None,
             z_voxel_size=.1 if save_postfix == 'pr' else None,
         )
