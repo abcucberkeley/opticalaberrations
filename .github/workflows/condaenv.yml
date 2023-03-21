@@ -17,26 +17,88 @@ on:
       - '*'
 
 jobs:
-  miniconda:
-    name: Miniconda ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-        fail-fast: false
-        matrix:
-            os: [ubuntu-latest, windows-latest, macos-latest]
-            python-version: [3.8, 3.9]
+  linux:
+    name: linux
+    runs-on: "ubuntu-latest"
     steps:
       - uses: actions/checkout@v2
       - uses: conda-incubator/setup-miniconda@v2
         with:
-          python-version: ${{ matrix.python-version }}
+          miniconda-version: "latest"
+          python-version: 3.9
           auto-update-conda: true
           activate-environment: ml
-          environment-file: requirements.yml
+          environment-file: linux.yml
           auto-activate-base: false
-      - name: Conda info
+      - name: Bash
         shell: bash -el {0}
-        run: conda info
-      - name: Conda list
+        run: |
+          conda info
+          conda list
+      - name: PowerShell Core
         shell: pwsh
-        run: conda list
+        run: |
+          conda info
+          conda list
+
+  mos:
+    name: mos
+    runs-on: "macos-latest"
+    steps:
+      - uses: actions/checkout@v2
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          miniconda-version: "latest"
+          python-version: 3.9
+          auto-update-conda: true
+          activate-environment: ml
+          environment-file: linux.yml
+          auto-activate-base: false
+      - name: Sh
+        shell: sh -l {0}
+        run: |
+          conda info
+          conda list
+      - name: Bash
+        shell: bash -el {0}
+        run: |
+          conda info
+          conda list
+      - name: PowerShell Core
+        shell: pwsh
+        run: |
+          conda info
+          conda list
+
+  win64:
+    name: win64
+    runs-on: "windows-latest"
+    steps:
+      - uses: actions/checkout@v2
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          miniconda-version: "latest"
+          python-version: 3.9
+          auto-update-conda: true
+          activate-environment: ml
+          environment-file: windows.yml
+          auto-activate-base: false
+      - name: Bash
+        shell: bash -el {0}
+        run: |
+          conda info
+          conda list
+      - name: PowerShell
+        shell: powershell
+        run: |
+          conda info
+          conda list
+      - name: PowerShell Core
+        shell: pwsh
+        run: |
+          conda info
+          conda list
+      - name: Cmd.exe
+        shell: cmd /C CALL {0}
+        run: >-
+          conda info && conda list
