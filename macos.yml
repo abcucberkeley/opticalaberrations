@@ -84,7 +84,6 @@ dependencies:
   - libedit=3.1.20210910
   - libev=4.33
   - libffi=3.3
-  - libgcc-ng=9.3.0
   - libnghttp2=1.46.0
   - libpng=1.6.37
   - libprotobuf=3.14.0
