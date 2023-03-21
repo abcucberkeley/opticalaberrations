@@ -2,14 +2,19 @@ from pathlib import Path
 from tensorflow import config as tfc
 from backend import load, load_metadata
 import numpy as np
-from typing import Any, Sequence, Union
+from typing import Optional, Union
 
 
 class Preloadedmodelclass:
     """ A class that LabVIEW can use to keep the model in memory to prevent reloading it each time.
     LabVIEW hates **kwargs.  So don't do that.
     """
-    def __init__(self, modelpath: Path, ideal_empirical_psf: Union[Path, np.ndarray]=None, ideal_empirical_psf_voxel_size=None):
+    def __init__(
+            self,
+            modelpath: Path,
+            ideal_empirical_psf: Optional[Union[Path, np.ndarray]] = None,
+            ideal_empirical_psf_voxel_size: Optional[tuple] = None
+    ):
         
         if ideal_empirical_psf == "None" or ideal_empirical_psf is None:
             self.ideal_empirical_psf = None
@@ -17,8 +22,9 @@ class Preloadedmodelclass:
         elif isinstance(ideal_empirical_psf, np.ndarray):          
             self.ideal_empirical_psf = ideal_empirical_psf
             self.ideal_empirical_psf_voxel_size = ideal_empirical_psf_voxel_size
-        else: 
-            self.ideal_empirical_psf = Path(ideal_empirical_psf)    # needed to make sure this gets typed to Path, because comparison of str and Path will fail
+        else:
+            # needed to make sure this gets typed to Path, because comparison of str and Path will fail
+            self.ideal_empirical_psf = Path(ideal_empirical_psf)
             self.ideal_empirical_psf_voxel_size = ideal_empirical_psf_voxel_size
 
         self.modelpath = Path(modelpath)

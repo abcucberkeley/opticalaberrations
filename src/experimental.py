@@ -48,8 +48,8 @@ except ImportError as e:
 
 @profile
 def reloadmodel_if_needed(
-    preloaded: Preloadedmodelclass,
     modelpath: Path,
+    preloaded: Optional[Preloadedmodelclass] = None,
     ideal_empirical_psf: Union[Path, np.ndarray] = None,
     ideal_empirical_psf_voxel_size: Any = None
 ):
@@ -60,7 +60,6 @@ def reloadmodel_if_needed(
     if ideal_empirical_psf is None and preloaded.ideal_empirical_psf is not None:
         logger.info("Loading new model, because ideal_empirical_psf has been removed")
         preloaded = Preloadedmodelclass(modelpath)
-
 
     elif preloaded.ideal_empirical_psf != ideal_empirical_psf:
         logger.info(f"Updating ideal psf with empirical, because {chr(10)} {preloaded.ideal_empirical_psf} of type {type(preloaded.ideal_empirical_psf)} has been changed to {chr(10)} {ideal_empirical_psf} of type {type(ideal_empirical_psf)}")
