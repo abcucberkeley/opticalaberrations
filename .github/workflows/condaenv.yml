@@ -17,26 +17,26 @@ on:
       - '*'
 
 jobs:
-  test:
+  miniconda:
+    name: Miniconda ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
-      max-parallel: 10
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.8', '3.9']
-
+        fail-fast: false
+        matrix:
+            os: [ubuntu-latest, windows-latest, macos-latest]
+            python-version: [3.8, 3.9]
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Add conda to system path
-      run: |
-        # $CONDA is an environment variable pointing to the root of the miniconda directory
-        echo $CONDA/bin >> $GITHUB_PATH
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        conda env create -f requirements.yml
-        conda activate ml
+      - uses: actions/checkout@v2
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+          auto-update-conda: true
+          activate-environment: ml
+          environment-file: requirements.yml
+          auto-activate-base: false
+      - name: Conda info
+        shell: bash -el {0}
+        run: conda info
+      - name: Conda list
+        shell: pwsh
+        run: conda list
