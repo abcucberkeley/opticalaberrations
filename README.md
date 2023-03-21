@@ -32,24 +32,10 @@ Once you have Anaconda installed on your system, clone the repo using the follow
 git clone --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
 ```
 
-### For `Linux`
 Create a new `conda` environment using the following commands (will create an environment named "ml"):
 ```shell
 cd opticalaberrations
-conda env create -f linux.yml
-conda activate ml
-```
-
-....to later update to the latest packages in `*.yml`:
-```shell 
-conda env update --file windows.yml 
-```
-
-### For `Windows`
-Create a new `conda` environment using the following commands (will create an environment named "ml"):
-```shell
-cd opticalaberrations
-conda env create -f windows.yml
+conda env create -f requirements.yml
 conda activate ml
 ```
 
