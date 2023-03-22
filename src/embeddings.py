@@ -1,9 +1,5 @@
-
 import matplotlib
 matplotlib.use('Agg')
-
-import platform
-is_windows = any(platform.win32_ver())
 
 import logging
 import sys
@@ -13,7 +9,6 @@ from typing import Any, Union, Optional
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
-import signal
 import numpy as np
 from tqdm import tqdm
 from functools import partial
@@ -48,10 +43,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-
-def timer(signum, frame):
-    raise TimeoutError("Timed out!")
 
 
 @profile
@@ -678,15 +669,11 @@ def compute_emb(
         emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
 
         try:
-            if len(np.ma.nonzero(emb)[0]) > 100 and not is_windows:
-                signal.signal(signal.SIGALRM, timer)
-                signal.alarm(60)
-                
+            if len(np.ma.nonzero(emb)[0]) > 100:
                 emb = np.ma.masked_array(emb, mask=~na_mask, fill_value=0)
                 emb = unwrap_phase(emb)
                 emb = emb.filled(0)
                 emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
-
         except TimeoutError as e:
             logger.warning(f"`unwrap_phase`: {e}")
 
