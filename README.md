@@ -1,5 +1,16 @@
 # Multiscale attention networks for sensorless detection of aberrations in adaptive optics
 
+---
+[![Ubuntu-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml)
+[![Windows-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml)
+[![MacOS-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml)
+----
+[![Ubuntu-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml)
+[![Windows-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml)
+[![MacOS-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml)
+---
+
+
 # Table of Contents
 * [Installation](#installation)
    * [For Linux or Windows](#for-linux-or-windows)
@@ -32,31 +43,26 @@ Once you have Anaconda installed on your system, clone the repo using the follow
 git clone --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
 ```
 
-### For `Linux`
 Create a new `conda` environment using the following commands (will create an environment named "ml"):
+
+| System  | Requirements                 |
+|---------|------------------------------|
+| Ubuntu  | [`linux.yml`](linux.yml)     |
+| Windows | [`windows.yml`](windows.yml) |
+| MacOS   | [`macos.yml`](macos.yml)     |
+
+
 ```shell
 cd opticalaberrations
 conda env create -f linux.yml
 conda activate ml
 ```
 
-....to later update to the latest packages in `*.yml`:
-```shell 
-conda env update --file windows.yml 
-```
+>....to later update to the latest packages in `*.yml`:
+>```shell 
+>conda env update --file ***.yml 
+>```
 
-### For `Windows`
-Create a new `conda` environment using the following commands (will create an environment named "ml"):
-```shell
-cd opticalaberrations
-conda env create -f windows.yml
-conda activate ml
-```
-
-....to later update to the latest packages in `*.yml`:
-```shell 
-conda env update --file windows.yml 
-```
 
 ### Pre-trained models
 To make sure you have the latest pre-trained models:

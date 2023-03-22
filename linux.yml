@@ -1,5 +1,6 @@
 name: ml
 channels:
+  - mamba
   - esri
   - conda-forge
   - anaconda
@@ -208,4 +209,3 @@ dependencies:
     - line-profiler==4.0.1
     - line-profiler-pycharm==1.1.0
     - raster-geometry==0.1.4.1
-

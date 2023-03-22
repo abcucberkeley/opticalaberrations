@@ -1,5 +1,6 @@
 name: ml
 channels:
+  - mamba
   - esri
   - conda-forge
   - anaconda
@@ -191,4 +192,3 @@ dependencies:
     - tomli==2.0.1
     - typeguard==2.13.3
     - wcwidth==0.2.5
-prefix: /Users/thayer/anaconda3/envs/ml
