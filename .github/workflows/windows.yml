@@ -50,13 +50,13 @@ jobs:
           conda list
 
       - name: Test IO modules
-        shell: bash -l {0}
+        if: always()        
         run: python -m pytest -vvv tests/test_io.py
 
-      - name: Test embeddings modules
-        shell: bash -l {0}
-        run: python -m pytest -vvv tests/test_io.py
+      - name: Test embeddings modules      
+        if: always()
+        run: python -m pytest -vvv tests/test_embeddings.py
 
       - name: Test AO modules
-        shell: bash -l {0}
-        run: python -m pytest -vvv tests/test_io.py
+        if: always()
+        run: python -m pytest -vvv tests/test_ao.py
