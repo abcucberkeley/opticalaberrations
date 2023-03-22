@@ -50,11 +50,18 @@ jobs:
           conda info
           conda list
 
-#      - name: Test IO modules
-#        run: python -m pytest -vvv tests/test_io.py
-#
-#      - name: Test embeddings modules
-#        run: python -m pytest -vvv tests/test_io.py
-#
-#      - name: Test AO modules
-#        run: python -m pytest -vvv tests/test_io.py
+  io:
+    needs: build
+    name: Test IO modules
+    runs-on: "ubuntu-latest"
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: ml
+
+      - name: Run test_io.py
+        run: python -m pytest -vvv tests/test_io.py
