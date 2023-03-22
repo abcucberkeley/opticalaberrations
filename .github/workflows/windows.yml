@@ -27,7 +27,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v2
         with:
           activate-environment: ml
-          environment-file: macos.yml
+          environment-file: windows.yml
           auto-activate-base: false
 
       - name: Set cache date
