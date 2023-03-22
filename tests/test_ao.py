@@ -2,6 +2,7 @@
 import sys
 sys.path.append('.')
 sys.path.append('./src')
+sys.path.append('./tests')
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -15,6 +16,7 @@ from pathlib import Path
 from src import experimental
 
 
+@pytest.mark.run(order=9)
 def test_phase_retrieval(kargs):
     zernikes = experimental.phase_retrieval(
         img=kargs['inputs'],
@@ -31,6 +33,7 @@ def test_phase_retrieval(kargs):
     assert zernikes.shape == kargs['zernikes_shape']
 
 
+@pytest.mark.run(order=10)
 def test_predict_sample(kargs):
     zernikes = experimental.predict_sample(
         model=kargs['model'],
@@ -50,6 +53,7 @@ def test_predict_sample(kargs):
     assert zernikes.shape == kargs['zernikes_shape']
 
 
+@pytest.mark.run(order=11)
 def test_predict_large_fov(kargs):
     zernikes = experimental.predict_large_fov(
         model=kargs['model'],
@@ -69,6 +73,7 @@ def test_predict_large_fov(kargs):
     assert zernikes.shape == kargs['zernikes_shape']
 
 
+@pytest.mark.run(order=12)
 def test_predict_tiles(kargs):
     tile_predictions = experimental.predict_tiles(
         model=kargs['model'],

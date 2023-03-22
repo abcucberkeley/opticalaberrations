@@ -13,6 +13,7 @@ import pytest
 from src import experimental
 
 
+@pytest.mark.run(order=6)
 def test_fourier_embeddings(kargs):
     emb = experimental.generate_embeddings(
         file=kargs['inputs'],
@@ -26,6 +27,7 @@ def test_fourier_embeddings(kargs):
     assert emb.shape == kargs['embeddings_shape']
 
 
+@pytest.mark.run(order=7)
 def test_rolling_fourier_embeddings(kargs):
     emb = experimental.generate_embeddings(
         file=kargs['inputs'],
@@ -39,6 +41,7 @@ def test_rolling_fourier_embeddings(kargs):
     assert emb.shape == kargs['embeddings_shape']
 
 
+@pytest.mark.run(order=8)
 def test_embeddings_with_digital_rotations(kargs):
     emb = experimental.generate_embeddings(
         file=kargs['inputs'],
