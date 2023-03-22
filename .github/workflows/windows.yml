@@ -33,7 +33,8 @@ jobs:
 
       - name: Set cache date
         run: echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
-        uses: actions/cache@v2
+
+      - uses: actions/cache@v2
         with:
           path: ${{ runner.os }}
           key: ${{ runner.os }}-conda-${{ hashFiles('windows.yml') }}-${{ env.DATE }}-${{ env.CACHE_NUMBER }}
