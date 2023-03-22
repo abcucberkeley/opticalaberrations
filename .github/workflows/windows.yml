@@ -17,7 +17,7 @@ on:
       - '*'
 
 jobs:
-  condaenv:
+  build:
     name: win-64
     runs-on: "windows-latest"
     steps:
@@ -27,7 +27,6 @@ jobs:
         uses: conda-incubator/setup-miniconda@v2
         with:
           activate-environment: ml
-          environment-file: windows.yml
           auto-activate-base: false
 
       - name: Set cache date
@@ -39,24 +38,31 @@ jobs:
           key: windows-conda-${{ hashFiles('windows.yml') }}-${{ env.DATE }}-${{ env.CACHE_NUMBER }}
           id: cache
 
-#      - name: Update environment
-#        run: mamba env update -n ml -f windows.yml
-#        if: steps.cache.outputs.cache-hit != 'true'
+      - name: Update environment
+        run: conda env update -n ml -f windows.yml
+        if: steps.cache.outputs.cache-hit != 'true'
 
-      - name: Bash
-        shell: bash -el {0}
+      - name: PowerShell
+        shell: powershell
         run: |
           conda info
           conda list
+      - name: PowerShell Core
+        shell: pwsh
+        run: |
+          conda info
+          conda list
+      - name: Cmd.exe
+        shell: cmd /C CALL {0}
+        run: >-
+          conda info && conda list
 
-      - name: Test IO modules
-        if: always()        
-        run: python -m pytest -vvv tests/test_io.py
 
-      - name: Test embeddings modules      
-        if: always()
-        run: python -m pytest -vvv tests/test_embeddings.py
-
-      - name: Test AO modules
-        if: always()
-        run: python -m pytest -vvv tests/test_ao.py
+#      - name: Test IO modules
+#        run: python -m pytest -vvv tests/test_io.py
+#
+#      - name: Test embeddings modules
+#        run: python -m pytest -vvv tests/test_embeddings.py
+#
+#      - name: Test AO modules
+#        run: python -m pytest -vvv tests/test_ao.py

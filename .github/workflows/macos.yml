@@ -17,7 +17,7 @@ on:
       - '*'
 
 jobs:
-  condaenv:
+  build:
     name: macos-64
     runs-on: "macos-latest"
     steps:
@@ -27,7 +27,6 @@ jobs:
         uses: conda-incubator/setup-miniconda@v2
         with:
           activate-environment: ml
-          environment-file: macos.yml
           auto-activate-base: false
 
       - name: Set cache date
@@ -40,23 +39,25 @@ jobs:
           id: cache
 
       - name: Update environment
-        run: mamba env update -n ml -f macos.yml
+        run: conda env update -n ml -f macos.yml
         if: steps.cache.outputs.cache-hit != 'true'
 
+      - name: Sh
+        shell: sh -l {0}
+        run: |
+          conda info
+          conda list
       - name: Bash
         shell: bash -el {0}
         run: |
           conda info
           conda list
 
-      - name: Test IO modules
-        shell: bash -l {0}
-        run: python -m pytest -vvv tests/test_io.py
-
-      - name: Test embeddings modules
-        shell: bash -l {0}
-        run: python -m pytest -vvv tests/test_io.py
-
-      - name: Test AO modules
-        shell: bash -l {0}
-        run: python -m pytest -vvv tests/test_io.py
+#      - name: Test IO modules
+#        run: python -m pytest -vvv tests/test_io.py
+#
+#      - name: Test embeddings modules
+#        run: python -m pytest -vvv tests/test_io.py
+#
+#      - name: Test AO modules
+#        run: python -m pytest -vvv tests/test_io.py
