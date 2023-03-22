@@ -34,7 +34,7 @@ jobs:
       - name: Set cache date
         run: echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: ubuntu
           key: ubuntu-conda-${{ hashFiles('linux.yml') }}-${{ env.DATE }}-${{ env.CACHE_NUMBER }}
@@ -50,14 +50,14 @@ jobs:
           conda info
           conda list
 
-#      - name: Test IO modules
-#        shell: bash -l {0}
-#        run: python -m pytest -vvv tests/test_io.py
-#
-#      - name: Test embeddings modules
-#        shell: bash -l {0}
-#        run: python -m pytest -vvv tests/test_io.py
-#
-#      - name: Test AO modules
-#        shell: bash -l {0}
-#        run: python -m pytest -vvv tests/test_io.py
+      - name: Test IO modules
+        shell: bash -l {0}
+        run: python -m pytest -vvv tests/test_io.py
+
+      - name: Test embeddings modules
+        shell: bash -l {0}
+        run: python -m pytest -vvv tests/test_io.py
+
+      - name: Test AO modules
+        shell: bash -l {0}
+        run: python -m pytest -vvv tests/test_io.py
