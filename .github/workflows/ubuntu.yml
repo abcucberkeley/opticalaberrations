@@ -30,12 +30,13 @@ jobs:
           auto-activate-base: false
 
       - name: Set cache date
-        run: echo "today=$(/bin/date -u '+%Y%m%d')" >> $GITHUB_OUTPUT
+        id: set-date
+        run: echo "today=$(date +'%Y%m%d')" >> $GITHUB_ENV
 
       - uses: actions/cache@v3
         with:
           path: ${{ env.CONDA }}/envs
-          key: conda-ubuntu-${{steps.get-date.outputs.today }}-${{ hashFiles('ubuntu.yml') }}-${{ env.CACHE_NUMBER }}
+          key: conda-ubuntu-${{steps.set--date.outputs.today }}-${{ hashFiles('ubuntu.yml') }}-${{ env.CACHE_NUMBER }}
         env:
           CACHE_NUMBER: 0
 
