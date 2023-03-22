@@ -39,9 +39,9 @@ jobs:
           key: windows-conda-${{ hashFiles('windows.yml') }}-${{ env.DATE }}-${{ env.CACHE_NUMBER }}
           id: cache
 
-      - name: Update environment
-        run: mamba env update -n ml -f windows.yml
-        if: steps.cache.outputs.cache-hit != 'true'
+#      - name: Update environment
+#        run: mamba env update -n ml -f windows.yml
+#        if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Bash
         shell: bash -el {0}
