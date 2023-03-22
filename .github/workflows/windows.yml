@@ -18,45 +18,36 @@ on:
 
 jobs:
   build:
-    name: win-64
+    name: Building conda environment
     runs-on: "windows-latest"
     steps:
       - uses: actions/checkout@v3
 
-      - name: Building conda environment
+      - name: Setup miniconda
         uses: conda-incubator/setup-miniconda@v2
         with:
           activate-environment: ml
           auto-activate-base: false
 
       - name: Set cache date
-        run: echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
+        run: echo "today=$(/bin/date -u '+%Y%m%d')" >> $GITHUB_OUTPUT
 
       - uses: actions/cache@v3
         with:
-          path: windows
-          key: windows-conda-${{ hashFiles('windows.yml') }}-${{ env.DATE }}-${{ env.CACHE_NUMBER }}
-          id: cache
+          path: ${{ env.CONDA }}/envs
+          key: conda-windows-${{steps.get-date.outputs.today }}-${{ hashFiles('windows.yml') }}-${{ env.CACHE_NUMBER }}
+        env:
+          CACHE_NUMBER: 0
 
       - name: Update environment
         run: conda env update -n ml -f windows.yml
         if: steps.cache.outputs.cache-hit != 'true'
 
-      - name: PowerShell
-        shell: powershell
-        run: |
-          conda info
-          conda list
-      - name: PowerShell Core
+      - name: Test environment
         shell: pwsh
         run: |
           conda info
           conda list
-      - name: Cmd.exe
-        shell: cmd /C CALL {0}
-        run: >-
-          conda info && conda list
-
 
 #      - name: Test IO modules
 #        run: python -m pytest -vvv tests/test_io.py

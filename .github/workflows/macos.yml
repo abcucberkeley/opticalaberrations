@@ -18,39 +18,34 @@ on:
 
 jobs:
   build:
-    name: macos-64
+    name: Building conda environment
     runs-on: "macos-latest"
     steps:
       - uses: actions/checkout@v3
 
-      - name: Building conda environment
+      - name: Setup miniconda
         uses: conda-incubator/setup-miniconda@v2
         with:
           activate-environment: ml
           auto-activate-base: false
 
       - name: Set cache date
-        run: echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
+        run: echo "today=$(/bin/date -u '+%Y%m%d')" >> $GITHUB_OUTPUT
 
       - uses: actions/cache@v3
         with:
-          path: macos
-          key: macos-conda-${{ hashFiles('macos.yml') }}-${{ env.DATE }}-${{ env.CACHE_NUMBER }}
-          id: cache
+          path: ${{ env.CONDA }}/envs
+          key: conda-macos-${{steps.get-date.outputs.today }}-${{ hashFiles('macos.yml') }}-${{ env.CACHE_NUMBER }}
+        env:
+          CACHE_NUMBER: 0
 
       - name: Update environment
         run: conda env update -n ml -f macos.yml
         if: steps.cache.outputs.cache-hit != 'true'
 
-      - name: Sh
-        shell: sh -l {0}
+      - name: Test environment
         run: |
-          conda info
-          conda list
-      - name: Bash
-        shell: bash -el {0}
-        run: |
-          conda info
+          conda info  
           conda list
 
 #      - name: Test IO modules
