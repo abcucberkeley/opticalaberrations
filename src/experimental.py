@@ -347,8 +347,8 @@ def generate_embeddings(
 ):
 
     model, modelpsfgen = reloadmodel_if_needed(
-        preloaded,
-        model,
+        modelpath=model,
+        preloaded=preloaded,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
@@ -539,8 +539,8 @@ def predict_sample(
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
-        preloaded,
-        model,
+        modelpath=model,
+        preloaded=preloaded,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
@@ -715,8 +715,8 @@ def predict_large_fov(
     sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
-        preloaded,
-        model,
+        modelpath=model,
+        preloaded=preloaded,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=sample_voxel_size
     )
@@ -870,8 +870,8 @@ def predict_rois(
     cpu_workers: int = -1
 ):
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
-        preloaded,
-        model,
+        modelpath=model,
+        preloaded=preloaded,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
@@ -982,8 +982,8 @@ def predict_tiles(
     cpu_workers: int = -1
 ):
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
-        preloaded,
-        model,
+        modelpath=model,
+        preloaded=preloaded,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
