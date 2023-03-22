@@ -26,10 +26,9 @@ jobs:
       - name: Building conda environment
         uses: conda-incubator/setup-miniconda@v2
         with:
-          miniforge-variant: Mambaforge
-          miniforge-version: latest
           activate-environment: ml
-          use-mamba: true
+          environment-file: macos.yml
+          auto-activate-base: false
 
       - name: Set cache date
         run: echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
