@@ -387,7 +387,7 @@ def eval_rotation(
 
     if plot is not None:
         fig = plt.figure(figsize=(15, 20 * round(psfgen.n_modes/15)))
-        plt.subplots_adjust(hspace=0.1)
+        # plt.subplots_adjust(hspace=0.1, wspace=0.2) gets overwritten in savefig
         gs = fig.add_gridspec(len(wavefront.twins.keys()), 2)
 
     for row, (mode, twin) in enumerate(wavefront.twins.items()):
@@ -450,7 +450,8 @@ def eval_rotation(
                     )
 
                     fit_ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                    fit_ax.set_ylabel('Predicted Twin angle (deg)')
+                    fit_ax.set_ylabel('Predicted Twin angle (deg)',rotation=-90,labelpad=15)
+                    fit_ax.yaxis.set_label_position("right")
                     fit_ax.set_xlabel('Digitially rotated Twin angle (deg)')
                     fit_ax.set_xticks(range(0, int(np.max(xdata)), 90))
                     fit_ax.set_yticks(np.insert(np.arange(-90, np.max(ydata), 180), 0, 0))
