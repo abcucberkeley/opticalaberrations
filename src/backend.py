@@ -329,6 +329,7 @@ def eval_rotation(
     no_phase: bool,
     threshold: float = 0.,
     plot: Any = None,
+    minimum_fraction_of_kept_points: float = 0.45,
 ):
     """
         We can think of the mode and its twin as the X and Y basis, and the aberration being a
@@ -405,6 +406,11 @@ def eval_rotation(
                 data_mask = np.ones(xdata.shape[0], dtype=bool)
                 if no_phase: data_mask[np.abs(init_preds[:, mode.index_ansi] / rho) < np.cos(np.radians(70)) * (rho > threshold)] = 0.
                 data_mask[rhos < rho/2] = 0. # exclude if rho is unusually small (which can lead to small, but dominant primary mode near discontinuity)
+                fraction_of_kept_points = data_mask.sum() / len(data_mask)
+                if fraction_of_kept_points < minimum_fraction_of_kept_points:
+                    # reject if aren't using at least 45% of the values
+                    rho = 0
+
                 xdata = xdata[data_mask]
                 ydata = ydata[data_mask]
                 offset = ydata[0]
@@ -444,8 +450,8 @@ def eval_rotation(
                     fit_ax.scatter(xdata, ydata, s=2, color='grey')
                     
                     fit_ax.set_title(
-                        f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
-                        f' [$b$={twin_angle:.1f}$^\circ$  $\\rho$={rho:.3f} $\mu$RMS   MSE={mse:.0f}]',
+                        f'm{mode.index_ansi}={preds[mode.index_ansi]:.2f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
+                        f' [{twin_angle:.0f}$^\circ$ $\\rho$={rho:.2f} $\mu$RMS, MSE={mse:.0f}, {fraction_of_kept_points*100:.0f}% kept]',
                         color=title_color
                     )
 
