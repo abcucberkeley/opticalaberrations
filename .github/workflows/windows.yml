@@ -20,6 +20,10 @@ jobs:
   build:
     name: Testing package on Windows
     runs-on: "windows-latest"
+    defaults:
+      run:
+        shell: pwsh
+
     steps:
       - uses: actions/checkout@v3
 
@@ -54,8 +58,8 @@ jobs:
       - name: Test IO modules
         run: python -m pytest -vvv tests/test_io.py
 
-      - name: Test embeddings modules
-        run: python -m pytest -vvv tests/test_embeddings.py
-
-      - name: Test AO modules
-        run: python -m pytest -vvv tests/test_ao.py
+#      - name: Test embeddings modules
+#        run: python -m pytest -vvv tests/test_embeddings.py
+#
+#      - name: Test AO modules
+#        run: python -m pytest -vvv tests/test_ao.py

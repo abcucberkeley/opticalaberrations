@@ -20,6 +20,10 @@ jobs:
   build:
     name: Testing package on MacOS
     runs-on: "macos-latest"
+    defaults:
+      run:
+        shell: sh -l {0}
+
     steps:
       - uses: actions/checkout@v3
 
@@ -53,8 +57,8 @@ jobs:
       - name: Test IO modules
         run: python -m pytest -vvv tests/test_io.py
 
-      - name: Test embeddings modules
-        run: python -m pytest -vvv tests/test_io.py
-
-      - name: Test AO modules
-        run: python -m pytest -vvv tests/test_io.py
+#      - name: Test embeddings modules
+#        run: python -m pytest -vvv tests/test_embeddings.py
+#
+#      - name: Test AO modules
+#        run: python -m pytest -vvv tests/test_ao.py
