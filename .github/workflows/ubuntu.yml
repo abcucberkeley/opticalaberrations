@@ -50,15 +50,5 @@ jobs:
           conda info
           conda list
 
-  io:
-    needs: build
-    name: Test IO modules
-    runs-on: "ubuntu-latest"
-    defaults:
-      run:
-        shell: bash -el {0}
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Run test_io.py
-        run: $CONDA/envs/ml/bin/python -m pytest -vvv tests/test_io.py
+      - name: Test IO modules
+        run: python -m pytest -vvv tests/test_io.py
