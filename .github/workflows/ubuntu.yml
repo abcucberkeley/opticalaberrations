@@ -18,7 +18,7 @@ on:
 
 jobs:
   build:
-    name: Building conda environment
+    name: Testing package on Ubuntu
     runs-on: "ubuntu-latest"
     steps:
       - uses: actions/checkout@v3
@@ -26,6 +26,7 @@ jobs:
       - name: Setup miniconda
         uses: conda-incubator/setup-miniconda@v2
         with:
+          environment-file: linux.yml
           activate-environment: ml
           auto-activate-base: false
 
@@ -51,4 +52,10 @@ jobs:
           conda list
 
       - name: Test IO modules
+        run: python -m pytest -vvv tests/test_io.py
+
+      - name: Test embeddings modules
+        run: python -m pytest -vvv tests/test_io.py
+
+      - name: Test AO modules
         run: python -m pytest -vvv tests/test_io.py
