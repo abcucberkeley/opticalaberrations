@@ -1,6 +1,5 @@
 name: ml
 channels:
-  - mamba
   - esri
   - conda-forge
   - anaconda

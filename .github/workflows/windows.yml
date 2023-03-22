@@ -18,70 +18,45 @@ on:
 
 jobs:
   condaenv:
-    name: Building conda environment
+    name: ${{ runner.os }}-${{ runner.arch }}
     runs-on: "windows-latest"
     steps:
       - uses: actions/checkout@v3
-      - uses: conda-incubator/setup-miniconda@v2
-        with:
-          miniconda-version: "latest"
-          miniforge-variant: Mambaforge
-          auto-update-conda: true
-          activate-environment: ml
-          environment-file: windows.yml
-          auto-activate-base: false
-          use-mamba: true
-      - name: PowerShell
-        shell: powershell
-        run: |
-          conda info
-          conda list
-      - name: PowerShell Core
-        shell: pwsh
-        run: |
-          conda info
-          conda list
-      - name: Cmd.exe
-        shell: cmd /C CALL {0}
-        run: >-
-          conda info && conda list
 
-#  io:
-#    needs: condaenv
-#    name: Test IO modules
-#    runs-on: "windows-latest"
-#    steps:
-#      - uses: actions/checkout@v3
-#      - uses: conda-incubator/setup-miniconda@v2
-#        with:
-#          miniconda-version: "latest"
-#          activate-environment: ml
-#      - name: Running pytest
+      - name: Building conda environment
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          activate-environment: ml
+          use-mamba: true
+
+      - name: Set cache date
+        run: echo "DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
+        uses: actions/cache@v2
+        with:
+          path: ${{ runner.os }}
+          key: ${{ runner.os }}-conda-${{ hashFiles('windows.yml') }}-${{ env.DATE }}-${{ env.CACHE_NUMBER }}
+          id: cache
+
+      - name: Update environment
+        run: mamba env update -n ml -f .yml
+        if: steps.cache.outputs.cache-hit != 'true'
+
+      - name: Bash
+        shell: bash -el {0}
+        run: |
+          conda info
+          conda list
+
+#      - name: Test IO modules
+#        shell: bash -l {0}
 #        run: python -m pytest -vvv tests/test_io.py
 #
-#  embeddings:
-#    needs: condaenv
-#    name: Test embeddings modules
-#    runs-on: "windows-latest"
-#    steps:
-#      - uses: actions/checkout@v3
-#      - uses: conda-incubator/setup-miniconda@v2
-#        with:
-#          miniconda-version: "latest"
-#          activate-environment: ml
-#      - name: Running pytest
-#        run: python -m pytest -vvv tests/test_embeddings.py
+#      - name: Test embeddings modules
+#        shell: bash -l {0}
+#        run: python -m pytest -vvv tests/test_io.py
 #
-#  ao:
-#    needs: condaenv
-#    name: Test AO modules
-#    runs-on: "windows-latest"
-#    steps:
-#      - uses: actions/checkout@v3
-#      - uses: conda-incubator/setup-miniconda@v2
-#        with:
-#          miniconda-version: "latest"
-#          activate-environment: ml
-#      - name: Running pytest
-#        run: python -m pytest -vvv tests/test_ao.py
-
+#      - name: Test AO modules
+#        shell: bash -l {0}
+#        run: python -m pytest -vvv tests/test_io.py
