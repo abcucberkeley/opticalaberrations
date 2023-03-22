@@ -41,7 +41,7 @@ jobs:
           id: cache
 
       - name: Update environment
-        run: mamba env update -n ml -f .yml
+        run: mamba env update -n ml -f linux.yml
         if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Bash
