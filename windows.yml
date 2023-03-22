@@ -154,6 +154,7 @@ dependencies:
   - pyqt=5.12.3
   - pysocks=1.7.1
   - pytest=7.2.0
+  - pytest-ordering=0.6
   - python=3.8.13
   - python-dateutil=2.8.2
   - python-flatbuffers=2.0
