@@ -1,14 +1,10 @@
 # Multiscale attention networks for sensorless detection of aberrations in adaptive optics
 
----
-[![Ubuntu-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml)
-[![Windows-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml)
-[![MacOS-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml)
-----
-[![Ubuntu-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml)
-[![Windows-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml)
-[![MacOS-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml)
----
+| `main`    | [![Ubuntu-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml)                | [![Windows-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml)                | [![MacOS-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml)                |
+|-----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `develop` | [![Ubuntu-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu.yml) | [![Windows-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows.yml) | [![MacOS-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos.yml) |
+
+
 
 
 # Table of Contents
