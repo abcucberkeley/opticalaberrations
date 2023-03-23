@@ -43,14 +43,14 @@ Create a new `conda` environment using the following commands (will create an en
 
 | System  | Requirements                 |
 |---------|------------------------------|
-| Ubuntu  | [`linux.yml`](linux.yml)     |
+| Ubuntu  | [`ubuntu.yml`](ubuntu.yml)     |
 | Windows | [`windows.yml`](windows.yml) |
 | MacOS   | [`macos.yml`](macos.yml)     |
 
 
 ```shell
 cd opticalaberrations
-conda env create -f linux.yml
+conda env create -f ubuntu.yml
 conda activate ml
 ```
 
