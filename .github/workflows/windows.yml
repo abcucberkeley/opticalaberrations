@@ -50,17 +50,17 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Test environment
-        run: conda activate ml && info && conda list
+        run: conda activate ml && conda info && conda list
     
       - name: Where? Oh where have my dlls gone. Where, oh where can they be?    
         run: dir C:\Miniconda\envs\ml\lib\site-packages\scipy\*.dll /s && where python
 
       - name: Test IO modules
-        if: always()     
-        run: export CONDA_DLL_SEARCH_MODIFICATION_ENABLE=1 && conda activate ml && python -m pytest -vvv tests/test_io.py
+        if: always()
+        run: conda activate ml && set CONDA_DLL_SEARCH_MODIFICATION_ENABLE=1 && python -m pytest -vvv tests/test_io.py
 
       - name: Test embeddings modules
-        run: python -m pytest -vvv tests/test_embeddings.py
+        run: conda activate ml && set CONDA_DLL_SEARCH_MODIFICATION_ENABLE=1 && python -m pytest -vvv tests/test_embeddings.py
 
       - name: Test AO modules
-        run: python -m pytest -vvv tests/test_ao.py
+        run: conda activate ml && set CONDA_DLL_SEARCH_MODIFICATION_ENABLE=1 && python -m pytest -vvv tests/test_ao.py
