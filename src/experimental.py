@@ -1707,7 +1707,7 @@ def eval_ao_dataset(
     datadir: Path,
     flat: Any = None,
     postfix: str = 'predictions_zernike_coefficients.csv',
-    gt_postfix: str = 'DSH1_DSH_Wvfrt*.tif',
+    gt_postfix: str = 'DSH1_DSH_Wvfrt*',
     gt_unit: str = 'nm',
     plot_evals: bool = True,
     precomputed: bool = False
@@ -1740,15 +1740,16 @@ def eval_ao_dataset(
         )
 
         logger.info('Beginning evaluations')
-        for file in sorted(datadir.glob('*_Scan_*.tif'), key=os.path.getctime):  # sort by creation time
+        for file in sorted(datadir.glob('MLAO_Scan*.tif'), key=os.path.getctime):  # sort by creation time
             if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
                 continue
 
-            prefix = '_'.join(file.stem.split('_')[:3])
+            method = file.stem.split('_')[0]
+            iter_num = file.stem.split('_')[3]
 
             gt_path = None
             for gtfile in sh_results:
-                if fnmatch.fnmatch(gtfile.name, f'{gt_postfix}'):
+                if fnmatch.fnmatch(gtfile.name, f'{gt_postfix}*{iter_num}*.tif'):
                     gt_path = gtfile
                     break
 
@@ -1757,7 +1758,7 @@ def eval_ao_dataset(
 
             prediction_path = None
             for predfile in ml_results:
-                if fnmatch.fnmatch(predfile.name, f'{prefix}*{postfix}'):
+                if fnmatch.fnmatch(predfile.name, f'{method}_Scan_Iter_{iter_num}*{postfix}'):
                     prediction_path = predfile
                     break
 

@@ -15,7 +15,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
-from typing import Any, Union
+from typing import Any, Union, Optional
 import numpy as np
 import matplotlib.patches as patches
 from line_profiler_pycharm import profile
