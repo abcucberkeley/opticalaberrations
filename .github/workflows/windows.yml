@@ -55,10 +55,13 @@ jobs:
           conda info
           conda list
     
-      - name: Where? Oh where have my dlls gone. Where, oh where can they be?        
+      - name: Where? Oh where have my dlls gone. Where, oh where can they be?
+        shell: cmd
         run: dir C:\Miniconda\envs\ml\lib\site-packages\scipy\*.dll /s
 
       - name: What if we activate
+        shell: cmd
+        if: always()
         run: conda activate ml && where libbanded5x.4LIW6FJ2MYAF374XJSSB2KHHIEBRW45R.gfortran-win_amd64.dll
 
       - name: Test IO modules
