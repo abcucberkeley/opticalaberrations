@@ -18,7 +18,7 @@ on:
 
 jobs:
   build:
-    name: Testing package on MacOS
+    name: Testing MacOS build
     runs-on: "macos-latest"
     defaults:
       run:
@@ -43,7 +43,7 @@ jobs:
           CACHE_NUMBER: 0
         with:
           path: ${{ env.CONDA }}/envs
-          key: macos-build-${{ hashFiles('**/macos.yml') }}-${{ env.DATE }}
+          key: macos-build-${{ hashFiles('macos.yml') }}-${{ env.DATE }}
 
       - name: Update environment
         run: conda env update -n ml -f macos.yml
