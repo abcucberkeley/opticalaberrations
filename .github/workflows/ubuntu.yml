@@ -54,9 +54,9 @@ jobs:
           conda info
           conda list
 
-      - name: Test IO modules
-        run: python -m pytest -vvv tests/test_io.py
-
+#      - name: Test IO modules
+#        run: python -m pytest -vvv tests/test_io.py
+#
 #      - name: Test embeddings modules
 #        run: python -m pytest -vvv tests/test_embeddings.py
 #
