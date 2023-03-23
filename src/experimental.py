@@ -1355,18 +1355,25 @@ def eval_mode(
     remove_background: bool = True,
     postfix: str = '',
     gt_postfix: str = '',
+    gt_unit: str = 'um',
     plot: bool = True,
 ):
     logger.info(f"Pred: {prediction_path.name}")
     logger.info(f"GT: {gt_path.name}")
 
-    save_postfix = 'pr' if postfix.startswith('phase_retrieval') else 'ml'
+    if postfix.startswith('DSH'):
+        save_postfix = 'sh'
+    elif postfix.startswith('phase_retrieval'):
+        save_postfix = 'pr'
+    else:
+        save_postfix = 'ml'
+
     save_path = Path(f'{prediction_path.parent}/{prediction_path.stem}_{save_postfix}_eval')
 
     with open(str(prediction_path).replace('_zernike_coefficients.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
 
-    noisy_img = np.squeeze(get_image(input_path).astype(float))
+    noisy_img = load_sample(input_path)
     maxcounts = np.max(noisy_img)
     psnr = predictions_settings['psnr']
     gen = backend.load_metadata(
@@ -1409,8 +1416,8 @@ def eval_mode(
         y = np.zeros_like(p)
 
     p_wave = Wavefront(p, lam_detection=gen.lam_detection, modes=len(p))
-    y_wave = Wavefront(y, lam_detection=gen.lam_detection, modes=len(p))
-    diff = Wavefront(y-p, lam_detection=gen.lam_detection, modes=len(p))
+    y_wave = Wavefront(y, lam_detection=gen.lam_detection, modes=len(p), unit=gt_unit)
+    diff = Wavefront(y_wave.amplitudes-p_wave.amplitudes, lam_detection=gen.lam_detection, modes=len(p))
 
     if flat_path is not None:
         rfilter = f"{str(gt_path.name).replace(gt_postfix, '')}"
@@ -1424,15 +1431,14 @@ def eval_mode(
         )
 
     if plot:
-        prep = partial(
-            preprocessing.prep_sample,
+        noisy_img = preprocessing.prep_sample(
+            noisy_img,
             normalize=normalize,
             remove_background=remove_background,
-            model_fov=gen.psf_fov,
-            plot=input_path.with_suffix(''),
+            windowing=False,
+            sample_voxel_size=predictions_settings['sample_voxel_size']
         )
 
-        noisy_img = prep(noisy_img, sample_voxel_size=predictions_settings['sample_voxel_size'])
         psfgen = backend.load_metadata(
             model_path,
             snr=psnr,
@@ -1694,6 +1700,81 @@ def eval_dataset(
         pool.join()     # wait for all tasks to complete
 
     plot_eval_dataset(model, datadir)
+
+
+@profile
+def eval_ao_dataset(
+    datadir: Path,
+    flat: Any = None,
+    postfix: str = 'predictions_zernike_coefficients.csv',
+    gt_postfix: str = 'DSH1_DSH_Wvfrt*.tif',
+    gt_unit: str = 'nm',
+    plot_evals: bool = True,
+    precomputed: bool = False
+):
+    mldir = Path(datadir/'MLResults')
+    ml_results = list(mldir.glob('**/*'))
+    sh_results = list(Path(datadir/'DSH1/DSH_Wavefront_TIF').glob('**/*'))
+
+    # get model from .json file
+    with open(list(mldir.glob('*_settings.json'))[0]) as f:
+        predictions_settings = ujson.load(f)
+        model = Path(predictions_settings['model'])
+
+        if not model.exists():
+            filename = str(model).split('\\')[-1]
+            model = Path(f"../pretrained_models/lattice_yumb_x108um_y108um_z200um/{filename}")
+
+        logger.info(model)
+
+    if not precomputed:
+        pool = mp.Pool(processes=mp.cpu_count())
+
+        evaluate = partial(
+            eval_mode,
+            model_path=model,
+            flat_path=flat,
+            postfix=postfix,
+            gt_postfix=gt_postfix,
+            plot=plot_evals,
+        )
+
+        logger.info('Beginning evaluations')
+        for file in sorted(datadir.glob('*_Scan_*.tif'), key=os.path.getctime):  # sort by creation time
+            if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
+                continue
+
+            prefix = '_'.join(file.stem.split('_')[:3])
+
+            gt_path = None
+            for gtfile in sh_results:
+                if fnmatch.fnmatch(gtfile.name, f'{gt_postfix}'):
+                    gt_path = gtfile
+                    break
+
+            if gt_path is None:
+                logger.warning(f'GT not found for: {file.name}.tif')
+
+            prediction_path = None
+            for predfile in ml_results:
+                if fnmatch.fnmatch(predfile.name, f'{prefix}*{postfix}'):
+                    prediction_path = predfile
+                    break
+
+            if prediction_path is None:
+                logger.warning(f'Prediction not found for: {file.name}')
+
+            task = partial(
+                evaluate,
+                input_path=file,
+                prediction_path=prediction_path,
+                gt_path=gt_path,
+                gt_unit=gt_unit
+            )
+            _ = pool.apply_async(task)  # issue task
+
+        pool.close()    # close the pool
+        pool.join()     # wait for all tasks to complete
 
 
 @profile

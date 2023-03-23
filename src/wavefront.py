@@ -44,7 +44,7 @@ class Wavefront:
         gamma: float = .75,
         signed: bool = True,
         rotate: bool = False,
-
+        unit: str = 'um'
     ):
         self.ranges = amplitudes
         self.order = order
@@ -54,6 +54,7 @@ class Wavefront:
         self.gamma = gamma
         self.signed = signed
         self.rotate = rotate
+        self.unit = unit
 
         # Provide the probabilities (aka weights) over the desired range of modes.
         # Don't include "prefixed": piston,tip,tilt,defocus.
@@ -124,7 +125,7 @@ class Wavefront:
                             self.zernikes[twin] = a * np.sin(randomangle)
 
         elif isinstance(amplitudes, Path) or isinstance(amplitudes, str):
-            amplitudes = self._fit_zernikes(amplitudes)
+            amplitudes = self._fit_zernikes(amplitudes, unit=self.unit)
             amplitudes = self._formatter(amplitudes, order)
             self.zernikes = {
                 Zernike(j, order=order): a
@@ -267,11 +268,14 @@ class Wavefront:
         wavefront *= self.na_mask(na=na, wavefrontshape=wavefront.shape)
         return abs(np.nanmax(wavefront) - np.nanmin(wavefront))
 
-    def _fit_zernikes(self, wavefront, rotate=True, microns=True):
+    def _fit_zernikes(self, wavefront, rotate=True, unit='waves'):
         wavefront = np.ascontiguousarray(imread(wavefront).astype(float))
 
-        if microns:
-            wavefront *= self.lam_detection  # convert waves to microns before fitting.
+        # convert unit to microns before fitting.
+        if unit == 'waves':
+            wavefront *= self.lam_detection
+        elif unit == 'nm':
+            wavefront /= 1000
 
         if rotate:
             wavefront = np.flip(np.rot90(wavefront), axis=0)
