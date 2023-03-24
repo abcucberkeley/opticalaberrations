@@ -130,10 +130,12 @@ do
               task="${task} --partition=abc"
             fi
 
+            JOB="${TITLE}-${DATASET}-${DISTRIBUTIONS[$DIST-1]}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
             task="${task} --cpus-per-task=${CPUS}"
             task="${task} --mem='${MEM}'"
-            task="${task} --job-name=${TITLE}-${DATASET}-${DISTRIBUTIONS[$DIST-1]}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
+            task="${task} --job-name=${JOB}"
             task="${task} --time=${TIMELIMIT}"
+            task="${task} --output=${OUTDIR}/logs/${JOB}.log"
             task="${task} --export=ALL"
             task="${task} --wrap=\"${j}\""
             echo $task | bash
