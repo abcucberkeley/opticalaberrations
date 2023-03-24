@@ -27,6 +27,9 @@ DATASET='train'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
+LOGS="${OUTDIR}/logs"
+mkdir -p $OUTDIR
+mkdir -p $LOGS
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
@@ -135,7 +138,7 @@ do
             task="${task} --mem='${MEM}'"
             task="${task} --job-name=${JOB}"
             task="${task} --time=${TIMELIMIT}"
-            task="${task} --output=${OUTDIR}/logs/${JOB}.log"
+            task="${task} --output=${LOGS}/${JOB}.log"
             task="${task} --export=ALL"
             task="${task} --wrap=\"${j}\""
             echo $task | bash
