@@ -1420,7 +1420,7 @@ def eval_mode(
     diff = Wavefront(y_wave.amplitudes-p_wave.amplitudes, lam_detection=gen.lam_detection, modes=len(p))
 
     if flat_path is not None:
-        rfilter = f"{str(gt_path.name).replace(gt_postfix, '')}"
+        rfilter = str(input_path.name).split("_Cam", 1)[0] # rfilter = f"{str(input_path.name).replace(gt_postfix, '')}"
         dm_path = Path(str(list(input_path.parent.glob(f"{rfilter}*JSONsettings.json"))[0]))
         dm_wavefront = Path(gt_path.parent/f"{rfilter}_dm_wavefront.svg")
 
