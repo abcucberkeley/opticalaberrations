@@ -450,7 +450,7 @@ def eval_rotation(
                     fit_ax.scatter(xdata, ydata, s=2, color='grey')
                     
                     fit_ax.set_title(
-                        f'm{mode.index_ansi}={preds[mode.index_ansi]:.2f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
+                        f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
                         f' [{twin_angle:.0f}$^\circ$ $\\rho$={rho:.2f} $\mu$RMS, MSE={mse:.0f}, {fraction_of_kept_points*100:.0f}% kept]',
                         color=title_color
                     )
