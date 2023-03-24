@@ -67,7 +67,8 @@ def get_sample(
         input_coverage=1.0,
         embedding_option='spatial_planes',
         iotf=None,
-        lls_defocus: bool = False
+        lls_defocus: bool = False,
+        defocus_only: bool = False
 ):
     try:
         if isinstance(path, tf.Tensor):
@@ -78,9 +79,7 @@ def get_sample(
         with open(path.with_suffix('.json')) as f:
             hashtbl = ujson.load(f)
 
-        zernikes = hashtbl['zernikes']
         snr = hashtbl['snr']
-
         npoints = hashtbl['npoints']
 
         try:
@@ -88,8 +87,13 @@ def get_sample(
         except KeyError:
             lls_defocus_offset = 0.
 
-        if lls_defocus:
-            zernikes.append(lls_defocus_offset)
+        if defocus_only:
+            zernikes = [lls_defocus_offset]
+        else:
+            zernikes = hashtbl['zernikes']
+
+            if lls_defocus:
+                zernikes.append(lls_defocus_offset)
 
         try:
             p2v = hashtbl['peak2peak']

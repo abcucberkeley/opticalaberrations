@@ -1245,7 +1245,8 @@ def train(
         refractive_index: float = 1.33,
         no_phase: bool = False,
         plot_patches: bool = False,
-        lls_defocus: bool = False
+        lls_defocus: bool = False,
+        defocus_only: bool = False,
 ):
     network = network.lower()
     opt = opt.lower()
@@ -1255,12 +1256,19 @@ def train(
         with h5py.File(psf_type, 'r') as file:
             psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
 
+    if defocus_only:
+        pmodes = 1
+    elif lls_defocus:
+        pmodes = pmodes + 1
+    else:
+        pmodes = modes
+
     if network == 'opticalnet':
         model = opticalnet.OpticalTransformer(
             name='OpticalNet',
             roi=roi,
             patches=patch_size,
-            modes=pmodes+1 if lls_defocus else pmodes,
+            modes=pmodes,
             depth_scalar=depth_scalar,
             width_scalar=width_scalar,
             activation=activation,
@@ -1271,7 +1279,7 @@ def train(
     elif network == 'opticalresnet':
         model = opticalresnet.OpticalResNet(
             name='OpticalResNet',
-            modes=pmodes+1 if lls_defocus else pmodes,
+            modes=pmodes,
             na_det=1.0,
             refractive_index=refractive_index,
             lambda_det=wavelength,
@@ -1289,7 +1297,7 @@ def train(
     elif network == 'baseline':
         model = baseline.Baseline(
             name='Baseline',
-            modes=pmodes+1 if lls_defocus else pmodes,
+            modes=pmodes,
             depth_scalar=depth_scalar,
             width_scalar=width_scalar,
             activation=activation,
@@ -1297,12 +1305,12 @@ def train(
     elif network == 'otfnet':
         model = otfnet.OTFNet(
             name='OTFNet',
-            modes=pmodes+1 if lls_defocus else pmodes
+            modes=pmodes
         )
     elif network == 'phasenet':
         model = PhaseNet(
             name='PhaseNet',
-            modes=pmodes+1 if lls_defocus else pmodes
+            modes=pmodes
         )
     else:
         model = load(Path(network))

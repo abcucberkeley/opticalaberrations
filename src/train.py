@@ -176,7 +176,12 @@ def parse_args(args):
 
     train_parser.add_argument(
         '--lls_defocus', action='store_true',
-        help='toggle to predict the offset between the excitation and detection focal plan '
+        help='toggle to also predict the offset between the excitation and detection focal plan '
+    )
+
+    train_parser.add_argument(
+        '--defocus_only', action='store_true',
+        help='toggle to only predict the offset between the excitation and detection focal plan '
     )
 
     return train_parser.parse_known_args(args)[0]
@@ -241,6 +246,7 @@ def main(args=None):
             width_scalar=args.width_scalar,
             no_phase=args.no_phase,
             lls_defocus=args.lls_defocus,
+            defocus_only=args.defocus_only,
         )
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
