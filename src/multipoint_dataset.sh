@@ -20,6 +20,7 @@ MEM='20G'
 TIMELIMIT='1:00:00'
 SHAPE=64
 MAX_LLS_OFFSET=0
+RAND_VSIZE=false
 
 MODES=15
 TITLE='fourier_embeddings'
@@ -100,6 +101,10 @@ do
             j="${j} --na_detection ${NA}"
             j="${j} --lam_detection ${LAMBDA}"
             j="${j} --cpu_workers ${CPUS}"
+
+            if $RAND_VSIZE; then
+              j="${j} --randomize_voxel_size"
+            fi
 
             for e in spatial_planes
             do

@@ -276,6 +276,7 @@ def create_synthetic_sample(
     mode_dist: str,
     gamma: float,
     signed: bool,
+    randomize_voxel_size: bool,
     rotate: bool,
     min_amplitude: float,
     max_amplitude: float,
@@ -298,6 +299,11 @@ def create_synthetic_sample(
     min_lls_defocus_offset: float = 0.,
     max_lls_defocus_offset: float = 0.,
 ):
+    if randomize_voxel_size:
+        x_voxel_size = np.random.uniform(low=x_voxel_size-.025, high=x_voxel_size+.025)
+        y_voxel_size = np.random.uniform(low=y_voxel_size - .025, high=y_voxel_size + .025)
+        z_voxel_size = np.random.uniform(low=z_voxel_size - .05, high=z_voxel_size + .05)
+
     gen = SyntheticPSF(
         order='ansi',
         cpu_workers=cpu_workers,
@@ -312,9 +318,9 @@ def create_synthetic_sample(
         amplitude_ranges=(min_amplitude, max_amplitude),
         lam_detection=lam_detection,
         psf_shape=3*[input_shape],
-        x_voxel_size=np.random.uniform(low=x_voxel_size-.025, high=x_voxel_size+.025),
-        y_voxel_size=np.random.uniform(low=y_voxel_size-.025, high=y_voxel_size+.025),
-        z_voxel_size=np.random.uniform(low=z_voxel_size-.05, high=z_voxel_size+.05),
+        x_voxel_size=x_voxel_size,
+        y_voxel_size=y_voxel_size,
+        z_voxel_size=z_voxel_size,
         refractive_index=refractive_index,
         na_detection=na_detection,
     )
@@ -459,6 +465,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        '--randomize_voxel_size', action='store_true',
+        help='optional flag to randomize voxel size during training'
+    )
+
+    parser.add_argument(
         "--min_amplitude", default=0, type=float,
         help="min amplitude for the zernike coefficients"
     )
@@ -534,6 +545,7 @@ def main(args=None):
         random_crop=args.random_crop,
         gamma=args.gamma,
         signed=args.signed,
+        randomize_voxel_size=args.randomize_voxel_size,
         rotate=args.rotate,
         min_amplitude=args.min_amplitude,
         max_amplitude=args.max_amplitude,
