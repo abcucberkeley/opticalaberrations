@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="eval_ao_dataset $USER_HOME$/nvme2/Data/TestsForThayer/20230323/test_for_filenames/" />
+    <option name="PARAMETERS" value="eval_ao_dataset U:\Data\TestsForThayer\20230323\test_for_filenamesv2 --flat U:\Data\TestsForThayer\20230322\DM\DM_flat_20230322v2.csv" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
