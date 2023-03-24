@@ -133,7 +133,7 @@ do
               task="${task} --partition=abc"
             fi
 
-            JOB="${TITLE}-${DATASET}-${DISTRIBUTIONS[$DIST-1]}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
+            JOB="${TITLE}-${DATASET}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
             task="${task} --cpus-per-task=${CPUS}"
             task="${task} --mem='${MEM}'"
             task="${task} --job-name=${JOB}"
