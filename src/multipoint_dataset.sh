@@ -30,7 +30,7 @@ OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
-  SAMPLES_PER_JOB=10
+  SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=200
   OBJS=(1 2 5 10 25 50 75 100 125 150)
   mPSNR=($(seq 1 10 41))
