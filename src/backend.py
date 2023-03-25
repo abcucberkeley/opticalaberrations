@@ -1259,9 +1259,7 @@ def train(
     if defocus_only:
         pmodes = 1
     elif lls_defocus:
-        pmodes = pmodes + 1
-    else:
-        pmodes = modes
+        pmodes += + 1
 
     if network == 'opticalnet':
         model = opticalnet.OpticalTransformer(
