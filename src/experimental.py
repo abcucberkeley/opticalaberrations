@@ -51,15 +51,27 @@ def reloadmodel_if_needed(
     modelpath: Path,
     preloaded: Optional[Preloadedmodelclass] = None,
     ideal_empirical_psf: Union[Path, np.ndarray] = None,
-    ideal_empirical_psf_voxel_size: Any = None
+    ideal_empirical_psf_voxel_size: Any = None,
+    n_modes: Optional[int] = None,
+    psf_type: Optional[np.ndarray] = None
 ):
     if preloaded is None:
         logger.info("Loading new model, because model didn't exist")
-        preloaded = Preloadedmodelclass(modelpath, ideal_empirical_psf, ideal_empirical_psf_voxel_size)
+        preloaded = Preloadedmodelclass(
+            modelpath,
+            ideal_empirical_psf,
+            ideal_empirical_psf_voxel_size,
+            n_modes=n_modes,
+            psf_type=psf_type,
+        )
 
     if ideal_empirical_psf is None and preloaded.ideal_empirical_psf is not None:
         logger.info("Loading new model, because ideal_empirical_psf has been removed")
-        preloaded = Preloadedmodelclass(modelpath)
+        preloaded = Preloadedmodelclass(
+            modelpath,
+            n_modes=n_modes,
+            psf_type=psf_type,
+        )
 
     elif preloaded.ideal_empirical_psf != ideal_empirical_psf:
         logger.info(f"Updating ideal psf with empirical, because {chr(10)} {preloaded.ideal_empirical_psf} of type {type(preloaded.ideal_empirical_psf)} has been changed to {chr(10)} {ideal_empirical_psf} of type {type(ideal_empirical_psf)}")
@@ -580,7 +592,6 @@ def predict_sample(
         filter_mask_dilation=True,
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
-
 
     if no_phase:
         p, std, pchange = backend.dual_stage_prediction(

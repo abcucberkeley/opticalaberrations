@@ -13,7 +13,9 @@ class Preloadedmodelclass:
             self,
             modelpath: Path,
             ideal_empirical_psf: Optional[Union[Path, np.ndarray]] = None,
-            ideal_empirical_psf_voxel_size: Optional[tuple] = None
+            ideal_empirical_psf_voxel_size: Optional[tuple] = None,
+            n_modes: Optional[int] = None,
+            psf_type: Optional[np.ndarray] = None
     ):
         
         if ideal_empirical_psf == "None" or ideal_empirical_psf is None:
@@ -33,7 +35,7 @@ class Preloadedmodelclass:
         for gpu_instance in physical_devices:
             tfc.experimental.set_memory_growth(gpu_instance, True)
 
-        self.modelpsfgen = load_metadata(self.modelpath)
+        self.modelpsfgen = load_metadata(self.modelpath, psf_type=psf_type, n_modes=n_modes)
         self.model = load(self.modelpath, mosaic=True)
 
         if self.ideal_empirical_psf is not None:

@@ -305,7 +305,10 @@ def bootstrap_predict(
     logger.info(f"[BS={batch_size}, n={n_samples}] {desc}")
     gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples)
     preds = model.predict(gen, batch_size=batch_size, verbose=verbose)
-    preds[:, ignore_modes] = 0.
+
+    if preds.shape[1] > 1:
+        preds[:, ignore_modes] = 0.
+
     preds[np.abs(preds) <= threshold] = 0.
     preds = np.stack(np.split(preds, n_samples), axis=-1)
 
@@ -597,19 +600,28 @@ def predict_rotation(
     )
 
     init_preds = np.stack(np.split(init_preds, digital_rotations.shape[0]), axis=1)
-    jobs = utils.multiprocess(
-        jobs=init_preds,
-        func=eval_mode_rotations,
-        cores=cpu_workers,
-        desc="Evaluate predictions"
-    )
-    jobs = np.array([list(zip(*j)) for j in jobs])
-    preds, stdev = jobs[..., 0], jobs[..., -1]
 
-    if init_preds.shape[-1] == psfgen.n_modes:
-        return preds, stdev
+    if init_preds.shape[-1] > 1:
+
+        jobs = utils.multiprocess(
+            jobs=init_preds,
+            func=eval_mode_rotations,
+            cores=cpu_workers,
+            desc="Evaluate predictions"
+        )
+        jobs = np.array([list(zip(*j)) for j in jobs])
+        preds, stdev = jobs[..., 0], jobs[..., -1]
+
+        if init_preds.shape[-1] == psfgen.n_modes:
+            return preds, stdev
+        else:
+            lls_defocus = np.mean(init_preds[:, -1])
+            return preds, stdev, lls_defocus
+
     else:
-        lls_defocus = np.mean(init_preds[:, -1])
+        preds = np.zeros(psfgen.n_modes)
+        stdev = np.zeros(psfgen.n_modes)
+        lls_defocus = np.mean(init_preds)
         return preds, stdev, lls_defocus
 
 
