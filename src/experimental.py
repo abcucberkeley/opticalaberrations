@@ -132,7 +132,7 @@ def estimate_and_save_new_dm(
         scalar=dm_damping_scalar
     ))
     dm.to_csv(savepath, index=False, header=False)
-    return dm
+    return dm.values
 
 
 @profile
@@ -419,6 +419,8 @@ def predict(
     model: tf.keras.Model,
     modelpsfgen: SyntheticPSF,
     samplepsfgen: SyntheticPSF,
+    dm_calibration: Any,
+    dm_state: Any,
     wavelength: float = .510,
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.,
@@ -498,7 +500,8 @@ def predict(
 
     ps, std = np.concatenate(ps), np.concatenate(std)
 
-    predictions = pd.DataFrame(ps.T, columns=[f.with_suffix('').name for f in rois])
+    tile_names = [f.with_suffix('').name for f in rois]
+    predictions = pd.DataFrame(ps.T, columns=tile_names)
     pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('z')]
     predictions['mean'] = predictions[pcols].mean(axis=1)
     predictions['median'] = predictions[pcols].median(axis=1)
@@ -507,6 +510,21 @@ def predict(
     predictions['std'] = predictions[pcols].std(axis=1)
     predictions.index.name = 'ansi'
     predictions.to_csv(f"{outdir}_predictions.csv")
+
+    if dm_calibration is not None:
+        dm_state = load_dm(dm_state)
+        actuators = {}
+
+        for t in tile_names:
+            actuators[t] = zernikies_to_actuators(
+                predictions[t].values,
+                dm_calibration=dm_calibration,
+                dm_state=dm_state,
+            )
+
+        actuators = pd.DataFrame.from_dict(actuators)
+        actuators.index.name = 'actuators'
+        actuators.to_csv(f"{outdir}_predictions_corrected_actuators.csv")
 
     if plot:
         vis.wavefronts(
@@ -858,6 +876,8 @@ def predict_rois(
     img: Path,
     model: Path,
     pois: Any,
+    dm_calibration: Any,
+    dm_state: Any,
     axial_voxel_size: float,
     lateral_voxel_size: float,
     wavelength: float = .605,
@@ -954,6 +974,8 @@ def predict_rois(
         model=preloadedmodel,
         modelpsfgen=premodelpsfgen,
         samplepsfgen=samplepsfgen,
+        dm_calibration=dm_calibration,
+        dm_state=dm_state,
         prediction_threshold=prediction_threshold,
         batch_size=batch_size,
         wavelength=wavelength,
@@ -973,6 +995,8 @@ def predict_rois(
 def predict_tiles(
     img: Path,
     model: Path,
+    dm_calibration: Any,
+    dm_state: Any,
     axial_voxel_size: float,
     lateral_voxel_size: float,
     wavelength: float = .605,
@@ -1068,6 +1092,8 @@ def predict_tiles(
         model=preloadedmodel,
         modelpsfgen=premodelpsfgen,
         samplepsfgen=samplepsfgen,
+        dm_calibration=dm_calibration,
+        dm_state=dm_state,
         prediction_threshold=prediction_threshold,
         batch_size=batch_size,
         wavelength=wavelength,
