@@ -34,7 +34,7 @@ except ImportError as e:
 
 from utils import resize_with_crop_or_pad, multiprocess
 import preprocessing
-from vis import savesvg
+from vis import savesvg, plot_interference_pattern_svg
 
 logging.basicConfig(
     stream=sys.stdout,
