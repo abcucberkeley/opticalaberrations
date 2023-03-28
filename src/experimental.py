@@ -86,12 +86,24 @@ def reloadmodel_if_needed(
 
 
 @profile
+def load_dm(dm_state: Any) -> np.ndarray:
+    if isinstance(dm_state, np.ndarray):
+        assert len(dm_state) == 69
+    elif dm_state is None or str(dm_state) == 'None':
+        dm_state = np.zeros(69)
+    else:
+        dm_state = pd.read_csv(dm_state, header=None).values[:, 0]
+    return dm_state
+
+
+@profile
 def zernikies_to_actuators(
         coefficients: np.array,
         dm_calibration: Path,
-        dm_state: Optional[np.array] = None,
+        dm_state: Optional[Union[Path, str, np.array]] = None,
         scalar: float = 1
 ) -> np.ndarray:
+    dm_state = load_dm(dm_state)
     dm_calibration = pd.read_csv(dm_calibration, header=None).values
 
     if dm_calibration.shape[-1] > coefficients.size:
@@ -110,17 +122,6 @@ def zernikies_to_actuators(
 
 
 @profile
-def load_dm(dm_state: Any) -> np.ndarray:
-    if isinstance(dm_state, np.ndarray):
-        assert len(dm_state) == 69
-    elif dm_state is None or str(dm_state) == 'None':
-        dm_state = np.zeros(69)
-    else:
-        dm_state = pd.read_csv(dm_state, header=None).values[:, 0]
-    return dm_state
-
-
-@profile
 def estimate_and_save_new_dm(
     savepath: Path,
     coefficients: np.array,
@@ -128,7 +129,6 @@ def estimate_and_save_new_dm(
     dm_state: np.array,
     dm_damping_scalar: float = 1
 ):
-    dm_state = load_dm(dm_state)
     dm = pd.DataFrame(zernikies_to_actuators(
         coefficients,
         dm_calibration=dm_calibration,
@@ -529,7 +529,6 @@ def predict(
     stdevs.to_csv(f"{outdir}_stdevs.csv")
 
     if dm_calibration is not None:
-        dm_state = load_dm(dm_state)
         actuators = {}
 
         for t in tile_names:
