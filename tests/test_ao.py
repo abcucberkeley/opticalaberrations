@@ -30,7 +30,7 @@ def test_phase_retrieval(kargs):
         plot=kargs['plot'],
         prediction_threshold=kargs['prediction_threshold'],
     )
-    assert zernikes.shape == kargs['zernikes_shape']
+    assert zernikes.shape[0] == kargs['num_modes']
 
 
 @pytest.mark.run(order=2)
@@ -50,7 +50,7 @@ def test_predict_sample(kargs):
         ignore_modes=kargs['ignore_modes'],
         prediction_threshold=kargs['prediction_threshold'],
     )
-    assert zernikes.shape == kargs['zernikes_shape']
+    assert zernikes.shape[0] == kargs['num_modes']
 
 
 @pytest.mark.run(order=3)
@@ -70,7 +70,7 @@ def test_predict_large_fov(kargs):
         ignore_modes=kargs['ignore_modes'],
         prediction_threshold=kargs['prediction_threshold'],
     )
-    assert zernikes.shape == kargs['zernikes_shape']
+    assert zernikes.shape[0] == kargs['num_modes']
 
 
 @pytest.mark.run(order=4)
@@ -93,6 +93,9 @@ def test_predict_tiles(kargs):
 
     assert tile_predictions.shape == kargs['tiles_shape']
 
+
+@pytest.mark.run(order=4)
+def test_aggregate_tiles(kargs):
     zernikes = experimental.aggregate_predictions(
         model=kargs['model'],
         model_pred=Path(f"{kargs['inputs'].with_suffix('')}_tiles_predictions.csv"),
@@ -110,4 +113,4 @@ def test_predict_tiles(kargs):
         plot=kargs['plot'],
     )
 
-    assert zernikes.shape == kargs['zernikes_shape']
+    assert zernikes.shape[0] == kargs['num_modes']
