@@ -281,6 +281,14 @@ def parse_args(args):
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_rois.add_argument("input", type=Path, help="path to input .tif file")
     predict_rois.add_argument("pois", type=Path, help="path to point detection results (.mat file)")
+    predict_rois.add_argument(
+        "dm_calibration", type=Path,
+        help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
+    )
+    predict_rois.add_argument(
+        "--current_dm", default=None, type=Path,
+        help="optional path to current DM .csv file (Default: `blank mirror`)"
+    )
 
     predict_rois.add_argument(
         "--batch_size", default=100, type=int, help='maximum batch size for the model'
@@ -358,6 +366,14 @@ def parse_args(args):
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_tiles.add_argument("input", type=Path, help="path to input .tif file")
+    predict_tiles.add_argument(
+        "dm_calibration", type=Path,
+        help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
+    )
+    predict_tiles.add_argument(
+        "--current_dm", default=None, type=Path,
+        help="optional path to current DM .csv file (Default: `blank mirror`)"
+    )
 
     predict_tiles.add_argument(
         "--batch_size", default=100, type=int, help='maximum batch size for the model'
@@ -510,6 +526,12 @@ def parse_args(args):
     eval_ao_dataset.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
+
+    eval_ao_dataset = subparsers.add_parser(
+        "plot_dataset_mips",
+        help="Evaluate biologically introduced aberrations"
+    )
+    eval_ao_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
 
     eval_dm = subparsers.add_parser("eval_dm")
     eval_dm.add_argument("datadir", type=Path, help="path to dataset directory")
@@ -720,6 +742,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             img=args.input,
             pois=args.pois,
             prev=args.prev,
+            dm_calibration=args.dm_calibration,
+            dm_state=args.current_dm,
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
             wavelength=args.wavelength,
@@ -745,6 +769,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             model=args.model,
             img=args.input,
             prev=args.prev,
+            dm_calibration=args.dm_calibration,
+            dm_state=args.current_dm,
             freq_strength_threshold=args.freq_strength_threshold,
             prediction_threshold=args.prediction_threshold,
             sign_threshold=args.sign_threshold,
@@ -794,6 +820,10 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             flat=args.flat,
             plot_evals=not args.skip_eval_plots,
             precomputed=args.precomputed,
+        )
+    elif args.func == 'plot_dataset_mips':
+        experimental.plot_dataset_mips(
+            datadir=args.datadir,
         )
     elif args.func == 'eval_mode':
         experimental.eval_mode(

@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="predict_tiles" type="PythonConfigurationType" factoryName="Python" folderName="ao">
+  <configuration default="false" name="plot_dataset_mips" type="PythonConfigurationType" factoryName="Python" folderName="ao">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="predict_tiles ../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5 ../examples/single/single.tif ../calibration/aang/Zernike_Aang_Bax272.csv --current_dm None --wavelength 0.51 --lateral_voxel_size 0.108 --axial_voxel_size 0.2 --window_size 128-128-128 --prediction_threshold 0. --freq_strength_threshold 0.01 --batch_size 512 --prev None --plot --plot_rotations" />
+    <option name="PARAMETERS" value="plot_dataset_mips $USER_HOME$/nvme2/Data/TestsForThayer/20230324_fish2/ML_SH_test_15/" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

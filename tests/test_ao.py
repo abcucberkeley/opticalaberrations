@@ -79,6 +79,8 @@ def test_predict_tiles(kargs):
         model=kargs['model'],
         img=kargs['inputs'],
         prev=kargs['prev'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
         axial_voxel_size=kargs['axial_voxel_size'],
         lateral_voxel_size=kargs['lateral_voxel_size'],
         wavelength=kargs['wavelength'],
