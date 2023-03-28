@@ -51,14 +51,14 @@ def savesvg(fig: plt.Figure, savepath: Union[Path, str]):
         f.write(filedata)
 
 
-def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, colorbar=True):
+def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, colorbar=True, aspect=None):
     def formatter(x, pos, dd):
         return f'{np.ceil(x * dd).astype(int):1d}'
 
     vol = vol ** gamma
     vol = np.nan_to_num(vol)
 
-    m = xy.imshow(np.max(vol, axis=0), cmap=cmap)
+    m = xy.imshow(np.max(vol, axis=0), cmap=cmap, aspect=aspect)
     xy.yaxis.set_ticks_position('right')
     xy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
     xy.yaxis.set_major_formatter(partial(formatter, dd=dxy))
@@ -67,7 +67,7 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
     xy.set_xlabel('XY ($\mu$m)')
 
     if xz is not None:
-        xz.imshow(np.max(vol, axis=1), cmap=cmap)
+        xz.imshow(np.max(vol, axis=1), cmap=cmap, aspect=aspect)
         xz.yaxis.set_ticks_position('right')
         xz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
         xz.yaxis.set_major_formatter(partial(formatter, dd=dz))
@@ -76,7 +76,7 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
         xz.set_xlabel('XZ ($\mu$m)')
 
     if yz is not None:
-        yz.imshow(np.max(vol, axis=2), cmap=cmap)
+        yz.imshow(np.max(vol, axis=2), cmap=cmap, aspect=aspect)
         yz.yaxis.set_ticks_position('right')
         yz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
         yz.yaxis.set_major_formatter(partial(formatter, dd=dz))
@@ -821,6 +821,76 @@ def sign_eval(
     axes[0, 0].set_ylabel('Input (MIP)')
     axes[1, 0].set_ylabel('Followup (MIP)')
     savesvg(fig, f'{savepath}.svg')
+
+
+def compare_mips(
+    results: dict,
+    save_path: Path,
+    psf_cmap: str = 'magma',
+    gamma: float = .5,
+    dxy: float = .108,
+    dz: float = .2,
+    pltstyle: Any = None,
+    transform_to_align_to_DM: bool = False,
+):
+    if pltstyle is not None: plt.style.use(pltstyle)
+
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    fig = plt.figure(figsize=(15, 11))
+    gs = fig.add_gridspec(3, 3)
+
+    if transform_to_align_to_DM:
+        # 180 rotate, then transpose
+        noao_img = np.transpose(np.rot90(results['noao_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+        ml_img = np.transpose(np.rot90(results['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+        sh_img = np.transpose(np.rot90(results['gt_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+
+    plot_mip(
+        xy=fig.add_subplot(gs[0, 0]),
+        xz=fig.add_subplot(gs[0, 1]),
+        yz=fig.add_subplot(gs[0, 2]),
+        label=f'Input [$\gamma$={gamma}]',
+        vol=noao_img,
+        cmap=psf_cmap,
+        dxy=dxy,
+        dz=dz,
+        aspect='auto'
+    )
+
+    plot_mip(
+        xy=fig.add_subplot(gs[1, 0]),
+        xz=fig.add_subplot(gs[1, 1]),
+        yz=fig.add_subplot(gs[1, 2]),
+        label=f'SH [$\gamma$={gamma}]',
+        vol=sh_img,
+        cmap=psf_cmap,
+        dxy=dxy,
+        dz=dz,
+        aspect='auto'
+    )
+
+    plot_mip(
+        xy=fig.add_subplot(gs[2, 0]),
+        xz=fig.add_subplot(gs[2, 1]),
+        yz=fig.add_subplot(gs[2, 2]),
+        vol=ml_img,
+        label=f'Model [$\gamma$={gamma}]',
+        cmap=psf_cmap,
+        dxy=dxy,
+        dz=dz,
+        aspect='auto'
+    )
+
+    savesvg(fig, f'{save_path}.svg')
 
 
 def compare_iterations(

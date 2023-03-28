@@ -527,6 +527,12 @@ def parse_args(args):
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
 
+    eval_ao_dataset = subparsers.add_parser(
+        "plot_dataset_mips",
+        help="Evaluate biologically introduced aberrations"
+    )
+    eval_ao_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
+
     eval_dm = subparsers.add_parser("eval_dm")
     eval_dm.add_argument("datadir", type=Path, help="path to dataset directory")
     eval_dm.add_argument(
@@ -814,6 +820,10 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             flat=args.flat,
             plot_evals=not args.skip_eval_plots,
             precomputed=args.precomputed,
+        )
+    elif args.func == 'plot_dataset_mips':
+        experimental.plot_dataset_mips(
+            datadir=args.datadir,
         )
     elif args.func == 'eval_mode':
         experimental.eval_mode(

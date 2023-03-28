@@ -1786,6 +1786,108 @@ def eval_dataset(
 
 
 @profile
+def plot_dataset_mips(datadir: Path):
+    mldir = Path(datadir/'MLResults')
+
+    # get model from .json file
+    with open(list(mldir.glob('*_settings.json'))[0]) as f:
+        predictions_settings = ujson.load(f)
+        model = Path(predictions_settings['model'])
+
+        if not model.exists():
+            filename = str(model).split('\\')[-1]
+            model = Path(f"../pretrained_models/lattice_yumb_x108um_y108um_z200um/{filename}")
+
+        logger.info(model)
+
+    logger.info('Beginning evaluations')
+    for file in sorted(datadir.glob('MLAO*.tif'), key=os.path.getctime):  # sort by creation time
+        if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
+            continue
+
+        if file.stem.split('_')[1].startswith('round'):
+            iter_num = int(file.stem.split('_')[1][-1])
+        else:
+            iter_num = file.stem.split('_')[3]
+
+        noao_path = None
+        for ifile in sorted(datadir.glob('NoAO*.tif')):
+            if fnmatch.fnmatch(ifile.name, f'NoAO*.tif'):
+                noao_path = ifile
+                break
+
+        if noao_path is None:
+            logger.warning(f'NoAO not found for: {file.name}')
+            continue
+
+        sh_path = None
+        for gtfile in sorted(datadir.glob('SHAO*.tif')):
+            if fnmatch.fnmatch(gtfile.name, f'SHAO_Scan_Iter_{str(iter_num-1).zfill(4)}*.tif'):
+                sh_path = gtfile
+                break
+            elif fnmatch.fnmatch(gtfile.name, f'SHAO_Scan_Iter_{iter_num}*.tif'):
+                sh_path = gtfile
+                break
+            elif fnmatch.fnmatch(gtfile.name, f'SHAO_Scan*.tif'):
+                sh_path = gtfile
+                break
+
+        if sh_path is None:
+            logger.warning(f'SH not found for: {file.name}')
+            continue
+
+        prediction_path = None
+        for predfile in sorted(datadir.glob('MLAO*.tif')):
+            if fnmatch.fnmatch(predfile.name, f'MLAO_Scan_Iter_{iter_num}*.tif'):
+                prediction_path = predfile
+                break
+            elif fnmatch.fnmatch(predfile.name, f'MLAO_round{iter_num}_Scan*.tif'):
+                prediction_path = predfile
+                break
+
+        if prediction_path is None:
+            logger.warning(f'Prediction not found for: {file.name}')
+            continue
+
+        noao_img = preprocessing.prep_sample(
+            load_sample(noao_path),
+            normalize=True,
+            remove_background=True,
+            windowing=False,
+            sample_voxel_size=predictions_settings['sample_voxel_size']
+        )
+
+        ml_img = preprocessing.prep_sample(
+            load_sample(prediction_path),
+            normalize=True,
+            remove_background=True,
+            windowing=False,
+            sample_voxel_size=predictions_settings['sample_voxel_size']
+        )
+
+        gt_img = preprocessing.prep_sample(
+            load_sample(sh_path),
+            normalize=True,
+            remove_background=True,
+            windowing=False,
+            sample_voxel_size=predictions_settings['sample_voxel_size']
+        )
+
+        vis.compare_mips(
+            results=dict(
+                noao_img=noao_img,
+                ml_img=ml_img,
+                gt_img=gt_img,
+                residuals=f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv',
+            ),
+            save_path=datadir / f'mips_evaluation_iter_{iter_num}',
+            dxy=predictions_settings['sample_voxel_size'][1],
+            dz=predictions_settings['sample_voxel_size'][0],
+            transform_to_align_to_DM=True
+        )
+
+
+@profile
 def eval_ao_dataset(
     datadir: Path,
     flat: Any = None,
@@ -1902,6 +2004,7 @@ def eval_ao_dataset(
             dz=predictions_settings['sample_voxel_size'][0],
             transform_to_align_to_DM=True
         )
+
 
 
 @profile
