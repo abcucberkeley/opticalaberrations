@@ -170,6 +170,11 @@ def parse_args(args):
         help='set predictions below threshold to zero (waves)'
     )
     predict_sample.add_argument(
+        "--confidence_threshold", default=0.0099, type=float,
+        help='optional threshold to flag unconfident predictions '
+             'based on the standard deviations of the predicted amplitudes for all digital rotations (microns)'
+    )
+    predict_sample.add_argument(
         "--sign_threshold", default=.9, type=float,
         help='flip sign of modes above given threshold relative to your initial prediction'
     )
@@ -241,6 +246,11 @@ def parse_args(args):
     predict_large_fov.add_argument(
         "--prediction_threshold", default=0., type=float,
         help='set predictions below threshold to zero (waves)'
+    )
+    predict_large_fov.add_argument(
+        "--confidence_threshold", default=0.0099, type=float,
+        help='optional threshold to flag unconfident predictions '
+             'based on the standard deviations of the predicted amplitudes for all digital rotations (microns)'
     )
     predict_large_fov.add_argument(
         "--sign_threshold", default=.9, type=float,
@@ -405,6 +415,11 @@ def parse_args(args):
         help='set predictions below threshold to zero (waves)'
     )
     predict_tiles.add_argument(
+        "--confidence_threshold", default=0.0099, type=float,
+        help='optional threshold to flag unconfident predictions '
+             'based on the standard deviations of the predicted amplitudes for all digital rotations (microns)'
+    )
+    predict_tiles.add_argument(
         "--sign_threshold", default=.9, type=float,
         help='flip sign of modes above given threshold relative to your initial prediction'
     )
@@ -463,6 +478,11 @@ def parse_args(args):
     aggregate_predictions.add_argument(
         "--prediction_threshold", default=.05, type=float,
         help='set predictions below threshold to zero (waves)'
+    )
+    aggregate_predictions.add_argument(
+        "--confidence_threshold", default=0.0099, type=float,
+        help='optional threshold to flag unconfident predictions '
+             'based on the standard deviations of the predicted amplitudes for all digital rotations (microns)'
     )
     aggregate_predictions.add_argument(
         "--majority_threshold", default=.5, type=float,
@@ -699,6 +719,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             dm_damping_scalar=args.dm_damping_scalar,
             freq_strength_threshold=args.freq_strength_threshold,
             prediction_threshold=args.prediction_threshold,
+            confidence_threshold=args.confidence_threshold,
             sign_threshold=args.sign_threshold,
             num_predictions=args.num_predictions,
             plot=args.plot,
@@ -724,6 +745,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             dm_damping_scalar=args.dm_damping_scalar,
             freq_strength_threshold=args.freq_strength_threshold,
             prediction_threshold=args.prediction_threshold,
+            confidence_threshold=args.confidence_threshold,
             sign_threshold=args.sign_threshold,
             num_predictions=args.num_predictions,
             plot=args.plot,
@@ -773,6 +795,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             dm_state=args.current_dm,
             freq_strength_threshold=args.freq_strength_threshold,
             prediction_threshold=args.prediction_threshold,
+            confidence_threshold=args.confidence_threshold,
             sign_threshold=args.sign_threshold,
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
@@ -798,6 +821,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
             prediction_threshold=args.prediction_threshold,
+            confidence_threshold=args.confidence_threshold,
             majority_threshold=args.majority_threshold,
             min_percentile=args.min_percentile,
             max_percentile=args.max_percentile,

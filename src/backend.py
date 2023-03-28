@@ -332,6 +332,7 @@ def eval_rotation(
     no_phase: bool,
     threshold: float = 0.,
     plot: Any = None,
+    confidence_threshold: float = .0099,
     minimum_fraction_of_kept_points: float = 0.45,
 ):
     """
@@ -366,6 +367,7 @@ def eval_rotation(
         'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
+
     def cart2pol(x, y):
         """Convert cartesian (x, y) to polar (rho, phi)
         """
@@ -404,6 +406,7 @@ def eval_rotation(
                 rhos, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
                 ydata = np.degrees(ydata)
                 rho = rhos[np.argmin(np.abs(ydata))]
+                std_rho = np.std(rhos).round(2)
 
                 # if spatial model: exclude points near discontinuities (-90, +90, 450,..) based upon fit
                 data_mask = np.ones(xdata.shape[0], dtype=bool)
@@ -431,7 +434,11 @@ def eval_rotation(
 
                 twin_angle = b   # evaluate the curve fit when there is no digital rotation.
                 preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
-                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = np.std(rhos[data_mask]), np.std(rhos[data_mask])
+
+                if rho > 0:
+                    stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
+                else:
+                    stdevs[mode.index_ansi], stdevs[twin.index_ansi] = std_rho, std_rho
 
                 if plot is not None:
                     ax = fig.add_subplot(gs[row, 0])
@@ -448,18 +455,24 @@ def eval_rotation(
                     ax.set_ylabel('Amplitude ($\mu$m RMS)')
                     ax.set_xlabel('Digital rotation (deg)')
 
-                    title_color = 'g' if rho > 0 else 'r'
-                    fit_ax.plot([0,xdata[-1]], m * [0,xdata[-1]] + b, color=title_color, lw='.75') # plot fit line from zero to end of data
+                    confidence = stdevs[mode.index_ansi] < confidence_threshold
+                    title_color = 'g' if confidence else 'r'
+                    fit_ax.plot([0, xdata[-1]], m * [0, xdata[-1]] + b, color=title_color, lw='.75')
+                    # plot fit line from zero to end of data
                     fit_ax.scatter(xdata, ydata, s=2, color='grey')
                     
                     fit_ax.set_title(
-                        f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
-                        f' [{twin_angle:.0f}$^\circ$ $\\rho$={rho:.2f} $\mu$RMS, MSE={mse:.0f}, {fraction_of_kept_points*100:.0f}% kept]',
+                        #f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, '
+                        #f'm{twin.index_ansi}={preds[twin.index_ansi]:.3f} '
+                        f'$\sigma$={stdevs[mode.index_ansi]:.2f} $\mu$RMS, '
+                        f'$\\rho$={rho:.3f} $\mu$RMS, '
+                        f'MSE={mse:.0f}, '
+                        f'{fraction_of_kept_points*100:.0f}% kept',
                         color=title_color
                     )
 
                     fit_ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                    fit_ax.set_ylabel('Predicted Twin angle (deg)',rotation=-90,labelpad=15)
+                    fit_ax.set_ylabel('Predicted Twin angle (deg)', rotation=-90, labelpad=15)
                     fit_ax.yaxis.set_label_position("right")
                     fit_ax.set_xlabel('Digitially rotated Twin angle (deg)')
                     fit_ax.set_xticks(range(0, int(np.max(xdata)), 90))
@@ -529,6 +542,7 @@ def predict_rotation(
     plot_rotations: Any = None,
     remove_interference: bool = True,
     desc: str = 'Predict-rotations',
+    confidence_threshold: float = .0099,
     digital_rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
     cpu_workers: int = -1
 ):
@@ -597,6 +611,7 @@ def predict_rotation(
         threshold=threshold,
         plot=plot_rotations,
         no_phase=no_phase,
+        confidence_threshold=confidence_threshold
     )
 
     init_preds = np.stack(np.split(init_preds, digital_rotations.shape[0]), axis=1)

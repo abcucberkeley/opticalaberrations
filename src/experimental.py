@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 from tifffile import imread, imsave
 import seaborn as sns
-from tqdm import tqdm
+from tqdm import trange
 from line_profiler_pycharm import profile
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from numpy.lib.stride_tricks import sliding_window_view
@@ -89,7 +89,7 @@ def reloadmodel_if_needed(
 def zernikies_to_actuators(
         coefficients: np.array,
         dm_calibration: Path,
-        dm_state: np.array,
+        dm_state: Optional[np.array] = None,
         scalar: float = 1
 ) -> np.ndarray:
     dm_calibration = pd.read_csv(dm_calibration, header=None).values
@@ -102,7 +102,11 @@ def zernikies_to_actuators(
         coefficients = coefficients[:dm_calibration.shape[-1]]
 
     offset = np.dot(dm_calibration, coefficients)
-    return dm_state - (offset * scalar)
+
+    if dm_state is None:
+        return offset * scalar
+    else:
+        return dm_state - (offset * scalar)
 
 
 @profile
@@ -264,6 +268,9 @@ def preprocess(
     no_phase: bool = False,
     match_model_fov: bool = True,
 ):
+    if isinstance(file, tf.Tensor):
+        file = Path(str(file.numpy(), "utf-8"))
+
     if isinstance(plot, bool) and plot:
         plot = file.with_suffix('')
 
@@ -425,9 +432,10 @@ def predict(
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
+    confidence_threshold: float = .0099,
     batch_size: int = 1,
     digital_rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
-    plot: Optional[np.ndarray] = None,
+    plot: Optional[Union[bool, Path, str]] = None,
     plot_rotations: bool = False,
     ztiles: int = 1,
     nrows: int = 1,
@@ -444,7 +452,7 @@ def predict(
             samplepsfgen=samplepsfgen,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
-            plot=None,
+            plot=plot,
             no_phase=no_phase,
             remove_background=True,
             normalize=True,
@@ -472,8 +480,9 @@ def predict(
             psfgen=modelpsfgen,
             no_phase=no_phase,
             batch_size=batch_size,
-            threshold=prediction_threshold,
             ignore_modes=ignore_modes,
+            threshold=prediction_threshold,
+            confidence_threshold=confidence_threshold,
             freq_strength_threshold=freq_strength_threshold,
             plot=file.with_suffix('') if plot else None,
             plot_rotations=file.with_suffix('') if plot_rotations else None,
@@ -502,14 +511,22 @@ def predict(
 
     tile_names = [f.with_suffix('').name for f in rois]
     predictions = pd.DataFrame(ps.T, columns=tile_names)
-    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('z')]
-    predictions['mean'] = predictions[pcols].mean(axis=1)
-    predictions['median'] = predictions[pcols].median(axis=1)
-    predictions['min'] = predictions[pcols].min(axis=1)
-    predictions['max'] = predictions[pcols].max(axis=1)
-    predictions['std'] = predictions[pcols].std(axis=1)
+    predictions['mean'] = predictions[tile_names].mean(axis=1)
+    predictions['median'] = predictions[tile_names].median(axis=1)
+    predictions['min'] = predictions[tile_names].min(axis=1)
+    predictions['max'] = predictions[tile_names].max(axis=1)
+    predictions['std'] = predictions[tile_names].std(axis=1)
     predictions.index.name = 'ansi'
     predictions.to_csv(f"{outdir}_predictions.csv")
+
+    stdevs = pd.DataFrame(std.T, columns=tile_names)
+    stdevs['mean'] = stdevs[tile_names].mean(axis=1)
+    stdevs['median'] = stdevs[tile_names].median(axis=1)
+    stdevs['min'] = stdevs[tile_names].min(axis=1)
+    stdevs['max'] = stdevs[tile_names].max(axis=1)
+    stdevs['std'] = stdevs[tile_names].std(axis=1)
+    stdevs.index.name = 'ansi'
+    stdevs.to_csv(f"{outdir}_stdevs.csv")
 
     if dm_calibration is not None:
         dm_state = load_dm(dm_state)
@@ -551,6 +568,7 @@ def predict_sample(
     dm_damping_scalar: float = 1,
     prediction_threshold: float = 0.0,
     freq_strength_threshold: float = .01,
+    confidence_threshold: float = .0099,
     sign_threshold: float = .9,
     verbose: bool = False,
     plot: bool = False,
@@ -639,6 +657,7 @@ def predict_sample(
             threshold=prediction_threshold,
             ignore_modes=ignore_modes,
             freq_strength_threshold=freq_strength_threshold,
+            confidence_threshold=confidence_threshold,
             digital_rotations=digital_rotations,
             plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
             plot_rotations=Path(f"{img.with_suffix('')}_sample_predictions") if plot_rotations else None,
@@ -725,6 +744,7 @@ def predict_large_fov(
     dm_damping_scalar: float = 1,
     prediction_threshold: float = 0.0,
     freq_strength_threshold: float = .01,
+    confidence_threshold: float = .0099,
     sign_threshold: float = .9,
     verbose: bool = False,
     plot: bool = False,
@@ -797,6 +817,7 @@ def predict_large_fov(
         threshold=prediction_threshold,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
+        confidence_threshold=confidence_threshold,
         digital_rotations=digital_rotations,
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
         plot_rotations=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot_rotations else None,
@@ -1005,6 +1026,7 @@ def predict_tiles(
     window_size: tuple = (64, 64, 64),
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
+    confidence_threshold: float = .0099,
     sign_threshold: float = .9,
     plot: bool = True,
     plot_rotations: bool = False,
@@ -1095,6 +1117,7 @@ def predict_tiles(
         dm_calibration=dm_calibration,
         dm_state=dm_state,
         prediction_threshold=prediction_threshold,
+        confidence_threshold=confidence_threshold,
         batch_size=batch_size,
         wavelength=wavelength,
         ztiles=ztiles,
@@ -1129,9 +1152,10 @@ def aggregate_predictions(
     axial_voxel_size: float = .1,
     lateral_voxel_size: float = .108,
     majority_threshold: float = .5,
-    min_percentile: int = 10,
-    max_percentile: int = 90,
+    min_percentile: int = 1,
+    max_percentile: int = 99,
     prediction_threshold: float = 0.,
+    confidence_threshold: float = .0099,
     final_prediction: str = 'mean',
     dm_damping_scalar: float = 1,
     plot: bool = False,
@@ -1141,170 +1165,82 @@ def aggregate_predictions(
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
 
-    modelpsfgen = backend.load_metadata(model) if preloaded is None else preloaded.modelpsfgen
-
     predictions = pd.read_csv(
         model_pred,
         index_col=0,
         header=0,
         usecols=lambda col: col == 'ansi' or col.startswith('z')
     )
-    original_pcols = predictions.columns
 
-    if ignore_tile is not None:
-        for tile in ignore_tile:
-            col = tile
-            if col in predictions.columns:
-                predictions.loc[:, col] = np.zeros_like(predictions.index)
-            else:
-                logger.warning(f"`{tile}` was not found!")
-
-    # filter out small predictions
-    prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
-    predictions[np.abs(predictions) < prediction_threshold] = 0.
-
-    # drop null predictions
-    predictions = predictions.loc[:, (predictions != 0).any(axis=0)]
-    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('z')]
-
-    p_modes = predictions[pcols].values
-    p_modes[p_modes != 0] = 1
-    p_modes = np.sum(p_modes, axis=1)
-    predictions['votes'] = p_modes
-    det_modes = predictions[predictions['votes'] > p_modes.max() * majority_threshold][pcols]
-
-    if det_modes.shape[0] > 0:
-        if plot:
-            fig, axes = plt.subplots(nrows=det_modes.shape[0], figsize=(8, 11))
-
-        for i in tqdm(range(det_modes.shape[0]), desc='Detecting outliers', total=det_modes.shape[0]):
-            preds = det_modes.iloc[i]
-
-            if plot:
-                min_amp = det_modes.values.flatten().min()
-                max_amp = det_modes.values.flatten().max()
-
-                ax = axes[i] if det_modes.shape[0] > 1 else axes
-                ax = sns.violinplot(
-                    preds,
-                    linewidth=1,
-                    alpha=.75,
-                    ax=ax,
-                    color="lightgrey",
-                    notch=False,
-                    showcaps=False,
-                    flierprops={"marker": "."},
-                    boxprops={"facecolor": "lightgrey"},
-                )
-
-            outliers = preds[percentile_filter(preds.values, min_pct=min_percentile, max_pct=max_percentile)]
-
-            if not outliers.empty and preds.shape[0] > 2:
-                preds.drop(outliers.index.values, inplace=True)
-
-            sign = preds[preds != 0]
-            sign = 1 if sign[sign < 0].shape[0] <= sign[sign > 0].shape[0] else -1
-
-            predictions.loc[det_modes.index[i], 'mean'] = np.nanmean(preds.abs()) * sign
-            predictions.loc[det_modes.index[i], 'median'] = np.nanmedian(preds.abs()) * sign
-
-            predictions.loc[det_modes.index[i], 'min'] = np.nanmin(preds)
-            predictions.loc[det_modes.index[i], 'max'] = np.nanmax(preds)
-            predictions.loc[det_modes.index[i], 'std'] = np.nanstd(preds)
-
-            if plot:
-                ax.plot(
-                    predictions.loc[det_modes.index[i], final_prediction], np.zeros_like(1),
-                    'o', clip_on=False, color='C0', label='Prediction', zorder=3
-                )
-                ax.plot(
-                    outliers, np.zeros_like(outliers),
-                    'x', clip_on=False, color='C3', label='Outliers', zorder=3
-                )
-
-                ax.spines.right.set_visible(False)
-                ax.spines.left.set_visible(False)
-                ax.spines.top.set_visible(False)
-                ax.set_yticks([])
-                ax.set_xlim(min_amp - .05, max_amp + .05)
-                ax.set_ylabel(f'{det_modes.index[i]}')
-                ax.set_xlabel('')
-
-        if plot:
-            if det_modes.shape[0] > 1:
-                axes[0].legend(ncol=2, frameon=False)
-                axes[-1].set_xlabel(f'Zernike coefficients ($\mu$m)')
-            else:
-                axes.legend(ncol=2, frameon=False)
-                axes.set_xlabel(f'Zernike coefficients ($\mu$m)')
-
-            vis.savesvg(fig, f"{model_pred.with_suffix('')}_aggregated.svg")
-    else:
-        logger.warning(f"No modes detected with the current configs")
-        predictions['mean'] = predictions[pcols].mean(axis=1)
-        predictions['median'] = predictions[pcols].median(axis=1)
-        predictions['min'] = predictions[pcols].min(axis=1)
-        predictions['max'] = predictions[pcols].max(axis=1)
-        predictions['std'] = predictions[pcols].std(axis=1)
-
-    for c in original_pcols:
-        if c not in predictions.columns:
-            predictions[c] = np.zeros_like(predictions.index)
-
-    predictions.fillna(0, inplace=True)
-    predictions.index.name = 'ansi'
-    predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated.csv")
-
-    estimate_and_save_new_dm(
-        savepath=Path(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv"),
-        coefficients=predictions[final_prediction].values,
-        dm_calibration=dm_calibration,
-        dm_state=dm_state,
-        dm_damping_scalar=dm_damping_scalar
+    stdevs = pd.read_csv(
+        str(model_pred).replace('_predictions.csv', '_stdevs.csv'),
+        index_col=0,
+        header=0,
+        usecols=lambda col: col == 'ansi' or col.startswith('z')
     )
 
-    p = Wavefront(predictions[final_prediction].values, order='ansi', lam_detection=wavelength)
-    pred_std = Wavefront(predictions['std'].values, order='ansi', lam_detection=wavelength)
+    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('z')]
+    ztiles, nrows, ncols = map(lambda x: calc_length(x), [c.split('-') for c in pcols][-1])
 
-    coefficients = [
-        {'n': z.n, 'm': z.m, 'amplitude': a}
-        for z, a in p.zernikes.items()
-    ]
-    coefficients = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
+    coefficients, actuators = {}, {}
+    for z in trange(ztiles, desc='Aggregating Z tiles', total=ztiles):
+        tiles = predictions.columns[pd.Series(predictions.columns).str.startswith(f'z{z}')]
+
+        if ignore_tile is not None:
+            for cc in ignore_tile:
+                if cc in tiles:
+                    predictions.loc[:, cc] = np.zeros_like(predictions.index)
+                else:
+                    logger.warning(f"`{cc}` was not found!")
+
+        # filter out small predictions
+        prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
+        predictions[np.abs(predictions) < prediction_threshold] = 0.
+
+        # filter out unconfident predictions
+        predictions[stdevs > confidence_threshold] = 0.
+
+        # drop null predictions
+        predictions = predictions.loc[:, (predictions != 0).any(axis=0)]
+
+        votes = predictions[tiles].values
+        votes[votes != 0] = 1
+        votes = np.sum(votes, axis=1)
+
+        final_amps = Wavefront(
+            np.mean(predictions[tiles].values, axis=1),
+            order='ansi',
+            lam_detection=wavelength
+        )
+        final_std = Wavefront(
+            np.mean(stdevs[tiles].values, axis=1),
+            order='ansi',
+            lam_detection=wavelength
+        )
+
+        coefficients[f'z{z}'] = final_amps.amplitudes
+
+        actuators[f'z{z}'] = zernikies_to_actuators(
+            final_amps.amplitudes,
+            dm_calibration=dm_calibration,
+            dm_state=dm_state,
+            scalar=dm_damping_scalar
+        )
+
+        if plot:
+            vis.diagnosis(
+                pred=final_amps,
+                pred_std=final_std,
+                save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_z{z}"),
+            )
+
+    coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
     coefficients.to_csv(f"{model_pred.with_suffix('')}_aggregated_zernike_coefficients.csv")
 
-    psfgen = SyntheticPSF(
-        psf_type=modelpsfgen.psf_type,
-        snr=100,
-        psf_shape=modelpsfgen.psf_shape,
-        n_modes=predictions[final_prediction].shape[0],
-        lam_detection=wavelength,
-        x_voxel_size=lateral_voxel_size,
-        y_voxel_size=lateral_voxel_size,
-        z_voxel_size=axial_voxel_size,
-    )
-
-    psf = psfgen.single_psf(phi=p, normed=True, noise=False)
-    imsave(f"{model_pred.with_suffix('')}_aggregated_psf.tif", psf)
-
-    ztiles, nrows, ncols = [c.split('-') for c in pcols][-1]
-
-    if plot:
-        vis.wavefronts(
-            ztiles=calc_length(ztiles),
-            nrows=calc_length(nrows),
-            ncols=calc_length(ncols),
-            predictions=predictions,
-            wavelength=wavelength,
-            save_path=Path(f"{model_pred.with_suffix('')}_aggregated_wavefronts"),
-        )
-
-        vis.diagnosis(
-            pred=p,
-            pred_std=pred_std,
-            save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis"),
-        )
+    actuators = pd.DataFrame.from_dict(actuators)
+    actuators.index.name = 'actuators'
+    actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
 
     return coefficients
 
