@@ -1164,6 +1164,33 @@ def aggregate_predictions(
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
 
+    if final_prediction == 'mean':
+        final_prediction = np.nanmean
+    elif final_prediction == 'median':
+        final_prediction = np.nanmedian
+    elif final_prediction == 'min':
+        final_prediction = np.nanmin
+    elif final_prediction == 'max':
+        final_prediction = np.nanmax
+    else:
+        logger.error(f'Unknown function: {final_prediction}')
+        return -1
+
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
+        modelpath=model,
+        preloaded=preloaded,
+        ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+    )
+
+    samplepsfgen = SyntheticPSF(
+        psf_type=premodelpsfgen.psf_type,
+        n_modes=preloadedmodel.output_shape[1],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
+
     predictions = pd.read_csv(
         model_pred,
         index_col=0,
@@ -1199,37 +1226,38 @@ def aggregate_predictions(
         # filter out unconfident predictions
         predictions[stdevs > confidence_threshold] = 0.
 
-        # drop null predictions
-        predictions = predictions.loc[:, (predictions != 0).any(axis=0)]
-
         votes = predictions[tiles].values
         votes[votes != 0] = 1
         votes = np.sum(votes, axis=1)
 
-        final_amps = Wavefront(
-            np.mean(predictions[tiles].values, axis=1),
-            order='ansi',
-            lam_detection=wavelength
-        )
-        final_std = Wavefront(
-            np.mean(stdevs[tiles].values, axis=1),
+        pred = Wavefront(
+            final_prediction(predictions[tiles].values, axis=1),
             order='ansi',
             lam_detection=wavelength
         )
 
-        coefficients[f'z{z}'] = final_amps.amplitudes
+        pred_std = Wavefront(
+            final_prediction(stdevs[tiles].values, axis=1),
+            order='ansi',
+            lam_detection=wavelength
+        )
+
+        coefficients[f'z{z}'] = pred.amplitudes
 
         actuators[f'z{z}'] = zernikies_to_actuators(
-            final_amps.amplitudes,
+            pred.amplitudes,
             dm_calibration=dm_calibration,
             dm_state=dm_state,
             scalar=dm_damping_scalar
         )
 
+        psf = samplepsfgen.single_psf(phi=pred, normed=True, noise=False)
+        imsave(f"{model_pred.with_suffix('')}_aggregated_psf_z{z}.tif", psf)
+
         if plot:
             vis.diagnosis(
-                pred=final_amps,
-                pred_std=final_std,
+                pred=pred,
+                pred_std=pred_std,
                 save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_z{z}"),
             )
 
