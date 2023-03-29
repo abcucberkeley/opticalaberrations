@@ -26,6 +26,12 @@ from skimage.morphology import dilation
 from skimage.filters import window, difference_of_gaussians
 from canny import CannyEdgeDetector3D
 
+try:
+    import cupy as cp
+    from cupyx.scipy.ndimage import gaussian_filter
+except ImportError as e:
+    logging.warning(f"Cupy not supported on your system: {e}")
+
 from vis import plot_mip, savesvg
 
 logging.basicConfig(
@@ -55,10 +61,12 @@ def round_to_odd(n):
     else:
         return int(answer - 1)
 
+
 def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float:
     """ Return estimated noise """
     noise = np.std(a, axis=axis)
     return noise
+
 
 def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> np.float:
     """ Return estimated signal-to-noise ratio or inf if the given image has no noise """
@@ -66,6 +74,7 @@ def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> np.float:
     signal = np.max(a, axis=axis) - np.median(a, axis=axis)
     noise = measure_noise(a, axis=axis)
     return np.round(np.where(noise == 0, np.inf, signal/noise), 2)
+
 
 @profile
 def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 'linear_ramp', **kwargs):
@@ -106,6 +115,82 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 'li
         return np.pad(img[tuple(slicer)], pad, mode=mode, **kwargs)
 
 
+def dog(
+    image,
+    low_sigma,
+    high_sigma=None,
+    mode='nearest',
+    cval=0,
+    truncate=4.0
+):
+    """
+    Find features between ``low_sigma`` and ``high_sigma`` in size.
+    This function uses the Difference of Gaussians method for applying
+    band-pass filters to multi-dimensional arrays. The input array is
+    blurred with two Gaussian kernels of differing sigmas to produce two
+    intermediate, filtered images. The more-blurred image is then subtracted
+    from the less-blurred image. The final output image will therefore have
+    had high-frequency components attenuated by the smaller-sigma Gaussian, and
+    low frequency components will have been removed due to their presence in
+    the more-blurred intermediate.
+
+    Args:
+        image: ndarray
+            Input array to filter.
+        low_sigma: scalar or sequence of scalars
+            Standard deviation(s) for the Gaussian kernel with the smaller sigmas
+            across all axes. The standard deviations are given for each axis as a
+            sequence, or as a single number, in which case the single number is
+            used as the standard deviation value for all axes.
+        high_sigma: scalar or sequence of scalars, optional (default is None)
+            Standard deviation(s) for the Gaussian kernel with the larger sigmas
+            across all axes. The standard deviations are given for each axis as a
+            sequence, or as a single number, in which case the single number is
+            used as the standard deviation value for all axes. If None is given
+            (default), sigmas for all axes are calculated as 1.6 * low_sigma.
+        mode: {'reflect', 'constant', 'nearest', 'mirror', 'wrap'}, optional
+            The ``mode`` parameter determines how the array borders are
+            handled, where ``cval`` is the value when mode is equal to
+            'constant'. Default is 'nearest'.
+        cval: scalar, optional
+            Value to fill past edges of input if ``mode`` is 'constant'. Default
+            is 0.0
+        truncate: float, optional (default is 4.0)
+            Truncate the filter at this many standard deviations.
+
+    Returns:
+        filtered_image : ndarray
+    """
+    try:
+        image = cp.array(image)
+        spatial_dims = image.ndim
+
+        low_sigma = np.array(low_sigma, dtype='float', ndmin=1)
+        if high_sigma is None:
+            high_sigma = low_sigma * 1.6
+        else:
+            high_sigma = np.array(high_sigma, dtype='float', ndmin=1)
+
+        if len(low_sigma) != 1 and len(low_sigma) != spatial_dims:
+            raise ValueError('low_sigma must have length equal to number of spatial dimensions of input')
+
+        if len(high_sigma) != 1 and len(high_sigma) != spatial_dims:
+            raise ValueError('high_sigma must have length equal to number of spatial dimensions of input')
+
+        low_sigma = low_sigma * np.ones(spatial_dims)
+        high_sigma = high_sigma * np.ones(spatial_dims)
+
+        if any(high_sigma < low_sigma):
+            raise ValueError('high_sigma must be equal to or larger than low_sigma for all axes')
+
+        im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)
+        im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)
+        return cp.asnumpy(im1 - im2)
+
+    except ImportError:
+        return difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
+
+
 @profile
 def remove_background_noise(
         image,
@@ -120,7 +205,7 @@ def remove_background_noise(
         mode = int(st.mode(image, axis=None).mode[0])
         image -= mode + read_noise_bias
     else:
-        image = difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
+        image = dog(image, low_sigma=0.7, high_sigma=1.5)
     image[image < 0] = 0
     return image
 
@@ -197,7 +282,7 @@ def prep_sample(
         plot = Path(plot)
         if plot.is_dir(): plot.mkdir(parents=True, exist_ok=True)
 
-        fig, axes = plt.subplots(2, ncols=3, figsize=(8, 5))
+        fig, axes = plt.subplots(3, ncols=3, figsize=(10, 10))
 
         plot_mip(
             vol=sample,
@@ -214,6 +299,7 @@ def prep_sample(
             f'${int(sample_voxel_size[1]*1000)}^Y$, '
             f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
         )
+        axes[0, 1].set_title(f"PSNR: {measure_snr(sample)}")
 
     if model_fov is not None:
         # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
@@ -234,8 +320,19 @@ def prep_sample(
         psnr = measure_snr(sample)
     else:
         psnr = measure_snr(sample)
+
     if plot is not None:
-        axes[0, 1].set_title(f"PSNR: {psnr}")
+        axes[1, 1].set_title(f"PSNR: {psnr}")
+
+        plot_mip(
+            vol=sample,
+            xy=axes[1, 0],
+            xz=axes[1, 1],
+            yz=axes[1, 2],
+            dxy=sample_voxel_size[-1],
+            dz=sample_voxel_size[0],
+            label='DoG [$\gamma$=.5]'
+        )
 
     if windowing:
         sample = tukey_window(sample)
@@ -261,15 +358,14 @@ def prep_sample(
     if plot is not None:
         plot_mip(
             vol=sample,
-            xy=axes[1, 0],
-            xz=axes[1, 1],
-            yz=axes[1, 2],
+            xy=axes[-1, 0],
+            xz=axes[-1, 1],
+            yz=axes[-1, 2],
             dxy=sample_voxel_size[-1],
             dz=sample_voxel_size[0],
-            label='Processed (MIP) [$\gamma$=.5]'
+            label='Processed [$\gamma$=.5]'
         )
         savesvg(fig, f'{plot}_preprocessing.svg')
-
 
     if return_psnr:
         logger.info(f"PSNR: {psnr}")
