@@ -8,8 +8,11 @@ import time
 from pathlib import Path
 import cli
 import experimental
+import experimental_llsm
+import experimental_eval
 from preprocessing import prep_sample
 from preloaded import Preloadedmodelclass
+from utils import load_sample
 
 
 def parse_args(args):
@@ -512,64 +515,6 @@ def parse_args(args):
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
 
-    eval_mode = subparsers.add_parser("eval_mode")
-    eval_mode.add_argument("model_path", type=Path, help="path to pretrained tensorflow model (.h5)")
-    eval_mode.add_argument("input_path", type=Path, help="path to input file (.tif)")
-    eval_mode.add_argument("gt_path", type=Path, help="path to ground truth file (.csv)")
-    eval_mode.add_argument("prediction_path", type=Path, help="path to model predictions (.csv)")
-    eval_mode.add_argument("--prediction_postfix", type=str, default='sample_predictions_zernike_coefficients.csv')
-    eval_mode.add_argument("--gt_postfix", type=str, default='ground_truth_zernike_coefficients.csv')
-    eval_mode.add_argument(
-        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
-    )
-
-    eval_dataset = subparsers.add_parser(
-        "eval_dataset",
-        help="Evaluate artificially introduced aberrations via the DM"
-    )
-    eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
-    eval_dataset.add_argument("--flat", default=None, type=Path, help="path to the flat DM acts file. If this is given, then DM surface plots will be made.")
-    eval_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
-    eval_dataset.add_argument("--precomputed", action='store_true')
-    eval_dataset.add_argument(
-        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
-    )
-
-    eval_ao_dataset = subparsers.add_parser(
-        "eval_ao_dataset",
-        help="Evaluate biologically introduced aberrations"
-    )
-    eval_ao_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
-    eval_ao_dataset.add_argument("--flat", default=None, type=Path, help="path to the flat DM acts file")
-    eval_ao_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
-    eval_ao_dataset.add_argument("--precomputed", action='store_true')
-    eval_ao_dataset.add_argument(
-        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
-    )
-
-    eval_ao_dataset = subparsers.add_parser(
-        "plot_dataset_mips",
-        help="Evaluate biologically introduced aberrations"
-    )
-    eval_ao_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
-
-    eval_dm = subparsers.add_parser("eval_dm")
-    eval_dm.add_argument("datadir", type=Path, help="path to dataset directory")
-    eval_dm.add_argument(
-        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
-    )
-
-    calibrate_dm = subparsers.add_parser("calibrate_dm")
-    calibrate_dm.add_argument("datadir", type=Path, help="path to DM eval directory")
-    calibrate_dm.add_argument(
-        "dm_calibration", type=Path,
-        help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
-    )
-    calibrate_dm.add_argument(
-        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
-    )
-
-
     phase_retrieval = subparsers.add_parser("phase_retrieval")
     phase_retrieval.add_argument("input", type=Path, help="path to input .tif file")
     phase_retrieval.add_argument(
@@ -623,6 +568,69 @@ def parse_args(args):
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
 
+    eval_dm = subparsers.add_parser("eval_dm")
+    eval_dm.add_argument("datadir", type=Path, help="path to dataset directory")
+    eval_dm.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+
+    calibrate_dm = subparsers.add_parser("calibrate_dm")
+    calibrate_dm.add_argument("datadir", type=Path, help="path to DM eval directory")
+    calibrate_dm.add_argument(
+        "dm_calibration", type=Path,
+        help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
+    )
+    calibrate_dm.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+
+    eval_mode = subparsers.add_parser("eval_mode")
+    eval_mode.add_argument("model_path", type=Path, help="path to pretrained tensorflow model (.h5)")
+    eval_mode.add_argument("input_path", type=Path, help="path to input file (.tif)")
+    eval_mode.add_argument("gt_path", type=Path, help="path to ground truth file (.csv)")
+    eval_mode.add_argument("prediction_path", type=Path, help="path to model predictions (.csv)")
+    eval_mode.add_argument("--prediction_postfix", type=str, default='sample_predictions_zernike_coefficients.csv')
+    eval_mode.add_argument("--gt_postfix", type=str, default='ground_truth_zernike_coefficients.csv')
+    eval_mode.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+
+    eval_dataset = subparsers.add_parser(
+        "eval_dataset",
+        help="Evaluate artificially introduced aberrations via the DM"
+    )
+    eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
+    eval_dataset.add_argument("--flat", default=None, type=Path, help="path to the flat DM acts file. If this is given, then DM surface plots will be made.")
+    eval_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
+    eval_dataset.add_argument("--precomputed", action='store_true')
+    eval_dataset.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+
+    eval_ao_dataset = subparsers.add_parser(
+        "eval_ao_dataset",
+        help="Evaluate biologically introduced aberrations"
+    )
+    eval_ao_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
+    eval_ao_dataset.add_argument("--flat", default=None, type=Path, help="path to the flat DM acts file")
+    eval_ao_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
+    eval_ao_dataset.add_argument("--precomputed", action='store_true')
+    eval_ao_dataset.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+
+    plot_dataset_mips = subparsers.add_parser(
+        "plot_dataset_mips",
+        help="Evaluate biologically introduced aberrations"
+    )
+    plot_dataset_mips.add_argument("datadir", type=Path, help="path to dataset directory")
+
+    eval_bleaching_rate = subparsers.add_parser(
+        "eval_bleaching_rate",
+        help="Evaluate bleaching rates"
+    )
+    eval_bleaching_rate.add_argument("datadir", type=Path, help="path to dataset directory")
+
     return parser.parse_args(args)
 
 
@@ -642,7 +650,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
     logger.info(args)
 
     if args.func == 'deskew':
-        experimental.deskew(
+        experimental_llsm.deskew(
             img=args.input,
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
@@ -651,7 +659,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         )
 
     elif args.func == 'decon':
-        experimental.decon(
+        experimental_llsm.decon(
             img=args.input,
             psf=args.psf,
             iters=args.iters,
@@ -659,7 +667,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         )
 
     elif args.func == 'detect_rois':
-        experimental.detect_rois(
+        experimental_llsm.detect_rois(
             img=args.input,
             psf=args.psf,
             axial_voxel_size=args.axial_voxel_size,
@@ -667,7 +675,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         )
 
     elif args.func == 'psnr':
-        sample = experimental.load_sample(args.input)
+        sample = load_sample(args.input)
         prep_sample(
             sample,
             remove_background=True,
@@ -680,7 +688,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
 
     elif args.func == 'preprocessing':
         sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
-        sample = experimental.load_sample(args.input)
+        sample = load_sample(args.input)
         prep_sample(
             sample,
             sample_voxel_size=sample_voxel_size,
@@ -831,42 +839,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             plot=args.plot,
             preloaded=preloaded
         )
-    elif args.func == 'eval_dataset':
-        experimental.eval_dataset(
-            datadir=args.datadir,
-            flat=args.flat,
-            plot_evals=not args.skip_eval_plots,
-            precomputed=args.precomputed,
-        )
-    elif args.func == 'eval_ao_dataset':
-        experimental.eval_ao_dataset(
-            datadir=args.datadir,
-            flat=args.flat,
-            plot_evals=not args.skip_eval_plots,
-            precomputed=args.precomputed,
-        )
-    elif args.func == 'plot_dataset_mips':
-        experimental.plot_dataset_mips(
-            datadir=args.datadir,
-        )
-    elif args.func == 'eval_mode':
-        experimental.eval_mode(
-            model_path=args.model_path,
-            input_path=args.input_path,
-            prediction_path=args.prediction_path,
-            gt_path=args.gt_path,
-            postfix=args.prediction_postfix,
-            gt_postfix=args.gt_postfix,
-        )
-    elif args.func == 'eval_dm':
-        experimental.eval_dm(
-            datadir=args.datadir,
-        )
-    elif args.func == 'calibrate_dm':
-        experimental.calibrate_dm(
-            datadir=args.datadir,
-            dm_calibration=args.dm_calibration,
-        )
     elif args.func == 'phase_retrieval':
         experimental.phase_retrieval(
             img=args.input,
@@ -882,6 +854,46 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             plot=args.plot,
             ignore_modes=args.ignore_mode,
             use_pyotf_zernikes=args.use_pyotf_zernikes,
+        )
+    elif args.func == 'eval_dm':
+        experimental_eval.eval_dm(
+            datadir=args.datadir,
+        )
+    elif args.func == 'calibrate_dm':
+        experimental_eval.calibrate_dm(
+            datadir=args.datadir,
+            dm_calibration=args.dm_calibration,
+        )
+    elif args.func == 'eval_mode':
+        experimental_eval.eval_mode(
+            model_path=args.model_path,
+            input_path=args.input_path,
+            prediction_path=args.prediction_path,
+            gt_path=args.gt_path,
+            postfix=args.prediction_postfix,
+            gt_postfix=args.gt_postfix,
+        )
+    elif args.func == 'eval_dataset':
+        experimental_eval.eval_dataset(
+            datadir=args.datadir,
+            flat=args.flat,
+            plot_evals=not args.skip_eval_plots,
+            precomputed=args.precomputed,
+        )
+    elif args.func == 'eval_ao_dataset':
+        experimental_eval.eval_ao_dataset(
+            datadir=args.datadir,
+            flat=args.flat,
+            plot_evals=not args.skip_eval_plots,
+            precomputed=args.precomputed,
+        )
+    elif args.func == 'plot_dataset_mips':
+        experimental_eval.plot_dataset_mips(
+            datadir=args.datadir,
+        )
+    elif args.func == 'eval_bleaching_rate':
+        experimental_eval.eval_bleaching_rate(
+            datadir=args.datadir,
         )
     else:
         logger.error(f"Error")
