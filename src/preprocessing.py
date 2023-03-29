@@ -70,7 +70,7 @@ def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float:
 @profile
 def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> np.float:
     """ Return estimated signal-to-noise ratio or inf if the given image has no noise """
-    a = np.asanyarray(a)
+
     signal = np.max(a, axis=axis) - np.median(a, axis=axis)
     noise = measure_noise(a, axis=axis)
     return np.round(np.where(noise == 0, np.inf, signal/noise), 2)
@@ -161,33 +161,36 @@ def dog(
     Returns:
         filtered_image : ndarray
     """
-    try:
-        image = cp.array(image)
-        spatial_dims = image.ndim
+    if isinstance(image, cp.ndarray):
 
-        low_sigma = cp.array(low_sigma, dtype='float', ndmin=1)
-        if high_sigma is None:
-            high_sigma = low_sigma * 1.6
-        else:
-            high_sigma = cp.array(high_sigma, dtype='float', ndmin=1)
+        try:
+            spatial_dims = image.ndim
 
-        if len(low_sigma) != 1 and len(low_sigma) != spatial_dims:
-            raise ValueError('low_sigma must have length equal to number of spatial dimensions of input')
+            low_sigma = cp.array(low_sigma, dtype='float', ndmin=1)
+            if high_sigma is None:
+                high_sigma = low_sigma * 1.6
+            else:
+                high_sigma = cp.array(high_sigma, dtype='float', ndmin=1)
 
-        if len(high_sigma) != 1 and len(high_sigma) != spatial_dims:
-            raise ValueError('high_sigma must have length equal to number of spatial dimensions of input')
+            if len(low_sigma) != 1 and len(low_sigma) != spatial_dims:
+                raise ValueError('low_sigma must have length equal to number of spatial dimensions of input')
 
-        low_sigma = low_sigma * cp.ones(spatial_dims)
-        high_sigma = high_sigma * cp.ones(spatial_dims)
+            if len(high_sigma) != 1 and len(high_sigma) != spatial_dims:
+                raise ValueError('high_sigma must have length equal to number of spatial dimensions of input')
 
-        if any(high_sigma < low_sigma):
-            raise ValueError('high_sigma must be equal to or larger than low_sigma for all axes')
+            low_sigma = low_sigma * cp.ones(spatial_dims)
+            high_sigma = high_sigma * cp.ones(spatial_dims)
 
-        im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)
-        im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)
-        return cp.asnumpy(im1 - im2)
+            if any(high_sigma < low_sigma):
+                raise ValueError('high_sigma must be equal to or larger than low_sigma for all axes')
 
-    except ImportError:
+            im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)
+            im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)
+            return im1 - im2
+
+        except ImportError:
+            return difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
+    else:
         return difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
 
 
@@ -316,8 +319,11 @@ def prep_sample(
             )
 
     if remove_background:
+        sample = cp.array(sample)
         sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)
         psnr = measure_snr(sample)
+        sample = cp.asnumpy(sample)
+
     else:
         psnr = measure_snr(sample)
 
