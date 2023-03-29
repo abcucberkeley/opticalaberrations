@@ -61,19 +61,21 @@ def round_to_odd(n):
     else:
         return int(answer - 1)
 
+
 @profile
 def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float:
     """ Return estimated noise """
     noise = np.std(a, axis=axis)
     return noise
 
+
 @profile
-def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> np.float:
+def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> int:
     """ Return estimated signal-to-noise ratio or inf if the given image has no noise """
 
     signal = np.max(a, axis=axis) - np.median(a, axis=axis)
     noise = measure_noise(a, axis=axis)
-    return np.round(np.where(noise == 0, np.inf, signal/noise), 2)
+    return int(np.round(np.where(noise == 0, np.inf, signal/noise), 0))
 
 
 @profile
@@ -323,7 +325,6 @@ def prep_sample(
         sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)
         psnr = measure_snr(sample)
         sample = cp.asnumpy(sample)
-
     else:
         psnr = measure_snr(sample)
 
