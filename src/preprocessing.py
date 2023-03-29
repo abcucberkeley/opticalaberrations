@@ -165,11 +165,11 @@ def dog(
         image = cp.array(image)
         spatial_dims = image.ndim
 
-        low_sigma = np.array(low_sigma, dtype='float', ndmin=1)
+        low_sigma = cp.array(low_sigma, dtype='float', ndmin=1)
         if high_sigma is None:
             high_sigma = low_sigma * 1.6
         else:
-            high_sigma = np.array(high_sigma, dtype='float', ndmin=1)
+            high_sigma = cp.array(high_sigma, dtype='float', ndmin=1)
 
         if len(low_sigma) != 1 and len(low_sigma) != spatial_dims:
             raise ValueError('low_sigma must have length equal to number of spatial dimensions of input')
@@ -177,8 +177,8 @@ def dog(
         if len(high_sigma) != 1 and len(high_sigma) != spatial_dims:
             raise ValueError('high_sigma must have length equal to number of spatial dimensions of input')
 
-        low_sigma = low_sigma * np.ones(spatial_dims)
-        high_sigma = high_sigma * np.ones(spatial_dims)
+        low_sigma = low_sigma * cp.ones(spatial_dims)
+        high_sigma = high_sigma * cp.ones(spatial_dims)
 
         if any(high_sigma < low_sigma):
             raise ValueError('high_sigma must be equal to or larger than low_sigma for all axes')
