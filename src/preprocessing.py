@@ -61,13 +61,13 @@ def round_to_odd(n):
     else:
         return int(answer - 1)
 
-
+@profile
 def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float:
     """ Return estimated noise """
     noise = np.std(a, axis=axis)
     return noise
 
-
+@profile
 def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> np.float:
     """ Return estimated signal-to-noise ratio or inf if the given image has no noise """
     a = np.asanyarray(a)
@@ -165,11 +165,11 @@ def dog(
         image = cp.array(image)
         spatial_dims = image.ndim
 
-        low_sigma = np.array(low_sigma, dtype='float', ndmin=1)
+        low_sigma = cp.array(low_sigma, dtype='float', ndmin=1)
         if high_sigma is None:
             high_sigma = low_sigma * 1.6
         else:
-            high_sigma = np.array(high_sigma, dtype='float', ndmin=1)
+            high_sigma = cp.array(high_sigma, dtype='float', ndmin=1)
 
         if len(low_sigma) != 1 and len(low_sigma) != spatial_dims:
             raise ValueError('low_sigma must have length equal to number of spatial dimensions of input')
@@ -177,8 +177,8 @@ def dog(
         if len(high_sigma) != 1 and len(high_sigma) != spatial_dims:
             raise ValueError('high_sigma must have length equal to number of spatial dimensions of input')
 
-        low_sigma = low_sigma * np.ones(spatial_dims)
-        high_sigma = high_sigma * np.ones(spatial_dims)
+        low_sigma = low_sigma * cp.ones(spatial_dims)
+        high_sigma = high_sigma * cp.ones(spatial_dims)
 
         if any(high_sigma < low_sigma):
             raise ValueError('high_sigma must be equal to or larger than low_sigma for all axes')
@@ -269,7 +269,7 @@ def prep_sample(
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
-    sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0)
+    # sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0, copy=False)
 
     if plot is not None:
         plt.rcParams.update({
