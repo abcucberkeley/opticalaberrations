@@ -94,7 +94,7 @@ def test_predict_tiles(kargs):
     assert tile_predictions.shape == kargs['tiles_shape']
 
 
-@pytest.mark.run(order=4)
+@pytest.mark.run(order=5)
 def test_aggregate_tiles(kargs):
     zernikes = experimental.aggregate_predictions(
         model=kargs['model'],

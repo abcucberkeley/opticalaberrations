@@ -13,8 +13,6 @@ on:
       - 'main'
       - 'develop'
       - 'releases/**'
-    tags:
-      - '*'
 
 jobs:
   build:
