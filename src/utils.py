@@ -1,30 +1,29 @@
 import matplotlib
 matplotlib.use('Agg')
 
-import logging
-import multiprocessing as mp
-import sys
-from typing import Union, Any, List, Generator
-from line_profiler_pycharm import profile
-import subprocess
-
-import matplotlib.pyplot as plt
-plt.set_loglevel('error')
-
 import io
+import sys
+import logging
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from pathlib import Path
 from scipy.special import binom
+import tensorflow as tf
 from skimage.feature import peak_local_max
 from scipy.spatial import KDTree
 from astropy import convolution
+import multiprocessing as mp
+from line_profiler_pycharm import profile
+from typing import Any, List, Union, Optional, Generator
 
-import vis
 from preprocessing import resize_with_crop_or_pad
-from synthetic import SyntheticPSF
 from wavefront import Wavefront
+from preloaded import Preloadedmodelclass
+from data_utils import get_image
 
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -167,39 +166,6 @@ def compute_error(y_true: pd.DataFrame, y_pred: pd.DataFrame, axis=None) -> pd.D
     return res
 
 
-def eval(k: tuple, psfargs: dict):
-    psf, y, pred, path, psnr, maxcounts = k
-
-    if psf.ndim == 5:
-        psf = np.squeeze(psf, axis=0)
-        psf = np.squeeze(psf, axis=-1)
-    elif psf.ndim == 4:
-        psf = np.squeeze(psf, axis=-1)
-
-    diff = y - pred
-    y = Wavefront(y)
-    pred = Wavefront(pred)
-    diff = Wavefront(diff)
-
-    psf_gen = SyntheticPSF(**psfargs)
-    p_psf = psf_gen.single_psf(pred)
-    gt_psf = psf_gen.single_psf(y)
-    corrected_psf = psf_gen.single_psf(diff)
-
-    vis.diagnostic_assessment(
-        psf=psf,
-        gt_psf=gt_psf,
-        corrected_psf=corrected_psf,
-        predicted_psf=p_psf,
-        psnr=psnr,
-        maxcounts=maxcounts,
-        y=y,
-        pred=pred,
-        save_path=path,
-        display=False
-    )
-
-
 def plot_to_image(figure):
     """
         Converts the matplotlib plot specified by 'figure' to a PNG image and
@@ -276,3 +242,104 @@ def fftconvolution(kernel, sample):
     conv = np.nan_to_num(conv, nan=0, neginf=0, posinf=0)
     conv[conv < 0] = 0
     return conv
+
+
+@profile
+def reloadmodel_if_needed(
+    modelpath: Path,
+    preloaded: Optional[Preloadedmodelclass] = None,
+    ideal_empirical_psf: Union[Path, np.ndarray] = None,
+    ideal_empirical_psf_voxel_size: Any = None,
+    n_modes: Optional[int] = None,
+    psf_type: Optional[np.ndarray] = None
+):
+    if preloaded is None:
+        logger.info("Loading new model, because model didn't exist")
+        preloaded = Preloadedmodelclass(
+            modelpath,
+            ideal_empirical_psf,
+            ideal_empirical_psf_voxel_size,
+            n_modes=n_modes,
+            psf_type=psf_type,
+        )
+
+    if ideal_empirical_psf is None and preloaded.ideal_empirical_psf is not None:
+        logger.info("Loading new model, because ideal_empirical_psf has been removed")
+        preloaded = Preloadedmodelclass(
+            modelpath,
+            n_modes=n_modes,
+            psf_type=psf_type,
+        )
+
+    elif preloaded.ideal_empirical_psf != ideal_empirical_psf:
+        logger.info(
+            f"Updating ideal psf with empirical, "
+            f"because {chr(10)} {preloaded.ideal_empirical_psf} "
+            f"of type {type(preloaded.ideal_empirical_psf)} "
+            f"has been changed to {chr(10)} {ideal_empirical_psf} of type {type(ideal_empirical_psf)}"
+        )
+        preloaded.modelpsfgen.update_ideal_psf_with_empirical(
+            ideal_empirical_psf=ideal_empirical_psf,
+            voxel_size=ideal_empirical_psf_voxel_size,
+            remove_background=True,
+            normalize=True,
+        )
+
+    return preloaded.model, preloaded.modelpsfgen
+
+
+@profile
+def load_dm(dm_state: Any) -> np.ndarray:
+    if isinstance(dm_state, np.ndarray):
+        assert len(dm_state) == 69
+    elif dm_state is None or str(dm_state) == 'None':
+        dm_state = np.zeros(69)
+    else:
+        dm_state = pd.read_csv(dm_state, header=None).values[:, 0]
+    return dm_state
+
+
+@profile
+def zernikies_to_actuators(
+        coefficients: np.array,
+        dm_calibration: Path,
+        dm_state: Optional[Union[Path, str, np.array]] = None,
+        scalar: float = 1
+) -> np.ndarray:
+    dm_state = load_dm(dm_state)
+    dm_calibration = pd.read_csv(dm_calibration, header=None).values
+
+    if dm_calibration.shape[-1] > coefficients.size:
+        # if we have <55 coefficients, crop the calibration matrix columns
+        dm_calibration = dm_calibration[:, :coefficients.size]
+    else:
+        # if we have >55 coefficients, crop the coefficients array
+        coefficients = coefficients[:dm_calibration.shape[-1]]
+
+    offset = np.dot(dm_calibration, coefficients)
+
+    if dm_state is None:
+        return offset * scalar
+    else:
+        return dm_state - (offset * scalar)
+
+
+@profile
+def percentile_filter(data: np.ndarray, min_pct: int = 5, max_pct: int = 95) -> np.ndarray:
+    minval, maxval = np.percentile(data, [min_pct, max_pct])
+    return (data < minval) | (data > maxval)
+
+
+@profile
+def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
+    if isinstance(data, np.ndarray):
+        img = data
+    elif isinstance(data, bytes):
+        img = Path(str(data, "utf-8"))
+    elif isinstance(data, tf.Tensor):
+        path = Path(str(data.numpy(), "utf-8"))
+        img = get_image(path).astype(float)
+    else:
+        path = Path(str(data))
+        img = get_image(path).astype(float)
+    return np.squeeze(img)
