@@ -9,7 +9,6 @@ import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
 from scipy.special import binom
-import tensorflow as tf
 from skimage.feature import peak_local_max
 from scipy.spatial import KDTree
 from astropy import convolution
@@ -19,8 +18,6 @@ from typing import Any, List, Union, Optional, Generator
 
 from preprocessing import resize_with_crop_or_pad
 from wavefront import Wavefront
-from preloaded import Preloadedmodelclass
-from data_utils import get_image
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -245,50 +242,6 @@ def fftconvolution(kernel, sample):
 
 
 @profile
-def reloadmodel_if_needed(
-    modelpath: Path,
-    preloaded: Optional[Preloadedmodelclass] = None,
-    ideal_empirical_psf: Union[Path, np.ndarray] = None,
-    ideal_empirical_psf_voxel_size: Any = None,
-    n_modes: Optional[int] = None,
-    psf_type: Optional[np.ndarray] = None
-):
-    if preloaded is None:
-        logger.info("Loading new model, because model didn't exist")
-        preloaded = Preloadedmodelclass(
-            modelpath,
-            ideal_empirical_psf,
-            ideal_empirical_psf_voxel_size,
-            n_modes=n_modes,
-            psf_type=psf_type,
-        )
-
-    if ideal_empirical_psf is None and preloaded.ideal_empirical_psf is not None:
-        logger.info("Loading new model, because ideal_empirical_psf has been removed")
-        preloaded = Preloadedmodelclass(
-            modelpath,
-            n_modes=n_modes,
-            psf_type=psf_type,
-        )
-
-    elif preloaded.ideal_empirical_psf != ideal_empirical_psf:
-        logger.info(
-            f"Updating ideal psf with empirical, "
-            f"because {chr(10)} {preloaded.ideal_empirical_psf} "
-            f"of type {type(preloaded.ideal_empirical_psf)} "
-            f"has been changed to {chr(10)} {ideal_empirical_psf} of type {type(ideal_empirical_psf)}"
-        )
-        preloaded.modelpsfgen.update_ideal_psf_with_empirical(
-            ideal_empirical_psf=ideal_empirical_psf,
-            voxel_size=ideal_empirical_psf_voxel_size,
-            remove_background=True,
-            normalize=True,
-        )
-
-    return preloaded.model, preloaded.modelpsfgen
-
-
-@profile
 def load_dm(dm_state: Any) -> np.ndarray:
     if isinstance(dm_state, np.ndarray):
         assert len(dm_state) == 69
@@ -328,18 +281,3 @@ def zernikies_to_actuators(
 def percentile_filter(data: np.ndarray, min_pct: int = 5, max_pct: int = 95) -> np.ndarray:
     minval, maxval = np.percentile(data, [min_pct, max_pct])
     return (data < minval) | (data > maxval)
-
-
-@profile
-def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
-    if isinstance(data, np.ndarray):
-        img = data
-    elif isinstance(data, bytes):
-        img = Path(str(data, "utf-8"))
-    elif isinstance(data, tf.Tensor):
-        path = Path(str(data.numpy(), "utf-8"))
-        img = get_image(path).astype(float)
-    else:
-        path = Path(str(data))
-        img = get_image(path).astype(float)
-    return np.squeeze(img)

@@ -12,7 +12,6 @@ import experimental_llsm
 import experimental_eval
 from preprocessing import prep_sample
 from preloaded import Preloadedmodelclass
-from utils import load_sample
 
 
 def parse_args(args):
@@ -675,7 +674,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         )
 
     elif args.func == 'psnr':
-        sample = load_sample(args.input)
+        sample = experimental.load_sample(args.input)
         prep_sample(
             sample,
             remove_background=True,
@@ -688,7 +687,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
 
     elif args.func == 'preprocessing':
         sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
-        sample = load_sample(args.input)
+        sample = experimental.load_sample(args.input)
         prep_sample(
             sample,
             sample_voxel_size=sample_voxel_size,

@@ -23,6 +23,8 @@ import utils
 import vis
 import backend
 import preprocessing
+
+from data_utils import get_image
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from data_utils import get_image
@@ -37,6 +39,65 @@ try:
     import cupy as cp
 except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
+
+
+@profile
+def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
+    if isinstance(data, np.ndarray):
+        img = data
+    elif isinstance(data, bytes):
+        img = Path(str(data, "utf-8"))
+    elif isinstance(data, tf.Tensor):
+        path = Path(str(data.numpy(), "utf-8"))
+        img = get_image(path).astype(float)
+    else:
+        path = Path(str(data))
+        img = get_image(path).astype(float)
+    return np.squeeze(img)
+
+
+@profile
+def reloadmodel_if_needed(
+    modelpath: Path,
+    preloaded: Optional[Preloadedmodelclass] = None,
+    ideal_empirical_psf: Union[Path, np.ndarray] = None,
+    ideal_empirical_psf_voxel_size: Any = None,
+    n_modes: Optional[int] = None,
+    psf_type: Optional[np.ndarray] = None
+):
+    if preloaded is None:
+        logger.info("Loading new model, because model didn't exist")
+        preloaded = Preloadedmodelclass(
+            modelpath,
+            ideal_empirical_psf,
+            ideal_empirical_psf_voxel_size,
+            n_modes=n_modes,
+            psf_type=psf_type,
+        )
+
+    if ideal_empirical_psf is None and preloaded.ideal_empirical_psf is not None:
+        logger.info("Loading new model, because ideal_empirical_psf has been removed")
+        preloaded = Preloadedmodelclass(
+            modelpath,
+            n_modes=n_modes,
+            psf_type=psf_type,
+        )
+
+    elif preloaded.ideal_empirical_psf != ideal_empirical_psf:
+        logger.info(
+            f"Updating ideal psf with empirical, "
+            f"because {chr(10)} {preloaded.ideal_empirical_psf} "
+            f"of type {type(preloaded.ideal_empirical_psf)} "
+            f"has been changed to {chr(10)} {ideal_empirical_psf} of type {type(ideal_empirical_psf)}"
+        )
+        preloaded.modelpsfgen.update_ideal_psf_with_empirical(
+            ideal_empirical_psf=ideal_empirical_psf,
+            voxel_size=ideal_empirical_psf_voxel_size,
+            remove_background=True,
+            normalize=True,
+        )
+
+    return preloaded.model, preloaded.modelpsfgen
 
 
 @profile
@@ -78,7 +139,7 @@ def preprocess(
     if isinstance(plot, bool) and plot:
         plot = file.with_suffix('')
 
-    sample = utils.load_sample(file)
+    sample = load_sample(file)
 
     if match_model_fov:
         sample = preprocessing.prep_sample(
@@ -169,14 +230,14 @@ def generate_embeddings(
     digital_rotations: Optional[Union[Generator, list, np.ndarray]] = None
 ):
 
-    model, modelpsfgen = utils.reloadmodel_if_needed(
+    model, modelpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
 
-    sample = utils.load_sample(file)
+    sample = load_sample(file)
     psnr = preprocessing.prep_sample(
         sample,
         return_psnr=True,
@@ -389,7 +450,7 @@ def predict_sample(
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
-    preloadedmodel, premodelpsfgen = utils.reloadmodel_if_needed(
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
         ideal_empirical_psf=ideal_empirical_psf,
@@ -398,7 +459,7 @@ def predict_sample(
     no_phase = True if preloadedmodel.input_shape[1] == 3 else False
 
     logger.info(f"Loading file: {img.name}")
-    sample = utils.load_sample(img)
+    sample = load_sample(img)
     psnr = preprocessing.prep_sample(
         sample,
         return_psnr=True,
@@ -566,7 +627,7 @@ def predict_large_fov(
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
     sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
 
-    preloadedmodel, premodelpsfgen = utils.reloadmodel_if_needed(
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
         ideal_empirical_psf=ideal_empirical_psf,
@@ -574,7 +635,7 @@ def predict_large_fov(
     )
     no_phase = True if preloadedmodel.input_shape[1] == 3 else False
 
-    sample = utils.load_sample(img)
+    sample = load_sample(img)
     psnr = preprocessing.prep_sample(
         sample,
         return_psnr=True,
@@ -624,6 +685,7 @@ def predict_large_fov(
         digital_rotations=digital_rotations,
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
         plot_rotations=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot_rotations else None,
+        cpu_workers=cpu_workers
     )
     try:
         p, std = res
@@ -724,7 +786,7 @@ def predict_rois(
     digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
     cpu_workers: int = -1
 ):
-    preloadedmodel, premodelpsfgen = utils.reloadmodel_if_needed(
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
         ideal_empirical_psf=ideal_empirical_psf,
@@ -841,7 +903,7 @@ def predict_tiles(
     digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
     cpu_workers: int = -1
 ):
-    preloadedmodel, premodelpsfgen = utils.reloadmodel_if_needed(
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
         ideal_empirical_psf=ideal_empirical_psf,
@@ -849,7 +911,7 @@ def predict_tiles(
     )
 
     logger.info(f"Loading file: {img.name}")
-    sample = utils.load_sample(img)
+    sample = load_sample(img)
     psnr = preprocessing.prep_sample(
         sample,
         return_psnr=True,
@@ -980,7 +1042,7 @@ def aggregate_predictions(
         logger.error(f'Unknown function: {final_prediction}')
         return -1
 
-    preloadedmodel, premodelpsfgen = utils.reloadmodel_if_needed(
+    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)

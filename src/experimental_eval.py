@@ -23,6 +23,7 @@ import vis
 import backend
 import preprocessing
 from wavefront import Wavefront
+from experimental import load_sample
 
 import logging
 logger = logging.getLogger('')
@@ -129,7 +130,7 @@ def eval_mode(
     with open(str(prediction_path).replace('_zernike_coefficients.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
 
-    noisy_img = utils.load_sample(input_path)
+    noisy_img = load_sample(input_path)
     maxcounts = np.max(noisy_img)
     psnr = predictions_settings['psnr']
     gen = backend.load_metadata(
@@ -451,7 +452,7 @@ def eval_dataset(
             if compare_iterations:
                 logger.info(file.stem)
                 ml_img = preprocessing.prep_sample(
-                    utils.load_sample(file),
+                    load_sample(file),
                     normalize=True,
                     remove_background=True,
                     windowing=False,
@@ -460,7 +461,7 @@ def eval_dataset(
 
                 logger.info(pr_path.stem)
                 pr_img = preprocessing.prep_sample(
-                    utils.load_sample(pr_path),
+                    load_sample(pr_path),
                     normalize=True,
                     remove_background=True,
                     windowing=False,
@@ -553,7 +554,7 @@ def plot_dataset_mips(datadir: Path):
             continue
 
         noao_img = preprocessing.prep_sample(
-            utils.load_sample(noao_path),
+            load_sample(noao_path),
             normalize=True,
             remove_background=True,
             windowing=False,
@@ -561,7 +562,7 @@ def plot_dataset_mips(datadir: Path):
         )
 
         ml_img = preprocessing.prep_sample(
-            utils.load_sample(prediction_path),
+            load_sample(prediction_path),
             normalize=True,
             remove_background=True,
             windowing=False,
@@ -569,7 +570,7 @@ def plot_dataset_mips(datadir: Path):
         )
 
         gt_img = preprocessing.prep_sample(
-            utils.load_sample(sh_path),
+            load_sample(sh_path),
             normalize=True,
             remove_background=True,
             windowing=False,
@@ -675,7 +676,7 @@ def eval_ao_dataset(
 
             if compare_iterations:
                 ml_img = preprocessing.prep_sample(
-                    utils.load_sample(file),
+                    load_sample(file),
                     normalize=True,
                     remove_background=True,
                     windowing=False,
@@ -683,7 +684,7 @@ def eval_ao_dataset(
                 )
 
                 gt_img = preprocessing.prep_sample(
-                    utils.load_sample(sh_path),
+                    load_sample(sh_path),
                     normalize=True,
                     remove_background=True,
                     windowing=False,
