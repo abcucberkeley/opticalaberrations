@@ -272,7 +272,7 @@ def zernikies_to_actuators(
     offset = np.dot(dm_calibration, coefficients)
 
     if dm_state is None:
-        return offset * scalar
+        return - (offset * scalar)
     else:
         return dm_state - (offset * scalar)
 
