@@ -102,6 +102,133 @@ def plot_dm_actuators(
     vis.savesvg(fig, save_path)
 
 
+
+@profile
+def eval_dm(
+    datadir: Path,
+    num_modes: int = 15,
+    gt_postfix: str = 'pr_pupil_waves.tif',
+    # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
+    postfix: str = 'sample_predictions_zernike_coefficients.csv'
+):
+
+    data = np.identity(num_modes)
+    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif')):
+        if 'CamB' in str(file):
+            continue
+
+        state = file.stem.split('_')[0]
+        modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
+        modes = [m for m in modes if m]
+        logger.info(modes)
+        logger.info(f"Input: {file.name[:75]}....tif")
+
+        if len(modes) > 1:
+            prefix = f"ansi_"
+            for m in modes:
+                prefix += f"z{m}*"
+        else:
+            mode = modes[0]
+            prefix = f"ansi_z{mode}*"
+
+        logger.info(f"Looking for: {prefix}")
+
+        try:
+            gt_path = list(datadir.rglob(f'{state}_widefield_{prefix}_{gt_postfix}'))[0]
+            logger.info(f"GT: {gt_path.name}")
+        except IndexError:
+            logger.warning(f'GT not found for: {file.name}')
+            continue
+
+        try:
+            prediction_path = list(datadir.rglob(f'{state}_lightsheet_{prefix}_{postfix}'))[0]
+            logger.info(f"Pred: {prediction_path.name}")
+        except IndexError:
+            logger.warning(f'Prediction not found for: {file.name}')
+            prediction_path = None
+
+        try:
+            p = pd.read_csv(prediction_path, header=0)['amplitude'].values
+        except KeyError:
+            p = pd.read_csv(prediction_path, header=None).iloc[:, 0].values
+
+        try:
+            y = pd.read_csv(gt_path, header=0)['amplitude'].values[:len(p)]
+        except KeyError:
+            y = pd.read_csv(gt_path, header=0).iloc[:, -1].values[:len(p)]
+
+        magnitude = y[np.argmax(np.abs(y))]
+
+        for i in range(p.shape[0]):
+            data[i, int(mode)] = p[i] / magnitude   # normalize by the magnitude of the mode we put on the mirror
+
+    df = pd.DataFrame(data)
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax = sns.heatmap(
+        data, ax=ax, annot=True, fmt=".2f", vmin=-1, vmax=1,
+        cmap='coolwarm', square=True, cbar_kws={'label': 'Ratio of ML prediction to GT', 'shrink': .8}
+    )
+    ax.set(ylabel="ML saw these modes", xlabel="DM applied this mode",)
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position('top')
+
+    for t in ax.texts:
+        if abs(float(t.get_text())) >= 0.01:
+            t.set_text(t.get_text())
+        else:
+            t.set_text("")
+
+    ax.set_title(f'DM magnitude = {magnitude} um RMS {chr(10)} {datadir.parts[-2]}')
+
+    output_file = Path(f'{datadir}/../{datadir.parts[-1]}_dm_matrix')
+    df.to_csv(f"{output_file}.csv")
+    plt.savefig(f"{output_file}.png", bbox_inches='tight', pad_inches=.25)
+    logger.info(f"Saved result to: {output_file}")
+
+
+def calibrate_dm(datadir, dm_calibration):
+    dataframes = []
+    for file in sorted(datadir.glob('*dm_matrix.csv')):
+        df = pd.read_csv(file, header=0, index_col=0)
+        dataframes.append(df)
+
+    df = pd.concat(dataframes)
+    avg = df.groupby(df.index).mean()
+    dm = pd.read_csv(dm_calibration, header=None)
+
+    scalers = np.identity(dm.shape[1])
+    scalers[np.diag_indices_from(avg)] /= np.diag(avg)
+    calibration = np.dot(dm, scalers)
+    calibration = pd.DataFrame(calibration)
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax = sns.heatmap(avg, ax=ax, annot=True, fmt=".2f", vmin=-1, vmax=1, cmap='coolwarm', square=True,
+                     cbar_kws={'label': 'Ratio of ML prediction to GT', 'shrink': .8})
+    ax.set(ylabel="ML saw these modes", xlabel="DM applied this mode", )
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position('top')
+
+    for t in ax.texts:
+        if abs(float(t.get_text())) >= 0.01:
+            t.set_text(t.get_text())
+        else:
+            t.set_text("")
+
+    output_file = Path(f"{datadir}/calibration")
+    plt.savefig(f"{output_file}.png", bbox_inches='tight', pad_inches=.25)
+
+    dm = calibration / dm
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax = sns.heatmap(dm, ax=ax, vmin=0, vmax=2, cmap='coolwarm', square=True, cbar_kws={'shrink': .8})
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position('top')
+    ax.set(ylabel="Actuators", xlabel="Zernike modes", )
+    plt.savefig(f"{output_file}_diff.png", bbox_inches='tight', pad_inches=.25)
+
+    calibration.to_csv(f"{output_file}.csv", header=False, index=False)
+    logger.info(f"Saved result to: {output_file}")
+
+
 def eval_mode(
     input_path: Path,
     prediction_path: Path,
@@ -490,108 +617,6 @@ def eval_dataset(
 
 
 @profile
-def plot_dataset_mips(datadir: Path):
-    mldir = Path(datadir/'MLResults')
-
-    # get model from .json file
-    with open(list(mldir.glob('*_settings.json'))[0]) as f:
-        predictions_settings = ujson.load(f)
-        model = Path(predictions_settings['model'])
-
-        if not model.exists():
-            filename = str(model).split('\\')[-1]
-            model = Path(f"../pretrained_models/lattice_yumb_x108um_y108um_z200um/{filename}")
-
-        logger.info(model)
-
-    logger.info('Beginning evaluations')
-    for file in sorted(datadir.glob('MLAO*.tif'), key=os.path.getctime):  # sort by creation time
-        if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
-            continue
-
-        if file.stem.split('_')[1].startswith('round'):
-            iter_num = int(file.stem.split('_')[1][-1])
-        else:
-            iter_num = file.stem.split('_')[3]
-
-        noao_path = None
-        for ifile in sorted(datadir.glob('NoAO*.tif')):
-            if fnmatch.fnmatch(ifile.name, f'NoAO*.tif'):
-                noao_path = ifile
-                break
-
-        if noao_path is None:
-            logger.warning(f'NoAO not found for: {file.name}')
-            continue
-
-        sh_path = None
-        for gtfile in sorted(datadir.glob('SHAO*.tif')):
-            if fnmatch.fnmatch(gtfile.name, f'SHAO_Scan_Iter_{str(iter_num-1).zfill(4)}*.tif'):
-                sh_path = gtfile
-                break
-            elif fnmatch.fnmatch(gtfile.name, f'SHAO_Scan_Iter_{iter_num}*.tif'):
-                sh_path = gtfile
-                break
-            elif fnmatch.fnmatch(gtfile.name, f'SHAO_Scan*.tif'):
-                sh_path = gtfile
-                break
-
-        if sh_path is None:
-            logger.warning(f'SH not found for: {file.name}')
-            continue
-
-        prediction_path = None
-        for predfile in sorted(datadir.glob('MLAO*.tif')):
-            if fnmatch.fnmatch(predfile.name, f'MLAO_Scan_Iter_{iter_num}*.tif'):
-                prediction_path = predfile
-                break
-            elif fnmatch.fnmatch(predfile.name, f'MLAO_round{iter_num}_Scan*.tif'):
-                prediction_path = predfile
-                break
-
-        if prediction_path is None:
-            logger.warning(f'Prediction not found for: {file.name}')
-            continue
-
-        noao_img = preprocessing.prep_sample(
-            load_sample(noao_path),
-            normalize=True,
-            remove_background=True,
-            windowing=False,
-            sample_voxel_size=predictions_settings['sample_voxel_size']
-        )
-
-        ml_img = preprocessing.prep_sample(
-            load_sample(prediction_path),
-            normalize=True,
-            remove_background=True,
-            windowing=False,
-            sample_voxel_size=predictions_settings['sample_voxel_size']
-        )
-
-        gt_img = preprocessing.prep_sample(
-            load_sample(sh_path),
-            normalize=True,
-            remove_background=True,
-            windowing=False,
-            sample_voxel_size=predictions_settings['sample_voxel_size']
-        )
-
-        vis.compare_mips(
-            results=dict(
-                noao_img=noao_img,
-                ml_img=ml_img,
-                gt_img=gt_img,
-                residuals=f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv',
-            ),
-            save_path=datadir / f'mips_evaluation_iter_{iter_num}',
-            dxy=predictions_settings['sample_voxel_size'][1],
-            dz=predictions_settings['sample_voxel_size'][0],
-            transform_to_align_to_DM=True
-        )
-
-
-@profile
 def eval_ao_dataset(
     datadir: Path,
     flat: Any = None,
@@ -711,126 +736,184 @@ def eval_ao_dataset(
 
 
 @profile
-def eval_dm(
-    datadir: Path,
-    num_modes: int = 15,
-    gt_postfix: str = 'pr_pupil_waves.tif',
-    # gt_postfix: str = 'ground_truth_zernike_coefficients.csv',
-    postfix: str = 'sample_predictions_zernike_coefficients.csv'
-):
+def plot_dataset_mips(datadir: Path):
+    mldir = Path(datadir/'MLResults')
 
-    data = np.identity(num_modes)
-    for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif')):
-        if 'CamB' in str(file):
+    # get model from .json file
+    with open(list(mldir.glob('*_settings.json'))[0]) as f:
+        predictions_settings = ujson.load(f)
+        model = Path(predictions_settings['model'])
+
+        if not model.exists():
+            filename = str(model).split('\\')[-1]
+            model = Path(f"../pretrained_models/lattice_yumb_x108um_y108um_z200um/{filename}")
+
+        logger.info(model)
+
+    logger.info('Beginning evaluations')
+    for file in sorted(datadir.glob('MLAO*.tif'), key=os.path.getctime):  # sort by creation time
+        if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
             continue
 
-        state = file.stem.split('_')[0]
-        modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
-        modes = [m for m in modes if m]
-        logger.info(modes)
-        logger.info(f"Input: {file.name[:75]}....tif")
-
-        if len(modes) > 1:
-            prefix = f"ansi_"
-            for m in modes:
-                prefix += f"z{m}*"
+        if file.stem.split('_')[1].startswith('round'):
+            iter_num = int(file.stem.split('_')[1][-1])
         else:
-            mode = modes[0]
-            prefix = f"ansi_z{mode}*"
+            iter_num = file.stem.split('_')[3]
 
-        logger.info(f"Looking for: {prefix}")
+        noao_path = None
+        for ifile in sorted(datadir.glob('NoAO*.tif')):
+            if fnmatch.fnmatch(ifile.name, f'NoAO*.tif'):
+                noao_path = ifile
+                break
 
-        try:
-            gt_path = list(datadir.rglob(f'{state}_widefield_{prefix}_{gt_postfix}'))[0]
-            logger.info(f"GT: {gt_path.name}")
-        except IndexError:
-            logger.warning(f'GT not found for: {file.name}')
+        if noao_path is None:
+            logger.warning(f'NoAO not found for: {file.name}')
             continue
 
-        try:
-            prediction_path = list(datadir.rglob(f'{state}_lightsheet_{prefix}_{postfix}'))[0]
-            logger.info(f"Pred: {prediction_path.name}")
-        except IndexError:
+        sh_path = None
+        for gtfile in sorted(datadir.glob('SHAO*.tif')):
+            if fnmatch.fnmatch(gtfile.name, f'SHAO_Scan_Iter_{str(iter_num-1).zfill(4)}*.tif'):
+                sh_path = gtfile
+                break
+            elif fnmatch.fnmatch(gtfile.name, f'SHAO_Scan_Iter_{iter_num}*.tif'):
+                sh_path = gtfile
+                break
+            elif fnmatch.fnmatch(gtfile.name, f'SHAO_Scan*.tif'):
+                sh_path = gtfile
+                break
+
+        if sh_path is None:
+            logger.warning(f'SH not found for: {file.name}')
+            continue
+
+        prediction_path = None
+        for predfile in sorted(datadir.glob('MLAO*.tif')):
+            if fnmatch.fnmatch(predfile.name, f'MLAO_Scan_Iter_{iter_num}*.tif'):
+                prediction_path = predfile
+                break
+            elif fnmatch.fnmatch(predfile.name, f'MLAO_round{iter_num}_Scan*.tif'):
+                prediction_path = predfile
+                break
+
+        if prediction_path is None:
             logger.warning(f'Prediction not found for: {file.name}')
-            prediction_path = None
+            continue
 
-        try:
-            p = pd.read_csv(prediction_path, header=0)['amplitude'].values
-        except KeyError:
-            p = pd.read_csv(prediction_path, header=None).iloc[:, 0].values
+        noao_img = preprocessing.prep_sample(
+            load_sample(noao_path),
+            normalize=True,
+            remove_background=True,
+            windowing=False,
+            sample_voxel_size=predictions_settings['sample_voxel_size']
+        )
 
-        try:
-            y = pd.read_csv(gt_path, header=0)['amplitude'].values[:len(p)]
-        except KeyError:
-            y = pd.read_csv(gt_path, header=0).iloc[:, -1].values[:len(p)]
+        ml_img = preprocessing.prep_sample(
+            load_sample(prediction_path),
+            normalize=True,
+            remove_background=True,
+            windowing=False,
+            sample_voxel_size=predictions_settings['sample_voxel_size']
+        )
 
-        magnitude = y[np.argmax(np.abs(y))]
+        gt_img = preprocessing.prep_sample(
+            load_sample(sh_path),
+            normalize=True,
+            remove_background=True,
+            windowing=False,
+            sample_voxel_size=predictions_settings['sample_voxel_size']
+        )
 
-        for i in range(p.shape[0]):
-            data[i, int(mode)] = p[i] / magnitude   # normalize by the magnitude of the mode we put on the mirror
-
-    df = pd.DataFrame(data)
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ax = sns.heatmap(
-        data, ax=ax, annot=True, fmt=".2f", vmin=-1, vmax=1,
-        cmap='coolwarm', square=True, cbar_kws={'label': 'Ratio of ML prediction to GT', 'shrink': .8}
-    )
-    ax.set(ylabel="ML saw these modes", xlabel="DM applied this mode",)
-    ax.xaxis.tick_top()
-    ax.xaxis.set_label_position('top')
-
-    for t in ax.texts:
-        if abs(float(t.get_text())) >= 0.01:
-            t.set_text(t.get_text())
-        else:
-            t.set_text("")
-
-    ax.set_title(f'DM magnitude = {magnitude} um RMS {chr(10)} {datadir.parts[-2]}')
-
-    output_file = Path(f'{datadir}/../{datadir.parts[-1]}_dm_matrix')
-    df.to_csv(f"{output_file}.csv")
-    plt.savefig(f"{output_file}.png", bbox_inches='tight', pad_inches=.25)
-    logger.info(f"Saved result to: {output_file}")
+        vis.compare_mips(
+            results=dict(
+                noao_img=noao_img,
+                ml_img=ml_img,
+                gt_img=gt_img,
+                residuals=f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv',
+            ),
+            save_path=datadir / f'mips_evaluation_iter_{iter_num}',
+            dxy=predictions_settings['sample_voxel_size'][1],
+            dz=predictions_settings['sample_voxel_size'][0],
+            transform_to_align_to_DM=True
+        )
 
 
-def calibrate_dm(datadir, dm_calibration):
-    dataframes = []
-    for file in sorted(datadir.glob('*dm_matrix.csv')):
-        df = pd.read_csv(file, header=0, index_col=0)
-        dataframes.append(df)
+@profile
+def eval_bleaching_rate(datadir: Path):
+    results = {}
 
-    df = pd.concat(dataframes)
-    avg = df.groupby(df.index).mean()
-    dm = pd.read_csv(dm_calibration, header=None)
+    def get_stats(path: Path, key: int):
+        img = load_sample(path)
+        quality = preprocessing.prep_sample(
+            img,
+            return_psnr=True,
+            remove_background=True,
+            plot=None,
+            normalize=False,
+            edge_filter=False,
+            filter_mask_dilation=False,
+        )
 
-    scalers = np.identity(dm.shape[1])
-    scalers[np.diag_indices_from(avg)] /= np.diag(avg)
-    calibration = np.dot(dm, scalers)
-    calibration = pd.DataFrame(calibration)
+        imin = np.nanmin(img)
+        imax = np.nanmax(img)
+        isum = np.nansum(img)
+        imean = np.nanmean(img)
+        istd = np.nanstd(img)
 
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ax = sns.heatmap(avg, ax=ax, annot=True, fmt=".2f", vmin=-1, vmax=1, cmap='coolwarm', square=True,
-                     cbar_kws={'label': 'Ratio of ML prediction to GT', 'shrink': .8})
-    ax.set(ylabel="ML saw these modes", xlabel="DM applied this mode", )
-    ax.xaxis.tick_top()
-    ax.xaxis.set_label_position('top')
+        ip1 = np.nanpercentile(img, 1)
+        ip5 = np.nanpercentile(img, 5)
+        ip15 = np.nanpercentile(img, 15)
+        ip25 = np.nanpercentile(img, 25)
+        ip50 = np.nanpercentile(img, 50)
+        ip75 = np.nanpercentile(img, 75)
+        ip85 = np.nanpercentile(img, 85)
+        ip95 = np.nanpercentile(img, 95)
+        ip99 = np.nanpercentile(img, 99)
 
-    for t in ax.texts:
-        if abs(float(t.get_text())) >= 0.01:
-            t.set_text(t.get_text())
-        else:
-            t.set_text("")
+        psnr = (imax - ip50) / np.sqrt((imax - ip50))
 
-    output_file = Path(f"{datadir}/calibration")
-    plt.savefig(f"{output_file}.png", bbox_inches='tight', pad_inches=.25)
+        results[key] = dict(
+            ipath=str(path),
+            iquality=quality,
+            ipsnr=psnr,
+            isum=isum,
+            imean=imean,
+            istd=istd,
+            imin=imin,
+            ip1=ip1,
+            ip5=ip5,
+            ip15=ip15,
+            ip25=ip25,
+            ip50=ip50,
+            ip75=ip75,
+            ip85=ip85,
+            ip95=ip95,
+            ip99=ip99,
+            imax=imax,
+        )
 
-    dm = calibration / dm
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ax = sns.heatmap(dm, ax=ax, vmin=0, vmax=2, cmap='coolwarm', square=True, cbar_kws={'shrink': .8})
-    ax.xaxis.tick_top()
-    ax.xaxis.set_label_position('top')
-    ax.set(ylabel="Actuators", xlabel="Zernike modes", )
-    plt.savefig(f"{output_file}_diff.png", bbox_inches='tight', pad_inches=.25)
+    pool = mp.Pool(processes=mp.cpu_count())
 
-    calibration.to_csv(f"{output_file}.csv", header=False, index=False)
-    logger.info(f"Saved result to: {output_file}")
+    logger.info('Beginning evaluations')
+    for file in sorted(datadir.glob('Imaging_Scan*.tif'), key=os.path.getctime):  # sort by creation time
+        if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
+            continue
+
+        iter_num = int(file.stem.split('_')[3])
+
+        prediction_path = None
+        for predfile in sorted(datadir.glob('ML*.tif')):
+            if fnmatch.fnmatch(predfile.name, f'ML*{iter_num}*.tif'):
+                prediction_path = predfile
+                break
+
+        if prediction_path is None:
+            logger.warning(f'Model not found for: {file.name}')
+            continue
+
+        pool.apply_async(get_stats(file, key=iter_num))
+
+    pool.close()  # close the pool
+    pool.join()  # wait for all tasks to complete
+
+    df = pd.DataFrame.from_dict(results, orient='index')
+    df.to_csv(datadir/'bleaching_rate.csv')
