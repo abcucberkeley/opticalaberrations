@@ -102,7 +102,6 @@ def plot_dm_actuators(
     vis.savesvg(fig, save_path)
 
 
-
 @profile
 def eval_dm(
     datadir: Path,
@@ -841,8 +840,10 @@ def plot_dataset_mips(datadir: Path):
 def eval_bleaching_rate(datadir: Path):
     results = {}
 
-    def get_stats(path: Path, key: int):
+    def get_stats(path: Path, key: int, background: int = 100):
         img = load_sample(path)
+        img -= background  # remove background offset
+
         quality = preprocessing.prep_sample(
             img,
             return_psnr=True,
@@ -899,21 +900,156 @@ def eval_bleaching_rate(datadir: Path):
             continue
 
         iter_num = int(file.stem.split('_')[3])
-
-        prediction_path = None
-        for predfile in sorted(datadir.glob('ML*.tif')):
-            if fnmatch.fnmatch(predfile.name, f'ML*{iter_num}*.tif'):
-                prediction_path = predfile
-                break
-
-        if prediction_path is None:
-            logger.warning(f'Model not found for: {file.name}')
-            continue
-
         pool.apply_async(get_stats(file, key=iter_num))
 
     pool.close()  # close the pool
     pool.join()  # wait for all tasks to complete
 
     df = pd.DataFrame.from_dict(results, orient='index')
+    df.index.name = 'iter_num'
     df.to_csv(datadir/'bleaching_rate.csv')
+
+
+def plot_bleaching_rate(datadir: Path):
+    results = []
+
+    ml_counter, sh_counter = 0, 0
+    logger.info('Beginning evaluations')
+    for file in sorted(datadir.rglob('*bleaching_rate.csv'), key=os.path.getctime):  # sort by creation time
+        df = pd.read_csv(file, header=0)
+        df['method'] = 'ML' if 'ML' in str(file) else 'SH'
+        df['signal'] = df['isum'] / df['isum'].iloc[0]
+        df['max_signal'] = df['ip99'] / df['ip99'].iloc[0]
+
+        if 'ML' in str(file):
+            df['method'] = 'OpticalNet'
+            ml_counter += 1
+            df['exp'] = ml_counter
+        else:
+            df['method'] = 'Shack–Hartmann'
+            sh_counter += 1
+            df['exp'] = sh_counter
+
+        results.append(df)
+
+    results = pd.concat(results, ignore_index=True)
+    results.to_csv(datadir/'bleaching_rate_evaluations.csv')
+
+    df = results.groupby(['iter_num', 'method'])['signal']
+    means = df.mean()
+    diff = means.loc[:, 'OpticalNet'] - means.loc[:, 'Shack–Hartmann']
+
+
+    fig = plt.figure(figsize=(5, 8))
+    sns.set_theme(style="ticks")
+    g = sns.relplot(
+        data=results,
+        x="iter_num",
+        y="signal",
+        hue="method",
+        kind="line",
+        height=5,
+        aspect=1.,
+    )
+
+    g.map(plt.axhline, y=means.loc[39, 'Shack–Hartmann'], color='C1', dashes=(2, 1), zorder=3)
+    g.map(plt.axhline, y=means.loc[39, 'OpticalNet'], color='C0', dashes=(2, 1), zorder=3)
+
+    (
+        g.map(plt.grid, which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
+        .set_axis_labels("Iteration", "Signal")
+        .set(xlim=(0, max(results['iter_num'])), ylim=(.7, 1))
+        .tight_layout(w_pad=0)
+    )
+
+    leg = g._legend
+    leg.set_title('Method')
+    leg.set_bbox_to_anchor((.9, .8))
+    vis.savesvg(fig, f'{datadir}/bleaching_rate_signal.svg')
+
+
+    fig = plt.figure(figsize=(5, 8))
+    sns.set_theme(style="ticks")
+    g = sns.relplot(
+        data=results,
+        x="iter_num",
+        y="signal",
+        hue="exp",
+        kind="line",
+        height=5,
+        aspect=1.,
+        col="method",
+        col_wrap=2,
+        palette='tab10',
+        facet_kws=dict(sharex=True),
+    )
+    g.map(plt.axhline, y=means.loc[39, 'Shack–Hartmann'], color='C1', dashes=(2, 1), zorder=3)
+    g.map(plt.axhline, y=means.loc[39, 'OpticalNet'], color='C0', dashes=(2, 1), zorder=3)
+
+    (
+        g.map(plt.grid, which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
+        .set_axis_labels("Iteration", "Signal")
+        .set(xlim=(0, max(results['iter_num'])), ylim=(.7, 1))
+        .tight_layout(w_pad=0)
+    )
+
+    leg = g._legend
+    leg.set_title('Experiment')
+    leg.set_bbox_to_anchor((.9, .8))
+    vis.savesvg(fig, f'{datadir}/bleaching_rate_evaluations.svg')
+
+    fig = plt.figure(figsize=(5, 8))
+    sns.set_theme(style="ticks")
+    g = sns.relplot(
+        data=results,
+        x="iter_num",
+        y="isum",
+        hue="exp",
+        kind="line",
+        height=5,
+        aspect=1.,
+        col="method",
+        col_wrap=2,
+        palette='tab10',
+        facet_kws=dict(sharex=True),
+    )
+
+    (
+        g.map(plt.grid, which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
+        .set_axis_labels("Iteration", "Integration")
+        .set(xlim=(0, max(results['iter_num'])),)
+        .tight_layout(w_pad=0)
+    )
+
+    leg = g._legend
+    leg.set_title('Experiment')
+    leg.set_bbox_to_anchor((.9, .8))
+    vis.savesvg(fig, f'{datadir}/bleaching_rate_integration.svg')
+
+    fig = plt.figure(figsize=(5, 8))
+    sns.set_theme(style="ticks")
+    g = sns.relplot(
+        data=results,
+        x="iter_num",
+        y="ip99",
+        hue="exp",
+        kind="line",
+        height=5,
+        aspect=1.,
+        col="method",
+        col_wrap=2,
+        palette='tab10',
+        facet_kws=dict(sharex=True),
+    )
+
+    (
+        g.map(plt.grid, which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
+        .set_axis_labels("Iteration", r"Max signal ($99^{th}$ percentile)")
+        .set(xlim=(0, max(results['iter_num'])))
+        .tight_layout(w_pad=0)
+    )
+
+    leg = g._legend
+    leg.set_title('Experiment')
+    leg.set_bbox_to_anchor((.9, .8))
+    vis.savesvg(fig, f'{datadir}/bleaching_rate_max.svg')

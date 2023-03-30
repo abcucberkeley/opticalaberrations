@@ -630,6 +630,12 @@ def parse_args(args):
     )
     eval_bleaching_rate.add_argument("datadir", type=Path, help="path to dataset directory")
 
+    plot_bleaching_rate = subparsers.add_parser(
+        "plot_bleaching_rate",
+        help="Visualize bleaching rates evaluations"
+    )
+    plot_bleaching_rate.add_argument("datadir", type=Path, help="path to dataset directory")
+
     return parser.parse_args(args)
 
 
@@ -892,6 +898,10 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         )
     elif args.func == 'eval_bleaching_rate':
         experimental_eval.eval_bleaching_rate(
+            datadir=args.datadir,
+        )
+    elif args.func == 'plot_bleaching_rate':
+        experimental_eval.plot_bleaching_rate(
             datadir=args.datadir,
         )
     else:
