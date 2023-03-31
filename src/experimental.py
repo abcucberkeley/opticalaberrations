@@ -1091,12 +1091,23 @@ def aggregate_predictions(
         # filter out unconfident predictions
         predictions[stdevs > confidence_threshold] = 0.
 
-        votes = predictions[tiles].values
-        votes[votes != 0] = 1
-        votes = np.sum(votes, axis=1)
+        # get tile votes per mode
+        votes = predictions[tiles].values   # votes is a 2D array
+        votes[votes != 0] = 1   # all predictions.values (e.g. each mode of each XY tile) that are non-zero get one vote
+
+        # sum votes per mode
+        total_votes = np.sum(votes, axis=1) # 1D array
+
+        # assign total votes per mode to a new column
+        # predictions['votes'] = total_votes
+
+        # filter out tiles without votes
+        # predictions = predictions[predictions['votes'] > 0]
+
+        mean_prediction = np.nan_to_num(np.sum(predictions[tiles].values, axis=1) / total_votes) # if total_votes=0 for a mode, we will get NaN, so set these to zero.
 
         pred = Wavefront(
-            final_prediction(predictions[tiles].values, axis=1),
+            mean_prediction,
             order='ansi',
             lam_detection=wavelength
         )
