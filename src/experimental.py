@@ -24,7 +24,6 @@ import vis
 import backend
 import preprocessing
 
-from data_utils import get_image
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from data_utils import get_image
