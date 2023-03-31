@@ -406,7 +406,7 @@ def eval_rotation(
                 rhos, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
                 ydata = np.degrees(ydata)
                 rho = rhos[np.argmin(np.abs(ydata))]
-                std_rho = np.std(rhos).round(2)
+                std_rho = np.std(rhos).round(3)
 
                 # if spatial model: exclude points near discontinuities (-90, +90, 450,..) based upon fit
                 data_mask = np.ones(xdata.shape[0], dtype=bool)
@@ -456,7 +456,9 @@ def eval_rotation(
                     ax.set_xlabel('Digital rotation (deg)')
 
                     confidence = stdevs[mode.index_ansi] < confidence_threshold
-                    title_color = 'g' if confidence else 'r'
+                    title_color = 'C0' if confidence else 'r'
+                    if rho > 0:
+                        title_color = 'g'
                     fit_ax.plot([0, xdata[-1]], m * [0, xdata[-1]] + b, color=title_color, lw='.75')
                     # plot fit line from zero to end of data
                     fit_ax.scatter(xdata, ydata, s=2, color='grey')
@@ -464,8 +466,8 @@ def eval_rotation(
                     fit_ax.set_title(
                         #f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, '
                         #f'm{twin.index_ansi}={preds[twin.index_ansi]:.3f} '
-                        f'$\sigma$={stdevs[mode.index_ansi]:.2f} $\mu$RMS, '
                         f'$\\rho$={rho:.3f} $\mu$RMS, '
+                        f'$\sigma$={stdevs[mode.index_ansi]:.3f} $\mu$RMS, '                        
                         f'MSE={mse:.0f}, '
                         f'{fraction_of_kept_points*100:.0f}% kept',
                         color=title_color
