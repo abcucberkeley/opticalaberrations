@@ -1096,7 +1096,7 @@ def aggregate_predictions(
         votes[votes != 0] = 1   # all predictions.values (e.g. each mode of each XY tile) that are non-zero get one vote
 
         # sum votes per mode
-        total_votes = np.sum(votes, axis=1) # 1D array
+        total_votes = np.sum(votes, axis=1)  # 1D array
 
         # assign total votes per mode to a new column
         # predictions['votes'] = total_votes
@@ -1104,7 +1104,8 @@ def aggregate_predictions(
         # filter out tiles without votes
         # predictions = predictions[predictions['votes'] > 0]
 
-        mean_prediction = np.nan_to_num(np.sum(predictions[tiles].values, axis=1) / total_votes) # if total_votes=0 for a mode, we will get NaN, so set these to zero.
+        # if total_votes=0 for a mode, we will get NaN, so set these to zero.
+        mean_prediction = np.nan_to_num(np.sum(predictions[tiles].values, axis=1) / total_votes)
 
         pred = Wavefront(
             mean_prediction,

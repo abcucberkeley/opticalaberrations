@@ -12,6 +12,7 @@ plt.set_loglevel('error')
 import numpy as np
 from tqdm import tqdm
 from functools import partial
+from pathlib import Path
 import matplotlib.colors as mcolors
 from skimage.filters import scharr, window
 from skimage.restoration import unwrap_phase
@@ -32,8 +33,8 @@ except ImportError as e:
     from scipy.ndimage import rotate
     logging.warning(f"Cupy not supported on your system: {e}")
 
-from utils import resize_with_crop_or_pad, multiprocess
 import preprocessing
+from utils import resize_with_crop_or_pad, multiprocess
 from vis import savesvg, plot_interference_pattern_svg
 
 logging.basicConfig(
@@ -77,6 +78,7 @@ def normalize(emb, otf, freq_strength_threshold: float = 0.):
         emb[np.abs(emb) < freq_strength_threshold] = 0.
 
     return emb
+
 
 @profile
 def principle_planes(emb):
@@ -539,6 +541,7 @@ def remove_interference_pattern(
 
         return otf
 
+
 @profile
 def compute_emb(
         otf: np.ndarray,
@@ -575,8 +578,8 @@ def compute_emb(
     na_mask = np.where(na_mask >= threshold, na_mask, 0.).astype(bool)
 
     if otf.shape != iotf.shape:
-        real = resize_with_crop_or_pad(np.real(otf), crop_shape=iotf.shape) # only center crop
-        imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=iotf.shape) # only center crop
+        real = resize_with_crop_or_pad(np.real(otf), crop_shape=iotf.shape)  # only center crop
+        imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=iotf.shape)  # only center crop
         otf = real + 1j * imag
 
     if val == 'real':
@@ -1006,3 +1009,131 @@ def rolling_fourier_embeddings(
         emb = np.expand_dims(emb, axis=-1)
 
     return emb
+
+
+@profile
+def measure_fourier_snr(
+        a: np.ndarray,
+        plot: Optional[Union[str, Path]],
+        threshold: float = 1e-6,
+        wavelength: float = .510,
+        axial_voxel_size: float = .097,
+        lateral_voxel_size: float = .097,
+        psnr: int = 200,
+) -> int:
+    """ Return estimated signal-to-noise ratio or inf if the given image has no noise """
+
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    # na_mask = np.abs(iotf)
+    # threshold = np.nanpercentile(na_mask.flatten(), 65)
+    # na_mask = np.where(na_mask < threshold, na_mask, 1.)
+    # na_mask = np.where(na_mask >= threshold, na_mask, 0.).astype(bool)
+
+    from synthetic import SyntheticPSF
+    samplepsfgen = SyntheticPSF(
+        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        snr=psnr,
+        psf_shape=a.shape,
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
+
+    a /= np.max(a)
+    otf = np.abs(fft(a))
+    otf /= np.max(otf)
+    otf[otf < threshold] = threshold
+
+    spsf = samplepsfgen.single_psf(
+        phi=0,
+        normed=True,
+        noise=True,
+        meta=False,
+    )
+    sotf = np.abs(fft(spsf))
+    sotf /= np.max(sotf)
+    sotf[sotf < threshold] = threshold
+
+    ipsf = samplepsfgen.single_psf(
+        phi=0,
+        normed=True,
+        noise=False,
+        meta=False,
+    )
+    iotf = np.abs(fft(ipsf))
+    iotf /= np.max(iotf)
+    iotf[iotf < threshold] = threshold
+
+    mid_plane = [s//2 for s in otf.shape]
+
+    if plot is not None:
+        fig, axes = plt.subplots(2, 3, figsize=(10, 6), sharex='col', sharey='row')
+
+        kz = otf[:, mid_plane[1], mid_plane[2]]
+        ky = otf[mid_plane[0], :, mid_plane[2]]
+        kx = otf[mid_plane[0], mid_plane[1], :]
+
+        skz = sotf[:, mid_plane[1], mid_plane[2]]
+        sky = sotf[mid_plane[0], :, mid_plane[2]]
+        skx = sotf[mid_plane[0], mid_plane[1], :]
+
+        ikz = iotf[:, mid_plane[1], mid_plane[2]]
+        iky = iotf[mid_plane[0], :, mid_plane[2]]
+        ikx = iotf[mid_plane[0], mid_plane[1], :]
+
+        axes[0, 0].plot(np.arange(ikz.size), ikz, color='grey', label=r'Theoretical ($|\mathscr{\hat{F}}|$)', zorder=0)
+        axes[0, 0].plot(np.arange(kz.size), kz, color='C0', label='Observed')
+        axes[0, 0].plot(np.arange(skz.size), skz, color='C1', label=f'Simulated (PSNR={psnr})')
+        axes[1, 0].plot(np.arange(kz.size), kz/ikz, color='C0', label='Observed')
+        axes[1, 0].plot(np.arange(skz.size), skz/ikz, color='C1', label=f'Simulated (PSNR={psnr})')
+        axes[0, 0].set_xlim(0, kz.size)
+        axes[0, 0].set_ylim(threshold, 1)
+
+        axes[0, 1].plot(np.arange(iky.size), iky, color='grey', label=r'Theoretical ($|\mathscr{\hat{F}}|$)', zorder=0)
+        axes[0, 1].plot(np.arange(ky.size), ky, color='C0', label='Observed')
+        axes[0, 1].plot(np.arange(sky.size), sky, color='C1', label=f'Simulated (PSNR={psnr})')
+        axes[1, 1].plot(np.arange(ky.size), ky/iky, color='C0', label='Observed')
+        axes[1, 1].plot(np.arange(sky.size), sky/iky, color='C1', label=f'Simulated (PSNR={psnr})')
+        axes[0, 1].set_xlim(0, ky.size)
+        axes[0, 1].set_ylim(threshold, 1)
+
+        axes[0, 2].plot(np.arange(ikx.size), ikx, color='grey', label=r'Theoretical ($|\mathscr{\hat{F}}|$)', zorder=0)
+        axes[0, 2].plot(np.arange(kx.size), kx, color='C0', label='Observed')
+        axes[0, 2].plot(np.arange(skx.size), skx, color='C1', label=f'Simulated (PSNR={psnr})')
+        axes[1, 2].plot(np.arange(kx.size), kx/ikx, color='C0', label='Observed')
+        axes[1, 2].plot(np.arange(skx.size), skx/ikx, color='C1', label=f'Simulated (PSNR={psnr})')
+        axes[0, 2].set_xlim(0, kx.size)
+        axes[0, 2].set_ylim(threshold, 1)
+
+        for i in range(3):
+            axes[0, i].set_yscale('log')
+            axes[1, i].set_yscale('log')
+            axes[0, i].spines.right.set_visible(False)
+            axes[1, i].spines.right.set_visible(False)
+            axes[0, i].spines.left.set_visible(False)
+            axes[1, i].spines.left.set_visible(False)
+            axes[0, i].spines.top.set_visible(False)
+            axes[1, i].spines.top.set_visible(False)
+            axes[1, i].set_xlabel('Frequency')
+            axes[0, i].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0, alpha=.5)
+            axes[1, i].grid(True, which="both", axis='y', lw=1, ls='--', zorder=0, alpha=.5)
+
+        axes[0, 0].set_ylabel(r'$|\mathscr{F}|$')
+        axes[1, 0].set_ylabel(r'$|\mathscr{F}| / |\mathscr{\hat{F}}|$')
+        axes[0, 0].set_title(r'$k$(XY)')
+        axes[0, 1].set_title(r'$k$(XZ)')
+        axes[0, 2].set_title(r'$k$(YZ)')
+        axes[0, 0].legend(frameon=False, ncol=3, loc='upper left', bbox_to_anchor=(0, 1.3))
+
+        savesvg(fig, savepath=plot)
+

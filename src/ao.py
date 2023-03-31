@@ -12,6 +12,7 @@ import experimental_llsm
 import experimental_eval
 from preprocessing import prep_sample
 from preloaded import Preloadedmodelclass
+from embeddings import measure_fourier_snr
 
 
 def parse_args(args):
@@ -50,9 +51,9 @@ def parse_args(args):
 
     psnr = subparsers.add_parser("psnr")
     psnr.add_argument("input", type=Path, help="path to input .tif file")
-    psnr.add_argument(
-        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
-    )
+
+    fourier_snr = subparsers.add_parser("fourier_snr")
+    fourier_snr.add_argument("input", type=Path, help="path to input .tif file")
 
     preprocessing = subparsers.add_parser("preprocessing")
     preprocessing.add_argument("input", type=Path, help="path to input .tif file")
@@ -690,6 +691,19 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             edge_filter=False,
             filter_mask_dilation=False,
         )
+
+    elif args.func == 'fourier_snr':
+        sample = experimental.load_sample(args.input)
+        psnr = prep_sample(
+            sample,
+            remove_background=True,
+            return_psnr=True,
+            plot=None,
+            normalize=False,
+            edge_filter=False,
+            filter_mask_dilation=False,
+        )
+        measure_fourier_snr(sample, psnr=psnr, plot=args.input.with_suffix('.svg'))
 
     elif args.func == 'preprocessing':
         sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
