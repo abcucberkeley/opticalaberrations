@@ -934,6 +934,7 @@ def plot_bleaching_rate(datadir: Path):
 
     results = pd.concat(results, ignore_index=True)
     results.to_csv(datadir/'bleaching_rate_evaluations.csv')
+    results['iter_num'] += 1
 
     df = results.groupby(['iter_num', 'method'])['signal']
     means = df.mean()
@@ -958,7 +959,7 @@ def plot_bleaching_rate(datadir: Path):
     (
         g.map(plt.grid, which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
         .set_axis_labels("Iteration", "Signal")
-        .set(xlim=(0, max(results['iter_num'])), ylim=(.7, 1))
+        .set(xlim=(1, max(results['iter_num'])), ylim=(.7, 1))
         .tight_layout(w_pad=0)
     )
 
@@ -966,7 +967,6 @@ def plot_bleaching_rate(datadir: Path):
     leg.set_title('Method')
     leg.set_bbox_to_anchor((.9, .8))
     vis.savesvg(fig, f'{datadir}/bleaching_rate_signal.svg')
-
 
     fig = plt.figure(figsize=(5, 8))
     sns.set_theme(style="ticks")
@@ -989,7 +989,7 @@ def plot_bleaching_rate(datadir: Path):
     (
         g.map(plt.grid, which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
         .set_axis_labels("Iteration", "Signal")
-        .set(xlim=(0, max(results['iter_num'])), ylim=(.7, 1))
+        .set(xlim=(1, max(results['iter_num'])), ylim=(.7, 1))
         .tight_layout(w_pad=0)
     )
 
@@ -1017,7 +1017,7 @@ def plot_bleaching_rate(datadir: Path):
     (
         g.map(plt.grid, which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
         .set_axis_labels("Iteration", "Integration")
-        .set(xlim=(0, max(results['iter_num'])),)
+        .set(xlim=(1, max(results['iter_num'])),)
         .tight_layout(w_pad=0)
     )
 
@@ -1045,7 +1045,7 @@ def plot_bleaching_rate(datadir: Path):
     (
         g.map(plt.grid, which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
         .set_axis_labels("Iteration", r"Max signal ($99^{th}$ percentile)")
-        .set(xlim=(0, max(results['iter_num'])))
+        .set(xlim=(1, max(results['iter_num'])))
         .tight_layout(w_pad=0)
     )
 
