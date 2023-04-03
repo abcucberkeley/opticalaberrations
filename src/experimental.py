@@ -39,6 +39,17 @@ try:
 except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
+def weighted_avg_and_std(values, weights, axis):
+    """
+    Return the weighted average and standard deviation.
+
+    values, weights -- NumPy ndarrays with the same shape.
+    """
+    average = np.average(values, weights=weights, axis=axis)
+    # Fast and numerically precise:
+    variance = np.average((values-average)**2, weights=weights, axis=axis)
+    return (average, np.sqrt(variance))
+
 
 @profile
 def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
@@ -1086,10 +1097,10 @@ def aggregate_predictions(
 
         # filter out small predictions
         prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
-        predictions[np.abs(predictions) < prediction_threshold] = 0.
+        stdevs[np.abs(predictions) < prediction_threshold] = np.inf
 
         # filter out unconfident predictions
-        predictions[stdevs > confidence_threshold] = 0.
+        stdevs[stdevs > confidence_threshold] = np.inf
 
         # get tile votes per mode
         votes = predictions[tiles].values   # votes is a 2D array
@@ -1098,14 +1109,16 @@ def aggregate_predictions(
         # sum votes per mode
         total_votes = np.sum(votes, axis=1)  # 1D array
 
-        # assign total votes per mode to a new column
-        # predictions['votes'] = total_votes
+        # weighted by 1/stddev**2
+        # weights = 1 / np.square(stdevs[tiles])
 
-        # filter out tiles without votes
-        # predictions = predictions[predictions['votes'] > 0]
+        # weighted by votes
+        weights = votes
 
-        # if total_votes=0 for a mode, we will get NaN, so set these to zero.
-        mean_prediction = np.nan_to_num(np.sum(predictions[tiles].values, axis=1) / total_votes)
+        mean_prediction, mean_stdev = weighted_avg_and_std(predictions[tiles].values, weights=weights, axis=1)
+        mean_prediction = np.nan_to_num(mean_prediction) # if no votes, then set prediction to zero
+        mean_stdev = np.nan_to_num(mean_stdev)  # if no votes, then set prediction to zero
+
 
         pred = Wavefront(
             mean_prediction,
@@ -1114,7 +1127,7 @@ def aggregate_predictions(
         )
 
         pred_std = Wavefront(
-            final_prediction(stdevs[tiles].values, axis=1),
+            mean_stdev,
             order='ansi',
             lam_detection=wavelength
         )
