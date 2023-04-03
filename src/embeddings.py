@@ -375,16 +375,18 @@ def remove_interference_pattern(
         corrected_psf /= np.nanmax(corrected_psf)
 
         if plot is not None:
-            plot_interference_pattern_svg(plot,
-                                          plot_interference_pattern,
-                                          pois=pois,
-                                          min_distance=min_distance,
-                                          beads=beads,
-                                          convolved_psf=convolved_psf,
-                                          psf_peaks=psf_peaks,
-                                          corrected_psf=corrected_psf,
-                                          kernel=kernel,
-                                          interference_pattern=interference_pattern)
+            Pool(1).apply_async(plot_interference_pattern_svg(
+                plot,
+                plot_interference_pattern,
+                pois=pois,
+                min_distance=min_distance,
+                beads=beads,
+                convolved_psf=convolved_psf,
+                psf_peaks=psf_peaks,
+                corrected_psf=corrected_psf,
+                kernel=kernel,
+                interference_pattern=interference_pattern
+            ))
 
         return corrected_otf
     else:
@@ -699,9 +701,11 @@ def fourier_embeddings(
 
     if plot is not None:
         plt.style.use("default")
-        Pool(1).apply_async(
-            plot_embeddings(inputs=psf, emb=emb, save_path=plot)
-        )
+        Pool(1).apply_async(plot_embeddings(
+            inputs=psf,
+            emb=emb,
+            save_path=plot
+        ))
 
     if digital_rotations is not None:
         emb = rotate_embeddings(
@@ -880,9 +884,14 @@ def rolling_fourier_embeddings(
 
     if plot is not None:
         plt.style.use("default")
-        Pool(1).apply_async(
-            plot_embeddings(inputs=rois, emb=emb, save_path=plot, nrows=nrows, ncols=ncols, ztiles=ztiles)
-        )
+        Pool(1).apply_async(plot_embeddings(
+            inputs=rois,
+            emb=emb,
+            save_path=plot,
+            nrows=nrows,
+            ncols=ncols,
+            ztiles=ztiles
+        ))
 
     if digital_rotations is not None:
         emb = rotate_embeddings(

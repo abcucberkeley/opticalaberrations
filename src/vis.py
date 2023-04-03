@@ -1001,8 +1001,19 @@ def compare_iterations(
 
     savesvg(fig, f'{save_path}.svg')
 
-def plot_interference_pattern_svg(plot, plot_interference_pattern, pois, min_distance, beads, convolved_psf, psf_peaks,
-                                  corrected_psf, kernel, interference_pattern):
+
+def plot_interference_pattern_svg(
+        plot,
+        plot_interference_pattern,
+        pois,
+        min_distance,
+        beads,
+        convolved_psf,
+        psf_peaks,
+        corrected_psf,
+        kernel,
+        interference_pattern
+):
     fig, axes = plt.subplots(
         nrows=5 if plot_interference_pattern else 4,
         ncols=3,
