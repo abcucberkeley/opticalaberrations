@@ -21,6 +21,7 @@ import pandas as pd
 from skimage.restoration import richardson_lucy
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from multiprocessing import Pool
 import numpy as np
 import scipy as sp
 from tqdm import tqdm
@@ -478,7 +479,7 @@ def eval_rotation(
     results.to_csv(f'{plot}_rotations.csv')
 
     if plot is not None:
-        vis.plot_rotations(Path(f'{plot}_rotations.csv'))
+        Pool(1).apply_async(vis.plot_rotations(Path(f'{plot}_rotations.csv')))
 
     return preds, stdevs
 
