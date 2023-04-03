@@ -381,48 +381,46 @@ def eval_rotation(
     preds = np.zeros(psfgen.n_modes)
     stdevs = np.zeros(psfgen.n_modes)
     wavefront = Wavefront(preds)
+    results = []
 
-    results = pd.DataFrame([], columns=[
-        'angle', 'mode', 'twin', 'valid_points',
-        'init_pred_mode', 'init_pred_twin', 'rhos',
-        'twin_angle', 'pred_twin_angle', 'fitted_twin_angle',
-        'mse','aggr_rho', 'aggr_mode_amp', 'aggr_twin_amp', 'aggr_std_dev', 'aggr_twin_std_dev', 'confident',
-    ]) # 17 columns
-
-    results=[]
     for row, (mode, twin) in enumerate(wavefront.twins.items()):
-
         df = pd.DataFrame(rotations, columns=['angle'])
         df['mode'] = mode.index_ansi
-        df['twin'] = np.nan if twin is None else twin.index_ansi
-        xdata = rotations * np.abs(mode.m)
-        df['twin_angle'] = xdata
+        df['twin'] = mode.index_ansi if twin is None else twin.index_ansi
+
         df['init_pred_mode'] = init_preds[:, mode.index_ansi]
-        df['init_pred_twin'] = np.nan if twin is None else init_preds[:, twin.index_ansi]
+        df['init_pred_twin'] = init_preds[:, mode.index_ansi] if twin is None else init_preds[:, twin.index_ansi]
 
         if twin is not None:
-            magnitude, phiangle = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
-
             # the Zernike modes have m periods per 2pi. xdata is now the Twin angle
-
             rhos, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
+
+            xdata = rotations * np.abs(mode.m)
+            df['twin_angle'] = xdata
+
             ydata = np.degrees(ydata)
+            df['pred_twin_angle'] = ((np.unwrap(ydata, period=180) - ydata[0] - xdata) + 90) \
+                % 180 - 90 + ydata[0] + xdata
+
             rho = rhos[np.argmin(np.abs(ydata))]
             std_rho = np.std(rhos).round(3)
-            df['pred_twin_angle'] = ydata
             df['rhos'] = rhos
-
 
             # if spatial model: exclude points near discontinuities (-90, +90, 450,..) based upon fit
             data_mask = np.ones(xdata.shape[0], dtype=bool)
-            if no_phase: data_mask[np.abs(init_preds[:, mode.index_ansi] / rho) < np.cos(np.radians(70)) * (rho > threshold)] = 0.
-            data_mask[rhos < rho/2] = 0. # exclude if rho is unusually small (which can lead to small, but dominant primary mode near discontinuity)
+
+            if no_phase:
+                data_mask[np.abs(init_preds[:, mode.index_ansi]/rho) < np.cos(np.radians(70)) * (rho > threshold)] = 0.
+
+            # exclude if rho is unusually small
+            # (which can lead to small, but dominant primary mode near discontinuity)
+            data_mask[rhos < rho/2] = 0.
+            df['valid_points'] = data_mask
+
             fraction_of_kept_points = data_mask.sum() / len(data_mask)
             if fraction_of_kept_points < minimum_fraction_of_kept_points:
                 # reject if aren't using at least 45% of the values
                 rho = 0
-
-
 
             xdata = xdata[data_mask]
             ydata = ydata[data_mask]
@@ -433,18 +431,17 @@ def eval_rotation(
             m = 1
             b = linear_fit_fixed_slope(xdata, ydata, m)  # refit without bad data points
             fit = m * xdata + b
+            df['fitted_twin_angle'] = m * df['twin_angle'] + b
 
             mse = np.mean(np.square(fit-ydata))
             if mse > 700:
-                # reject if it doesn't show rotation that matches within +/- 26deg, equivalent to +/- 0.005 um on a 0.01 um mode.
+                # reject if it doesn't show rotation that matches within +/- 26deg,
+                # equivalent to +/- 0.005 um on a 0.01 um mode.
                 rho = 0
+            df['mse'] = mse
 
             twin_angle = b   # evaluate the curve fit when there is no digital rotation.
             preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
-
-            df['valid_points'] = data_mask
-            df['fitted_twin_angle'] = m * df['twin_angle'] + b
-            df['mse'] = mse
 
             if rho > 0:
                 stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
@@ -455,13 +452,13 @@ def eval_rotation(
 
             df['confident'] = confident
 
-
         else:
             # mode has m=0 (spherical,...), or twin isn't within the 55 modes.
             rho = np.median(init_preds[:, mode.index_ansi])
             rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
             preds[mode.index_ansi] = rho
             stdevs[mode.index_ansi] = np.std(init_preds[:, mode.index_ansi])
+            df['twin_angle'] = np.nan
             df['pred_twin_angle'] = np.nan
             df['rhos'] = init_preds[:, mode.index_ansi]
             df['valid_points'] = 1
@@ -482,7 +479,6 @@ def eval_rotation(
 
     if plot is not None:
         vis.plot_rotations(Path(f'{plot}_rotations.csv'))
-
 
     return preds, stdevs
 
