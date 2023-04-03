@@ -18,6 +18,7 @@ from tifffile import imread, imsave
 from tqdm import trange
 from line_profiler_pycharm import profile
 from numpy.lib.stride_tricks import sliding_window_view
+from multiprocessing import Pool
 
 import utils
 import vis
@@ -39,6 +40,7 @@ try:
 except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
+
 def weighted_avg_and_std(values, weights, axis):
     """
     Return the weighted average and standard deviation.
@@ -48,7 +50,7 @@ def weighted_avg_and_std(values, weights, axis):
     average = np.average(values, weights=weights, axis=axis)
     # Fast and numerically precise:
     variance = np.average((values-average)**2, weights=weights, axis=axis)
-    return (average, np.sqrt(variance))
+    return average, np.sqrt(variance)
 
 
 @profile
@@ -142,6 +144,7 @@ def preprocess(
     plot: Any = None,
     no_phase: bool = False,
     match_model_fov: bool = True,
+    async_plot: bool = True,
 ):
     if isinstance(file, tf.Tensor):
         file = Path(str(file.numpy(), "utf-8"))
@@ -173,7 +176,8 @@ def preprocess(
             embedding_option=modelpsfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
-            poi_shape=modelpsfgen.psf_shape[1:]
+            poi_shape=modelpsfgen.psf_shape[1:],
+            async_plot=async_plot
         )
     else:
         window_size = (
@@ -217,7 +221,8 @@ def preprocess(
             poi_shape=modelpsfgen.psf_shape[1:],
             nrows=nrows,
             ncols=ncols,
-            ztiles=ztiles
+            ztiles=ztiles,
+            async_plot=async_plot
         )
 
 
@@ -333,6 +338,7 @@ def predict(
             normalize=True,
             edge_filter=False,
             filter_mask_dilation=True,
+            async_plot=False
         ),
         desc='Generate Fourier embeddings',
         cores=cpu_workers
@@ -372,12 +378,12 @@ def predict(
             p, s, lls_defocus = res
 
         if plot:
-            vis.diagnosis(
+            Pool(1).apply_async(vis.diagnosis(
                 pred=Wavefront(p, lam_detection=wavelength),
                 pred_std=Wavefront(s, lam_detection=wavelength),
                 save_path=Path(f"{file.with_suffix('')}_diagnosis"),
                 lls_defocus=lls_defocus
-            )
+            ))
 
         ps.append(p)
         std.append(s)
@@ -418,14 +424,14 @@ def predict(
         actuators.to_csv(f"{outdir}_predictions_corrected_actuators.csv")
 
     if plot:
-        vis.wavefronts(
+        Pool(1).apply_async(vis.wavefronts(
             predictions=predictions,
             nrows=nrows,
             ncols=ncols,
             ztiles=ztiles,
             wavelength=wavelength,
             save_path=Path(f"{outdir.with_suffix('')}_predictions_wavefronts"),
-        )
+        ))
 
     return predictions
 
@@ -596,12 +602,12 @@ def predict_sample(
         )
 
     if plot:
-        vis.diagnosis(
+        Pool(1).apply_async(vis.diagnosis(
             pred=p,
             pred_std=std,
             save_path=Path(f"{img.with_suffix('')}_sample_predictions_diagnosis"),
             lls_defocus=lls_defocus
-        )
+        ))
 
     return df
 
@@ -757,12 +763,12 @@ def predict_large_fov(
         )
 
     if plot:
-        vis.diagnosis(
+        Pool(1).apply_async(vis.diagnosis(
             pred=p,
             pred_std=std,
             save_path=Path(f"{img.with_suffix('')}_large_fov_predictions_diagnosis"),
             lls_defocus=lls_defocus
-        )
+        ))
 
     return df
 
@@ -1007,12 +1013,12 @@ def predict_tiles(
     )
 
     if plot:
-        vis.tiles(
+        Pool(1).apply_async(vis.tiles(
             data=sample,
             strides=window_size,
             window_size=window_size,
             save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
-        )
+        ))
 
     return predictions
 
@@ -1109,16 +1115,20 @@ def aggregate_predictions(
         # sum votes per mode
         total_votes = np.sum(votes, axis=1)  # 1D array
 
+        mean_prediction = np.nan_to_num(np.sum(predictions[tiles].values, axis=1) / total_votes)
+        mean_stdev = np.nan_to_num(np.sum(stdevs[tiles].values, axis=1) / total_votes)
+
+        '''
         # weighted by 1/stddev**2
         # weights = 1 / np.square(stdevs[tiles])
 
         # weighted by votes
-        weights = votes
+        weights = votes / total_votes
 
-        mean_prediction, mean_stdev = weighted_avg_and_std(predictions[tiles].values, weights=weights, axis=1)
-        mean_prediction = np.nan_to_num(mean_prediction) # if no votes, then set prediction to zero
+        # mean_prediction, mean_stdev = weighted_avg_and_std(predictions[tiles].values, weights=weights, axis=1)
+        mean_prediction = np.nan_to_num(mean_prediction)  # if no votes, then set prediction to zero
         mean_stdev = np.nan_to_num(mean_stdev)  # if no votes, then set prediction to zero
-
+        '''
 
         pred = Wavefront(
             mean_prediction,
@@ -1145,11 +1155,11 @@ def aggregate_predictions(
         imsave(f"{model_pred.with_suffix('')}_aggregated_psf_z{z}.tif", psf)
 
         if plot:
-            vis.diagnosis(
+            Pool(1).apply_async(vis.diagnosis(
                 pred=pred,
                 pred_std=pred_std,
                 save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_z{z}"),
-            )
+            ))
 
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
@@ -1281,11 +1291,11 @@ def phase_retrieval(
     imsave(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf)
 
     if plot:
-        vis.diagnosis(
+        Pool(1).apply_async(vis.diagnosis(
             pred=pred,
             pred_std=pred_std,
             save_path=Path(f"{img.with_suffix('')}_phase_retrieval_diagnosis"),
-        )
+        ))
 
         fig, axes = pr_result.plot()
         axes[0].set_title("Phase in waves")

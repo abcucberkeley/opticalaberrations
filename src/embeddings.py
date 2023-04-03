@@ -247,6 +247,7 @@ def remove_interference_pattern(
         window_size: tuple = (21, 21, 21),
         plot_interference_pattern: bool = False,
         min_psnr: float = 15.0,
+        async_plot: bool = True
 ):
     """
     Normalize interference pattern from the given FFT
@@ -375,18 +376,32 @@ def remove_interference_pattern(
         corrected_psf /= np.nanmax(corrected_psf)
 
         if plot is not None:
-            Pool(1).apply_async(plot_interference_pattern_svg(
-                plot,
-                plot_interference_pattern,
-                pois=pois,
-                min_distance=min_distance,
-                beads=beads,
-                convolved_psf=convolved_psf,
-                psf_peaks=psf_peaks,
-                corrected_psf=corrected_psf,
-                kernel=kernel,
-                interference_pattern=interference_pattern
-            ))
+            if async_plot:
+                Pool(1).apply_async(plot_interference_pattern_svg(
+                    plot,
+                    plot_interference_pattern,
+                    pois=pois,
+                    min_distance=min_distance,
+                    beads=beads,
+                    convolved_psf=convolved_psf,
+                    psf_peaks=psf_peaks,
+                    corrected_psf=corrected_psf,
+                    kernel=kernel,
+                    interference_pattern=interference_pattern
+                ))
+            else:
+                plot_interference_pattern_svg(
+                    plot,
+                    plot_interference_pattern,
+                    pois=pois,
+                    min_distance=min_distance,
+                    beads=beads,
+                    convolved_psf=convolved_psf,
+                    psf_peaks=psf_peaks,
+                    corrected_psf=corrected_psf,
+                    kernel=kernel,
+                    interference_pattern=interference_pattern
+                )
 
         return corrected_otf
     else:
@@ -602,7 +617,8 @@ def fourier_embeddings(
         edge_filter: bool = False,
         digital_rotations: Any = None,
         poi_shape: tuple = (64, 64),
-        debug_rotations: bool = False
+        debug_rotations: bool = False,
+        async_plot: bool = True
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -660,9 +676,6 @@ def fourier_embeddings(
             emb[emb > 1] = 1
     else:
 
-        # if remove_interference:
-        #     otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois, windowing=True)
-
         alpha = compute_emb(
             otf,
             iotf,
@@ -680,7 +693,14 @@ def fourier_embeddings(
             alpha[alpha > 1] = 1
 
         if remove_interference:
-            otf = remove_interference_pattern(psf, otf, plot=plot, pois=pois, windowing=True)
+            otf = remove_interference_pattern(
+                psf,
+                otf,
+                plot=plot,
+                pois=pois,
+                windowing=True,
+                async_plot=async_plot
+            )
 
         phi = compute_emb(
             otf,
@@ -701,11 +721,18 @@ def fourier_embeddings(
 
     if plot is not None:
         plt.style.use("default")
-        Pool(1).apply_async(plot_embeddings(
-            inputs=psf,
-            emb=emb,
-            save_path=plot
-        ))
+        if async_plot:
+            Pool(1).apply_async(plot_embeddings(
+                inputs=psf,
+                emb=emb,
+                save_path=plot
+            ))
+        else:
+            plot_embeddings(
+                inputs=psf,
+                emb=emb,
+                save_path=plot
+            )
 
     if digital_rotations is not None:
         emb = rotate_embeddings(
@@ -742,6 +769,7 @@ def rolling_fourier_embeddings(
         nrows: Optional[int] = None,
         ncols: Optional[int] = None,
         ztiles: Optional[int] = None,
+        async_plot: bool = True
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -884,14 +912,25 @@ def rolling_fourier_embeddings(
 
     if plot is not None:
         plt.style.use("default")
-        Pool(1).apply_async(plot_embeddings(
-            inputs=rois,
-            emb=emb,
-            save_path=plot,
-            nrows=nrows,
-            ncols=ncols,
-            ztiles=ztiles
-        ))
+        if async_plot:
+            Pool(1).apply_async(plot_embeddings(
+                inputs=rois,
+                emb=emb,
+                save_path=plot,
+                nrows=nrows,
+                ncols=ncols,
+                ztiles=ztiles
+            ))
+        else:
+            plot_embeddings(
+                inputs=rois,
+                emb=emb,
+                save_path=plot,
+                nrows=nrows,
+                ncols=ncols,
+                ztiles=ztiles
+            )
+
 
     if digital_rotations is not None:
         emb = rotate_embeddings(
