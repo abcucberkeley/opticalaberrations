@@ -39,17 +39,18 @@ def savesvg(fig: plt.Figure, savepath: Union[Path, str]):
     plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
     plt.savefig(savepath, bbox_inches='tight', dpi=300, pad_inches=.25)
 
-    # Read in the file
-    with open(savepath, 'r') as f:
-        filedata = f.read()
+    if Path(savepath).suffix == '.svg':
+        # Read in the file
+        with open(savepath, 'r') as f:
+            filedata = f.read()
 
-    # Replace the target string
-    filedata = re.sub('height="[0-9]+(\.[0-9]+)pt"', '', filedata)
-    filedata = re.sub('width="[0-9]+(\.[0-9]+)pt"', '', filedata)
+        # Replace the target string
+        filedata = re.sub('height="[0-9]+(\.[0-9]+)pt"', '', filedata)
+        filedata = re.sub('width="[0-9]+(\.[0-9]+)pt"', '', filedata)
 
-    # Write the file out again
-    with open(savepath, 'w') as f:
-        f.write(filedata)
+        # Write the file out again
+        with open(savepath, 'w') as f:
+            f.write(filedata)
 
 
 def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, colorbar=True, aspect=None):
