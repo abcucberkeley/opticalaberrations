@@ -304,8 +304,9 @@ def bootstrap_predict(
     features = np.array([np.count_nonzero(s) for s in inputs])
 
     logger.info(f"[BS={batch_size}, n={n_samples}] {desc}")
-    gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples)
-    preds = model.predict(gen, batch_size=batch_size, verbose=verbose)
+    # batch_size is over number of samples (e.g. # of image vols)
+    gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples) # (None, 6, 64, 64, 1)
+    preds = model.predict(gen, verbose=verbose)
 
     if preds.shape[1] > 1:
         preds[:, ignore_modes] = 0.
