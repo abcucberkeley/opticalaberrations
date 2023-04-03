@@ -359,7 +359,6 @@ def eval_rotation(
             plot: optional toggle to visualize embeddings
     """
 
-
     def cart2pol(x, y):
         """Convert cartesian (x, y) to polar (rho, phi)
         """

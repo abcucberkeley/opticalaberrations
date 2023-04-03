@@ -3,7 +3,6 @@ matplotlib.use('Agg')
 
 import logging
 import sys
-import itertools
 from typing import Any, Union, Optional
 
 import matplotlib.pyplot as plt
@@ -13,7 +12,6 @@ import numpy as np
 from tqdm import tqdm
 from functools import partial
 from pathlib import Path
-import matplotlib.colors as mcolors
 from skimage.filters import scharr, window
 from skimage.restoration import unwrap_phase
 from skimage.feature import peak_local_max
@@ -24,7 +22,7 @@ from line_profiler_pycharm import profile
 from scipy import ndimage
 from astropy import convolution
 from skspatial.objects import Plane, Points
-import matplotlib.gridspec as gridspec
+from multiprocessing import Pool
 
 try:
     import cupy as cp
@@ -35,7 +33,7 @@ except ImportError as e:
 
 import preprocessing
 from utils import resize_with_crop_or_pad, multiprocess
-from vis import savesvg, plot_interference_pattern_svg
+from vis import savesvg, plot_interference_pattern_svg, plot_embeddings
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -190,121 +188,6 @@ def spatial_quadrants(emb):
     ], axis=0)
 
     return np.stack([xy, xz, yz], axis=0)
-
-
-@profile
-def plot_embeddings(
-        inputs: np.array,
-        emb: np.array,
-        save_path: Any,
-        gamma: float = .5,
-        nrows: Optional[int] = None,
-        ncols: Optional[int] = None,
-        ztiles: Optional[int] = None,
-):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-
-    step = .1
-    vmin = int(np.floor(np.nanpercentile(emb[0], 1))) if np.any(emb[0] < 0) else 0
-    vmax = int(np.ceil(np.nanpercentile(emb[0], 99))) if vmin < 0 else 3
-    vcenter = 1 if vmin == 0 else 0
-
-    cmap = np.vstack((
-        plt.get_cmap('GnBu_r' if vmin == 0 else 'GnBu_r', 256)(
-            np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-        ),
-        [1, 1, 1, 1],
-        plt.get_cmap('YlOrRd' if vmax == 3 else 'OrRd', 256)(
-            np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-        )
-    ))
-    cmap = mcolors.ListedColormap(cmap)
-
-    if emb.shape[0] == 3:
-        fig, axes = plt.subplots(2, 3, figsize=(8, 6))
-    else:
-        fig, axes = plt.subplots(3, 3, figsize=(8, 8))
-
-    if inputs.ndim == 4:
-        if ncols is None or nrows is None:
-            inputs = np.max(inputs, axis=0)  # show max projections of all z-tiles
-            for c in range(10, 0, -1):
-                if inputs.shape[0] > c and not inputs.shape[0] % c:
-                    ncols = c
-                    break
-
-            nrows = inputs.shape[0] // ncols
-
-        for proj in range(3):
-            grid = gridspec.GridSpecFromSubplotSpec(
-                nrows, ncols, subplot_spec=axes[0, proj], wspace=.01, hspace=.01
-            )
-
-            for idx, (i, j) in enumerate(itertools.product(range(nrows), range(ncols))):
-                ax = fig.add_subplot(grid[i, j])
-                m = ax.imshow(np.max(inputs[idx], axis=proj) ** gamma, cmap='hot', vmin=0, vmax=1)
-                ax.axis('off')
-
-        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_label_position("right")
-        cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
-    else:
-        m = axes[0, 0].imshow(np.max(inputs, axis=0) ** gamma, cmap='hot', vmin=0, vmax=1)
-        axes[0, 1].imshow(np.max(inputs, axis=1) ** gamma, cmap='hot', vmin=0, vmax=1)
-        axes[0, 2].imshow(np.max(inputs, axis=2) ** gamma, cmap='hot', vmin=0, vmax=1)
-        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_label_position("right")
-        cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
-
-    m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
-    axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
-    axes[1, 2].imshow(emb[2], cmap=cmap, vmin=vmin, vmax=vmax)
-    cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-    cb = plt.colorbar(m, cax=cax)
-    cax.yaxis.set_label_position("right")
-    cax.set_ylabel(r'Embedding ($\alpha$)')
-
-    if emb.shape[0] > 3:
-        p_vmin = -1
-        p_vmax = 1
-        p_vcenter = 0
-
-        p_cmap = np.vstack((
-            plt.get_cmap('GnBu_r' if p_vmin == 0 else 'GnBu_r', 256)(
-                np.linspace(0, 1 - step, int(abs(p_vcenter - p_vmin) / step))
-            ),
-            [1, 1, 1, 1],
-            plt.get_cmap('YlOrRd' if p_vmax == 3 else 'OrRd', 256)(
-                np.linspace(0, 1 + step, int(abs(p_vcenter - p_vmax) / step))
-            )
-        ))
-        p_cmap = mcolors.ListedColormap(p_cmap)
-
-        m = axes[-1, 0].imshow(emb[3], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
-        axes[-1, 1].imshow(emb[4], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
-        axes[-1, 2].imshow(emb[5], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
-        cax = inset_axes(axes[-1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_label_position("right")
-        cax.set_ylabel(r'Embedding ($\varphi$)')
-
-    for ax in axes.flatten():
-        ax.axis('off')
-
-    if save_path == True:
-        plt.show()
-    else:
-        savesvg(fig, f'{save_path}_embeddings.svg')
 
 
 @profile
@@ -816,7 +699,9 @@ def fourier_embeddings(
 
     if plot is not None:
         plt.style.use("default")
-        plot_embeddings(inputs=psf, emb=emb, save_path=plot)
+        Pool(1).apply_async(
+            plot_embeddings(inputs=psf, emb=emb, save_path=plot)
+        )
 
     if digital_rotations is not None:
         emb = rotate_embeddings(
@@ -995,7 +880,9 @@ def rolling_fourier_embeddings(
 
     if plot is not None:
         plt.style.use("default")
-        plot_embeddings(inputs=rois, emb=emb, save_path=plot, nrows=nrows, ncols=ncols, ztiles=ztiles)
+        Pool(1).apply_async(
+            plot_embeddings(inputs=rois, emb=emb, save_path=plot, nrows=nrows, ncols=ncols, ztiles=ztiles)
+        )
 
     if digital_rotations is not None:
         emb = rotate_embeddings(
