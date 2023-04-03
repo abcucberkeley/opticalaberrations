@@ -1,6 +1,5 @@
 import matplotlib
 matplotlib.use('Agg')
-import pickle
 
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
@@ -359,16 +358,6 @@ def eval_rotation(
             plot: optional toggle to visualize embeddings
     """
 
-    plt.style.use("default")
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
 
     def cart2pol(x, y):
         """Convert cartesian (x, y) to polar (rho, phi)
@@ -393,114 +382,79 @@ def eval_rotation(
     stdevs = np.zeros(psfgen.n_modes)
     wavefront = Wavefront(preds)
 
-    if plot is not None:
-        fig = plt.figure(figsize=(15, 20 * round(psfgen.n_modes/15)))
-        # plt.subplots_adjust(hspace=0.1, wspace=0.2) gets overwritten in savefig
-        gs = fig.add_gridspec(len(wavefront.twins.keys()), 2)
+    results = pd.DataFrame([], columns=[
+        'angle', 'mode', 'twin', 'valid_points',
+        'init_pred_mode', 'init_pred_twin', 'rhos',
+        'twin_angle', 'pred_twin_angle', 'fitted_twin_angle',
+        'mse','aggr_rho', 'aggr_mode_amp', 'aggr_twin_amp', 'aggr_std_dev', 'aggr_twin_std_dev', 'confident',
+    ]) # 17 columns
 
+    results=[]
     for row, (mode, twin) in enumerate(wavefront.twins.items()):
+
+        df = pd.DataFrame(rotations, columns=['angle'])
+        df['mode'] = mode.index_ansi
+        df['twin'] = np.nan if twin is None else twin.index_ansi
+        xdata = rotations * np.abs(mode.m)
+        df['twin_angle'] = xdata
+        df['init_pred_mode'] = init_preds[:, mode.index_ansi]
+        df['init_pred_twin'] = np.nan if twin is None else init_preds[:, twin.index_ansi]
+
         if twin is not None:
             magnitude, phiangle = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
 
-            if np.mean(magnitude) > threshold:
-                # the Zernike modes have m periods per 2pi. xdata is now the Twin angle
-                xdata = rotations * np.abs(mode.m)
-                rhos, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
-                ydata = np.degrees(ydata)
-                rho = rhos[np.argmin(np.abs(ydata))]
-                std_rho = np.std(rhos).round(3)
+            # the Zernike modes have m periods per 2pi. xdata is now the Twin angle
 
-                # if spatial model: exclude points near discontinuities (-90, +90, 450,..) based upon fit
-                data_mask = np.ones(xdata.shape[0], dtype=bool)
-                if no_phase: data_mask[np.abs(init_preds[:, mode.index_ansi] / rho) < np.cos(np.radians(70)) * (rho > threshold)] = 0.
-                data_mask[rhos < rho/2] = 0. # exclude if rho is unusually small (which can lead to small, but dominant primary mode near discontinuity)
-                fraction_of_kept_points = data_mask.sum() / len(data_mask)
-                if fraction_of_kept_points < minimum_fraction_of_kept_points:
-                    # reject if aren't using at least 45% of the values
-                    rho = 0
+            rhos, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
+            ydata = np.degrees(ydata)
+            rho = rhos[np.argmin(np.abs(ydata))]
+            std_rho = np.std(rhos).round(3)
+            df['pred_twin_angle'] = ydata
+            df['rhos'] = rhos
 
-                xdata = xdata[data_mask]
-                ydata = ydata[data_mask]
-                offset = ydata[0]
-                ydata = np.unwrap(ydata, period=180)
-                ydata = ((ydata - offset - xdata) + 90) % 180 - 90 + offset + xdata
 
-                m = 1
-                b = linear_fit_fixed_slope(xdata, ydata, m)  # refit without bad data points
-                fit = m * xdata + b
+            # if spatial model: exclude points near discontinuities (-90, +90, 450,..) based upon fit
+            data_mask = np.ones(xdata.shape[0], dtype=bool)
+            if no_phase: data_mask[np.abs(init_preds[:, mode.index_ansi] / rho) < np.cos(np.radians(70)) * (rho > threshold)] = 0.
+            data_mask[rhos < rho/2] = 0. # exclude if rho is unusually small (which can lead to small, but dominant primary mode near discontinuity)
+            fraction_of_kept_points = data_mask.sum() / len(data_mask)
+            if fraction_of_kept_points < minimum_fraction_of_kept_points:
+                # reject if aren't using at least 45% of the values
+                rho = 0
 
-                mse = np.mean(np.square(fit-ydata))
-                if mse > 700:
-                    # reject if it doesn't show rotation that matches within +/- 26deg, equivalent to +/- 0.005 um on a 0.01 um mode.
-                    rho = 0
 
-                twin_angle = b   # evaluate the curve fit when there is no digital rotation.
-                preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
 
-                if rho > 0:
-                    stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
-                else:
-                    stdevs[mode.index_ansi], stdevs[twin.index_ansi] = std_rho, std_rho
+            xdata = xdata[data_mask]
+            ydata = ydata[data_mask]
+            offset = ydata[0]
+            ydata = np.unwrap(ydata, period=180)
+            ydata = ((ydata - offset - xdata) + 90) % 180 - 90 + offset + xdata
 
-                if plot is not None:
-                    ax = fig.add_subplot(gs[row, 0])
-                    fit_ax = fig.add_subplot(gs[row, 1])
+            m = 1
+            b = linear_fit_fixed_slope(xdata, ydata, m)  # refit without bad data points
+            fit = m * xdata + b
 
-                    ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
-                    ax.plot(rotations, init_preds[:, twin.index_ansi], label=f"m{twin.index_ansi}")
+            mse = np.mean(np.square(fit-ydata))
+            if mse > 700:
+                # reject if it doesn't show rotation that matches within +/- 26deg, equivalent to +/- 0.005 um on a 0.01 um mode.
+                rho = 0
 
-                    ax.set_xlim(0, 360)
-                    ax.set_xticks(range(0, 405, 45))
-                    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                    ax.set_ylim(-np.max(rhos), np.max(rhos))
-                    ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
-                    ax.set_ylabel('Amplitude ($\mu$m RMS)')
-                    ax.set_xlabel('Digital rotation (deg)')
+            twin_angle = b   # evaluate the curve fit when there is no digital rotation.
+            preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
 
-                    confidence = stdevs[mode.index_ansi] < confidence_threshold
-                    title_color = 'C0' if confidence else 'r'
-                    if rho > 0:
-                        title_color = 'g'
-                    fit_ax.plot([0, xdata[-1]], m * [0, xdata[-1]] + b, color=title_color, lw='.75')
-                    # plot fit line from zero to end of data
-                    fit_ax.scatter(xdata, ydata, s=2, color='grey')
-                    
-                    fit_ax.set_title(
-                        #f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, '
-                        #f'm{twin.index_ansi}={preds[twin.index_ansi]:.3f} '
-                        f'$\\rho$={rho:.3f} $\mu$RMS, '
-                        f'$\sigma$={stdevs[mode.index_ansi]:.3f} $\mu$RMS, '                        
-                        f'MSE={mse:.0f}, '
-                        f'{fraction_of_kept_points*100:.0f}% kept',
-                        color=title_color
-                    )
+            df['valid_points'] = data_mask
+            df['fitted_twin_angle'] = m * df['twin_angle'] + b
+            df['mse'] = mse
 
-                    fit_ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                    fit_ax.set_ylabel('Predicted Twin angle (deg)', rotation=-90, labelpad=15)
-                    fit_ax.yaxis.set_label_position("right")
-                    fit_ax.set_xlabel('Digitially rotated Twin angle (deg)')
-                    fit_ax.set_xticks(range(0, int(np.max(xdata)), 90))
-                    fit_ax.set_yticks(np.insert(np.arange(-90, np.max(ydata), 180), 0, 0))
-                    fit_ax.set_xlim(0, 360 * np.abs(mode.m))
-     
-                    ax.scatter(rotations[~data_mask], rhos[~data_mask], s=1.5, color='pink', zorder=3)
-                    ax.scatter(rotations[data_mask], rhos[data_mask], s=1.5, color='black', zorder=3)
+            if rho > 0:
+                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
+                confident = 1
             else:
-                preds[mode.index_ansi] = 0
-                preds[twin.index_ansi] = 0
+                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = std_rho, std_rho
+                confident = stdevs[mode.index_ansi] < confidence_threshold
 
-                if plot is not None:
-                    ax = fig.add_subplot(gs[row, 0])
-                    ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
-                    ax.plot(rotations, init_preds[:, twin.index_ansi], ':', label=f"m{twin.index_ansi}")
+            df['confident'] = confident
 
-                    ax.set_xlim(0, 360)
-                    ax.set_xticks(range(0, 405, 45))
-                    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                    ax.set_ylim(np.min(init_preds), np.max(init_preds))
-                    ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
-                    ax.set_ylabel('Amplitude ($\mu$ RMS)')
-                    ax.set_xlabel('Digital rotation (deg)')
 
         else:
             # mode has m=0 (spherical,...), or twin isn't within the 55 modes.
@@ -508,25 +462,28 @@ def eval_rotation(
             rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
             preds[mode.index_ansi] = rho
             stdevs[mode.index_ansi] = np.std(init_preds[:, mode.index_ansi])
+            df['pred_twin_angle'] = np.nan
+            df['rhos'] = init_preds[:, mode.index_ansi]
+            df['valid_points'] = 1
+            df['fitted_twin_angle'] = np.nan
+            df['mse'] = np.nan
+            df['confident'] = 1
 
-            if plot is not None:
-                ax = fig.add_subplot(gs[row, 0])
-                ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}={rho:.3f}")
+        df['aggr_rho'] = rho
+        df['aggr_mode_amp'] = preds[mode.index_ansi]
+        df['aggr_twin_amp'] = np.nan if twin is None else preds[twin.index_ansi]
+        df['aggr_std_dev'] = stdevs[mode.index_ansi]
+        df['aggr_twin_std_dev'] = np.nan if twin is None else stdevs[twin.index_ansi]
 
-                ax.set_xlim(0, 360)
-                ax.set_xticks(range(0, 405, 45))
-                ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                ax.set_ylim(np.min(init_preds), np.max(init_preds))
-                ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
-                ax.set_ylabel('Amplitude ($\mu$ RMS)')
-                ax.set_xlabel('Digital rotation (deg)')
+        results.append(df)
+
+    results = pd.concat(results, ignore_index=True)
+    results.to_csv(f'{plot}_rotations.csv')
 
     if plot is not None:
-        # vis.savesvg(fig, f'{plot}_rotations.svg')
+        vis.plot_rotations(Path(f'{plot}_rotations.csv'))
 
-        file_name = f'{plot}_rotations.pkl'
-        with open(file_name, 'wb') as file:
-            pickle.dump(fig, file)
+
     return preds, stdevs
 
 

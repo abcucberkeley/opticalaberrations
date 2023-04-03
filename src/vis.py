@@ -1079,3 +1079,98 @@ def plot_interference_pattern_svg(plot, plot_interference_pattern, pois, min_dis
     axes[0, 1].set_title('XZ')
     axes[0, 2].set_title('YZ')
     savesvg(fig, f'{plot}_interference_pattern.svg')
+
+def plot_rotations(results:Path):
+    dataframe = pd.read_csv(results, header=0, index_col=0)
+
+    n_modes = int(np.nanmax(dataframe['twin']) + 1)
+    wavefront = Wavefront(np.zeros(n_modes))
+    rotations = dataframe['angle'].unique()
+
+    plt.style.use("default")
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+    fig = plt.figure(figsize=(15, 20 * round(n_modes / 15)))
+    # plt.subplots_adjust(hspace=0.1, wspace=0.2) gets overwritten in savefig
+    gs = fig.add_gridspec(len(wavefront.twins.keys()), 2)
+
+    for row, (mode, twin) in enumerate(wavefront.twins.items()):
+
+        df = dataframe[(dataframe['mode'] == mode) & (dataframe['twin'] == twin)]
+        rho = df.aggr_rho.values[0]
+        confident = df.confident.values[0]
+        xdata = df.twin_angle.values
+        ydata = df.pred_twin_angle.values
+        stdev = df.aggr_std_dev.values[0]
+        mse = df.mse.values[0]
+        data_mask = df.valid_points.values
+        fraction_of_kept_points = data_mask.sum() / len(data_mask)
+        rhos = df.rhos.values
+        fitted_twin_angle = df.fitted_twin_angle.values
+
+        m = 1
+        b = (fitted_twin_angle[1] -fitted_twin_angle[0])/ (xdata[1]-xdata[0])  # get slope
+
+        if twin is not None:
+            ax = fig.add_subplot(gs[row, 0])
+            fit_ax = fig.add_subplot(gs[row, 1])
+
+            ax.plot(rotations, df.init_pred_mode, label=f"m{mode.index_ansi}")
+            ax.plot(rotations, df.init_pred_twin, label=f"m{twin.index_ansi}")
+
+            ax.set_xlim(0, 360)
+            ax.set_xticks(range(0, 405, 45))
+            ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax.set_ylim(-np.max(df.rhos), np.max(df.rhos))
+            ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
+            ax.set_ylabel('Amplitude ($\mu$m RMS)')
+            ax.set_xlabel('Digital rotation (deg)')
+
+            if rho > 0 and confident:
+                title_color = 'g'
+            else:
+                title_color = 'C0' if confident else 'r'
+            fit_ax.plot([0, xdata[-1]], m * [0, xdata[-1]] + b, color=title_color, lw='.75')
+            # plot fit line from zero to end of data
+            fit_ax.scatter(xdata, ydata, s=2, color='grey')
+
+            fit_ax.set_title(
+                # f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, '
+                # f'm{twin.index_ansi}={preds[twin.index_ansi]:.3f} '
+                f'$\\rho$={rho:.3f} $\mu$RMS, '
+                f'$\sigma$={stdev:.3f} $\mu$RMS, '
+                f'MSE={mse:.0f}, '
+                f'{fraction_of_kept_points * 100:.0f}% kept',
+                color=title_color
+            )
+
+            fit_ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            fit_ax.set_ylabel('Predicted Twin angle (deg)', rotation=-90, labelpad=15)
+            fit_ax.yaxis.set_label_position("right")
+            fit_ax.set_xlabel('Digitially rotated Twin angle (deg)')
+            fit_ax.set_xticks(range(0, int(np.max(xdata)), 90))
+            fit_ax.set_yticks(np.insert(np.arange(-90, np.max(ydata), 180), 0, 0))
+            fit_ax.set_xlim(0, 360 * np.abs(mode.m))
+
+            ax.scatter(rotations[~data_mask], rhos[~data_mask], s=1.5, color='pink', zorder=3)
+            ax.scatter(rotations[data_mask], rhos[data_mask], s=1.5, color='black', zorder=3)
+        else:
+            ax = fig.add_subplot(gs[row, 0])
+            ax.plot(rotations, df.init_pred_mode, label=f"m{mode.index_ansi}={rho:.3f}")
+
+            ax.set_xlim(0, 360)
+            ax.set_xticks(range(0, 405, 45))
+            ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax.set_ylim(np.min(df.init_pred_mode), np.max(df.init_pred_mode))
+            ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
+            ax.set_ylabel('Amplitude ($\mu$ RMS)')
+            ax.set_xlabel('Digital rotation (deg)')
+
+    savesvg(fig, results.with_suffix('.svg'))
