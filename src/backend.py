@@ -1,5 +1,6 @@
 import matplotlib
 matplotlib.use('Agg')
+import pickle
 
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
@@ -292,7 +293,7 @@ def bootstrap_predict(
             remove_interference=remove_interference,
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
-        )
+        ) # (nx361, 6, 64, 64, 1) n=# of samples (e.g. # of image vols)
     else:
         # pass raw PSFs to the model
         model_inputs = inputs
@@ -520,8 +521,11 @@ def eval_rotation(
                 ax.set_xlabel('Digital rotation (deg)')
 
     if plot is not None:
-        vis.savesvg(fig, f'{plot}_rotations.svg')
+        # vis.savesvg(fig, f'{plot}_rotations.svg')
 
+        file_name = f'{plot}_rotations.pkl'
+        with open(file_name, 'wb') as file:
+            pickle.dump(fig, file)
     return preds, stdevs
 
 
@@ -589,7 +593,7 @@ def predict_rotation(
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations
-        )
+        ) # inputs.shape = (361 rotations, 6 embeddings, 64, 64, 1)
 
     init_preds, stdev = bootstrap_predict(
         model,
