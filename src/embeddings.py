@@ -342,7 +342,7 @@ def remove_interference_pattern(
             max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
             ]) - baseline) / noise > min_psnr
 
-    logger.info(f"{pois.shape[0]} objects detected. {np.count_nonzero(good_psnr)} were above {min_psnr} min_psnr")
+    #logger.info(f"{pois.shape[0]} objects detected. {np.count_nonzero(good_psnr)} were above {min_psnr} min_psnr")
     pois = pois[good_psnr]  # remove points that are below peak snr
 
     for p in pois:
@@ -405,7 +405,7 @@ def remove_interference_pattern(
 
         return corrected_otf
     else:
-        logger.warning("No objects were detected")
+        # logger.warning("No objects were detected")
 
         if plot is not None:
             fig, axes = plt.subplots(

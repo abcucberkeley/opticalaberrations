@@ -10,15 +10,15 @@ plt.set_loglevel('error')
 
 from pathlib import Path
 import tensorflow as tf
-
+from itertools import repeat
 from typing import Any, Union, Optional, Generator
 import numpy as np
 import pandas as pd
 from tifffile import imread, imsave
-from tqdm import trange
+from tqdm import trange, tqdm
 from line_profiler_pycharm import profile
 from numpy.lib.stride_tricks import sliding_window_view
-from multiprocessing import Pool
+import multiprocessing as mp
 
 import utils
 import vis
@@ -144,7 +144,7 @@ def preprocess(
     plot: Any = None,
     no_phase: bool = False,
     match_model_fov: bool = True,
-    async_plot: bool = True,
+    async_plot: bool = True
 ):
     if isinstance(file, tf.Tensor):
         file = Path(str(file.numpy(), "utf-8"))
@@ -164,13 +164,13 @@ def preprocess(
             edge_filter=edge_filter,
             filter_mask_dilation=filter_mask_dilation,
             read_noise_bias=read_noise_bias,
-            plot=plot
+            plot=plot if plot else None
         )
 
         return fourier_embeddings(
             sample,
             iotf=modelpsfgen.iotf,
-            plot=plot,
+            plot=plot if plot else None,
             no_phase=no_phase,
             remove_interference=True,
             embedding_option=modelpsfgen.embedding_option,
@@ -314,8 +314,8 @@ def predict(
     freq_strength_threshold: float = .01,
     confidence_threshold: float = .0099,
     batch_size: int = 1,
-    digital_rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
-    plot: Optional[Union[bool, Path, str]] = None,
+    digital_rotations: Optional[np.ndarray] = np.arange(0, 360+1, 1).astype(int),
+    plot: bool = True,
     plot_rotations: bool = False,
     ztiles: int = 1,
     nrows: int = 1,
@@ -324,8 +324,7 @@ def predict(
 ):
     no_phase = True if model.input_shape[1] == 3 else False
 
-    generate_fourier_embeddings = partial(
-        utils.multiprocess,
+    embeddings = utils.multiprocess(
         func=partial(
             preprocess,
             modelpsfgen=modelpsfgen,
@@ -340,59 +339,62 @@ def predict(
             filter_mask_dilation=True,
             async_plot=False
         ),
+        jobs=rois,
         desc='Generate Fourier embeddings',
         cores=cpu_workers
     )
 
-    inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(rois))
-    inputs = inputs.batch(batch_size).map(
-        lambda x: tf.py_function(
-            generate_fourier_embeddings,
-            inp=[x],
-            Tout=tf.float32,
-        ),
-    ).unbatch()
+    if digital_rotations is not None:
+        embeddings = np.concatenate(embeddings, axis=0)
+    else:
+        embeddings = np.array(embeddings)
 
-    ps, std = [], []
-    for tile, file in zip(inputs.as_numpy_iterator(), rois):
-        res = backend.predict_rotation(
-            model,
-            inputs=tile,
-            psfgen=modelpsfgen,
-            no_phase=no_phase,
-            batch_size=batch_size,
-            ignore_modes=ignore_modes,
-            threshold=prediction_threshold,
-            confidence_threshold=confidence_threshold,
-            freq_strength_threshold=freq_strength_threshold,
-            plot=file.with_suffix('') if plot else None,
-            plot_rotations=file.with_suffix('') if plot_rotations else None,
-            digital_rotations=digital_rotations,
-            desc=f'Predicting ROIs in ({outdir.name})',
-            save_path=Path(f"{file.with_suffix('')}"),
-        )
+    preds, std = backend.bootstrap_predict(
+        model,
+        embeddings,
+        psfgen=modelpsfgen,
+        batch_size=batch_size,
+        n_samples=1,
+        no_phase=no_phase,
+        threshold=prediction_threshold,
+        ignore_modes=ignore_modes,
+        desc=f"Predicting [{embeddings.shape[0]}]: "
+             f"ROIs [{rois.shape[0]}] x "
+             f"[{digital_rotations.shape[0] if digital_rotations is not None else digital_rotations}] Rotations",
+        cpu_workers=cpu_workers
+    )
 
-        try:
-            p, s = res
-            lls_defocus = 0.
-        except ValueError:
-            p, s, lls_defocus = res
+    if digital_rotations is not None:
+        tile_predictions = np.array(np.split(preds, rois.shape[0]))
 
-        if plot:
-            Pool(1).apply_async(vis.diagnosis(
-                pred=Wavefront(p, lam_detection=wavelength),
-                pred_std=Wavefront(s, lam_detection=wavelength),
-                save_path=Path(f"{file.with_suffix('')}_diagnosis"),
-                lls_defocus=lls_defocus
+        with mp.Pool(processes=mp.cpu_count()) as p:
+            jobs = list(tqdm(
+                p.starmap(
+                    backend.eval_rotation,
+                    zip(
+                        tile_predictions,
+                        repeat(digital_rotations),
+                        repeat(modelpsfgen),
+                        [f.with_suffix('') for f in rois],  # save path
+                        [f.with_suffix('') if plot_rotations else None for f in rois],  # optional plot path
+                        repeat(prediction_threshold),
+                        repeat(False),
+                        repeat(no_phase),
+                        repeat(confidence_threshold),
+                    ),
+                ),
+                total=rois.shape[0],
+                desc="Evaluate predictions"
             ))
 
-        ps.append(p)
-        std.append(s)
+        jobs = np.array([list(zip(*j)) for j in jobs])
+        preds, std = jobs[..., 0], jobs[..., -1]
 
-    ps, std = np.concatenate(ps), np.concatenate(std)
+    else:
+        std = np.zeros_like(preds)
 
     tile_names = [f.with_suffix('').name for f in rois]
-    predictions = pd.DataFrame(ps.T, columns=tile_names)
+    predictions = pd.DataFrame(preds.T, columns=tile_names)
     predictions['mean'] = predictions[tile_names].mean(axis=1)
     predictions['median'] = predictions[tile_names].median(axis=1)
     predictions['min'] = predictions[tile_names].min(axis=1)
@@ -425,7 +427,7 @@ def predict(
         actuators.to_csv(f"{outdir}_predictions_corrected_actuators.csv")
 
     if plot:
-        Pool(1).apply_async(vis.wavefronts(
+        mp.Pool(1).apply_async(vis.wavefronts(
             predictions=predictions,
             nrows=nrows,
             ncols=ncols,
@@ -604,7 +606,7 @@ def predict_sample(
         )
 
     if plot:
-        Pool(1).apply_async(vis.diagnosis(
+        mp.Pool(1).apply_async(vis.diagnosis(
             pred=p,
             pred_std=std,
             save_path=Path(f"{img.with_suffix('')}_sample_predictions_diagnosis"),
@@ -766,7 +768,7 @@ def predict_large_fov(
         )
 
     if plot:
-        Pool(1).apply_async(vis.diagnosis(
+        mp.Pool(1).apply_async(vis.diagnosis(
             pred=p,
             pred_std=std,
             save_path=Path(f"{img.with_suffix('')}_large_fov_predictions_diagnosis"),
@@ -919,7 +921,7 @@ def predict_tiles(
     ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
-    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    digital_rotations: Optional[np.ndarray] = np.arange(0, 360 + 1, 1).astype(int),
     cpu_workers: int = -1
 ):
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
@@ -1016,7 +1018,7 @@ def predict_tiles(
     )
 
     if plot:
-        Pool(1).apply_async(vis.tiles(
+        mp.Pool(1).apply_async(vis.tiles(
             data=sample,
             strides=window_size,
             window_size=window_size,
@@ -1159,7 +1161,7 @@ def aggregate_predictions(
         imsave(f"{model_pred.with_suffix('')}_aggregated_psf_z{z}.tif", psf)
 
         if plot:
-            Pool(1).apply_async(vis.diagnosis(
+            mp.Pool(1).apply_async(vis.diagnosis(
                 pred=pred,
                 pred_std=pred_std,
                 save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_z{z}"),
@@ -1295,7 +1297,7 @@ def phase_retrieval(
     imsave(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf)
 
     if plot:
-        Pool(1).apply_async(vis.diagnosis(
+        mp.Pool(1).apply_async(vis.diagnosis(
             pred=pred,
             pred_std=pred_std,
             save_path=Path(f"{img.with_suffix('')}_phase_retrieval_diagnosis"),

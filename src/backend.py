@@ -21,7 +21,7 @@ import pandas as pd
 from skimage.restoration import richardson_lucy
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from multiprocessing import Pool
+import multiprocessing as mp
 import numpy as np
 import scipy as sp
 from tqdm import tqdm
@@ -152,7 +152,7 @@ def load_metadata(
         SyntheticPSF class: ideal PSF that the model was trained on.
     """
     # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
-    if not model_path.suffix == '.h5':       
+    if not model_path.suffix == '.h5':
         model_path = list(model_path.rglob('*.h5'))[0]  # locate the model if the parent folder path is given
 
     with h5py.File(model_path, 'r') as file:
@@ -177,14 +177,14 @@ def load_metadata(
 
 
 def save_metadata(
-    filepath: Path,
-    wavelength: float,
-    psf_type: str,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
-    n_modes: int,
-    embedding_option: str = 'spatial_planes'
+        filepath: Path,
+        wavelength: float,
+        psf_type: str,
+        x_voxel_size: float,
+        y_voxel_size: float,
+        z_voxel_size: float,
+        n_modes: int,
+        embedding_option: str = 'spatial_planes'
 ):
     def add_param(h5file, name, data):
         try:
@@ -226,24 +226,24 @@ def save_metadata(
 
 @profile
 def bootstrap_predict(
-    model: tf.keras.Model,
-    inputs: np.array,
-    psfgen: SyntheticPSF,
-    batch_size: int = 128,
-    n_samples: int = 10,
-    no_phase: bool = False,
-    padsize: Any = None,
-    alpha_val: str = 'abs',
-    phi_val: str = 'angle',
-    pois: Any = None,
-    remove_interference: bool = True,
-    ignore_modes: list = (0, 1, 2, 4),
-    threshold: float = 0.,
-    freq_strength_threshold: float = .01,
-    verbose: bool = True,
-    plot: Any = None,
-    desc: str = 'MiniBatch-probabilistic-predictions',
-    cpu_workers: int = 1
+        model: tf.keras.Model,
+        inputs: np.array,
+        psfgen: SyntheticPSF,
+        batch_size: int = 128,
+        n_samples: int = 10,
+        no_phase: bool = False,
+        padsize: Any = None,
+        alpha_val: str = 'abs',
+        phi_val: str = 'angle',
+        pois: Any = None,
+        remove_interference: bool = True,
+        ignore_modes: list = (0, 1, 2, 4),
+        threshold: float = 0.,
+        freq_strength_threshold: float = .01,
+        verbose: bool = True,
+        plot: Any = None,
+        desc: str = 'MiniBatch-probabilistic-predictions',
+        cpu_workers: int = 1
 ):
     """
     Average predictions and compute stdev
@@ -293,7 +293,7 @@ def bootstrap_predict(
             remove_interference=remove_interference,
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
-        ) # (nx361, 6, 64, 64, 1) n=# of samples (e.g. # of image vols)
+        )  # (nx361, 6, 64, 64, 1) n=# of samples (e.g. # of image vols)
     else:
         # pass raw PSFs to the model
         model_inputs = inputs
@@ -305,7 +305,7 @@ def bootstrap_predict(
 
     logger.info(f"[BS={batch_size}, n={n_samples}] {desc}")
     # batch_size is over number of samples (e.g. # of image vols)
-    gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples) # (None, 6, 64, 64, 1)
+    gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples)  # (None, 6, 64, 64, 1)
     preds = model.predict(gen, verbose=verbose)
 
     if preds.shape[1] > 1:
@@ -328,15 +328,16 @@ def bootstrap_predict(
 
 @profile
 def eval_rotation(
-    init_preds: np.ndarray,
-    rotations: np.ndarray,
-    psfgen: SyntheticPSF,
-    save_path: Path,
-    no_phase: bool,
-    threshold: float = 0.,
-    plot: Any = None,
-    confidence_threshold: float = .0099,
-    minimum_fraction_of_kept_points: float = 0.45,
+        init_preds: np.ndarray,
+        rotations: np.ndarray,
+        psfgen: SyntheticPSF,
+        save_path: Path,
+        plot: Any = None,
+        threshold: float = 0.,
+        async_plot: bool = True,
+        no_phase: bool = False,
+        confidence_threshold: float = .0099,
+        minimum_fraction_of_kept_points: float = 0.45,
 ):
     """
         We can think of the mode and its twin as the X and Y basis, and the aberration being a
@@ -375,7 +376,7 @@ def eval_rotation(
         return (x, y)
 
     def linear_fit_fixed_slope(x, y, m):
-        return np.mean(y - m*x)
+        return np.mean(y - m * x)
 
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
 
@@ -409,11 +410,13 @@ def eval_rotation(
             data_mask = np.ones(xdata.shape[0], dtype=bool)
 
             if no_phase:
-                data_mask[np.abs(init_preds[:, mode.index_ansi]/rho) < np.cos(np.radians(70)) * (rho > threshold)] = 0.
+                data_mask[
+                    np.abs(init_preds[:, mode.index_ansi] / rho) < np.cos(np.radians(70)) * (rho > threshold)
+                ] = 0.
 
             # exclude if rho is unusually small
             # (which can lead to small, but dominant primary mode near discontinuity)
-            data_mask[rhos < rho/2] = 0.
+            data_mask[rhos < rho / 2] = 0.
             df['valid_points'] = data_mask
 
             fraction_of_kept_points = data_mask.sum() / len(data_mask)
@@ -434,14 +437,14 @@ def eval_rotation(
             fit = m * xdata + b
             df['fitted_twin_angle'] = m * df['twin_angle'] + b
 
-            mse = np.mean(np.square(fit-ydata))
+            mse = np.mean(np.square(fit - ydata))
             if mse > 700:
                 # reject if it doesn't show rotation that matches within +/- 26deg,
                 # equivalent to +/- 0.005 um on a 0.01 um mode.
                 rho = 0
             df['mse'] = mse
 
-            twin_angle = b   # evaluate the curve fit when there is no digital rotation.
+            twin_angle = b  # evaluate the curve fit when there is no digital rotation.
             preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
 
             if rho > 0:
@@ -479,34 +482,37 @@ def eval_rotation(
     results.to_csv(Path(f'{save_path}_rotations.csv'))
 
     if plot is not None:
-        Pool(1).apply_async(vis.plot_rotations(Path(f'{plot}_rotations.csv')))
+        if async_plot:
+            mp.Pool(1).apply_async(vis.plot_rotations(Path(f'{plot}_rotations.csv')))
+        else:
+            vis.plot_rotations(Path(f'{plot}_rotations.csv'))
 
     return preds, stdevs
 
 
 @profile
 def predict_rotation(
-    model: tf.keras.Model,
-    inputs: np.array,
-    psfgen: SyntheticPSF,
-    save_path:Path,
-    batch_size: int = 128,
-    no_phase: bool = False,
-    padsize: Any = None,
-    alpha_val: str = 'abs',
-    phi_val: str = 'angle',
-    pois: Any = None,
-    ignore_modes: list = (0, 1, 2, 4),
-    threshold: float = 0.,
-    freq_strength_threshold: float = .01,
-    verbose: bool = True,
-    plot: Any = None,
-    plot_rotations: Any = None,
-    remove_interference: bool = True,
-    desc: str = 'Predict-rotations',
-    confidence_threshold: float = .0099,
-    digital_rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
-    cpu_workers: int = -1,
+        model: tf.keras.Model,
+        inputs: np.ndarray,
+        psfgen: SyntheticPSF,
+        save_path: Path,
+        batch_size: int = 128,
+        no_phase: bool = False,
+        padsize: Any = None,
+        alpha_val: str = 'abs',
+        phi_val: str = 'angle',
+        pois: Any = None,
+        ignore_modes: list = (0, 1, 2, 4),
+        threshold: float = 0.,
+        freq_strength_threshold: float = .01,
+        verbose: bool = True,
+        plot: Any = None,
+        plot_rotations: Any = None,
+        remove_interference: bool = True,
+        desc: str = 'Predict-rotations',
+        confidence_threshold: float = .0099,
+        digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+        cpu_workers: int = -1,
 ):
     """
     Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin).
@@ -549,7 +555,7 @@ def predict_rotation(
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations
-        ) # inputs.shape = (361 rotations, 6 embeddings, 64, 64, 1)
+        )  # inputs.shape = (361 rotations, 6 embeddings, 64, 64, 1)
 
     init_preds, stdev = bootstrap_predict(
         model,
@@ -605,10 +611,10 @@ def predict_rotation(
 
 @profile
 def predict_sign(
-    init_preds: np.ndarray,
-    followup_preds: np.ndarray,
-    sign_threshold: float = .99,
-    plot: Any = None,
+        init_preds: np.ndarray,
+        followup_preds: np.ndarray,
+        sign_threshold: float = .99,
+        plot: Any = None,
 ):
     def pct_change(cur, prev):
         cur = np.abs(cur)
@@ -616,7 +622,7 @@ def predict_sign(
 
         if np.array_equal(cur, prev):
             return np.zeros_like(prev)
-        pct = ((cur - prev) / (prev+1e-6)) * 100.0
+        pct = ((cur - prev) / (prev + 1e-6)) * 100.0
         pct[pct > 100] = 100
         pct[pct < -100] = -100
         return pct
@@ -699,23 +705,22 @@ def predict_sign(
 
 @profile
 def dual_stage_prediction(
-    model: tf.keras.Model,
-    inputs: np.array,
-    gen: SyntheticPSF,
-    modelgen: SyntheticPSF,
-    plot: Any = None,
-    verbose: bool = False,
-    threshold: float = 0.,
-    freq_strength_threshold: float = .01,
-    sign_threshold: float = .9,
-    n_samples: int = 1,
-    batch_size: int = 1,
-    ignore_modes: list = (0, 1, 2, 4),
-    prev_pred: Any = None,
-    estimate_sign_with_decon: bool = False,
-    decon_iters: int = 5
+        model: tf.keras.Model,
+        inputs: np.array,
+        gen: SyntheticPSF,
+        modelgen: SyntheticPSF,
+        plot: Any = None,
+        verbose: bool = False,
+        threshold: float = 0.,
+        freq_strength_threshold: float = .01,
+        sign_threshold: float = .9,
+        n_samples: int = 1,
+        batch_size: int = 1,
+        ignore_modes: list = (0, 1, 2, 4),
+        prev_pred: Any = None,
+        estimate_sign_with_decon: bool = False,
+        decon_iters: int = 5
 ):
-
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -809,18 +814,18 @@ def dual_stage_prediction(
 
 @profile
 def predict_dataset(
-    model: tf.keras.Model,
-    inputs: tf.data.Dataset,
-    psfgen: SyntheticPSF,
-    save_path: Path,
-    batch_size: int = 128,
-    ignore_modes: list = (0, 1, 2, 4),
-    threshold: float = 0.,
-    verbose: bool = True,
-    desc: str = 'MiniBatch-probabilistic-predictions',
-    digital_rotations: Any = None,
-    plot_rotations: Any = None,
-
+        model: tf.keras.Model,
+        inputs: tf.data.Dataset,
+        psfgen: SyntheticPSF,
+        save_path: list[Path],
+        batch_size: int = 128,
+        ignore_modes: list = (0, 1, 2, 4),
+        threshold: float = 0.,
+        verbose: bool = True,
+        desc: str = 'MiniBatch-probabilistic-predictions',
+        digital_rotations: Any = None,
+        plot: Any = None,
+        plot_rotations: Any = None,
 ):
     """
     Average predictions and compute stdev
@@ -835,6 +840,7 @@ def predict_dataset(
         desc: test to display for the progressbar
         verbose: a toggle for progress bar
         digital_rotations: an array of digital rotations to apply to evaluate model's confidence
+        plot: optional toggle to plot predictions
         plot_rotations: optional toggle to plot digital rotations
 
     Returns:
@@ -913,7 +919,7 @@ def deconstruct(
             n_modes=modes,
             distribution=eval_distribution,
             lam_detection=wavelength,
-            amplitude_ranges=((.05*i), (.05*(i+1))),
+            amplitude_ranges=((.05 * i), (.05 * (i + 1))),
             psf_shape=3 * [input_shape[-1]],
             x_voxel_size=x_voxel_size,
             y_voxel_size=y_voxel_size,
@@ -1122,14 +1128,14 @@ def featuremaps(
                     for f in range(features):
                         vol = fmap[j, :, :, f]
                         grid[
-                            j * window[0]:(j + 1) * window[0],
-                            f * window[1]:(f + 1) * window[1]
+                        j * window[0]:(j + 1) * window[0],
+                        f * window[1]:(f + 1) * window[1]
                         ] = vol
 
                 space = grid.flatten()
                 vmin = np.nanquantile(space, .02)
                 vmax = np.nanquantile(space, .98)
-                vcenter = (vmin + vmax)/2
+                vcenter = (vmin + vmax) / 2
                 step = .01
 
                 highcmap = plt.get_cmap('YlOrRd', 256)
