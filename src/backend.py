@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from pprint import pprint
 from typing import Any, Union
+from itertools import repeat
 from functools import partial
 from line_profiler_pycharm import profile
 
@@ -817,14 +818,13 @@ def predict_dataset(
         model: tf.keras.Model,
         inputs: tf.data.Dataset,
         psfgen: SyntheticPSF,
-        save_path: list[Path],
+        save_path: list,
         batch_size: int = 128,
         ignore_modes: list = (0, 1, 2, 4),
         threshold: float = 0.,
         verbose: bool = True,
         desc: str = 'MiniBatch-probabilistic-predictions',
         digital_rotations: Any = None,
-        plot: Any = None,
         plot_rotations: Any = None,
 ):
     """
@@ -864,36 +864,30 @@ def predict_dataset(
     preds[np.abs(preds) <= threshold] = 0.
 
     if digital_rotations is not None:
-        eval_mode_rotations = partial(
-            eval_rotation,
-            rotations=digital_rotations,
-            psfgen=psfgen,
-            threshold=threshold,
-            no_phase=no_phase,
-            save_path=save_path,
-        )
-
-        preds = np.stack(np.split(preds, digital_rotations.shape[0]), axis=1)
-
-        if plot_rotations is not None:
-            predictions, stdev = np.zeros((preds.shape[0], preds.shape[-1])), np.zeros((preds.shape[0], preds.shape[-1]))
-            for i, (p, savepath) in tqdm(
-                    enumerate(zip(preds, plot_rotations)),
-                    total=preds.shape[0],
-                    desc="Evaluate predictions"
-            ):
-                predictions[i], stdev[i] = eval_mode_rotations(p, plot=savepath)
-            return predictions, stdev
-        else:
-            jobs = utils.multiprocess(
-                func=eval_mode_rotations,
-                jobs=preds,
-                cores=-1,
+        tile_predictions = np.array(np.split(preds, len(save_path)))
+        with mp.Pool(processes=mp.cpu_count()) as p:
+            jobs = list(tqdm(
+                p.starmap(
+                    eval_rotation,
+                    zip(
+                        tile_predictions,
+                        repeat(digital_rotations),
+                        repeat(psfgen),
+                        save_path,
+                        save_path if plot_rotations else repeat(None),
+                        repeat(threshold),
+                        repeat(False),
+                        repeat(no_phase),
+                    ),
+                ),
+                total=len(save_path),
                 desc="Evaluate predictions"
-            )
-            jobs = np.array([list(zip(*j)) for j in jobs])
-            preds, stdev = jobs[..., 0], jobs[..., -1]
-            return preds, stdev
+            ))
+
+        jobs = np.array([list(zip(*j)) for j in jobs])
+        preds, std = jobs[..., 0], jobs[..., -1]
+        return preds, std
+
     else:
         return preds, np.zeros_like(preds)
 

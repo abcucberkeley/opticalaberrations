@@ -10,12 +10,11 @@ plt.set_loglevel('error')
 
 from pathlib import Path
 import tensorflow as tf
-from itertools import repeat
 from typing import Any, Union, Optional, Generator
 import numpy as np
 import pandas as pd
 from tifffile import imread, imsave
-from tqdm import trange, tqdm
+from tqdm import trange
 from line_profiler_pycharm import profile
 from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
@@ -324,7 +323,8 @@ def predict(
 ):
     no_phase = True if model.input_shape[1] == 3 else False
 
-    embeddings = utils.multiprocess(
+    generate_fourier_embeddings = partial(
+        utils.multiprocess,
         func=partial(
             preprocess,
             modelpsfgen=modelpsfgen,
@@ -339,59 +339,32 @@ def predict(
             filter_mask_dilation=True,
             async_plot=False
         ),
-        jobs=rois,
         desc='Generate Fourier embeddings',
         cores=cpu_workers
     )
 
-    if digital_rotations is not None:
-        embeddings = np.concatenate(embeddings, axis=0)
-    else:
-        embeddings = np.array(embeddings)
+    inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(rois))
+    inputs = inputs.batch(batch_size).map(
+        lambda x: tf.py_function(
+            generate_fourier_embeddings,
+            inp=[x],
+            Tout=tf.float32,
+        ),
+    ).unbatch()
 
-    preds, std = backend.bootstrap_predict(
+    preds, std = backend.predict_dataset(
         model,
-        embeddings,
+        inputs=inputs,
         psfgen=modelpsfgen,
         batch_size=batch_size,
-        n_samples=1,
-        no_phase=no_phase,
-        threshold=prediction_threshold,
         ignore_modes=ignore_modes,
-        desc=f"Predicting [{embeddings.shape[0]}]: "
-             f"ROIs [{rois.shape[0]}] x "
+        threshold=prediction_threshold,
+        save_path=[f.with_suffix('') for f in rois],
+        plot_rotations=plot_rotations,
+        digital_rotations=digital_rotations,
+        desc=f"ROIs [{rois.shape[0]}] x "
              f"[{digital_rotations.shape[0] if digital_rotations is not None else digital_rotations}] Rotations",
-        cpu_workers=cpu_workers
     )
-
-    if digital_rotations is not None:
-        tile_predictions = np.array(np.split(preds, rois.shape[0]))
-
-        with mp.Pool(processes=mp.cpu_count()) as p:
-            jobs = list(tqdm(
-                p.starmap(
-                    backend.eval_rotation,
-                    zip(
-                        tile_predictions,
-                        repeat(digital_rotations),
-                        repeat(modelpsfgen),
-                        [f.with_suffix('') for f in rois],  # save path
-                        [f.with_suffix('') if plot_rotations else None for f in rois],  # optional plot path
-                        repeat(prediction_threshold),
-                        repeat(False),
-                        repeat(no_phase),
-                        repeat(confidence_threshold),
-                    ),
-                ),
-                total=rois.shape[0],
-                desc="Evaluate predictions"
-            ))
-
-        jobs = np.array([list(zip(*j)) for j in jobs])
-        preds, std = jobs[..., 0], jobs[..., -1]
-
-    else:
-        std = np.zeros_like(preds)
 
     tile_names = [f.with_suffix('').name for f in rois]
     predictions = pd.DataFrame(preds.T, columns=tile_names)
@@ -956,7 +929,7 @@ def predict_tiles(
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
         snr=psnr,
-        psf_shape=sample.shape,
+        psf_shape=window_size,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
