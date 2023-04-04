@@ -1002,7 +1002,7 @@ def compare_iterations(
     savesvg(fig, f'{save_path}.svg')
 
 
-def plot_interference_pattern_svg(
+def plot_interference(
         plot,
         plot_interference_pattern,
         pois,
@@ -1075,22 +1075,36 @@ def plot_interference_pattern_svg(
             ax2.set_title(r'$|\mathscr{F}(\mathcal{S})|$')
 
         m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot')
+
     for ax, m, label in zip(
-            range(5) if plot_interference_pattern else range(4),
-            [m1, m2, m3, m4, m5] if plot_interference_pattern else [m1, m2, m3, m5],
-            [f'Inputs ({pois.shape[0]} peaks)', 'Kernel', 'Peak detection', 'Interference', 'Reconstructed']
-            if plot_interference_pattern else [f'Inputs ({pois.shape[0]} peaks)', 'kernel', 'Peak detection',
-                                               'Reconstructed']
+        range(5) if plot_interference_pattern else range(4),
+        [m1, m2, m3, m4, m5] if plot_interference_pattern else [m1, m2, m3, m5],
+        [
+            f'Inputs ({pois.shape[0]} peaks)',
+            'Kernel',
+            'Peak detection',
+            'Interference',
+            'Reconstructed'
+        ]
+        if plot_interference_pattern else [
+            f'Inputs ({pois.shape[0]} peaks)',
+            'kernel',
+            'Peak detection',
+            'Reconstructed'
+        ]
     ):
         cax = inset_axes(axes[ax, -1], width="10%", height="90%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
         cax.set_ylabel(label)
+
     for ax in axes.flatten():
         ax.axis('off')
+
     axes[0, 0].set_title('XY')
     axes[0, 1].set_title('XZ')
     axes[0, 2].set_title('YZ')
+
     savesvg(fig, f'{plot}_interference_pattern.svg')
 
 
@@ -1209,6 +1223,7 @@ def plot_embeddings(
         savesvg(fig, f'{save_path}_embeddings.svg')
 
 
+@profile
 def plot_rotations(results: Path):
     plt.style.use("default")
     plt.rcParams.update({

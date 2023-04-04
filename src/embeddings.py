@@ -33,7 +33,7 @@ except ImportError as e:
 
 import preprocessing
 from utils import resize_with_crop_or_pad, multiprocess
-from vis import savesvg, plot_interference_pattern_svg, plot_embeddings
+from vis import savesvg, plot_interference, plot_embeddings
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -377,7 +377,7 @@ def remove_interference_pattern(
 
         if plot is not None:
             if async_plot:
-                Pool(1).apply_async(plot_interference_pattern_svg(
+                Pool(1).apply_async(plot_interference(
                     plot,
                     plot_interference_pattern,
                     pois=pois,
@@ -390,7 +390,7 @@ def remove_interference_pattern(
                     interference_pattern=interference_pattern
                 ))
             else:
-                plot_interference_pattern_svg(
+                plot_interference(
                     plot,
                     plot_interference_pattern,
                     pois=pois,
