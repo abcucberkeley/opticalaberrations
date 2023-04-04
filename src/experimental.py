@@ -369,6 +369,7 @@ def predict(
             plot_rotations=file.with_suffix('') if plot_rotations else None,
             digital_rotations=digital_rotations,
             desc=f'Predicting ROIs in ({outdir.name})',
+            save_path=Path(f"{file.with_suffix('')}"),
         )
 
         try:
@@ -541,6 +542,7 @@ def predict_sample(
             digital_rotations=digital_rotations,
             plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
             plot_rotations=Path(f"{img.with_suffix('')}_sample_predictions") if plot_rotations else None,
+            save_path=Path(f"{img.with_suffix('')}_sample_predictions"),
         )
         try:
             p, std = res
@@ -701,7 +703,8 @@ def predict_large_fov(
         digital_rotations=digital_rotations,
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
         plot_rotations=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot_rotations else None,
-        cpu_workers=cpu_workers
+        cpu_workers=cpu_workers,
+        save_path=Path(f"{img.with_suffix('')}_large_fov_predictions"),
     )
     try:
         p, std = res
@@ -1103,10 +1106,10 @@ def aggregate_predictions(
 
         # filter out small predictions
         prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
-        stdevs[np.abs(predictions) < prediction_threshold] = np.inf
+        stdevs[np.abs(predictions) < prediction_threshold] = 0
 
         # filter out unconfident predictions
-        stdevs[stdevs > confidence_threshold] = np.inf
+        stdevs[stdevs > confidence_threshold] = 0
 
         # get tile votes per mode
         votes = predictions[tiles].values   # votes is a 2D array
@@ -1115,8 +1118,9 @@ def aggregate_predictions(
         # sum votes per mode
         total_votes = np.sum(votes, axis=1)  # 1D array
 
-        mean_prediction = np.nan_to_num(np.sum(predictions[tiles].values, axis=1) / total_votes)
-        mean_stdev = np.nan_to_num(np.sum(stdevs[tiles].values, axis=1) / total_votes)
+        mean_prediction = np.nan_to_num(np.sum(predictions[tiles].values, axis=1) / total_votes, nan=0, posinf=0, neginf=0)
+        mean_stdev = np.nan_to_num(np.sum(stdevs[tiles].values, axis=1) / total_votes, nan=0, posinf=0, neginf=0)
+
 
         '''
         # weighted by 1/stddev**2

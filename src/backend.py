@@ -331,6 +331,7 @@ def eval_rotation(
     init_preds: np.ndarray,
     rotations: np.ndarray,
     psfgen: SyntheticPSF,
+    save_path: Path,
     no_phase: bool,
     threshold: float = 0.,
     plot: Any = None,
@@ -399,8 +400,6 @@ def eval_rotation(
             df['twin_angle'] = xdata
 
             ydata = np.degrees(ydata)
-            df['pred_twin_angle'] = ((np.unwrap(ydata, period=180) - ydata[0] - xdata) + 90) \
-                % 180 - 90 + ydata[0] + xdata
 
             rho = rhos[np.argmin(np.abs(ydata))]
             std_rho = np.std(rhos).round(3)
@@ -427,6 +426,8 @@ def eval_rotation(
             offset = ydata[0]
             ydata = np.unwrap(ydata, period=180)
             ydata = ((ydata - offset - xdata) + 90) % 180 - 90 + offset + xdata
+            df['pred_twin_angle'] = np.nan
+            df['pred_twin_angle'][data_mask] = ydata
 
             m = 1
             b = linear_fit_fixed_slope(xdata, ydata, m)  # refit without bad data points
@@ -475,7 +476,7 @@ def eval_rotation(
         results.append(df)
 
     results = pd.concat(results, ignore_index=True)
-    results.to_csv(f'{plot}_rotations.csv')
+    results.to_csv(Path(f'{save_path}_rotations.csv'))
 
     if plot is not None:
         Pool(1).apply_async(vis.plot_rotations(Path(f'{plot}_rotations.csv')))
@@ -488,6 +489,7 @@ def predict_rotation(
     model: tf.keras.Model,
     inputs: np.array,
     psfgen: SyntheticPSF,
+    save_path:Path,
     batch_size: int = 128,
     no_phase: bool = False,
     padsize: Any = None,
@@ -504,7 +506,7 @@ def predict_rotation(
     desc: str = 'Predict-rotations',
     confidence_threshold: float = .0099,
     digital_rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int),
-    cpu_workers: int = -1
+    cpu_workers: int = -1,
 ):
     """
     Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin).
@@ -571,7 +573,8 @@ def predict_rotation(
         threshold=threshold,
         plot=plot_rotations,
         no_phase=no_phase,
-        confidence_threshold=confidence_threshold
+        confidence_threshold=confidence_threshold,
+        save_path=save_path,
     )
 
     init_preds = np.stack(np.split(init_preds, digital_rotations.shape[0]), axis=1)
@@ -809,13 +812,15 @@ def predict_dataset(
     model: tf.keras.Model,
     inputs: tf.data.Dataset,
     psfgen: SyntheticPSF,
+    save_path: Path,
     batch_size: int = 128,
     ignore_modes: list = (0, 1, 2, 4),
     threshold: float = 0.,
     verbose: bool = True,
     desc: str = 'MiniBatch-probabilistic-predictions',
     digital_rotations: Any = None,
-    plot_rotations: Any = None
+    plot_rotations: Any = None,
+
 ):
     """
     Average predictions and compute stdev
@@ -859,6 +864,7 @@ def predict_dataset(
             psfgen=psfgen,
             threshold=threshold,
             no_phase=no_phase,
+            save_path=save_path,
         )
 
         preds = np.stack(np.split(preds, digital_rotations.shape[0]), axis=1)

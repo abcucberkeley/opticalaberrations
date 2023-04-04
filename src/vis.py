@@ -1236,17 +1236,14 @@ def plot_rotations(results: Path):
         ydata = df.pred_twin_angle.values
         rhos = df.rhos.values
 
-        data_mask = df.valid_points.values
+        data_mask = df.valid_points.values.astype(bool)
         fraction_of_kept_points = data_mask.sum() / len(data_mask)
         fitted_twin_angle = df.fitted_twin_angle.values
 
         rho = df.aggr_rho.values[0]
         stdev = df.aggr_std_dev.values[0]
         mse = df.mse.values[0]
-        confident = df.confident.values[0]
-
-        m = 1
-        b = (fitted_twin_angle[1] - fitted_twin_angle[0]) / (xdata[1] - xdata[0])  # get slope
+        confident = df.confident.values[0].astype(bool)
 
         if rho > 0 and confident:
             title_color = 'g'
@@ -1270,7 +1267,7 @@ def plot_rotations(results: Path):
 
             # plot fit line from zero to end of data
             fit_ax.plot(xdata, fitted_twin_angle, color=title_color, lw='.75')
-            fit_ax.scatter(xdata, ydata, s=2, color='grey')
+            fit_ax.scatter(xdata[data_mask], ydata[data_mask], s=2, color='grey')
 
             fit_ax.set_title(
                 # f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, '
@@ -1287,7 +1284,7 @@ def plot_rotations(results: Path):
             fit_ax.yaxis.set_label_position("right")
             fit_ax.set_xlabel('Digitially rotated Twin angle (deg)')
             fit_ax.set_xticks(range(0, int(np.max(xdata)), 90))
-            fit_ax.set_yticks(np.insert(np.arange(-90, np.max(ydata), 180), 0, 0))
+            fit_ax.set_yticks(np.insert(np.arange(-90, np.nanmax(ydata[data_mask]), 180), 0, 0))
             fit_ax.set_xlim(0, 360 * np.abs(mode.m))
 
             ax.scatter(rotations[data_mask == 0], rhos[data_mask == 0], s=1.5, color='pink', zorder=3)
