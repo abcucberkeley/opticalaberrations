@@ -1096,7 +1096,6 @@ def aggregate_predictions(
         mean_prediction = np.nan_to_num(np.sum(predictions[tiles].values, axis=1) / total_votes, nan=0, posinf=0, neginf=0)
         mean_stdev = np.nan_to_num(np.sum(stdevs[tiles].values, axis=1) / total_votes, nan=0, posinf=0, neginf=0)
 
-
         '''
         # weighted by 1/stddev**2
         # weights = 1 / np.square(stdevs[tiles])
@@ -1148,6 +1147,15 @@ def aggregate_predictions(
     actuators.index.name = 'actuators'
     actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
 
+    vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
+    vis.plot_volume(
+        vol=vol,
+        results=coefficients,
+        window_size=64,
+        dxy=lateral_voxel_size,
+        dz=axial_voxel_size,
+        save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
+    )
     return coefficients
 
 

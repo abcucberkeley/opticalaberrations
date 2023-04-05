@@ -35,9 +35,18 @@ logger = logging.getLogger(__name__)
 warnings.filterwarnings('ignore')
 
 
-def savesvg(fig: plt.Figure, savepath: Union[Path, str]):
+def savesvg(
+    fig: plt.Figure,
+    savepath: Union[Path, str],
+    top: float = 0.9,
+    bottom: float = 0.1,
+    left: float = 0.1,
+    right: float = 0.9,
+    hspace: float = 0.35,
+    wspace: float = 0.1
+):
 
-    plt.subplots_adjust(top=0.9, bottom=0.1, left=0.1, right=0.9, hspace=0.35, wspace=0.1)
+    plt.subplots_adjust(top=top, bottom=bottom, left=left, right=right, hspace=hspace, wspace=wspace)
     plt.savefig(savepath, bbox_inches='tight', dpi=300, pad_inches=.25)
 
     if Path(savepath).suffix == '.svg':
@@ -1324,3 +1333,80 @@ def plot_rotations(results: Path):
             ax.set_xlabel('Digital rotation (deg)')
 
     savesvg(fig, results.with_suffix('.svg'))
+
+
+@profile
+def plot_volume(
+        vol: np.ndarray,
+        results: pd.DataFrame,
+        save_path: Union[Path, str],
+        window_size: int,
+        wavelength: float = .510,
+        dxy: float = .108,
+        dz: float = .2,
+):
+    def formatter(x, pos, dd):
+        return f'{np.ceil(x * dd).astype(int):1d}'
+
+    plt.style.use("default")
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+    sample = np.max(vol, axis=-1) ** .5
+
+    ztiles = sliding_window_view(
+        sample, window_shape=[window_size, sample.shape[-1]]
+    )[::window_size, ::sample.shape[-1]]
+
+    nrows, ncols = ztiles.shape[0], ztiles.shape[1]
+    ztiles = np.reshape(ztiles, (-1, window_size, sample.shape[-1]))
+
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(8, 11))
+
+    for i, (k, j) in enumerate(itertools.product(range(nrows), range(ncols))):
+        im = axes[i].imshow(
+            ztiles[i],
+            cmap='hot',
+            vmin=np.nanmin(sample),
+            vmax=np.nanmax(sample),
+            aspect='auto'
+        )
+
+        depth = np.arange(ztiles[i].shape[0]*i, ztiles[i].shape[0]*(i+1))
+        labels = [int(round(x * dz, 0)) for x in depth]
+        axes[i].set_yticks(np.arange(len(depth)))
+        axes[i].set_yticklabels(labels)
+        axes[i].yaxis.set_major_locator(plt.MaxNLocator(10))
+
+        if i < len(ztiles) - 1:
+            axes[i].set_xticks([])
+        else:
+            axes[i].xaxis.set_major_formatter(partial(formatter, dd=dxy))
+            axes[i].xaxis.set_major_locator(plt.MaxNLocator(10))
+
+        wavefront = Wavefront(
+            results.iloc[:, i].values,
+            order='ansi',
+            lam_detection=wavelength
+        )
+
+        wax = inset_axes(axes[i], width="25%", height="100%", loc='center right', borderpad=-15)
+        w = plot_wavefront(wax, wavefront.wave(size=100), vcolorbar=True, label='Average', nas=[.95, .85])
+
+    axes[-1].set_xlabel('Y ($\mu$m)')
+    axes[-1].set_ylabel('Z ($\mu$m)')
+
+    cax = inset_axes(axes[0], width="100%", height="10%", loc='upper center', borderpad=-2)
+    cb = plt.colorbar(im, cax=cax, orientation='horizontal')
+    cax.xaxis.set_major_formatter(FormatStrFormatter("%.0f"))
+    cax.set_ylabel(r'Input (MIP) [$\gamma$=.5]')
+    cax.xaxis.set_label_position("top")
+    cax.xaxis.set_ticks_position("top")
+
+    savesvg(fig, save_path, hspace=.01, wspace=.01)
