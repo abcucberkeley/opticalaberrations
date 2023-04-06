@@ -1340,10 +1340,11 @@ def plot_volume(
         vol: np.ndarray,
         results: pd.DataFrame,
         save_path: Union[Path, str],
-        window_size: int,
+        window_size: tuple,
         wavelength: float = .510,
         dxy: float = .108,
         dz: float = .2,
+        gamma: float = .5,
 ):
     def formatter(x, pos, dd):
         return f'{np.ceil(x * dd).astype(int):1d}'
@@ -1359,15 +1360,17 @@ def plot_volume(
         'axes.autolimit_mode': 'round_numbers'
     })
     sample = np.max(vol, axis=-1) ** .5
+    sample /= np.max(sample)
+    sample **= gamma
 
     ztiles = sliding_window_view(
-        sample, window_shape=[window_size, sample.shape[-1]]
-    )[::window_size, ::sample.shape[-1]]
+        sample, window_shape=[window_size[0], sample.shape[-1]]
+    )[::window_size[0], ::sample.shape[-1]]
 
     nrows, ncols = ztiles.shape[0], ztiles.shape[1]
-    ztiles = np.reshape(ztiles, (-1, window_size, sample.shape[-1]))
+    ztiles = np.reshape(ztiles, (-1, window_size[0], sample.shape[-1]))
 
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(8, 11))
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(8, nrows*3))
 
     for i, (k, j) in enumerate(itertools.product(range(nrows), range(ncols))):
         im = axes[i].imshow(
@@ -1382,16 +1385,17 @@ def plot_volume(
         labels = [int(round(x * dz, 0)) for x in depth]
         axes[i].set_yticks(np.arange(len(depth)))
         axes[i].set_yticklabels(labels)
-        axes[i].yaxis.set_major_locator(plt.MaxNLocator(10))
+        axes[i].yaxis.set_major_locator(plt.MaxNLocator(11))
+        axes[i].grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0, alpha=.66)
 
-        if i < len(ztiles) - 1:
-            axes[i].set_xticks([])
-        else:
+        if i == 0:
             axes[i].xaxis.set_major_formatter(partial(formatter, dd=dxy))
-            axes[i].xaxis.set_major_locator(plt.MaxNLocator(10))
+            axes[i].xaxis.set_major_locator(plt.MaxNLocator(20))
+        else:
+            axes[i].set_xticks([])
 
         wavefront = Wavefront(
-            results.iloc[:, i].values,
+            results[f'z{i}'].values,
             order='ansi',
             lam_detection=wavelength
         )
@@ -1399,14 +1403,16 @@ def plot_volume(
         wax = inset_axes(axes[i], width="25%", height="100%", loc='center right', borderpad=-15)
         w = plot_wavefront(wax, wavefront.wave(size=100), vcolorbar=True, label='Average', nas=[.95, .85])
 
-    axes[-1].set_xlabel('Y ($\mu$m)')
-    axes[-1].set_ylabel('Z ($\mu$m)')
+    axes[0].set_xlabel('Y ($\mu$m)')
+    axes[0].xaxis.set_label_position("top")
+    axes[0].xaxis.set_ticks_position("top")
+    axes[0].set_ylabel('Z ($\mu$m)')
 
-    cax = inset_axes(axes[0], width="100%", height="10%", loc='upper center', borderpad=-2)
+    cax = inset_axes(axes[-1], width="100%", height="10%", loc='lower center', borderpad=-2)
     cb = plt.colorbar(im, cax=cax, orientation='horizontal')
-    cax.xaxis.set_major_formatter(FormatStrFormatter("%.0f"))
-    cax.set_ylabel(r'Input (MIP) [$\gamma$=.5]')
-    cax.xaxis.set_label_position("top")
-    cax.xaxis.set_ticks_position("top")
+    cax.xaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+    cax.set_xlabel(rf'Input (MIP) [$\gamma$={gamma:.2f}]')
+    cax.xaxis.set_label_position("bottom")
+    cax.xaxis.set_ticks_position("bottom")
 
     savesvg(fig, save_path, hspace=.01, wspace=.01)

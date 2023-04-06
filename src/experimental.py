@@ -945,6 +945,7 @@ def predict_tiles(
             sample_voxel_size=list(samplepsfgen.voxel_size),
             model_voxel_size=list(premodelpsfgen.voxel_size),
             psf_fov=list(premodelpsfgen.psf_fov),
+            window_size=list(window_size),
             wavelength=float(wavelength),
             prediction_threshold=float(prediction_threshold),
             freq_strength_threshold=float(freq_strength_threshold),
@@ -1041,6 +1042,9 @@ def aggregate_predictions(
         preloaded=preloaded,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
+
+    with open(str(model_pred).replace('.csv', '_settings.json')) as f:
+        predictions_settings = ujson.load(f)
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
@@ -1151,7 +1155,7 @@ def aggregate_predictions(
     vis.plot_volume(
         vol=vol,
         results=coefficients,
-        window_size=64,
+        window_size=predictions_settings['window_size'],
         dxy=lateral_voxel_size,
         dz=axial_voxel_size,
         save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
