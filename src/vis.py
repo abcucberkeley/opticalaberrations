@@ -21,6 +21,7 @@ import numpy as np
 import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
 from line_profiler_pycharm import profile
+import seaborn as sns
 
 from wavefront import Wavefront
 import re
@@ -1359,38 +1360,39 @@ def plot_volume(
         'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
-    sample = np.max(vol, axis=-1) ** .5
-    sample /= np.max(sample)
-    sample **= gamma
 
+    vol = np.max(vol, axis=1)
     ztiles = sliding_window_view(
-        sample, window_shape=[window_size[0], sample.shape[-1]]
-    )[::window_size[0], ::sample.shape[-1]]
+        vol, window_shape=[window_size[0], vol.shape[1]]
+    )[::window_size[0], ::vol.shape[1]]
 
     nrows, ncols = ztiles.shape[0], ztiles.shape[1]
-    ztiles = np.reshape(ztiles, (-1, window_size[0], sample.shape[-1]))
+    ztiles = np.reshape(ztiles, (-1, window_size[0], vol.shape[1]))
 
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(8, nrows*3))
 
     for i, (k, j) in enumerate(itertools.product(range(nrows), range(ncols))):
+        proj = ztiles[i] / np.max(ztiles[i])
+        proj **= gamma
+
         im = axes[i].imshow(
-            ztiles[i],
+            proj,
             cmap='hot',
-            vmin=np.nanmin(sample),
-            vmax=np.nanmax(sample),
+            vmin=np.nanmin(proj),
+            vmax=np.nanmax(proj),
             aspect='auto'
         )
 
-        depth = np.arange(ztiles[i].shape[0]*i, ztiles[i].shape[0]*(i+1))
+        depth = np.arange(proj.shape[0]*i, proj.shape[0]*(i+1))
         labels = [int(round(x * dz, 0)) for x in depth]
         axes[i].set_yticks(np.arange(len(depth)))
         axes[i].set_yticklabels(labels)
-        axes[i].yaxis.set_major_locator(plt.MaxNLocator(11))
+        axes[i].yaxis.set_major_locator(plt.MaxNLocator(vol.shape[0]*dz//5))
         axes[i].grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0, alpha=.66)
 
         if i == 0:
             axes[i].xaxis.set_major_formatter(partial(formatter, dd=dxy))
-            axes[i].xaxis.set_major_locator(plt.MaxNLocator(20))
+            axes[i].xaxis.set_major_locator(plt.MaxNLocator(vol.shape[-1]*dxy//2))
         else:
             axes[i].set_xticks([])
 
@@ -1403,7 +1405,7 @@ def plot_volume(
         wax = inset_axes(axes[i], width="25%", height="100%", loc='center right', borderpad=-15)
         w = plot_wavefront(wax, wavefront.wave(size=100), vcolorbar=True, label='Average', nas=[.95, .85])
 
-    axes[0].set_xlabel('Y ($\mu$m)')
+    axes[0].set_xlabel('X ($\mu$m)')
     axes[0].xaxis.set_label_position("top")
     axes[0].xaxis.set_ticks_position("top")
     axes[0].set_ylabel('Z ($\mu$m)')

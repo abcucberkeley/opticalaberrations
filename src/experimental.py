@@ -8,6 +8,7 @@ import ujson
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
+import itertools
 from pathlib import Path
 import tensorflow as tf
 from typing import Any, Union, Optional, Generator
@@ -40,16 +41,6 @@ except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
 
-def weighted_avg_and_std(values, weights, axis):
-    """
-    Return the weighted average and standard deviation.
-
-    values, weights -- NumPy ndarrays with the same shape.
-    """
-    average = np.average(values, weights=weights, axis=axis)
-    # Fast and numerically precise:
-    variance = np.average((values-average)**2, weights=weights, axis=axis)
-    return average, np.sqrt(variance)
 
 
 @profile
@@ -1025,18 +1016,6 @@ def aggregate_predictions(
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
 
-    if final_prediction == 'mean':
-        final_prediction = np.nanmean
-    elif final_prediction == 'median':
-        final_prediction = np.nanmedian
-    elif final_prediction == 'min':
-        final_prediction = np.nanmin
-    elif final_prediction == 'max':
-        final_prediction = np.nanmax
-    else:
-        logger.error(f'Unknown function: {final_prediction}')
-        return -1
-
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
@@ -1072,6 +1051,7 @@ def aggregate_predictions(
     pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('z')]
     ztiles, nrows, ncols = map(lambda x: calc_length(x), [c.split('-') for c in pcols][-1])
 
+    isoplantic_patchs = {}
     coefficients, actuators = {}, {}
     for z in trange(ztiles, desc='Aggregating Z tiles', total=ztiles):
         tiles = predictions.columns[pd.Series(predictions.columns).str.startswith(f'z{z}')]
@@ -1090,36 +1070,55 @@ def aggregate_predictions(
         # filter out unconfident predictions
         stdevs[stdevs > confidence_threshold] = 0
 
-        # get tile votes per mode
-        votes = predictions[tiles].values   # votes is a 2D array
-        votes[votes != 0] = 1   # all predictions.values (e.g. each mode of each XY tile) that are non-zero get one vote
+        votes = predictions[tiles] != 0                         # get tile votes per mode
+        total_votes = np.sum(votes.values, axis=1)              # sum votes per mode
+        weights = votes.div(total_votes, axis=0).fillna(0)      # weighted by votes
 
-        # sum votes per mode
-        total_votes = np.sum(votes, axis=1)  # 1D array
+        for mode in weights.index:
+            for yi, xi in itertools.product(range(nrows), range(ncols)):
+                isoplantic_patchs[(xi, yi, z, mode)] = dict(
+                    prediction=predictions.loc[mode, f'z{z}-y{yi}-x{xi}'],
+                    stdev=stdevs.loc[mode, f'z{z}-y{yi}-x{xi}'],
+                    vote=votes.loc[mode, f'z{z}-y{yi}-x{xi}'].astype(int),
+                    weight=weights.loc[mode, f'z{z}-y{yi}-x{xi}'],
+                )
 
-        mean_prediction = np.nan_to_num(np.sum(predictions[tiles].values, axis=1) / total_votes, nan=0, posinf=0, neginf=0)
-        mean_stdev = np.nan_to_num(np.sum(stdevs[tiles].values, axis=1) / total_votes, nan=0, posinf=0, neginf=0)
+        if final_prediction == 'weighted_average':
+            pred = np.average(predictions[tiles], weights=weights, axis=1)
+            variance = np.average(predictions[tiles].subtract(pred, axis=0)**2, weights=weights, axis=1)
+            pred_std = np.sqrt(variance)
 
-        '''
-        # weighted by 1/stddev**2
-        # weights = 1 / np.square(stdevs[tiles])
+        elif final_prediction == 'mean':
+            pred = np.nanmean(predictions[tiles][votes], axis=1)
+            pred_std = np.nanmean(stdevs[tiles][votes], axis=1)
 
-        # weighted by votes
-        weights = votes / total_votes
+        elif final_prediction == 'median':
+            pred = np.nanmedian(predictions[tiles][votes], axis=1)
+            pred_std = np.nanmedian(stdevs[tiles][votes], axis=1)
 
-        # mean_prediction, mean_stdev = weighted_avg_and_std(predictions[tiles].values, weights=weights, axis=1)
-        mean_prediction = np.nan_to_num(mean_prediction)  # if no votes, then set prediction to zero
-        mean_stdev = np.nan_to_num(mean_stdev)  # if no votes, then set prediction to zero
-        '''
+        elif final_prediction == 'min':
+            pred = np.nanmin(predictions[tiles][votes], axis=1)
+            pred_std = np.nanmin(stdevs[tiles][votes], axis=1)
+
+        elif final_prediction == 'max':
+            pred = np.nanmax(predictions[tiles][votes], axis=1)
+            pred_std = np.nanmax(stdevs[tiles][votes], axis=1)
+
+        else:
+            logger.error(f'Unknown function: {final_prediction}')
+            return -1
+
+        pred = np.nan_to_num(pred, nan=0, posinf=0, neginf=0)
+        pred_std = np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0)
 
         pred = Wavefront(
-            mean_prediction,
+            pred,
             order='ansi',
             lam_detection=wavelength
         )
 
         pred_std = Wavefront(
-            mean_stdev,
+            pred_std,
             order='ansi',
             lam_detection=wavelength
         )
@@ -1160,6 +1159,15 @@ def aggregate_predictions(
         dz=axial_voxel_size,
         save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
     )
+
+    # isoplantic_patchs = pd.DataFrame.from_dict(isoplantic_patchs, orient='index')
+    # isoplantic_patchs.index.set_names(('x', 'y', 'z', 'mode'), inplace=True)
+    #
+    # vis.plot_isoplantic_patchs(
+    #     results=isoplantic_patchs,
+    #     save_path=f"{model_pred.with_suffix('')}_aggregated_isoplantic_patchs.svg"
+    # )
+
     return coefficients
 
 
