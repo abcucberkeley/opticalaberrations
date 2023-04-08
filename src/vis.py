@@ -4,6 +4,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
+import string
 import warnings
 from pathlib import Path
 from functools import partial
@@ -21,7 +22,6 @@ import numpy as np
 import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
 from line_profiler_pycharm import profile
-import seaborn as sns
 
 from wavefront import Wavefront
 import re
@@ -1418,3 +1418,60 @@ def plot_volume(
     cax.xaxis.set_ticks_position("bottom")
 
     savesvg(fig, save_path, hspace=.01, wspace=.01)
+
+
+@profile
+def plot_isoplantic_patchs(
+    results: pd.DataFrame,
+    save_path: Union[Path, str],
+):
+
+    plt.style.use("default")
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    xtiles = len(results.index.get_level_values('x').unique())
+    ytiles = len(results.index.get_level_values('y').unique())
+    ztiles = len(results.index.get_level_values('z').unique())
+    nrows = ztiles * ytiles
+
+    mode_hashtable = {}
+    w = Wavefront(np.zeros(results.index.get_level_values('mode').unique().shape[0]))
+    for i, (mode, twin) in enumerate(w.twins.items()):
+        if twin is not None:
+            mode_hashtable[mode.index_ansi] = f'$Z^{mode.n}_{{{mode.index_ansi},{twin.index_ansi}}}$'
+            mode_hashtable[twin.index_ansi] = f'$Z^{mode.n}_{{{mode.index_ansi},{twin.index_ansi}}}$'
+        else:
+            mode_hashtable[mode.index_ansi] = f'$Z^{mode.n}_{{{mode.index_ansi}}}$'
+
+    results.reset_index(inplace=True)
+    results['cat'] = results['mode'].map(mode_hashtable)
+    results.set_index(['x', 'y', 'z'], inplace=True)
+
+    fig, axes = plt.subplots(nrows=nrows, ncols=xtiles, figsize=(15, 50), subplot_kw={'projection': 'polar'})
+
+    for zi, yi, xi in itertools.product(range(ztiles), range(ytiles), range(xtiles)):
+        row = yi + (zi * ytiles)
+        m = results.loc[(xi, yi, zi)]
+        m = m.groupby('cat', as_index=False).mean()
+
+        theta = np.arange(m.shape[0] + 1) / float(m.shape[0]) * 2 * np.pi
+        values = m['weight'].values
+        values = np.append(values, values[0])
+
+        l1, = axes[row, xi].plot(theta, values, color='grey', marker="o")
+        axes[row, xi].set_xticks(theta[:-1], m['cat'], color='dimgrey')
+        axes[row, xi].tick_params(axis='both', which='major', pad=10)
+        axes[row, xi].set_yticklabels([])
+        axes[row, xi].fill(theta, values, 'C0', alpha=0.25)
+        axes[row, xi].set_title(f'z{zi}-y{yi}-x{xi}')
+        # axes[row, xi].set_rgrids([0.15, 0.25, 0.35, 0.45, 0.5])
+
+    savesvg(fig, save_path, hspace=.4, wspace=0)
