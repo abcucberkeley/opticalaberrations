@@ -1160,13 +1160,13 @@ def aggregate_predictions(
         save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
     )
 
-    # isoplantic_patchs = pd.DataFrame.from_dict(isoplantic_patchs, orient='index')
-    # isoplantic_patchs.index.set_names(('x', 'y', 'z', 'mode'), inplace=True)
-    #
-    # vis.plot_isoplantic_patchs(
-    #     results=isoplantic_patchs,
-    #     save_path=f"{model_pred.with_suffix('')}_aggregated_isoplantic_patchs.svg"
-    # )
+    isoplantic_patchs = pd.DataFrame.from_dict(isoplantic_patchs, orient='index')
+    isoplantic_patchs.index.set_names(('x', 'y', 'z', 'mode'), inplace=True)
+
+    vis.plot_isoplantic_patchs(
+        results=isoplantic_patchs,
+        save_path=f"{model_pred.with_suffix('')}_aggregated_isoplantic_patchs.svg"
+    )
 
     return coefficients
 
