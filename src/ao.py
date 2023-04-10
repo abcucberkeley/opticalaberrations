@@ -14,6 +14,13 @@ from preprocessing import prep_sample
 from preloaded import Preloadedmodelclass
 from embeddings import measure_fourier_snr
 
+import tensorflow as tf
+
+try:
+    import cupy as cp
+except ImportError as e:
+    logging.warning(f"Cupy not supported on your system: {e}")
+
 
 def parse_args(args):
     parser = cli.argparser()
@@ -637,7 +644,7 @@ def parse_args(args):
     )
     plot_bleaching_rate.add_argument("datadir", type=Path, help="path to dataset directory")
 
-    return parser.parse_args(args)
+    return parser.parse_known_args(args)
 
 
 def main(args=None, preloaded: Preloadedmodelclass = None):
@@ -646,7 +653,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
 
     timeit = time.time()
-    args = parse_args(args)
+    args, unknown = parse_args(args)
 
     logging.basicConfig(
         level=logging.INFO,
@@ -654,6 +661,18 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
     )
     logger = logging.getLogger('')
     logger.info(args)
+
+    physical_devices = tf.config.list_physical_devices('GPU')
+    for gpu_instance in physical_devices:
+        tf.config.experimental.set_memory_growth(gpu_instance, True)
+
+    if len(physical_devices) > 1:
+        cp.fft.config.use_multi_gpus = True
+        cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
+
+    strategy = tf.distribute.MirroredStrategy()
+    gpu_workers = strategy.num_replicas_in_sync
+    logging.info(f'Number of active GPUs: {gpu_workers}')
 
     if args.func == 'deskew':
         experimental_llsm.deskew(

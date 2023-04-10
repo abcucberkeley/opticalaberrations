@@ -148,7 +148,7 @@ def main(args=None):
         sjob += f"JOBS='{len(args.task)}',"
 
         for i, (t, n) in enumerate(zip(args.task, args.taskname)):
-            sjob += f"TASK_{i + 1}='{profiler} {args.python} {args.script} --cpu_workers -1 --gpu_workers -1 --outdir {outdir/n} {t}'"
+            sjob += f"TASK_{i + 1}='{profiler} {args.python} {args.script} {t} --cpu_workers -1 --gpu_workers -1 --outdir {outdir/n}'"
             sjob += ',' if i < len(args.task)-1 else ' '
 
         sjob += args.job

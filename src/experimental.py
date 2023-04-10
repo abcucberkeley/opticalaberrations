@@ -41,8 +41,6 @@ except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
 
-
-
 @profile
 def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
     if isinstance(data, np.ndarray):
