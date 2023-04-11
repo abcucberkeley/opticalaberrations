@@ -1009,7 +1009,7 @@ def aggregate_predictions(
     confidence_threshold: float = .0099,
     final_prediction: str = 'mean',
     dm_damping_scalar: float = 1,
-    n_clusters: int = 5,
+    max_isoplantic_clusters: int = 3,
     plot: bool = False,
     ignore_tile: Any = None,
     preloaded: Preloadedmodelclass = None
@@ -1171,8 +1171,12 @@ def aggregate_predictions(
         columns=['mode'],
         aggfunc=np.sum
     )
-    emb = PCA(n_components=2).fit_transform(clusters)
-    clusters['cluster'] = KMeans(init="k-means++", n_clusters=n_clusters, n_init=4).fit_predict(emb)
+    clusters['cluster'] = KMeans(
+        init="k-means++",
+        n_init=5,
+        verbose=False,
+        n_clusters=max_isoplantic_clusters,
+    ).fit_predict(clusters.values)
 
     vis.plot_isoplantic_patchs(
         results=isoplantic_patchs,
