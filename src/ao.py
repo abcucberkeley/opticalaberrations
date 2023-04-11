@@ -670,10 +670,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         cp.fft.config.use_multi_gpus = True
         cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
 
-    strategy = tf.distribute.MirroredStrategy()
-    gpu_workers = strategy.num_replicas_in_sync
-    logging.info(f'Number of active GPUs: {gpu_workers}')
-
     if args.func == 'deskew':
         experimental_llsm.deskew(
             img=args.input,
