@@ -4,7 +4,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
-import string
 import warnings
 from pathlib import Path
 from functools import partial
@@ -22,6 +21,7 @@ import numpy as np
 import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
 from line_profiler_pycharm import profile
+from matplotlib import colors
 
 from wavefront import Wavefront
 import re
@@ -1423,6 +1423,7 @@ def plot_volume(
 @profile
 def plot_isoplantic_patchs(
     results: pd.DataFrame,
+    clusters: pd.DataFrame,
     save_path: Union[Path, str],
 ):
 
@@ -1459,19 +1460,26 @@ def plot_isoplantic_patchs(
 
     for zi, yi, xi in itertools.product(range(ztiles), range(ytiles), range(xtiles)):
         row = yi + (zi * ytiles)
+        roi = f"z{zi}-y{yi}-x{xi}"
         m = results.loc[(xi, yi, zi)]
         m = m.groupby('cat', as_index=False).mean()
+        cc = clusters.loc[(xi, yi, zi), 'cluster']
+
+        # pred = Wavefront(results.loc[(xi, yi, zi), 'prediction'].values, lam_detection=.510)
+        # pred_wave = pred.wave(size=100)
+        # plot_wavefront(axes[row, xi], pred_wave)
 
         theta = np.arange(m.shape[0] + 1) / float(m.shape[0]) * 2 * np.pi
         values = m['weight'].values
         values = np.append(values, values[0])
 
-        l1, = axes[row, xi].plot(theta, values, color='grey', marker="o")
+        l1, = axes[row, xi].plot(theta, values, color='k', marker="o")
         axes[row, xi].set_xticks(theta[:-1], m['cat'], color='dimgrey')
         axes[row, xi].tick_params(axis='both', which='major', pad=10)
         axes[row, xi].set_yticklabels([])
-        axes[row, xi].fill(theta, values, 'C0', alpha=0.25)
-        axes[row, xi].set_title(f'z{zi}-y{yi}-x{xi}')
-        # axes[row, xi].set_rgrids([0.15, 0.25, 0.35, 0.45, 0.5])
+        axes[row, xi].set_title(roi, pad=1)
+        # axes[row, xi].fill(theta, values, 'grey', alpha=0.25)
+        axes[row, xi].patch.set_facecolor(colors.to_rgba(f'C{cc}'))
+        axes[row, xi].patch.set_alpha(0.25)
 
     savesvg(fig, save_path, hspace=.4, wspace=0)

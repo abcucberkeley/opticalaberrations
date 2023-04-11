@@ -19,6 +19,8 @@ from tqdm import trange
 from line_profiler_pycharm import profile
 from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 
 import utils
 import vis
@@ -1007,6 +1009,7 @@ def aggregate_predictions(
     confidence_threshold: float = .0099,
     final_prediction: str = 'mean',
     dm_damping_scalar: float = 1,
+    n_clusters: int = 5,
     plot: bool = False,
     ignore_tile: Any = None,
     preloaded: Preloadedmodelclass = None
@@ -1161,8 +1164,13 @@ def aggregate_predictions(
     isoplantic_patchs = pd.DataFrame.from_dict(isoplantic_patchs, orient='index')
     isoplantic_patchs.index.set_names(('x', 'y', 'z', 'mode'), inplace=True)
 
+    clusters = pd.pivot_table(isoplantic_patchs, values='weight', index=['x', 'y', 'z'], columns=['mode'], aggfunc=np.sum)
+    emb = PCA(n_components=2).fit_transform(clusters)
+    clusters['cluster'] = KMeans(init="k-means++", n_clusters=n_clusters, n_init=4).fit_predict(emb)
+
     vis.plot_isoplantic_patchs(
         results=isoplantic_patchs,
+        clusters=clusters,
         save_path=f"{model_pred.with_suffix('')}_aggregated_isoplantic_patchs.svg"
     )
 
