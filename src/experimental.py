@@ -1164,7 +1164,13 @@ def aggregate_predictions(
     isoplantic_patchs = pd.DataFrame.from_dict(isoplantic_patchs, orient='index')
     isoplantic_patchs.index.set_names(('x', 'y', 'z', 'mode'), inplace=True)
 
-    clusters = pd.pivot_table(isoplantic_patchs, values='weight', index=['x', 'y', 'z'], columns=['mode'], aggfunc=np.sum)
+    clusters = pd.pivot_table(
+        isoplantic_patchs,
+        values='weight',
+        index=['x', 'y', 'z'],
+        columns=['mode'],
+        aggfunc=np.sum
+    )
     emb = PCA(n_components=2).fit_transform(clusters)
     clusters['cluster'] = KMeans(init="k-means++", n_clusters=n_clusters, n_init=4).fit_predict(emb)
 

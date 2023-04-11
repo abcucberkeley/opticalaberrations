@@ -1371,6 +1371,9 @@ def plot_volume(
 
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(8, nrows*3))
 
+    if not isinstance(axes, np.ndarray):
+        axes = np.array([axes])
+
     for i, (k, j) in enumerate(itertools.product(range(nrows), range(ncols))):
         proj = ztiles[i] / np.max(ztiles[i])
         proj **= gamma
@@ -1387,7 +1390,7 @@ def plot_volume(
         labels = [int(round(x * dz, 0)) for x in depth]
         axes[i].set_yticks(np.arange(len(depth)))
         axes[i].set_yticklabels(labels)
-        axes[i].yaxis.set_major_locator(plt.MaxNLocator(vol.shape[0]*dz//5))
+        axes[i].yaxis.set_major_locator(plt.MaxNLocator(8))
         axes[i].grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0, alpha=.66)
 
         if i == 0:
