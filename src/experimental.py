@@ -1018,13 +1018,6 @@ def aggregate_predictions(
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
 
-    def get_neighbours(tile_index):
-        return [
-            tuple(np.array(tile_index) + np.array([1, 0, 0])),
-            tuple(np.array(tile_index) + np.array([0, 1, 0])),
-            tuple(np.array(tile_index) + np.array([0, 0, 1])),
-        ]
-
     vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
@@ -1164,42 +1157,7 @@ def aggregate_predictions(
     isoplantic_patchs = pd.DataFrame.from_dict(isoplantic_patchs, orient='index')
     isoplantic_patchs.index.set_names(('z', 'y', 'x', 'mode'), inplace=True)
 
-    xtiles = len(isoplantic_patchs.index.get_level_values('x').unique())
-    ytiles = len(isoplantic_patchs.index.get_level_values('y').unique())
-    ztiles = len(isoplantic_patchs.index.get_level_values('z').unique())
-
-    num_cords = xtiles*ytiles*ztiles
-    num_measurements = xtiles*ytiles*ztiles*3
-    slopes = np.zeros(num_measurements)
-    A = np.zeros((num_measurements, num_cords))
-
-    matrix_row = 0
-    for i, tile_cords in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
-        neighbours = list(get_neighbours(tile_cords))
-        for neighbour_cords in neighbours:
-            try:
-                diff = isoplantic_patchs.loc[tile_cords, 'prediction'].values - isoplantic_patchs.loc[neighbour_cords, 'prediction'].values
-                w = Wavefront(diff, lam_detection=wavelength)
-                slopes[matrix_row] = w.peak2valley(na=1.0)
-                A[matrix_row, np.ravel_multi_index(neighbour_cords, (ztiles, ytiles, xtiles))] = 1
-                A[matrix_row, i] = -1
-                matrix_row += 1
-            except KeyError:
-                pass
-
-    # clip out empty measurements
-    slopes = slopes[:matrix_row]
-    A = A[:matrix_row, :]
-
-    # add new row of ones to prevent singular solutions
-    A = np.append(A, np.ones((1, A.shape[1])), axis=0)
-    slopes = np.append(slopes, 0)
-
-    terrain, _, _, _ = np.linalg.lstsq(A, slopes, rcond=None)
-    terrain3d = np.reshape(terrain, (ztiles, ytiles, xtiles))
-    terrain3d = resize(terrain3d, vol.shape)
-    terrain3d = (terrain3d - np.min(terrain3d))
-    terrain3d /= np.max(terrain3d)
+    terrain3d = reconstruct_wavefront_error_landscape(isoplantic_patchs, volume_shape=vol.shape, na=1.0, wavelength=wavelength)
 
     # create a masked image of varying hue and value
     hsv = np.zeros((*terrain3d.shape, 3))
@@ -1240,6 +1198,85 @@ def aggregate_predictions(
     )
 
     return coefficients
+
+
+def reconstruct_wavefront_error_landscape(isoplantic_patchs, volume_shape, na: float = 1.0, wavelength: float = .515):
+    """
+    Calculate the wavefront error landscape that would produce the wavefront error differences that we've measured between
+    tiles.
+
+    1. Calc wavefront error p2v difference between adjacent tiles. (e.g. wavefront error slope)
+    2. Solve for the wavefront error using LS following wavefront reconstruction technique:
+    W.H. Southwell, "Wave-front estimation from wave-front slope measurements," J. Opt. Soc. Am. 70, 998-1006 (1980)
+    https://doi.org/10.1364/JOSA.70.000998
+
+    S = A phi
+
+    S = vector of slopes.  length = # of measurements
+    A = matrix operator that calculates slopes (e.g. rise/run = (neighbor - current) / stride)
+        number of rows = # of measurements
+        number of cols = # of tile coordinates (essentially 3D meshgrid of coordinates flattened to 1D array)
+        filled with all zeros except where slope is calculated (and we put -1 and +1 on the coordinate pair)
+    phi = vector of the wavefront error at the coordinates. lenght = # of coordinates
+
+    Args:
+        isoplantic_patchs: wavefronts at each tile location
+        volume_shape: Number of pixels in full volume
+        na: Numerical aperature limit which to use for calculating p2v error
+        wavelength:
+
+    Returns:
+        terrain3d: wavefront error
+
+    """
+    def get_neighbors(tile_coords: Union[tuple, np.array]):
+        """
+        Args:
+            tile_coords: (z, y, x)
+
+        Returns:
+            The coordinates of the three bordering neighbors *forward* of the input tile (avoids double counting)
+        """
+        return [
+            tuple(np.array(tile_coords) + np.array([1, 0, 0])),
+            tuple(np.array(tile_coords) + np.array([0, 1, 0])),
+            tuple(np.array(tile_coords) + np.array([0, 0, 1])),
+        ]
+
+    xtiles = len(isoplantic_patchs.index.get_level_values('x').unique())
+    ytiles = len(isoplantic_patchs.index.get_level_values('y').unique())
+    ztiles = len(isoplantic_patchs.index.get_level_values('z').unique())
+    num_coords = xtiles * ytiles * ztiles
+    num_dimensions = 3
+    num_measurements = num_coords * num_dimensions  # max limit of number of cube borders
+    slopes = np.zeros(num_measurements)             # 1D vector of measurements
+    A = np.zeros((num_measurements, num_coords))    # 2D matrix
+    matrix_row = 0  # pointer to where we are writing
+    for i, tile_coords in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
+        neighbours = list(get_neighbors(tile_coords))
+        for neighbour_coords in neighbours:
+            try:
+                diff = isoplantic_patchs.loc[tile_coords, 'prediction'].values - isoplantic_patchs.loc[
+                    neighbour_coords, 'prediction'].values
+                w = Wavefront(diff, lam_detection=wavelength)
+                slopes[matrix_row] = w.peak2valley(na=na)
+                A[matrix_row, np.ravel_multi_index(neighbour_coords, (ztiles, ytiles, xtiles))] = 1
+                A[matrix_row, i] = -1
+                matrix_row += 1
+            except KeyError:
+                pass    # e.g. if neighbor is beyond the border or that tile was dropped
+    # clip out empty measurements
+    slopes = slopes[:matrix_row]
+    A = A[:matrix_row, :]
+    # add row of ones to prevent singular solutions. This basically amounts to pinning the average of terrain3d to zero
+    A = np.append(A, np.ones((1, A.shape[1])), axis=0)
+    slopes = np.append(slopes, 0)   # add a corresponding value of zero.
+    terrain, _, _, _ = np.linalg.lstsq(A, slopes, rcond=None)
+    terrain3d = np.reshape(terrain, (ztiles, ytiles, xtiles))
+    terrain3d = resize(terrain3d, volume_shape) # upsample from tile coordinates back to the volume
+    terrain3d = (terrain3d - np.min(terrain3d))
+    terrain3d /= np.max(terrain3d)
+    return terrain3d
 
 
 @profile
