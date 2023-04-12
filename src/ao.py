@@ -511,8 +511,8 @@ def parse_args(args):
         help='maximum percentile to filter out outliers'
     )
     aggregate_predictions.add_argument(
-        "--max_isoplantic_clusters", default=5, type=int,
-        help='maximum number of unique isoplantic patchs for clustering tiles'
+        "--max_isoplanatic_clusters", default=5, type=int,
+        help='maximum number of unique isoplanatic patchs for clustering tiles'
     )
     aggregate_predictions.add_argument(
         "--plot", action='store_true',
@@ -872,7 +872,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             min_percentile=args.min_percentile,
             max_percentile=args.max_percentile,
             final_prediction=args.final_prediction,
-            max_isoplantic_clusters=args.max_isoplantic_clusters,
+            max_isoplanatic_clusters=args.max_isoplanatic_clusters,
             ignore_tile=args.ignore_tile,
             dm_damping_scalar=args.dm_damping_scalar,
             plot=args.plot,

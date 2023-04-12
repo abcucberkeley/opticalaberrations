@@ -1423,7 +1423,7 @@ def plot_volume(
 
 
 @profile
-def plot_isoplantic_patchs(
+def plot_isoplanatic_patchs(
     results: pd.DataFrame,
     clusters: pd.DataFrame,
     save_path: Union[Path, str],
@@ -1463,7 +1463,7 @@ def plot_isoplantic_patchs(
     for zi, yi, xi in itertools.product(range(ztiles), range(ytiles), range(xtiles)):
         row = yi + (zi * ytiles)
         roi = f"z{zi}-y{yi}-x{xi}"
-        m = results.loc[(xi, yi, zi)]
+        m = results.loc[(zi, yi, xi)]
         m = m.groupby('cat', as_index=False).mean()
         cc = clusters.loc[(zi, yi, xi), 'cluster']
 
