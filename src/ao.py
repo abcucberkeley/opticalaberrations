@@ -515,6 +515,10 @@ def parse_args(args):
         help='maximum number of unique isoplanatic patchs for clustering tiles'
     )
     aggregate_predictions.add_argument(
+        "--isoplanatic_patch_colormap", default=Path('../CETperceptual/CET-C2.csv'), type=Path,
+        help='maximum number of unique isoplanatic patchs for clustering tiles'
+    )
+    aggregate_predictions.add_argument(
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
     )
@@ -875,6 +879,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             max_isoplanatic_clusters=args.max_isoplanatic_clusters,
             ignore_tile=args.ignore_tile,
             dm_damping_scalar=args.dm_damping_scalar,
+            isoplanatic_patch_colormap=args.isoplanatic_patch_colormap,
             plot=args.plot,
             preloaded=preloaded
         )

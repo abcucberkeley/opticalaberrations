@@ -293,8 +293,12 @@ def generate_embeddings(
 def reconstruct_wavefront_error_landscape(
     isoplanatic_patchs: pd.DataFrame,
     volume_shape: tuple,
+    window_size: tuple,
+    lateral_voxel_size: float = .108,
+    axial_voxel_size: float = .2,
+    wavelength: float = .510,
+    threshold: float = 0.,
     na: float = 1.0,
-    wavelength: float = .515
 ):
     """
     Calculate the wavefront error landscape that would produce the wavefront error differences
@@ -333,9 +337,9 @@ def reconstruct_wavefront_error_landscape(
             The coordinates of the three bordering neighbors *forward* of the input tile (avoids double counting)
         """
         return [
-            tuple(np.array(tile_coords) + np.array([1, 0, 0])),
-            tuple(np.array(tile_coords) + np.array([0, 1, 0])),
-            tuple(np.array(tile_coords) + np.array([0, 0, 1])),
+            tuple(np.array(tile_coords) + np.array([1, 0, 0])),  # z neighbour
+            tuple(np.array(tile_coords) + np.array([0, 1, 0])),  # y neighbour
+            tuple(np.array(tile_coords) + np.array([0, 0, 1])),  # x neighbour
         ]
 
     xtiles = len(isoplanatic_patchs.index.get_level_values('x').unique())
@@ -348,18 +352,45 @@ def reconstruct_wavefront_error_landscape(
     slopes = np.zeros(num_measurements)             # 1D vector of measurements
     A = np.zeros((num_measurements, num_coords))    # 2D matrix
 
+    h = np.array(window_size) * (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+    h = utils.microns2waves(h, wavelength=wavelength)
+
+    center = (ztiles//2, ytiles//2, xtiles//2)
+    peak = isoplanatic_patchs.apply(lambda x: x**2).groupby(['z', 'y', 'x']).sum()['prediction'].idxmax()
+    terrain = np.zeros(xtiles * ytiles * ztiles)
+
     matrix_row = 0  # pointer to where we are writing
     for i, tile_coords in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
         neighbours = list(get_neighbors(tile_coords))
-        for neighbour_coords in neighbours:
+        tile_wavefront = Wavefront(
+            isoplanatic_patchs.loc[tile_coords, 'prediction'].values,
+            lam_detection=wavelength
+        )
+        # terrain[i] = tile_wavefront.peak2valley(na=na)
+
+        for j, neighbour_coords in enumerate(neighbours):  # ordered as (z, y, x) neighbours
             try:
-                diff = isoplanatic_patchs.loc[tile_coords, 'prediction'].values - isoplanatic_patchs.loc[
-                    neighbour_coords, 'prediction'].values
-                w = Wavefront(diff, lam_detection=wavelength)
-                slopes[matrix_row] = w.peak2valley(na=na)
-                A[matrix_row, np.ravel_multi_index(neighbour_coords, (ztiles, ytiles, xtiles))] = 1
-                A[matrix_row, i] = -1
-                matrix_row += 1
+                neighbour_wavefront = Wavefront(
+                    isoplanatic_patchs.loc[neighbour_coords, 'prediction'].values,
+                    lam_detection=wavelength
+                )
+
+                diff_wavefront = Wavefront(tile_wavefront - neighbour_wavefront, lam_detection=wavelength)
+                p2v = diff_wavefront.peak2valley(na=na)
+
+                v1 = np.dot(tile_wavefront.amplitudes_ansi_waves, tile_wavefront.amplitudes_ansi_waves)
+                v2 = np.dot(tile_wavefront.amplitudes_ansi_waves, neighbour_wavefront.amplitudes_ansi_waves)
+
+                if v2 < v1:
+                    p2v *= -1
+
+                if tile_wavefront.peak2valley(na=na) > threshold and neighbour_wavefront.peak2valley(na=na) > threshold:
+                    # rescale slopes with the distance between tiles (h)
+                    slopes[matrix_row] = p2v / h[j]
+                    A[matrix_row, np.ravel_multi_index(neighbour_coords, (ztiles, ytiles, xtiles))] = 1 / h[j]
+                    A[matrix_row, i] = -1 / h[j]
+                    matrix_row += 1
+
             except KeyError:
                 pass    # e.g. if neighbor is beyond the border or that tile was dropped
 
@@ -367,17 +398,18 @@ def reconstruct_wavefront_error_landscape(
     slopes = slopes[:matrix_row]
     A = A[:matrix_row, :]
 
-    # add row of ones to prevent singular solutions. This basically amounts to pinning the average of terrain3d to zero
+    # add row of ones to prevent singular solutions.
+    # This basically amounts to pinning the average of terrain3d to zero
     A = np.append(A, np.ones((1, A.shape[1])), axis=0)
     slopes = np.append(slopes, 0)   # add a corresponding value of zero.
 
+    # terrain in waves
     terrain, _, _, _ = np.linalg.lstsq(A, slopes, rcond=None)
     terrain3d = np.reshape(terrain, (ztiles, ytiles, xtiles))
 
     # upsample from tile coordinates back to the volume
     terrain3d = resize(terrain3d, volume_shape)
-    terrain3d = (terrain3d - np.min(terrain3d))
-    terrain3d /= np.max(terrain3d)
+    # terrain3d = resize(terrain3d, volume_shape, order=0, mode='constant')  # to show tiles
     return terrain3d
 
 
@@ -1104,12 +1136,14 @@ def aggregate_predictions(
     max_isoplanatic_clusters: int = 3,
     plot: bool = False,
     ignore_tile: Any = None,
-    preloaded: Preloadedmodelclass = None
+    preloaded: Preloadedmodelclass = None,
+    isoplanatic_patch_colormap: Union[Path, str] = Path('../CETperceptual/CET-C2.csv')
 ):
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
 
     vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
+    vol /= np.max(vol)
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
@@ -1251,17 +1285,31 @@ def aggregate_predictions(
     terrain3d = reconstruct_wavefront_error_landscape(
         isoplanatic_patchs,
         volume_shape=vol.shape,
-        na=1.0,
-        wavelength=wavelength
+        window_size=predictions_settings['window_size'],
+        lateral_voxel_size=lateral_voxel_size,
+        axial_voxel_size=axial_voxel_size,
+        wavelength=wavelength,
+        na=.9,
     )
+    
+    isoplanatic_patch_colormap = pd.read_csv(
+        isoplanatic_patch_colormap,
+        header=None,
+        index_col=None,
+        dtype=np.ubyte
+    ).values
+
+    terrain3d *= 255
+    terrain3d = terrain3d.round(0).astype(np.ubyte)
 
     # create a masked image of varying hue and value
-    hsv = np.zeros((*terrain3d.shape, 3))
-    hsv[..., 0] = terrain3d
-    hsv[..., 1] = 1.
-    hsv[..., 2] = vol
-    rgb_vol = hsv_to_rgb(hsv)
-    imsave(f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif", rgb_vol)
+    rgb_vol = isoplanatic_patch_colormap[terrain3d] * vol[..., np.newaxis]
+    rgb_vol = rgb_vol.astype(np.ubyte)
+    imsave(
+        f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif",
+        rgb_vol,
+        photometric='rgb'
+    )
 
     vis.plot_volume(
         vol=rgb_vol,
@@ -1272,26 +1320,26 @@ def aggregate_predictions(
         save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
     )
 
-    clusters = pd.pivot_table(
-        isoplanatic_patchs,
-        values='vote',
-        index=['z', 'y', 'x'],
-        columns=['mode'],
-        aggfunc=np.sum
-    )
+    # clusters = pd.pivot_table(
+    #     isoplanatic_patchs,
+    #     values='vote',
+    #     index=['z', 'y', 'x'],
+    #     columns=['mode'],
+    #     aggfunc=np.sum
+    # )
+    #
+    # clusters['cluster'] = KMeans(
+    #     init="k-means++",
+    #     n_init=5,
+    #     verbose=False,
+    #     n_clusters=max_isoplanatic_clusters,
+    # ).fit_predict(clusters.values)
 
-    clusters['cluster'] = KMeans(
-        init="k-means++",
-        n_init=5,
-        verbose=False,
-        n_clusters=max_isoplanatic_clusters,
-    ).fit_predict(clusters.values)
-
-    vis.plot_isoplanatic_patchs(
-        results=isoplanatic_patchs,
-        clusters=clusters,
-        save_path=f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.svg"
-    )
+    # vis.plot_isoplanatic_patchs(
+    #     results=isoplanatic_patchs,
+    #     clusters=clusters,
+    #     save_path=f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.svg"
+    # )
 
     return coefficients
 
