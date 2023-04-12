@@ -1346,6 +1346,7 @@ def plot_volume(
         dxy: float = .108,
         dz: float = .2,
         gamma: float = .5,
+        proj_ax: int = 2
 ):
     def formatter(x, pos, dd):
         return f'{np.ceil(x * dd).astype(int):1d}'
@@ -1361,13 +1362,13 @@ def plot_volume(
         'axes.autolimit_mode': 'round_numbers'
     })
 
-    vol = np.max(vol, axis=1)
+    vol = np.max(vol, axis=proj_ax)
     ztiles = sliding_window_view(
-        vol, window_shape=[window_size[0], vol.shape[1]]
+        vol, window_shape=[window_size[0], vol.shape[1], 3]
     )[::window_size[0], ::vol.shape[1]]
 
     nrows, ncols = ztiles.shape[0], ztiles.shape[1]
-    ztiles = np.reshape(ztiles, (-1, window_size[0], vol.shape[1]))
+    ztiles = np.reshape(ztiles, (-1, window_size[0], vol.shape[1], 3))
 
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(8, nrows*3))
 
@@ -1376,11 +1377,9 @@ def plot_volume(
 
     for i, (k, j) in enumerate(itertools.product(range(nrows), range(ncols))):
         proj = ztiles[i] / np.max(ztiles[i])
-        proj **= gamma
 
         im = axes[i].imshow(
             proj,
-            cmap='hot',
             vmin=np.nanmin(proj),
             vmax=np.nanmax(proj),
             aspect='auto'
@@ -1395,7 +1394,7 @@ def plot_volume(
 
         if i == 0:
             axes[i].xaxis.set_major_formatter(partial(formatter, dd=dxy))
-            axes[i].xaxis.set_major_locator(plt.MaxNLocator(vol.shape[-1]*dxy//2))
+            axes[i].xaxis.set_major_locator(plt.MaxNLocator(vol.shape[1]*dxy//4))
         else:
             axes[i].set_xticks([])
 
@@ -1408,17 +1407,17 @@ def plot_volume(
         wax = inset_axes(axes[i], width="25%", height="100%", loc='center right', borderpad=-15)
         w = plot_wavefront(wax, wavefront.wave(size=100), vcolorbar=True, label='Average', nas=[.95, .85])
 
-    axes[0].set_xlabel('X ($\mu$m)')
+    axes[0].set_xlabel('X ($\mu$m)' if proj_ax == 1 else 'Y ($\mu$m)')
     axes[0].xaxis.set_label_position("top")
     axes[0].xaxis.set_ticks_position("top")
     axes[0].set_ylabel('Z ($\mu$m)')
 
-    cax = inset_axes(axes[-1], width="100%", height="10%", loc='lower center', borderpad=-2)
-    cb = plt.colorbar(im, cax=cax, orientation='horizontal')
-    cax.xaxis.set_major_formatter(FormatStrFormatter("%.1f"))
-    cax.set_xlabel(rf'Input (MIP) [$\gamma$={gamma:.2f}]')
-    cax.xaxis.set_label_position("bottom")
-    cax.xaxis.set_ticks_position("bottom")
+    # cax = inset_axes(axes[-1], width="100%", height="10%", loc='lower center', borderpad=-2)
+    # cb = plt.colorbar(im, cax=cax, orientation='horizontal')
+    # cax.xaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+    # cax.set_xlabel(rf'Input (MIP)')
+    # cax.xaxis.set_label_position("bottom")
+    # cax.xaxis.set_ticks_position("bottom")
 
     savesvg(fig, save_path, hspace=.01, wspace=.01)
 
@@ -1457,7 +1456,7 @@ def plot_isoplantic_patchs(
 
     results.reset_index(inplace=True)
     results['cat'] = results['mode'].map(mode_hashtable)
-    results.set_index(['x', 'y', 'z'], inplace=True)
+    results.set_index(['z', 'y', 'x'], inplace=True)
 
     fig, axes = plt.subplots(nrows=nrows, ncols=xtiles, figsize=(15, 50), subplot_kw={'projection': 'polar'})
 
@@ -1466,9 +1465,9 @@ def plot_isoplantic_patchs(
         roi = f"z{zi}-y{yi}-x{xi}"
         m = results.loc[(xi, yi, zi)]
         m = m.groupby('cat', as_index=False).mean()
-        cc = clusters.loc[(xi, yi, zi), 'cluster']
+        cc = clusters.loc[(zi, yi, xi), 'cluster']
 
-        # pred = Wavefront(results.loc[(xi, yi, zi), 'prediction'].values, lam_detection=.510)
+        # pred = Wavefront(results.loc[(zi, yi, xi), 'prediction'].values, lam_detection=.510)
         # pred_wave = pred.wave(size=100)
         # plot_wavefront(axes[row, xi], pred_wave)
 

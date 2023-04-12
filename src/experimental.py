@@ -20,7 +20,8 @@ from line_profiler_pycharm import profile
 from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
 from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
+from skimage.transform import rescale, resize
+from matplotlib.colors import hsv_to_rgb
 
 import utils
 import vis
@@ -1017,6 +1018,15 @@ def aggregate_predictions(
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
 
+    def get_neighbours(tile_index):
+        return [
+            tuple(np.array(tile_index) + np.array([1, 0, 0])),
+            tuple(np.array(tile_index) + np.array([0, 1, 0])),
+            tuple(np.array(tile_index) + np.array([0, 0, 1])),
+        ]
+
+    vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
+
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
@@ -1077,7 +1087,7 @@ def aggregate_predictions(
 
         for mode in weights.index:
             for yi, xi in itertools.product(range(nrows), range(ncols)):
-                isoplantic_patchs[(xi, yi, z, mode)] = dict(
+                isoplantic_patchs[(z, yi, xi, mode)] = dict(
                     prediction=predictions.loc[mode, f'z{z}-y{yi}-x{xi}'],
                     stdev=stdevs.loc[mode, f'z{z}-y{yi}-x{xi}'],
                     vote=votes.loc[mode, f'z{z}-y{yi}-x{xi}'].astype(int),
@@ -1151,9 +1161,56 @@ def aggregate_predictions(
     actuators.index.name = 'actuators'
     actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
 
-    vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
+    isoplantic_patchs = pd.DataFrame.from_dict(isoplantic_patchs, orient='index')
+    isoplantic_patchs.index.set_names(('z', 'y', 'x', 'mode'), inplace=True)
+
+    xtiles = len(isoplantic_patchs.index.get_level_values('x').unique())
+    ytiles = len(isoplantic_patchs.index.get_level_values('y').unique())
+    ztiles = len(isoplantic_patchs.index.get_level_values('z').unique())
+
+    num_cords = xtiles*ytiles*ztiles
+    num_measurements = xtiles*ytiles*ztiles*3
+    slopes = np.zeros(num_measurements)
+    A = np.zeros((num_measurements, num_cords))
+
+    matrix_row = 0
+    for i, tile_cords in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
+        neighbours = list(get_neighbours(tile_cords))
+        for neighbour_cords in neighbours:
+            try:
+                diff = isoplantic_patchs.loc[tile_cords, 'prediction'].values - isoplantic_patchs.loc[neighbour_cords, 'prediction'].values
+                w = Wavefront(diff, lam_detection=wavelength)
+                slopes[matrix_row] = w.peak2valley(na=1.0)
+                A[matrix_row, np.ravel_multi_index(neighbour_cords, (ztiles, ytiles, xtiles))] = 1
+                A[matrix_row, i] = -1
+                matrix_row += 1
+            except KeyError:
+                pass
+
+    # clip out empty measurements
+    slopes = slopes[:matrix_row]
+    A = A[:matrix_row, :]
+
+    # add new row of ones to prevent singular solutions
+    A = np.append(A, np.ones((1, A.shape[1])), axis=0)
+    slopes = np.append(slopes, 0)
+
+    terrain, _, _, _ = np.linalg.lstsq(A, slopes, rcond=None)
+    terrain3d = np.reshape(terrain, (ztiles, ytiles, xtiles))
+    terrain3d = resize(terrain3d, vol.shape)
+    terrain3d = (terrain3d - np.min(terrain3d))
+    terrain3d /= np.max(terrain3d)
+
+    # create a masked image of varying hue and value
+    hsv = np.zeros((*terrain3d.shape, 3))
+    hsv[..., 0] = terrain3d
+    hsv[..., 1] = 1.
+    hsv[..., 2] = vol
+    rgb_vol = hsv_to_rgb(hsv)
+    imsave(f"{model_pred.with_suffix('')}_aggregated_isoplantic_patchs.tif", rgb_vol)
+
     vis.plot_volume(
-        vol=vol,
+        vol=rgb_vol,
         results=coefficients,
         window_size=predictions_settings['window_size'],
         dxy=lateral_voxel_size,
@@ -1161,16 +1218,14 @@ def aggregate_predictions(
         save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
     )
 
-    isoplantic_patchs = pd.DataFrame.from_dict(isoplantic_patchs, orient='index')
-    isoplantic_patchs.index.set_names(('x', 'y', 'z', 'mode'), inplace=True)
-
     clusters = pd.pivot_table(
         isoplantic_patchs,
-        values='weight',
+        values='vote',
         index=['x', 'y', 'z'],
         columns=['mode'],
         aggfunc=np.sum
     )
+
     clusters['cluster'] = KMeans(
         init="k-means++",
         n_init=5,
