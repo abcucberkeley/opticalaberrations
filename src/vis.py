@@ -1376,10 +1376,11 @@ def plot_volume(
         axes = np.array([axes])
 
     for i, (k, j) in enumerate(itertools.product(range(nrows), range(ncols))):
-        proj = ztiles[i] / np.max(ztiles[i])
+        proj = ztiles[i]
 
-        im = axes[i].imshow(
-            proj,
+        im = axes[i].contourf(
+            np.max(proj, axis=-1),
+            cmap='tab20',
             vmin=np.nanmin(proj),
             vmax=np.nanmax(proj),
             aspect='auto'
@@ -1394,7 +1395,7 @@ def plot_volume(
 
         if i == 0:
             axes[i].xaxis.set_major_formatter(partial(formatter, dd=dxy))
-            axes[i].xaxis.set_major_locator(plt.MaxNLocator(vol.shape[1]*dxy//4))
+            axes[i].xaxis.set_major_locator(plt.MaxNLocator(vol.shape[1]*dxy//5))
         else:
             axes[i].set_xticks([])
 
