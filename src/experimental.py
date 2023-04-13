@@ -290,6 +290,7 @@ def generate_embeddings(
     )
 
 
+@profile
 def reconstruct_wavefront_error_landscape(
     isoplanatic_patchs: pd.DataFrame,
     volume_shape: tuple,
@@ -325,7 +326,7 @@ def reconstruct_wavefront_error_landscape(
         wavelength:
 
     Returns:
-        terrain3d: wavefront error
+        terrain3d: wavefront error in units of waves
 
     """
     def get_neighbors(tile_coords: Union[tuple, np.array]):
@@ -366,6 +367,7 @@ def reconstruct_wavefront_error_landscape(
             isoplanatic_patchs.loc[tile_coords, 'prediction'].values,
             lam_detection=wavelength
         )
+        tile_p2v = tile_wavefront.peak2valley(na=na)
         # terrain[i] = tile_wavefront.peak2valley(na=na)
 
         for j, neighbour_coords in enumerate(neighbours):  # ordered as (z, y, x) neighbours
@@ -381,10 +383,10 @@ def reconstruct_wavefront_error_landscape(
                 v1 = np.dot(tile_wavefront.amplitudes_ansi_waves, tile_wavefront.amplitudes_ansi_waves)
                 v2 = np.dot(tile_wavefront.amplitudes_ansi_waves, neighbour_wavefront.amplitudes_ansi_waves)
 
-                if v2 < v1:
+                if v2 < v1: # choose negative slope when neighbor has less aberration along the current aberration
                     p2v *= -1
 
-                if tile_wavefront.peak2valley(na=na) > threshold and neighbour_wavefront.peak2valley(na=na) > threshold:
+                if tile_p2v > threshold and neighbour_wavefront.peak2valley(na=na) > threshold:
                     # rescale slopes with the distance between tiles (h)
                     slopes[matrix_row] = p2v / h[j]
                     A[matrix_row, np.ravel_multi_index(neighbour_coords, (ztiles, ytiles, xtiles))] = 1 / h[j]
@@ -1299,10 +1301,10 @@ def aggregate_predictions(
         dtype=np.ubyte
     ).values
 
-    terrain3d *= 255
-    terrain3d = terrain3d.round(0).astype(np.ubyte)
+    terrain3d *= 255    # convert waves to colormap cycles
+    terrain3d = (terrain3d % 256).round(0).astype(np.ubyte) # wrap if terrain's span is > 1 wave
 
-    # create a masked image of varying hue and value
+    #  terrain3d is full brightness RGB color then use vol to determine brightness
     rgb_vol = isoplanatic_patch_colormap[terrain3d] * vol[..., np.newaxis]
     rgb_vol = rgb_vol.astype(np.ubyte)
     imsave(
