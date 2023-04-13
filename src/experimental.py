@@ -1302,7 +1302,7 @@ def aggregate_predictions(
     ).values
 
     terrain3d *= 255    # convert waves to colormap cycles
-    terrain3d = (terrain3d % 256).round(0).astype(np.ubyte) # wrap if terrain's span is > 1 wave
+    terrain3d = (terrain3d % 256).round(0).astype(np.ubyte)  # wrap if terrain's span is > 1 wave
 
     #  terrain3d is full brightness RGB color then use vol to determine brightness
     rgb_vol = isoplanatic_patch_colormap[terrain3d] * vol[..., np.newaxis]
@@ -1322,20 +1322,34 @@ def aggregate_predictions(
         save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
     )
 
-    # clusters = pd.pivot_table(
-    #     isoplanatic_patchs,
-    #     values='vote',
-    #     index=['z', 'y', 'x'],
-    #     columns=['mode'],
-    #     aggfunc=np.sum
-    # )
-    #
-    # clusters['cluster'] = KMeans(
-    #     init="k-means++",
-    #     n_init=5,
-    #     verbose=False,
-    #     n_clusters=max_isoplanatic_clusters,
-    # ).fit_predict(clusters.values)
+    clusters = pd.pivot_table(
+        isoplanatic_patchs,
+        values='prediction',
+        index=['z', 'y', 'x'],
+        columns=['mode'],
+        aggfunc=np.sum
+    )
+
+    clusters['cluster'] = KMeans(
+        init="k-means++",
+        n_init=5,
+        verbose=False,
+        n_clusters=max_isoplanatic_clusters,
+    ).fit_predict(clusters.values)
+
+    clusters3d = clusters['cluster'].values.reshape((ztiles, nrows, ncols))
+    clusters3d = resize(clusters3d, vol.shape, order=0, mode='constant')
+    clusters3d = clusters3d.astype(np.float) * 255 / max_isoplanatic_clusters  # convert waves to colormap cycles
+    clusters3d = (clusters3d % 256).round(0).astype(np.ubyte)  # wrap if terrain's span is > 1 wave
+
+    #  clusters3d is full brightness RGB color then use vol to determine brightness
+    rgb_vol = isoplanatic_patch_colormap[clusters3d] * vol[..., np.newaxis]
+    rgb_vol = rgb_vol.astype(np.ubyte)
+    imwrite(
+        f"{model_pred.with_suffix('')}_aggregated_clusters.tif",
+        rgb_vol,
+        photometric='rgb'
+    )
 
     # vis.plot_isoplanatic_patchs(
     #     results=isoplanatic_patchs,
