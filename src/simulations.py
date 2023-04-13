@@ -14,7 +14,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import raster_geometry as rg
 import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
-from tifffile import imsave
+from tifffile import imwrite
 import numpy as np
 import seaborn as sns
 from tqdm import tqdm, trange
@@ -583,7 +583,7 @@ def plot_embeddings(
                 embedding_option=embedding_option,
                 plot=f"{outdir}/{str(abr).replace('.', 'p')}",
             )
-            imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
+            imwrite(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
 
             plt.figure(fig.number)
             for ax in range(6):
@@ -703,7 +703,7 @@ def plot_rotations(
                 embedding_option=embedding_option,
                 plot=f"{outdir}/amp{str(amp).replace('.', 'p')}_deg{str(deg)}",
             )
-            imsave(f"{outdir}/amp{str(amp).replace('.', 'p')}_deg{str(deg)}.tif", emb)
+            imwrite(f"{outdir}/amp{str(amp).replace('.', 'p')}_deg{str(deg)}.tif", emb)
 
             plt.figure(fig.number)
             for ax in range(6):
@@ -815,7 +815,7 @@ def plot_shapes_embeddings(
 
             outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/r{radius}')
             outdir.mkdir(exist_ok=True, parents=True)
-            imsave(f"{outdir}/reference_{radius}.tif", reference)
+            imwrite(f"{outdir}/reference_{radius}.tif", reference)
 
 
             fig, axes = plt.subplots(6, len(waves)+1, figsize=(12, 6))
@@ -841,7 +841,7 @@ def plot_shapes_embeddings(
 
                 outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/r{radius}/convolved/')
                 outdir.mkdir(exist_ok=True, parents=True)
-                imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", inputs)
+                imwrite(f"{outdir}/{str(abr).replace('.', 'p')}.tif", inputs)
 
                 emb = fourier_embeddings(
                     inputs,
@@ -853,7 +853,7 @@ def plot_shapes_embeddings(
                 )
                 outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/r{radius}/embeddings/')
                 outdir.mkdir(exist_ok=True, parents=True)
-                imsave(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
+                imwrite(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
 
 
                 plt.figure(fig.number)
@@ -1053,8 +1053,8 @@ def plot_simulation(
     outdir = Path(f'{savepath}/i{res}_pad_{padsize}/')
     outdir.mkdir(exist_ok=True, parents=True)
 
-    imsave(f"{outdir}/theoretical_psf.tif", gen.ipsf)
-    imsave(f"{outdir}/theoretical_otf.tif", gen.iotf)
+    imwrite(f"{outdir}/theoretical_psf.tif", gen.ipsf)
+    imwrite(f"{outdir}/theoretical_otf.tif", gen.iotf)
 
     for mode in trange(5, n_modes):
         for amp in waves:
@@ -1075,7 +1075,7 @@ def plot_simulation(
 
             emb = Path(f'{outdir}/mode_{mode}/embeddings')
             emb.mkdir(exist_ok=True, parents=True)
-            imsave(f"{emb}/{str(abr).replace('.', 'p')}.tif", embedding)
+            imwrite(f"{emb}/{str(abr).replace('.', 'p')}.tif", embedding)
 
             psf = gen.single_psf(
                 phi=phi,
@@ -1086,7 +1086,7 @@ def plot_simulation(
 
             reals = Path(f'{outdir}/mode_{mode}/psfs')
             reals.mkdir(exist_ok=True, parents=True)
-            imsave(f"{reals}/{str(abr).replace('.', 'p')}.tif", psf)
+            imwrite(f"{reals}/{str(abr).replace('.', 'p')}.tif", psf)
 
 
 def plot_signal(n_modes=55, wavelength=.605):

@@ -21,7 +21,7 @@ import tensorflow as tf
 from preprocessing import remove_background_noise
 from line_profiler_pycharm import profile
 from tqdm import tqdm
-from tifffile import imsave
+from tifffile import imwrite
 
 import embeddings
 import utils
@@ -753,8 +753,8 @@ def random_samples(
                     corrected_noisy_img = rand_noise + corrected_noisy_img
                     corrected_noisy_img /= np.max(corrected_noisy_img)
 
-                    imsave(save_path / f'psf_{s}.tif', noisy_img)
-                    imsave(save_path / f'corrected_psf_{s}.tif', corrected_psf)
+                    imwrite(save_path / f'psf_{s}.tif', noisy_img)
+                    imwrite(save_path / f'corrected_psf_{s}.tif', corrected_psf)
 
                     task = partial(
                         vis.diagnostic_assessment,

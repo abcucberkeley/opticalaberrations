@@ -16,7 +16,7 @@ import zarr
 import h5py
 import scipy.io
 from tqdm.contrib import itertools
-from tifffile import imread, imsave
+from tifffile import imread, imwrite
 from scipy.spatial import KDTree
 from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.patches as patches
@@ -592,7 +592,7 @@ def find_roi(
 
         if r.size != 0:
             tile = f"z{0}-y{y}-x{x}"
-            imsave(savepath / f"{tile}.tif", r)
+            imwrite(savepath / f"{tile}.tif", r)
             rois.append(savepath / f"{tile}.tif")
 
     return np.array(rois), ztiles, nrows, ncols
@@ -636,7 +636,7 @@ def get_tiles(
         desc=f"Locating tiles: {[windows.shape[0]]}")
     ):
         tile = f"z{z}-y{y}-x{x}"
-        imsave(savepath / f"{tile}.tif", windows[i])
+        imwrite(savepath / f"{tile}.tif", windows[i])
         rois.append(savepath / f"{tile}.tif")
 
     return np.array(rois), ztiles, nrows, ncols

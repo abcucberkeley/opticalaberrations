@@ -14,7 +14,7 @@ from cupyx.scipy.signal import fftconvolve as cupyx_fftconvolve
 from scipy.signal import fftconvolve as scipy_fftconvolve
 from skimage.util import view_as_windows
 
-from tifffile import imsave, imread
+from tifffile import imwrite, imread
 from tqdm import tqdm, trange
 
 import utils
@@ -98,7 +98,7 @@ def download_data(savedir: Path, resolution: str, dtype: str = 'zarr'):
                     logger.info(data)
                 else:
                     data = data.compute().data
-                    imsave(save_path/f'{c}.tif', data)
+                    imwrite(save_path/f'{c}.tif', data)
 
                 logger.info(data)
 
@@ -136,7 +136,7 @@ def convolve(kernel, sample, sample_voxel_size, save_path, cuda=False):
        center[2] - width[2]:center[2] + width[2],
     ]
     save_path = f'{save_path}_{"_".join(kernel.parts[-4:])}'
-    imsave(save_path, conv)
+    imwrite(save_path, conv)
 
     conv = preprocessing.resize(
         conv,

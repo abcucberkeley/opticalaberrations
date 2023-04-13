@@ -13,7 +13,7 @@ import ujson
 from functools import partial
 from typing import Any
 from pathlib import Path
-from tifffile import imsave
+from tifffile import imwrite
 import numpy as np
 import raster_geometry as rg
 
@@ -52,13 +52,13 @@ def save_synthetic_sample(
 ):
 
     if gt is not None:
-        imsave(f"{savepath}_gt.tif", gt)
+        imwrite(f"{savepath}_gt.tif", gt)
 
     if realspace is not None:
-        imsave(f"{savepath}_realspace.tif", realspace)
+        imwrite(f"{savepath}_realspace.tif", realspace)
 
     logger.info(f"Saved: {savepath}")
-    imsave(f"{savepath}.tif", inputs)
+    imwrite(f"{savepath}.tif", inputs)
 
     with Path(f"{savepath}.json").open('w') as f:
         json = dict(

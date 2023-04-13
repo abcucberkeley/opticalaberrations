@@ -1184,8 +1184,8 @@ def featuremaps(
                 # vol = (vol - vol.min()) / (vol.max() - vol.min())
                 grid[:, f * window[1]:(f + 1) * window[1]] = vol
 
-            # from tifffile import imsave
-            # imsave(f'{modelpath}/{name.upper()}_{i}.tif', grid)
+            # from tifffile import imwrite
+            # imwrite(f'{modelpath}/{name.upper()}_{i}.tif', grid)
 
             ax = fig.add_subplot(gs[i, :])
             ax.set_title(f"{name.upper()} {fmap.shape}")

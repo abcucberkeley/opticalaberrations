@@ -9,7 +9,7 @@ from functools import partial
 import numpy as np
 import raster_geometry as rg
 from skimage import measure, transform
-from tifffile import imread, imsave
+from tifffile import imread, imwrite
 from scipy import signal
 from pathlib import Path
 from tqdm import trange
@@ -234,7 +234,7 @@ def simobjects(codename=None, image_size=(256, 256, 256), plot=False):
     if codename is None:
         for s, func in hashtbl.items():
             obj = func(image_size=image_size)
-            imsave(f"../data/shapes/{s}.tif", obj)
+            imwrite(f"../data/shapes/{s}.tif", obj)
             logger.info(f"../data/shapes/{s}.tif")
 
             if plot:
@@ -290,7 +290,7 @@ def similarity(
         noise=False,
         meta=False
     )
-    imsave(savepath / f'kernel.tif', kernel)
+    imwrite(savepath / f'kernel.tif', kernel)
 
     embeddings = []
     for k in trange(25):
@@ -299,10 +299,10 @@ def similarity(
         else:
             reference = several_lines(image_size, nlines=nobjects, radius=radius)
 
-        imsave(savepath / f'{k}_reference.tif', reference)
+        imwrite(savepath / f'{k}_reference.tif', reference)
 
         conv = signal.convolve(reference, kernel, mode='same')
-        imsave(savepath / f'{k}_convolved.tif', conv)
+        imwrite(savepath / f'{k}_convolved.tif', conv)
 
         preds, stds, embs = backend.bootstrap_predict(
             model,
@@ -319,4 +319,4 @@ def similarity(
 
     embeddings = np.stack(embeddings, axis=0)
     embeddings = np.mean(embeddings, axis=0)
-    imsave(savepath / f'embeddings_average.tif', embeddings)
+    imwrite(savepath / f'embeddings_average.tif', embeddings)

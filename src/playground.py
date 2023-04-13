@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import ujson
 import numpy as np
 from pathlib import Path
-from tifffile import imsave
+from tifffile import imwrite
 import raster_geometry as rg
 
 from wavefront import Wavefront
@@ -56,7 +56,7 @@ def beads(
 def save_synthetic_sample(savepath, inputs, amps, snr, maxcounts, p2v, npoints=1):
 
     logger.info(f"Saved: {savepath}")
-    imsave(f"{savepath}.tif", inputs)
+    imwrite(f"{savepath}.tif", inputs)
 
     with Path(f"{savepath}.json").open('w') as f:
         json = dict(
@@ -100,7 +100,7 @@ def create_synthetic_sample(
         vcolorbar=True,
     )
     plt.savefig(f"{outdir}/{filename}_wavefront.png", bbox_inches='tight', pad_inches=.25)
-    imsave(f"{outdir}/{filename}_wavefront.tif", wavefront.wave(size=128))
+    imwrite(f"{outdir}/{filename}_wavefront.tif", wavefront.wave(size=128))
 
     # aberrated PSF without noise
     psf, amps, estsnr, maxcounts, lls_defocus_offset = gen.single_psf(

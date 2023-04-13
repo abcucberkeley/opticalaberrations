@@ -13,7 +13,7 @@ import ujson
 from functools import partial
 from typing import Any
 from pathlib import Path
-from tifffile import imsave
+from tifffile import imwrite
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -44,7 +44,7 @@ def save_synthetic_sample(
     lls_defocus_offset=0.
 ):
     logger.info(f"Saved: {savepath}")
-    imsave(f"{savepath}.tif", inputs)
+    imwrite(f"{savepath}.tif", inputs)
 
     with Path(f"{savepath}.json").open('w') as f:
         json = dict(

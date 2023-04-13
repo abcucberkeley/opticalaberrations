@@ -14,7 +14,7 @@ import tensorflow as tf
 from typing import Any, Union, Optional, Generator
 import numpy as np
 import pandas as pd
-from tifffile import imread, imsave
+from tifffile import imread, imwrite
 from tqdm import trange
 from line_profiler_pycharm import profile
 from numpy.lib.stride_tricks import sliding_window_view
@@ -662,7 +662,7 @@ def predict_sample(
         )
 
     psf = samplepsfgen.single_psf(phi=p, normed=True, noise=False)
-    imsave(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
+    imwrite(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
 
     with Path(f"{img.with_suffix('')}_sample_predictions_settings.json").open('w') as f:
         json = dict(
@@ -824,7 +824,7 @@ def predict_large_fov(
         )
 
     psf = samplepsfgen.single_psf(phi=p, normed=True, noise=False)
-    imsave(f"{img.with_suffix('')}_large_fov_predictions_psf.tif", psf)
+    imwrite(f"{img.with_suffix('')}_large_fov_predictions_psf.tif", psf)
 
     with Path(f"{img.with_suffix('')}_large_fov_predictions_settings.json").open('w') as f:
         json = dict(
@@ -1264,7 +1264,7 @@ def aggregate_predictions(
         )
 
         psf = samplepsfgen.single_psf(phi=pred, normed=True, noise=False)
-        imsave(f"{model_pred.with_suffix('')}_aggregated_psf_z{z}.tif", psf)
+        imwrite(f"{model_pred.with_suffix('')}_aggregated_psf_z{z}.tif", psf)
 
         if plot:
             mp.Pool(1).apply_async(vis.diagnosis(
@@ -1307,7 +1307,7 @@ def aggregate_predictions(
     #  terrain3d is full brightness RGB color then use vol to determine brightness
     rgb_vol = isoplanatic_patch_colormap[terrain3d] * vol[..., np.newaxis]
     rgb_vol = rgb_vol.astype(np.ubyte)
-    imsave(
+    imwrite(
         f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif",
         rgb_vol,
         photometric='rgb'
@@ -1424,7 +1424,7 @@ def phase_retrieval(
 
     pupil[pupil == 0.] = np.nan # put NaN's outside of pupil
     pupil_path = Path(f"{img.with_suffix('')}_phase_retrieval_wavefront.tif")
-    imsave(pupil_path, cp.asnumpy(pupil))
+    imwrite(pupil_path, cp.asnumpy(pupil))
 
     threshold = utils.waves2microns(prediction_threshold, wavelength=psfgen.lam_detection)
     ignore_modes = list(map(int, ignore_modes))
@@ -1462,7 +1462,7 @@ def phase_retrieval(
         )
 
     psf = psfgen.single_psf(pred, normed=True, noise=False)
-    imsave(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf)
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf)
 
     if plot:
         mp.Pool(1).apply_async(vis.diagnosis(
