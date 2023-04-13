@@ -1139,7 +1139,7 @@ def aggregate_predictions(
     plot: bool = False,
     ignore_tile: Any = None,
     preloaded: Preloadedmodelclass = None,
-    isoplanatic_patch_colormap: Union[Path, str] = Path('../CETperceptual/CET-C2.csv')
+    isoplanatic_patch_colormap: Union[Path, str] = Path.joinpath(Path(__file__).parent, '../CETperceptual/CET-C2.csv')
 ):
     def calc_length(s):
         return int(re.sub(r'[a-z]+', '', s)) + 1
