@@ -557,7 +557,7 @@ def parse_args(args):
         help='maximum percentile to filter out outliers'
     )
     aggregate_predictions.add_argument(
-        "--max_isoplanatic_clusters", default=5, type=int,
+        "--max_isoplanatic_clusters", default=10, type=int,
         help='maximum number of unique isoplanatic patchs for clustering tiles'
     )
     aggregate_predictions.add_argument(
@@ -760,7 +760,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         flags = ' '.join(sys.argv[1:])
         flags = flags.replace('..', cluster_repo)
         flags = flags.replace('--cluster', '')
-        hostname = 'login.abc.berkeley.edu'
+        hostname = '162.241.244.201' #'login.abc.berkeley.edu'
         username = 'thayeralshaabi'
 
         job = f"srun -p {node} --job-name={taskname} --exclusive --pty {cluster_env} {script} {flags}"

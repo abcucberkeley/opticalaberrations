@@ -186,8 +186,13 @@ def dog(
             if any(high_sigma < low_sigma):
                 raise ValueError('high_sigma must be equal to or larger than low_sigma for all axes')
 
-            im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)
-            im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)
+            im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)    # sharper
+            im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)   # more blurred
+
+            if cp.std(im2 < 2):
+                #this is sparse
+                im2 += cp.std(image) # increase the background subtraction by the noise
+
             return im1 - im2
 
         except ImportError:

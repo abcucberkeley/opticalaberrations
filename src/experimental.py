@@ -1146,7 +1146,8 @@ def aggregate_predictions(
         return int(re.sub(r'[a-z]+', '', s)) + 1
 
     vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
-    vol /= np.percentile(vol, 90)
+    vol /= np.percentile(vol, 98)
+    vol = np.clip(vol, 0, 1)
 
 
     with open(str(model_pred).replace('.csv', '_settings.json')) as f:
@@ -1316,14 +1317,14 @@ def aggregate_predictions(
         photometric='rgb'
     )
 
-    vis.plot_volume(
-        vol=rgb_vol,
-        results=coefficients,
-        window_size=predictions_settings['window_size'],
-        dxy=lateral_voxel_size,
-        dz=axial_voxel_size,
-        save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
-    )
+    # vis.plot_volume(
+    #     vol=rgb_vol,
+    #     results=coefficients,
+    #     window_size=predictions_settings['window_size'],
+    #     dxy=lateral_voxel_size,
+    #     dz=axial_voxel_size,
+    #     save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
+    # )
 
     clusters = pd.pivot_table(
         isoplanatic_patchs,
@@ -1331,21 +1332,32 @@ def aggregate_predictions(
         index=['z', 'y', 'x'],
         columns=['mode'],
         aggfunc=np.sum
-    )
+    )#.reset_index()
 
-    logger.info('KMeans calculating...')
-    clusters['cluster'] = KMeans(
-        init="k-means++",
-        n_init=5,
-        verbose=False,
-        n_clusters=max_isoplanatic_clusters,
-    ).fit_predict(clusters.values)
+    clusters[clusters.abs() < .0025] = 0
+    clusters[clusters.abs() > .0025] = 1
+    # emb = clusters.loc[~(clusters[range(preloadedmodel.output_shape[1])] == 0).all(axis=1)]
+
+    clusters['cluster'] = clusters.sum(axis=1)
+    # logger.info('KMeans calculating...')
+    # clusters['cluster'] = KMeans(
+    #     init="k-means++",
+    #     n_init=5,
+    #     verbose=False,
+    #     n_clusters=2,
+    # ).fit_predict(clusters.values)
+
+    # from sklearn.cluster import DBSCAN
+    # clusters['cluster'] = DBSCAN(
+    #     verbose=False,
+    # ).fit_predict(clusters.values)
+
 
     clusters3d = clusters['cluster'].values.reshape((ztiles, nrows, ncols))
     clusters3d = resize(clusters3d, vol.shape, order=0, mode='constant')
 
     #  clusters3d is full brightness RGB color then use vol to determine brightness
-    clusters3d_colormap = np.array(sns.color_palette("bright", n_colors=max_isoplanatic_clusters))*255
+    clusters3d_colormap = np.array(sns.color_palette("Spectral", n_colors=15))*255
     rgb_vol = clusters3d_colormap[clusters3d.astype(np.ubyte)] * vol[..., np.newaxis]
     rgb_vol = rgb_vol.astype(np.ubyte)
     imwrite(
