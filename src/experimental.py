@@ -1,5 +1,6 @@
 import matplotlib
 matplotlib.use('Agg')
+import seaborn as sns
 
 import re
 from functools import partial
@@ -1145,16 +1146,18 @@ def aggregate_predictions(
         return int(re.sub(r'[a-z]+', '', s)) + 1
 
     vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
-    vol /= np.max(vol)
+    vol /= np.percentile(vol, 90)
+
+
+    with open(str(model_pred).replace('.csv', '_settings.json')) as f:
+        predictions_settings = ujson.load(f)
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
-        modelpath=model,
+        modelpath=predictions_settings['model'],
         preloaded=preloaded,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
 
-    with open(str(model_pred).replace('.csv', '_settings.json')) as f:
-        predictions_settings = ujson.load(f)
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
@@ -1330,6 +1333,7 @@ def aggregate_predictions(
         aggfunc=np.sum
     )
 
+    logger.info('KMeans calculating...')
     clusters['cluster'] = KMeans(
         init="k-means++",
         n_init=5,
@@ -1339,11 +1343,10 @@ def aggregate_predictions(
 
     clusters3d = clusters['cluster'].values.reshape((ztiles, nrows, ncols))
     clusters3d = resize(clusters3d, vol.shape, order=0, mode='constant')
-    clusters3d = clusters3d.astype(np.float) * 255 / max_isoplanatic_clusters  # convert waves to colormap cycles
-    clusters3d = (clusters3d % 256).round(0).astype(np.ubyte)  # wrap if terrain's span is > 1 wave
 
     #  clusters3d is full brightness RGB color then use vol to determine brightness
-    rgb_vol = isoplanatic_patch_colormap[clusters3d] * vol[..., np.newaxis]
+    clusters3d_colormap = np.array(sns.color_palette("bright", n_colors=max_isoplanatic_clusters))*255
+    rgb_vol = clusters3d_colormap[clusters3d.astype(np.ubyte)] * vol[..., np.newaxis]
     rgb_vol = rgb_vol.astype(np.ubyte)
     imwrite(
         f"{model_pred.with_suffix('')}_aggregated_clusters.tif",
