@@ -5,7 +5,16 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import logging
 import time
+import sys
+import tensorflow as tf
 from pathlib import Path
+
+try:
+    import cupy as cp
+except ImportError as e:
+    logging.warning(f"Cupy not supported on your system: {e}")
+
+
 import cli
 import experimental
 import experimental_llsm
@@ -13,13 +22,6 @@ import experimental_eval
 from preprocessing import prep_sample
 from preloaded import Preloadedmodelclass
 from embeddings import measure_fourier_snr
-
-import tensorflow as tf
-
-try:
-    import cupy as cp
-except ImportError as e:
-    logging.warning(f"Cupy not supported on your system: {e}")
 
 
 def parse_args(args):
@@ -460,6 +462,10 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
+    predict_tiles.add_argument(
+        "--slurm", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
     aggregate_predictions.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -678,6 +684,11 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         cp.fft.config.use_multi_gpus = True
         cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
 
+    strategy = tf.distribute.MirroredStrategy()
+
+    gpu_workers = strategy.num_replicas_in_sync
+    logging.info(f'Number of active GPUs: {gpu_workers}')
+
     if args.func == 'deskew':
         experimental_llsm.deskew(
             img=args.input,
@@ -837,30 +848,45 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             preloaded=preloaded
         )
     elif args.func == 'predict_tiles':
-        experimental.predict_tiles(
-            model=args.model,
-            img=args.input,
-            prev=args.prev,
-            dm_calibration=args.dm_calibration,
-            dm_state=args.current_dm,
-            freq_strength_threshold=args.freq_strength_threshold,
-            prediction_threshold=args.prediction_threshold,
-            confidence_threshold=args.confidence_threshold,
-            sign_threshold=args.sign_threshold,
-            axial_voxel_size=args.axial_voxel_size,
-            lateral_voxel_size=args.lateral_voxel_size,
-            num_predictions=args.num_predictions,
-            wavelength=args.wavelength,
-            window_size=tuple(int(i) for i in args.window_size.split('-')),
-            plot=args.plot,
-            plot_rotations=args.plot_rotations,
-            batch_size=args.batch_size,
-            estimate_sign_with_decon=args.estimate_sign_with_decon,
-            ignore_modes=args.ignore_mode,
-            ideal_empirical_psf=args.ideal_empirical_psf,
-            cpu_workers=args.cpu_workers,
-            preloaded=preloaded
-        )
+
+        if args.slurm:
+            with strategy.scope():
+                taskname = f"{sys.argv[1]}_{args.input.stem}"
+                penv = f"~/anaconda3/envs/ml/bin/python"
+                repo = f"/clusterfs/nvme/thayer/opticalaberrations"
+                script = f"{repo}/src/ao.py"
+                flags = ' '.join(sys.argv[1:])
+                flags = flags.replace('..', repo)
+
+                slurm = f"srun -p abc_a100 --job-name={taskname} --exclusive --pty {penv} {script} {flags}"
+                sjob = f"ssh thayeralshaabi@login.abc.berkeley.edu \"{slurm}\""
+                subprocess.run(sjob, shell=True)
+
+        else:
+            experimental.predict_tiles(
+                model=args.model,
+                img=args.input,
+                prev=args.prev,
+                dm_calibration=args.dm_calibration,
+                dm_state=args.current_dm,
+                freq_strength_threshold=args.freq_strength_threshold,
+                prediction_threshold=args.prediction_threshold,
+                confidence_threshold=args.confidence_threshold,
+                sign_threshold=args.sign_threshold,
+                axial_voxel_size=args.axial_voxel_size,
+                lateral_voxel_size=args.lateral_voxel_size,
+                num_predictions=args.num_predictions,
+                wavelength=args.wavelength,
+                window_size=tuple(int(i) for i in args.window_size.split('-')),
+                plot=args.plot,
+                plot_rotations=args.plot_rotations,
+                batch_size=args.batch_size,
+                estimate_sign_with_decon=args.estimate_sign_with_decon,
+                ignore_modes=args.ignore_mode,
+                ideal_empirical_psf=args.ideal_empirical_psf,
+                cpu_workers=args.cpu_workers,
+                preloaded=preloaded
+            )
     elif args.func == 'aggregate_predictions':
         experimental.aggregate_predictions(
             model=args.model,
