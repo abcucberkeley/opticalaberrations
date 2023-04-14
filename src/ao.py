@@ -46,6 +46,10 @@ def parse_args(args):
         "--flipz", action='store_true',
         help='a toggle to flip Z axis'
     )
+    deskew.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
 
     decon = subparsers.add_parser("decon")
     decon.add_argument("input", type=Path, help="path to input .tif file")
@@ -57,12 +61,24 @@ def parse_args(args):
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
     )
+    decon.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
 
     psnr = subparsers.add_parser("psnr")
     psnr.add_argument("input", type=Path, help="path to input .tif file")
+    psnr.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
 
     fourier_snr = subparsers.add_parser("fourier_snr")
     fourier_snr.add_argument("input", type=Path, help="path to input .tif file")
+    fourier_snr.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
 
     preprocessing = subparsers.add_parser("preprocessing")
     preprocessing.add_argument("input", type=Path, help="path to input .tif file")
@@ -94,6 +110,10 @@ def parse_args(args):
     preprocessing.add_argument(
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
+    )
+    preprocessing.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
     )
 
     embeddings = subparsers.add_parser("embeddings")
@@ -132,6 +152,10 @@ def parse_args(args):
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
     )
+    embeddings.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
 
     detect_rois = subparsers.add_parser("detect_rois")
     detect_rois.add_argument("input", type=Path, help="path to input .tif file")
@@ -141,6 +165,10 @@ def parse_args(args):
     )
     detect_rois.add_argument(
         "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
+    )
+    detect_rois.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
     )
 
     predict_sample = subparsers.add_parser("predict_sample")
@@ -220,6 +248,10 @@ def parse_args(args):
     predict_sample.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
+    predict_sample.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
 
     predict_large_fov = subparsers.add_parser("predict_large_fov")
     predict_large_fov.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -297,6 +329,10 @@ def parse_args(args):
     )
     predict_large_fov.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+    predict_large_fov.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
     )
 
     predict_rois = subparsers.add_parser("predict_rois")
@@ -384,6 +420,10 @@ def parse_args(args):
     predict_rois.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
+    predict_rois.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -463,13 +503,13 @@ def parse_args(args):
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
     predict_tiles.add_argument(
-        "--slurm", action='store_true',
+        "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
     aggregate_predictions.add_argument("model", type=Path, help="path to pretrained tensorflow model")
-    aggregate_predictions.add_argument("predictions", type=Path, help="path to csv file")
+    aggregate_predictions.add_argument("input", type=Path, help="path to csv file")
     aggregate_predictions.add_argument("dm_calibration", type=Path,
                                        help="path DM calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)")
 
@@ -521,10 +561,6 @@ def parse_args(args):
         help='maximum number of unique isoplanatic patchs for clustering tiles'
     )
     aggregate_predictions.add_argument(
-        "--isoplanatic_patch_colormap", default=Path('../CETperceptual/CET-C2.csv'), type=Path,
-        help='maximum number of unique isoplanatic patchs for clustering tiles'
-    )
-    aggregate_predictions.add_argument(
         "--plot", action='store_true',
         help='a toggle for plotting predictions'
     )
@@ -534,6 +570,10 @@ def parse_args(args):
     )
     aggregate_predictions.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+    aggregate_predictions.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
     )
 
     phase_retrieval = subparsers.add_parser("phase_retrieval")
@@ -588,11 +628,19 @@ def parse_args(args):
     phase_retrieval.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
+    phase_retrieval.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
 
     eval_dm = subparsers.add_parser("eval_dm")
     eval_dm.add_argument("datadir", type=Path, help="path to dataset directory")
     eval_dm.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+    eval_dm.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
     )
 
     calibrate_dm = subparsers.add_parser("calibrate_dm")
@@ -603,6 +651,10 @@ def parse_args(args):
     )
     calibrate_dm.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+    calibrate_dm.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
     )
 
     eval_mode = subparsers.add_parser("eval_mode")
@@ -615,17 +667,28 @@ def parse_args(args):
     eval_mode.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
+    eval_mode.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
 
     eval_dataset = subparsers.add_parser(
         "eval_dataset",
         help="Evaluate artificially introduced aberrations via the DM"
     )
     eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
-    eval_dataset.add_argument("--flat", default=None, type=Path, help="path to the flat DM acts file. If this is given, then DM surface plots will be made.")
+    eval_dataset.add_argument(
+        "--flat", default=None, type=Path,
+        help="path to the flat DM acts file. If this is given, then DM surface plots will be made."
+    )
     eval_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
     eval_dataset.add_argument("--precomputed", action='store_true')
     eval_dataset.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+    eval_dataset.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
     )
 
     eval_ao_dataset = subparsers.add_parser(
@@ -638,6 +701,10 @@ def parse_args(args):
     eval_ao_dataset.add_argument("--precomputed", action='store_true')
     eval_ao_dataset.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+    eval_ao_dataset.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
     )
 
     plot_dataset_mips = subparsers.add_parser(
@@ -689,288 +756,288 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
     gpu_workers = strategy.num_replicas_in_sync
     logging.info(f'Number of active GPUs: {gpu_workers}')
 
-    if args.func == 'deskew':
-        experimental_llsm.deskew(
-            img=args.input,
-            axial_voxel_size=args.axial_voxel_size,
-            lateral_voxel_size=args.lateral_voxel_size,
-            flipz=args.flipz,
-            skew_angle=args.skew_angle,
-        )
+    if args.cluster:
+        node = 'abc_a100'
+        taskname = f"{args.func}_{args.input.stem}"
+        cluster_env = f"~/anaconda3/envs/ml/bin/python"
+        cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
+        script = f"{cluster_repo}/src/ao.py"
+        flags = ' '.join(sys.argv[1:])
+        flags = flags.replace('..', cluster_repo)
+        flags = flags.replace('--cluster', '')
+        hostname = 'login.abc.berkeley.edu'
+        username = 'thayeralshaabi'
 
-    elif args.func == 'decon':
-        experimental_llsm.decon(
-            img=args.input,
-            psf=args.psf,
-            iters=args.iters,
-            plot=args.plot,
-        )
-
-    elif args.func == 'detect_rois':
-        experimental_llsm.detect_rois(
-            img=args.input,
-            psf=args.psf,
-            axial_voxel_size=args.axial_voxel_size,
-            lateral_voxel_size=args.lateral_voxel_size,
-        )
-
-    elif args.func == 'psnr':
-        sample = experimental.load_sample(args.input)
-        prep_sample(
-            sample,
-            remove_background=True,
-            return_psnr=True,
-            plot=None,
-            normalize=False,
-            edge_filter=False,
-            filter_mask_dilation=False,
-        )
-
-    elif args.func == 'fourier_snr':
-        sample = experimental.load_sample(args.input)
-        psnr = prep_sample(
-            sample,
-            remove_background=True,
-            return_psnr=True,
-            plot=None,
-            normalize=False,
-            edge_filter=False,
-            filter_mask_dilation=False,
-        )
-        measure_fourier_snr(sample, psnr=psnr, plot=args.input.with_suffix('.svg'))
-
-    elif args.func == 'preprocessing':
-        sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
-        sample = experimental.load_sample(args.input)
-        prep_sample(
-            sample,
-            sample_voxel_size=sample_voxel_size,
-            remove_background=args.remove_background,
-            read_noise_bias=args.read_noise_bias,
-            normalize=args.normalize,
-            edge_filter=args.edge_filter,
-            filter_mask_dilation=args.filter_mask_dilation,
-            plot=args.input.with_suffix('') if args.plot else None,
-        )
-
-    elif args.func == 'embeddings':
-        experimental.generate_embeddings(
-            file=args.input,
-            model=args.model,
-            axial_voxel_size=args.axial_voxel_size,
-            lateral_voxel_size=args.lateral_voxel_size,
-            wavelength=args.wavelength,
-            plot=args.plot,
-            ideal_empirical_psf=args.ideal_empirical_psf,
-            edge_filter=args.edge_filter,
-            digital_rotations=args.digital_rotations,
-            preloaded=preloaded,
-        )
-
-    elif args.func == 'predict_sample':
-        experimental.predict_sample(
-            model=args.model,
-            img=args.input,
-            dm_calibration=args.dm_calibration,
-            dm_state=args.current_dm,
-            prev=args.prev,
-            axial_voxel_size=args.axial_voxel_size,
-            lateral_voxel_size=args.lateral_voxel_size,
-            wavelength=args.wavelength,
-            dm_damping_scalar=args.dm_damping_scalar,
-            freq_strength_threshold=args.freq_strength_threshold,
-            prediction_threshold=args.prediction_threshold,
-            confidence_threshold=args.confidence_threshold,
-            sign_threshold=args.sign_threshold,
-            num_predictions=args.num_predictions,
-            plot=args.plot,
-            plot_rotations=args.plot_rotations,
-            batch_size=args.batch_size,
-            estimate_sign_with_decon=args.estimate_sign_with_decon,
-            ignore_modes=args.ignore_mode,
-            ideal_empirical_psf=args.ideal_empirical_psf,
-            cpu_workers=args.cpu_workers,
-            preloaded=preloaded
-        )
-
-    elif args.func == 'predict_large_fov':
-        experimental.predict_large_fov(
-            model=args.model,
-            img=args.input,
-            dm_calibration=args.dm_calibration,
-            dm_state=args.current_dm,
-            prev=args.prev,
-            axial_voxel_size=args.axial_voxel_size,
-            lateral_voxel_size=args.lateral_voxel_size,
-            wavelength=args.wavelength,
-            dm_damping_scalar=args.dm_damping_scalar,
-            freq_strength_threshold=args.freq_strength_threshold,
-            prediction_threshold=args.prediction_threshold,
-            confidence_threshold=args.confidence_threshold,
-            sign_threshold=args.sign_threshold,
-            num_predictions=args.num_predictions,
-            plot=args.plot,
-            plot_rotations=args.plot_rotations,
-            batch_size=args.batch_size,
-            estimate_sign_with_decon=args.estimate_sign_with_decon,
-            ignore_modes=args.ignore_mode,
-            ideal_empirical_psf=args.ideal_empirical_psf,
-            cpu_workers=args.cpu_workers,
-            preloaded=preloaded
-        )
-
-    elif args.func == 'predict_rois':
-        experimental.predict_rois(
-            model=args.model,
-            img=args.input,
-            pois=args.pois,
-            prev=args.prev,
-            dm_calibration=args.dm_calibration,
-            dm_state=args.current_dm,
-            axial_voxel_size=args.axial_voxel_size,
-            lateral_voxel_size=args.lateral_voxel_size,
-            wavelength=args.wavelength,
-            window_size=tuple(int(i) for i in args.window_size.split('-')),
-            num_predictions=args.num_predictions,
-            num_rois=args.num_rois,
-            min_intensity=args.min_intensity,
-            freq_strength_threshold=args.freq_strength_threshold,
-            prediction_threshold=args.prediction_threshold,
-            sign_threshold=args.sign_threshold,
-            minimum_distance=args.minimum_distance,
-            plot=args.plot,
-            plot_rotations=args.plot_rotations,
-            batch_size=args.batch_size,
-            estimate_sign_with_decon=args.estimate_sign_with_decon,
-            ignore_modes=args.ignore_mode,
-            ideal_empirical_psf=args.ideal_empirical_psf,
-            cpu_workers=args.cpu_workers,
-            preloaded=preloaded
-        )
-    elif args.func == 'predict_tiles':
-
-        if args.slurm:
-            with strategy.scope():
-                taskname = f"{sys.argv[1]}_{args.input.stem}"
-                penv = f"~/anaconda3/envs/ml/bin/python"
-                repo = f"/clusterfs/nvme/thayer/opticalaberrations"
-                script = f"{repo}/src/ao.py"
-                flags = ' '.join(sys.argv[1:])
-                flags = flags.replace('..', repo)
-
-                slurm = f"srun -p abc_a100 --job-name={taskname} --exclusive --pty {penv} {script} {flags}"
-                sjob = f"ssh thayeralshaabi@login.abc.berkeley.edu \"{slurm}\""
-                subprocess.run(sjob, shell=True)
-
-        else:
-            experimental.predict_tiles(
-                model=args.model,
-                img=args.input,
-                prev=args.prev,
-                dm_calibration=args.dm_calibration,
-                dm_state=args.current_dm,
-                freq_strength_threshold=args.freq_strength_threshold,
-                prediction_threshold=args.prediction_threshold,
-                confidence_threshold=args.confidence_threshold,
-                sign_threshold=args.sign_threshold,
-                axial_voxel_size=args.axial_voxel_size,
-                lateral_voxel_size=args.lateral_voxel_size,
-                num_predictions=args.num_predictions,
-                wavelength=args.wavelength,
-                window_size=tuple(int(i) for i in args.window_size.split('-')),
-                plot=args.plot,
-                plot_rotations=args.plot_rotations,
-                batch_size=args.batch_size,
-                estimate_sign_with_decon=args.estimate_sign_with_decon,
-                ignore_modes=args.ignore_mode,
-                ideal_empirical_psf=args.ideal_empirical_psf,
-                cpu_workers=args.cpu_workers,
-                preloaded=preloaded
-            )
-    elif args.func == 'aggregate_predictions':
-        experimental.aggregate_predictions(
-            model=args.model,
-            model_pred=args.predictions,
-            dm_calibration=args.dm_calibration,
-            dm_state=args.current_dm,
-            wavelength=args.wavelength,
-            axial_voxel_size=args.axial_voxel_size,
-            lateral_voxel_size=args.lateral_voxel_size,
-            prediction_threshold=args.prediction_threshold,
-            confidence_threshold=args.confidence_threshold,
-            majority_threshold=args.majority_threshold,
-            min_percentile=args.min_percentile,
-            max_percentile=args.max_percentile,
-            final_prediction=args.final_prediction,
-            max_isoplanatic_clusters=args.max_isoplanatic_clusters,
-            ignore_tile=args.ignore_tile,
-            dm_damping_scalar=args.dm_damping_scalar,
-            isoplanatic_patch_colormap=args.isoplanatic_patch_colormap,
-            plot=args.plot,
-            preloaded=preloaded
-        )
-    elif args.func == 'phase_retrieval':
-        experimental.phase_retrieval(
-            img=args.input,
-            num_modes=args.num_modes,
-            dm_calibration=args.dm_calibration,
-            dm_state=args.current_dm,
-            axial_voxel_size=args.axial_voxel_size,
-            lateral_voxel_size=args.lateral_voxel_size,
-            wavelength=args.wavelength,
-            dm_damping_scalar=args.dm_damping_scalar,
-            prediction_threshold=args.prediction_threshold,
-            num_iterations=args.num_iterations,
-            plot=args.plot,
-            ignore_modes=args.ignore_mode,
-            use_pyotf_zernikes=args.use_pyotf_zernikes,
-        )
-    elif args.func == 'eval_dm':
-        experimental_eval.eval_dm(
-            datadir=args.datadir,
-        )
-    elif args.func == 'calibrate_dm':
-        experimental_eval.calibrate_dm(
-            datadir=args.datadir,
-            dm_calibration=args.dm_calibration,
-        )
-    elif args.func == 'eval_mode':
-        experimental_eval.eval_mode(
-            model_path=args.model_path,
-            input_path=args.input_path,
-            prediction_path=args.prediction_path,
-            gt_path=args.gt_path,
-            postfix=args.prediction_postfix,
-            gt_postfix=args.gt_postfix,
-        )
-    elif args.func == 'eval_dataset':
-        experimental_eval.eval_dataset(
-            datadir=args.datadir,
-            flat=args.flat,
-            plot_evals=not args.skip_eval_plots,
-            precomputed=args.precomputed,
-        )
-    elif args.func == 'eval_ao_dataset':
-        experimental_eval.eval_ao_dataset(
-            datadir=args.datadir,
-            flat=args.flat,
-            plot_evals=not args.skip_eval_plots,
-            precomputed=args.precomputed,
-        )
-    elif args.func == 'plot_dataset_mips':
-        experimental_eval.plot_dataset_mips(
-            datadir=args.datadir,
-        )
-    elif args.func == 'eval_bleaching_rate':
-        experimental_eval.eval_bleaching_rate(
-            datadir=args.datadir,
-        )
-    elif args.func == 'plot_bleaching_rate':
-        experimental_eval.plot_bleaching_rate(
-            datadir=args.datadir,
-        )
+        job = f"srun -p {node} --job-name={taskname} --exclusive --pty {cluster_env} {script} {flags}"
+        subprocess.run(f"ssh {username}@{hostname} \"{job}\"", shell=True)
     else:
-        logger.error(f"Error")
+        with strategy.scope():
+            if args.func == 'deskew':
+                experimental_llsm.deskew(
+                    img=args.input,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    flipz=args.flipz,
+                    skew_angle=args.skew_angle,
+                )
+
+            elif args.func == 'decon':
+                experimental_llsm.decon(
+                    img=args.input,
+                    psf=args.psf,
+                    iters=args.iters,
+                    plot=args.plot,
+                )
+
+            elif args.func == 'detect_rois':
+                experimental_llsm.detect_rois(
+                    img=args.input,
+                    psf=args.psf,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                )
+
+            elif args.func == 'psnr':
+                sample = experimental.load_sample(args.input)
+                prep_sample(
+                    sample,
+                    remove_background=True,
+                    return_psnr=True,
+                    plot=None,
+                    normalize=False,
+                    edge_filter=False,
+                    filter_mask_dilation=False,
+                )
+
+            elif args.func == 'fourier_snr':
+                sample = experimental.load_sample(args.input)
+                psnr = prep_sample(
+                    sample,
+                    remove_background=True,
+                    return_psnr=True,
+                    plot=None,
+                    normalize=False,
+                    edge_filter=False,
+                    filter_mask_dilation=False,
+                )
+                measure_fourier_snr(sample, psnr=psnr, plot=args.input.with_suffix('.svg'))
+
+            elif args.func == 'preprocessing':
+                sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
+                sample = experimental.load_sample(args.input)
+                prep_sample(
+                    sample,
+                    sample_voxel_size=sample_voxel_size,
+                    remove_background=args.remove_background,
+                    read_noise_bias=args.read_noise_bias,
+                    normalize=args.normalize,
+                    edge_filter=args.edge_filter,
+                    filter_mask_dilation=args.filter_mask_dilation,
+                    plot=args.input.with_suffix('') if args.plot else None,
+                )
+
+            elif args.func == 'embeddings':
+                experimental.generate_embeddings(
+                    file=args.input,
+                    model=args.model,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    wavelength=args.wavelength,
+                    plot=args.plot,
+                    ideal_empirical_psf=args.ideal_empirical_psf,
+                    edge_filter=args.edge_filter,
+                    digital_rotations=args.digital_rotations,
+                    preloaded=preloaded,
+                )
+
+            elif args.func == 'predict_sample':
+                experimental.predict_sample(
+                    model=args.model,
+                    img=args.input,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    prev=args.prev,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    wavelength=args.wavelength,
+                    dm_damping_scalar=args.dm_damping_scalar,
+                    freq_strength_threshold=args.freq_strength_threshold,
+                    prediction_threshold=args.prediction_threshold,
+                    confidence_threshold=args.confidence_threshold,
+                    sign_threshold=args.sign_threshold,
+                    num_predictions=args.num_predictions,
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
+                    batch_size=args.batch_size,
+                    estimate_sign_with_decon=args.estimate_sign_with_decon,
+                    ignore_modes=args.ignore_mode,
+                    ideal_empirical_psf=args.ideal_empirical_psf,
+                    cpu_workers=args.cpu_workers,
+                    preloaded=preloaded
+                )
+
+            elif args.func == 'predict_large_fov':
+                experimental.predict_large_fov(
+                    model=args.model,
+                    img=args.input,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    prev=args.prev,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    wavelength=args.wavelength,
+                    dm_damping_scalar=args.dm_damping_scalar,
+                    freq_strength_threshold=args.freq_strength_threshold,
+                    prediction_threshold=args.prediction_threshold,
+                    confidence_threshold=args.confidence_threshold,
+                    sign_threshold=args.sign_threshold,
+                    num_predictions=args.num_predictions,
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
+                    batch_size=args.batch_size,
+                    estimate_sign_with_decon=args.estimate_sign_with_decon,
+                    ignore_modes=args.ignore_mode,
+                    ideal_empirical_psf=args.ideal_empirical_psf,
+                    cpu_workers=args.cpu_workers,
+                    preloaded=preloaded
+                )
+
+            elif args.func == 'predict_rois':
+                experimental.predict_rois(
+                    model=args.model,
+                    img=args.input,
+                    pois=args.pois,
+                    prev=args.prev,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    wavelength=args.wavelength,
+                    window_size=tuple(int(i) for i in args.window_size.split('-')),
+                    num_predictions=args.num_predictions,
+                    num_rois=args.num_rois,
+                    min_intensity=args.min_intensity,
+                    freq_strength_threshold=args.freq_strength_threshold,
+                    prediction_threshold=args.prediction_threshold,
+                    sign_threshold=args.sign_threshold,
+                    minimum_distance=args.minimum_distance,
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
+                    batch_size=args.batch_size,
+                    estimate_sign_with_decon=args.estimate_sign_with_decon,
+                    ignore_modes=args.ignore_mode,
+                    ideal_empirical_psf=args.ideal_empirical_psf,
+                    cpu_workers=args.cpu_workers,
+                    preloaded=preloaded
+                )
+            elif args.func == 'predict_tiles':
+                experimental.predict_tiles(
+                    model=args.model,
+                    img=args.input,
+                    prev=args.prev,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    freq_strength_threshold=args.freq_strength_threshold,
+                    prediction_threshold=args.prediction_threshold,
+                    confidence_threshold=args.confidence_threshold,
+                    sign_threshold=args.sign_threshold,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    num_predictions=args.num_predictions,
+                    wavelength=args.wavelength,
+                    window_size=tuple(int(i) for i in args.window_size.split('-')),
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
+                    batch_size=args.batch_size,
+                    estimate_sign_with_decon=args.estimate_sign_with_decon,
+                    ignore_modes=args.ignore_mode,
+                    ideal_empirical_psf=args.ideal_empirical_psf,
+                    cpu_workers=args.cpu_workers,
+                    preloaded=preloaded
+                )
+            elif args.func == 'aggregate_predictions':
+                experimental.aggregate_predictions(
+                    model=args.model,
+                    model_pred=args.input,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    wavelength=args.wavelength,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    prediction_threshold=args.prediction_threshold,
+                    confidence_threshold=args.confidence_threshold,
+                    majority_threshold=args.majority_threshold,
+                    min_percentile=args.min_percentile,
+                    max_percentile=args.max_percentile,
+                    final_prediction=args.final_prediction,
+                    max_isoplanatic_clusters=args.max_isoplanatic_clusters,
+                    ignore_tile=args.ignore_tile,
+                    dm_damping_scalar=args.dm_damping_scalar,
+                    plot=args.plot,
+                    preloaded=preloaded
+                )
+            elif args.func == 'phase_retrieval':
+                experimental.phase_retrieval(
+                    img=args.input,
+                    num_modes=args.num_modes,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    wavelength=args.wavelength,
+                    dm_damping_scalar=args.dm_damping_scalar,
+                    prediction_threshold=args.prediction_threshold,
+                    num_iterations=args.num_iterations,
+                    plot=args.plot,
+                    ignore_modes=args.ignore_mode,
+                    use_pyotf_zernikes=args.use_pyotf_zernikes,
+                )
+            elif args.func == 'eval_dm':
+                experimental_eval.eval_dm(
+                    datadir=args.datadir,
+                )
+            elif args.func == 'calibrate_dm':
+                experimental_eval.calibrate_dm(
+                    datadir=args.datadir,
+                    dm_calibration=args.dm_calibration,
+                )
+            elif args.func == 'eval_mode':
+                experimental_eval.eval_mode(
+                    model_path=args.model_path,
+                    input_path=args.input_path,
+                    prediction_path=args.prediction_path,
+                    gt_path=args.gt_path,
+                    postfix=args.prediction_postfix,
+                    gt_postfix=args.gt_postfix,
+                )
+            elif args.func == 'eval_dataset':
+                experimental_eval.eval_dataset(
+                    datadir=args.datadir,
+                    flat=args.flat,
+                    plot_evals=not args.skip_eval_plots,
+                    precomputed=args.precomputed,
+                )
+            elif args.func == 'eval_ao_dataset':
+                experimental_eval.eval_ao_dataset(
+                    datadir=args.datadir,
+                    flat=args.flat,
+                    plot_evals=not args.skip_eval_plots,
+                    precomputed=args.precomputed,
+                )
+            elif args.func == 'plot_dataset_mips':
+                experimental_eval.plot_dataset_mips(
+                    datadir=args.datadir,
+                )
+            elif args.func == 'eval_bleaching_rate':
+                experimental_eval.eval_bleaching_rate(
+                    datadir=args.datadir,
+                )
+            elif args.func == 'plot_bleaching_rate':
+                experimental_eval.plot_bleaching_rate(
+                    datadir=args.datadir,
+                )
+            else:
+                logger.error(f"Error")
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
