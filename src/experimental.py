@@ -1298,7 +1298,7 @@ def aggregate_predictions(
     )
     
     isoplanatic_patch_colormap = pd.read_csv(
-        isoplanatic_patch_colormap,
+        isoplanatic_patch_colormap.resolve(),
         header=None,
         index_col=None,
         dtype=np.ubyte
