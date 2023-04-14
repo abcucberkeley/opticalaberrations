@@ -79,7 +79,7 @@ def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> int:
 
 
 @profile
-def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 'linear_ramp', **kwargs):
+def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 'reflect', **kwargs):
     """Crops or pads array.  Output will have dimensions "crop_shape". No interpolation. Padding type
     can be customized with **kwargs, like "reflect" to get mirror pad.
 
