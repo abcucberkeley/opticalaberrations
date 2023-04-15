@@ -75,7 +75,7 @@ def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> int:
 
     signal = np.max(a, axis=axis) - np.median(a, axis=axis)
     noise = measure_noise(a, axis=axis)
-    return int(np.round(np.where(noise == 0, np.inf, signal/noise), 0))
+    return int(np.round(np.where(noise == 0, 0, signal/noise), 0))
 
 
 @profile
@@ -110,11 +110,24 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 're
 
     if len(img.shape) == 5:
         if img.shape[0] != 1:
-            return np.array([np.pad(s[slicer], pad, mode=mode, **kwargs) for s in np.squeeze(img)])[..., np.newaxis]
+            padded = np.array([np.pad(s[slicer], pad, mode=mode, **kwargs) for s in np.squeeze(img)])[..., np.newaxis]
         else:
-            return np.pad(np.squeeze(img)[slicer], pad, mode=mode, **kwargs)[np.newaxis, ..., np.newaxis]
+            padded = np.pad(np.squeeze(img)[slicer], pad, mode=mode, **kwargs)[np.newaxis, ..., np.newaxis]
     else:
-        return np.pad(img[tuple(slicer)], pad, mode=mode, **kwargs)
+        padded = np.pad(img[tuple(slicer)], pad, mode=mode, **kwargs)
+
+    pad_width = 1 - np.array(img.shape) / np.array(crop_shape)
+    pad_width = np.clip(pad_width*2, 0, 1)
+
+    if all(pad_width == 0):
+        return padded
+    else:
+        window_z = window(('tukey', pad_width[0]), padded.shape[0])**2
+        # window_y = window(('tukey', pad_width[1]), padded.shape[1])
+        # window_x = window(('tukey', pad_width[2]), padded.shape[2])
+        # zv, yv, xv = np.meshgrid(window_z, window_y, window_x, indexing='ij', copy=True)
+        padded *= window_z[..., np.newaxis, np.newaxis]
+        return padded
 
 
 def dog(
@@ -189,11 +202,12 @@ def dog(
             im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)    # sharper
             im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)   # more blurred
 
-            if cp.std(im2 < 2):
-                #this is sparse
-                im2 += cp.std(image) # increase the background subtraction by the noise
+            if cp.std(im2 < 1):  # this is sparse
+                noise = cp.std(image-im2)  # increase the background subtraction by the noise
+            else:
+                noise = 0
 
-            return im1 - im2
+            return im1 - (im2 + noise)
 
         except ImportError:
             return difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)

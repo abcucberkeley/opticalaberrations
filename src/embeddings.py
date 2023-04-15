@@ -231,7 +231,7 @@ def gaussian_kernel(kernlen: tuple = (21, 21, 21), std=3):
     z = np.arange((-kernlen[0] // 2)+1, (-kernlen[0] // 2)+1 + kernlen[0], 1)
     zz, yy, xx = np.meshgrid(z, y, x, indexing='ij')
     kernel = np.exp(-(xx ** 2 + yy ** 2 + zz ** 2) / (2 * std ** 2))
-    return kernel
+    return kernel / np.sum(kernel)
 
 
 @profile
@@ -300,6 +300,7 @@ def remove_interference_pattern(
             convolved_psf,
             min_distance=min_distance,
             threshold_rel=.3,
+            threshold_abs=np.std(psf),
             exclude_border=int(np.floor(effective_kernel_width)),
             p_norm=2,
             num_peaks=max_num_peaks
