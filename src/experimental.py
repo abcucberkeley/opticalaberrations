@@ -1345,9 +1345,9 @@ def aggregate_predictions(
     clusters['cluster'] = emb['cluster']
 
     # assign a unique color for tiles without predictions
-    clusters.fillna(20, inplace=True)
+    clusters['cluster'].fillna(max_isoplanatic_clusters, inplace=True)
 
-    clusters3d_colormap = sns.color_palette("tab20", n_colors=20)
+    clusters3d_colormap = sns.color_palette("tab20", n_colors=max_isoplanatic_clusters)
     clusters3d_colormap.append((0, 0, 0))  # black color for no data
     clusters3d_colormap = np.array(clusters3d_colormap)*255
 
@@ -1357,6 +1357,102 @@ def aggregate_predictions(
     clusters3d = clusters3d_colormap[clusters3d.astype(np.ubyte)] * vol[..., np.newaxis]
     clusters3d = clusters3d.astype(np.ubyte)
     imwrite(f"{model_pred.with_suffix('')}_aggregated_clusters.tif", clusters3d, photometric='rgb')
+
+    isoplanatic_patchs['cluster'] = clusters.groupby(['z', 'y', 'x'])['cluster'].agg(pd.Series.mode)
+    clusters = isoplanatic_patchs.groupby('cluster')
+    coefficients, actuators = {}, {}
+
+    for c in trange(max_isoplanatic_clusters, desc='Aggregating clusters', total=max_isoplanatic_clusters):
+        tiles = clusters.get_group(c)
+
+        # filter out small predictions
+        prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
+        tiles[tiles['prediction'] < prediction_threshold] = 0
+        tiles[tiles['stdev'] > confidence_threshold] = 0
+
+        predictions = pd.pivot_table(
+            tiles,
+            values='prediction',
+            index=['z', 'y', 'x'],
+            columns=['mode'],
+            aggfunc=np.mean
+        )
+        stdevs = pd.pivot_table(
+            tiles,
+            values='stdev',
+            index=['z', 'y', 'x'],
+            columns=['mode'],
+            aggfunc=np.mean
+        )
+
+        votes = predictions != 0  # get tile votes per mode
+
+        if final_prediction == 'weighted_average':
+            pred = np.average(predictions[votes], weights=weights, axis=1)
+            variance = np.average(predictions[votes].subtract(pred, axis=0)**2, weights=weights, axis=1)
+            pred_std = np.sqrt(variance)
+
+        elif final_prediction == 'mean':
+            pred = np.nanmean(predictions[votes], axis=0)
+            pred_std = np.nanmean(stdevs[votes], axis=0)
+
+        elif final_prediction == 'median':
+            pred = np.nanmedian(predictions[votes], axis=0)
+            pred_std = np.nanmedian(stdevs[votes], axis=0)
+
+        elif final_prediction == 'min':
+            pred = np.nanmin(predictions[votes], axis=0)
+            pred_std = np.nanmin(stdevs[votes], axis=0)
+
+        elif final_prediction == 'max':
+            pred = np.nanmax(predictions[votes], axis=0)
+            pred_std = np.nanmax(stdevs[votes], axis=0)
+
+        else:
+            logger.error(f'Unknown function: {final_prediction}')
+            return -1
+
+        pred = np.nan_to_num(pred, nan=0, posinf=0, neginf=0)
+        pred_std = np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0)
+
+        pred = Wavefront(
+            pred,
+            order='ansi',
+            lam_detection=wavelength
+        )
+
+        pred_std = Wavefront(
+            pred_std,
+            order='ansi',
+            lam_detection=wavelength
+        )
+
+        coefficients[f'c{c}'] = pred.amplitudes
+
+        actuators[f'c{c}'] = utils.zernikies_to_actuators(
+            pred.amplitudes,
+            dm_calibration=dm_calibration,
+            dm_state=dm_state,
+            scalar=dm_damping_scalar
+        )
+
+        psf = samplepsfgen.single_psf(phi=pred, normed=True, noise=False)
+        imwrite(f"{model_pred.with_suffix('')}_aggregated_psf_c{c}.tif", psf)
+
+        if plot:
+            mp.Pool(1).apply_async(vis.diagnosis(
+                pred=pred,
+                pred_std=pred_std,
+                save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_c{c}"),
+            ))
+
+    coefficients = pd.DataFrame.from_dict(coefficients)
+    coefficients.index.name = 'ansi'
+    coefficients.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters_zernike_coefficients.csv")
+
+    actuators = pd.DataFrame.from_dict(actuators)
+    actuators.index.name = 'actuators'
+    actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters_corrected_actuators.csv")
 
     # vis.plot_volume(
     #     vol=terrain3d,
