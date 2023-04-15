@@ -21,8 +21,7 @@ from line_profiler_pycharm import profile
 from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
 from sklearn.cluster import KMeans
-from skimage.transform import rescale, resize
-from matplotlib.colors import hsv_to_rgb
+from skimage.transform import resize
 
 import utils
 import vis
@@ -1309,62 +1308,64 @@ def aggregate_predictions(
     terrain3d = (terrain3d % 256).round(0).astype(np.ubyte)  # wrap if terrain's span is > 1 wave
 
     #  terrain3d is full brightness RGB color then use vol to determine brightness
-    rgb_vol = isoplanatic_patch_colormap[terrain3d] * vol[..., np.newaxis]
-    rgb_vol = rgb_vol.astype(np.ubyte)
-    imwrite(
-        f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif",
-        rgb_vol,
-        photometric='rgb'
-    )
+    terrain3d = isoplanatic_patch_colormap[terrain3d] * vol[..., np.newaxis]
+    terrain3d = terrain3d.astype(np.ubyte)
+    imwrite(f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif", terrain3d, photometric='rgb')
 
-    # vis.plot_volume(
-    #     vol=rgb_vol,
-    #     results=coefficients,
-    #     window_size=predictions_settings['window_size'],
-    #     dxy=lateral_voxel_size,
-    #     dz=axial_voxel_size,
-    #     save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
-    # )
-
+    # create a new embedding to cluster isoplanatic patches
     clusters = pd.pivot_table(
         isoplanatic_patchs,
         values='prediction',
         index=['z', 'y', 'x'],
         columns=['mode'],
         aggfunc=np.sum
-    )#.reset_index()
+    )
 
-    clusters[clusters.abs() < .0025] = 0
-    clusters[clusters.abs() > .0025] = 1
-    # emb = clusters.loc[~(clusters[range(preloadedmodel.output_shape[1])] == 0).all(axis=1)]
+    # include spatial coordinates into the embedding
+    clusters = clusters.reset_index()
 
-    clusters['cluster'] = clusters.sum(axis=1)
-    # logger.info('KMeans calculating...')
-    # clusters['cluster'] = KMeans(
-    #     init="k-means++",
-    #     n_init=5,
-    #     verbose=False,
-    #     n_clusters=2,
-    # ).fit_predict(clusters.values)
+    logger.info('KMeans calculating...')
 
-    # from sklearn.cluster import DBSCAN
-    # clusters['cluster'] = DBSCAN(
-    #     verbose=False,
-    # ).fit_predict(clusters.values)
+    # remove predictions below this threshold
+    clusters[clusters.abs() < .005] = 0
 
+    # filter out tiles with no predictions
+    emb = clusters.loc[~(clusters[range(preloadedmodel.output_shape[1])] == 0).all(axis=1)]
 
-    clusters3d = clusters['cluster'].values.reshape((ztiles, nrows, ncols))
-    clusters3d = resize(clusters3d, vol.shape, order=0, mode='constant')
+    # run clustering on valid points only
+    cc = KMeans(
+        init="k-means++",
+        n_init=5,
+        verbose=False,
+        n_clusters=max_isoplanatic_clusters,
+    )
+    emb['cluster'] = cc.fit_predict(emb.values)
+
+    # assign cluster codes
+    clusters['cluster'] = emb['cluster']
+
+    # assign a unique color for tiles without predictions
+    clusters.fillna(20, inplace=True)
+
+    clusters3d_colormap = sns.color_palette("tab20", n_colors=20)
+    clusters3d_colormap.append((0, 0, 0))  # black color for no data
+    clusters3d_colormap = np.array(clusters3d_colormap)*255
 
     #  clusters3d is full brightness RGB color then use vol to determine brightness
-    clusters3d_colormap = np.array(sns.color_palette("Spectral", n_colors=15))*255
-    rgb_vol = clusters3d_colormap[clusters3d.astype(np.ubyte)] * vol[..., np.newaxis]
-    rgb_vol = rgb_vol.astype(np.ubyte)
-    imwrite(
-        f"{model_pred.with_suffix('')}_aggregated_clusters.tif",
-        rgb_vol,
-        photometric='rgb'
-    )
+    clusters3d = clusters['cluster'].values.reshape((ztiles, nrows, ncols))
+    clusters3d = resize(clusters3d, vol.shape, order=0, mode='constant')
+    clusters3d = clusters3d_colormap[clusters3d.astype(np.ubyte)] * vol[..., np.newaxis]
+    clusters3d = clusters3d.astype(np.ubyte)
+    imwrite(f"{model_pred.with_suffix('')}_aggregated_clusters.tif", clusters3d, photometric='rgb')
+
+    # vis.plot_volume(
+    #     vol=terrain3d,
+    #     results=coefficients,
+    #     window_size=predictions_settings['window_size'],
+    #     dxy=lateral_voxel_size,
+    #     dz=axial_voxel_size,
+    #     save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
+    # )
 
     # vis.plot_isoplanatic_patchs(
     #     results=isoplanatic_patchs,
