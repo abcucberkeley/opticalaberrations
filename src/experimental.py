@@ -1155,22 +1155,6 @@ def aggregate_predictions(
     with open(str(model_pred).replace('.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
 
-    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
-        modelpath=predictions_settings['model'],
-        preloaded=preloaded,
-        ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
-    )
-
-
-    samplepsfgen = SyntheticPSF(
-        psf_type=premodelpsfgen.psf_type,
-        n_modes=preloadedmodel.output_shape[1],
-        lam_detection=wavelength,
-        x_voxel_size=lateral_voxel_size,
-        y_voxel_size=lateral_voxel_size,
-        z_voxel_size=axial_voxel_size
-    )
-
     predictions = pd.read_csv(
         model_pred,
         index_col=0,
@@ -1269,9 +1253,6 @@ def aggregate_predictions(
             scalar=dm_damping_scalar
         )
 
-        psf = samplepsfgen.single_psf(phi=pred, normed=True, noise=False)
-        imwrite(f"{model_pred.with_suffix('')}_aggregated_psf_z{z}.tif", psf)
-
         if plot:
             task = partial(vis.diagnosis,
                 pred=pred,
@@ -1334,7 +1315,7 @@ def aggregate_predictions(
     clusters[clusters.abs() < .005] = 0
 
     # filter out tiles with no predictions
-    emb = clusters.loc[~(clusters[range(preloadedmodel.output_shape[1])] == 0).all(axis=1)]
+    emb = clusters.loc[~(clusters[range(predictions.shape[0])] == 0).all(axis=1)]
 
     # run clustering on valid points only
     cc = KMeans(
@@ -1447,9 +1428,6 @@ def aggregate_predictions(
             dm_state=dm_state,
             scalar=dm_damping_scalar
         )
-
-        psf = samplepsfgen.single_psf(phi=pred, normed=True, noise=False)
-        imwrite(f"{model_pred.with_suffix('')}_aggregated_psf_c{c}.tif", psf)
 
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
