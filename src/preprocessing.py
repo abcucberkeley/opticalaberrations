@@ -205,14 +205,17 @@ def dog(
 
             if cp.std(im2) < 3:  # this is sparse
                 snr = measure_snr(image)
-
                 if snr > snr_threshold:
                     noise = cp.std(image - im2)  # increase the background subtraction by the noise
                     return im1 - (im2 + noise)
                 else:
                     return np.zeros_like(image)
             else:
-                return im1 - im2
+                filtered_img = im1 - im2
+                if measure_snr(filtered_img) < 13:
+                    return np.zeros_like(image)
+                else:
+                    return filtered_img
 
         except ImportError:
             return difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
