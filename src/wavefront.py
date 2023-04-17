@@ -232,7 +232,6 @@ class Wavefront:
             :param outside: scalar, outside padding of the spherical disc defined within a square grid, default is none
             :return: 2D array, wavefront computed for rho and theta
         """
-        return np.sum(
         if all(self.amplitudes == 0):
             # flat wavefront
             (z, a) = list(self.zernikes.items())[0]  # take the first to get correct size and mask

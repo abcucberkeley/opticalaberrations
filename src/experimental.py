@@ -1150,6 +1150,7 @@ def aggregate_predictions(
     vol /= np.percentile(vol, 98)
     vol = np.clip(vol, 0, 1)
 
+    pool = mp.Pool(processes=4)  # async pool for plotting
 
     with open(str(model_pred).replace('.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
@@ -1272,11 +1273,12 @@ def aggregate_predictions(
         imwrite(f"{model_pred.with_suffix('')}_aggregated_psf_z{z}.tif", psf)
 
         if plot:
-            mp.Pool(1).apply_async(vis.diagnosis(
+            task = partial(vis.diagnosis,
                 pred=pred,
                 pred_std=pred_std,
                 save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_z{z}"),
-            ))
+            )
+            pool.apply_async(task)
 
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
@@ -1429,6 +1431,14 @@ def aggregate_predictions(
             lam_detection=wavelength
         )
 
+        if plot:
+            task = partial(vis.diagnosis,
+                pred=pred,
+                pred_std=pred_std,
+                save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_c{c}"),
+            )
+            pool.apply_async(task)
+
         coefficients[f'c{c}'] = pred.amplitudes
 
         actuators[f'c{c}'] = utils.zernikies_to_actuators(
@@ -1440,13 +1450,6 @@ def aggregate_predictions(
 
         psf = samplepsfgen.single_psf(phi=pred, normed=True, noise=False)
         imwrite(f"{model_pred.with_suffix('')}_aggregated_psf_c{c}.tif", psf)
-
-        if plot:
-            mp.Pool(1).apply_async(vis.diagnosis(
-                pred=pred,
-                pred_std=pred_std,
-                save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_c{c}"),
-            ))
 
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
@@ -1470,6 +1473,10 @@ def aggregate_predictions(
     #     clusters=clusters,
     #     save_path=f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.svg"
     # )
+
+    logger.info('Done. Waiting for plots to write.')
+    pool.close()    # close the pool
+    pool.join()     # wait for all tasks to complete
 
     return coefficients
 
