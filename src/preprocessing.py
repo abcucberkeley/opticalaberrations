@@ -330,19 +330,6 @@ def prep_sample(
         )
         axes[0, 1].set_title(f"PSNR: {measure_snr(sample)}")
 
-    if model_fov is not None:
-        # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
-        number_of_desired_sample_pixels = (
-            round_to_even(model_fov[0] / sample_voxel_size[0]),
-            round_to_even(model_fov[1] / sample_voxel_size[1]),
-            round_to_even(model_fov[2] / sample_voxel_size[2]),
-        )
-
-        if not all(s1 == s2 for s1, s2 in zip(number_of_desired_sample_pixels, sample.shape)):
-            sample = resize_with_crop_or_pad(
-                sample,
-                crop_shape=number_of_desired_sample_pixels
-            )
 
     if remove_background:
         sample = cp.array(sample)
@@ -364,6 +351,20 @@ def prep_sample(
             dz=sample_voxel_size[0],
             label='DoG [$\gamma$=.5]'
         )
+
+    if model_fov is not None:
+        # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
+        number_of_desired_sample_pixels = (
+            round_to_even(model_fov[0] / sample_voxel_size[0]),
+            round_to_even(model_fov[1] / sample_voxel_size[1]),
+            round_to_even(model_fov[2] / sample_voxel_size[2]),
+        )
+
+        if not all(s1 == s2 for s1, s2 in zip(number_of_desired_sample_pixels, sample.shape)):
+            sample = resize_with_crop_or_pad(
+                sample,
+                crop_shape=number_of_desired_sample_pixels
+            )
 
     if windowing:
         sample = tukey_window(sample)
