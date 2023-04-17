@@ -233,9 +233,16 @@ class Wavefront:
             :return: 2D array, wavefront computed for rho and theta
         """
         return np.sum(
-            [a * z.phase(rho=rho, theta=theta, normed=normed, outside=outside) for z, a in self.zernikes.items()],
-            axis=0
-        )
+        if all(self.amplitudes == 0):
+            # flat wavefront
+            (z, a) = list(self.zernikes.items())[0]  # take the first to get correct size and mask
+            return a * z.phase(rho=rho, theta=theta, normed=normed, outside=outside)
+
+        else:
+            return np.sum(
+                [a * z.phase(rho=rho, theta=theta, normed=normed, outside=outside) for z, a in self.zernikes.items() if a != 0],
+                axis=0
+            )
 
     def polynomial(self, size, normed=True, outside=np.nan):
         """
@@ -246,11 +253,18 @@ class Wavefront:
             :param outside: scalar, Outside padding of the spherical disc defined within a square grid, default is np.nan
             :return: 2D array, weighted sums of Zernike polynomials computed on a disc of unit radius defined within a square grid
         """
-        return np.sum(
-            [self._microns2waves(a) * z.polynomial(size=size, normed=normed, outside=outside)
-             for z, a in self.zernikes.items()],
-            axis=0
-        )
+        if all(self.amplitudes == 0):
+            # flat wavefront
+            (z, a) = list(self.zernikes.items())[0]  # take the first to get correct size and mask
+            return self._microns2waves(a) * z.polynomial(size=size, normed=normed, outside=outside)
+
+        else:   # Optimize by skipping polynomial calc when amplitude is zero
+            return np.sum(
+                [self._microns2waves(a) * z.polynomial(size=size, normed=normed, outside=outside)
+                 for z, a in self.zernikes.items() if a != 0],
+                axis=0
+            )
+
 
     def wave(self, size=55, normed=True):
         return np.flip(np.rot90(self.polynomial(size=size, normed=normed)), axis=0)
