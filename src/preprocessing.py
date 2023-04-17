@@ -132,11 +132,12 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 're
 
 def dog(
     image,
-    low_sigma,
-    high_sigma=None,
-    mode='nearest',
-    cval=0,
-    truncate=4.0
+    low_sigma: float,
+    high_sigma: Union[float] = None,
+    mode: str = 'nearest',
+    cval: int = 0,
+    truncate: float = 4.0,
+    snr_threshold: int = 10,
 ):
     """
     Find features between ``low_sigma`` and ``high_sigma`` in size.
@@ -203,11 +204,15 @@ def dog(
             im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)   # more blurred
 
             if cp.std(im2 < 1):  # this is sparse
-                noise = cp.std(image-im2)  # increase the background subtraction by the noise
-            else:
-                noise = 0
+                snr = measure_snr(image)
 
-            return im1 - (im2 + noise)
+                if snr > snr_threshold:
+                    noise = cp.std(image - im2)  # increase the background subtraction by the noise
+                    return im1 - (im2 + noise)
+                else:
+                    return np.zeros_like(image)
+            else:
+                return im1 - im2
 
         except ImportError:
             return difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
