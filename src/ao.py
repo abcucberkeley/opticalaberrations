@@ -760,7 +760,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         flags = ' '.join(sys.argv[1:])
         flags = flags.replace('..', cluster_repo)
         flags = flags.replace('--cluster', '')
-        hostname = 'login.abc.berkeley.edu'
+        hostname = 'master.abc.berkeley.edu'
         username = 'thayeralshaabi'
 
         job = f"srun -p {node} --job-name={taskname} --exclusive --pty {cluster_env} {script} {flags}"
