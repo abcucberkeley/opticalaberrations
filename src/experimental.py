@@ -358,7 +358,7 @@ def reconstruct_wavefront_error_landscape(
 
     center = (ztiles//2, ytiles//2, xtiles//2)
     peak = isoplanatic_patchs.apply(lambda x: x**2).groupby(['z', 'y', 'x']).sum()['prediction'].idxmax()
-    terrain = np.zeros(xtiles * ytiles * ztiles)
+    tile_p2v = np.full((xtiles * ytiles * ztiles), np.nan)
 
     matrix_row = 0  # pointer to where we are writing
     for i, tile_coords in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
@@ -367,8 +367,8 @@ def reconstruct_wavefront_error_landscape(
             isoplanatic_patchs.loc[tile_coords, 'prediction'].values,
             lam_detection=wavelength
         )
-        tile_p2v = tile_wavefront.peak2valley(na=na)
-        # terrain[i] = tile_wavefront.peak2valley(na=na)
+        if np.isnan(tile_p2v[i]):
+            tile_p2v[i] = tile_wavefront.peak2valley(na=na)
 
         for j, neighbour_coords in enumerate(neighbours):  # ordered as (z, y, x) neighbours
             try:
@@ -376,6 +376,8 @@ def reconstruct_wavefront_error_landscape(
                     isoplanatic_patchs.loc[neighbour_coords, 'prediction'].values,
                     lam_detection=wavelength
                 )
+                if np.isnan(tile_p2v[j]):
+                    tile_p2v[j] = neighbour_wavefront.peak2valley(na=na)
 
                 diff_wavefront = Wavefront(tile_wavefront - neighbour_wavefront, lam_detection=wavelength)
                 p2v = diff_wavefront.peak2valley(na=na)
@@ -386,7 +388,7 @@ def reconstruct_wavefront_error_landscape(
                 if v2 < v1: # choose negative slope when neighbor has less aberration along the current aberration
                     p2v *= -1
 
-                if tile_p2v > threshold and neighbour_wavefront.peak2valley(na=na) > threshold:
+                if tile_p2v[i] > threshold and tile_p2v[j] > threshold:
                     # rescale slopes with the distance between tiles (h)
                     slopes[matrix_row] = p2v / h[j]
                     A[matrix_row, np.ravel_multi_index(neighbour_coords, (ztiles, ytiles, xtiles))] = 1 / h[j]
