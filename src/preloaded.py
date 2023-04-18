@@ -1,5 +1,4 @@
 from pathlib import Path
-from tensorflow import config as tfc
 from backend import load, load_metadata
 import numpy as np
 from typing import Optional, Union
@@ -30,10 +29,6 @@ class Preloadedmodelclass:
             self.ideal_empirical_psf_voxel_size = ideal_empirical_psf_voxel_size
 
         self.modelpath = Path(modelpath)
-                
-        physical_devices = tfc.list_physical_devices('GPU')
-        for gpu_instance in physical_devices:
-            tfc.experimental.set_memory_growth(gpu_instance, True)
 
         self.modelpsfgen = load_metadata(self.modelpath, psf_type=psf_type, n_modes=n_modes)
         self.model = load(self.modelpath, mosaic=True)
