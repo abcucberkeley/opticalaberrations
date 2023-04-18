@@ -768,8 +768,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         timeit = time.time()
 
         physical_devices = tf.config.list_physical_devices('GPU')
-        for gpu_instance in physical_devices:
-            tf.config.experimental.set_memory_growth(gpu_instance, True)
 
         if len(physical_devices) > 1:
             cp.fft.config.use_multi_gpus = True
@@ -1052,7 +1050,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             else:
                 logger.error(f"Error")
 
-    logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+        logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 
 if __name__ == "__main__":
