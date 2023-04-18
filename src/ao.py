@@ -730,17 +730,6 @@ def parse_args(args):
 
 def main(args=None, preloaded: Preloadedmodelclass = None):
 
-    hostname = "10.17.209.10"
-    username = "thayeralshaabi"
-
-    cluster_env = f"~/anaconda3/envs/ml/bin/python"
-    cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
-    script = f"{cluster_repo}/src/ao.py"
-
-    if os.name == 'nt':
-        mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
-
-    timeit = time.time()
     args, unknown = parse_args(args)
 
     logging.basicConfig(
@@ -750,39 +739,50 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
     logger = logging.getLogger('')
     logger.info(args)
 
-    physical_devices = tf.config.list_physical_devices('GPU')
-    for gpu_instance in physical_devices:
-        tf.config.experimental.set_memory_growth(gpu_instance, True)
+    if args.cluster:
+        hostname = "10.17.209.10"
+        username = "thayeralshaabi"
+        partition = "abc_a100"
 
-    if len(physical_devices) > 1:
-        cp.fft.config.use_multi_gpus = True
-        cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
+        cluster_env = f"~/anaconda3/envs/ml/bin/python"
+        cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
+        script = f"{cluster_repo}/src/ao.py"
 
-    strategy = tf.distribute.MirroredStrategy(
-        devices=[f"{physical_devices[i].device_type}:{i}" for i in range(len(physical_devices))]
-    )
+        flags = ' '.join(sys.argv[1:])
+        flags = flags.replace('..', cluster_repo)
+        flags = flags.replace('--cluster', '')
+        taskname = f"{args.func}_{args.input.stem}"
 
-    gpu_workers = strategy.num_replicas_in_sync
-    logging.info(f'Number of active GPUs: {gpu_workers}')
+        sjob = f"srun "
+        sjob += f"--exclusive  "
+        sjob += f"-p {partition} "
+        sjob += f" --nodes=1 "
+        sjob += f"--job-name={taskname} "
+        sjob += f"--pty {cluster_env} {script} {flags}"
 
-    with strategy.scope():
+        subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
+    else:
+        if os.name == 'nt':
+            mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
 
-        if args.cluster:
-            partition = "abc_a100"
-            flags = ' '.join(sys.argv[1:])
-            flags = flags.replace('..', cluster_repo)
-            flags = flags.replace('--cluster', '')
-            taskname = f"{args.func}_{args.input.stem}"
+        timeit = time.time()
 
-            sjob = f"srun "
-            sjob += f"--exclusive  "
-            sjob += f"-p {partition} "
-            sjob += f" --nodes=1 "
-            sjob += f"--job-name={taskname} "
-            sjob += f"--pty {cluster_env} {script} {flags}"
+        physical_devices = tf.config.list_physical_devices('GPU')
+        for gpu_instance in physical_devices:
+            tf.config.experimental.set_memory_growth(gpu_instance, True)
 
-            subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
-        else:
+        if len(physical_devices) > 1:
+            cp.fft.config.use_multi_gpus = True
+            cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
+
+        strategy = tf.distribute.MirroredStrategy(
+            devices=[f"{physical_devices[i].device_type}:{i}" for i in range(len(physical_devices))]
+        )
+
+        gpu_workers = strategy.num_replicas_in_sync
+        logging.info(f'Number of active GPUs: {gpu_workers}')
+
+        with strategy.scope():
             if args.func == 'deskew':
                 experimental_llsm.deskew(
                     img=args.input,
@@ -1050,7 +1050,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             else:
                 logger.error(f"Error")
 
-    logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+        logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 
 if __name__ == "__main__":
