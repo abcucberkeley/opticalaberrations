@@ -869,6 +869,10 @@ def predict_dataset(
         inputs = inputs.map(lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:])))
         inputs = inputs.unbatch().batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
 
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+    inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE)
+
     preds = model.predict(inputs, batch_size=batch_size, verbose=verbose)
 
     preds[:, ignore_modes] = 0.

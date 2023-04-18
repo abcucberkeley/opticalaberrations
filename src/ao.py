@@ -730,6 +730,16 @@ def parse_args(args):
 
 def main(args=None, preloaded: Preloadedmodelclass = None):
 
+    hostname = "10.17.209.10"
+    username = "thayeralshaabi"
+
+    nodes = 4
+    partition = "abc_a100"
+
+    cluster_env = f"~/anaconda3/envs/ml/bin/python"
+    cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
+    script = f"{cluster_repo}/src/ao.py"
+
     if os.name == 'nt':
         mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
 
@@ -751,287 +761,300 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         cp.fft.config.use_multi_gpus = True
         cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
 
-    if args.cluster:
-        node = 'abc_a100'
-        taskname = f"{args.func}_{args.input.stem}"
-        cluster_env = f"~/anaconda3/envs/ml/bin/python"
-        cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
-        script = f"{cluster_repo}/src/ao.py"
-        flags = ' '.join(sys.argv[1:])
-        flags = flags.replace('..', cluster_repo)
-        flags = flags.replace('--cluster', '')
-        hostname = '10.17.209.10'
-        username = 'thayeralshaabi'
-
-        job = f"srun -p {node} --job-name={taskname} --exclusive --pty {cluster_env} {script} {flags}"
-        subprocess.run(f"ssh {username}@{hostname} \"{job}\"", shell=True)
+    if nodes > 1:
+        strategy = tf.distribute.MultiWorkerMirroredStrategy(
+            cluster_resolver=tf.distribute.cluster_resolver.SlurmClusterResolver(),
+        )
     else:
-        if args.func == 'deskew':
-            experimental_llsm.deskew(
-                img=args.input,
-                axial_voxel_size=args.axial_voxel_size,
-                lateral_voxel_size=args.lateral_voxel_size,
-                flipz=args.flipz,
-                skew_angle=args.skew_angle,
-            )
+        strategy = tf.distribute.MirroredStrategy()
 
-        elif args.func == 'decon':
-            experimental_llsm.decon(
-                img=args.input,
-                psf=args.psf,
-                iters=args.iters,
-                plot=args.plot,
-            )
+    gpu_workers = strategy.num_replicas_in_sync
+    logging.info(f'Number of active GPUs: {gpu_workers}')
 
-        elif args.func == 'detect_rois':
-            experimental_llsm.detect_rois(
-                img=args.input,
-                psf=args.psf,
-                axial_voxel_size=args.axial_voxel_size,
-                lateral_voxel_size=args.lateral_voxel_size,
-            )
+    with strategy.scope():
 
-        elif args.func == 'psnr':
-            sample = experimental.load_sample(args.input)
-            prep_sample(
-                sample,
-                remove_background=True,
-                return_psnr=True,
-                plot=None,
-                normalize=False,
-                edge_filter=False,
-                filter_mask_dilation=False,
-            )
+        if args.cluster:
+            flags = ' '.join(sys.argv[1:])
+            flags = flags.replace('..', cluster_repo)
+            flags = flags.replace('--cluster', '')
+            taskname = f"{args.func}_{args.input.stem}"
 
-        elif args.func == 'fourier_snr':
-            sample = experimental.load_sample(args.input)
-            psnr = prep_sample(
-                sample,
-                remove_background=True,
-                return_psnr=True,
-                plot=None,
-                normalize=False,
-                edge_filter=False,
-                filter_mask_dilation=False,
-            )
-            measure_fourier_snr(sample, psnr=psnr, plot=args.input.with_suffix('.svg'))
+            sjob = f"srun "
+            sjob += f"--exclusive  "
+            sjob += f"-p {partition} "
+            sjob += f" --nodes={nodes} "
+            sjob += f" --ntasks-per-node=1 "
+            sjob += f"--job-name={taskname} "
+            sjob += f"--pty {cluster_env} {script} {flags}"
 
-        elif args.func == 'preprocessing':
-            sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
-            sample = experimental.load_sample(args.input)
-            prep_sample(
-                sample,
-                sample_voxel_size=sample_voxel_size,
-                remove_background=args.remove_background,
-                read_noise_bias=args.read_noise_bias,
-                normalize=args.normalize,
-                edge_filter=args.edge_filter,
-                filter_mask_dilation=args.filter_mask_dilation,
-                plot=args.input.with_suffix('') if args.plot else None,
-            )
-
-        elif args.func == 'embeddings':
-            experimental.generate_embeddings(
-                file=args.input,
-                model=args.model,
-                axial_voxel_size=args.axial_voxel_size,
-                lateral_voxel_size=args.lateral_voxel_size,
-                wavelength=args.wavelength,
-                plot=args.plot,
-                ideal_empirical_psf=args.ideal_empirical_psf,
-                edge_filter=args.edge_filter,
-                digital_rotations=args.digital_rotations,
-                preloaded=preloaded,
-            )
-
-        elif args.func == 'predict_sample':
-            experimental.predict_sample(
-                model=args.model,
-                img=args.input,
-                dm_calibration=args.dm_calibration,
-                dm_state=args.current_dm,
-                prev=args.prev,
-                axial_voxel_size=args.axial_voxel_size,
-                lateral_voxel_size=args.lateral_voxel_size,
-                wavelength=args.wavelength,
-                dm_damping_scalar=args.dm_damping_scalar,
-                freq_strength_threshold=args.freq_strength_threshold,
-                prediction_threshold=args.prediction_threshold,
-                confidence_threshold=args.confidence_threshold,
-                sign_threshold=args.sign_threshold,
-                num_predictions=args.num_predictions,
-                plot=args.plot,
-                plot_rotations=args.plot_rotations,
-                batch_size=args.batch_size,
-                estimate_sign_with_decon=args.estimate_sign_with_decon,
-                ignore_modes=args.ignore_mode,
-                ideal_empirical_psf=args.ideal_empirical_psf,
-                cpu_workers=args.cpu_workers,
-                preloaded=preloaded
-            )
-
-        elif args.func == 'predict_large_fov':
-            experimental.predict_large_fov(
-                model=args.model,
-                img=args.input,
-                dm_calibration=args.dm_calibration,
-                dm_state=args.current_dm,
-                prev=args.prev,
-                axial_voxel_size=args.axial_voxel_size,
-                lateral_voxel_size=args.lateral_voxel_size,
-                wavelength=args.wavelength,
-                dm_damping_scalar=args.dm_damping_scalar,
-                freq_strength_threshold=args.freq_strength_threshold,
-                prediction_threshold=args.prediction_threshold,
-                confidence_threshold=args.confidence_threshold,
-                sign_threshold=args.sign_threshold,
-                num_predictions=args.num_predictions,
-                plot=args.plot,
-                plot_rotations=args.plot_rotations,
-                batch_size=args.batch_size,
-                estimate_sign_with_decon=args.estimate_sign_with_decon,
-                ignore_modes=args.ignore_mode,
-                ideal_empirical_psf=args.ideal_empirical_psf,
-                cpu_workers=args.cpu_workers,
-                preloaded=preloaded
-            )
-
-        elif args.func == 'predict_rois':
-            experimental.predict_rois(
-                model=args.model,
-                img=args.input,
-                pois=args.pois,
-                prev=args.prev,
-                dm_calibration=args.dm_calibration,
-                dm_state=args.current_dm,
-                axial_voxel_size=args.axial_voxel_size,
-                lateral_voxel_size=args.lateral_voxel_size,
-                wavelength=args.wavelength,
-                window_size=tuple(int(i) for i in args.window_size.split('-')),
-                num_predictions=args.num_predictions,
-                num_rois=args.num_rois,
-                min_intensity=args.min_intensity,
-                freq_strength_threshold=args.freq_strength_threshold,
-                prediction_threshold=args.prediction_threshold,
-                sign_threshold=args.sign_threshold,
-                minimum_distance=args.minimum_distance,
-                plot=args.plot,
-                plot_rotations=args.plot_rotations,
-                batch_size=args.batch_size,
-                estimate_sign_with_decon=args.estimate_sign_with_decon,
-                ignore_modes=args.ignore_mode,
-                ideal_empirical_psf=args.ideal_empirical_psf,
-                cpu_workers=args.cpu_workers,
-                preloaded=preloaded
-            )
-        elif args.func == 'predict_tiles':
-            experimental.predict_tiles(
-                model=args.model,
-                img=args.input,
-                prev=args.prev,
-                dm_calibration=args.dm_calibration,
-                dm_state=args.current_dm,
-                freq_strength_threshold=args.freq_strength_threshold,
-                prediction_threshold=args.prediction_threshold,
-                confidence_threshold=args.confidence_threshold,
-                sign_threshold=args.sign_threshold,
-                axial_voxel_size=args.axial_voxel_size,
-                lateral_voxel_size=args.lateral_voxel_size,
-                num_predictions=args.num_predictions,
-                wavelength=args.wavelength,
-                window_size=tuple(int(i) for i in args.window_size.split('-')),
-                plot=args.plot,
-                plot_rotations=args.plot_rotations,
-                batch_size=args.batch_size,
-                estimate_sign_with_decon=args.estimate_sign_with_decon,
-                ignore_modes=args.ignore_mode,
-                ideal_empirical_psf=args.ideal_empirical_psf,
-                cpu_workers=args.cpu_workers,
-                preloaded=preloaded
-            )
-        elif args.func == 'aggregate_predictions':
-            experimental.aggregate_predictions(
-                model=args.model,
-                model_pred=args.input,
-                dm_calibration=args.dm_calibration,
-                dm_state=args.current_dm,
-                wavelength=args.wavelength,
-                axial_voxel_size=args.axial_voxel_size,
-                lateral_voxel_size=args.lateral_voxel_size,
-                prediction_threshold=args.prediction_threshold,
-                confidence_threshold=args.confidence_threshold,
-                majority_threshold=args.majority_threshold,
-                min_percentile=args.min_percentile,
-                max_percentile=args.max_percentile,
-                aggregation_rule=args.aggregation_rule,
-                max_isoplanatic_clusters=args.max_isoplanatic_clusters,
-                ignore_tile=args.ignore_tile,
-                dm_damping_scalar=args.dm_damping_scalar,
-                plot=args.plot,
-                preloaded=preloaded
-            )
-        elif args.func == 'phase_retrieval':
-            experimental.phase_retrieval(
-                img=args.input,
-                num_modes=args.num_modes,
-                dm_calibration=args.dm_calibration,
-                dm_state=args.current_dm,
-                axial_voxel_size=args.axial_voxel_size,
-                lateral_voxel_size=args.lateral_voxel_size,
-                wavelength=args.wavelength,
-                dm_damping_scalar=args.dm_damping_scalar,
-                prediction_threshold=args.prediction_threshold,
-                num_iterations=args.num_iterations,
-                plot=args.plot,
-                ignore_modes=args.ignore_mode,
-                use_pyotf_zernikes=args.use_pyotf_zernikes,
-            )
-        elif args.func == 'eval_dm':
-            experimental_eval.eval_dm(
-                datadir=args.datadir,
-            )
-        elif args.func == 'calibrate_dm':
-            experimental_eval.calibrate_dm(
-                datadir=args.datadir,
-                dm_calibration=args.dm_calibration,
-            )
-        elif args.func == 'eval_mode':
-            experimental_eval.eval_mode(
-                model_path=args.model_path,
-                input_path=args.input_path,
-                prediction_path=args.prediction_path,
-                gt_path=args.gt_path,
-                postfix=args.prediction_postfix,
-                gt_postfix=args.gt_postfix,
-            )
-        elif args.func == 'eval_dataset':
-            experimental_eval.eval_dataset(
-                datadir=args.datadir,
-                flat=args.flat,
-                plot_evals=not args.skip_eval_plots,
-                precomputed=args.precomputed,
-            )
-        elif args.func == 'eval_ao_dataset':
-            experimental_eval.eval_ao_dataset(
-                datadir=args.datadir,
-                flat=args.flat,
-                plot_evals=not args.skip_eval_plots,
-                precomputed=args.precomputed,
-            )
-        elif args.func == 'plot_dataset_mips':
-            experimental_eval.plot_dataset_mips(
-                datadir=args.datadir,
-            )
-        elif args.func == 'eval_bleaching_rate':
-            experimental_eval.eval_bleaching_rate(
-                datadir=args.datadir,
-            )
-        elif args.func == 'plot_bleaching_rate':
-            experimental_eval.plot_bleaching_rate(
-                datadir=args.datadir,
-            )
+            subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
         else:
-            logger.error(f"Error")
+            if args.func == 'deskew':
+                experimental_llsm.deskew(
+                    img=args.input,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    flipz=args.flipz,
+                    skew_angle=args.skew_angle,
+                )
+
+            elif args.func == 'decon':
+                experimental_llsm.decon(
+                    img=args.input,
+                    psf=args.psf,
+                    iters=args.iters,
+                    plot=args.plot,
+                )
+
+            elif args.func == 'detect_rois':
+                experimental_llsm.detect_rois(
+                    img=args.input,
+                    psf=args.psf,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                )
+
+            elif args.func == 'psnr':
+                sample = experimental.load_sample(args.input)
+                prep_sample(
+                    sample,
+                    remove_background=True,
+                    return_psnr=True,
+                    plot=None,
+                    normalize=False,
+                    edge_filter=False,
+                    filter_mask_dilation=False,
+                )
+
+            elif args.func == 'fourier_snr':
+                sample = experimental.load_sample(args.input)
+                psnr = prep_sample(
+                    sample,
+                    remove_background=True,
+                    return_psnr=True,
+                    plot=None,
+                    normalize=False,
+                    edge_filter=False,
+                    filter_mask_dilation=False,
+                )
+                measure_fourier_snr(sample, psnr=psnr, plot=args.input.with_suffix('.svg'))
+
+            elif args.func == 'preprocessing':
+                sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
+                sample = experimental.load_sample(args.input)
+                prep_sample(
+                    sample,
+                    sample_voxel_size=sample_voxel_size,
+                    remove_background=args.remove_background,
+                    read_noise_bias=args.read_noise_bias,
+                    normalize=args.normalize,
+                    edge_filter=args.edge_filter,
+                    filter_mask_dilation=args.filter_mask_dilation,
+                    plot=args.input.with_suffix('') if args.plot else None,
+                )
+
+            elif args.func == 'embeddings':
+                experimental.generate_embeddings(
+                    file=args.input,
+                    model=args.model,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    wavelength=args.wavelength,
+                    plot=args.plot,
+                    ideal_empirical_psf=args.ideal_empirical_psf,
+                    edge_filter=args.edge_filter,
+                    digital_rotations=args.digital_rotations,
+                    preloaded=preloaded,
+                )
+
+            elif args.func == 'predict_sample':
+                experimental.predict_sample(
+                    model=args.model,
+                    img=args.input,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    prev=args.prev,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    wavelength=args.wavelength,
+                    dm_damping_scalar=args.dm_damping_scalar,
+                    freq_strength_threshold=args.freq_strength_threshold,
+                    prediction_threshold=args.prediction_threshold,
+                    confidence_threshold=args.confidence_threshold,
+                    sign_threshold=args.sign_threshold,
+                    num_predictions=args.num_predictions,
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
+                    batch_size=args.batch_size,
+                    estimate_sign_with_decon=args.estimate_sign_with_decon,
+                    ignore_modes=args.ignore_mode,
+                    ideal_empirical_psf=args.ideal_empirical_psf,
+                    cpu_workers=args.cpu_workers,
+                    preloaded=preloaded
+                )
+
+            elif args.func == 'predict_large_fov':
+                experimental.predict_large_fov(
+                    model=args.model,
+                    img=args.input,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    prev=args.prev,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    wavelength=args.wavelength,
+                    dm_damping_scalar=args.dm_damping_scalar,
+                    freq_strength_threshold=args.freq_strength_threshold,
+                    prediction_threshold=args.prediction_threshold,
+                    confidence_threshold=args.confidence_threshold,
+                    sign_threshold=args.sign_threshold,
+                    num_predictions=args.num_predictions,
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
+                    batch_size=args.batch_size,
+                    estimate_sign_with_decon=args.estimate_sign_with_decon,
+                    ignore_modes=args.ignore_mode,
+                    ideal_empirical_psf=args.ideal_empirical_psf,
+                    cpu_workers=args.cpu_workers,
+                    preloaded=preloaded
+                )
+
+            elif args.func == 'predict_rois':
+                experimental.predict_rois(
+                    model=args.model,
+                    img=args.input,
+                    pois=args.pois,
+                    prev=args.prev,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    wavelength=args.wavelength,
+                    window_size=tuple(int(i) for i in args.window_size.split('-')),
+                    num_predictions=args.num_predictions,
+                    num_rois=args.num_rois,
+                    min_intensity=args.min_intensity,
+                    freq_strength_threshold=args.freq_strength_threshold,
+                    prediction_threshold=args.prediction_threshold,
+                    sign_threshold=args.sign_threshold,
+                    minimum_distance=args.minimum_distance,
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
+                    batch_size=args.batch_size,
+                    estimate_sign_with_decon=args.estimate_sign_with_decon,
+                    ignore_modes=args.ignore_mode,
+                    ideal_empirical_psf=args.ideal_empirical_psf,
+                    cpu_workers=args.cpu_workers,
+                    preloaded=preloaded
+                )
+            elif args.func == 'predict_tiles':
+                experimental.predict_tiles(
+                    model=args.model,
+                    img=args.input,
+                    prev=args.prev,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    freq_strength_threshold=args.freq_strength_threshold,
+                    prediction_threshold=args.prediction_threshold,
+                    confidence_threshold=args.confidence_threshold,
+                    sign_threshold=args.sign_threshold,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    num_predictions=args.num_predictions,
+                    wavelength=args.wavelength,
+                    window_size=tuple(int(i) for i in args.window_size.split('-')),
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
+                    batch_size=args.batch_size,
+                    estimate_sign_with_decon=args.estimate_sign_with_decon,
+                    ignore_modes=args.ignore_mode,
+                    ideal_empirical_psf=args.ideal_empirical_psf,
+                    cpu_workers=args.cpu_workers,
+                    preloaded=preloaded
+                )
+            elif args.func == 'aggregate_predictions':
+                experimental.aggregate_predictions(
+                    model=args.model,
+                    model_pred=args.input,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    wavelength=args.wavelength,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    prediction_threshold=args.prediction_threshold,
+                    confidence_threshold=args.confidence_threshold,
+                    majority_threshold=args.majority_threshold,
+                    min_percentile=args.min_percentile,
+                    max_percentile=args.max_percentile,
+                    aggregation_rule=args.aggregation_rule,
+                    max_isoplanatic_clusters=args.max_isoplanatic_clusters,
+                    ignore_tile=args.ignore_tile,
+                    dm_damping_scalar=args.dm_damping_scalar,
+                    plot=args.plot,
+                    preloaded=preloaded
+                )
+            elif args.func == 'phase_retrieval':
+                experimental.phase_retrieval(
+                    img=args.input,
+                    num_modes=args.num_modes,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    wavelength=args.wavelength,
+                    dm_damping_scalar=args.dm_damping_scalar,
+                    prediction_threshold=args.prediction_threshold,
+                    num_iterations=args.num_iterations,
+                    plot=args.plot,
+                    ignore_modes=args.ignore_mode,
+                    use_pyotf_zernikes=args.use_pyotf_zernikes,
+                )
+            elif args.func == 'eval_dm':
+                experimental_eval.eval_dm(
+                    datadir=args.datadir,
+                )
+            elif args.func == 'calibrate_dm':
+                experimental_eval.calibrate_dm(
+                    datadir=args.datadir,
+                    dm_calibration=args.dm_calibration,
+                )
+            elif args.func == 'eval_mode':
+                experimental_eval.eval_mode(
+                    model_path=args.model_path,
+                    input_path=args.input_path,
+                    prediction_path=args.prediction_path,
+                    gt_path=args.gt_path,
+                    postfix=args.prediction_postfix,
+                    gt_postfix=args.gt_postfix,
+                )
+            elif args.func == 'eval_dataset':
+                experimental_eval.eval_dataset(
+                    datadir=args.datadir,
+                    flat=args.flat,
+                    plot_evals=not args.skip_eval_plots,
+                    precomputed=args.precomputed,
+                )
+            elif args.func == 'eval_ao_dataset':
+                experimental_eval.eval_ao_dataset(
+                    datadir=args.datadir,
+                    flat=args.flat,
+                    plot_evals=not args.skip_eval_plots,
+                    precomputed=args.precomputed,
+                )
+            elif args.func == 'plot_dataset_mips':
+                experimental_eval.plot_dataset_mips(
+                    datadir=args.datadir,
+                )
+            elif args.func == 'eval_bleaching_rate':
+                experimental_eval.eval_bleaching_rate(
+                    datadir=args.datadir,
+                )
+            elif args.func == 'plot_bleaching_rate':
+                experimental_eval.plot_bleaching_rate(
+                    datadir=args.datadir,
+                )
+            else:
+                logger.error(f"Error")
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
