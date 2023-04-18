@@ -456,7 +456,8 @@ def predict(
     ztiles: int = 1,
     nrows: int = 1,
     ncols: int = 1,
-    cpu_workers: int = -1
+    cpu_workers: int = -1,
+    strategy: tf.distribute.Strategy = tf.distribute.MirroredStrategy()
 ):
     no_phase = True if model.input_shape[1] == 3 else False
 
@@ -499,6 +500,7 @@ def predict(
         save_path=[f.with_suffix('') for f in rois],
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
+        strategy=strategy,
         desc=f"ROIs [{rois.shape[0]}] x "
              f"[{digital_rotations.shape[0] if digital_rotations is not None else digital_rotations}] Rotations",
     )

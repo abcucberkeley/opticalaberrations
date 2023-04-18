@@ -964,7 +964,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     ignore_modes=args.ignore_mode,
                     ideal_empirical_psf=args.ideal_empirical_psf,
                     cpu_workers=args.cpu_workers,
-                    preloaded=preloaded
+                    preloaded=preloaded,
+                    strategy=strategy
                 )
             elif args.func == 'aggregate_predictions':
                 experimental.aggregate_predictions(
