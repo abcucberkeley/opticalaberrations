@@ -733,9 +733,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
     hostname = "10.17.209.10"
     username = "thayeralshaabi"
 
-    nodes = 4
-    partition = "abc_a100"
-
     cluster_env = f"~/anaconda3/envs/ml/bin/python"
     cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
     script = f"{cluster_repo}/src/ao.py"
@@ -761,36 +758,31 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         cp.fft.config.use_multi_gpus = True
         cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
 
-    if args.cluster:
-        flags = ' '.join(sys.argv[1:])
-        flags = flags.replace('..', cluster_repo)
-        flags = flags.replace('--cluster', '')
-        taskname = f"{args.func}_{args.input.stem}"
+    strategy = tf.distribute.MirroredStrategy(
+        devices=[f"{physical_devices[i].device_type}:{i}" for i in range(len(physical_devices))]
+    )
 
-        sjob = f"srun "
-        sjob += f"--exclusive  "
-        sjob += f"-p {partition} "
-        sjob += f" --nodes={nodes} "
-        sjob += f" --ntasks-per-node=1 "
-        sjob += f"--job-name={taskname} "
-        sjob += f"--pty {cluster_env} {script} {flags}"
+    gpu_workers = strategy.num_replicas_in_sync
+    logging.info(f'Number of active GPUs: {gpu_workers}')
 
-        subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
-    else:
-        if args.cluster and nodes > 1:
-            strategy = tf.distribute.MultiWorkerMirroredStrategy(
-                cluster_resolver=tf.distribute.cluster_resolver.SlurmClusterResolver(),
-            )
+    with strategy.scope():
+
+        if args.cluster:
+            partition = "abc_a100"
+            flags = ' '.join(sys.argv[1:])
+            flags = flags.replace('..', cluster_repo)
+            flags = flags.replace('--cluster', '')
+            taskname = f"{args.func}_{args.input.stem}"
+
+            sjob = f"srun "
+            sjob += f"--exclusive  "
+            sjob += f"-p {partition} "
+            sjob += f" --nodes=1 "
+            sjob += f"--job-name={taskname} "
+            sjob += f"--pty {cluster_env} {script} {flags}"
+
+            subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
         else:
-            strategy = tf.distribute.MirroredStrategy(
-                devices=[f"{physical_devices[i].device_type}:{i}" for i in range(len(physical_devices))]
-            )
-
-        gpu_workers = strategy.num_replicas_in_sync
-        logging.info(f'Number of active GPUs: {gpu_workers}')
-
-        with strategy.scope():
-
             if args.func == 'deskew':
                 experimental_llsm.deskew(
                     img=args.input,
