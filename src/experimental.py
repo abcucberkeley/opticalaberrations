@@ -293,12 +293,14 @@ def generate_embeddings(
 @profile
 def reconstruct_wavefront_error_landscape(
     isoplanatic_patchs: pd.DataFrame,
-    volume_shape: tuple,
+    image: np.ndarray,
+    save_path: Union[Path, str],
     window_size: tuple,
     lateral_voxel_size: float = .108,
     axial_voxel_size: float = .2,
     wavelength: float = .510,
     threshold: float = 0.,
+    isoplanatic_patch_colormap: Union[Path, str] = Path.joinpath(Path(__file__).parent, '../CETperceptual/CET-C2.csv'),
     na: float = 1.0,
 ):
     """
@@ -356,15 +358,15 @@ def reconstruct_wavefront_error_landscape(
     h = np.array(window_size) * (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     h = utils.microns2waves(h, wavelength=wavelength)
 
-    center = (ztiles//2, ytiles//2, xtiles//2)
-    peak = isoplanatic_patchs.apply(lambda x: x**2).groupby(['z', 'y', 'x']).sum()['prediction'].idxmax()
+    # center = (ztiles//2, ytiles//2, xtiles//2)
+    # peak = isoplanatic_patchs.apply(lambda x: x**2).groupby(['z', 'y', 'x']).sum().idxmax()
     tile_p2v = np.full((xtiles * ytiles * ztiles), np.nan)
 
     matrix_row = 0  # pointer to where we are writing
     for i, tile_coords in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
         neighbours = list(get_neighbors(tile_coords))
         tile_wavefront = Wavefront(
-            isoplanatic_patchs.loc[tile_coords, 'prediction'].values,
+            isoplanatic_patchs.loc[tile_coords].values,
             lam_detection=wavelength
         )
         if np.isnan(tile_p2v[i]):
@@ -373,7 +375,7 @@ def reconstruct_wavefront_error_landscape(
         for j, neighbour_coords in enumerate(neighbours):  # ordered as (z, y, x) neighbours
             try:
                 neighbour_wavefront = Wavefront(
-                    isoplanatic_patchs.loc[neighbour_coords, 'prediction'].values,
+                    isoplanatic_patchs.loc[neighbour_coords].values,
                     lam_detection=wavelength
                 )
                 if np.isnan(tile_p2v[j]):
@@ -412,8 +414,24 @@ def reconstruct_wavefront_error_landscape(
     terrain3d = np.reshape(terrain, (ztiles, ytiles, xtiles))
 
     # upsample from tile coordinates back to the volume
-    terrain3d = resize(terrain3d, volume_shape)
+    terrain3d = resize(terrain3d, image.shape)
     # terrain3d = resize(terrain3d, volume_shape, order=0, mode='constant')  # to show tiles
+
+    isoplanatic_patch_colormap = pd.read_csv(
+        isoplanatic_patch_colormap.resolve(),
+        header=None,
+        index_col=None,
+        dtype=np.ubyte
+    ).values
+
+    terrain3d *= 255    # convert waves to colormap cycles
+    terrain3d = (terrain3d % 256).round(0).astype(np.ubyte)  # wrap if terrain's span is > 1 wave
+
+    #  terrain3d is full brightness RGB color then use vol to determine brightness
+    terrain3d = isoplanatic_patch_colormap[terrain3d] * image[..., np.newaxis]
+    terrain3d = terrain3d.astype(np.ubyte)
+    imwrite(save_path, terrain3d, photometric='rgb')
+
     return terrain3d
 
 
@@ -1141,10 +1159,7 @@ def aggregate_predictions(
     plot: bool = False,
     ignore_tile: Any = None,
     preloaded: Preloadedmodelclass = None,
-    isoplanatic_patch_colormap: Union[Path, str] = Path.joinpath(Path(__file__).parent, '../CETperceptual/CET-C2.csv')
 ):
-    def calc_length(s):
-        return int(re.sub(r'[a-z]+', '', s)) + 1
 
     vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
     vol /= np.percentile(vol, 98)
@@ -1160,106 +1175,122 @@ def aggregate_predictions(
         index_col=0,
         header=0,
         usecols=lambda col: col == 'ansi' or col.startswith('z')
-    )
+    ).T
+
+    predictions.index = pd.MultiIndex.from_tuples(predictions.index.str.split('-').to_list())
+    predictions.index = pd.MultiIndex.from_arrays([
+        predictions.index.get_level_values(0).str.lstrip('z').astype(np.int),
+        predictions.index.get_level_values(1).str.lstrip('y').astype(np.int),
+        predictions.index.get_level_values(2).str.lstrip('x').astype(np.int),
+    ], names=('z', 'y', 'x'))
 
     stdevs = pd.read_csv(
         str(model_pred).replace('_predictions.csv', '_stdevs.csv'),
         index_col=0,
         header=0,
         usecols=lambda col: col == 'ansi' or col.startswith('z')
-    )
+    ).T
+    stdevs.index = pd.MultiIndex.from_tuples(stdevs.index.str.split('-').to_list())
+    stdevs.index = pd.MultiIndex.from_arrays([
+        stdevs.index.get_level_values(0).str.lstrip('z').astype(np.int),
+        stdevs.index.get_level_values(1).str.lstrip('y').astype(np.int),
+        stdevs.index.get_level_values(2).str.lstrip('x').astype(np.int),
+    ], names=('z', 'y', 'x'))
 
-    pcols = predictions.columns[pd.Series(predictions.columns).str.startswith('z')]
-    ztiles, nrows, ncols = map(lambda x: calc_length(x), [c.split('-') for c in pcols][-1])
+    ztiles = predictions.index.get_level_values('z').unique().shape[0]
+    ytiles = predictions.index.get_level_values('y').unique().shape[0]
+    xtiles = predictions.index.get_level_values('x').unique().shape[0]
 
-    isoplanatic_patchs = {}
+    if ignore_tile is not None:
+        for cc in ignore_tile:
+            z, y, x = [int(s) for s in cc if s.isdigit()]
+            predictions.loc[(z, y, x)] = np.nan
+            stdevs.loc[(z, y, x)] = np.nan
+
+    # filter out small predictions
+    prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
+    predictions[np.abs(predictions) < prediction_threshold] = np.nan
+    stdevs[np.abs(predictions) < prediction_threshold] = np.nan
+
+    # filter out unconfident predictions
+    stdevs[stdevs > confidence_threshold] = np.nan
+    predictions[stdevs > confidence_threshold] = np.nan
+
     coefficients, actuators = {}, {}
+    z_predictions = predictions.groupby('z')
+    z_stdevs = stdevs.groupby('z')
+
+    predictions['cluster'] = np.nan
+    stdevs['cluster'] = np.nan
+
     for z in trange(ztiles, desc='Aggregating Z tiles', total=ztiles):
-        tiles = predictions.columns[pd.Series(predictions.columns).str.startswith(f'z{z}')]
+        ztile_preds = z_predictions.get_group(z)
+        ztile_preds.drop(columns='cluster', errors='ignore', inplace=True)
 
-        if ignore_tile is not None:
-            for cc in ignore_tile:
-                if cc in tiles:
-                    predictions.loc[:, cc] = np.zeros_like(predictions.index)
-                else:
-                    logger.warning(f"`{cc}` was not found!")
+        ztile_stds = z_stdevs.get_group(z)
+        ztile_stds.drop(columns='cluster', errors='ignore', inplace=True)
 
-        # filter out small predictions
-        prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
-        stdevs[np.abs(predictions) < prediction_threshold] = 0
+        votes = ztile_preds != 0  # get tile votes per mode
 
-        # filter out unconfident predictions
-        stdevs[stdevs > confidence_threshold] = 0
+        # select tiles with votes
+        ztile_preds = ztile_preds[votes]
+        ztile_stds = ztile_stds[votes]
 
-        votes = predictions[tiles] != 0                         # get tile votes per mode
-        total_votes = np.sum(votes.values, axis=1)              # sum votes per mode
-        weights = votes.div(total_votes, axis=0).fillna(0)      # weighted by votes
+        # create a new embedding to cluster isoplanatic patches
+        ztile_emb = ztile_preds.fillna(0)
 
-        for mode in weights.index:
-            for yi, xi in itertools.product(range(nrows), range(ncols)):
-                isoplanatic_patchs[(z, yi, xi, mode)] = dict(
-                    prediction=predictions.loc[mode, f'z{z}-y{yi}-x{xi}'],
-                    stdev=stdevs.loc[mode, f'z{z}-y{yi}-x{xi}'],
-                    vote=votes.loc[mode, f'z{z}-y{yi}-x{xi}'].astype(int),
-                    weight=weights.loc[mode, f'z{z}-y{yi}-x{xi}'],
-                )
+        # run clustering on valid points only
+        ztile_emb[ztile_emb.abs() < .005] = 0
+        ztile_emb = ztile_emb.loc[~(ztile_emb == 0).all(axis=1)]
 
-        if final_prediction == 'weighted_average':
-            pred = np.average(predictions[tiles], weights=weights, axis=1)
-            variance = np.average(predictions[tiles].subtract(pred, axis=0)**2, weights=weights, axis=1)
-            pred_std = np.sqrt(variance)
-
-        elif final_prediction == 'mean':
-            pred = np.nanmean(predictions[tiles][votes], axis=1)
-            pred_std = np.nanmean(stdevs[tiles][votes], axis=1)
-
-        elif final_prediction == 'median':
-            pred = np.nanmedian(predictions[tiles][votes], axis=1)
-            pred_std = np.nanmedian(stdevs[tiles][votes], axis=1)
-
-        elif final_prediction == 'min':
-            pred = np.nanmin(predictions[tiles][votes], axis=1)
-            pred_std = np.nanmin(stdevs[tiles][votes], axis=1)
-
-        elif final_prediction == 'max':
-            pred = np.nanmax(predictions[tiles][votes], axis=1)
-            pred_std = np.nanmax(stdevs[tiles][votes], axis=1)
-
-        else:
-            logger.error(f'Unknown function: {final_prediction}')
-            return -1
-
-        pred = np.nan_to_num(pred, nan=0, posinf=0, neginf=0)
-        pred_std = np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0)
-
-        pred = Wavefront(
-            pred,
-            order='ansi',
-            lam_detection=wavelength
+        logger.info('KMeans calculating...')
+        clustering = KMeans(
+            init="k-means++",
+            n_init=5,
+            verbose=False,
+            n_clusters=max_isoplanatic_clusters,
         )
+        ztile_emb['cluster'] = clustering.fit_predict(ztile_emb)
 
-        pred_std = Wavefront(
-            pred_std,
-            order='ansi',
-            lam_detection=wavelength
-        )
+        # assign cluster codes
+        predictions.loc[ztile_emb.index, 'cluster'] = ztile_emb['cluster']
+        stdevs.loc[ztile_emb.index, 'cluster'] = ztile_emb['cluster']
 
-        coefficients[f'z{z}'] = pred.amplitudes
+        clusters = ztile_emb.groupby('cluster')
+        for c in range(max_isoplanatic_clusters):
+            g = clusters.get_group(c).index
+            pred = ztile_preds.loc[g].agg(final_prediction, axis=0)
+            pred_std = ztile_stds.loc[g].agg(final_prediction, axis=0)
 
-        actuators[f'z{z}'] = utils.zernikies_to_actuators(
-            pred.amplitudes,
-            dm_calibration=dm_calibration,
-            dm_state=dm_state,
-            scalar=dm_damping_scalar
-        )
-
-        if plot:
-            task = partial(vis.diagnosis,
-                pred=pred,
-                pred_std=pred_std,
-                save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_z{z}"),
+            pred = Wavefront(
+                np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
+                order='ansi',
+                lam_detection=wavelength
             )
-            pool.apply_async(task)
+
+            pred_std = Wavefront(
+                np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0),
+                order='ansi',
+                lam_detection=wavelength
+            )
+
+            if plot:
+                task = partial(
+                    vis.diagnosis,
+                    pred=pred,
+                    pred_std=pred_std,
+                    save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_z{z}_c{c}"),
+                )
+                pool.apply_async(task)
+
+            coefficients[f'z{z}_c{c}'] = pred.amplitudes
+
+            actuators[f'z{z}_c{c}'] = utils.zernikies_to_actuators(
+                pred.amplitudes,
+                dm_calibration=dm_calibration,
+                dm_state=dm_state,
+                scalar=dm_damping_scalar
+            )
 
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
@@ -1269,173 +1300,28 @@ def aggregate_predictions(
     actuators.index.name = 'actuators'
     actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
 
-    isoplanatic_patchs = pd.DataFrame.from_dict(isoplanatic_patchs, orient='index')
-    isoplanatic_patchs.index.set_names(('z', 'y', 'x', 'mode'), inplace=True)
-
-    terrain3d = reconstruct_wavefront_error_landscape(
-        isoplanatic_patchs,
-        volume_shape=vol.shape,
+    reconstruct_wavefront_error_landscape(
+        predictions.drop(columns='cluster'),
+        image=vol,
+        save_path=Path(f"{model_pred.with_suffix('')}_aggregated_error.tif"),
         window_size=predictions_settings['window_size'],
         lateral_voxel_size=lateral_voxel_size,
         axial_voxel_size=axial_voxel_size,
         wavelength=wavelength,
         na=.9,
     )
-    
-    isoplanatic_patch_colormap = pd.read_csv(
-        isoplanatic_patch_colormap.resolve(),
-        header=None,
-        index_col=None,
-        dtype=np.ubyte
-    ).values
-
-    terrain3d *= 255    # convert waves to colormap cycles
-    terrain3d = (terrain3d % 256).round(0).astype(np.ubyte)  # wrap if terrain's span is > 1 wave
-
-    #  terrain3d is full brightness RGB color then use vol to determine brightness
-    terrain3d = isoplanatic_patch_colormap[terrain3d] * vol[..., np.newaxis]
-    terrain3d = terrain3d.astype(np.ubyte)
-    imwrite(f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif", terrain3d, photometric='rgb')
-
-    # create a new embedding to cluster isoplanatic patches
-    clusters = pd.pivot_table(
-        isoplanatic_patchs,
-        values='prediction',
-        index=['z', 'y', 'x'],
-        columns=['mode'],
-        aggfunc=np.sum
-    )
-
-    # include spatial coordinates into the embedding
-    clusters = clusters.reset_index()
-
-    logger.info('KMeans calculating...')
-
-    # remove predictions below this threshold
-    clusters[clusters.abs() < .005] = 0
-
-    # filter out tiles with no predictions
-    emb = clusters.loc[~(clusters[range(predictions.shape[0])] == 0).all(axis=1)]
-
-    # run clustering on valid points only
-    cc = KMeans(
-        init="k-means++",
-        n_init=5,
-        verbose=False,
-        n_clusters=max_isoplanatic_clusters,
-    )
-    emb['cluster'] = cc.fit_predict(emb.values)
-
-    # assign cluster codes
-    clusters['cluster'] = emb['cluster']
-
-    # assign a unique color for tiles without predictions
-    clusters['cluster'].fillna(max_isoplanatic_clusters, inplace=True)
 
     clusters3d_colormap = sns.color_palette("tab20", n_colors=max_isoplanatic_clusters)
     clusters3d_colormap.append((0, 0, 0))  # black color for no data
     clusters3d_colormap = np.array(clusters3d_colormap)*255
 
-    #  clusters3d is full brightness RGB color then use vol to determine brightness
-    clusters3d = clusters['cluster'].values.reshape((ztiles, nrows, ncols))
+    # assign a unique color for tiles without predictions
+    clusters3d = predictions['cluster'].fillna(max_isoplanatic_clusters).values
+    clusters3d = clusters3d.reshape((ztiles, ytiles, xtiles))
     clusters3d = resize(clusters3d, vol.shape, order=0, mode='constant')
     clusters3d = clusters3d_colormap[clusters3d.astype(np.ubyte)] * vol[..., np.newaxis]
     clusters3d = clusters3d.astype(np.ubyte)
-    imwrite(f"{model_pred.with_suffix('')}_aggregated_clusters.tif", clusters3d, photometric='rgb')
-
-    isoplanatic_patchs['cluster'] = clusters.groupby(['z', 'y', 'x'])['cluster'].agg(pd.Series.mode)
-    clusters = isoplanatic_patchs.groupby('cluster')
-    coefficients, actuators = {}, {}
-
-    for c in trange(max_isoplanatic_clusters, desc='Aggregating clusters', total=max_isoplanatic_clusters):
-        tiles = clusters.get_group(c)
-
-        # filter out small predictions
-        prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
-        tiles[tiles['prediction'] < prediction_threshold] = 0
-        tiles[tiles['stdev'] > confidence_threshold] = 0
-
-        predictions = pd.pivot_table(
-            tiles,
-            values='prediction',
-            index=['z', 'y', 'x'],
-            columns=['mode'],
-            aggfunc=np.mean
-        )
-        stdevs = pd.pivot_table(
-            tiles,
-            values='stdev',
-            index=['z', 'y', 'x'],
-            columns=['mode'],
-            aggfunc=np.mean
-        )
-
-        votes = predictions != 0  # get tile votes per mode
-
-        if final_prediction == 'weighted_average':
-            pred = np.average(predictions[votes], weights=weights, axis=1)
-            variance = np.average(predictions[votes].subtract(pred, axis=0)**2, weights=weights, axis=1)
-            pred_std = np.sqrt(variance)
-
-        elif final_prediction == 'mean':
-            pred = np.nanmean(predictions[votes], axis=0)
-            pred_std = np.nanmean(stdevs[votes], axis=0)
-
-        elif final_prediction == 'median':
-            pred = np.nanmedian(predictions[votes], axis=0)
-            pred_std = np.nanmedian(stdevs[votes], axis=0)
-
-        elif final_prediction == 'min':
-            pred = np.nanmin(predictions[votes], axis=0)
-            pred_std = np.nanmin(stdevs[votes], axis=0)
-
-        elif final_prediction == 'max':
-            pred = np.nanmax(predictions[votes], axis=0)
-            pred_std = np.nanmax(stdevs[votes], axis=0)
-
-        else:
-            logger.error(f'Unknown function: {final_prediction}')
-            return -1
-
-        pred = np.nan_to_num(pred, nan=0, posinf=0, neginf=0)
-        pred_std = np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0)
-
-        pred = Wavefront(
-            pred,
-            order='ansi',
-            lam_detection=wavelength
-        )
-
-        pred_std = Wavefront(
-            pred_std,
-            order='ansi',
-            lam_detection=wavelength
-        )
-
-        if plot:
-            task = partial(vis.diagnosis,
-                pred=pred,
-                pred_std=pred_std,
-                save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_c{c}"),
-            )
-            pool.apply_async(task)
-
-        coefficients[f'c{c}'] = pred.amplitudes
-
-        actuators[f'c{c}'] = utils.zernikies_to_actuators(
-            pred.amplitudes,
-            dm_calibration=dm_calibration,
-            dm_state=dm_state,
-            scalar=dm_damping_scalar
-        )
-
-    coefficients = pd.DataFrame.from_dict(coefficients)
-    coefficients.index.name = 'ansi'
-    coefficients.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters_zernike_coefficients.csv")
-
-    actuators = pd.DataFrame.from_dict(actuators)
-    actuators.index.name = 'actuators'
-    actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters_corrected_actuators.csv")
+    imwrite(f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif", clusters3d, photometric='rgb')
 
     # vis.plot_volume(
     #     vol=terrain3d,

@@ -557,7 +557,7 @@ def parse_args(args):
         help='maximum percentile to filter out outliers'
     )
     aggregate_predictions.add_argument(
-        "--max_isoplanatic_clusters", default=10, type=int,
+        "--max_isoplanatic_clusters", default=5, type=int,
         help='maximum number of unique isoplanatic patchs for clustering tiles'
     )
     aggregate_predictions.add_argument(
