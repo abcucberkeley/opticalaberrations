@@ -837,7 +837,6 @@ def predict_dataset(
         desc: str = 'MiniBatch-probabilistic-predictions',
         digital_rotations: Any = None,
         plot_rotations: Any = None,
-        strategy: tf.distribute.Strategy = tf.distribute.MirroredStrategy()
 ):
     """
     Average predictions and compute stdev
@@ -874,7 +873,6 @@ def predict_dataset(
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
     inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE)
-    inputs = strategy.experimental_distribute_dataset(inputs)
 
     preds = model.predict(inputs, batch_size=batch_size, verbose=verbose)
 
