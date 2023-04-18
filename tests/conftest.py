@@ -46,7 +46,7 @@ def kargs():
         majority_threshold=.5,
         min_percentile=1,
         max_percentile=99,
-        final_prediction='mean',
+        aggregation_rule='mean',
         ignore_tile=[],
         # extra `predict_rois` flags
         num_rois=10,

@@ -258,7 +258,7 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `dm_damping_scalar`    | scale DM actuators by an arbitrary multiplier (Default: `0.75`)                      |
 | `prediction_threshold` | set predictions below threshold to zero (waves) (Default: `0.`)                      |
 | `majority_threshold`   | majority rule to use to determine dominant modes among ROIs (Default: `0.5`)         |
-| `final_prediction`     | rule to use to calculate final prediction [mean, median, min, max] (Default: `mean`) |
+| `aggregation_rule`     | rule to use to calculate final prediction [mean, median, min, max] (Default: `mean`) |
 | `min_percentile`       | minimum percentile to filter out outliers (Default: `10`)                            |
 | `max_percentile`       | maximum percentile to filter out outliers (Default: `90`)                            |
 | `lateral_voxel_size`   | lateral voxel size in microns for X (Default: `0.108`)                               |

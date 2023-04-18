@@ -56,7 +56,7 @@ ignore_modes = []
 majority_threshold = .5
 min_percentile = 1
 max_percentile = 99
-final_prediction = 'mean'
+aggregation_rule = 'mean'
 ignore_tiles = []
 
 # extra `predict_rois` flags
@@ -187,7 +187,7 @@ aggregate_predictions_flags += f" --prediction_threshold {prediction_threshold}"
 aggregate_predictions_flags += f" --majority_threshold {majority_threshold}"
 aggregate_predictions_flags += f" --min_percentile {min_percentile}"
 aggregate_predictions_flags += f" --max_percentile {max_percentile}"
-aggregate_predictions_flags += f" --final_prediction {final_prediction}"
+aggregate_predictions_flags += f" --aggregation_rule {aggregation_rule}"
 aggregate_predictions_flags += f" --lateral_voxel_size {lateral_voxel_size}"
 aggregate_predictions_flags += f" --axial_voxel_size {axial_voxel_size}"
 aggregate_predictions_flags += f" --wavelength {wavelength}"

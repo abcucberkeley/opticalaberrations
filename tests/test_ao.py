@@ -108,7 +108,7 @@ def test_aggregate_tiles(kargs):
         majority_threshold=kargs['majority_threshold'],
         min_percentile=kargs['min_percentile'],
         max_percentile=kargs['max_percentile'],
-        final_prediction=kargs['final_prediction'],
+        aggregation_rule=kargs['aggregation_rule'],
         ignore_tile=kargs['ignore_tile'],
         plot=kargs['plot'],
     )

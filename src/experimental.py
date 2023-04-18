@@ -1153,7 +1153,7 @@ def aggregate_predictions(
     max_percentile: int = 99,
     prediction_threshold: float = 0.,
     confidence_threshold: float = .0099,
-    final_prediction: str = 'mean',
+    aggregation_rule: str = 'mean',
     dm_damping_scalar: float = 1,
     max_isoplanatic_clusters: int = 3,
     plot: bool = False,
@@ -1177,6 +1177,7 @@ def aggregate_predictions(
         usecols=lambda col: col == 'ansi' or col.startswith('z')
     ).T
 
+    # processes "z0-y0-x0" to z, y, x multindex (strip -, then letter, convert to int)
     predictions.index = pd.MultiIndex.from_tuples(predictions.index.str.split('-').to_list())
     predictions.index = pd.MultiIndex.from_arrays([
         predictions.index.get_level_values(0).str.lstrip('z').astype(np.int),
@@ -1212,7 +1213,7 @@ def aggregate_predictions(
     predictions[np.abs(predictions) < prediction_threshold] = np.nan
     stdevs[np.abs(predictions) < prediction_threshold] = np.nan
 
-    # filter out unconfident predictions
+    # filter out unconfident predictions (std deviation is too large)
     stdevs[stdevs > confidence_threshold] = np.nan
     predictions[stdevs > confidence_threshold] = np.nan
 
@@ -1220,6 +1221,7 @@ def aggregate_predictions(
     z_predictions = predictions.groupby('z')
     z_stdevs = stdevs.groupby('z')
 
+    # create a new column for cluster ids.
     predictions['cluster'] = np.nan
     stdevs['cluster'] = np.nan
 
@@ -1230,17 +1232,12 @@ def aggregate_predictions(
         ztile_stds = z_stdevs.get_group(z)
         ztile_stds.drop(columns='cluster', errors='ignore', inplace=True)
 
-        votes = ztile_preds != 0  # get tile votes per mode
-
-        # select tiles with votes
-        ztile_preds = ztile_preds[votes]
-        ztile_stds = ztile_stds[votes]
-
         # create a new embedding to cluster isoplanatic patches
+        # replace NaN with zero
         ztile_emb = ztile_preds.fillna(0)
 
-        # run clustering on valid points only
-        ztile_emb[ztile_emb.abs() < .005] = 0
+        # run clustering on valid tiles (all zero tiles get dropped)
+        #ztile_emb[ztile_emb.abs() < .005] = 0
         ztile_emb = ztile_emb.loc[~(ztile_emb == 0).all(axis=1)]
 
         logger.info('KMeans calculating...')
@@ -1252,15 +1249,16 @@ def aggregate_predictions(
         )
         ztile_emb['cluster'] = clustering.fit_predict(ztile_emb)
 
-        # assign cluster codes
+        # assign cluster ids to full dataframes (untouched ones, remain NaN)
         predictions.loc[ztile_emb.index, 'cluster'] = ztile_emb['cluster']
         stdevs.loc[ztile_emb.index, 'cluster'] = ztile_emb['cluster']
 
         clusters = ztile_emb.groupby('cluster')
         for c in range(max_isoplanatic_clusters):
-            g = clusters.get_group(c).index
-            pred = ztile_preds.loc[g].agg(final_prediction, axis=0)
-            pred_std = ztile_stds.loc[g].agg(final_prediction, axis=0)
+            g = clusters.get_group(c).index  # get all tiles that belong to cluster "c"
+            # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
+            pred = ztile_preds.loc[g].agg(aggregation_rule, axis=0)     # mean ignoring NaNs
+            pred_std = ztile_stds.loc[g].agg(aggregation_rule, axis=0)
 
             pred = Wavefront(
                 np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
@@ -1311,12 +1309,14 @@ def aggregate_predictions(
         na=.9,
     )
 
-    clusters3d_colormap = sns.color_palette("tab20", n_colors=max_isoplanatic_clusters)
-    clusters3d_colormap.append((0, 0, 0))  # black color for no data
+    clusters3d_colormap = sns.color_palette("tab10", n_colors=max_isoplanatic_clusters * ztiles)
+    clusters3d_colormap.append((1, 1, 1))  # black color for no data
     clusters3d_colormap = np.array(clusters3d_colormap)*255
 
-    # assign a unique color for tiles without predictions
-    clusters3d = predictions['cluster'].fillna(max_isoplanatic_clusters).values
+    # assign a unique color for tiles without predictions (different colors for each z tile)
+    clusters3d = predictions['cluster'].values
+    clusters3d += predictions.index.get_level_values('z') * max_isoplanatic_clusters
+    clusters3d = np.nan_to_num(clusters3d, nan=max_isoplanatic_clusters * ztiles)
     clusters3d = clusters3d.reshape((ztiles, ytiles, xtiles))
     clusters3d = resize(clusters3d, vol.shape, order=0, mode='constant')
     clusters3d = clusters3d_colormap[clusters3d.astype(np.ubyte)] * vol[..., np.newaxis]

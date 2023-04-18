@@ -545,7 +545,7 @@ def parse_args(args):
         help='majority rule to use to determine dominant modes among ROIs'
     )
     aggregate_predictions.add_argument(
-        "--final_prediction", default='mean', type=str,
+        "--aggregation_rule", default='mean', type=str,
         help='rule to use to calculate final prediction [mean, median, min, max]'
     )
     aggregate_predictions.add_argument(
@@ -557,7 +557,7 @@ def parse_args(args):
         help='maximum percentile to filter out outliers'
     )
     aggregate_predictions.add_argument(
-        "--max_isoplanatic_clusters", default=5, type=int,
+        "--max_isoplanatic_clusters", default=3, type=int,
         help='maximum number of unique isoplanatic patchs for clustering tiles'
     )
     aggregate_predictions.add_argument(
@@ -963,7 +963,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                 majority_threshold=args.majority_threshold,
                 min_percentile=args.min_percentile,
                 max_percentile=args.max_percentile,
-                final_prediction=args.final_prediction,
+                aggregation_rule=args.aggregation_rule,
                 max_isoplanatic_clusters=args.max_isoplanatic_clusters,
                 ignore_tile=args.ignore_tile,
                 dm_damping_scalar=args.dm_damping_scalar,
