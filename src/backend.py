@@ -452,24 +452,35 @@ def eval_rotation(
                 stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
                 confident = 1
             else:
-                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = std_rho, std_rho
-                confident = stdevs[mode.index_ansi] < confidence_threshold
+                if np.all(rhos == rhos[0]):  # blank image
+                    preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
+                    stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
+                    confident = 0.
+                else:
+                    stdevs[mode.index_ansi], stdevs[twin.index_ansi] = std_rho, std_rho
+                    confident = stdevs[mode.index_ansi] < confidence_threshold
 
             df['confident'] = confident
 
-        else:
-            # mode has m=0 (spherical,...), or twin isn't within the 55 modes.
-            rho = np.median(init_preds[:, mode.index_ansi])
-            rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
-            preds[mode.index_ansi] = rho
-            stdevs[mode.index_ansi] = np.std(init_preds[:, mode.index_ansi])
+        else:  # mode has m=0 (spherical,...), or twin isn't within the 55 modes.
+            if np.all(init_preds[:, mode.index_ansi] == init_preds[0, mode.index_ansi]):  # blank image
+                preds[mode.index_ansi] = 0.
+                stdevs[mode.index_ansi] = 0.
+                df['rhos'] = 0.
+                df['confident'] = 0.
+            else:
+                rho = np.median(init_preds[:, mode.index_ansi])
+                rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
+                preds[mode.index_ansi] = rho
+                stdevs[mode.index_ansi] = np.std(init_preds[:, mode.index_ansi])
+                df['rhos'] = init_preds[:, mode.index_ansi]
+                df['confident'] = 1
+
+            df['valid_points'] = 1
             df['twin_angle'] = np.nan
             df['pred_twin_angle'] = np.nan
-            df['rhos'] = init_preds[:, mode.index_ansi]
-            df['valid_points'] = 1
             df['fitted_twin_angle'] = np.nan
             df['mse'] = np.nan
-            df['confident'] = 1
 
         df['aggr_rho'] = rho
         df['aggr_mode_amp'] = preds[mode.index_ansi]
