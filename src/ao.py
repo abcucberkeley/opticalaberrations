@@ -730,6 +730,15 @@ def parse_args(args):
 
 def main(args=None, preloaded: Preloadedmodelclass = None):
 
+    args, unknown = parse_args(args)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+    )
+    logger = logging.getLogger('')
+    logger.info(args)
+
     if args.cluster:
         hostname = "10.17.209.10"
         username = "thayeralshaabi"
@@ -757,14 +766,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
 
         timeit = time.time()
-        args, unknown = parse_args(args)
-
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-        )
-        logger = logging.getLogger('')
-        logger.info(args)
 
         physical_devices = tf.config.list_physical_devices('GPU')
         for gpu_instance in physical_devices:
