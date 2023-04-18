@@ -1034,7 +1034,8 @@ def predict_tiles(
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[np.ndarray] = np.arange(0, 360 + 1, 1).astype(int),
-    cpu_workers: int = -1
+    cpu_workers: int = -1,
+    strategy: tf.distribute.Strategy = tf.distribute.MirroredStrategy()
 ):
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
@@ -1127,7 +1128,8 @@ def predict_tiles(
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
-        cpu_workers=cpu_workers
+        cpu_workers=cpu_workers,
+        strategy=strategy
     )
 
     if plot:
