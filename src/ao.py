@@ -779,10 +779,11 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
     else:
         if args.cluster and nodes > 1:
             strategy = tf.distribute.MultiWorkerMirroredStrategy(
+                devices=physical_devices,
                 cluster_resolver=tf.distribute.cluster_resolver.SlurmClusterResolver(),
             )
         else:
-            strategy = tf.distribute.MirroredStrategy()
+            strategy = tf.distribute.MirroredStrategy(devices=physical_devices)
 
         gpu_workers = strategy.num_replicas_in_sync
         logging.info(f'Number of active GPUs: {gpu_workers}')
