@@ -126,7 +126,7 @@ def preprocess(
     modelpsfgen: SyntheticPSF,
     samplepsfgen: SyntheticPSF,
     freq_strength_threshold: float = .01,
-    digital_rotations: Optional[np.ndarray] = np.arange(0, 360 + 1, 1).astype(int),
+    digital_rotations: Optional[np.ndarray] = np.linspace(0, 360, 360).astype(int),
     remove_background: bool = True,
     read_noise_bias: float = 5,
     normalize: bool = True,
@@ -233,8 +233,10 @@ def generate_embeddings(
     match_model_fov: bool = True,
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
-    digital_rotations: Optional[Union[Generator, list, np.ndarray]] = None
+    digital_rotations: Optional[int] = None
 ):
+    if digital_rotations is not None:
+        digital_rotations = np.linspace(0, 360, digital_rotations).astype(int)
 
     model, modelpsfgen = reloadmodel_if_needed(
         modelpath=model,
@@ -450,7 +452,7 @@ def predict(
     freq_strength_threshold: float = .01,
     confidence_threshold: float = .0099,
     batch_size: int = 1,
-    digital_rotations: Optional[np.ndarray] = np.arange(0, 360+1, 1).astype(int),
+    digital_rotations: Optional[np.ndarray] = np.linspace(0, 360, 360).astype(int),
     plot: bool = True,
     plot_rotations: bool = False,
     ztiles: int = 1,
@@ -573,11 +575,14 @@ def predict_sample(
     ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
-    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    digital_rotations: Optional[int] = 360,
     cpu_workers: int = -1
 ):
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
+
+    if digital_rotations is not None:
+        digital_rotations = np.linspace(0, 360, digital_rotations).astype(int)
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
@@ -750,12 +755,15 @@ def predict_large_fov(
     ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
-    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    digital_rotations: Optional[int] = 360,
     cpu_workers: int = -1
 ):
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
     sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+
+    if digital_rotations is not None:
+        digital_rotations = np.linspace(0, 360, digital_rotations).astype(int)
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
@@ -914,9 +922,12 @@ def predict_rois(
     sign_threshold: float = .9,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
-    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    digital_rotations: Optional[int] = 360,
     cpu_workers: int = -1
 ):
+    if digital_rotations is not None:
+        digital_rotations = np.linspace(0, 360, digital_rotations).astype(int)
+
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
@@ -1031,9 +1042,12 @@ def predict_tiles(
     ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
-    digital_rotations: Optional[np.ndarray] = np.arange(0, 360 + 1, 1).astype(int),
+    digital_rotations: Optional[int] = 360,
     cpu_workers: int = -1,
 ):
+    if digital_rotations is not None:
+        digital_rotations = np.linspace(0, 360, digital_rotations).astype(int)
+
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,

@@ -142,10 +142,6 @@ def parse_args(args):
         help='path to an ideal empirical psf (Default: `None` ie. will be simulated automatically)'
     )
     embeddings.add_argument(
-        "--digital_rotations", default=None, type=list,
-        help='optional flag for applying digital rotations'
-    )
-    embeddings.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
     embeddings.add_argument(
@@ -252,6 +248,10 @@ def parse_args(args):
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
+    predict_sample.add_argument(
+        "--digital_rotations", default=360, type=int,
+        help='optional flag for applying digital rotations'
+    )
 
     predict_large_fov = subparsers.add_parser("predict_large_fov")
     predict_large_fov.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -333,6 +333,10 @@ def parse_args(args):
     predict_large_fov.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    predict_large_fov.add_argument(
+        "--digital_rotations", default=360, type=int,
+        help='optional flag for applying digital rotations'
     )
 
     predict_rois = subparsers.add_parser("predict_rois")
@@ -424,6 +428,10 @@ def parse_args(args):
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
+    predict_rois.add_argument(
+        "--digital_rotations", default=360, type=int,
+        help='optional flag for applying digital rotations'
+    )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -505,6 +513,10 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    predict_tiles.add_argument(
+        "--digital_rotations", default=360, type=int,
+        help='optional flag for applying digital rotations'
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
@@ -857,7 +869,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     plot=args.plot,
                     ideal_empirical_psf=args.ideal_empirical_psf,
                     edge_filter=args.edge_filter,
-                    digital_rotations=args.digital_rotations,
                     preloaded=preloaded,
                 )
 
@@ -883,6 +894,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     estimate_sign_with_decon=args.estimate_sign_with_decon,
                     ignore_modes=args.ignore_mode,
                     ideal_empirical_psf=args.ideal_empirical_psf,
+                    digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded
                 )
@@ -909,6 +921,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     estimate_sign_with_decon=args.estimate_sign_with_decon,
                     ignore_modes=args.ignore_mode,
                     ideal_empirical_psf=args.ideal_empirical_psf,
+                    digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded
                 )
@@ -938,6 +951,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     estimate_sign_with_decon=args.estimate_sign_with_decon,
                     ignore_modes=args.ignore_mode,
                     ideal_empirical_psf=args.ideal_empirical_psf,
+                    digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded
                 )
@@ -963,6 +977,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     estimate_sign_with_decon=args.estimate_sign_with_decon,
                     ignore_modes=args.ignore_mode,
                     ideal_empirical_psf=args.ideal_empirical_psf,
+                    digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded
                 )

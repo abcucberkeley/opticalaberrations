@@ -523,7 +523,7 @@ def predict_rotation(
         remove_interference: bool = True,
         desc: str = 'Predict-rotations',
         confidence_threshold: float = .0099,
-        digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+        digital_rotations: np.ndarray = np.linspace(0, 360, 360).astype(int),
         cpu_workers: int = -1,
 ):
     """
