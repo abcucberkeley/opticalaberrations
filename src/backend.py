@@ -13,7 +13,7 @@ import h5py
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
-from typing import Any, Union
+from typing import Any, Union, Optional
 from itertools import repeat
 from functools import partial
 from line_profiler_pycharm import profile
@@ -330,12 +330,11 @@ def bootstrap_predict(
 @profile
 def eval_rotation(
         init_preds: np.ndarray,
-        rotations: np.ndarray,
+        rotations: Union[int, np.ndarray],
         psfgen: SyntheticPSF,
         save_path: Path,
         plot: Any = None,
         threshold: float = 0.,
-        async_plot: bool = True,
         no_phase: bool = False,
         confidence_threshold: float = .0099,
         minimum_fraction_of_kept_points: float = 0.45,
@@ -380,6 +379,9 @@ def eval_rotation(
         return np.mean(y - m * x)
 
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
+
+    if isinstance(rotations, int):
+        rotations = np.linspace(0, 360, rotations).astype(int)
 
     preds = np.zeros(psfgen.n_modes)
     stdevs = np.zeros(psfgen.n_modes)
@@ -494,10 +496,7 @@ def eval_rotation(
     results.to_csv(Path(f'{save_path}_rotations.csv'))
 
     if plot is not None:
-        if async_plot:
-            mp.Pool(1).apply_async(vis.plot_rotations(Path(f'{plot}_rotations.csv')))
-        else:
-            vis.plot_rotations(Path(f'{plot}_rotations.csv'))
+        vis.plot_rotations(Path(f'{plot}_rotations.csv'))
 
     return preds, stdevs
 
@@ -523,7 +522,7 @@ def predict_rotation(
         remove_interference: bool = True,
         desc: str = 'Predict-rotations',
         confidence_threshold: float = .0099,
-        digital_rotations: np.ndarray = np.linspace(0, 360, 360).astype(int),
+        digital_rotations: Optional[int] = 360,
         cpu_workers: int = -1,
 ):
     """
@@ -595,7 +594,7 @@ def predict_rotation(
         save_path=save_path,
     )
 
-    init_preds = np.stack(np.split(init_preds, digital_rotations.shape[0]), axis=1)
+    init_preds = np.stack(np.split(init_preds, digital_rotations), axis=1)
 
     if init_preds.shape[-1] > 1:
 
@@ -835,7 +834,7 @@ def predict_dataset(
         threshold: float = 0.,
         verbose: bool = True,
         desc: str = 'MiniBatch-probabilistic-predictions',
-        digital_rotations: Any = None,
+        digital_rotations: Optional[int] = None,
         plot_rotations: Any = None,
 ):
     """
@@ -874,7 +873,7 @@ def predict_dataset(
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
     inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE)
 
-    preds = model.predict(inputs, batch_size=batch_size, verbose=verbose)
+    preds = model.predict(inputs, verbose=verbose)
 
     preds[:, ignore_modes] = 0.
     preds[np.abs(preds) <= threshold] = 0.

@@ -32,7 +32,7 @@ from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
-from embeddings import remove_interference_pattern, fourier_embeddings, rolling_fourier_embeddings
+from embeddings import rotate_coords, remove_interference_pattern, fourier_embeddings, rolling_fourier_embeddings
 from preprocessing import round_to_even
 
 import logging
@@ -126,7 +126,7 @@ def preprocess(
     modelpsfgen: SyntheticPSF,
     samplepsfgen: SyntheticPSF,
     freq_strength_threshold: float = .01,
-    digital_rotations: Optional[np.ndarray] = np.linspace(0, 360, 360).astype(int),
+    digital_rotations: Optional[int] = 360,
     remove_background: bool = True,
     read_noise_bias: float = 5,
     normalize: bool = True,
@@ -134,8 +134,7 @@ def preprocess(
     filter_mask_dilation: bool = True,
     plot: Any = None,
     no_phase: bool = False,
-    match_model_fov: bool = True,
-    async_plot: bool = True
+    match_model_fov: bool = True
 ):
     if isinstance(file, tf.Tensor):
         file = Path(str(file.numpy(), "utf-8"))
@@ -167,8 +166,7 @@ def preprocess(
             embedding_option=modelpsfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
-            poi_shape=modelpsfgen.psf_shape[1:],
-            async_plot=async_plot
+            poi_shape=modelpsfgen.psf_shape[1:]
         )
     else:
         window_size = (
@@ -212,8 +210,7 @@ def preprocess(
             poi_shape=modelpsfgen.psf_shape[1:],
             nrows=nrows,
             ncols=ncols,
-            ztiles=ztiles,
-            async_plot=async_plot
+            ztiles=ztiles
         )
 
 
@@ -235,8 +232,6 @@ def generate_embeddings(
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = None
 ):
-    if digital_rotations is not None:
-        digital_rotations = np.linspace(0, 360, digital_rotations).astype(int)
 
     model, modelpsfgen = reloadmodel_if_needed(
         modelpath=model,
@@ -452,7 +447,7 @@ def predict(
     freq_strength_threshold: float = .01,
     confidence_threshold: float = .0099,
     batch_size: int = 1,
-    digital_rotations: Optional[np.ndarray] = np.linspace(0, 360, 360).astype(int),
+    digital_rotations: Optional[int] = 360,
     plot: bool = True,
     plot_rotations: bool = False,
     ztiles: int = 1,
@@ -475,8 +470,7 @@ def predict(
             remove_background=True,
             normalize=True,
             edge_filter=False,
-            filter_mask_dilation=True,
-            async_plot=False
+            filter_mask_dilation=True
         ),
         desc='Generate Fourier embeddings',
         cores=cpu_workers
@@ -501,8 +495,7 @@ def predict(
         save_path=[f.with_suffix('') for f in rois],
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
-        desc=f"ROIs [{rois.shape[0]}] x "
-             f"[{digital_rotations.shape[0] if digital_rotations is not None else digital_rotations}] Rotations",
+        desc=f"ROIs [{rois.shape[0]}] x [{digital_rotations}] Rotations",
     )
 
     tile_names = [f.with_suffix('').name for f in rois]
@@ -539,7 +532,7 @@ def predict(
         actuators.to_csv(f"{outdir}_predictions_corrected_actuators.csv")
 
     # if plot:
-    #     mp.Pool(1).apply_async(vis.wavefronts(
+    #     vis.wavefronts(
     #         predictions=predictions,
     #         nrows=nrows,
     #         ncols=ncols,
@@ -580,9 +573,6 @@ def predict_sample(
 ):
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
-
-    if digital_rotations is not None:
-        digital_rotations = np.linspace(0, 360, digital_rotations).astype(int)
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
@@ -721,12 +711,12 @@ def predict_sample(
         )
 
     if plot:
-        mp.Pool(1).apply_async(vis.diagnosis(
+        vis.diagnosis(
             pred=p,
             pred_std=std,
             save_path=Path(f"{img.with_suffix('')}_sample_predictions_diagnosis"),
             lls_defocus=lls_defocus
-        ))
+        )
 
     return df
 
@@ -761,9 +751,6 @@ def predict_large_fov(
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
     sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
-
-    if digital_rotations is not None:
-        digital_rotations = np.linspace(0, 360, digital_rotations).astype(int)
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
@@ -886,12 +873,12 @@ def predict_large_fov(
         )
 
     if plot:
-        mp.Pool(1).apply_async(vis.diagnosis(
+        vis.diagnosis(
             pred=p,
             pred_std=std,
             save_path=Path(f"{img.with_suffix('')}_large_fov_predictions_diagnosis"),
             lls_defocus=lls_defocus
-        ))
+        )
 
     return df
 
@@ -925,8 +912,6 @@ def predict_rois(
     digital_rotations: Optional[int] = 360,
     cpu_workers: int = -1
 ):
-    if digital_rotations is not None:
-        digital_rotations = np.linspace(0, 360, digital_rotations).astype(int)
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
@@ -1045,8 +1030,6 @@ def predict_tiles(
     digital_rotations: Optional[int] = 360,
     cpu_workers: int = -1,
 ):
-    if digital_rotations is not None:
-        digital_rotations = np.linspace(0, 360, digital_rotations).astype(int)
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
         modelpath=model,
@@ -1143,12 +1126,12 @@ def predict_tiles(
     )
 
     # if plot:
-    #     mp.Pool(1).apply_async(vis.tiles(
+    #     vis.tiles(
     #         data=sample,
     #         strides=window_size,
     #         window_size=window_size,
     #         save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
-    #     ))
+    #     )
 
     return predictions
 
@@ -1478,11 +1461,11 @@ def phase_retrieval(
     imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf)
 
     if plot:
-        mp.Pool(1).apply_async(vis.diagnosis(
+        vis.diagnosis(
             pred=pred,
             pred_std=pred_std,
             save_path=Path(f"{img.with_suffix('')}_phase_retrieval_diagnosis"),
-        ))
+        )
 
         fig, axes = pr_result.plot()
         axes[0].set_title("Phase in waves")

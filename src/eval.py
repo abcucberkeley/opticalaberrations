@@ -7,7 +7,7 @@ import logging
 import sys
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 from matplotlib.ticker import FormatStrFormatter
 import matplotlib.colors as mcolors
 
@@ -74,7 +74,7 @@ def generate_fourier_embeddings(
     psfgen: SyntheticPSF,
     no_phase: bool = False,
     input_coverage: float = 1.0,
-    digital_rotations: Any = None,
+    digital_rotations: Optional[int] = None,
 ):
     hashtable = data[data['id'] == image_id].iloc[0].to_dict()
 
@@ -131,7 +131,7 @@ def iter_evaluate(
     snr_range: tuple = (21, 30),
     eval_sign: str = 'positive_only',
     digital_rotations: bool = False,
-    rotations: np.ndarray = np.linspace(0, 360, 360).astype(int),
+    rotations: Optional[int] = 360,
     savepath: Any = None,
 ):
     model = backend.load(modelpath)

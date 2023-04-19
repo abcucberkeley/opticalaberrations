@@ -4,6 +4,7 @@ matplotlib.use('Agg')
 import logging
 import sys
 from typing import Any, Union, Optional
+from functools import lru_cache
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -26,9 +27,9 @@ from multiprocessing import Pool
 
 try:
     import cupy as cp
-    from cupyx.scipy.ndimage import rotate
+    from cupyx.scipy.ndimage import rotate, map_coordinates
 except ImportError as e:
-    from scipy.ndimage import rotate
+    from scipy.ndimage import rotate, map_coordinates
     logging.warning(f"Cupy not supported on your system: {e}")
 
 import preprocessing
@@ -246,8 +247,7 @@ def remove_interference_pattern(
         windowing: bool = True,
         window_size: tuple = (21, 21, 21),
         plot_interference_pattern: bool = False,
-        min_psnr: float = 15.0,
-        async_plot: bool = True
+        min_psnr: float = 15.0
 ):
     """
     Normalize interference pattern from the given FFT
@@ -377,21 +377,7 @@ def remove_interference_pattern(
         corrected_psf /= np.nanmax(corrected_psf)
 
         if plot is not None:
-            if async_plot:
-                Pool(1).apply_async(plot_interference(
-                    plot,
-                    plot_interference_pattern,
-                    pois=pois,
-                    min_distance=min_distance,
-                    beads=beads,
-                    convolved_psf=convolved_psf,
-                    psf_peaks=psf_peaks,
-                    corrected_psf=corrected_psf,
-                    kernel=kernel,
-                    interference_pattern=interference_pattern
-                ))
-            else:
-                plot_interference(
+            plot_interference(
                     plot,
                     plot_interference_pattern,
                     pois=pois,
@@ -544,13 +530,54 @@ def compute_emb(
         return emb
 
 
+@lru_cache(maxsize=360, typed=True)
+def rotate_coords(
+    shape: tuple,
+    digital_rotations: int,
+    axes: tuple = (-2, -1),
+):
+    rotations = np.linspace(0, 360, digital_rotations).astype(int)
+    gpu_support = 'cupy' in sys.modules
+
+    if gpu_support:
+        all_coords = cp.zeros((3, digital_rotations, *shape))
+
+        for i, angle in enumerate(rotations):
+            z = cp.arange(0, shape[0])
+            y = cp.arange(0, shape[1])
+            x = cp.arange(0, shape[2])
+
+            coords = cp.meshgrid(z, y, x, indexing='ij')
+            coords[0] = rotate(coords[0], angle=angle, reshape=False, axes=axes)
+            coords[1] = rotate(coords[1], angle=angle, reshape=False, axes=axes)
+            coords[2] = rotate(coords[2], angle=angle, reshape=False, axes=axes)
+            all_coords[:, i] = cp.array(coords)
+    else:
+        all_coords = np.zeros((3, digital_rotations, *shape))
+
+        for i, angle in enumerate(rotations):
+            z = np.arange(0, shape[0])
+            y = np.arange(0, shape[1])
+            x = np.arange(0, shape[2])
+
+            coords = np.meshgrid(z, y, x, indexing='ij')
+            coords[0] = rotate(coords[0], angle=angle, reshape=False, axes=axes)
+            coords[1] = rotate(coords[1], angle=angle, reshape=False, axes=axes)
+            coords[2] = rotate(coords[2], angle=angle, reshape=False, axes=axes)
+            all_coords[:, i] = np.array(coords)
+
+    return all_coords   # 3 coords (z,y,x), 360 angles, 6 emb, height of emb, width of emb
+
+
+@profile
 def rotate_embeddings(
     emb: np.ndarray,
-    digital_rotations: np.ndarray = np.linspace(0, 360, 360).astype(int),
+    digital_rotations: int = 360,
     plot: Any = None,
-    debug_rotations: bool = False
+    debug_rotations: bool = False,
 ):
     gpu_support = 'cupy' in sys.modules
+    coordinates = rotate_coords(shape=emb.shape, digital_rotations=digital_rotations)
 
     if gpu_support:
         memarray = cp.array(emb)
@@ -558,6 +585,7 @@ def rotate_embeddings(
         memarray = emb.copy()
 
     if debug_rotations:
+        digital_rotations = np.linspace(0, 360, digital_rotations).astype(int)
         emb = np.zeros((digital_rotations.shape[0], *emb.shape))
 
         for i, angle in enumerate(tqdm(
@@ -577,23 +605,9 @@ def rotate_embeddings(
 
     else:
         if gpu_support:
-            emb = np.array([
-                cp.asnumpy(rotate(memarray, angle=angle, reshape=False, axes=(-2, -1)))
-                for angle in tqdm(
-                    digital_rotations,
-                    desc=f"Generating digital rotations [{plot.name}]"
-                    if plot is not None else "Generating digital rotations",
-                )
-            ])
+            emb = cp.asnumpy(map_coordinates(memarray, coordinates=coordinates, output=np.float32))
         else:
-            emb = np.array([
-                rotate(memarray, angle=angle, reshape=False, axes=(-2, -1))
-                for angle in tqdm(
-                    digital_rotations,
-                    desc=f"Generating digital rotations [{plot.name}]"
-                    if plot is not None else "Generating digital rotations",
-                )
-            ])
+            emb = map_coordinates(memarray, coordinates=coordinates, output=np.float32)
 
     return emb
 
@@ -616,10 +630,9 @@ def fourier_embeddings(
         remove_interference: bool = True,
         embedding_option: str = 'spatial_planes',
         edge_filter: bool = False,
-        digital_rotations: Any = None,
+        digital_rotations: Optional[int] = None,
         poi_shape: tuple = (64, 64),
-        debug_rotations: bool = False,
-        async_plot: bool = True
+        debug_rotations: bool = False
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -699,8 +712,7 @@ def fourier_embeddings(
                 otf,
                 plot=plot,
                 pois=pois,
-                windowing=True,
-                async_plot=async_plot
+                windowing=True
             )
 
         phi = compute_emb(
@@ -722,18 +734,11 @@ def fourier_embeddings(
 
     if plot is not None:
         plt.style.use("default")
-        if async_plot:
-            Pool(1).apply_async(plot_embeddings(
-                inputs=psf,
-                emb=emb,
-                save_path=plot
-            ))
-        else:
-            plot_embeddings(
-                inputs=psf,
-                emb=emb,
-                save_path=plot
-            )
+        plot_embeddings(
+            inputs=psf,
+            emb=emb,
+            save_path=plot
+        )
 
     if digital_rotations is not None:
         emb = rotate_embeddings(
@@ -762,15 +767,14 @@ def rolling_fourier_embeddings(
         log10: bool = False,
         freq_strength_threshold: float = 0.01,
         embedding_option: str = 'spatial_planes',
-        digital_rotations: Any = None,
+        digital_rotations: Optional[int] = None,
         poi_shape: tuple = (64, 64),
         debug_rotations: bool = False,
         remove_interference: bool = True,
         cpu_workers: int = -1,
         nrows: Optional[int] = None,
         ncols: Optional[int] = None,
-        ztiles: Optional[int] = None,
-        async_plot: bool = True
+        ztiles: Optional[int] = None
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -913,25 +917,14 @@ def rolling_fourier_embeddings(
 
     if plot is not None:
         plt.style.use("default")
-        if async_plot:
-            Pool(1).apply_async(plot_embeddings(
-                inputs=rois,
-                emb=emb,
-                save_path=plot,
-                nrows=nrows,
-                ncols=ncols,
-                ztiles=ztiles
-            ))
-        else:
-            plot_embeddings(
-                inputs=rois,
-                emb=emb,
-                save_path=plot,
-                nrows=nrows,
-                ncols=ncols,
-                ztiles=ztiles
-            )
-
+        plot_embeddings(
+            inputs=rois,
+            emb=emb,
+            save_path=plot,
+            nrows=nrows,
+            ncols=ncols,
+            ztiles=ztiles
+        )
 
     if digital_rotations is not None:
         emb = rotate_embeddings(
