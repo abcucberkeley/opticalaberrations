@@ -538,15 +538,15 @@ def predict(
         actuators.index.name = 'actuators'
         actuators.to_csv(f"{outdir}_predictions_corrected_actuators.csv")
 
-    # if plot:
-    #     mp.Pool(1).apply_async(vis.wavefronts(
-    #         predictions=predictions,
-    #         nrows=nrows,
-    #         ncols=ncols,
-    #         ztiles=ztiles,
-    #         wavelength=wavelength,
-    #         save_path=Path(f"{outdir.with_suffix('')}_predictions_wavefronts"),
-    #     ))
+    if plot:
+        mp.Pool(1).apply_async(vis.wavefronts(
+            predictions=predictions,
+            nrows=nrows,
+            ncols=ncols,
+            ztiles=ztiles,
+            wavelength=wavelength,
+            save_path=Path(f"{outdir.with_suffix('')}_predictions_wavefronts"),
+        ))
 
     return predictions
 
@@ -1142,13 +1142,13 @@ def predict_tiles(
         cpu_workers=cpu_workers,
     )
 
-    # if plot:
-    #     mp.Pool(1).apply_async(vis.tiles(
-    #         data=sample,
-    #         strides=window_size,
-    #         window_size=window_size,
-    #         save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
-    #     ))
+    if plot:
+        mp.Pool(1).apply_async(vis.tiles(
+            data=sample,
+            strides=window_size,
+            window_size=window_size,
+            save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
+        ))
 
     return predictions
 
