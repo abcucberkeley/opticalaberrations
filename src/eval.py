@@ -131,7 +131,7 @@ def iter_evaluate(
     snr_range: tuple = (21, 30),
     eval_sign: str = 'positive_only',
     digital_rotations: bool = False,
-    rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    rotations: np.ndarray = np.linspace(0, 360, 360).astype(int),
     savepath: Any = None,
 ):
     model = backend.load(modelpath)

@@ -11,14 +11,14 @@ def kargs():
     input_shape = (256, 256, 256)  # z-y-x
     window_size = (128, 128, 128)  # z-y-x
     num_tiles = np.prod(tuple(map(floordiv, input_shape, window_size)))
-    digital_rotations = range(0, 361)
+    digital_rotations = 360
 
     kargs = dict(
         inputs=repo / f'examples/single/single.tif',
         input_shape=input_shape,
         embeddings_shape=(6, 64, 64, 1),
         digital_rotations=digital_rotations,
-        rotations_shape=(len(digital_rotations), 6, 64, 64, 1),
+        rotations_shape=(digital_rotations, 6, 64, 64, 1),
         window_size=window_size,
         num_tiles=num_tiles,
         tiles_shape=(num_modes, num_tiles+5),

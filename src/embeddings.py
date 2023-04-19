@@ -546,7 +546,7 @@ def compute_emb(
 
 def rotate_embeddings(
     emb: np.ndarray,
-    digital_rotations: np.ndarray = np.arange(0, 360 + 1, 1).astype(int),
+    digital_rotations: np.ndarray = np.linspace(0, 360, 360).astype(int),
     plot: Any = None,
     debug_rotations: bool = False
 ):
