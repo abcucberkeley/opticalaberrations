@@ -249,7 +249,7 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     predict_sample.add_argument(
-        "--digital_rotations", default=360, type=int,
+        "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
     )
 
@@ -335,7 +335,7 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     predict_large_fov.add_argument(
-        "--digital_rotations", default=360, type=int,
+        "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
     )
 
@@ -429,7 +429,7 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     predict_rois.add_argument(
-        "--digital_rotations", default=360, type=int,
+        "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
     )
 
@@ -515,7 +515,7 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     predict_tiles.add_argument(
-        "--digital_rotations", default=360, type=int,
+        "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
     )
 

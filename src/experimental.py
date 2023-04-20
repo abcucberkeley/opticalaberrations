@@ -126,7 +126,7 @@ def preprocess(
     modelpsfgen: SyntheticPSF,
     samplepsfgen: SyntheticPSF,
     freq_strength_threshold: float = .01,
-    digital_rotations: Optional[int] = 360,
+    digital_rotations: Optional[int] = 361,
     remove_background: bool = True,
     read_noise_bias: float = 5,
     normalize: bool = True,
@@ -440,7 +440,7 @@ def predict(
     freq_strength_threshold: float = .01,
     confidence_threshold: float = .0099,
     batch_size: int = 1,
-    digital_rotations: Optional[int] = 360,
+    digital_rotations: Optional[int] = 361,
     plot: bool = True,
     plot_rotations: bool = False,
     ztiles: int = 1,
@@ -551,7 +551,7 @@ def predict_sample(
     ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
-    digital_rotations: Optional[int] = 360,
+    digital_rotations: Optional[int] = 361,
     cpu_workers: int = -1
 ):
     lls_defocus = 0.
@@ -728,7 +728,7 @@ def predict_large_fov(
     ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
-    digital_rotations: Optional[int] = 360,
+    digital_rotations: Optional[int] = 361,
     cpu_workers: int = -1
 ):
     lls_defocus = 0.
@@ -892,7 +892,7 @@ def predict_rois(
     sign_threshold: float = .9,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
-    digital_rotations: Optional[int] = 360,
+    digital_rotations: Optional[int] = 361,
     cpu_workers: int = -1
 ):
 
@@ -1010,7 +1010,7 @@ def predict_tiles(
     ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
-    digital_rotations: Optional[int] = 360,
+    digital_rotations: Optional[int] = 361,
     cpu_workers: int = -1,
 ):
 

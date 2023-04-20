@@ -131,7 +131,7 @@ def iter_evaluate(
     snr_range: tuple = (21, 30),
     eval_sign: str = 'positive_only',
     digital_rotations: bool = False,
-    rotations: Optional[int] = 360,
+    rotations: Optional[int] = 361,
     savepath: Any = None,
 ):
     model = backend.load(modelpath)

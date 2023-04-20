@@ -381,7 +381,7 @@ def eval_rotation(
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
 
     if isinstance(rotations, int):
-        rotations = np.linspace(0, 360, rotations).astype(int)
+        rotations = np.linspace(0, 360, rotations)
 
     preds = np.zeros(psfgen.n_modes)
     stdevs = np.zeros(psfgen.n_modes)
@@ -522,7 +522,7 @@ def predict_rotation(
         remove_interference: bool = True,
         desc: str = 'Predict-rotations',
         confidence_threshold: float = .0099,
-        digital_rotations: Optional[int] = 360,
+        digital_rotations: Optional[int] = 361,
         cpu_workers: int = -1,
 ):
     """
