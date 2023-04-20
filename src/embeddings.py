@@ -532,47 +532,56 @@ def compute_emb(
 
 @lru_cache(maxsize=361, typed=True)
 def rotate_coords(
-    shape: tuple,
+    shape: Union[tuple, np.ndarray],
     digital_rotations: int,
     axes: tuple = (-2, -1),
 ):
     gpu_support = 'cupy' in sys.modules
     dtype = np.float16
     rotations = np.linspace(0, 360, digital_rotations)
-    linear_rotate = partial(rotate,
-                            reshape=False,
-                            axes=axes,
-                            output=dtype,  # output will be floats
-                            prefilter=False,
-                            order=1,
-                            )
 
-    if gpu_support:          # rotated coordinates don't need many decimals
+    if gpu_support:  # rotated coordinates don't need many decimals
+        coords = cp.array(
+            cp.meshgrid(
+                cp.arange(shape[0]),
+                cp.arange(shape[1]),
+                cp.arange(shape[2]),
+                indexing='ij'
+            )
+        )
         all_coords = cp.zeros((3, digital_rotations, *shape), dtype=dtype)
 
         for i, angle in enumerate(rotations):
-            z = cp.arange(0, shape[0])
-            y = cp.arange(0, shape[1])
-            x = cp.arange(0, shape[2])  # these will be integers
-
-            coords = cp.meshgrid(z, y, x, indexing='ij')
-            if axes != (-2, -1): # if z is emb axis, don't bother rotating by zero
-                all_coords[0, i] = linear_rotate(coords[0], angle=angle)   # rotate z coords
-            all_coords[1, i] = linear_rotate(coords[1], angle=angle)   # rotate y coords
-            all_coords[2, i] = linear_rotate(coords[2], angle=angle)   # rotate x coords
+            all_coords[:, i] = rotate(
+                coords,
+                angle=angle,
+                reshape=False,
+                axes=axes,
+                output=dtype,  # output will be floats
+                prefilter=False,
+                order=1,
+            )
     else:
+        coords = np.array(
+            np.meshgrid(
+                np.arange(shape[0]),
+                np.arange(shape[1]),
+                np.arange(shape[2]),
+                indexing='ij'
+            )
+        )
         all_coords = np.zeros((3, digital_rotations, *shape), dtype=dtype)
 
         for i, angle in enumerate(rotations):
-            z = np.arange(0, shape[0])
-            y = np.arange(0, shape[1])
-            x = np.arange(0, shape[2])
-
-            coords = np.meshgrid(z, y, x, indexing='ij')
-            if axes != (-2, -1): # if z is emb axis, don't bother rotating by zero
-                all_coords[0, i] = linear_rotate(coords[0], angle=angle)   # rotate z coords
-            all_coords[1, i] = linear_rotate(coords[1], angle=angle)   # rotate y coords
-            all_coords[2, i] = linear_rotate(coords[2], angle=angle)   # rotate x coords
+            all_coords[:, i] = rotate(
+                coords,
+                angle=angle,
+                reshape=False,
+                axes=axes,
+                output=dtype,  # output will be floats
+                prefilter=False,
+                order=1,
+            )
 
     return all_coords   # 3 coords (z,y,x), 361 angles, 6 emb, height of emb, width of emb
 
@@ -588,12 +597,11 @@ def rotate_embeddings(
     coordinates = rotate_coords(shape=emb.shape, digital_rotations=digital_rotations)
 
     if gpu_support:
-        memarray = cp.array(emb)
         emb = cp.asnumpy(
-            map_coordinates(memarray, coordinates=coordinates, output=cp.float32, order=1, prefilter=False))
+            map_coordinates(cp.array(emb), coordinates=coordinates, output=cp.float32, order=1, prefilter=False)
+        )
     else:
-        memarray = emb.copy()
-        emb = map_coordinates(memarray, coordinates=coordinates, output=np.float32, order=1, prefilter=False)
+        emb = map_coordinates(emb, coordinates=coordinates, output=np.float32, order=1, prefilter=False)
 
     if debug_rotations and plot:
         rotations = np.linspace(0, 360, digital_rotations)

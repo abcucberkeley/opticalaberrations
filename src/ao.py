@@ -763,6 +763,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         flags = ' '.join(sys.argv[1:])
         flags = flags.replace('..', cluster_repo)
         flags = flags.replace('--cluster', '')
+        flags = flags.replace('U:\\', '/clusterfs/nvme2/')
         taskname = f"{args.func}_{args.input.stem}"
 
         sjob = f"srun "

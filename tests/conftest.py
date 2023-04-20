@@ -11,7 +11,7 @@ def kargs():
     input_shape = (256, 256, 256)  # z-y-x
     window_size = (128, 128, 128)  # z-y-x
     num_tiles = np.prod(tuple(map(floordiv, input_shape, window_size)))
-    digital_rotations = 360
+    digital_rotations = 361
 
     kargs = dict(
         inputs=repo / f'examples/single/single.tif',
