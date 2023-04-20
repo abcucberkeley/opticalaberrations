@@ -289,7 +289,10 @@ def generate_embeddings(
 
 @profile
 def reconstruct_wavefront_error_landscape(
-    isoplanatic_patchs: pd.DataFrame,
+    wavefronts: dict,
+    xtiles: int,
+    ytiles: int,
+    ztiles: int,
     image: np.ndarray,
     save_path: Union[Path, str],
     window_size: tuple,
@@ -319,7 +322,7 @@ def reconstruct_wavefront_error_landscape(
     phi = vector of the wavefront error at the coordinates. lenght = # of coordinates
 
     Args:
-        isoplanatic_patchs: wavefronts at each tile location
+        wavefronts: wavefronts at each tile location
         volume_shape: Number of pixels in full volume
         na: Numerical aperature limit which to use for calculating p2v error
         wavelength:
@@ -342,10 +345,6 @@ def reconstruct_wavefront_error_landscape(
             tuple(np.array(tile_coords) + np.array([0, 0, 1])),  # x neighbour
         ]
 
-    xtiles = len(isoplanatic_patchs.index.get_level_values('x').unique())
-    ytiles = len(isoplanatic_patchs.index.get_level_values('y').unique())
-    ztiles = len(isoplanatic_patchs.index.get_level_values('z').unique())
-
     num_coords = xtiles * ytiles * ztiles
     num_dimensions = 3
     num_measurements = num_coords * num_dimensions  # max limit of number of cube borders
@@ -356,25 +355,19 @@ def reconstruct_wavefront_error_landscape(
     h = utils.microns2waves(h, wavelength=wavelength)
 
     # center = (ztiles//2, ytiles//2, xtiles//2)
-    # peak = isoplanatic_patchs.apply(lambda x: x**2).groupby(['z', 'y', 'x']).sum().idxmax()
+    # peak = predictions.apply(lambda x: x**2).groupby(['z', 'y', 'x']).sum().idxmax()
     tile_p2v = np.full((xtiles * ytiles * ztiles), np.nan)
 
     matrix_row = 0  # pointer to where we are writing
     for i, tile_coords in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
         neighbours = list(get_neighbors(tile_coords))
-        tile_wavefront = Wavefront(
-            isoplanatic_patchs.loc[tile_coords].values,
-            lam_detection=wavelength
-        )
+        tile_wavefront = wavefronts[tile_coords]
         if np.isnan(tile_p2v[i]):
             tile_p2v[i] = tile_wavefront.peak2valley(na=na)
 
         for j, neighbour_coords in enumerate(neighbours):  # ordered as (z, y, x) neighbours
             try:
-                neighbour_wavefront = Wavefront(
-                    isoplanatic_patchs.loc[neighbour_coords].values,
-                    lam_detection=wavelength
-                )
+                neighbour_wavefront = wavefronts[neighbour_coords]
                 if np.isnan(tile_p2v[j]):
                     tile_p2v[j] = neighbour_wavefront.peak2valley(na=na)
 
@@ -384,7 +377,7 @@ def reconstruct_wavefront_error_landscape(
                 v1 = np.dot(tile_wavefront.amplitudes_ansi_waves, tile_wavefront.amplitudes_ansi_waves)
                 v2 = np.dot(tile_wavefront.amplitudes_ansi_waves, neighbour_wavefront.amplitudes_ansi_waves)
 
-                if v2 < v1: # choose negative slope when neighbor has less aberration along the current aberration
+                if v2 < v1:  # choose negative slope when neighbor has less aberration along the current aberration
                     p2v *= -1
 
                 if tile_p2v[i] > threshold and tile_p2v[j] > threshold:
@@ -530,16 +523,6 @@ def predict(
         actuators = pd.DataFrame.from_dict(actuators)
         actuators.index.name = 'actuators'
         actuators.to_csv(f"{outdir}_predictions_corrected_actuators.csv")
-
-    # if plot:
-    #     vis.wavefronts(
-    #         predictions=predictions,
-    #         nrows=nrows,
-    #         ncols=ncols,
-    #         ztiles=ztiles,
-    #         wavelength=wavelength,
-    #         save_path=Path(f"{outdir.with_suffix('')}_predictions_wavefronts"),
-    #     ))
 
     return predictions
 
@@ -1125,14 +1108,6 @@ def predict_tiles(
         cpu_workers=cpu_workers,
     )
 
-    # if plot:
-    #     vis.tiles(
-    #         data=sample,
-    #         strides=window_size,
-    #         window_size=window_size,
-    #         save_path=Path(f"{outdir.with_suffix('')}_predictions_mips"),
-    #     )
-
     return predictions
 
 
@@ -1157,6 +1132,16 @@ def aggregate_predictions(
     ignore_tile: Any = None,
     preloaded: Preloadedmodelclass = None,
 ):
+
+    # if plot:
+    #     vis.wavefronts(
+    #         predictions=pd.read_csv(model_pred, index_col=0, header=0),
+    #         nrows=nrows,
+    #         ncols=ncols,
+    #         ztiles=ztiles,
+    #         wavelength=wavelength,
+    #         save_path=Path(f"{outdir.with_suffix('')}_predictions_wavefronts"),
+    #     ))
 
     vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
     vol /= np.percentile(vol, 98)
@@ -1295,8 +1280,24 @@ def aggregate_predictions(
     actuators.index.name = 'actuators'
     actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
 
+    wavefronts = {}
+    for index, z in predictions.drop(columns='cluster').iterrows():
+        wavefronts[index] = Wavefront(
+            z.values,
+            lam_detection=wavelength,
+        )
+
+    wavefront_heatmap = np.zeros((ztiles, *vol.shape[1:]))
+    w = predictions_settings['window_size'][-1]
+    for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
+        wavefront_heatmap[z, y*w:(y*w)+w, x*w:(x*w)+w] = np.nan_to_num(wavefronts[(z, y, x)].wave(w), nan=0)
+    imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap)
+
     reconstruct_wavefront_error_landscape(
-        predictions.drop(columns='cluster'),
+        wavefronts=wavefronts,
+        xtiles=xtiles,
+        ytiles=ytiles,
+        ztiles=ztiles,
         image=vol,
         save_path=Path(f"{model_pred.with_suffix('')}_aggregated_error.tif"),
         window_size=predictions_settings['window_size'],

@@ -752,7 +752,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
     logger.info(args)
 
     if args.cluster:
-        hostname = "10.17.209.10"
+        hostname = "master.abc.berkeley.edu"
         username = "thayeralshaabi"
         partition = "abc_a100"
 
