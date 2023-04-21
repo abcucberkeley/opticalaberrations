@@ -339,7 +339,7 @@ def eval_rotation(
         confidence_threshold: float = .0099,
         minimum_fraction_of_kept_points: float = 0.45,
 ):
-    """
+    """  # order matters future thayer (predict_dataset)
         We can think of the mode and its twin as the X and Y basis, and the aberration being a
         vector on this coordinate system. A problem occurs when the ground truth vector lies near
         where one of the vectors flips sign (and the model was trained to only respond with positive
@@ -448,42 +448,66 @@ def eval_rotation(
             df['mse'] = mse
 
             twin_angle = b  # evaluate the curve fit when there is no digital rotation.
-            preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
 
-            if rho > 0:
+            """
+                rho is already set to zero if `fraction_of_kept_points` and/or `mse` are bad
+                                    prediction  stdev
+                confident-A         p           s (small)
+                confident-Z         0           s (small)
+                unconfident         0           0
+            """
+
+            confident = std_rho < confidence_threshold
+
+            if np.all(rhos == rhos[0]):  # blank image (unconfident)
+                preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
                 stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
-                confident = 1
-            else:
-                if np.all(rhos == rhos[0]):  # blank image
-                    preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
-                    stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
-                    confident = 0.
-                else:
-                    stdevs[mode.index_ansi], stdevs[twin.index_ansi] = std_rho, std_rho
-                    confident = stdevs[mode.index_ansi] < confidence_threshold
+                confident = 0.
+            elif confident and rho > 0:  # confident-A
+                preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
+                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = std_rho, std_rho
+            elif confident and rho == 0:  # confident-Z
+                preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
+                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = std_rho, std_rho
+            else:  # unconfident
+                preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
+                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
 
             df['confident'] = confident
 
         else:  # mode has m=0 (spherical,...), or twin isn't within the 55 modes.
-            if np.all(init_preds[:, mode.index_ansi] == init_preds[0, mode.index_ansi]):  # blank image
+
+            std_rho = np.std(init_preds[:, mode.index_ansi])
+            confident = std_rho < confidence_threshold
+            rhos = init_preds[:, mode.index_ansi]
+
+            if np.all(rhos == rhos[0]):  # blank image (unconfident)
                 preds[mode.index_ansi] = 0.
                 stdevs[mode.index_ansi] = 0.
-                df['rhos'] = 0.
-                df['confident'] = 0.
+                rhos = np.zeros_like(rhos)
+                confident = 0.
             else:
-                rho = np.median(init_preds[:, mode.index_ansi])
+                rho = np.median(rhos)
                 rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
-                preds[mode.index_ansi] = rho
-                stdevs[mode.index_ansi] = np.std(init_preds[:, mode.index_ansi])
-                df['rhos'] = init_preds[:, mode.index_ansi]
-                df['confident'] = 1
 
+                if confident and rho > 0:  # confident-A
+                    preds[mode.index_ansi] = rho
+                    stdevs[mode.index_ansi] = std_rho
+                elif confident and rho == 0:  # confident-Z
+                    preds[mode.index_ansi] = 0.
+                    stdevs[mode.index_ansi] = std_rho
+                else:  # unconfident
+                    preds[mode.index_ansi] = 0.
+                    stdevs[mode.index_ansi] = 0.
+
+            df['rhos'] = rhos
             df['valid_points'] = 1
             df['twin_angle'] = np.nan
             df['pred_twin_angle'] = np.nan
             df['fitted_twin_angle'] = np.nan
             df['mse'] = np.nan
 
+        df['confident'] = confident
         df['aggr_rho'] = rho
         df['aggr_mode_amp'] = preds[mode.index_ansi]
         df['aggr_twin_amp'] = np.nan if twin is None else preds[twin.index_ansi]
@@ -832,6 +856,7 @@ def predict_dataset(
         batch_size: int = 128,
         ignore_modes: list = (0, 1, 2, 4),
         threshold: float = 0.,
+        confidence_threshold: float = .0099,
         verbose: bool = True,
         desc: str = 'MiniBatch-probabilistic-predictions',
         digital_rotations: Optional[int] = None,
@@ -883,16 +908,16 @@ def predict_dataset(
         with mp.Pool(processes=mp.cpu_count()) as p:
             jobs = list(tqdm(
                 p.starmap(
-                    eval_rotation,
+                    eval_rotation,  # order matters future thayer
                     zip(
-                        tile_predictions,
-                        repeat(digital_rotations),
-                        repeat(psfgen),
-                        save_path,
-                        save_path if plot_rotations else repeat(None),
-                        repeat(threshold),
-                        repeat(False),
-                        repeat(no_phase),
+                        tile_predictions,                               # init_preds
+                        repeat(digital_rotations),                      # rotations
+                        repeat(psfgen),                                 # psfgen
+                        save_path,                                      # save_path
+                        save_path if plot_rotations else repeat(None),  # plot
+                        repeat(threshold),                              # threshold
+                        repeat(no_phase),                               # no_phase
+                        repeat(confidence_threshold),                   # confidence_threshold
                     ),
                 ),
                 total=len(save_path),

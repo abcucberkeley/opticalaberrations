@@ -41,7 +41,7 @@ def kargs():
         batch_size=128,
         plot=True,
         plot_rotations=True,
-        ignore_modes=[],
+        ignore_modes=[0, 1, 2, 4],
         # extra `aggregate_predictions` flags
         majority_threshold=.5,
         min_percentile=1,
