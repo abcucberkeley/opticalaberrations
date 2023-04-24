@@ -1208,9 +1208,9 @@ def aggregate_predictions(
     where_unconfident = where_unconfident.agg('all', axis=1)  # 1D (one value for each tile)
     where_zero_confident = where_zero_confident.agg('all', axis=1)  # 1D (one value for each tile)
 
-    print(f'\nNumber of all zeros tiles {all_zeros.sum()} out of {all_zeros.count()}')
-    print(f'\nNumber of unconfident tiles {where_unconfident.sum()} out of {where_unconfident.count()}')
-    print(f'\nNumber of confident zero tiles {where_zero_confident.sum()} out of {where_zero_confident.count()}')
+    print(f'Number of all zeros tiles {all_zeros.sum()} out of {all_zeros.count()}')
+    print(f'Number of unconfident tiles {where_unconfident.sum()} out of {where_unconfident.count()}')
+    print(f'Number of confident zero tiles {where_zero_confident.sum()} out of {where_zero_confident.count()}')
 
     coefficients, actuators = {}, {}
 
@@ -1257,7 +1257,7 @@ def aggregate_predictions(
 
             g = clusters.get_group(c).index  # get all tiles that belong to cluster "c"
             # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
-            pred = ztile_preds.loc[g].agg(aggregation_rule, axis=0)     # mean ignoring NaNs
+            pred = ztile_preds.loc[g].drop(columns='cluster').agg(aggregation_rule, axis=0)     # mean ignoring NaNs
             pred_std = ztile_stds.loc[g].agg(aggregation_rule, axis=0)
 
             pred = Wavefront(
