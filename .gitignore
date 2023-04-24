@@ -152,3 +152,5 @@ dmypy.json
 pretrained_models/**/*.*
 !pretrained_models/**/*.h5
 examples/DM_State_510nm.csv
+src/pycharm.lnk
+src/LabVIEW_Shortcut.lnk
