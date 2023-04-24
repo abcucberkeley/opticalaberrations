@@ -557,7 +557,7 @@ def parse_args(args):
         help='majority rule to use to determine dominant modes among ROIs'
     )
     aggregate_predictions.add_argument(
-        "--aggregation_rule", default='mean', type=str,
+        "--aggregation_rule", default='median', type=str,
         help='rule to use to calculate final prediction [mean, median, min, max]'
     )
     aggregate_predictions.add_argument(
@@ -569,7 +569,7 @@ def parse_args(args):
         help='maximum percentile to filter out outliers'
     )
     aggregate_predictions.add_argument(
-        "--max_isoplanatic_clusters", default=3, type=int,
+        "--max_isoplanatic_clusters", default=4, type=int,
         help='maximum number of unique isoplanatic patchs for clustering tiles'
     )
     aggregate_predictions.add_argument(

@@ -1192,22 +1192,23 @@ def aggregate_predictions(
             predictions.loc[(z, y, x)] = np.nan
             stdevs.loc[(z, y, x)] = np.nan
 
+    all_zeros = predictions == 0
+
     # filter out unconfident predictions (std deviation is too large)
     where_unconfident = stdevs == 0
     where_unconfident[predictions_settings['ignore_modes']] = False
 
     # filter out small predictions from KMeans cluster analysis, but keep these as an additional group
     prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
-    where_zero_confident = (np.abs(predictions) <= prediction_threshold) & ~where_unconfident
+    where_zero_confident = (predictions.abs() <= prediction_threshold) & ~where_unconfident
     where_zero_confident[predictions_settings['ignore_modes']] = True
 
-    # set unconfident and zeros to np.nan
-    predictions = predictions.mask(where_unconfident | ~where_zero_confident)
-    stdevs = stdevs.mask(where_unconfident | ~where_zero_confident)
-
     where_unconfident[predictions_settings['ignore_modes']] = True  # ignore these modes during agg
+    all_zeros = all_zeros.agg('all', axis=1)  # 1D (one value for each tile)
     where_unconfident = where_unconfident.agg('all', axis=1)  # 1D (one value for each tile)
     where_zero_confident = where_zero_confident.agg('all', axis=1)  # 1D (one value for each tile)
+
+    print(f'\nNumber of all zeros tiles {all_zeros.sum()} out of {all_zeros.count()}')
     print(f'\nNumber of unconfident tiles {where_unconfident.sum()} out of {where_unconfident.count()}')
     print(f'\nNumber of confident zero tiles {where_zero_confident.sum()} out of {where_zero_confident.count()}')
 
@@ -1217,8 +1218,11 @@ def aggregate_predictions(
     predictions['cluster'] = np.nan
     stdevs['cluster'] = np.nan
 
-    z_predictions = predictions.groupby('z')
-    z_stdevs = stdevs.groupby('z')
+    valid_predictions = predictions.loc[~(where_unconfident | where_zero_confident | all_zeros)]
+    valid_predictions = valid_predictions.groupby('z')
+
+    valid_stdevs = stdevs.loc[~(where_unconfident | where_zero_confident | all_zeros)]
+    valid_stdevs = valid_stdevs.groupby('z')
 
     clusters3d_colormap = sns.color_palette("tab10", n_colors=(max_isoplanatic_clusters * ztiles))
     clusters3d_colormap.append((1, 1, 0))  # yellow color for no aberration
@@ -1226,18 +1230,11 @@ def aggregate_predictions(
     clusters3d_colormap = np.array(clusters3d_colormap)*255
 
     for z in trange(ztiles, desc='Aggregating Z tiles', total=ztiles):
-        ztile_preds = z_predictions.get_group(z)
+        ztile_preds = valid_predictions.get_group(z)
         ztile_preds.drop(columns='cluster', errors='ignore', inplace=True)
 
-        ztile_stds = z_stdevs.get_group(z)
+        ztile_stds = valid_stdevs.get_group(z)
         ztile_stds.drop(columns='cluster', errors='ignore', inplace=True)
-
-        # create a new embedding to cluster isoplanatic patches
-        # replace NaN with zero
-        ztile_emb = ztile_preds.fillna(0)
-
-        # run clustering on valid tiles (all zero tiles get dropped)
-        ztile_emb = ztile_emb.loc[~(ztile_emb == 0).all(axis=1)]
 
         logger.info('KMeans calculating...')
         clustering = KMeans(
@@ -1247,14 +1244,14 @@ def aggregate_predictions(
             n_clusters=max_isoplanatic_clusters,
         )
 
-        ztile_emb['cluster'] = clustering.fit_predict(ztile_emb)
-        ztile_emb['cluster'] += z * max_isoplanatic_clusters
+        ztile_preds['cluster'] = clustering.fit_predict(ztile_preds)
+        ztile_preds['cluster'] += z * max_isoplanatic_clusters
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
-        predictions.loc[ztile_emb.index, 'cluster'] = ztile_emb['cluster']
-        stdevs.loc[ztile_emb.index, 'cluster'] = ztile_emb['cluster']
+        predictions.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
+        stdevs.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
 
-        clusters = ztile_emb.groupby('cluster')
+        clusters = ztile_preds.groupby('cluster')
         for c in range(max_isoplanatic_clusters):
             c += z * max_isoplanatic_clusters
 
@@ -1302,6 +1299,7 @@ def aggregate_predictions(
     actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
 
     wavefronts = {}
+    predictions.loc[all_zeros, 'cluster'] = len(clusters3d_colormap) - 2
     predictions.loc[where_zero_confident, 'cluster'] = len(clusters3d_colormap) - 2
     predictions.loc[where_unconfident, 'cluster'] = len(clusters3d_colormap) - 1
 
@@ -1311,20 +1309,24 @@ def aggregate_predictions(
             lam_detection=wavelength,
         )
 
-    clusters3d_heatmap = np.empty_like(vol, dtype=np.float32)
-    wavefront_heatmap = np.empty((ztiles, *vol.shape[1:]), dtype=np.float32)
+    clusters3d_heatmap = np.ones_like(vol, dtype=np.float32) * len(clusters3d_colormap) - 1
+    wavefront_heatmap = np.zeros((ztiles, *vol.shape[1:]), dtype=np.float32)
+    wavefront_rgb = np.ones((ztiles, *vol.shape[1:]), dtype=np.float32) * len(clusters3d_colormap) - 1
+
     zw, yw, xw = predictions_settings['window_size']
     for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
         c = predictions.loc[(z, y, x), 'cluster']
 
-        # where the model is confident that some zernike modes are zeros but unconfident about the rest of the modes
-        if np.isnan(c):  # assign unconfident zero case to the `where_zero_confident` group
-            c = len(clusters3d_colormap) - 2
-
+        wavefront_rgb[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.ones((yw, xw)) * int(c)
         wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.nan_to_num(wavefronts[(z, y, x)].wave(xw), nan=0)
         clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.ones((zw, yw, xw)) * int(c)
 
     imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap, dtype=np.float32)
+
+    scaled_wavefront_heatmap = (wavefront_heatmap - np.nanmin(wavefront_heatmap)) / (np.nanmax(wavefront_heatmap) * 2)
+    wavefront_rgb = clusters3d_colormap[wavefront_rgb.astype(np.ubyte)] * scaled_wavefront_heatmap[..., np.newaxis]
+    wavefront_rgb = wavefront_rgb.astype(np.ubyte)
+    imwrite(f"{model_pred.with_suffix('')}_aggregated_clusters.tif", wavefront_rgb, photometric='rgb')
 
     clusters3d = clusters3d_colormap[clusters3d_heatmap.astype(np.ubyte)] * vol[..., np.newaxis]
     clusters3d = clusters3d.astype(np.ubyte)
