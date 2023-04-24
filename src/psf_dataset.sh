@@ -5,7 +5,6 @@ ENV=~/anaconda3/envs/ml/bin/python
 
 #PSF_TYPE='widefield'
 #PSF_TYPE='confocal'
-#PSF_TYPE='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 xVOXEL=.108
 yVOXEL=.108
@@ -23,6 +22,10 @@ MODES=15
 TITLE='psfs'
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}"
+
+LOGS="${OUTDIR}/logs"
+mkdir -p $OUTDIR
+mkdir -p $LOGS
 
 SAMPLES_PER_JOB=100
 SAMPLES_PER_BIN=200
@@ -73,13 +76,16 @@ do
           j="${j} --lam_detection ${LAMBDA}"
           j="${j} --cpu_workers ${CPUS}"
 
+          JOB="${TITLE}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-iter#${S}"
+
           task="/usr/bin/sbatch"
           task="${task} --qos=abc_normal --nice=1111111111"
           task="${task} --partition=abc"
           task="${task} --cpus-per-task=${CPUS}"
           task="${task} --mem='${MEM}'"
-          task="${task} --job-name=${TITLE}-${DISTRIBUTIONS[$DIST-1]}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-iter#${S}"
+          task="${task} --job-name=${JOB}"
           task="${task} --time=${TIMELIMIT}"
+          task="${task} --output=${LOGS}/${JOB}.log"
           task="${task} --export=ALL"
           task="${task} --wrap=\"${j}\""
           echo $task | bash
