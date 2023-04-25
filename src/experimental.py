@@ -1130,9 +1130,6 @@ def aggregate_predictions(
     model_pred: Path,
     dm_calibration: Path,
     dm_state: Any,
-    wavelength: float = .605,
-    axial_voxel_size: float = .1,
-    lateral_voxel_size: float = .108,
     majority_threshold: float = .5,
     min_percentile: int = 1,
     max_percentile: int = 99,
@@ -1141,21 +1138,11 @@ def aggregate_predictions(
     aggregation_rule: str = 'mean',
     dm_damping_scalar: float = 1,
     max_isoplanatic_clusters: int = 3,
-    optimize_max_isoplanatic_clusters: bool = True,
+    optimize_max_isoplanatic_clusters: bool = False,
     plot: bool = False,
     ignore_tile: Any = None,
     preloaded: Preloadedmodelclass = None,
 ):
-
-    # if plot:
-    #     vis.wavefronts(
-    #         predictions=pd.read_csv(model_pred, index_col=0, header=0),
-    #         nrows=nrows,
-    #         ncols=ncols,
-    #         ztiles=ztiles,
-    #         wavelength=wavelength,
-    #         save_path=Path(f"{outdir.with_suffix('')}_predictions_wavefronts"),
-    #     ))
 
     vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
     vol /= np.percentile(vol, 98)
@@ -1165,6 +1152,13 @@ def aggregate_predictions(
 
     with open(str(model_pred).replace('.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
+    if vol.shape != tuple(predictions_settings['input_shape']):
+        logger.error(f"vol.shape {vol.shape} != json's input_shape {tuple(predictions_settings['input_shape'])}")
+
+    wavelength = predictions_settings['wavelength']
+    axial_voxel_size = predictions_settings['sample_voxel_size'][0]
+    lateral_voxel_size = predictions_settings['sample_voxel_size'][2]
+
 
     # tile id is the column header, rows are the predictions
     predictions = pd.read_csv(
@@ -1194,7 +1188,7 @@ def aggregate_predictions(
         stdevs.index.get_level_values(1).str.lstrip('y').astype(np.int),
         stdevs.index.get_level_values(2).str.lstrip('x').astype(np.int),
     ], names=('z', 'y', 'x'))
-    print(f'std dev stats \n{stdevs.describe()}')
+    # print(f'std dev stats \n{stdevs.describe()}')
 
     ztiles = predictions.index.get_level_values('z').unique().shape[0]
     ytiles = predictions.index.get_level_values('y').unique().shape[0]
@@ -1206,7 +1200,7 @@ def aggregate_predictions(
             predictions.loc[(z, y, x)] = np.nan
             stdevs.loc[(z, y, x)] = np.nan
 
-    all_zeros = predictions == 0
+    all_zeros = predictions == 0    # will label tiles that are any mix of (confident zero and unconfident).
 
     # filter out unconfident predictions (std deviation is too large)
     where_unconfident = stdevs == 0
@@ -1222,9 +1216,10 @@ def aggregate_predictions(
     where_unconfident = where_unconfident.agg('all', axis=1)  # 1D (one value for each tile)
     where_zero_confident = where_zero_confident.agg('all', axis=1)  # 1D (one value for each tile)
 
-    print(f'Number of all zeros tiles {all_zeros.sum()} out of {all_zeros.count()}')
-    print(f'Number of unconfident tiles {where_unconfident.sum()} out of {where_unconfident.count()}')
-    print(f'Number of confident zero tiles {where_zero_confident.sum()} out of {where_zero_confident.count()}')
+    print(f'Number of confident zero tiles {where_zero_confident.sum():4} out of {where_zero_confident.count()}')
+    print(f'Number of unconfident tiles    {where_unconfident.sum():4} out of {where_unconfident.count()}')
+    print(f'Number of all zeros tiles      {all_zeros.sum():4} out of {all_zeros.count()}')
+    print(f'Number of non-zero tiles       {(~(where_unconfident | where_zero_confident | all_zeros)).sum():4} out of {all_zeros.count()}')
 
     coefficients, actuators = {}, {}
 
@@ -1328,6 +1323,9 @@ def aggregate_predictions(
     wavefront_rgb = np.ones((ztiles, *vol.shape[1:]), dtype=np.float32) * len(clusters3d_colormap) - 1
 
     zw, yw, xw = predictions_settings['window_size']
+    print(f"volume_size = {vol.shape}\n"
+          f"window_size = {predictions_settings['window_size']}\n"
+          f"      tiles = {ztiles, ytiles, xtiles}")
     for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
         c = predictions.loc[(z, y, x), 'cluster']
 

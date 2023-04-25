@@ -530,16 +530,6 @@ def parse_args(args):
         help="optional path to current DM current_dm .csv file (Default: `blank mirror`)"
     )
     aggregate_predictions.add_argument(
-        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
-    )
-    aggregate_predictions.add_argument(
-        "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
-    )
-    aggregate_predictions.add_argument(
-        "--wavelength", default=.510, type=float,
-        help='wavelength in microns'
-    )
-    aggregate_predictions.add_argument(
         "--dm_damping_scalar", default=.75, type=float,
         help='scale DM actuators by an arbitrary multiplier'
     )
@@ -987,9 +977,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     model_pred=args.input,
                     dm_calibration=args.dm_calibration,
                     dm_state=args.current_dm,
-                    wavelength=args.wavelength,
-                    axial_voxel_size=args.axial_voxel_size,
-                    lateral_voxel_size=args.lateral_voxel_size,
                     prediction_threshold=args.prediction_threshold,
                     confidence_threshold=args.confidence_threshold,
                     majority_threshold=args.majority_threshold,
