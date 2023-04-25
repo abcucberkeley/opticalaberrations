@@ -1312,6 +1312,7 @@ def aggregate_predictions(
     predictions.loc[all_zeros, 'cluster'] = len(clusters3d_colormap) - 2
     predictions.loc[where_zero_confident, 'cluster'] = len(clusters3d_colormap) - 2
     predictions.loc[where_unconfident, 'cluster'] = len(clusters3d_colormap) - 1
+    predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters.csv")
 
     for index, zernikes in predictions.drop(columns='cluster').iterrows():
         wavefronts[index] = Wavefront(
@@ -1379,6 +1380,58 @@ def aggregate_predictions(
     pool.join()     # wait for all tasks to complete
 
     return coefficients
+
+
+@profile
+def combine_tiles(
+    tile_predictions: Path,
+    corrections: list,
+):
+    """
+    Combine tiles from several DM patterns based on cluster IDs
+    Args:
+        tile_predictions: path to the output of `aggregate_predictions`
+        corrections: a list of tuples (clusterid, path to .tif scan taken with the given DM pattern)
+
+    """
+    original_image = load_sample(str(tile_predictions).replace('_tiles_predictions_aggregated_clusters.csv', '.tif'))
+    combined = np.zeros_like(original_image)
+
+    correction_scans = {}
+    for c, path in corrections:
+        correction_scans[c] = load_sample(path)
+
+    with open(str(tile_predictions).replace('_aggregated_clusters.csv', '_settings.json')) as f:
+        predictions_settings = ujson.load(f)
+
+    if original_image.shape != tuple(predictions_settings['input_shape']):
+        logger.error(f"img.shape {original_image.shape} != json's input_shape {tuple(predictions_settings['input_shape'])}")
+
+    predictions = pd.read_csv(tile_predictions, index_col=['z', 'y', 'x'], header=0)
+
+    zw, yw, xw = predictions_settings['window_size']
+    ztiles = predictions.index.get_level_values('z').unique().shape[0]
+    ytiles = predictions.index.get_level_values('y').unique().shape[0]
+    xtiles = predictions.index.get_level_values('x').unique().shape[0]
+
+    for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
+        c = int(predictions.loc[(z, y, x), 'cluster'])
+        dm = f"z{z}_c{c}"
+
+        if correction_scans.get(dm) is not None:
+            combined[
+                z * zw:(z * zw) + zw,
+                y * yw:(y * yw) + yw,
+                x * xw:(x * xw) + xw
+            ] = correction_scans[dm][z * zw:(z * zw) + zw, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw]
+        else:
+            combined[
+                z * zw:(z * zw) + zw,
+                y * yw:(y * yw) + yw,
+                x * xw:(x * xw) + xw
+            ] = original_image[z * zw:(z * zw) + zw, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw]
+
+    imwrite(f"{tile_predictions.with_suffix('')}_combined.tif", combined)
 
 
 @profile

@@ -8,6 +8,7 @@ import time
 import sys
 import tensorflow as tf
 from pathlib import Path
+import argparse
 
 try:
     import cupy as cp
@@ -492,7 +493,7 @@ def parse_args(args):
         help='a toggle for plotting predictions for digital rotations'
     )
     predict_tiles.add_argument(
-        "--num_predictions", default=10, type=int,
+        "--num_predictions", default=1, type=int,
         help="number of predictions per tile to estimate model's confidence"
     )
     predict_tiles.add_argument(
@@ -559,7 +560,7 @@ def parse_args(args):
         help='maximum percentile to filter out outliers'
     )
     aggregate_predictions.add_argument(
-        "--max_isoplanatic_clusters", default=10, type=int,
+        "--max_isoplanatic_clusters", default=3, type=int,
         help='maximum number of unique isoplanatic patchs for clustering tiles'
     )
     aggregate_predictions.add_argument(
@@ -574,6 +575,24 @@ def parse_args(args):
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
     aggregate_predictions.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
+
+    def corrections(s):
+        try:
+            dm, path = s.split(',')
+            return dm, path
+        except:
+            raise argparse.ArgumentTypeError("corrections must be z0_c0,path")
+
+    combine_tiles = subparsers.add_parser("combine_tiles")
+    combine_tiles.add_argument("input", type=Path, help="path to csv file")
+    combine_tiles.add_argument(
+        "--corrections", action='append', default=[], type=corrections,
+        help='paths to corrected scans for each DM'
+    )
+    combine_tiles.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
@@ -989,6 +1008,11 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     dm_damping_scalar=args.dm_damping_scalar,
                     plot=args.plot,
                     preloaded=preloaded
+                )
+            elif args.func == 'combine_tiles':
+                experimental.combine_tiles(
+                    tile_predictions=args.input,
+                    corrections=args.corrections,
                 )
             elif args.func == 'phase_retrieval':
                 experimental.phase_retrieval(
