@@ -123,11 +123,10 @@ class PsfGenerator3D:
         _psf /= np.max(_psf)
 
         if self.psf_type == 'widefield':
-            return _psf
+            pass
         elif self.psf_type == 'confocal':
             _psf = _psf**2
             _psf /= np.max(_psf)
-            return _psf
         else:
             lattice_profile = self.psf_type
 
@@ -154,5 +153,6 @@ class PsfGenerator3D:
                 np.newaxis,
                 np.newaxis
             ]
+            _psf *= lattice_profile
 
-            return _psf * lattice_profile
+        return _psf.astype(np.float32)

@@ -193,7 +193,7 @@ def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
         threshold_rel=0,
         exclude_border=False,
         p_norm=2,
-    ).astype(np.float64)
+    ).astype(np.float32)
 
     scaled_peaks = np.zeros_like(beads)
     scaled_peaks[:, 0] = beads[:, 0] * voxel_size[0]

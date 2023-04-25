@@ -301,7 +301,8 @@ def prep_sample(
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
-    # sample = np.nan_to_num(sample, nan=0, posinf=0, neginf=0, copy=False)
+    # convert to 32bit
+    sample = sample.astype(np.float32)
 
     if plot is not None:
         plt.rcParams.update({
@@ -332,7 +333,6 @@ def prep_sample(
             f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
         )
         axes[0, 1].set_title(f"PSNR: {measure_snr(sample)}")
-
 
     if remove_background:
         sample = cp.array(sample)
@@ -383,10 +383,10 @@ def prep_sample(
             highthresholdratio=0.2,
             weak_voxel=1.5*(st.mode(sample, axis=None).mode[0] + 1e-6),
             strong_voxel=np.nanmax(sample)
-        ).detect().astype(np.float)
+        ).detect().astype(np.float32)
 
         if filter_mask_dilation:
-            mask = dilation(mask, ball(1)).astype(float)
+            mask = dilation(mask, ball(1)).astype(np.float32)
 
         sample *= mask
 
@@ -406,7 +406,7 @@ def prep_sample(
         logger.info(f"PSNR: {psnr}")
         return psnr
     else:
-        return sample
+        return sample.astype(np.float32)
 
 
 @profile

@@ -666,6 +666,9 @@ def fourier_embeddings(
             Capitalizing on the radial symmetry of the FFT,
             we have a few options to minimize the size of the embedding.
     """
+    inputs = inputs.astype(np.float32)
+    iotf = iotf.astype(np.float32)
+
     if isinstance(inputs, tuple):
         psf, otf = inputs
     else:
@@ -804,6 +807,9 @@ def rolling_fourier_embeddings(
             Capitalizing on the radial symmetry of the FFT,
             we have a few options to minimize the size of the embedding.
     """
+
+    rois = rois.astype(np.float32)
+    iotf = iotf.astype(np.float32)
 
     otfs = multiprocess(
         func=fft,

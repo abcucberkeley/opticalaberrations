@@ -48,15 +48,16 @@ except ImportError as e:
 @profile
 def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
     if isinstance(data, np.ndarray):
-        img = data
+        img = data.astype(np.float32)
     elif isinstance(data, bytes):
-        img = Path(str(data, "utf-8"))
+        data = Path(str(data, "utf-8"))
+        img = get_image(data).astype(np.float32)
     elif isinstance(data, tf.Tensor):
         path = Path(str(data.numpy(), "utf-8"))
-        img = get_image(path).astype(float)
+        img = get_image(path).astype(tf.float32)
     else:
         path = Path(str(data))
-        img = get_image(path).astype(float)
+        img = get_image(path).astype(np.float32)
     return np.squeeze(img)
 
 
