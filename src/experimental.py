@@ -1212,15 +1212,16 @@ def aggregate_predictions(
     where_zero_confident = (predictions.abs() <= prediction_threshold) & ~where_unconfident
     where_zero_confident[predictions_settings['ignore_modes']] = True
 
-    where_unconfident[predictions_settings['ignore_modes']] = True  # ignore these modes during agg
-    all_zeros = all_zeros.agg('all', axis=1)  # 1D (one value for each tile)
-    where_unconfident = where_unconfident.agg('all', axis=1)  # 1D (one value for each tile)
-    where_zero_confident = where_zero_confident.agg('all', axis=1)  # 1D (one value for each tile)
+    unconfident_tiles = where_unconfident.copy()
+    unconfident_tiles[predictions_settings['ignore_modes']] = True  # ignore these modes during agg
+    all_zeros_tiles = all_zeros.agg('all', axis=1)  # 1D (one value for each tile)
+    unconfident_tiles = unconfident_tiles.agg('all', axis=1)  # 1D (one value for each tile)
+    zero_confident_tiles = where_zero_confident.agg('all', axis=1)  # 1D (one value for each tile)
 
-    print(f'Number of confident zero tiles {where_zero_confident.sum():4} out of {where_zero_confident.count()}')
-    print(f'Number of unconfident tiles    {where_unconfident.sum():4} out of {where_unconfident.count()}')
-    print(f'Number of all zeros tiles      {all_zeros.sum():4} out of {all_zeros.count()}')
-    print(f'Number of non-zero tiles       {(~(where_unconfident | where_zero_confident | all_zeros)).sum():4} out of {all_zeros.count()}')
+    print(f'Number of confident zero tiles {zero_confident_tiles.sum():4} out of {zero_confident_tiles.count()}')
+    print(f'Number of unconfident tiles    {unconfident_tiles.sum():4} out of {unconfident_tiles.count()}')
+    print(f'Number of all zeros tiles      {all_zeros_tiles.sum():4} out of {all_zeros_tiles.count()}')
+    print(f'Number of non-zero tiles       {(~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)).sum():4} out of {all_zeros_tiles.count()}')
 
     coefficients, actuators = {}, {}
 
@@ -1228,10 +1229,10 @@ def aggregate_predictions(
     predictions['cluster'] = np.nan
     stdevs['cluster'] = np.nan
 
-    valid_predictions = predictions.loc[~(where_unconfident | where_zero_confident | all_zeros)]
+    valid_predictions = predictions.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_predictions = valid_predictions.groupby('z')
 
-    valid_stdevs = stdevs.loc[~(where_unconfident | where_zero_confident | all_zeros)]
+    valid_stdevs = stdevs.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_stdevs = valid_stdevs.groupby('z')
 
     clusters3d_colormap = sns.color_palette("tab10", n_colors=(max_isoplanatic_clusters * ztiles))
@@ -1267,8 +1268,8 @@ def aggregate_predictions(
 
             g = clusters.get_group(c).index  # get all tiles that belong to cluster "c"
             # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
-            pred = ztile_preds.loc[g].drop(columns='cluster').agg(aggregation_rule, axis=0)     # mean ignoring NaNs
-            pred_std = ztile_stds.loc[g].agg(aggregation_rule, axis=0)
+            pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)     # mean ignoring NaNs
+            pred_std = ztile_stds.loc[g].mask(where_unconfident).agg(aggregation_rule, axis=0)
 
             pred = Wavefront(
                 np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
@@ -1309,9 +1310,9 @@ def aggregate_predictions(
     actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
 
     wavefronts = {}
-    predictions.loc[all_zeros, 'cluster'] = len(clusters3d_colormap) - 2
-    predictions.loc[where_zero_confident, 'cluster'] = len(clusters3d_colormap) - 2
-    predictions.loc[where_unconfident, 'cluster'] = len(clusters3d_colormap) - 1
+    predictions.loc[all_zeros_tiles, 'cluster'] = len(clusters3d_colormap) - 2
+    predictions.loc[zero_confident_tiles, 'cluster'] = len(clusters3d_colormap) - 2
+    predictions.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
 
     for index, zernikes in predictions.drop(columns='cluster').iterrows():
         wavefronts[index] = Wavefront(
@@ -1336,7 +1337,8 @@ def aggregate_predictions(
 
     imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap, dtype=np.float32)
 
-    scaled_wavefront_heatmap = (wavefront_heatmap - np.nanmin(wavefront_heatmap)) / (np.nanmax(wavefront_heatmap) * 2)
+    scaled_wavefront_heatmap = (wavefront_heatmap - np.nanpercentile(wavefront_heatmap, 1)) / (np.nanpercentile(wavefront_heatmap, 99) - np.nanpercentile(wavefront_heatmap, 1))
+    scaled_wavefront_heatmap = np.clip(scaled_wavefront_heatmap, a_min=0, a_max=1)
     wavefront_rgb = clusters3d_colormap[wavefront_rgb.astype(np.ubyte)] * scaled_wavefront_heatmap[..., np.newaxis]
     wavefront_rgb = wavefront_rgb.astype(np.ubyte)
     imwrite(f"{model_pred.with_suffix('')}_aggregated_clusters.tif", wavefront_rgb, photometric='rgb')
