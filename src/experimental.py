@@ -661,6 +661,7 @@ def predict_sample(
 
     psf = samplepsfgen.single_psf(phi=p, normed=True, noise=False)
     imwrite(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
+    imwrite(f"{img.with_suffix('')}_sample_predictions_wavefront.tif", p.wave(), dtype=np.float32)
 
     with Path(f"{img.with_suffix('')}_sample_predictions_settings.json").open('w') as f:
         json = dict(
@@ -823,6 +824,7 @@ def predict_large_fov(
 
     psf = samplepsfgen.single_psf(phi=p, normed=True, noise=False)
     imwrite(f"{img.with_suffix('')}_large_fov_predictions_psf.tif", psf)
+    imwrite(f"{img.with_suffix('')}_large_fov_predictions_wavefront.tif", p.wave(), dtype=np.float32)
 
     with Path(f"{img.with_suffix('')}_large_fov_predictions_settings.json").open('w') as f:
         json = dict(
