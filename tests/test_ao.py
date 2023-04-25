@@ -97,7 +97,6 @@ def test_predict_tiles(kargs):
 @pytest.mark.run(order=5)
 def test_aggregate_tiles(kargs):
     zernikes = experimental.aggregate_predictions(
-        model=kargs['model'],
         model_pred=Path(f"{kargs['inputs'].with_suffix('')}_tiles_predictions.csv"),
         dm_calibration=kargs['dm_calibration'],
         dm_state=kargs['dm_state'],

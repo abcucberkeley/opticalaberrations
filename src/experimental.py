@@ -1129,7 +1129,6 @@ def kmeans_clustering(data, k, alpha_k=0.02):
 
 @profile
 def aggregate_predictions(
-    model: Path,
     model_pred: Path,
     dm_calibration: Path,
     dm_state: Any,
