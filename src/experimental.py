@@ -1128,7 +1128,6 @@ def kmeans_clustering(data, k):
 
 @profile
 def aggregate_predictions(
-    model: Path,
     model_pred: Path,
     dm_calibration: Path,
     dm_state: Any,
@@ -1143,7 +1142,7 @@ def aggregate_predictions(
     aggregation_rule: str = 'mean',
     dm_damping_scalar: float = 1,
     max_isoplanatic_clusters: int = 3,
-    optiomize_max_isoplanatic_clusters: bool = True,
+    optimize_max_isoplanatic_clusters: bool = True,
     plot: bool = False,
     ignore_tile: Any = None,
     preloaded: Preloadedmodelclass = None,
@@ -1252,7 +1251,7 @@ def aggregate_predictions(
         ztile_stds = valid_stdevs.get_group(z)
         ztile_stds.drop(columns='cluster', errors='ignore', inplace=True)
 
-        if optiomize_max_isoplanatic_clusters:
+        if optimize_max_isoplanatic_clusters:
             logger.info('KMeans calculating...')
             ks = np.arange(2, max_isoplanatic_clusters+1)
             ans = Parallel(n_jobs=-1, verbose=0)(delayed(kmeans_clustering)(ztile_preds.values, k) for k in ks)

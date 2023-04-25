@@ -520,7 +520,7 @@ def parse_args(args):
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
-    aggregate_predictions.add_argument("model", type=Path, help="path to pretrained tensorflow model")
+
     aggregate_predictions.add_argument("input", type=Path, help="path to csv file")
     aggregate_predictions.add_argument("dm_calibration", type=Path,
                                        help="path DM calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)")
@@ -985,7 +985,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                 )
             elif args.func == 'aggregate_predictions':
                 experimental.aggregate_predictions(
-                    model=args.model,
                     model_pred=args.input,
                     dm_calibration=args.dm_calibration,
                     dm_state=args.current_dm,
