@@ -1115,16 +1115,14 @@ def predict_tiles(
     return predictions
 
 
-def kmeans_clustering(data, k, alpha_k=0.02):
-    inertia_o = np.square((data - data.mean(axis=0))).sum()
+def kmeans_clustering(data, k):
     km = KMeans(
         init="k-means++",
         n_clusters=k
     ).fit(data)
     labels = km.fit_predict(data)
     silhouette = silhouette_score(data, labels)
-    inertia = km.inertia_ / inertia_o + alpha_k * k
-    return inertia, silhouette
+    return silhouette
 
 
 @profile
@@ -1256,8 +1254,7 @@ def aggregate_predictions(
             logger.info('KMeans calculating...')
             ks = np.arange(2, max_isoplanatic_clusters+1)
             ans = Parallel(n_jobs=-1, verbose=0)(delayed(kmeans_clustering)(ztile_preds.values, k) for k in ks)
-            results = pd.DataFrame(ans, index=ks, columns=['inertia', 'silhouette'])
-            min_inertia = results['inertia'].idxmin()
+            results = pd.DataFrame(ans, index=ks, columns=['silhouette'])
             max_silhouette = results['silhouette'].idxmax()
             max_isoplanatic_clusters = max_silhouette
 

@@ -387,7 +387,7 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
             'p2v_pred': p.peak2valley(na=na),
             f'mode_1': modes[0],
             f'mode_2': None if len(modes) < 2 else modes[1],
-            'psnr': np.mean(res['psnr']),
+            # 'psnr': np.mean(res['psnr']),
         }
 
         if len(modes) > 1 and modes[0] != modes[1]:
@@ -403,7 +403,7 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
                 'p2v_pred': p.peak2valley(na=na),
                 f'mode_1': None if len(modes) < 2 else modes[1],
                 f'mode_2': modes[0],
-                'psnr': np.mean(res['psnr']),
+                # 'psnr': np.mean(res['psnr']),
             }   # if we have mixed modes, duplicate for the opposite combination (e.g. 12,13 copied to -> 13,12)
 
     return results
@@ -449,8 +449,8 @@ def plot_eval_dataset(
     logger.info(f'{savepath}.csv')
 
     for col, label in zip(
-            ["p2v_gt", "p2v_residual", "psnr"],
-            [r"Remaining aberration (P-V $\lambda$)", "PR-Model (P-V $\lambda$)", "PSNR"]
+            ["p2v_gt", "p2v_residual"],
+            [r"Remaining aberration (P-V $\lambda$)", "PR-Model (P-V $\lambda$)"]
     ):
         fig = plt.figure(figsize=(11, 8))
         g = sns.relplot(
@@ -476,7 +476,7 @@ def plot_eval_dataset(
             .set_axis_labels("Iteration", label)
             .set_titles("Mode: {col_name}")
             .set(xlim=(0, max(df['iteration_index'])))
-            .set(ylim=(0, np.ceil(np.max(df['psnr']))) if col == 'psnr' else (0, 5))
+            .set(ylim=(0, np.ceil(np.max(df['psnr']))) if col == 'psnr' else (0, 2))
             .tight_layout(w_pad=0)
         )
 
