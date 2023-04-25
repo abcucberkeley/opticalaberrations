@@ -264,9 +264,8 @@ class Wavefront:
                 axis=0
             )
 
-
     def wave(self, size=55, normed=True):
-        return np.flip(np.rot90(self.polynomial(size=size, normed=normed)), axis=0)
+        return np.flip(np.rot90(self.polynomial(size=size, normed=normed)), axis=0).astype(np.float32)
 
     @lru_cache(maxsize=None)
     def na_mask(self, na: float = 1.0, wavefrontshape: tuple = (256,256)):
