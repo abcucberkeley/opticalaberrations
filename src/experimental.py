@@ -21,6 +21,8 @@ from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
 from sklearn.cluster import KMeans
 from skimage.transform import resize
+from sklearn.metrics import silhouette_samples, silhouette_score
+from joblib import Parallel, delayed
 
 import utils
 import vis
@@ -1113,6 +1115,18 @@ def predict_tiles(
     return predictions
 
 
+def kmeans_clustering(data, k, alpha_k=0.02):
+    inertia_o = np.square((data - data.mean(axis=0))).sum()
+    km = KMeans(
+        init="k-means++",
+        n_clusters=k
+    ).fit(data)
+    labels = km.fit_predict(data)
+    silhouette = silhouette_score(data, labels)
+    inertia = km.inertia_ / inertia_o + alpha_k * k
+    return inertia, silhouette
+
+
 @profile
 def aggregate_predictions(
     model: Path,
@@ -1130,6 +1144,7 @@ def aggregate_predictions(
     aggregation_rule: str = 'mean',
     dm_damping_scalar: float = 1,
     max_isoplanatic_clusters: int = 3,
+    optiomize_max_isoplanatic_clusters: bool = True,
     plot: bool = False,
     ignore_tile: Any = None,
     preloaded: Preloadedmodelclass = None,
@@ -1238,15 +1253,16 @@ def aggregate_predictions(
         ztile_stds = valid_stdevs.get_group(z)
         ztile_stds.drop(columns='cluster', errors='ignore', inplace=True)
 
-        logger.info('KMeans calculating...')
-        clustering = KMeans(
-            init="k-means++",
-            n_init=5,
-            verbose=False,
-            n_clusters=max_isoplanatic_clusters,
-        )
+        if optiomize_max_isoplanatic_clusters:
+            logger.info('KMeans calculating...')
+            ks = np.arange(2, max_isoplanatic_clusters+1)
+            ans = Parallel(n_jobs=-1, verbose=0)(delayed(kmeans_clustering)(ztile_preds.values, k) for k in ks)
+            results = pd.DataFrame(ans, index=ks, columns=['inertia', 'silhouette'])
+            min_inertia = results['inertia'].idxmin()
+            max_silhouette = results['silhouette'].idxmax()
+            max_isoplanatic_clusters = max_silhouette
 
-        ztile_preds['cluster'] = clustering.fit_predict(ztile_preds)
+        ztile_preds['cluster'] = KMeans(init="k-means++", n_clusters=max_isoplanatic_clusters).fit_predict(ztile_preds)
         ztile_preds['cluster'] += z * max_isoplanatic_clusters
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
