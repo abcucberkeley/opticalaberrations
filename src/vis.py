@@ -131,36 +131,36 @@ def plot_wavefront(
         mask = dist_from_center <= radius
         return mask
 
-    dlimit = .1
-    step = .1
+    dlimit = .05
+    step = .025
 
     if vmin is None:
-        vmin = np.floor(np.nanmin(phi)*2)/2     # round down to nearest 0.5 wave
+        vmin = np.floor(np.nanmin(phi)*2)/4     # round down to nearest 0.25 wave
         vmin = -1*dlimit if vmin > -0.01 else vmin
 
     if vmax is None:
-        vmax = np.ceil(np.nanmax(phi)*2)/2  # round up to nearest 0.5 wave
+        vmax = np.ceil(np.nanmax(phi)*2)/4  # round up to nearest 0.25 wave
         vmax = dlimit if vmax < 0.01 else vmax
 
-    highcmap = plt.get_cmap('magma_r', 256)
-    middlemap = plt.get_cmap('gist_gray', 256)
-    lowcmap = plt.get_cmap('gist_earth_r', 256)
+    # highcmap = plt.get_cmap('magma_r', 256)
+    # middlemap = plt.get_cmap('gist_gray', 256)
+    # lowcmap = plt.get_cmap('gist_earth_r', 256)
+    #
+    # ll = np.arange(vmin, -1*dlimit+step, step)
+    # hh = np.arange(dlimit, vmax+step, step)
 
-    ll = np.arange(vmin, -1*dlimit+step, step)
-    hh = np.arange(dlimit, vmax+step, step)
-
-    wave_cmap = np.vstack((
-        lowcmap(.66 * ll / ll.min()),
-        middlemap([.9, 1, .9]),
-        highcmap(.66 * hh / hh.max())
-    ))
-    wave_cmap = mcolors.ListedColormap(wave_cmap)
+    # wave_cmap = np.vstack((
+    #     lowcmap(.66 * ll / ll.min()),
+    #     middlemap([.8, .9, 1, .9, .8]),
+    #     highcmap(.66 * hh / hh.max())
+    # ))
+    # wave_cmap = mcolors.ListedColormap(wave_cmap)
 
     mat = iax.imshow(
         phi,
-        cmap=wave_cmap,
-        vmin=ll.min(),
-        vmax=hh.max(),
+        cmap='Spectral_r',
+        vmin=vmin,
+        vmax=vmax,
     )
 
     pcts = []
