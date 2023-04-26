@@ -50,7 +50,7 @@ do
             sleep 10s
           done
 
-          j="${ENV} psf_dataset.py ${TYPE}"
+          j="${ENV} psf_dataset.py"
           j="${j} --psf_type ${PSF_TYPE}"
           j="${j} --dist ${DISTRIBUTIONS[$DIST-1]}"
           j="${j} --mode_dist ${MODE_DIST}"

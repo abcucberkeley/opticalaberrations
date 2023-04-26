@@ -372,8 +372,8 @@ def prep_sample(
     if windowing:
         sample = tukey_window(sample)
 
-    if normalize:
-        sample /= np.nanmax(sample)
+    if normalize:  # safe division to not get nans for blank images
+        sample = np.where(sample == 0, 0, sample/np.nanmax(sample))
 
     if edge_filter:
         mask = CannyEdgeDetector3D(

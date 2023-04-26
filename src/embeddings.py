@@ -808,7 +808,8 @@ def rolling_fourier_embeddings(
             we have a few options to minimize the size of the embedding.
     """
 
-    rois = rois.astype(np.float32)
+    # filter out blank images
+    rois = rois[[~np.all(r == 0) for r in rois]].astype(np.float32)
     iotf = iotf.astype(np.float32)
 
     otfs = multiprocess(
