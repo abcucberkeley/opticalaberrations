@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="combine_tiles $USER_HOME$/nvme2/Data/TestsForThayer/20230407_AP2_72hpf/test/largeFOV_before_tiles_predictions_aggregated_clusters.csv --corrections &quot;z0_c1,$USER_HOME$/nvme2/Data/TestsForThayer/20230407_AP2_72hpf/test/largeFOV_after_DM1.tif&quot;" />
+    <option name="PARAMETERS" value="combine_tiles $USER_HOME$/nvme2/Data/TestsForThayer/20230407_AP2_72hpf/test/largeFOV_before_tiles_predictions_aggregated_clusters.csv --corrections &quot;z0_c1,$USER_HOME$/nvme2/Data/TestsForThayer/20230407_AP2_72hpf/test/largeFOV_after.tif&quot;" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

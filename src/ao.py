@@ -552,11 +552,11 @@ def parse_args(args):
         help='rule to use to calculate final prediction [mean, median, min, max]'
     )
     aggregate_predictions.add_argument(
-        "--min_percentile", default=10, type=int,
+        "--min_percentile", default=5, type=int,
         help='minimum percentile to filter out outliers'
     )
     aggregate_predictions.add_argument(
-        "--max_percentile", default=90, type=int,
+        "--max_percentile", default=95, type=int,
         help='maximum percentile to filter out outliers'
     )
     aggregate_predictions.add_argument(

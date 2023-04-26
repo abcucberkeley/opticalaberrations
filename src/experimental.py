@@ -1159,7 +1159,7 @@ def aggregate_predictions(
     wavelength = predictions_settings['wavelength']
     axial_voxel_size = predictions_settings['sample_voxel_size'][0]
     lateral_voxel_size = predictions_settings['sample_voxel_size'][2]
-
+    prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
 
     # tile id is the column header, rows are the predictions
     predictions = pd.read_csv(
@@ -1175,7 +1175,7 @@ def aggregate_predictions(
         predictions.index.get_level_values(1).str.lstrip('y').astype(np.int),
         predictions.index.get_level_values(2).str.lstrip('x').astype(np.int),
     ], names=('z', 'y', 'x'))
-    print(f'prediction stats \n{predictions.describe()}')
+    print(f'prediction stats \n{predictions.describe(percentiles=[.01, .05, .1, .9, .95, .99])}')
 
     stdevs = pd.read_csv(
         str(model_pred).replace('_predictions.csv', '_stdevs.csv'),
@@ -1208,8 +1208,9 @@ def aggregate_predictions(
     where_unconfident[predictions_settings['ignore_modes']] = False
 
     # filter out small predictions from KMeans cluster analysis, but keep these as an additional group
-    prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
-    where_zero_confident = (predictions.abs() <= prediction_threshold) & ~where_unconfident
+    # note: threshold is computed for each mode individually
+    where_zero_confident = (predictions >= predictions.quantile(min_percentile/100)) & \
+                           (predictions <= predictions.quantile(max_percentile/100))
     where_zero_confident[predictions_settings['ignore_modes']] = True
 
     unconfident_tiles = where_unconfident.copy()
@@ -1217,11 +1218,13 @@ def aggregate_predictions(
     all_zeros_tiles = all_zeros.agg('all', axis=1)  # 1D (one value for each tile)
     unconfident_tiles = unconfident_tiles.agg('all', axis=1)  # 1D (one value for each tile)
     zero_confident_tiles = where_zero_confident.agg('all', axis=1)  # 1D (one value for each tile)
+    zero_confident_tiles = zero_confident_tiles * ~unconfident_tiles  # don't mark zero_confident if tile is unconfident
 
     print(f'Number of confident zero tiles {zero_confident_tiles.sum():4} out of {zero_confident_tiles.count()}')
     print(f'Number of unconfident tiles    {unconfident_tiles.sum():4} out of {unconfident_tiles.count()}')
     print(f'Number of all zeros tiles      {all_zeros_tiles.sum():4} out of {all_zeros_tiles.count()}')
-    print(f'Number of non-zero tiles       {(~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)).sum():4} out of {all_zeros_tiles.count()}')
+    print(f'Number of non-zero tiles       {(~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)).sum():4} '
+          f'out of {all_zeros_tiles.count()}')
 
     coefficients, actuators = {}, {}
 
@@ -1321,9 +1324,9 @@ def aggregate_predictions(
             lam_detection=wavelength,
         )
 
-    clusters3d_heatmap = np.ones_like(vol, dtype=np.float32) * len(clusters3d_colormap) - 1
+    clusters3d_heatmap = np.full_like(vol, len(clusters3d_colormap) - 1, dtype=np.float32)
     wavefront_heatmap = np.zeros((ztiles, *vol.shape[1:]), dtype=np.float32)
-    wavefront_rgb = np.ones((ztiles, *vol.shape[1:]), dtype=np.float32) * len(clusters3d_colormap) - 1
+    wavefront_rgb = np.full((ztiles, *vol.shape[1:]), len(clusters3d_colormap) - 1, dtype=np.float32)
 
     zw, yw, xw = predictions_settings['window_size']
     print(f"volume_size = {vol.shape}\n"
@@ -1332,9 +1335,9 @@ def aggregate_predictions(
     for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
         c = predictions.loc[(z, y, x), 'cluster']
 
-        wavefront_rgb[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.ones((yw, xw)) * int(c)
+        wavefront_rgb[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((yw, xw), int(c))
         wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.nan_to_num(wavefronts[(z, y, x)].wave(xw), nan=0)
-        clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.ones((zw, yw, xw)) * int(c)
+        clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((zw, yw, xw), int(c))
 
     imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap, dtype=np.float32)
 
