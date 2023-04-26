@@ -1143,6 +1143,8 @@ def aggregate_predictions(
     plot: bool = False,
     ignore_tile: Any = None,
     preloaded: Preloadedmodelclass = None,
+    zero_confident_color: tuple = (255, 255, 0),
+    unconfident_color: tuple = (255, 255, 255),
 ):
 
     vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
@@ -1239,9 +1241,8 @@ def aggregate_predictions(
     valid_stdevs = valid_stdevs.groupby('z')
 
     clusters3d_colormap = sns.color_palette("tab10", n_colors=(max_isoplanatic_clusters * ztiles))
-    clusters3d_colormap.append((1, 1, 0))  # yellow color for no aberration
-    clusters3d_colormap.append((1, 1, 1))  # white color for unconfident (no data)
     clusters3d_colormap = np.array(clusters3d_colormap)*255
+    clusters3d_colormap = np.append(clusters3d_colormap, [zero_confident_color, unconfident_color], axis=0)
 
     for z in trange(ztiles, desc='Aggregating Z tiles', total=ztiles):
         ztile_preds = valid_predictions.get_group(z)
@@ -1312,10 +1313,13 @@ def aggregate_predictions(
     actuators.index.name = 'actuators'
     actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
 
+    zero_confident_cluster = np.where(np.all(clusters3d_colormap == zero_confident_color, axis=1))[0][0]
+    unconfident_cluster = np.where(np.all(clusters3d_colormap == unconfident_color, axis=1))[0][0]
+
     wavefronts = {}
-    predictions.loc[all_zeros_tiles, 'cluster'] = len(clusters3d_colormap) - 2
-    predictions.loc[zero_confident_tiles, 'cluster'] = len(clusters3d_colormap) - 2
-    predictions.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
+    predictions.loc[all_zeros_tiles, 'cluster'] = zero_confident_cluster
+    predictions.loc[zero_confident_tiles, 'cluster'] = zero_confident_cluster
+    predictions.loc[unconfident_tiles, 'cluster'] = unconfident_cluster
     predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters.csv")
 
     for index, zernikes in predictions.drop(columns='cluster').iterrows():
@@ -1324,9 +1328,9 @@ def aggregate_predictions(
             lam_detection=wavelength,
         )
 
-    clusters3d_heatmap = np.full_like(vol, len(clusters3d_colormap) - 1, dtype=np.float32)
+    clusters3d_heatmap = np.full_like(vol, unconfident_cluster, dtype=np.float32)
     wavefront_heatmap = np.zeros((ztiles, *vol.shape[1:]), dtype=np.float32)
-    wavefront_rgb = np.full((ztiles, *vol.shape[1:]), len(clusters3d_colormap) - 1, dtype=np.float32)
+    wavefront_rgb = np.full((ztiles, *vol.shape[1:]), unconfident_cluster, dtype=np.float32)
 
     zw, yw, xw = predictions_settings['window_size']
     print(f"volume_size = {vol.shape}\n"
@@ -1341,7 +1345,8 @@ def aggregate_predictions(
 
     imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap, dtype=np.float32)
 
-    scaled_wavefront_heatmap = (wavefront_heatmap - np.nanpercentile(wavefront_heatmap, 1)) / (np.nanpercentile(wavefront_heatmap, 99) - np.nanpercentile(wavefront_heatmap, 1))
+    scaled_wavefront_heatmap = (wavefront_heatmap - np.nanpercentile(wavefront_heatmap, 1)) / \
+        (np.nanpercentile(wavefront_heatmap, 99) - np.nanpercentile(wavefront_heatmap, 1))
     scaled_wavefront_heatmap = np.clip(scaled_wavefront_heatmap, a_min=0, a_max=1)
     wavefront_rgb = clusters3d_colormap[wavefront_rgb.astype(np.ubyte)] * scaled_wavefront_heatmap[..., np.newaxis]
     wavefront_rgb = wavefront_rgb.astype(np.ubyte)
