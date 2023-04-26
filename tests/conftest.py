@@ -44,9 +44,10 @@ def kargs():
         ignore_modes=[0, 1, 2, 4],
         # extra `aggregate_predictions` flags
         majority_threshold=.5,
-        min_percentile=1,
-        max_percentile=99,
+        min_percentile=20,
+        max_percentile=80,
         aggregation_rule='mean',
+        max_isoplanatic_clusters=2,
         ignore_tile=[],
         # extra `predict_rois` flags
         num_rois=10,

@@ -194,11 +194,7 @@ def preprocess(
             read_noise_bias=read_noise_bias,
         )
 
-        rois = utils.multiprocess(
-            func=prep,
-            jobs=rois,
-            desc='Preprocessing'
-        )
+        rois = utils.multiprocess(func=prep, jobs=rois, desc='Preprocessing')
 
         return rolling_fourier_embeddings(
             rois,
@@ -443,12 +439,10 @@ def predict(
     confidence_threshold: float = .0099,
     batch_size: int = 1,
     digital_rotations: Optional[int] = 361,
+    match_model_fov: bool = True,
     plot: bool = True,
     plot_rotations: bool = False,
-    ztiles: int = 1,
-    nrows: int = 1,
-    ncols: int = 1,
-    cpu_workers: int = -1
+    cpu_workers: int = -1,
 ):
     no_phase = True if model.input_shape[1] == 3 else False
 
@@ -465,7 +459,8 @@ def predict(
             remove_background=True,
             normalize=True,
             edge_filter=False,
-            filter_mask_dilation=True
+            filter_mask_dilation=True,
+            match_model_fov=match_model_fov,
         ),
         desc='Generate Fourier embeddings',
         cores=cpu_workers
@@ -600,6 +595,7 @@ def predict_sample(
         normalize=True,
         edge_filter=False,
         filter_mask_dilation=True,
+        match_model_fov=True,
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
 
@@ -1102,11 +1098,9 @@ def predict_tiles(
         confidence_threshold=confidence_threshold,
         batch_size=batch_size,
         wavelength=wavelength,
-        ztiles=ztiles,
-        nrows=nrows,
-        ncols=ncols,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
+        match_model_fov=True if samplepsfgen.psf_fov == premodelpsfgen.psf_fov else False,
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
@@ -1177,7 +1171,8 @@ def aggregate_predictions(
         predictions.index.get_level_values(1).str.lstrip('y').astype(np.int),
         predictions.index.get_level_values(2).str.lstrip('x').astype(np.int),
     ], names=('z', 'y', 'x'))
-    print(f'prediction stats \n{predictions.describe(percentiles=[.01, .05, .1, .9, .95, .99])}')
+    logger.info(f'prediction stats')
+    logger.info(f'{predictions.describe(percentiles=[.01, .05, .1, .15, .2, .8, .85, .9, .95, .99])}')
 
     stdevs = pd.read_csv(
         str(model_pred).replace('_predictions.csv', '_stdevs.csv'),
@@ -1191,7 +1186,6 @@ def aggregate_predictions(
         stdevs.index.get_level_values(1).str.lstrip('y').astype(np.int),
         stdevs.index.get_level_values(2).str.lstrip('x').astype(np.int),
     ], names=('z', 'y', 'x'))
-    # print(f'std dev stats \n{stdevs.describe()}')
 
     ztiles = predictions.index.get_level_values('z').unique().shape[0]
     ytiles = predictions.index.get_level_values('y').unique().shape[0]
@@ -1222,11 +1216,14 @@ def aggregate_predictions(
     zero_confident_tiles = where_zero_confident.agg('all', axis=1)  # 1D (one value for each tile)
     zero_confident_tiles = zero_confident_tiles * ~unconfident_tiles  # don't mark zero_confident if tile is unconfident
 
-    print(f'Number of confident zero tiles {zero_confident_tiles.sum():4} out of {zero_confident_tiles.count()}')
-    print(f'Number of unconfident tiles    {unconfident_tiles.sum():4} out of {unconfident_tiles.count()}')
-    print(f'Number of all zeros tiles      {all_zeros_tiles.sum():4} out of {all_zeros_tiles.count()}')
-    print(f'Number of non-zero tiles       {(~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)).sum():4} '
-          f'out of {all_zeros_tiles.count()}')
+    logger.info(f'Number of confident zero tiles \t {zero_confident_tiles.sum():4}'
+                f' out of {zero_confident_tiles.count()}')
+    logger.info(f'Number of unconfident tiles \t {unconfident_tiles.sum():4}'
+                f' out of {unconfident_tiles.count()}')
+    logger.info(f'Number of all zeros tiles \t {all_zeros_tiles.sum():4}'
+                f' out of {all_zeros_tiles.count()}')
+    logger.info(f'Number of non-zero tiles \t {(~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)).sum():4}'
+                f' out of {all_zeros_tiles.count()}')
 
     coefficients, actuators = {}, {}
 
@@ -1333,7 +1330,7 @@ def aggregate_predictions(
     wavefront_rgb = np.full((ztiles, *vol.shape[1:]), unconfident_cluster, dtype=np.float32)
 
     zw, yw, xw = predictions_settings['window_size']
-    print(f"volume_size = {vol.shape}\n"
+    logger.info(f"volume_size = {vol.shape}\n"
           f"window_size = {predictions_settings['window_size']}\n"
           f"      tiles = {ztiles, ytiles, xtiles}")
     for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):

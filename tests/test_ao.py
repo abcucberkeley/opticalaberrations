@@ -105,6 +105,7 @@ def test_aggregate_tiles(kargs):
         min_percentile=kargs['min_percentile'],
         max_percentile=kargs['max_percentile'],
         aggregation_rule=kargs['aggregation_rule'],
+        max_isoplanatic_clusters=kargs['max_isoplanatic_clusters'],
         ignore_tile=kargs['ignore_tile'],
         plot=kargs['plot'],
     )

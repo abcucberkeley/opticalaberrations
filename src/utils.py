@@ -31,7 +31,12 @@ logger = logging.getLogger(__name__)
 
 
 @profile
-def multiprocess(jobs: Union[Generator, List, np.ndarray], func: Any, desc: str = 'Processing', cores: int = -1):
+def multiprocess(
+    jobs: Union[Generator, List, np.ndarray],
+    func: Any,
+    desc: str = 'Processing',
+    cores: int = -1
+):
     """ Multiprocess a generic function
     Args:
         func: a python function
@@ -43,8 +48,10 @@ def multiprocess(jobs: Union[Generator, List, np.ndarray], func: Any, desc: str 
         an array of outputs for every function call
     """
 
+    cores = cores if mp.current_process().name == 'MainProcess' else 1
     mp.set_start_method('spawn', force=True)
     jobs = list(jobs)
+
     if cores == 1 or len(jobs) == 1:
         logs = []
         for j in tqdm(jobs, total=len(jobs), desc=desc):
@@ -58,6 +65,7 @@ def multiprocess(jobs: Union[Generator, List, np.ndarray], func: Any, desc: str 
     else:
         logging.error('Jobs must be a positive integer')
         return False
+
     return np.array(logs)
 
 
