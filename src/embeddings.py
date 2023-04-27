@@ -23,7 +23,6 @@ from line_profiler_pycharm import profile
 from scipy import ndimage
 from astropy import convolution
 from skspatial.objects import Plane, Points
-from multiprocessing import Pool
 
 try:
     import cupy as cp
@@ -93,17 +92,17 @@ def spatial_planes(emb):
     midplane = emb.shape[0] // 2
     return np.stack([
         emb[midplane, :, :],
-        np.mean(emb[midplane:midplane + 5, :, :], axis=0),
-        np.mean(emb[midplane + 5:midplane + 10, :, :], axis=0),
+        np.nanmean(emb[midplane:midplane + 5, :, :], axis=0),
+        np.nanmean(emb[midplane + 5:midplane + 10, :, :], axis=0),
     ], axis=0)
 
 
 @profile
 def average_planes(emb):
     return np.stack([
-        np.mean(emb, axis=0),
-        np.mean(emb, axis=1),
-        np.mean(emb, axis=2),
+        np.nanmean(emb, axis=0),
+        np.nanmean(emb, axis=1),
+        np.nanmean(emb, axis=2),
     ], axis=0)
 
 
@@ -232,7 +231,7 @@ def gaussian_kernel(kernlen: tuple = (21, 21, 21), std=3):
     z = np.arange((-kernlen[0] // 2)+1, (-kernlen[0] // 2)+1 + kernlen[0], 1)
     zz, yy, xx = np.meshgrid(z, y, x, indexing='ij')
     kernel = np.exp(-(xx ** 2 + yy ** 2 + zz ** 2) / (2 * std ** 2))
-    return kernel / np.sum(kernel)
+    return kernel / np.nansum(kernel)
 
 
 @profile
@@ -268,12 +267,15 @@ def remove_interference_pattern(
         'legend.fontsize': 12,
         'axes.autolimit_mode': 'round_numbers'
     })
-    if otf is None: otf = fft(psf)
+
+    if otf is None:
+        otf = fft(psf)
+
     blured_psf = ndimage.gaussian_filter(psf, sigma=1.1)
 
     # get max pixel in the image
     half_length = kernel_size // 2
-    poi = list(np.unravel_index(np.argmax(blured_psf, axis=None), blured_psf.shape))
+    poi = list(np.unravel_index(np.nanargmax(blured_psf, axis=None), blured_psf.shape))
 
     # crop a window around the object for template matching
     poi[0] = np.clip(poi[0], a_min=half_length, a_max=(psf.shape[0] - half_length) - 1)
@@ -300,7 +302,7 @@ def remove_interference_pattern(
             convolved_psf,
             min_distance=min_distance,
             threshold_rel=.3,
-            threshold_abs=np.std(psf),
+            threshold_abs=np.nanstd(psf),
             exclude_border=int(np.floor(effective_kernel_width)),
             p_norm=2,
             num_peaks=max_num_peaks
@@ -314,7 +316,7 @@ def remove_interference_pattern(
                     p[1]-(min_distance+1):p[1]+(min_distance+1),
                     p[2]-(min_distance+1):p[2]+(min_distance+1),
                 ]
-                if np.max(fov) > convolved_psf[p[0], p[1], p[2]]:
+                if np.nanmax(fov) > convolved_psf[p[0], p[1], p[2]]:
                     continue    # we are not at the summit if a max nearby is available.
                 else:
                     beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
@@ -333,10 +335,10 @@ def remove_interference_pattern(
 
     psf_peaks = np.zeros_like(psf)  # create a volume masked around each peak, don't go past vol bounds
     noise = preprocessing.measure_noise(psf)
-    baseline = np.median(psf)
+    baseline = np.nanmedian(psf)
     good_psnr = np.zeros(pois.shape[0], dtype=bool)
     for i, p in enumerate(pois):
-        good_psnr[i] = (np.max(
+        good_psnr[i] = (np.nanmax(
             psf[
             max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
             max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
@@ -818,7 +820,7 @@ def rolling_fourier_embeddings(
         cores=cpu_workers,
         desc='Compute FFTs'
     )
-    avg_otf = resize_with_crop_or_pad(np.mean(otfs, axis=0), crop_shape=iotf.shape)
+    avg_otf = resize_with_crop_or_pad(np.nanmean(otfs, axis=0), crop_shape=iotf.shape)
 
     if no_phase:
         emb = compute_emb(
@@ -864,8 +866,8 @@ def rolling_fourier_embeddings(
                 found_spots_in_tile[m] = not np.array_equal(phi_otfs[m], otfs[m], equal_nan=True)
 
             phi_otfs = phi_otfs[found_spots_in_tile]
-
-            avg_otf = resize_with_crop_or_pad(np.mean(phi_otfs, axis=0), crop_shape=iotf.shape)
+            avg_otf = np.nanmean(phi_otfs, axis=0)
+            avg_otf = resize_with_crop_or_pad(avg_otf, crop_shape=iotf.shape)
 
             if plot:
                 gamma = 0.5
@@ -991,9 +993,9 @@ def measure_fourier_snr(
         z_voxel_size=axial_voxel_size
     )
 
-    a /= np.max(a)
+    a /= np.nanmax(a)
     otf = np.abs(fft(a))
-    otf /= np.max(otf)
+    otf /= np.nanmax(otf)
     otf[otf < threshold] = threshold
 
     spsf = samplepsfgen.single_psf(
@@ -1003,7 +1005,7 @@ def measure_fourier_snr(
         meta=False,
     )
     sotf = np.abs(fft(spsf))
-    sotf /= np.max(sotf)
+    sotf /= np.nanmax(sotf)
     sotf[sotf < threshold] = threshold
 
     ipsf = samplepsfgen.single_psf(
@@ -1013,7 +1015,7 @@ def measure_fourier_snr(
         meta=False,
     )
     iotf = np.abs(fft(ipsf))
-    iotf /= np.max(iotf)
+    iotf /= np.nanmax(iotf)
     iotf[iotf < threshold] = threshold
 
     mid_plane = [s//2 for s in otf.shape]
