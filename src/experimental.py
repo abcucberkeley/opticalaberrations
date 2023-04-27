@@ -380,8 +380,13 @@ def reconstruct_wavefront_error_landscape(
         if np.isnan(tile_p2v[i]):
             tile_p2v[i] = tile_wavefront.peak2valley(na=na)
 
-        for j, neighbour_coords in enumerate(neighbours):  # ordered as (z, y, x) neighbours
+        for k, neighbour_coords in enumerate(neighbours):  # ordered as (z, y, x) neighbours
             try:
+                try:
+                    j = np.ravel_multi_index(neighbour_coords, (ztiles, ytiles, xtiles))
+                except ValueError:
+                    continue
+
                 neighbour_wavefront = wavefronts[neighbour_coords]
                 if np.isnan(tile_p2v[j]):
                     tile_p2v[j] = neighbour_wavefront.peak2valley(na=na)
@@ -397,13 +402,13 @@ def reconstruct_wavefront_error_landscape(
 
                 if tile_p2v[i] > threshold and tile_p2v[j] > threshold:
                     # rescale slopes with the distance between tiles (h)
-                    slopes[matrix_row] = p2v / h[j]
-                    A[matrix_row, np.ravel_multi_index(neighbour_coords, (ztiles, ytiles, xtiles))] = 1 / h[j]
-                    A[matrix_row, i] = -1 / h[j]
+                    slopes[matrix_row] = p2v / h[k]
+                    A[matrix_row, j] = 1 / h[k]
+                    A[matrix_row, i] = -1 / h[k]
                     matrix_row += 1
 
             except KeyError:
-                pass    # e.g. if neighbor is beyond the border or that tile was dropped
+                continue    # e.g. if neighbor is beyond the border or that tile was dropped
 
     # clip out empty measurements
     slopes = slopes[:matrix_row]
