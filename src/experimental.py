@@ -1216,13 +1216,13 @@ def aggregate_predictions(
     zero_confident_tiles = where_zero_confident.agg('all', axis=1)  # 1D (one value for each tile)
     zero_confident_tiles = zero_confident_tiles * ~unconfident_tiles  # don't mark zero_confident if tile is unconfident
 
-    logger.info(f'Number of confident zero tiles \t {zero_confident_tiles.sum():4}'
+    logger.info(f'Number of confident zero tiles {zero_confident_tiles.sum():4}'
                 f' out of {zero_confident_tiles.count()}')
-    logger.info(f'Number of unconfident tiles \t {unconfident_tiles.sum():4}'
+    logger.info(f'Number of unconfident tiles    {unconfident_tiles.sum():4}'
                 f' out of {unconfident_tiles.count()}')
-    logger.info(f'Number of all zeros tiles \t {all_zeros_tiles.sum():4}'
+    logger.info(f'Number of all zeros tiles      {all_zeros_tiles.sum():4}'
                 f' out of {all_zeros_tiles.count()}')
-    logger.info(f'Number of non-zero tiles \t {(~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)).sum():4}'
+    logger.info(f'Number of non-zero tiles       {(~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)).sum():4}'
                 f' out of {all_zeros_tiles.count()}')
 
     coefficients, actuators = {}, {}
@@ -1330,9 +1330,10 @@ def aggregate_predictions(
     wavefront_rgb = np.full((ztiles, *vol.shape[1:]), unconfident_cluster, dtype=np.float32)
 
     zw, yw, xw = predictions_settings['window_size']
-    logger.info(f"volume_size = {vol.shape}\n"
-          f"window_size = {predictions_settings['window_size']}\n"
-          f"      tiles = {ztiles, ytiles, xtiles}")
+    logger.info(f"volume_size = {vol.shape}")
+    logger.info(f"window_size = {predictions_settings['window_size']}")
+    logger.info(f"      tiles = {ztiles, ytiles, xtiles}")
+
     for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
         c = predictions.loc[(z, y, x), 'cluster']
 
