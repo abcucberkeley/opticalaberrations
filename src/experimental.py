@@ -136,7 +136,8 @@ def preprocess(
     filter_mask_dilation: bool = True,
     plot: Any = None,
     no_phase: bool = False,
-    match_model_fov: bool = True
+    match_model_fov: bool = True,
+    rolling_strides: Optional[tuple] = None
 ):
     if isinstance(file, tf.Tensor):
         file = Path(str(file.numpy(), "utf-8"))
@@ -180,7 +181,21 @@ def preprocess(
         rois = sliding_window_view(
             sample,
             window_shape=window_size
-        )[::window_size[0], ::window_size[1], ::window_size[2]]
+        )
+
+        if rolling_strides is not None:
+            rois = rois[
+               ::rolling_strides[0],
+               ::rolling_strides[1],
+               ::rolling_strides[2]
+            ]
+        else:
+            rois = rois[
+               ::window_size[0],
+               ::window_size[1],
+               ::window_size[2]
+            ]
+
         ztiles, nrows, ncols = rois.shape[:3]
         rois = np.reshape(rois, (-1, *window_size))
 
@@ -439,6 +454,7 @@ def predict(
     confidence_threshold: float = .0099,
     batch_size: int = 1,
     digital_rotations: Optional[int] = 361,
+    rolling_strides: Optional[tuple] = None,
     match_model_fov: bool = True,
     plot: bool = True,
     plot_rotations: bool = False,
@@ -461,6 +477,7 @@ def predict(
             edge_filter=False,
             filter_mask_dilation=True,
             match_model_fov=match_model_fov,
+            rolling_strides=rolling_strides,
         ),
         desc='Generate Fourier embeddings',
         cores=cpu_workers
@@ -729,6 +746,7 @@ def predict_large_fov(
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = 361,
+    rolling_strides: Optional[tuple] = None,
     cpu_workers: int = -1
 ):
     lls_defocus = 0.
@@ -776,6 +794,7 @@ def predict_large_fov(
         normalize=True,
         edge_filter=False,
         match_model_fov=False,
+        rolling_strides=rolling_strides,
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
     )
 
@@ -1012,6 +1031,7 @@ def predict_tiles(
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = 361,
+    rolling_strides: Optional[tuple] = None,
     cpu_workers: int = -1,
 ):
 
@@ -1104,6 +1124,7 @@ def predict_tiles(
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
+        rolling_strides=rolling_strides,
         cpu_workers=cpu_workers,
     )
 

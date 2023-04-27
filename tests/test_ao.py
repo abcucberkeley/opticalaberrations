@@ -69,6 +69,7 @@ def test_predict_large_fov(kargs):
         batch_size=kargs['batch_size'],
         ignore_modes=kargs['ignore_modes'],
         prediction_threshold=kargs['prediction_threshold'],
+        rolling_strides=kargs['rolling_strides'],
     )
     assert zernikes.shape[0] == kargs['num_modes']
 
@@ -89,6 +90,7 @@ def test_predict_tiles(kargs):
         batch_size=kargs['batch_size'],
         ignore_modes=kargs['ignore_modes'],
         window_size=kargs['window_size'],
+        rolling_strides=kargs['rolling_strides'],
     )
 
     assert tile_predictions.shape == kargs['tiles_shape']
