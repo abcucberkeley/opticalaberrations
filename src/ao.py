@@ -478,10 +478,6 @@ def parse_args(args):
              '(percentages; values below that will be set to the desired minimum)'
     )
     predict_tiles.add_argument(
-        "--prediction_threshold", default=0., type=float,
-        help='set predictions below threshold to zero (waves)'
-    )
-    predict_tiles.add_argument(
         "--confidence_threshold", default=0.0099, type=float,
         help='optional threshold to flag unconfident predictions '
              'based on the standard deviations of the predicted amplitudes for all digital rotations (microns)'
@@ -986,7 +982,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     dm_calibration=args.dm_calibration,
                     dm_state=args.current_dm,
                     freq_strength_threshold=args.freq_strength_threshold,
-                    prediction_threshold=args.prediction_threshold,
                     confidence_threshold=args.confidence_threshold,
                     sign_threshold=args.sign_threshold,
                     axial_voxel_size=args.axial_voxel_size,

@@ -315,6 +315,7 @@ def reconstruct_wavefront_error_landscape(
     threshold: float = 0.,
     isoplanatic_patch_colormap: Union[Path, str] = Path.joinpath(Path(__file__).parent, '../CETperceptual/CET-C2.csv'),
     na: float = 1.0,
+    tile_p2v: Optional[np.ndarray] = None,
 ):
     """
     Calculate the wavefront error landscape that would produce the wavefront error differences
@@ -369,7 +370,8 @@ def reconstruct_wavefront_error_landscape(
 
     # center = (ztiles//2, ytiles//2, xtiles//2)
     # peak = predictions.apply(lambda x: x**2).groupby(['z', 'y', 'x']).sum().idxmax()
-    tile_p2v = np.full((xtiles * ytiles * ztiles), np.nan)
+    if tile_p2v is None:
+        tile_p2v = np.full((xtiles * ytiles * ztiles), np.nan)
 
     matrix_row = 0  # pointer to where we are writing
     for i, tile_coords in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
@@ -1019,7 +1021,6 @@ def predict_tiles(
     num_predictions: int = 1,
     batch_size: int = 1,
     window_size: tuple = (64, 64, 64),
-    prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
     confidence_threshold: float = .0099,
     sign_threshold: float = .9,
@@ -1085,7 +1086,7 @@ def predict_tiles(
             psf_fov=list(premodelpsfgen.psf_fov),
             window_size=list(window_size),
             wavelength=float(wavelength),
-            prediction_threshold=float(prediction_threshold),
+            prediction_threshold=float(0),
             freq_strength_threshold=float(freq_strength_threshold),
             prev=str(prev),
             ignore_modes=list(ignore_modes),
@@ -1114,13 +1115,13 @@ def predict_tiles(
         samplepsfgen=samplepsfgen,
         dm_calibration=dm_calibration,
         dm_state=dm_state,
-        prediction_threshold=prediction_threshold,
+        prediction_threshold=0,
         confidence_threshold=confidence_threshold,
         batch_size=batch_size,
         wavelength=wavelength,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
-        match_model_fov=True if samplepsfgen.psf_fov == premodelpsfgen.psf_fov else False,
+        match_model_fov=True if all(np.array(samplepsfgen.psf_fov) <= np.array(premodelpsfgen.psf_fov)) else False,
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
@@ -1176,7 +1177,6 @@ def aggregate_predictions(
     wavelength = predictions_settings['wavelength']
     axial_voxel_size = predictions_settings['sample_voxel_size'][0]
     lateral_voxel_size = predictions_settings['sample_voxel_size'][2]
-    prediction_threshold = utils.waves2microns(prediction_threshold, wavelength=wavelength)
 
     # tile id is the column header, rows are the predictions
     predictions = pd.read_csv(
@@ -1192,8 +1192,18 @@ def aggregate_predictions(
         predictions.index.get_level_values(1).str.lstrip('y').astype(np.int),
         predictions.index.get_level_values(2).str.lstrip('x').astype(np.int),
     ], names=('z', 'y', 'x'))
+
+    wavefronts = {}
+    predictions['p2v'] = np.nan
+    for index, zernikes in predictions.iterrows():
+        wavefronts[index] = Wavefront(
+            np.nan_to_num(zernikes.values, nan=0),
+            lam_detection=wavelength,
+        )
+        predictions.loc[index, 'p2v'] = wavefronts[index].peak2valley()
+
     logger.info(f'prediction stats')
-    logger.info(f'{predictions.describe(percentiles=[.01, .05, .1, .15, .2, .8, .85, .9, .95, .99])}')
+    logger.info(f'\n{predictions.describe(percentiles=[.01, .05, .1, .15, .2, .8, .85, .9, .95, .99])}')
 
     stdevs = pd.read_csv(
         str(model_pred).replace('_predictions.csv', '_stdevs.csv'),
@@ -1225,16 +1235,12 @@ def aggregate_predictions(
     where_unconfident[predictions_settings['ignore_modes']] = False
 
     # filter out small predictions from KMeans cluster analysis, but keep these as an additional group
-    # note: threshold is computed for each mode individually
-    where_zero_confident = (predictions >= predictions.quantile(min_percentile/100)) & \
-                           (predictions <= predictions.quantile(max_percentile/100))
-    where_zero_confident[predictions_settings['ignore_modes']] = True
-
+    # note: p2v threshold is computed for each tile
     unconfident_tiles = where_unconfident.copy()
     unconfident_tiles[predictions_settings['ignore_modes']] = True  # ignore these modes during agg
     all_zeros_tiles = all_zeros.agg('all', axis=1)  # 1D (one value for each tile)
     unconfident_tiles = unconfident_tiles.agg('all', axis=1)  # 1D (one value for each tile)
-    zero_confident_tiles = where_zero_confident.agg('all', axis=1)  # 1D (one value for each tile)
+    zero_confident_tiles = predictions['p2v'] <= prediction_threshold  # 1D (one value for each tile)
     zero_confident_tiles = zero_confident_tiles * ~unconfident_tiles  # don't mark zero_confident if tile is unconfident
 
     logger.info(f'Number of confident zero tiles {zero_confident_tiles.sum():4}'
@@ -1264,10 +1270,10 @@ def aggregate_predictions(
 
     for z in trange(ztiles, desc='Aggregating Z tiles', total=ztiles):
         ztile_preds = valid_predictions.get_group(z)
-        ztile_preds.drop(columns='cluster', errors='ignore', inplace=True)
+        ztile_preds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
 
         ztile_stds = valid_stdevs.get_group(z)
-        ztile_stds.drop(columns='cluster', errors='ignore', inplace=True)
+        ztile_stds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
 
         if optimize_max_isoplanatic_clusters:
             logger.info('KMeans calculating...')
@@ -1334,17 +1340,10 @@ def aggregate_predictions(
     zero_confident_cluster = np.where(np.all(clusters3d_colormap == zero_confident_color, axis=1))[0][0]
     unconfident_cluster = np.where(np.all(clusters3d_colormap == unconfident_color, axis=1))[0][0]
 
-    wavefronts = {}
     predictions.loc[all_zeros_tiles, 'cluster'] = zero_confident_cluster
     predictions.loc[zero_confident_tiles, 'cluster'] = zero_confident_cluster
     predictions.loc[unconfident_tiles, 'cluster'] = unconfident_cluster
     predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters.csv")
-
-    for index, zernikes in predictions.drop(columns='cluster').iterrows():
-        wavefronts[index] = Wavefront(
-            np.nan_to_num(zernikes.values, nan=0),
-            lam_detection=wavelength,
-        )
 
     clusters3d_heatmap = np.full_like(vol, unconfident_cluster, dtype=np.float32)
     wavefront_heatmap = np.zeros((ztiles, *vol.shape[1:]), dtype=np.float32)
@@ -1387,6 +1386,7 @@ def aggregate_predictions(
         axial_voxel_size=axial_voxel_size,
         wavelength=wavelength,
         na=.9,
+        tile_p2v=predictions['p2v'].values,
     )
 
     # vis.plot_volume(
