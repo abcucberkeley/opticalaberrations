@@ -1290,10 +1290,7 @@ def aggregate_predictions(
             max_silhouette = results['silhouette'].idxmax()
             max_isoplanatic_clusters = max_silhouette
 
-        km = KMeans(init="k-means++", n_clusters=max_isoplanatic_clusters)
-        km.fit(ztile_preds)
-
-        ztile_preds['cluster'] = km.labels_
+        ztile_preds['cluster'] = KMeans(init="k-means++", n_clusters=max_isoplanatic_clusters).fit_predict(ztile_preds)
         ztile_preds['cluster'] += z * max_isoplanatic_clusters
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
