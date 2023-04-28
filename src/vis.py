@@ -1298,9 +1298,8 @@ def plot_rotations(results: Path):
                 # f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, '
                 # f'm{twin.index_ansi}={preds[twin.index_ansi]:.3f} '
                 f'$\\rho$={rho:.3f} $\mu$RMS, '
-                f'$\sigma$={stdev:.3f} $\mu$RMS, '
-                f'MSE={mse:.0f}, '
-                f'{fraction_of_kept_points * 100:.0f}% kept',
+                f'$\\rho/\\sigma={rho / stdev:.3f}, \\sigma$={stdev:.3f}, '
+                f'MSE={mse:.0f}',
                 color=title_color
             )
 
@@ -1321,14 +1320,14 @@ def plot_rotations(results: Path):
                 df.init_pred_mode,
                 label=f'm{mode.index_ansi}: '
                       f'$\\rho$={rho:.3f} $\mu$RMS, '
-                      f'$\sigma$={stdev:.3f} $\mu$RMS',
+                      f'$\\rho/\\sigma={rho / stdev:.3f}, \\sigma$={stdev:.3f}',
                 color=title_color
             )
 
             ax.set_xlim(0, 360)
             ax.set_xticks(range(0, 405, 45))
             ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-            ax.set_ylim(np.min(df.init_pred_mode), np.max(df.init_pred_mode))
+            ax.set_ylim(min(np.min(-np.abs(df.init_pred_mode)), -0.01), max(np.max(np.abs(df.init_pred_mode)), 0.01))
             ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
             ax.set_ylabel('Amplitude ($\mu$ RMS)')
             ax.set_xlabel('Digital rotation (deg)')

@@ -207,7 +207,7 @@ def parse_args(args):
         help='set predictions below threshold to zero (waves)'
     )
     predict_sample.add_argument(
-        "--confidence_threshold", default=0.0099, type=float,
+        "--confidence_threshold", default=0.02, type=float,
         help='optional threshold to flag unconfident predictions '
              'based on the standard deviations of the predicted amplitudes for all digital rotations (microns)'
     )
@@ -293,7 +293,7 @@ def parse_args(args):
         help='set predictions below threshold to zero (waves)'
     )
     predict_large_fov.add_argument(
-        "--confidence_threshold", default=0.0099, type=float,
+        "--confidence_threshold", default=0.02, type=float,
         help='optional threshold to flag unconfident predictions '
              'based on the standard deviations of the predicted amplitudes for all digital rotations (microns)'
     )
@@ -478,7 +478,7 @@ def parse_args(args):
              '(percentages; values below that will be set to the desired minimum)'
     )
     predict_tiles.add_argument(
-        "--confidence_threshold", default=0.0099, type=float,
+        "--confidence_threshold", default=0.015, type=float,
         help='optional threshold to flag unconfident predictions '
              'based on the standard deviations of the predicted amplitudes for all digital rotations (microns)'
     )
@@ -537,13 +537,8 @@ def parse_args(args):
         help='scale DM actuators by an arbitrary multiplier'
     )
     aggregate_predictions.add_argument(
-        "--prediction_threshold", default=.05, type=float,
-        help='set predictions below threshold to zero (waves)'
-    )
-    aggregate_predictions.add_argument(
-        "--confidence_threshold", default=0.0099, type=float,
-        help='optional threshold to flag unconfident predictions '
-             'based on the standard deviations of the predicted amplitudes for all digital rotations (microns)'
+        "--prediction_threshold", default=.25, type=float,
+        help='set predictions below threshold to zero (p2v waves)'
     )
     aggregate_predictions.add_argument(
         "--majority_threshold", default=.5, type=float,
@@ -1008,7 +1003,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     dm_calibration=args.dm_calibration,
                     dm_state=args.current_dm,
                     prediction_threshold=args.prediction_threshold,
-                    confidence_threshold=args.confidence_threshold,
                     majority_threshold=args.majority_threshold,
                     min_percentile=args.min_percentile,
                     max_percentile=args.max_percentile,

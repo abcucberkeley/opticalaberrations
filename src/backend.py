@@ -336,7 +336,7 @@ def eval_rotation(
         plot: Any = None,
         threshold: float = 0.,
         no_phase: bool = False,
-        confidence_threshold: float = .0099,
+        confidence_threshold: float = .02,
         minimum_fraction_of_kept_points: float = 0.45,
 ):
     """  # order matters future thayer (predict_dataset)
@@ -420,31 +420,40 @@ def eval_rotation(
             # exclude if rho is unusually small
             # (which can lead to small, but dominant primary mode near discontinuity)
             data_mask[rhos < rho / 2] = 0.
-            df['valid_points'] = data_mask
+            df['valid_points'] = np.ones(xdata.shape[0], dtype=bool) # data_mask
 
-            fraction_of_kept_points = data_mask.sum() / len(data_mask)
-            if fraction_of_kept_points < minimum_fraction_of_kept_points:
-                # reject if aren't using at least 45% of the values
-                rho = 0
-
-            xdata = xdata[data_mask]
-            ydata = ydata[data_mask]
-            offset = ydata[0]
-            ydata = np.unwrap(ydata, period=180)
-            ydata = ((ydata - offset - xdata) + 90) % 180 - 90 + offset + xdata
-            df['pred_twin_angle'] = np.nan
-            df['pred_twin_angle'][data_mask] = ydata
+            xdata_masked = xdata[data_mask]
+            ydata_masked = ydata[data_mask]
+            offset = ydata_masked[0]
+            ydata_masked = np.unwrap(ydata_masked, period=180)
+            ydata_masked = ((ydata_masked - offset - xdata_masked) + 90) % 180 - 90 + offset + xdata_masked
 
             m = 1
-            b = linear_fit_fixed_slope(xdata, ydata, m)  # refit without bad data points
+            b = linear_fit_fixed_slope(xdata_masked, ydata_masked, m)  # refit without bad data points
             fit = m * xdata + b
+
+            number_of_wraps = (fit - ydata) // 180
+            below = ydata + (number_of_wraps * 180)
+            above = ydata + ((number_of_wraps+1) * 180)
+            ydata = above
+            below_is_better = np.abs(fit-below) < np.abs(fit-above)
+            ydata[below_is_better] = below[below_is_better]
+
+            df['pred_twin_angle'] = ydata
             df['fitted_twin_angle'] = m * df['twin_angle'] + b
 
-            mse = np.mean(np.square(fit - ydata))
+            squared_error = np.square(fit - ydata)
+            mse = np.mean(squared_error)
             if mse > 700:
                 # reject if it doesn't show rotation that matches within +/- 26deg,
                 # equivalent to +/- 0.005 um on a 0.01 um mode.
                 rho = 0
+                confident = all(rhos < confidence_threshold) # either confident zero or unconfident
+            else:
+                rho = np.mean(rhos[squared_error < 700])
+                confident = rho / std_rho > 1 # is SNR above 1? # either confident-A or unconfident
+
+
             df['mse'] = mse
 
             twin_angle = b  # evaluate the curve fit when there is no digital rotation.
@@ -456,8 +465,6 @@ def eval_rotation(
                 confident-Z         0           s (small)
                 unconfident         0           0
             """
-
-            confident = std_rho < confidence_threshold
 
             if np.all(rhos == rhos[0]):  # blank image (unconfident)
                 preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
@@ -477,9 +484,8 @@ def eval_rotation(
 
         else:  # mode has m=0 (spherical,...), or twin isn't within the 55 modes.
 
-            std_rho = np.std(init_preds[:, mode.index_ansi])
-            confident = std_rho < confidence_threshold
             rhos = init_preds[:, mode.index_ansi]
+            std_rho = np.std(rhos)
 
             if np.all(rhos == rhos[0]):  # blank image (unconfident)
                 preds[mode.index_ansi] = 0.
@@ -487,8 +493,14 @@ def eval_rotation(
                 rhos = np.zeros_like(rhos)
                 confident = 0.
             else:
-                rho = np.median(rhos)
-                rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
+                rho = np.abs(np.median(rhos))
+                rho *= rho > threshold  # keep it if it's above threshold, or else set to zero.
+
+                if all(np.abs(rhos) < confidence_threshold):
+                    confident = 1
+                    rho = 0  # confident-Z
+                else:
+                    confident = rho / std_rho > 1  # is SNR above 1?
 
                 if confident and rho > 0:  # confident-A
                     preds[mode.index_ansi] = rho
@@ -511,8 +523,8 @@ def eval_rotation(
         df['aggr_rho'] = rho
         df['aggr_mode_amp'] = preds[mode.index_ansi]
         df['aggr_twin_amp'] = np.nan if twin is None else preds[twin.index_ansi]
-        df['aggr_std_dev'] = stdevs[mode.index_ansi]
-        df['aggr_twin_std_dev'] = np.nan if twin is None else stdevs[twin.index_ansi]
+        df['aggr_std_dev'] = std_rho
+        df['aggr_twin_std_dev'] = np.nan if twin is None else std_rho
 
         results.append(df)
 
@@ -545,7 +557,7 @@ def predict_rotation(
         plot_rotations: Any = None,
         remove_interference: bool = True,
         desc: str = 'Predict-rotations',
-        confidence_threshold: float = .0099,
+        confidence_threshold: float = .02,
         digital_rotations: Optional[int] = 361,
         cpu_workers: int = -1,
 ):
@@ -856,7 +868,7 @@ def predict_dataset(
         batch_size: int = 128,
         ignore_modes: list = (0, 1, 2, 4),
         threshold: float = 0.,
-        confidence_threshold: float = .0099,
+        confidence_threshold: float = .02,
         verbose: bool = True,
         desc: str = 'MiniBatch-probabilistic-predictions',
         digital_rotations: Optional[int] = None,

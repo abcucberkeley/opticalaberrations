@@ -38,7 +38,7 @@ def kargs():
         axial_voxel_size=.2,
         freq_strength_threshold=.01,
         prediction_threshold=0.,
-        confidence_threshold=0.0099,
+        confidence_threshold=0.02,
         num_predictions=1,
         batch_size=128,
         plot=True,

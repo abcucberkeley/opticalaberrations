@@ -424,7 +424,7 @@ def reconstruct_wavefront_error_landscape(
     terrain3d = np.reshape(terrain, (ztiles, ytiles, xtiles))
 
     # upsample from tile coordinates back to the volume
-    terrain3d = resize(terrain3d, image.shape)
+    terrain3d = resize(terrain3d, image.shape, mode='edge')
     # terrain3d = resize(terrain3d, volume_shape, order=0, mode='constant')  # to show tiles
 
     isoplanatic_patch_colormap = pd.read_csv(
@@ -458,7 +458,7 @@ def predict(
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
-    confidence_threshold: float = .0099,
+    confidence_threshold: float = .02,
     batch_size: int = 1,
     digital_rotations: Optional[int] = 361,
     rolling_strides: Optional[tuple] = None,
@@ -561,7 +561,7 @@ def predict_sample(
     dm_damping_scalar: float = 1,
     prediction_threshold: float = 0.0,
     freq_strength_threshold: float = .01,
-    confidence_threshold: float = .0099,
+    confidence_threshold: float = .02,
     sign_threshold: float = .9,
     verbose: bool = False,
     plot: bool = False,
@@ -740,7 +740,7 @@ def predict_large_fov(
     dm_damping_scalar: float = 1,
     prediction_threshold: float = 0.0,
     freq_strength_threshold: float = .01,
-    confidence_threshold: float = .0099,
+    confidence_threshold: float = .02,
     sign_threshold: float = .9,
     verbose: bool = False,
     plot: bool = False,
@@ -1027,7 +1027,7 @@ def predict_tiles(
     batch_size: int = 1,
     window_size: tuple = (64, 64, 64),
     freq_strength_threshold: float = .01,
-    confidence_threshold: float = .0099,
+    confidence_threshold: float = .02,
     sign_threshold: float = .9,
     plot: bool = True,
     plot_rotations: bool = False,
@@ -1155,8 +1155,7 @@ def aggregate_predictions(
     majority_threshold: float = .5,
     min_percentile: int = 1,
     max_percentile: int = 99,
-    prediction_threshold: float = 0.,
-    confidence_threshold: float = .0099,
+    prediction_threshold: float = 0.25, # peak to valley in waves. you already have this diffraction limited data
     aggregation_rule: str = 'mean',
     dm_damping_scalar: float = 1,
     max_isoplanatic_clusters: int = 3,
@@ -1205,10 +1204,13 @@ def aggregate_predictions(
             np.nan_to_num(zernikes.values, nan=0),
             lam_detection=wavelength,
         )
-        predictions.loc[index, 'p2v'] = wavefronts[index].peak2valley()
+        predictions.loc[index, 'p2v'] = wavefronts[index].peak2valley(na=1)
 
-    logger.info(f'prediction stats')
-    logger.info(f'\n{predictions.describe(percentiles=[.01, .05, .1, .15, .2, .8, .85, .9, .95, .99])}')
+    pd.options.display.width = 200
+    pd.options.display.max_columns = 20
+
+    logger.info(f'stats\npredictions dataframe\n{predictions.describe(percentiles=[.01, .05, .1, .15, .2, .8, .85, .9, .95, .99])}\n')
+
 
     stdevs = pd.read_csv(
         str(model_pred).replace('_predictions.csv', '_stdevs.csv'),
@@ -1269,7 +1271,7 @@ def aggregate_predictions(
     valid_stdevs = stdevs.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_stdevs = valid_stdevs.groupby('z')
 
-    clusters3d_colormap = sns.color_palette("tab10", n_colors=(max_isoplanatic_clusters * ztiles))
+    clusters3d_colormap = sns.color_palette("brg", n_colors=(max_isoplanatic_clusters * ztiles))
     clusters3d_colormap = np.array(clusters3d_colormap)*255
     clusters3d_colormap = np.append(clusters3d_colormap, [zero_confident_color, unconfident_color], axis=0)
 
@@ -1288,7 +1290,10 @@ def aggregate_predictions(
             max_silhouette = results['silhouette'].idxmax()
             max_isoplanatic_clusters = max_silhouette
 
-        ztile_preds['cluster'] = KMeans(init="k-means++", n_clusters=max_isoplanatic_clusters).fit_predict(ztile_preds)
+        km = KMeans(init="k-means++", n_clusters=max_isoplanatic_clusters)
+        km.fit(ztile_preds)
+
+        ztile_preds['cluster'] = km.labels_
         ztile_preds['cluster'] += z * max_isoplanatic_clusters
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
@@ -1302,6 +1307,7 @@ def aggregate_predictions(
             g = clusters.get_group(c).index  # get all tiles that belong to cluster "c"
             # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
             pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)     # mean ignoring NaNs
+
             pred_std = ztile_stds.loc[g].mask(where_unconfident).agg(aggregation_rule, axis=0)
 
             pred = Wavefront(
@@ -1342,9 +1348,11 @@ def aggregate_predictions(
     actuators.index.name = 'actuators'
     actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
 
+    # generate cluster id for zero and unconfident
     zero_confident_cluster = np.where(np.all(clusters3d_colormap == zero_confident_color, axis=1))[0][0]
     unconfident_cluster = np.where(np.all(clusters3d_colormap == unconfident_color, axis=1))[0][0]
 
+    # assign cluster ids for zero and unconfident
     predictions.loc[all_zeros_tiles, 'cluster'] = zero_confident_cluster
     predictions.loc[zero_confident_tiles, 'cluster'] = zero_confident_cluster
     predictions.loc[unconfident_tiles, 'cluster'] = unconfident_cluster
@@ -1362,7 +1370,7 @@ def aggregate_predictions(
     for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
         c = predictions.loc[(z, y, x), 'cluster']
 
-        wavefront_rgb[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((yw, xw), int(c))
+        wavefront_rgb[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((yw, xw), int(c))    # cluster group id
         wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.nan_to_num(wavefronts[(z, y, x)].wave(xw), nan=0)
         clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((zw, yw, xw), int(c))
 
