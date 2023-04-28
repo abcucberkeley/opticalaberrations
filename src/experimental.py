@@ -1162,10 +1162,13 @@ def aggregate_predictions(
     optimize_max_isoplanatic_clusters: bool = False,
     plot: bool = False,
     ignore_tile: Any = None,
-    preloaded: Preloadedmodelclass = None,
+    clusters3d_colormap: str = 'tab10',
     zero_confident_color: tuple = (255, 255, 0),
     unconfident_color: tuple = (255, 255, 255),
+    preloaded: Preloadedmodelclass = None,
 ):
+    pd.options.display.width = 200
+    pd.options.display.max_columns = 20
 
     vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
     vol /= np.percentile(vol, 98)
@@ -1197,6 +1200,10 @@ def aggregate_predictions(
         predictions.index.get_level_values(2).str.lstrip('x').astype(np.int),
     ], names=('z', 'y', 'x'))
 
+    ztiles = predictions.index.get_level_values('z').unique().shape[0]
+    ytiles = predictions.index.get_level_values('y').unique().shape[0]
+    xtiles = predictions.index.get_level_values('x').unique().shape[0]
+
     wavefronts = {}
     predictions['p2v'] = np.nan
     for index, zernikes in predictions.iterrows():
@@ -1206,11 +1213,12 @@ def aggregate_predictions(
         )
         predictions.loc[index, 'p2v'] = wavefronts[index].peak2valley(na=1)
 
-    pd.options.display.width = 200
-    pd.options.display.max_columns = 20
-
     logger.info(f'stats\npredictions dataframe\n{predictions.describe(percentiles=[.01, .05, .1, .15, .2, .8, .85, .9, .95, .99])}\n')
 
+    errormap = np.reshape(predictions['p2v'].values, (ztiles, ytiles, xtiles))
+    errormap = resize(errormap, vol.shape, mode='edge')
+    # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
+    imwrite(Path(f"{model_pred.with_suffix('')}_aggregated_error.tif"), errormap, dtype=np.float32)
 
     stdevs = pd.read_csv(
         str(model_pred).replace('_predictions.csv', '_stdevs.csv'),
@@ -1224,10 +1232,6 @@ def aggregate_predictions(
         stdevs.index.get_level_values(1).str.lstrip('y').astype(np.int),
         stdevs.index.get_level_values(2).str.lstrip('x').astype(np.int),
     ], names=('z', 'y', 'x'))
-
-    ztiles = predictions.index.get_level_values('z').unique().shape[0]
-    ytiles = predictions.index.get_level_values('y').unique().shape[0]
-    xtiles = predictions.index.get_level_values('x').unique().shape[0]
 
     if ignore_tile is not None:
         for cc in ignore_tile:
@@ -1271,7 +1275,7 @@ def aggregate_predictions(
     valid_stdevs = stdevs.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_stdevs = valid_stdevs.groupby('z')
 
-    clusters3d_colormap = sns.color_palette("brg", n_colors=(max_isoplanatic_clusters * ztiles))
+    clusters3d_colormap = sns.color_palette(clusters3d_colormap, n_colors=(max_isoplanatic_clusters * ztiles))
     clusters3d_colormap = np.array(clusters3d_colormap)*255
     clusters3d_colormap = np.append(clusters3d_colormap, [zero_confident_color, unconfident_color], axis=0)
 
@@ -1390,7 +1394,7 @@ def aggregate_predictions(
         ytiles=ytiles,
         ztiles=ztiles,
         image=vol,
-        save_path=Path(f"{model_pred.with_suffix('')}_aggregated_error.tif"),
+        save_path=Path(f"{model_pred.with_suffix('')}_aggregated_patchs.tif"),
         window_size=predictions_settings['window_size'],
         lateral_voxel_size=lateral_voxel_size,
         axial_voxel_size=axial_voxel_size,
