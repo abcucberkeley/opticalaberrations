@@ -576,17 +576,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
 
-    def corrections(s):
-        try:
-            dm, path = s.split(',')
-            return dm, path
-        except:
-            raise argparse.ArgumentTypeError("corrections must be z0_c0,path")
-
     combine_tiles = subparsers.add_parser("combine_tiles")
     combine_tiles.add_argument("input", type=Path, help="path to csv file")
     combine_tiles.add_argument(
-        "--corrections", action='append', default=[], type=corrections,
+        "--corrections", action='append', default=[], type=Path,
         help='paths to corrected scans for each DM'
     )
     combine_tiles.add_argument(

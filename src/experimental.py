@@ -1438,43 +1438,44 @@ def combine_tiles(
 
     """
     original_image = load_sample(str(tile_predictions).replace('_tiles_predictions_aggregated_clusters.csv', '.tif'))
-    combined = np.zeros_like(original_image)
-
-    correction_scans = {}
-    for c, path in corrections:
-        correction_scans[c] = load_sample(path)
 
     with open(str(tile_predictions).replace('_aggregated_clusters.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
 
     if original_image.shape != tuple(predictions_settings['input_shape']):
-        logger.error(f"img.shape {original_image.shape} != json's input_shape {tuple(predictions_settings['input_shape'])}")
+        logger.error(
+            f"img.shape {original_image.shape} != json's input_shape {tuple(predictions_settings['input_shape'])}"
+        )
 
     predictions = pd.read_csv(tile_predictions, index_col=['z', 'y', 'x'], header=0)
+    correction_scans = np.zeros((len(corrections), *original_image.shape))
+    error_maps = np.zeros((len(corrections), *original_image.shape))
 
-    zw, yw, xw = predictions_settings['window_size']
-    ztiles = predictions.index.get_level_values('z').unique().shape[0]
-    ytiles = predictions.index.get_level_values('y').unique().shape[0]
-    xtiles = predictions.index.get_level_values('x').unique().shape[0]
+    for t, path in enumerate(corrections):
+        error_maps[t] = load_sample(path)
+        correction_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_error.tif', '.tif'))
 
-    for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
-        c = int(predictions.loc[(z, y, x), 'cluster'])
-        dm = f"z{z}_c{c}"
+    indices = np.argmin(error_maps, axis=0)
+    z, y, x = np.indices(indices.shape)
+    combined_errormap = error_maps[indices, z, y, x]
+    combined = correction_scans[indices, z, y, x]
 
-        if correction_scans.get(dm) is not None:
-            combined[
-                z * zw:(z * zw) + zw,
-                y * yw:(y * yw) + yw,
-                x * xw:(x * xw) + xw
-            ] = correction_scans[dm][z * zw:(z * zw) + zw, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw]
-        else:
-            combined[
-                z * zw:(z * zw) + zw,
-                y * yw:(y * yw) + yw,
-                x * xw:(x * xw) + xw
-            ] = original_image[z * zw:(z * zw) + zw, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw]
+    # zw, yw, xw = predictions_settings['window_size']
+    # ztiles = predictions.index.get_level_values('z').unique().shape[0]
+    # ytiles = predictions.index.get_level_values('y').unique().shape[0]
+    # xtiles = predictions.index.get_level_values('x').unique().shape[0]
+    #
+    # for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
+    #     zts, yts, xts = z * zw, y * yw, x * xw
+    #     zte, yte, xte = (z * zw) + zw, (y * yw) + yw, (x * xw) + xw
+    #     c = int(predictions.loc[(z, y, x), 'cluster'])
+    #
+    #     idx = np.argmin(error_maps[:, zts:zte, yts:yte, xts:xte], axis=0)
+    #     combined_errormap = error_maps[idx, zts:zte, yts:yte, xts:xte]
+    #     combined = correction_scans[idx, zts:zte, yts:yte, xts:xte]
 
     imwrite(f"{tile_predictions.with_suffix('')}_combined.tif", combined)
+    imwrite(f"{tile_predictions.with_suffix('')}_combined_error.tif", combined_errormap)
 
 
 @profile
