@@ -23,6 +23,7 @@ from sklearn.cluster import KMeans
 from skimage.transform import resize
 from sklearn.metrics import silhouette_samples, silhouette_score
 from joblib import Parallel, delayed
+from scipy.interpolate import NearestNDInterpolator
 
 import utils
 import vis
@@ -1171,6 +1172,7 @@ def aggregate_predictions(
     pd.options.display.max_columns = 20
 
     vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
+    vol -= np.percentile(vol, 5)
     vol /= np.percentile(vol, 98)
     vol = np.clip(vol, 0, 1)
 
@@ -1214,11 +1216,6 @@ def aggregate_predictions(
         predictions.loc[index, 'p2v'] = wavefronts[index].peak2valley(na=1)
 
     logger.info(f'stats\npredictions dataframe\n{predictions.describe(percentiles=[.01, .05, .1, .15, .2, .8, .85, .9, .95, .99])}\n')
-
-    errormap = np.reshape(predictions['p2v'].values, (ztiles, ytiles, xtiles))
-    errormap = resize(errormap, vol.shape, mode='edge')
-    # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
-    imwrite(Path(f"{model_pred.with_suffix('')}_aggregated_error.tif"), errormap.astype(np.float32), dtype=np.float32)
 
     stdevs = pd.read_csv(
         str(model_pred).replace('_predictions.csv', '_stdevs.csv'),
@@ -1264,6 +1261,16 @@ def aggregate_predictions(
                 f' out of {all_zeros_tiles.count()}')
 
     coefficients, actuators = {}, {}
+
+    errormapdf = predictions['p2v'].copy()
+    nn_coords = np.array(errormapdf[~unconfident_tiles].index.to_list())
+    nn_values = errormapdf[~unconfident_tiles].values
+    myInterpolator = NearestNDInterpolator(nn_coords, nn_values)
+    errormap = myInterpolator(np.array(errormapdf.index.to_list()))
+    errormap = np.reshape(errormap, (ztiles, ytiles, xtiles))
+    errormap = resize(errormap, vol.shape, order=1, mode='edge')
+    # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
+    imwrite(Path(f"{model_pred.with_suffix('')}_aggregated_p2v_error.tif"), errormap.astype(np.float32), dtype=np.float32)
 
     # create a new column for cluster ids.
     predictions['cluster'] = np.nan
@@ -1368,7 +1375,7 @@ def aggregate_predictions(
 
     zw, yw, xw = predictions_settings['window_size']
     logger.info(f"volume_size = {vol.shape}")
-    logger.info(f"window_size = {predictions_settings['window_size']}")
+    logger.info(f"window_size = {zw, yw, xw}")
     logger.info(f"      tiles = {ztiles, ytiles, xtiles}")
 
     for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
@@ -1389,7 +1396,12 @@ def aggregate_predictions(
 
     clusters3d = clusters3d_colormap[clusters3d_heatmap.astype(np.ubyte)] * vol[..., np.newaxis]
     clusters3d = clusters3d.astype(np.ubyte)
-    imwrite(f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif", clusters3d, photometric='rgb')
+    imwrite(f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif",
+            clusters3d,
+            photometric='rgb',
+            imagej=True,
+            resolution=(xw, yw),
+            )
 
     reconstruct_wavefront_error_landscape(
         wavefronts=wavefronts,
@@ -1421,7 +1433,7 @@ def aggregate_predictions(
     #     save_path=f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.svg"
     # )
 
-    logger.info('Done. Waiting for plots to write.')
+    logger.info(f'Done. Waiting for plots to write for {model_pred.with_suffix("")}')
     pool.close()    # close the pool
     pool.join()     # wait for all tasks to complete
 
@@ -1456,7 +1468,7 @@ def combine_tiles(
 
     for t, path in enumerate(corrections):
         error_maps[t] = load_sample(path)
-        correction_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_error.tif', '.tif'))
+        correction_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '.tif'))
 
     indices = np.argmin(error_maps, axis=0)     # locate the correction with the lowest error for every voxel (3D array)
     z, y, x = np.indices(indices.shape)
@@ -1477,6 +1489,7 @@ def combine_tiles(
     #     combined_errormap = error_maps[idx, zts:zte, yts:yte, xts:xte]
     #     combined = correction_scans[idx, zts:zte, yts:yte, xts:xte]
 
+    imwrite(f"{tile_predictions.with_suffix('')}_volume_used.tif", indices.astype(np.uint16))
     imwrite(f"{tile_predictions.with_suffix('')}_combined.tif", combined.astype(np.float32))
     imwrite(f"{tile_predictions.with_suffix('')}_combined_error.tif", combined_errormap.astype(np.float32))
 

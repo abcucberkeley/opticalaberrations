@@ -341,7 +341,9 @@ def parse_args(args):
         help='optional flag for applying digital rotations'
     )
     predict_large_fov.add_argument(
-        "--rolling_strides", default=None, type=str, help='"z-y-x" strides for computing rolling fourier embeddings'
+        "--rolling_strides", default=None, type=str,
+        help='"z-y-x" strides in pixels for computing rolling fourier embeddings. '
+             'This will generate more FFTs and avg them together before doing prediction.'
     )
 
     predict_rois = subparsers.add_parser("predict_rois")
