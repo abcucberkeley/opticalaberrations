@@ -1279,7 +1279,7 @@ def aggregate_predictions(
     clusters3d_colormap = np.array(clusters3d_colormap)*255
     clusters3d_colormap = np.append(clusters3d_colormap, [zero_confident_color, unconfident_color], axis=0)
 
-    for z in trange(ztiles, desc='Aggregating Z tiles', total=ztiles):
+    for z in valid_predictions.groups.keys():   # basically loop through all ztiles, unless no valid predictions exist
         ztile_preds = valid_predictions.get_group(z)
         ztile_preds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
 
@@ -1294,7 +1294,10 @@ def aggregate_predictions(
             max_silhouette = results['silhouette'].idxmax()
             max_isoplanatic_clusters = max_silhouette
 
-        ztile_preds['cluster'] = KMeans(init="k-means++", n_clusters=max_isoplanatic_clusters).fit_predict(ztile_preds)
+        n_clusters = min(max_isoplanatic_clusters, len(ztile_preds))
+        ztile_preds['cluster'] = KMeans(init="k-means++",
+                                        n_clusters=n_clusters,
+                                        ).fit_predict(ztile_preds)
         ztile_preds['cluster'] += z * max_isoplanatic_clusters
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
@@ -1302,7 +1305,7 @@ def aggregate_predictions(
         stdevs.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
 
         clusters = ztile_preds.groupby('cluster')
-        for c in range(max_isoplanatic_clusters):
+        for c in range(n_clusters):
             c += z * max_isoplanatic_clusters
 
             g = clusters.get_group(c).index  # get all tiles that belong to cluster "c"
