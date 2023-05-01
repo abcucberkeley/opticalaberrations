@@ -470,9 +470,9 @@ def eval_rotation(
                 print('we are here')
                 print(rhos)
                 print(std_rho)
-                print(confident)
 
-            if np.all(rhos == rhos[0]):  # blank image (unconfident)
+
+            if np.allclose(rhos, rhos[0], atol=0.0001):  # blank image (unconfident)
                 preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
                 stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
                 confident = 0.
@@ -491,7 +491,7 @@ def eval_rotation(
             rhos = init_preds[:, mode.index_ansi]
             std_rho = np.std(rhos)
 
-            if np.all(rhos == rhos[0]):  # blank image (unconfident)
+            if np.allclose(rhos, rhos[0], atol=0.0001):  # blank image (unconfident)
                 preds[mode.index_ansi] = 0.
                 stdevs[mode.index_ansi] = 0.
                 rhos = np.zeros_like(rhos)
@@ -522,6 +522,9 @@ def eval_rotation(
             df['pred_twin_angle'] = np.nan
             df['fitted_twin_angle'] = np.nan
             df['mse'] = np.nan
+        if 'z1-y27-x3' in str(save_path):
+            print(f'{confident=}')
+            print(np.isclose(rhos, rhos[0], atol=0.0001))
 
         df['confident'] = confident
         df['aggr_rho'] = rho
