@@ -361,9 +361,6 @@ def eval_rotation(
             plot: optional toggle to visualize embeddings
     """
 
-    if 'z1-y27-x3' in str(save_path):
-        print('we are here')
-
     def cart2pol(x, y):
         """Convert cartesian (x, y) to polar (rho, phi)
         """
@@ -468,6 +465,12 @@ def eval_rotation(
                 confident-Z         0           s (small)
                 unconfident         0           0
             """
+
+            if 'z1-y27-x3' in str(save_path):
+                print('we are here')
+                print(rhos)
+                print(std_rho)
+                print(confident)
 
             if np.all(rhos == rhos[0]):  # blank image (unconfident)
                 preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.

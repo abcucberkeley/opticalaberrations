@@ -10,6 +10,7 @@ import sys
 import tensorflow as tf
 from pathlib import Path
 import argparse
+import re
 
 try:
     import cupy as cp
@@ -763,6 +764,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         flags = flags.replace('..', cluster_repo)
         flags = flags.replace('--cluster', '')
         flags = flags.replace('U:\\', '/clusterfs/nvme2/')
+        flags = flags.replace('\\', '/')
+        flags = re.sub(pattern='--batch_size \d+', repl='--batch_size 3500', string=flags)
         taskname = f"{args.func}_{args.input.stem}"
 
         sjob = f"srun "
