@@ -1218,7 +1218,7 @@ def aggregate_predictions(
     errormap = np.reshape(predictions['p2v'].values, (ztiles, ytiles, xtiles))
     errormap = resize(errormap, vol.shape, mode='edge')
     # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
-    imwrite(Path(f"{model_pred.with_suffix('')}_aggregated_error.tif"), errormap, dtype=np.float32)
+    imwrite(Path(f"{model_pred.with_suffix('')}_aggregated_error.tif"), errormap.astype(np.float32), dtype=np.float32)
 
     stdevs = pd.read_csv(
         str(model_pred).replace('_predictions.csv', '_stdevs.csv'),
@@ -1375,7 +1375,7 @@ def aggregate_predictions(
         wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.nan_to_num(wavefronts[(z, y, x)].wave(xw), nan=0)
         clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((zw, yw, xw), int(c))
 
-    imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap, dtype=np.float32)
+    imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap.astype(np.float32))
 
     scaled_wavefront_heatmap = (wavefront_heatmap - np.nanpercentile(wavefront_heatmap, 1)) / \
         (np.nanpercentile(wavefront_heatmap, 99) - np.nanpercentile(wavefront_heatmap, 1))
@@ -1474,8 +1474,8 @@ def combine_tiles(
     #     combined_errormap = error_maps[idx, zts:zte, yts:yte, xts:xte]
     #     combined = correction_scans[idx, zts:zte, yts:yte, xts:xte]
 
-    imwrite(f"{tile_predictions.with_suffix('')}_combined.tif", combined)
-    imwrite(f"{tile_predictions.with_suffix('')}_combined_error.tif", combined_errormap)
+    imwrite(f"{tile_predictions.with_suffix('')}_combined.tif", combined.astype(np.float32))
+    imwrite(f"{tile_predictions.with_suffix('')}_combined_error.tif", combined_errormap.astype(np.float32))
 
 
 @profile
