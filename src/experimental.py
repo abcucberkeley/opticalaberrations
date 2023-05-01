@@ -1449,16 +1449,16 @@ def combine_tiles(
 
     predictions = pd.read_csv(tile_predictions, index_col=['z', 'y', 'x'], header=0)
     correction_scans = np.zeros((len(corrections), *original_image.shape))
-    error_maps = np.zeros((len(corrections), *original_image.shape))
+    error_maps = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
 
     for t, path in enumerate(corrections):
         error_maps[t] = load_sample(path)
         correction_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_error.tif', '.tif'))
 
-    indices = np.argmin(error_maps, axis=0)
+    indices = np.argmin(error_maps, axis=0)     # locate the correction with the lowest error for every voxel (3D array)
     z, y, x = np.indices(indices.shape)
-    combined_errormap = error_maps[indices, z, y, x]
-    combined = correction_scans[indices, z, y, x]
+    combined_errormap = error_maps[indices, z, y, x]    # retrieve the best p2v
+    combined = correction_scans[indices, z, y, x]       # retrieve the best data
 
     # zw, yw, xw = predictions_settings['window_size']
     # ztiles = predictions.index.get_level_values('z').unique().shape[0]
