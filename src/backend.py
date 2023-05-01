@@ -480,8 +480,6 @@ def eval_rotation(
                 preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
                 stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
 
-            df['confident'] = confident
-
         else:  # mode has m=0 (spherical,...), or twin isn't within the 55 modes.
 
             rhos = init_preds[:, mode.index_ansi]
