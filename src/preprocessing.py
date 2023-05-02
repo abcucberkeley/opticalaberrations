@@ -631,7 +631,7 @@ def get_tiles(
     path: Union[Path, np.array],
     savepath: Path,
     window_size: tuple = (64, 64, 64),
-    strides: tuple = (64, 64, 64),
+    strides: Optional[tuple] = None,
 ):
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -653,6 +653,9 @@ def get_tiles(
     else:
         logger.error(f"Unknown file format: {path.name}")
         return
+
+    if strides is None:
+        strides = window_size
 
     windows = sliding_window_view(dataset, window_shape=window_size)[::strides[0], ::strides[1], ::strides[2]]
     ztiles, nrows, ncols = windows.shape[:3]
