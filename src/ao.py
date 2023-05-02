@@ -763,10 +763,11 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         script = f"{cluster_repo}/src/ao.py"
 
         flags = ' '.join(sys.argv[1:])
-        flags = flags.replace('..', cluster_repo)
-        flags = flags.replace('--cluster', '')
-        flags = flags.replace('U:\\', '/clusterfs/nvme2/')
-        flags = flags.replace('\\', '/')
+        flags = re.sub(pattern='--cluster', repl='', string=flags)
+        flags = re.sub(pattern='\\', repl='/', string=flags)
+        flags = re.sub(pattern='..', repl=cluster_repo, string=flags)
+        flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='U:\\', repl='/clusterfs/nvme2/', string=flags)
         flags = re.sub(pattern='--batch_size \d+', repl='--batch_size 3500', string=flags)
         taskname = f"{args.func}_{args.input.stem}"
 
