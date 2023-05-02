@@ -314,7 +314,6 @@ def reconstruct_wavefront_error_landscape(
     axial_voxel_size: float = .2,
     wavelength: float = .510,
     threshold: float = 0.,
-    isoplanatic_patch_colormap: Union[Path, str] = Path.joinpath(Path(__file__).parent, '../CETperceptual/CET-C2.csv'),
     na: float = 1.0,
     tile_p2v: Optional[np.ndarray] = None,
 ):
@@ -428,12 +427,15 @@ def reconstruct_wavefront_error_landscape(
     terrain3d = resize(terrain3d, image.shape, mode='edge')
     # terrain3d = resize(terrain3d, volume_shape, order=0, mode='constant')  # to show tiles
 
-    isoplanatic_patch_colormap = pd.read_csv(
-        isoplanatic_patch_colormap.resolve(),
-        header=None,
-        index_col=None,
-        dtype=np.ubyte
-    ).values
+    isoplanatic_patch_colormap = sns.color_palette('hls', n_colors=256)
+    isoplanatic_patch_colormap = np.array(isoplanatic_patch_colormap) * 255
+
+    # isoplanatic_patch_colormap = pd.read_csv(
+    #     Path.joinpath(Path(__file__).parent, '../CETperceptual/CET-C2.csv').resolve(),
+    #     header=None,
+    #     index_col=None,
+    #     dtype=np.ubyte
+    # ).values
 
     terrain3d *= 255    # convert waves to colormap cycles
     terrain3d = (terrain3d % 256).round(0).astype(np.ubyte)  # wrap if terrain's span is > 1 wave
