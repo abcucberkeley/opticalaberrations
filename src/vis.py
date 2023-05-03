@@ -912,13 +912,13 @@ def compare_mips(
 
 def compare_iterations(
     results: dict,
+    num_iters: int,
     save_path: Path,
-    psf_cmap: str = 'magma',
+    psf_cmap: str = 'hot',
     gamma: float = .5,
     dxy: float = .108,
     dz: float = .2,
     pltstyle: Any = None,
-    transform_to_align_to_DM: bool = False,
 ):
     if pltstyle is not None: plt.style.use(pltstyle)
 
@@ -932,81 +932,98 @@ def compare_iterations(
         'axes.autolimit_mode': 'round_numbers'
     })
 
-    fig = plt.figure(figsize=(15, 15))
-    gs = fig.add_gridspec(len(results), 5)
+    fig = plt.figure(figsize=(num_iters*5, 18))
+    gs = fig.add_gridspec(3, num_iters)
 
-    for i, iter_num in enumerate(results.keys()):
-        df = pd.read_csv(results[iter_num]['residuals'])
-        p = Wavefront(df['prediction'].values, modes=df.shape[0])
-        y = Wavefront(df['ground_truth'].values, modes=df.shape[0])
-        diff = Wavefront(df['residuals'].values, modes=df.shape[0])
+    noao_ax = fig.add_subplot(gs[0, 0])
+    ml_ax = fig.add_subplot(gs[1, 0])
+    gt_ax = fig.add_subplot(gs[-1, 0])
 
-        y_wave = y.wave(size=100)
+    m = plot_mip(
+        xy=noao_ax,
+        xz=None,
+        yz=None,
+        gamma=gamma,
+        vol=results['noao_img'],
+        cmap=psf_cmap,
+        dxy=dxy,
+        dz=dz,
+        colorbar=True,
+    )
+    noao_ax.set_title('No AO')
+
+    plot_mip(
+        xy=ml_ax,
+        xz=None,
+        yz=None,
+        gamma=gamma,
+        vol=results['ml_img'],
+        cmap=psf_cmap,
+        dxy=dxy,
+        dz=dz,
+        colorbar=True,
+    )
+    ml_ax.set_title('OpticalNet')
+
+    plot_mip(
+        xy=gt_ax,
+        xz=None,
+        yz=None,
+        gamma=gamma,
+        vol=results['gt_img'],
+        cmap=psf_cmap,
+        dxy=dxy,
+        dz=dz,
+        colorbar=True,
+    )
+    gt_ax.set_title('Shack–Hartmann')
+
+    vmin = -.5
+    vmax = .5
+
+    for i in range(num_iters-1):
+        iter_num = i + 1
+        p = results[iter_num]['ml_wavefront']
         p_wave = p.wave(size=100)
-        diff_wave = diff.wave(size=100)
+        ax_ml = fig.add_subplot(gs[1, iter_num])
+        plot_wavefront(ax_ml, p_wave, label='P2V', vmin=vmin, vmax=vmax, nas=[.95, .85])
 
-        ax_sh = fig.add_subplot(gs[i, 0])
-        ax_ml = fig.add_subplot(gs[i, 1])
-        ax_gt = fig.add_subplot(gs[i, 2])
-        ax_pred = fig.add_subplot(gs[i, 3])
-        ax_diff = fig.add_subplot(gs[i, 4])
+        y = results[iter_num]['gt_wavefront']
+        if y is not None:
+            y_wave = y.wave(size=100)
+            ax_sh = fig.add_subplot(gs[-1, iter_num])
+            mat = plot_wavefront(ax_sh, y_wave, label='P2V', vmin=vmin, vmax=vmax, nas=[.95, .85])
 
-        dlimit = .25    #hardcap the extreme limits to 0.25
+        if iter_num == num_iters-1:
+            for ax in (ax_ml, ax_sh):
+                cax = inset_axes(ax, width="10%", height="100%", loc='center right', borderpad=-3)
+                cbar = fig.colorbar(
+                    mat,
+                    cax=cax,
+                    fraction=0.046,
+                    pad=0.04,
+                    extend='both',
+                    format=FormatStrFormatter("%.2g"),
+                )
+                cbar.ax.set_title(r'$\lambda$', pad=20)
+                cbar.ax.yaxis.set_ticks_position('right')
 
-        vmin = np.floor(np.nanmin(y_wave) * 2) / 2  # round down to nearest 0.5 wave
-        vmin = -1 * dlimit if vmin > -0.01 else vmin
-
-        vmax = np.ceil(np.nanmax(y_wave) * 2) / 2  # round up to nearest 0.5 wave
-        vmax = dlimit if vmax < 0.01 else vmax
-
-        mat = plot_wavefront(ax_gt, y_wave, label='Ground truth', vmin=vmin, vmax=vmax, nas=[.95])
-        plot_wavefront(ax_pred, p_wave, label='Predicted', vmin=vmin, vmax=vmax, nas=[.95])
-        plot_wavefront(ax_diff, diff_wave, label='Residuals', vmin=vmin, vmax=vmax, nas=[.95])
-
-        cax = inset_axes(ax_diff, width="10%", height="100%", loc='center right', borderpad=-3)
-        cbar = fig.colorbar(
-            mat,
-            cax=cax,
-            fraction=0.046,
-            pad=0.04,
-            extend='both',
-            format=FormatStrFormatter("%.2g"),
-        )
-        cbar.ax.set_title(r'$\lambda$', pad=20)
-        cbar.ax.yaxis.set_ticks_position('right')
-
-        if transform_to_align_to_DM:
-            # 180 rotate, then transpose
-            ml_img = np.transpose(np.rot90(results[iter_num]['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
-            sh_img = np.transpose(np.rot90(results[iter_num]['gt_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
-
-        if i == 0:
-            ax_sh.set_title(f'Ground truth')
-            ax_ml.set_title(f'OpticalNet')
-
+        ax_img = fig.add_subplot(gs[0, iter_num])
         plot_mip(
-            xy=ax_sh,
+            xy=ax_img,
             xz=None,
             yz=None,
-            label=f'[$\gamma$={gamma}] Iter: {i}',
-            vol=sh_img,
-            cmap=psf_cmap,
-            dxy=dxy,
-            dz=dz,
-        )
-
-        plot_mip(
-            xy=ax_ml,
-            xz=None,
-            yz=None,
-            vol=ml_img,
+            gamma=gamma,
+            vol=results[iter_num]['ml_img'],
             cmap=psf_cmap,
             dxy=dxy,
             dz=dz,
             colorbar=False,
         )
 
-        for ax in [ax_gt, ax_pred, ax_diff]:
+        ax_img.set_title(f'Round {iter_num}')
+
+        for ax in [ax_ml, ax_sh]:
             ax.axis('off')
 
     savesvg(fig, f'{save_path}.svg')
