@@ -660,8 +660,15 @@ def eval_ao_dataset(
             logger.warning(f'Prediction not found for: {file.name}')
             break
 
-        p = pd.read_csv(prediction_path)
-        ml_wavefront = Wavefront(p.amplitude.values, modes=p.shape[0], lam_detection=predictions_settings['wavelength'])
+        if prediction_path is not None:
+            p = pd.read_csv(prediction_path)
+            ml_wavefront = Wavefront(
+                p.amplitude.values,
+                modes=p.shape[0],
+                lam_detection=predictions_settings['wavelength']
+            )
+        else:
+            ml_wavefront = None
 
         try:
             sh_path = sh_results[iter_num - 1]
@@ -689,6 +696,9 @@ def eval_ao_dataset(
             gt_wavefront=gt_wavefront,
         )
 
+        # if iter_num == 4:
+        #     break
+
     results['noao_img'] = preprocessing.prep_sample(
         load_sample(sorted(datadir.glob('NoAO*CamA*.tif'))[-1]),
         normalize=True,
@@ -712,7 +722,6 @@ def eval_ao_dataset(
         windowing=False,
         sample_voxel_size=predictions_settings['sample_voxel_size']
     )
-
 
     vis.compare_iterations(
         results=results,
