@@ -15,13 +15,14 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 from numpy.lib.stride_tricks import sliding_window_view
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import pandas as pd
-from matplotlib.ticker import FormatStrFormatter
+from matplotlib.ticker import FormatStrFormatter, LogFormatterMathtext
 from typing import Any, Union, Optional
 import numpy as np
 import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
 from line_profiler_pycharm import profile
 from matplotlib import colors
+import seaborn as sns
 
 from wavefront import Wavefront
 import re
@@ -64,7 +65,7 @@ def savesvg(
             f.write(filedata)
 
 
-def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, colorbar=True, aspect=None):
+def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, colorbar=True, aspect=None, log=False):
     def formatter(x, pos, dd):
         return f'{np.ceil(x * dd).astype(int):1d}'
 
@@ -72,7 +73,12 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
     vol = np.nan_to_num(vol)
 
     if xy is not None:
-        m = xy.imshow(np.max(vol, axis=0), cmap=cmap, aspect=aspect)
+        m = xy.imshow(
+            np.max(vol, axis=0),
+            cmap=cmap,
+            aspect=aspect,
+            norm=mcolors.LogNorm(vmin=0.09, vmax=1) if log else None
+        )
         xy.yaxis.set_ticks_position('right')
         xy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
         xy.yaxis.set_major_formatter(partial(formatter, dd=dxy))
@@ -81,7 +87,12 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
         xy.set_xlabel('XY ($\mu$m)')
 
     if xz is not None:
-        m = xz.imshow(np.max(vol, axis=1), cmap=cmap, aspect=aspect)
+        m = xz.imshow(
+            np.max(vol, axis=1),
+            cmap=cmap,
+            aspect=aspect,
+            norm=mcolors.LogNorm(vmin=0.09, vmax=1) if log else None
+        )
         xz.yaxis.set_ticks_position('right')
         xz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
         xz.yaxis.set_major_formatter(partial(formatter, dd=dz))
@@ -90,7 +101,12 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
         xz.set_xlabel('XZ ($\mu$m)')
 
     if yz is not None:
-        m = yz.imshow(np.max(vol, axis=2), cmap=cmap, aspect=aspect)
+        m = yz.imshow(
+            np.max(vol, axis=2),
+            cmap=cmap,
+            aspect=aspect,
+            norm=mcolors.LogNorm(vmin=0.09, vmax=1) if log else None
+        )
         yz.yaxis.set_ticks_position('right')
         yz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
         yz.yaxis.set_major_formatter(partial(formatter, dd=dz))
@@ -106,10 +122,16 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
         else:
             cax = inset_axes(yz, width="10%", height="100%", loc='center left', borderpad=-5)
 
+        if log:
+            formatter = LogFormatterMathtext()
+        else:
+            formatter = FormatStrFormatter("%.1f")
+
         cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+        cax.yaxis.set_major_formatter(formatter)
         cax.set_ylabel(f"{label}")
         cax.yaxis.set_label_position("left")
+        cax.get_xaxis().get_major_formatter().labelOnlyBase = False
 
     return m
 
@@ -922,6 +944,7 @@ def compare_iterations(
     num_iters: int,
     save_path: Path,
     psf_cmap: str = 'hot',
+    fft_cmap: str = 'nipy_spectral',
     gamma: float = .5,
     dxy: float = .108,
     dz: float = .2,
@@ -939,23 +962,107 @@ def compare_iterations(
         'axes.autolimit_mode': 'round_numbers'
     })
 
-    fig = plt.figure(figsize=(12, 12))
-    gs = fig.add_gridspec(3, num_iters)
+    fig = plt.figure(figsize=(12, 16))
+    gs = fig.add_gridspec(4, num_iters)
 
     vmin = -.5
     vmax = .5
 
+    noao_otf = results[0]['ml_img_fft'] / np.nanpercentile(results[0]['ml_img_fft'], 99.99)
+    noao_otf_hist = noao_otf.flatten() ** gamma
+
     for i in range(num_iters):
+        ax_img = fig.add_subplot(gs[0, i])
+        ax_fft = fig.add_subplot(gs[1, i])
+
+        if i == 0:
+            otf = noao_otf
+
+            plot_mip(
+                xy=ax_img,
+                xz=None,
+                yz=None,
+                gamma=gamma,
+                label='OpticalNet',
+                vol=results['noao_img'],
+                cmap=psf_cmap,
+                dxy=dxy,
+                dz=dz,
+                colorbar=True,
+            )
+            ax_img.set_title(f'No AO')
+
+            plot_mip(
+                xy=ax_fft,
+                xz=None,
+                yz=None,
+                gamma=gamma,
+                label='|$\log_{10}$ FFT|',
+                vol=otf,
+                cmap=fft_cmap,
+                dxy=dxy,
+                dz=dz,
+                colorbar=True,
+                log=True,
+            )
+        else:
+            ax_img.set_title(f'Round {i}\nXY ($\mu$m)')
+            otf = results[i]['ml_img_fft'] / np.nanpercentile(results[i]['ml_img_fft'], 99.99)
+            otf_hist = otf.flatten() ** gamma
+
+            plot_mip(
+                xy=ax_img,
+                xz=None,
+                yz=None,
+                gamma=gamma,
+                vol=results[i]['ml_img'],
+                cmap=psf_cmap,
+                dxy=dxy,
+                dz=dz,
+                colorbar=False,
+            )
+            plot_mip(
+                xy=ax_fft,
+                xz=None,
+                yz=None,
+                gamma=gamma,
+                vol=otf,
+                cmap=fft_cmap,
+                dxy=dxy,
+                dz=dz,
+                colorbar=False,
+                log=True,
+            )
+
+        ax_hist = inset_axes(ax_fft, height="25%", width="100%", loc='upper center', borderpad=-5)
+        ax_hist.hist(noao_otf_hist, density=True, bins=500, log=True, color='lightgrey', zorder=3)
+
+        if i > 0:
+            ax_hist.hist(otf_hist, density=True, bins=500, log=True, color=f'C0', alpha=.75, zorder=0)
+            ax_hist.set_yticklabels([])
+
+        ax_hist.grid(True, which="both", axis='y', lw=.5, ls='--', zorder=0, alpha=.5)
+        ax_hist.spines['right'].set_visible(False)
+        ax_hist.spines['top'].set_visible(False)
+        ax_hist.spines['left'].set_visible(False)
+        ax_hist.set_xlim(10**-3, 10**-.5)
+        ax_hist.set_xticks([10**-3, 10**-2.5, 10**-2, 10**-1.5, 10**-1, 10**-.5])
+        ax_hist.set_yticks([10**-5, 10**-3, 10**-1, 10])
+        ax_hist.set_xscale('log')
+
+        ax_img.set_xlabel('')
+        ax_fft.set_xlabel('')
+
         p = results[i]['ml_wavefront']
         if p is not None:
             p_wave = p.wave(size=100)
-            ax_ml = fig.add_subplot(gs[1, i])
+            ax_ml = fig.add_subplot(gs[-2, i])
             plot_wavefront(ax_ml, p_wave, label='P2V', vmin=vmin, vmax=vmax, nas=[.95, .85])
 
         y = results[i]['gt_wavefront']
         if y is not None:
             y_wave = y.wave(size=100)
-            ax_sh = fig.add_subplot(gs[2, i])
+            ax_sh = fig.add_subplot(gs[-1, i])
             mat = plot_wavefront(ax_sh, y_wave, label='P2V', vmin=vmin, vmax=vmax, nas=[.95, .85])
 
         if i == 0:
@@ -974,72 +1081,10 @@ def compare_iterations(
                 cbar.ax.yaxis.set_label_position('left')
                 cbar.ax.set_ylabel(label)
 
-        ax_img = fig.add_subplot(gs[0, i])
-
-        if i == 0:
-            plot_mip(
-                xy=ax_img,
-                xz=None,
-                yz=None,
-                gamma=gamma,
-                label='OpticalNet',
-                vol=results['noao_img'],
-                cmap=psf_cmap,
-                dxy=dxy,
-                dz=dz,
-                colorbar=True,
-            )
-            ax_img.set_title(f'No AO')
-        else:
-            plot_mip(
-                xy=ax_img,
-                xz=None,
-                yz=None,
-                gamma=gamma,
-                vol=results[i]['ml_img'],
-                cmap=psf_cmap,
-                dxy=dxy,
-                dz=dz,
-                colorbar=False,
-            )
-
-            ax_img.set_title(f'Round {i}\nXY ($\mu$m)')
-        ax_img.set_xlabel('')
-
         for ax in [ax_ml, ax_sh]:
             ax.axis('off')
 
-    # plot_mip(
-    #     xy=ml_ax,
-    #     xz=None,
-    #     yz=None,
-    #     gamma=gamma,
-    #     label='OpticalNet',
-    #     vol=results['ml_img'],
-    #     cmap=psf_cmap,
-    #     dxy=dxy,
-    #     dz=dz,
-    #     colorbar=True,
-    # )
-    # ml_ax.set_xlabel('')
-    # ml_ax.set_title('XY ($\mu$m)')
-
-    # plot_mip(
-    #     xy=gt_ax,
-    #     xz=None,
-    #     yz=None,
-    #     gamma=gamma,
-    #     label='Shack–Hartmann',
-    #     vol=results['gt_img'],
-    #     cmap=psf_cmap,
-    #     dxy=dxy,
-    #     dz=dz,
-    #     colorbar=True,
-    # )
-    # gt_ax.set_xlabel('')
-    # gt_ax.set_title('XY ($\mu$m)')
-
-    plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.1, wspace=.2)
+    plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.01, wspace=.2)
     plt.savefig(f'{save_path}.png', bbox_inches='tight', dpi=300, pad_inches=.25)
     plt.savefig(f'{save_path}.pdf', bbox_inches='tight', dpi=300, pad_inches=.25)
 

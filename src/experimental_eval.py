@@ -24,6 +24,7 @@ import backend
 import preprocessing
 from wavefront import Wavefront
 from experimental import load_sample
+from embeddings import fft
 
 import logging
 logger = logging.getLogger('')
@@ -692,6 +693,7 @@ def eval_ao_dataset(
 
         results[iter_num] = dict(
             ml_img=ml_img,
+            ml_img_fft=np.abs(fft(ml_img)),
             ml_wavefront=ml_wavefront,
             gt_wavefront=gt_wavefront,
         )
@@ -726,6 +728,7 @@ def eval_ao_dataset(
 
     results[0] = dict(
         ml_img=noao_img,
+        ml_img_fft=np.abs(fft(noao_img)),
         ml_wavefront=ml_wavefront,
         gt_wavefront=gt_wavefront,
     )
