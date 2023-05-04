@@ -671,7 +671,7 @@ def eval_ao_dataset(
             ml_wavefront = None
 
         try:
-            sh_path = sh_results[iter_num - 1]
+            sh_path = sh_results[iter_num]
             gt_wavefront = Wavefront(
                 sh_path,
                 modes=p.shape[0],
@@ -699,13 +699,38 @@ def eval_ao_dataset(
         # if iter_num == 4:
         #     break
 
-    results['noao_img'] = preprocessing.prep_sample(
-        load_sample(sorted(datadir.glob('NoAO*CamA*.tif'))[-1]),
+    noao = sorted(datadir.glob('NoAO*CamA*.tif'))[-1]
+    noao_img = preprocessing.prep_sample(
+        load_sample(noao),
         normalize=True,
         remove_background=True,
         windowing=False,
         sample_voxel_size=predictions_settings['sample_voxel_size']
     )
+
+    prediction_path = sorted(mldir.glob(f'NoAO*{postfix}'))[-1]
+    p = pd.read_csv(prediction_path)
+    ml_wavefront = Wavefront(
+        p.amplitude.values,
+        modes=p.shape[0],
+        lam_detection=predictions_settings['wavelength']
+    )
+
+    sh_path = sh_results[0]
+    gt_wavefront = Wavefront(
+        sh_path,
+        modes=p.shape[0],
+        lam_detection=predictions_settings['wavelength'],
+        unit='nm'
+    )
+
+    results[0] = dict(
+        ml_img=noao_img,
+        ml_wavefront=ml_wavefront,
+        gt_wavefront=gt_wavefront,
+    )
+
+    results['noao_img'] = noao_img
 
     results['ml_img'] = preprocessing.prep_sample(
         load_sample(sorted(datadir.glob('MLAO*CamA*.tif'))[-1]),

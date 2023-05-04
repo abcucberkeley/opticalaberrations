@@ -945,23 +945,22 @@ def compare_iterations(
     vmin = -.5
     vmax = .5
 
-    for i in range(num_iters-1):
-        iter_num = i + 1
-        p = results[iter_num]['ml_wavefront']
+    for i in range(num_iters):
+        p = results[i]['ml_wavefront']
         if p is not None:
             p_wave = p.wave(size=100)
-            ax_ml = fig.add_subplot(gs[1, iter_num])
+            ax_ml = fig.add_subplot(gs[1, i])
             plot_wavefront(ax_ml, p_wave, label='P2V', vmin=vmin, vmax=vmax, nas=[.95, .85])
 
-        y = results[iter_num]['gt_wavefront']
+        y = results[i]['gt_wavefront']
         if y is not None:
             y_wave = y.wave(size=100)
-            ax_sh = fig.add_subplot(gs[2, iter_num])
+            ax_sh = fig.add_subplot(gs[2, i])
             mat = plot_wavefront(ax_sh, y_wave, label='P2V', vmin=vmin, vmax=vmax, nas=[.95, .85])
 
-        if iter_num == num_iters-1:
-            for ax in (ax_ml, ax_sh):
-                cax = inset_axes(ax, width="10%", height="100%", loc='center right', borderpad=-3)
+        if i == 0:
+            for ax, label in zip((ax_ml, ax_sh), ('OpticalNet', 'Shack–Hartmann')):
+                cax = inset_axes(ax, width="10%", height="100%", loc='center left', borderpad=-5)
                 cbar = fig.colorbar(
                     mat,
                     cax=cax,
@@ -972,74 +971,73 @@ def compare_iterations(
                 )
                 cbar.ax.set_title(r'$\lambda$', pad=20)
                 cbar.ax.yaxis.set_ticks_position('right')
+                cbar.ax.yaxis.set_label_position('left')
+                cbar.ax.set_ylabel(label)
 
-        ax_img = fig.add_subplot(gs[0, iter_num])
-        plot_mip(
-            xy=ax_img,
-            xz=None,
-            yz=None,
-            gamma=gamma,
-            vol=results[iter_num]['ml_img'],
-            cmap=psf_cmap,
-            dxy=dxy,
-            dz=dz,
-            colorbar=False,
-        )
+        ax_img = fig.add_subplot(gs[0, i])
 
-        ax_img.set_title(f'Round {iter_num}\nXY ($\mu$m)')
+        if i == 0:
+            plot_mip(
+                xy=ax_img,
+                xz=None,
+                yz=None,
+                gamma=gamma,
+                label='OpticalNet',
+                vol=results['noao_img'],
+                cmap=psf_cmap,
+                dxy=dxy,
+                dz=dz,
+                colorbar=True,
+            )
+            ax_img.set_title(f'No AO')
+        else:
+            plot_mip(
+                xy=ax_img,
+                xz=None,
+                yz=None,
+                gamma=gamma,
+                vol=results[i]['ml_img'],
+                cmap=psf_cmap,
+                dxy=dxy,
+                dz=dz,
+                colorbar=False,
+            )
+
+            ax_img.set_title(f'Round {i}\nXY ($\mu$m)')
         ax_img.set_xlabel('')
 
         for ax in [ax_ml, ax_sh]:
             ax.axis('off')
 
-    noao_ax = fig.add_subplot(gs[0, 0])
-    ml_ax = fig.add_subplot(gs[1, 0])
-    gt_ax = fig.add_subplot(gs[2, 0])
+    # plot_mip(
+    #     xy=ml_ax,
+    #     xz=None,
+    #     yz=None,
+    #     gamma=gamma,
+    #     label='OpticalNet',
+    #     vol=results['ml_img'],
+    #     cmap=psf_cmap,
+    #     dxy=dxy,
+    #     dz=dz,
+    #     colorbar=True,
+    # )
+    # ml_ax.set_xlabel('')
+    # ml_ax.set_title('XY ($\mu$m)')
 
-    plot_mip(
-        xy=noao_ax,
-        xz=None,
-        yz=None,
-        gamma=gamma,
-        label='OpticalNet',
-        vol=results['noao_img'],
-        cmap=psf_cmap,
-        dxy=dxy,
-        dz=dz,
-        colorbar=True,
-    )
-    noao_ax.set_xlabel('')
-    noao_ax.set_title('No AO\nXY ($\mu$m)')
-
-    plot_mip(
-        xy=ml_ax,
-        xz=None,
-        yz=None,
-        gamma=gamma,
-        label='OpticalNet',
-        vol=results['ml_img'],
-        cmap=psf_cmap,
-        dxy=dxy,
-        dz=dz,
-        colorbar=True,
-    )
-    ml_ax.set_xlabel('')
-    ml_ax.set_title('XY ($\mu$m)')
-
-    plot_mip(
-        xy=gt_ax,
-        xz=None,
-        yz=None,
-        gamma=gamma,
-        label='Shack–Hartmann',
-        vol=results['gt_img'],
-        cmap=psf_cmap,
-        dxy=dxy,
-        dz=dz,
-        colorbar=True,
-    )
-    gt_ax.set_xlabel('')
-    gt_ax.set_title('XY ($\mu$m)')
+    # plot_mip(
+    #     xy=gt_ax,
+    #     xz=None,
+    #     yz=None,
+    #     gamma=gamma,
+    #     label='Shack–Hartmann',
+    #     vol=results['gt_img'],
+    #     cmap=psf_cmap,
+    #     dxy=dxy,
+    #     dz=dz,
+    #     colorbar=True,
+    # )
+    # gt_ax.set_xlabel('')
+    # gt_ax.set_title('XY ($\mu$m)')
 
     plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.1, wspace=.2)
     plt.savefig(f'{save_path}.png', bbox_inches='tight', dpi=300, pad_inches=.25)
