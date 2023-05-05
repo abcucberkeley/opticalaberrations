@@ -132,7 +132,7 @@ def parse_args(args):
         help='wavelength in microns'
     )
     embeddings.add_argument(
-        "--match_model_fov", action='store_true',
+        "--fov_is_small", action='store_true',
         help='a toggle for cropping input image to match the model\'s FOV'
     )
     embeddings.add_argument(
@@ -340,11 +340,6 @@ def parse_args(args):
         "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
     )
-    predict_large_fov.add_argument(
-        "--rolling_strides", default=None, type=str,
-        help='"z-y-x" strides in pixels for computing rolling fourier embeddings. '
-             'This will generate more FFTs and avg them together before doing prediction.'
-    )
 
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -457,9 +452,6 @@ def parse_args(args):
     )
     predict_tiles.add_argument(
         "--window_size", default='64-64-64', type=str, help='size of the window to crop each tile'
-    )
-    predict_tiles.add_argument(
-        "--rolling_strides", default=None, type=str, help='"z-y-x" strides for computing rolling fourier embeddings'
     )
     predict_tiles.add_argument(
         "--prev", default=None, type=Path,
@@ -930,9 +922,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     ignore_modes=args.ignore_mode,
                     ideal_empirical_psf=args.ideal_empirical_psf,
                     digital_rotations=args.digital_rotations,
-                    rolling_strides=tuple(
-                        int(i) for i in args.rolling_strides.split('-')
-                    ) if args.rolling_strides is not None else None,
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded
                 )
@@ -949,9 +938,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     lateral_voxel_size=args.lateral_voxel_size,
                     wavelength=args.wavelength,
                     window_size=tuple(int(i) for i in args.window_size.split('-')),
-                    rolling_strides=tuple(
-                        int(i) for i in args.rolling_strides.split('-')
-                    ) if args.rolling_strides is not None else None,
                     num_predictions=args.num_predictions,
                     num_rois=args.num_rois,
                     min_intensity=args.min_intensity,
@@ -984,9 +970,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     num_predictions=args.num_predictions,
                     wavelength=args.wavelength,
                     window_size=tuple(int(i) for i in args.window_size.split('-')),
-                    rolling_strides=tuple(
-                        int(i) for i in args.rolling_strides.split('-')
-                    ) if args.rolling_strides is not None else None,
                     plot=args.plot,
                     plot_rotations=args.plot_rotations,
                     batch_size=args.batch_size,

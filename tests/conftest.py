@@ -10,7 +10,6 @@ def kargs():
     num_modes = 15
     input_shape = (256, 256, 256)   # z-y-x
     window_size = (128, 128, 128)   # z-y-x
-    rolling_strides = (64, 64, 64)  # z-y-x
     num_tiles = np.prod(tuple(map(floordiv, input_shape, window_size)))
     digital_rotations = 361
 
@@ -21,7 +20,6 @@ def kargs():
         digital_rotations=digital_rotations,
         rotations_shape=(digital_rotations, 6, 64, 64, 1),
         window_size=window_size,
-        rolling_strides=rolling_strides,
         num_tiles=num_tiles,
         tiles_shape=(num_modes, num_tiles+5),
         num_modes=num_modes,

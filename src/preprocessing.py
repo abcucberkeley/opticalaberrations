@@ -65,7 +65,7 @@ def round_to_odd(n):
 @profile
 def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float:
     """ Return estimated noise """
-    noise = np.std(a, axis=axis)
+    noise = np.nanstd(a, axis=axis)
     return noise
 
 
@@ -73,7 +73,7 @@ def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float:
 def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> int:
     """ Return estimated signal-to-noise ratio or inf if the given image has no noise """
 
-    signal = np.max(a, axis=axis) - np.median(a, axis=axis)
+    signal = np.nanmax(a, axis=axis) - np.nanmedian(a, axis=axis)
     noise = measure_noise(a, axis=axis)
     return int(np.round(np.where(noise == 0, 0, signal/noise), 0))
 
@@ -203,8 +203,12 @@ def dog(
             im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)    # sharper
             im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)   # more blurred
 
-            if cp.std(im2) < 3:  # this is sparse
-                snr = measure_snr(image)
+            mask = cp.array(tukey_window(np.ones(image.shape)))
+            mask[mask <  .9] = np.nan
+            mask[mask >= .9] = 1
+
+            if cp.nanstd(im2*mask) < 3:  # this is sparse
+                snr = measure_snr(image*mask)
                 if snr > snr_threshold:
                     noise = cp.std(image - im2)  # increase the background subtraction by the noise
                     return im1 - (im2 + noise)
@@ -671,3 +675,20 @@ def get_tiles(
         rois.append(savepath / f"{tile}.tif")
 
     return np.array(rois), ztiles, nrows, ncols
+
+
+def optimal_rolling_strides(modelpsfgen, samplepsfgen, sample_shape):
+    model_window_size = (
+        round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
+        round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
+        round_to_even(modelpsfgen.psf_fov[2] / samplepsfgen.voxel_size[2]),
+    )  # number of sample voxels that make up a model psf.
+
+    model_window_size = np.minimum(model_window_size, sample_shape)
+    number_of_rois = np.ceil(sample_shape / model_window_size)
+    strides = np.floor((sample_shape - model_window_size) / (number_of_rois - 1))
+    idx = np.where(np.isnan(strides))[0]
+    strides[idx] = model_window_size[idx]
+    strides = strides.astype(int)
+    # throwaway = sample_shape - ((np.array(number_of_rois) - 1) * strides + model_window_size)
+    return strides

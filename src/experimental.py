@@ -35,7 +35,7 @@ from wavefront import Wavefront
 from data_utils import get_image
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern, fourier_embeddings, rolling_fourier_embeddings
-from preprocessing import round_to_even
+from preprocessing import round_to_even, optimal_rolling_strides
 
 import logging
 logger = logging.getLogger('')
@@ -137,7 +137,7 @@ def preprocess(
     filter_mask_dilation: bool = True,
     plot: Any = None,
     no_phase: bool = False,
-    match_model_fov: bool = True,
+    fov_is_small: bool = True,
     rolling_strides: Optional[tuple] = None
 ):
     if isinstance(file, tf.Tensor):
@@ -148,10 +148,10 @@ def preprocess(
 
     sample = load_sample(file)
 
-    if match_model_fov:
+    if fov_is_small: # only going to center crop and predict on that single FOV (fourier_embeddings)
         sample = preprocessing.prep_sample(
             sample,
-            model_fov=modelpsfgen.psf_fov,
+            model_fov=modelpsfgen.psf_fov,              # this is what we will crop to
             sample_voxel_size=samplepsfgen.voxel_size,
             remove_background=remove_background,
             normalize=normalize,
@@ -172,33 +172,40 @@ def preprocess(
             digital_rotations=digital_rotations,
             poi_shape=modelpsfgen.psf_shape[1:]
         )
-    else:
-        window_size = (
+    else: # at least one tile fov dimension is larger than model fov
+        model_window_size = (
             round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
             round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
             round_to_even(modelpsfgen.psf_fov[2] / samplepsfgen.voxel_size[2]),
-        )
+        )   # number of sample voxels that make up a model psf.
 
+        model_window_size = np.minimum(model_window_size, sample.shape)
+
+        # how many non-overlapping rois can we split this tile fov into (round down)
         rois = sliding_window_view(
             sample,
-            window_shape=window_size
-        )
+            window_shape=model_window_size
+        )   # stride = 1.
 
+        # decimate from all available windows to the stride we want (either rolling_strides or model_window_size)
         if rolling_strides is not None:
-            rois = rois[
-               ::rolling_strides[0],
-               ::rolling_strides[1],
-               ::rolling_strides[2]
-            ]
+            strides = rolling_strides
         else:
-            rois = rois[
-               ::window_size[0],
-               ::window_size[1],
-               ::window_size[2]
-            ]
+            strides = model_window_size
+
+        rois = rois[
+           ::strides[0],
+           ::strides[1],
+           ::strides[2]
+        ]
+
+        throwaway = sample.shape - ((np.array(rois.shape[:3])-1) * strides + rois.shape[-3:])
+        if any(throwaway > (np.array(sample.shape) / 4)):
+            raise Exception(f'You are throwing away {throwaway} voxels out of {sample.shape}, with stride length'
+                            f'{strides}. Change rolling_strides.')
 
         ztiles, nrows, ncols = rois.shape[:3]
-        rois = np.reshape(rois, (-1, *window_size))
+        rois = np.reshape(rois, (-1, *model_window_size))
 
         prep = partial(
             preprocessing.prep_sample,
@@ -210,9 +217,12 @@ def preprocess(
             read_noise_bias=read_noise_bias,
         )
 
-        rois = utils.multiprocess(func=prep, jobs=rois, desc='Preprocessing')
+        rois = utils.multiprocess(func=prep, jobs=rois,
+                                  desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
+                                       f'stride length {strides}, '
+                                       f'throwing away {throwaway} voxels')
 
-        return rolling_fourier_embeddings(
+        return rolling_fourier_embeddings(  # aka "large_fov"
             rois,
             iotf=modelpsfgen.iotf,
             plot=plot,
@@ -241,7 +251,7 @@ def generate_embeddings(
     edge_filter: bool = False,
     filter_mask_dilation: bool = True,
     plot: bool = False,
-    match_model_fov: bool = True,
+    fov_is_small: bool = True,
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = None
@@ -295,7 +305,7 @@ def generate_embeddings(
         remove_background=True,
         normalize=True,
         edge_filter=False,
-        match_model_fov=match_model_fov,
+        fov_is_small=fov_is_small,
         digital_rotations=digital_rotations,
         plot=file.with_suffix('') if plot else None,
     )
@@ -465,7 +475,7 @@ def predict(
     batch_size: int = 1,
     digital_rotations: Optional[int] = 361,
     rolling_strides: Optional[tuple] = None,
-    match_model_fov: bool = True,
+    fov_is_small: bool = True,
     plot: bool = True,
     plot_rotations: bool = False,
     cpu_workers: int = -1,
@@ -486,7 +496,7 @@ def predict(
             normalize=True,
             edge_filter=False,
             filter_mask_dilation=True,
-            match_model_fov=match_model_fov,
+            fov_is_small=fov_is_small,
             rolling_strides=rolling_strides,
         ),
         desc='Generate Fourier embeddings',
@@ -622,7 +632,7 @@ def predict_sample(
         normalize=True,
         edge_filter=False,
         filter_mask_dilation=True,
-        match_model_fov=True,
+        fov_is_small=True,
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
 
@@ -756,7 +766,6 @@ def predict_large_fov(
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = 361,
-    rolling_strides: Optional[tuple] = None,
     cpu_workers: int = -1
 ):
     lls_defocus = 0.
@@ -803,8 +812,8 @@ def predict_large_fov(
         remove_background=True,
         normalize=True,
         edge_filter=False,
-        match_model_fov=False,
-        rolling_strides=rolling_strides,
+        fov_is_small=False,
+        rolling_strides=optimal_rolling_strides(premodelpsfgen, samplepsfgen, sample.shape),
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
     )
 
@@ -1040,7 +1049,6 @@ def predict_tiles(
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = 361,
-    rolling_strides: Optional[tuple] = None,
     cpu_workers: int = -1,
 ):
 
@@ -1066,6 +1074,7 @@ def predict_tiles(
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
 
+    # obtain each tile and save to .tif.
     rois, ztiles, nrows, ncols = preprocessing.get_tiles(
         sample,
         savepath=outdir,
@@ -1129,11 +1138,11 @@ def predict_tiles(
         wavelength=wavelength,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
-        match_model_fov=True if all(np.array(samplepsfgen.psf_fov) <= np.array(premodelpsfgen.psf_fov)) else False,
+        fov_is_small=True if all(np.array(samplepsfgen.psf_fov) <= np.array(premodelpsfgen.psf_fov)) else False,
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
-        rolling_strides=rolling_strides,
+        rolling_strides=optimal_rolling_strides(premodelpsfgen, samplepsfgen, window_size),
         cpu_workers=cpu_workers,
     )
 
