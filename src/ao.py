@@ -744,6 +744,7 @@ def parse_args(args):
 
 
 def main(args=None, preloaded: Preloadedmodelclass = None):
+    command_flags = sys.argv[1:] if args is None else args
     args, unknown = parse_args(args)
 
     logging.basicConfig(
@@ -762,12 +763,12 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
         script = f"{cluster_repo}/src/ao.py"
 
-        flags = ' '.join(sys.argv[1:])
+        flags = ' '.join(command_flags)
         flags = re.sub(pattern='--cluster', repl='', string=flags)
-        flags = re.sub(pattern='\\', repl='/', string=flags)
-        flags = re.sub(pattern='..', repl=cluster_repo, string=flags)
+        flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
+        flags = flags.replace("..", cluster_repo)       # regex stinks at replacing ".."
         flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='U:\\', repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
         flags = re.sub(pattern='--batch_size \d+', repl='--batch_size 3500', string=flags)
         taskname = f"{args.func}_{args.input.stem}"
 
