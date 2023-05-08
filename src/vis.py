@@ -944,7 +944,7 @@ def compare_iterations(
     num_iters: int,
     save_path: Path,
     psf_cmap: str = 'hot',
-    fft_cmap: str = 'nipy_spectral',
+    fft_cmap: str = 'Greys_r',
     gamma: float = .5,
     dxy: float = .108,
     dz: float = .2,
@@ -977,6 +977,7 @@ def compare_iterations(
 
         if i == 0:
             otf = noao_otf
+            # otf = results['iotf'] / np.nanpercentile(results['iotf'], 99.99)
 
             plot_mip(
                 xy=ax_img,
@@ -1005,9 +1006,16 @@ def compare_iterations(
                 colorbar=True,
                 log=True,
             )
+            contours = ax_fft.contour(
+                np.nanmax(results['iotf'], axis=0),
+                levels=[0, 1],
+                origin='lower',
+                linestyles='dashed',
+                colors='red'
+            )
         else:
             ax_img.set_title(f'Round {i}\nXY ($\mu$m)')
-            otf = results[i]['ml_img_fft'] / np.nanpercentile(results[i]['ml_img_fft'], 99.99)
+            otf = results[i]['ml_img_fft'] / np.nanpercentile(results[0]['ml_img_fft'], 99.99)
             otf_hist = otf.flatten() ** gamma
 
             plot_mip(
@@ -1032,6 +1040,13 @@ def compare_iterations(
                 dz=dz,
                 colorbar=False,
                 log=True,
+            )
+            contours = ax_fft.contour(
+                np.nanmax(results['iotf'], axis=0),
+                levels=[0, 1],
+                origin='lower',
+                linestyles='dashed',
+                colors='red'
             )
 
         ax_hist = inset_axes(ax_fft, height="25%", width="100%", loc='upper center', borderpad=-5)

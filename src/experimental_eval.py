@@ -1,4 +1,7 @@
 import matplotlib
+
+from src.synthetic import SyntheticPSF
+
 matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
@@ -683,10 +686,13 @@ def eval_ao_dataset(
             logger.warning(f'GT not found for: {file.name}')
             gt_wavefront = None
 
+        ml_img = load_sample(file)
+        ml_img -= 100
+
         ml_img = preprocessing.prep_sample(
-            load_sample(file),
+            ml_img,
             normalize=True,
-            remove_background=True,
+            remove_background=False,
             windowing=False,
             sample_voxel_size=predictions_settings['sample_voxel_size']
         )
@@ -702,10 +708,12 @@ def eval_ao_dataset(
         #     break
 
     noao = sorted(datadir.glob('NoAO*CamA*.tif'))[-1]
+    noao_img = load_sample(noao)
+    noao_img -= 100
     noao_img = preprocessing.prep_sample(
-        load_sample(noao),
+        noao_img,
         normalize=True,
-        remove_background=True,
+        remove_background=False,
         windowing=False,
         sample_voxel_size=predictions_settings['sample_voxel_size']
     )
@@ -735,21 +743,40 @@ def eval_ao_dataset(
 
     results['noao_img'] = noao_img
 
+    ml_img = load_sample(sorted(datadir.glob('MLAO*CamA*.tif'))[-1])
+    ml_img -= 100
+
     results['ml_img'] = preprocessing.prep_sample(
-        load_sample(sorted(datadir.glob('MLAO*CamA*.tif'))[-1]),
+        ml_img,
         normalize=True,
-        remove_background=True,
+        remove_background=False,
         windowing=False,
         sample_voxel_size=predictions_settings['sample_voxel_size']
     )
 
+    gt_img = load_sample(sorted(datadir.glob('SHAO*CamA*.tif'))[-1])
+    gt_img -= 100
     results['gt_img'] = preprocessing.prep_sample(
-        load_sample(sorted(datadir.glob('SHAO*CamA*.tif'))[-1]),
+        gt_img,
         normalize=True,
-        remove_background=True,
+        remove_background=False,
         windowing=False,
         sample_voxel_size=predictions_settings['sample_voxel_size']
     )
+
+    samplepsfgen = SyntheticPSF(
+        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        psf_shape=noao_img.shape,
+        n_modes=15,
+        lam_detection=predictions_settings['wavelength'],
+        x_voxel_size=predictions_settings['sample_voxel_size'][2],
+        y_voxel_size=predictions_settings['sample_voxel_size'][1],
+        z_voxel_size=predictions_settings['sample_voxel_size'][0]
+    )
+
+    ipsf = samplepsfgen.ipsf
+    results['iotf'] = np.abs(fft(ipsf))
+    results['na_mask'] = samplepsfgen.na_mask()
 
     vis.compare_iterations(
         results=results,
