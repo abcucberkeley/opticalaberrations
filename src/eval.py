@@ -704,6 +704,7 @@ def random_samples(
                         res = backend.predict_rotation(
                             m,
                             noisy_img,
+                            save_path=save_path / f'{s}',
                             psfgen=gen,
                             no_phase=no_phase,
                             batch_size=batch_size,
@@ -823,6 +824,7 @@ def eval_object(
             res = backend.predict_rotation(
                 model,
                 inputs,
+                save_path=savepath,
                 psfgen=gen,
                 batch_size=batch_size,
                 no_phase=no_phase,
