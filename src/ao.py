@@ -761,6 +761,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         flags = flags.replace("..", cluster_repo)       # regex stinks at replacing ".."
         flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
         flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
         flags = re.sub(pattern='--batch_size \d+', repl='--batch_size 3500', string=flags)
         taskname = f"{args.func}_{args.input.stem}"
 
