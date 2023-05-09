@@ -216,7 +216,7 @@ def dog(
                     return np.zeros_like(image)
             else:
                 filtered_img = im1 - im2
-                if measure_snr(filtered_img) < 13:
+                if measure_snr(filtered_img) < snr_threshold:
                     return np.zeros_like(image)
                 else:
                     return filtered_img
