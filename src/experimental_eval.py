@@ -1,6 +1,6 @@
 import matplotlib
 
-from src.synthetic import SyntheticPSF
+from synthetic import SyntheticPSF
 
 matplotlib.use('Agg')
 
