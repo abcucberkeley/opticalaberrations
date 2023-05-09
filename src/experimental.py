@@ -1025,6 +1025,42 @@ def predict_rois(
         cpu_workers=cpu_workers
     )
 
+def predict_snr_map(
+        img: Path,
+        window_size: tuple = (64, 64, 64),
+        save_files: bool = False
+):
+
+    logger.info(f"Loading file: {img.name}")
+    sample = load_sample(img)
+    logger.info(f"Sample: {sample.shape}")
+
+    outdir = Path(f"{img.with_suffix('')}_tiles")
+    outdir.mkdir(exist_ok=True, parents=True)
+
+    # obtain each tile and skip saving to .tif.
+    rois, ztiles, nrows, ncols = preprocessing.get_tiles(
+        sample,
+        savepath=outdir,
+        strides=window_size,
+        window_size=window_size,
+        save_files=save_files,
+    )
+
+    prep = partial(
+        preprocessing.prep_sample,
+        return_psnr=True,
+    )
+
+    snrs = utils.multiprocess(func=prep, jobs=rois,
+                              desc=f'PNSR, {rois.shape[0]} rois per tile.'
+                              )
+
+    snrs = np.reshape(snrs, (ztiles, nrows, ncols))
+
+    snrs = resize(snrs, sample.shape, order=1, mode='edge')
+    imwrite(Path(f"{img.with_suffix('')}_snrs.tif"), snrs.astype(np.float32), dtype=np.float32)
+
 
 @profile
 def predict_tiles(
@@ -1197,6 +1233,10 @@ def aggregate_predictions(
     wavelength = predictions_settings['wavelength']
     axial_voxel_size = predictions_settings['sample_voxel_size'][0]
     lateral_voxel_size = predictions_settings['sample_voxel_size'][2]
+    window_size = predictions_settings['window_size']
+
+    predict_snr_map(Path(str(model_pred).replace('_tiles_predictions.csv', '.tif')),
+                    window_size=window_size)
 
     # tile id is the column header, rows are the predictions
     predictions = pd.read_csv(
@@ -1476,12 +1516,15 @@ def combine_tiles(
     predictions = pd.read_csv(tile_predictions, index_col=['z', 'y', 'x'], header=0)
     correction_scans = np.zeros((len(corrections), *original_image.shape))
     error_maps = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
+    psnr_scans = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
 
     for t, path in enumerate(corrections):
         error_maps[t] = load_sample(path)
         correction_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '.tif'))
+        psnr_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_snrs.tif'))
 
     indices = np.argmin(error_maps, axis=0)     # locate the correction with the lowest error for every voxel (3D array)
+    indices = np.argmax(psnr_scans, axis=0)     # locate the correction with the lowest error for every voxel (3D array)
     z, y, x = np.indices(indices.shape)
     combined_errormap = error_maps[indices, z, y, x]    # retrieve the best p2v
     combined = correction_scans[indices, z, y, x]       # retrieve the best data
