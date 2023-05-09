@@ -1516,17 +1516,18 @@ def combine_tiles(
     predictions = pd.read_csv(tile_predictions, index_col=['z', 'y', 'x'], header=0)
     correction_scans = np.zeros((len(corrections), *original_image.shape))
     error_maps = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
-    psnr_scans = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
+    snr_scans = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
 
     for t, path in enumerate(corrections):
         error_maps[t] = load_sample(path)
         correction_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '.tif'))
-        psnr_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_snrs.tif'))
+        snr_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_snrs.tif'))
 
-    indices = np.argmin(error_maps, axis=0)     # locate the correction with the lowest error for every voxel (3D array)
-    indices = np.argmax(psnr_scans, axis=0)     # locate the correction with the lowest error for every voxel (3D array)
+    # indices = np.argmin(error_maps, axis=0)     # locate the correction with the lowest error for every voxel (3D array)
+    indices = np.argmax(snr_scans, axis=0)     # locate the correction with the highest snr for every voxel (3D array)
     z, y, x = np.indices(indices.shape)
     combined_errormap = error_maps[indices, z, y, x]    # retrieve the best p2v
+    combined_snrmap = snr_scans[indices, z, y, x]    # retrieve the best snr
     combined = correction_scans[indices, z, y, x]       # retrieve the best data
 
     # zw, yw, xw = predictions_settings['window_size']
@@ -1546,6 +1547,7 @@ def combine_tiles(
     imwrite(f"{tile_predictions.with_suffix('')}_volume_used.tif", indices.astype(np.uint16))
     imwrite(f"{tile_predictions.with_suffix('')}_combined.tif", combined.astype(np.float32))
     imwrite(f"{tile_predictions.with_suffix('')}_combined_error.tif", combined_errormap.astype(np.float32))
+    imwrite(f"{tile_predictions.with_suffix('')}_combined_snr.tif", combined_snrmap.astype(np.float32))
 
 
 @profile
