@@ -1,7 +1,4 @@
 import matplotlib
-
-from synthetic import SyntheticPSF
-
 matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
@@ -28,6 +25,7 @@ import preprocessing
 from wavefront import Wavefront
 from experimental import load_sample
 from embeddings import fft
+from synthetic import SyntheticPSF
 
 import logging
 logger = logging.getLogger('')
@@ -413,87 +411,6 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
     return results
 
 
-def plot_eval_dataset(
-    model,
-    datadir: Path,
-    postfix: str = 'predictions_zernike_coefficients_ml_eval_residuals.csv',
-):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-
-    savepath = Path(f'{datadir}/p2v_eval')
-
-    # Permanently changes the pandas settings
-    pd.set_option('display.max_rows', None)
-    pd.set_option('display.max_columns', None)
-    pd.set_option('display.width', 600)
-    pd.set_option('display.max_colwidth', 20)
-
-    results = utils.multiprocess(
-        func=process_eval_file,
-        jobs=sorted(datadir.rglob(f'*{postfix}'), key=os.path.getctime),  # sort by creation time
-        desc=f'Collecting *{postfix} results'
-    )
-
-    if results == []:
-        logger.error(f'Did not find results in {datadir}\\*{postfix}    Please reurun without --precomputed flag.')
-        return
-
-    df = pd.DataFrame([v for d in results for k, v in d.items()])
-    df.sort_values(by=['modes', 'iteration_index', 'na'], ascending=[True, True, False], inplace=True)
-    df['model'] = str(model)
-
-    df.to_csv(f'{savepath}.csv')
-    logger.info(f'{savepath}.csv')
-
-    for col, label in zip(
-            ["p2v_gt", "p2v_residual"],
-            [r"Remaining aberration (P-V $\lambda$)", "PR-Model (P-V $\lambda$)"]
-    ):
-        fig = plt.figure(figsize=(11, 8))
-        g = sns.relplot(
-            data=df,
-            x="iteration_index",
-            y=col,
-            hue="na",
-            col="mode_1",
-            col_wrap=4,
-            kind="line",
-            height=3,
-            aspect=1.,
-            palette='tab10',
-            ci='sd',
-            # units="modes",
-            # estimator=None,
-            facet_kws=dict(sharex=True),
-        )
-
-        (
-            g.map(plt.axhline, y=.5, color="red", dashes=(2, 1), zorder=3)
-            .map(plt.grid, which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
-            .set_axis_labels("Iteration", label)
-            .set_titles("Mode: {col_name}")
-            .set(xlim=(0, max(df['iteration_index'])))
-            .set(ylim=(0, np.ceil(np.max(df['psnr']))) if col == 'psnr' else (0, 2))
-            .tight_layout(w_pad=0)
-        )
-
-        leg = g._legend
-        leg.set_bbox_to_anchor([.95, .93])
-        leg.set_title('NA')
-        #g.fig.suptitle(f"{df['num_model_modes'].unique()} mode Model")
-
-        plt.subplots_adjust(top=0.95, right=0.95, wspace=.1, hspace=.2)
-        plt.savefig(f'{savepath}_{col}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        logger.info(f'{savepath}_{col}.png')
-
-
 @profile
 def eval_dataset(
     datadir: Path,
@@ -502,7 +419,6 @@ def eval_dataset(
     gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv',
     plot_evals: bool = True,
     precomputed: bool = False,
-    compare_iterations: bool = False,
 ):
     results = {}
 
@@ -515,7 +431,6 @@ def eval_dataset(
             filename = str(model).split('\\')[-1]
             model = Path(f"../pretrained_models/lattice_yumb_x108um_y108um_z200um/{filename}")
 
-    if not precomputed:
         pool = mp.Pool(processes=mp.cpu_count())
         MLresultsdir = Path(datadir / 'MLResults')
         MLresults_list = list(MLresultsdir.glob('**/*'))    # only get directory list once for speed
@@ -537,7 +452,6 @@ def eval_dataset(
             state = file.stem.split('_')[0]
             modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
             modes = [m for m in modes if m]
-            logger.info(f"ansi_z{modes}")
 
             if len(modes) > 1:
                 prefix = f"ansi_"
@@ -571,52 +485,95 @@ def eval_dataset(
                     continue
             if prediction_path is None: logger.warning(f'Prediction not found for: {file.name}')
 
-            task = partial(
-                evaluate,
-                input_path=file,
-                prediction_path=prediction_path,
-                gt_path=gt_path
+            ml_img = load_sample(file)
+            ml_img -= 100
+            ml_img = preprocessing.prep_sample(
+                ml_img,
+                normalize=True,
+                remove_background=False,
+                windowing=False,
+                sample_voxel_size=predictions_settings['sample_voxel_size']
             )
-            _ = pool.apply_async(task)  # issue task
 
-            if compare_iterations:
+            pr_img = load_sample(pr_path)
+            pr_img -= 100
+            pr_img = preprocessing.prep_sample(
+                pr_img,
+                normalize=True,
+                remove_background=True,
+                windowing=False,
+                sample_voxel_size=predictions_settings['sample_voxel_size']
+            )
+
+            if prediction_path is not None:
+                p = pd.read_csv(prediction_path)
+                ml_wavefront = Wavefront(
+                    p.amplitude.values,
+                    modes=p.shape[0],
+                    lam_detection=predictions_settings['wavelength']
+                )
+            else:
+                ml_wavefront = None
+
+            if gt_path is not None:
+                y = pd.read_csv(gt_path)
+                gt_wavefront = Wavefront(
+                    y.amplitude.values[:p.shape[0]],
+                    modes=p.shape[0],
+                    lam_detection=predictions_settings['wavelength']
+                )
+            else:
+                gt_wavefront = None
+
+            diff_wavefront = Wavefront(
+                gt_wavefront - ml_wavefront,
+                modes=p.shape[0],
+                lam_detection=predictions_settings['wavelength']
+            )
+
+            results[(state, '-'.join(modes))] = dict(
+                ml_img=ml_img,
+                ml_wavefront=ml_wavefront,
+                gt_img=pr_img,
+                gt_wavefront=gt_wavefront,
+                diff_wavefront=diff_wavefront,
+                residuals=f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv',
+            )
+
+            if not precomputed:
+                logger.info(f"ansi_z{modes}")
                 logger.info(file.stem)
-                ml_img = preprocessing.prep_sample(
-                    load_sample(file),
-                    normalize=True,
-                    remove_background=True,
-                    windowing=False,
-                    sample_voxel_size=predictions_settings['sample_voxel_size']
-                )
-
                 logger.info(pr_path.stem)
-                pr_img = preprocessing.prep_sample(
-                    load_sample(pr_path),
-                    normalize=True,
-                    remove_background=True,
-                    windowing=False,
-                    sample_voxel_size=predictions_settings['sample_voxel_size']
-                )
 
-                results[state] = dict(
-                    ml_img=ml_img,
-                    gt_img=pr_img,
-                    residuals=f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv',
+                task = partial(
+                    evaluate,
+                    input_path=file,
+                    prediction_path=prediction_path,
+                    gt_path=gt_path
                 )
+                _ = pool.apply_async(task)  # issue task
 
         pool.close()    # close the pool
         pool.join()     # wait for all tasks to complete
 
-    plot_eval_dataset(model, datadir)
+    postfix = 'predictions_zernike_coefficients_ml_eval_residuals.csv'
+    residuals = utils.multiprocess(
+        func=process_eval_file,
+        jobs=sorted(datadir.rglob(f'*{postfix}'), key=os.path.getctime),  # sort by creation time
+        desc=f'Collecting *{postfix} results'
+    )
 
-    if compare_iterations:
-        vis.compare_iterations(
-            results=results,
-            save_path=datadir/'iterative_evaluation',
-            dxy=predictions_settings['sample_voxel_size'][1],
-            dz=predictions_settings['sample_voxel_size'][0],
-            transform_to_align_to_DM=True
-        )
+    if len(residuals) == 0:
+        raise Exception(f'Did not find results in {datadir}\\*{postfix}\t Please reurun without --precomputed flag.')
+
+    residuals = pd.DataFrame([v for d in residuals for k, v in d.items()])
+    residuals.sort_values(by=['modes', 'iteration_index', 'na'], ascending=[True, True, False], inplace=True)
+    print(residuals)
+
+    savepath = Path(f'{datadir}/evaluation')
+    residuals.to_csv(f'{savepath}.csv')
+    logger.info(f'{savepath}.csv')
+    vis.plot_beads_dataset(results, residuals, savepath=savepath)
 
 
 @profile
@@ -628,7 +585,7 @@ def eval_ao_dataset(
     gt_unit: str = 'nm',
     plot_evals: bool = True,
     precomputed: bool = False,
-    compare_iterations: bool = True,
+    compare_ao_iterations: bool = True,
 ):
     mldir = Path(datadir/'MLResults')
     ml_results = sorted(mldir.glob('**/*'), key=os.path.getctime)
@@ -778,7 +735,7 @@ def eval_ao_dataset(
     results['iotf'] = np.abs(fft(ipsf))
     results['na_mask'] = samplepsfgen.na_mask()
 
-    vis.compare_iterations(
+    vis.compare_ao_iterations(
         results=results,
         num_iters=iter_num,
         save_path=datadir/'iterative_evaluation',
