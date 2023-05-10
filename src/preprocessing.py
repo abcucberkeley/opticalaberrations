@@ -25,6 +25,7 @@ from skimage.morphology import ball
 from skimage.morphology import dilation
 from skimage.filters import window, difference_of_gaussians
 from canny import CannyEdgeDetector3D
+from tifffile import TiffFile
 
 try:
     import cupy as cp
@@ -272,7 +273,7 @@ def tukey_window(image: np.ndarray, alpha: float = .5):
 
 @profile
 def prep_sample(
-    sample: np.array,
+    sample: Union[np.array, Path],
     return_psnr: bool = False,
     normalize: bool = True,
     windowing: bool = True,
@@ -305,6 +306,12 @@ def prep_sample(
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
+    if isinstance(sample, Path):
+        with TiffFile(sample) as tif:
+            sample = tif.asarray()
+
+        sample = np.expand_dims(sample, axis=-1)
+
     # convert to 32bit
     sample = sample.astype(np.float32)
 
@@ -636,6 +643,7 @@ def get_tiles(
     savepath: Path,
     window_size: tuple = (64, 64, 64),
     strides: Optional[tuple] = None,
+    save_files: bool = True,
 ):
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -671,7 +679,8 @@ def get_tiles(
         desc=f"Locating tiles: {[windows.shape[0]]}")
     ):
         tile = f"z{z}-y{y}-x{x}"
-        imwrite(savepath / f"{tile}.tif", windows[i])
+        if save_files:
+            imwrite(savepath / f"{tile}.tif", windows[i])
         rois.append(savepath / f"{tile}.tif")
 
     return np.array(rois), ztiles, nrows, ncols
