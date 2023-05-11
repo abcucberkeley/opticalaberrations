@@ -1544,13 +1544,17 @@ def combine_tiles(
 
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
+    coefficients.sort_index(axis=1, inplace=True)
     coefficients.to_csv(f"{tile_predictions.with_suffix('')}_combined_zernike_coefficients.csv")
 
     actuators = pd.DataFrame.from_dict(actuators)
     actuators.index.name = 'actuators'
+    actuators.sort_index(axis=1, inplace=True)
+
     actuators.to_csv(f"{tile_predictions.with_suffix('')}_combined_corrected_actuators.csv")
     logger.info(f"Org actuators: {str(tile_predictions).replace('_clusters.csv', '_corrected_actuators.csv')}")
     logger.info(f"New actuators: {tile_predictions.with_suffix('')}_combined_corrected_actuators.csv")
+    logger.info(f"columns: {actuators.columns.names}")
 
 
 @profile
