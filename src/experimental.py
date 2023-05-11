@@ -1468,6 +1468,7 @@ def combine_tiles(
     snr_scans = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
 
     for t, path in enumerate(corrections):
+        logger.info(path)
         error_maps[t] = load_sample(path)
         correction_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '.tif'))
         snr_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_snrs.tif'))
@@ -1515,14 +1516,14 @@ def combine_tiles(
             stdevs=stdevs,
             prediction_threshold=prediction_threshold,
             ignore_modes=predictions_settings['ignore_modes'],
-            verbose=True
+            verbose=False
         )
         for z_tile_index in range(predictions_settings['ztiles']):
             clusterid = i + (len(corrections[1:]) * z_tile_index)
             dm_state = original_acts[f'z{z_tile_index}_c{clusterid}'].values
 
-            winners = np.where(tile_ids == clusterid)
-            pred = predictions.loc[winners and ~unconfident_tiles]
+            winners = pd.MultiIndex.from_arrays(np.where(tile_ids == clusterid), names=('z', 'y', 'x'))
+            pred = predictions.loc[winners].loc[~unconfident_tiles]
             pred = pred.drop(columns='p2v')[pred != 0].agg(aggregation_rule, axis=0)
 
             pred = Wavefront(
