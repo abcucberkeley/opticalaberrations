@@ -15,7 +15,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from tifffile import imread, imwrite
-from tqdm import trange
 from line_profiler_pycharm import profile
 from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
@@ -1232,83 +1231,28 @@ def aggregate_predictions(
     lateral_voxel_size = predictions_settings['sample_voxel_size'][2]
     window_size = predictions_settings['window_size']
 
-    predict_snr_map(Path(str(model_pred).replace('_tiles_predictions.csv', '.tif')),
-                    window_size=window_size)
+    predict_snr_map(
+        Path(str(model_pred).replace('_tiles_predictions.csv', '.tif')),
+        window_size=window_size
+    )
 
     # tile id is the column header, rows are the predictions
-    predictions = pd.read_csv(
-        model_pred,
-        index_col=0,
-        header=0,
-        usecols=lambda col: col == 'ansi' or col.startswith('z')
-    ).T
-    # processes "z0-y0-x0" to z, y, x multindex (strip -, then letter, convert to int)
-    predictions.index = pd.MultiIndex.from_tuples(predictions.index.str.split('-').to_list())
-    predictions.index = pd.MultiIndex.from_arrays([
-        predictions.index.get_level_values(0).str.lstrip('z').astype(np.int),
-        predictions.index.get_level_values(1).str.lstrip('y').astype(np.int),
-        predictions.index.get_level_values(2).str.lstrip('x').astype(np.int),
-    ], names=('z', 'y', 'x'))
+    predictions, wavefronts = utils.create_multiindex_tile_dataframe(model_pred, return_wavefronts=True, describe=True)
+    stdevs = utils.create_multiindex_tile_dataframe(str(model_pred).replace('_predictions.csv', '_stdevs.csv'))
+    unconfident_tiles, zero_confident_tiles, all_zeros_tiles = utils.get_tile_confidence(
+        predictions=predictions,
+        stdevs=stdevs,
+        prediction_threshold=prediction_threshold,
+        ignore_tile=ignore_tile,
+        ignore_modes=predictions_settings['ignore_modes'],
+        verbose=True
+    )
+    where_unconfident = stdevs == 0
+    where_unconfident[predictions_settings['ignore_modes']] = False
 
     ztiles = predictions.index.get_level_values('z').unique().shape[0]
     ytiles = predictions.index.get_level_values('y').unique().shape[0]
     xtiles = predictions.index.get_level_values('x').unique().shape[0]
-
-    wavefronts = {}
-    predictions['p2v'] = np.nan
-    for index, zernikes in predictions.iterrows():
-        wavefronts[index] = Wavefront(
-            np.nan_to_num(zernikes.values, nan=0),
-            lam_detection=wavelength,
-        )
-        predictions.loc[index, 'p2v'] = wavefronts[index].peak2valley(na=1)
-
-    logger.info(f'stats\npredictions dataframe\n{predictions.describe(percentiles=[.01, .05, .1, .15, .2, .8, .85, .9, .95, .99])}\n')
-
-    stdevs = pd.read_csv(
-        str(model_pred).replace('_predictions.csv', '_stdevs.csv'),
-        index_col=0,
-        header=0,
-        usecols=lambda col: col == 'ansi' or col.startswith('z')
-    ).T
-    stdevs.index = pd.MultiIndex.from_tuples(stdevs.index.str.split('-').to_list())
-    stdevs.index = pd.MultiIndex.from_arrays([
-        stdevs.index.get_level_values(0).str.lstrip('z').astype(np.int),
-        stdevs.index.get_level_values(1).str.lstrip('y').astype(np.int),
-        stdevs.index.get_level_values(2).str.lstrip('x').astype(np.int),
-    ], names=('z', 'y', 'x'))
-
-    if ignore_tile is not None:
-        for cc in ignore_tile:
-            z, y, x = [int(s) for s in cc if s.isdigit()]
-            predictions.loc[(z, y, x)] = np.nan
-            stdevs.loc[(z, y, x)] = np.nan
-
-    all_zeros = predictions == 0    # will label tiles that are any mix of (confident zero and unconfident).
-
-    # filter out unconfident predictions (std deviation is too large)
-    where_unconfident = stdevs == 0
-    where_unconfident[predictions_settings['ignore_modes']] = False
-
-    # filter out small predictions from KMeans cluster analysis, but keep these as an additional group
-    # note: p2v threshold is computed for each tile
-    unconfident_tiles = where_unconfident.copy()
-    unconfident_tiles[predictions_settings['ignore_modes']] = True  # ignore these modes during agg
-    all_zeros_tiles = all_zeros.agg('all', axis=1)  # 1D (one value for each tile)
-    unconfident_tiles = unconfident_tiles.agg('all', axis=1)  # 1D (one value for each tile)
-    zero_confident_tiles = predictions['p2v'] <= prediction_threshold  # 1D (one value for each tile)
-    zero_confident_tiles = zero_confident_tiles * ~unconfident_tiles  # don't mark zero_confident if tile is unconfident
-
-    logger.info(f'Number of confident zero tiles {zero_confident_tiles.sum():4}'
-                f' out of {zero_confident_tiles.count()}')
-    logger.info(f'Number of unconfident tiles    {unconfident_tiles.sum():4}'
-                f' out of {unconfident_tiles.count()}')
-    logger.info(f'Number of all zeros tiles      {all_zeros_tiles.sum():4}'
-                f' out of {all_zeros_tiles.count()}')
-    logger.info(f'Number of non-zero tiles       {(~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)).sum():4}'
-                f' out of {all_zeros_tiles.count()}')
-
-    coefficients, actuators = {}, {}
 
     errormapdf = predictions['p2v'].copy()
     nn_coords = np.array(errormapdf[~unconfident_tiles].index.to_list())
@@ -1318,7 +1262,7 @@ def aggregate_predictions(
     errormap = np.reshape(errormap, (ztiles, ytiles, xtiles))
     errormap = resize(errormap, vol.shape, order=1, mode='edge')
     # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
-    imwrite(Path(f"{model_pred.with_suffix('')}_aggregated_p2v_error.tif"), errormap.astype(np.float32), dtype=np.float32)
+    imwrite(Path(f"{model_pred.with_suffix('')}_aggregated_p2v_error.tif"), errormap.astype(np.float32))
 
     # create a new column for cluster ids.
     predictions['cluster'] = np.nan
@@ -1334,6 +1278,7 @@ def aggregate_predictions(
     clusters3d_colormap = np.array(clusters3d_colormap)*255
     clusters3d_colormap = np.append(clusters3d_colormap, [zero_confident_color, unconfident_color], axis=0)
 
+    coefficients, actuators = {}, {}
     for z in valid_predictions.groups.keys():   # basically loop through all ztiles, unless no valid predictions exist
         ztile_preds = valid_predictions.get_group(z)
         ztile_preds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
@@ -1350,9 +1295,7 @@ def aggregate_predictions(
             max_isoplanatic_clusters = max_silhouette
 
         n_clusters = min(max_isoplanatic_clusters, len(ztile_preds))
-        ztile_preds['cluster'] = KMeans(init="k-means++",
-                                        n_clusters=n_clusters,
-                                        ).fit_predict(ztile_preds)
+        ztile_preds['cluster'] = KMeans(init="k-means++", n_clusters=n_clusters).fit_predict(ztile_preds)
         ztile_preds['cluster'] += z * max_isoplanatic_clusters
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
@@ -1365,8 +1308,7 @@ def aggregate_predictions(
 
             g = clusters.get_group(c).index  # get all tiles that belong to cluster "c"
             # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
-            pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)     # mean ignoring NaNs
-
+            pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)
             pred_std = ztile_stds.loc[g].mask(where_unconfident).agg(aggregation_rule, axis=0)
 
             pred = Wavefront(
@@ -1492,6 +1434,8 @@ def aggregate_predictions(
 def combine_tiles(
     tile_predictions: Path,
     corrections: list,
+    prediction_threshold: float = 0.25,
+    aggregation_rule: str = 'median',
     dm_calibration: Path = Path('../calibration/aang/28_mode_calibration.csv')
 ):
     """
@@ -1565,17 +1509,21 @@ def combine_tiles(
             model_pred = str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_tiles_predictions.csv')
             dm_state = original_acts[f'z{z_tile_index}_c{clusterid}'].values
 
-            # tile id is the column header, rows are the predictions
-            predictions = pd.read_csv(
-                model_pred,
-                index_col=0,
-                header=0,
-                usecols=lambda col: col == 'ansi' or col.startswith('z')
+            predictions = utils.create_multiindex_tile_dataframe(model_pred)
+            stdevs = utils.create_multiindex_tile_dataframe(model_pred.replace('_predictions.csv', '_stdevs.csv'))
+
+            logger.info(f'z{z_tile_index}_c{clusterid}')
+            unconfident_tiles, zero_confident_tiles, all_zeros_tiles = utils.get_tile_confidence(
+                predictions=predictions,
+                stdevs=stdevs,
+                prediction_threshold=prediction_threshold,
+                ignore_modes=predictions_settings['ignore_modes'],
+                verbose=True
             )
-            winners = np.argwhere(tile_ids == clusterid)
-            winners = [f'z{z}-y{y}-x{x}' for z, y, x in winners]
-            pred = predictions[winners]
-            pred = pred[pred != 0].agg('median', axis=1)
+
+            winners = np.where(tile_ids == clusterid)
+            pred = predictions.loc[winners and ~unconfident_tiles]
+            pred = pred.drop(columns='p2v')[pred != 0].agg(aggregation_rule, axis=0)
 
             pred = Wavefront(
                 np.nan_to_num(pred, nan=0, posinf=0, neginf=0),

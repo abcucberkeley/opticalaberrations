@@ -289,3 +289,95 @@ def zernikies_to_actuators(
 def percentile_filter(data: np.ndarray, min_pct: int = 5, max_pct: int = 95) -> np.ndarray:
     minval, maxval = np.percentile(data, [min_pct, max_pct])
     return (data < minval) | (data > maxval)
+
+
+def create_multiindex_tile_dataframe(
+        path,
+        wavelength: float = .510,
+        return_wavefronts: bool = False,
+        describe: bool = False,
+):
+    predictions = pd.read_csv(
+        path,
+        index_col=0,
+        header=0,
+        usecols=lambda col: col == 'ansi' or col.startswith('z')
+    ).T
+    # processes "z0-y0-x0" to z, y, x multindex (strip -, then letter, convert to int)
+    predictions.index = pd.MultiIndex.from_tuples(predictions.index.str.split('-').to_list())
+    predictions.index = pd.MultiIndex.from_arrays([
+        predictions.index.get_level_values(0).str.lstrip('z').astype(np.int),
+        predictions.index.get_level_values(1).str.lstrip('y').astype(np.int),
+        predictions.index.get_level_values(2).str.lstrip('x').astype(np.int),
+    ], names=('z', 'y', 'x'))
+
+    wavefronts = {}
+    predictions['p2v'] = np.nan
+    for index, zernikes in predictions.iterrows():
+        wavefronts[index] = Wavefront(
+            np.nan_to_num(zernikes.values, nan=0),
+            lam_detection=wavelength,
+        )
+        predictions.loc[index, 'p2v'] = wavefronts[index].peak2valley(na=1)
+
+    if describe:
+        logger.info(
+            f'stats\npredictions dataframe\n'
+            f'{predictions.describe(percentiles=[.01, .05, .1, .15, .2, .8, .85, .9, .95, .99])}\n'
+        )
+
+    if return_wavefronts:
+        return predictions, wavefronts
+    else:
+        return predictions
+
+
+def get_tile_confidence(
+    predictions: pd.DataFrame,
+    stdevs: pd.DataFrame,
+    prediction_threshold: float = 0.25,
+    ignore_tile: Optional[list] = None,
+    ignore_modes: Optional[list] = None,
+    verbose: bool = False,
+):
+
+    if ignore_tile is not None:
+        for cc in ignore_tile:
+            z, y, x = [int(s) for s in cc if s.isdigit()]
+            predictions.loc[(z, y, x)] = np.nan
+            stdevs.loc[(z, y, x)] = np.nan
+
+    all_zeros = predictions == 0  # will label tiles that are any mix of (confident zero and unconfident).
+
+    # filter out unconfident predictions (std deviation is too large)
+    where_unconfident = stdevs == 0
+    where_unconfident[ignore_modes] = False
+
+    # filter out small predictions from KMeans cluster analysis, but keep these as an additional group
+    # note: p2v threshold is computed for each tile
+    unconfident_tiles = where_unconfident.copy()
+    unconfident_tiles[ignore_modes] = True  # ignore these modes during agg
+    all_zeros_tiles = all_zeros.agg('all', axis=1)  # 1D (one value for each tile)
+    unconfident_tiles = unconfident_tiles.agg('all', axis=1)  # 1D (one value for each tile)
+    zero_confident_tiles = predictions['p2v'] <= prediction_threshold  # 1D (one value for each tile)
+    zero_confident_tiles = zero_confident_tiles * ~unconfident_tiles  # don't mark zero_confident if tile is unconfident
+
+    if verbose:
+        logger.info(
+            f'Number of confident zero tiles {zero_confident_tiles.sum():4}'
+            f' out of {zero_confident_tiles.count()}'
+        )
+        logger.info(
+            f'Number of unconfident tiles    {unconfident_tiles.sum():4}'
+            f' out of {unconfident_tiles.count()}'
+        )
+        logger.info(
+            f'Number of all zeros tiles      {all_zeros_tiles.sum():4}'
+            f' out of {all_zeros_tiles.count()}'
+        )
+        logger.info(
+            f'Number of non-zero tiles       {(~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)).sum():4}'
+            f' out of {all_zeros_tiles.count()}'
+        )
+
+    return unconfident_tiles, zero_confident_tiles, all_zeros_tiles
