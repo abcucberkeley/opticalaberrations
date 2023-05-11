@@ -999,7 +999,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                 )
             elif args.func == 'combine_tiles':
                 experimental.combine_tiles(
-                    tile_predictions=args.input,
+                    corrected_actuators_csv=args.input,
                     corrections=args.corrections,
                 )
             elif args.func == 'phase_retrieval':

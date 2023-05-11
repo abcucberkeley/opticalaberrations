@@ -1303,13 +1303,17 @@ def aggregate_predictions(
         stdevs.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
 
         clusters = ztile_preds.groupby('cluster')
-        for c in range(n_clusters):
-            c += z * max_isoplanatic_clusters
+        for c in range(n_clusters+1):
+            if c == 0:    # "before" volume
+                c += z * max_isoplanatic_clusters
+                pred = np.zeros(ztile_preds.shape[0])   # "before" will not have a wavefront update here.
+            else:       # "after" volumes
+                c += z * max_isoplanatic_clusters
 
-            g = clusters.get_group(c).index  # get all tiles that belong to cluster "c"
-            # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
-            pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)
-            pred_std = ztile_stds.loc[g].mask(where_unconfident).agg(aggregation_rule, axis=0)
+                g = clusters.get_group(c).index  # get all tiles that belong to cluster "c"
+                # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
+                pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)
+                pred_std = ztile_stds.loc[g].mask(where_unconfident).agg(aggregation_rule, axis=0)
 
             pred = Wavefront(
                 np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
@@ -1432,7 +1436,7 @@ def aggregate_predictions(
 
 @profile
 def combine_tiles(
-    tile_predictions: Path,
+    corrected_actuators_csv: Path,
     corrections: list,
     prediction_threshold: float = 0.25,
     aggregation_rule: str = 'median',
@@ -1441,31 +1445,28 @@ def combine_tiles(
     """
     Combine tiles from several DM patterns based on cluster IDs
     Args:
-        tile_predictions: path to the output of `aggregate_predictions`
+        corrected_actuators_csv: either _tiles_predictions_aggregated_corrected_actuators.csv (0th iteration)
+                                     or _corrected_cluster_actuators.csv (Nth iteration)
         corrections: a list of tuples (clusterid, path to .tif scan taken with the given DM pattern)
 
     """
-    original_image = load_sample(
-        str(tile_predictions).replace('_tiles_predictions_aggregated_clusters.csv', '.tif')
-    )
-
     original_acts = pd.read_csv(
-        str(tile_predictions).replace('_clusters.csv', '_corrected_actuators.csv'),
+        corrected_actuators_csv,
         index_col=0,
         header=0
     )
 
-    with open(str(tile_predictions).replace('_aggregated_clusters.csv', '_settings.json')) as f:
+    base_path = str(corrected_actuators_csv).replace('_tiles_predictions_aggregated_corrected_actuators.csv', '')
+    base_path = Path(base_path.replace('_corrected_cluster_actuators.csv', '')) # also remove this if it exists
+
+    with open(f"{base_path}_tiles_predictions_settings.json") as f:
         predictions_settings = ujson.load(f)
 
-    if original_image.shape != tuple(predictions_settings['input_shape']):
-        logger.error(
-            f"img.shape {original_image.shape} != json's input_shape {tuple(predictions_settings['input_shape'])}"
-        )
+    image_shape = tuple(predictions_settings['input_shape'])
 
-    correction_scans = np.zeros((len(corrections), *original_image.shape))
-    error_maps = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
-    snr_scans = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
+    correction_scans = np.zeros((len(corrections), *image_shape))
+    error_maps = np.zeros((len(corrections), *image_shape))            # series of 3d p2v maps aka a 4d array
+    snr_scans = np.zeros((len(corrections), *image_shape))            # series of 3d p2v maps aka a 4d array
 
     for t, path in enumerate(corrections):
         error_maps[t] = load_sample(path)
@@ -1479,10 +1480,10 @@ def combine_tiles(
     combined_snrmap = snr_scans[indices, z, y, x]       # retrieve the best snr
     combined = correction_scans[indices, z, y, x]       # retrieve the best data
 
-    imwrite(f"{tile_predictions.with_suffix('')}_volume_used.tif", indices.astype(np.uint16))
-    imwrite(f"{tile_predictions.with_suffix('')}_combined.tif", combined.astype(np.float32))
-    imwrite(f"{tile_predictions.with_suffix('')}_combined_error.tif", combined_errormap.astype(np.float32))
-    imwrite(f"{tile_predictions.with_suffix('')}_combined_snr.tif", combined_snrmap.astype(np.float32))
+    imwrite(f"{base_path}_volume_used.tif", indices.astype(np.uint16))
+    imwrite(f"{base_path}_combined.tif", combined.astype(np.float32))
+    imwrite(f"{base_path}_combined_error.tif", combined_errormap.astype(np.float32))
+    imwrite(f"{base_path}_combined_snr.tif", combined_snrmap.astype(np.float32))
 
     tile_ids = resize(
         indices,
@@ -1545,16 +1546,16 @@ def combine_tiles(
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
     coefficients.sort_index(axis=1, inplace=True)
-    coefficients.to_csv(f"{tile_predictions.with_suffix('')}_combined_zernike_coefficients.csv")
+    coefficients.to_csv(f"{base_path}_combined_zernike_coefficients.csv")
 
     actuators = pd.DataFrame.from_dict(actuators)
     actuators.index.name = 'actuators'
     actuators.sort_index(axis=1, inplace=True)
 
-    actuators.to_csv(f"{tile_predictions.with_suffix('')}_combined_corrected_actuators.csv")
-    logger.info(f"Org actuators: {str(tile_predictions).replace('_clusters.csv', '_corrected_actuators.csv')}")
-    logger.info(f"New actuators: {tile_predictions.with_suffix('')}_combined_corrected_actuators.csv")
-    logger.info(f"columns: {actuators.columns.names}")
+    actuators.to_csv(f"{base_path}_combined_corrected_actuators.csv")
+    logger.info(f"Org actuators: {corrected_actuators_csv}")
+    logger.info(f"New actuators: {base_path}_corrected_cluster_actuators.csv")
+    logger.info(f"columns: {actuators.columns.values}")
 
 
 @profile
