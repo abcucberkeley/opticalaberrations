@@ -1468,7 +1468,6 @@ def combine_tiles(
     snr_scans = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
 
     for t, path in enumerate(corrections):
-        logger.info(path)
         error_maps[t] = load_sample(path)
         correction_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '.tif'))
         snr_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_snrs.tif'))
@@ -1510,7 +1509,6 @@ def combine_tiles(
         predictions = utils.create_multiindex_tile_dataframe(model_pred)
         stdevs = utils.create_multiindex_tile_dataframe(model_pred.replace('_predictions.csv', '_stdevs.csv'))
 
-        logger.info(Path(model_pred).name)
         unconfident_tiles, zero_confident_tiles, all_zeros_tiles = utils.get_tile_confidence(
             predictions=predictions,
             stdevs=stdevs,
@@ -1524,7 +1522,9 @@ def combine_tiles(
 
             winners = pd.MultiIndex.from_arrays(np.where(tile_ids == clusterid), names=('z', 'y', 'x'))
             pred = predictions.loc[winners].loc[~unconfident_tiles]
-            pred = pred.drop(columns='p2v')[pred != 0].agg(aggregation_rule, axis=0)
+            pred_shape = pred.shape
+            pred = pred.drop(columns='p2v').agg(aggregation_rule, axis=0)
+
 
             pred = Wavefront(
                 np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
@@ -1533,7 +1533,8 @@ def combine_tiles(
             )
 
             coefficients[f'z{z_tile_index}_c{clusterid}'] = pred.amplitudes
-            logger.info(f'z{z_tile_index}_c{clusterid} wavefront change (p2V) = {pred.peak2valley(na=0.9):4.3f} waves')
+            logger.info(f'z{z_tile_index}_c{clusterid} wavefront change (p2V) = {pred.peak2valley(na=0.9):4.3f} waves.'
+                        f' Using {pred_shape[0]:3d} tiles from {Path(model_pred).name}')
 
             actuators[f'z{z_tile_index}_c{clusterid}'] = utils.zernikies_to_actuators(
                 pred.amplitudes,
