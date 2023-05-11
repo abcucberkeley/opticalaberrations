@@ -759,6 +759,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         flags = re.sub(pattern='--cluster', repl='', string=flags)
         flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
         flags = flags.replace("..", cluster_repo)       # regex stinks at replacing ".."
+        flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
         flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
         flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
         flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)

@@ -1223,6 +1223,7 @@ def aggregate_predictions(
 
     with open(str(model_pred).replace('.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
+
     if vol.shape != tuple(predictions_settings['input_shape']):
         logger.error(f"vol.shape {vol.shape} != json's input_shape {tuple(predictions_settings['input_shape'])}")
 
@@ -1239,6 +1240,7 @@ def aggregate_predictions(
     # tile id is the column header, rows are the predictions
     predictions, wavefronts = utils.create_multiindex_tile_dataframe(model_pred, return_wavefronts=True, describe=True)
     stdevs = utils.create_multiindex_tile_dataframe(str(model_pred).replace('_predictions.csv', '_stdevs.csv'))
+
     unconfident_tiles, zero_confident_tiles, all_zeros_tiles = utils.get_tile_confidence(
         predictions=predictions,
         stdevs=stdevs,
@@ -1253,6 +1255,7 @@ def aggregate_predictions(
     ztiles = predictions.index.get_level_values('z').unique().shape[0]
     ytiles = predictions.index.get_level_values('y').unique().shape[0]
     xtiles = predictions.index.get_level_values('x').unique().shape[0]
+    n_modes = np.sum([1 for col in predictions if str(col).isdigit()])
 
     errormapdf = predictions['p2v'].copy()
     nn_coords = np.array(errormapdf[~unconfident_tiles].index.to_list())
@@ -1295,8 +1298,8 @@ def aggregate_predictions(
             max_isoplanatic_clusters = max_silhouette
 
         n_clusters = min(max_isoplanatic_clusters, len(ztile_preds))
-        ztile_preds['cluster'] = KMeans(init="k-means++", n_clusters=n_clusters).fit_predict(ztile_preds)
-        ztile_preds['cluster'] += z * max_isoplanatic_clusters
+        ztile_preds['cluster'] = KMeans(init="k-means++", n_clusters=n_clusters).fit_predict(ztile_preds) + 1
+        ztile_preds['cluster'] += z * (max_isoplanatic_clusters + 1)
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
         predictions.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
@@ -1305,15 +1308,17 @@ def aggregate_predictions(
         clusters = ztile_preds.groupby('cluster')
         for c in range(n_clusters+1):
             if c == 0:    # "before" volume
-                c += z * max_isoplanatic_clusters
-                pred = np.zeros(ztile_preds.shape[0])   # "before" will not have a wavefront update here.
+                c += z * (max_isoplanatic_clusters + 1)
+                pred = np.zeros(n_modes)   # "before" will not have a wavefront update here.
+                pred_std = np.zeros(n_modes)
             else:       # "after" volumes
-                c += z * max_isoplanatic_clusters
-
+                c += z * (max_isoplanatic_clusters + 1)
                 g = clusters.get_group(c).index  # get all tiles that belong to cluster "c"
                 # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
                 pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)
                 pred_std = ztile_stds.loc[g].mask(where_unconfident).agg(aggregation_rule, axis=0)
+
+            cluster = f'z{z}_c{c}'
 
             pred = Wavefront(
                 np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
@@ -1332,13 +1337,13 @@ def aggregate_predictions(
                     vis.diagnosis,
                     pred=pred,
                     pred_std=pred_std,
-                    save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_z{z}_c{c}"),
+                    save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_{cluster}"),
                 )
                 pool.apply_async(task)
 
-            coefficients[f'z{z}_c{c}'] = pred.amplitudes
+            coefficients[cluster] = pred.amplitudes
 
-            actuators[f'z{z}_c{c}'] = utils.zernikies_to_actuators(
+            actuators[cluster] = utils.zernikies_to_actuators(
                 pred.amplitudes,
                 dm_calibration=dm_calibration,
                 dm_state=dm_state,
@@ -1390,12 +1395,13 @@ def aggregate_predictions(
 
     clusters3d = clusters3d_colormap[clusters3d_heatmap.astype(np.ubyte)] * vol[..., np.newaxis]
     clusters3d = clusters3d.astype(np.ubyte)
-    imwrite(f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif",
-            clusters3d,
-            photometric='rgb',
-            imagej=True,
-            resolution=(xw, yw),
-            )
+    imwrite(
+        f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif",
+        clusters3d,
+        photometric='rgb',
+        imagej=True,
+        resolution=(xw, yw),
+    )
 
     reconstruct_wavefront_error_landscape(
         wavefronts=wavefronts,
@@ -1498,13 +1504,10 @@ def combine_tiles(
         preserve_range=True,
     ).astype(np.float)
     z_indices, y_indices, x_indices = np.indices(tile_ids.shape)
-
-    tile_ids[tile_ids == 0] = np.nan
     tile_ids += np.nanmax(tile_ids) * z_indices
-    tile_ids -= 1
 
     coefficients, actuators = {}, {}
-    for i, path in enumerate(corrections[1:]):  # skip the before
+    for i, path in enumerate(corrections):  # skip the before
         model_pred = str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_tiles_predictions.csv')
 
         predictions = utils.create_multiindex_tile_dataframe(model_pred)
@@ -1518,14 +1521,13 @@ def combine_tiles(
             verbose=False
         )
         for z_tile_index in range(predictions_settings['ztiles']):
-            clusterid = i + (len(corrections[1:]) * z_tile_index)
+            clusterid = i + (len(corrections) * z_tile_index)
             dm_state = original_acts[f'z{z_tile_index}_c{clusterid}'].values
 
             winners = pd.MultiIndex.from_arrays(np.where(tile_ids == clusterid), names=('z', 'y', 'x'))
             pred = predictions.loc[winners].loc[~unconfident_tiles]
             pred_shape = pred.shape
             pred = pred.drop(columns='p2v').agg(aggregation_rule, axis=0)
-
 
             pred = Wavefront(
                 np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
