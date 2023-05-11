@@ -1584,6 +1584,7 @@ def combine_tiles(
             )
 
             coefficients[f'z{z_tile_index}_c{clusterid}'] = pred.amplitudes
+            logger.info(f'z{z_tile_index}_c{clusterid} wavefront change (p2V) = {pred.peak2valley(na=0.9):4.3f} waves')
 
             actuators[f'z{z_tile_index}_c{clusterid}'] = utils.zernikies_to_actuators(
                 pred.amplitudes,
@@ -1598,6 +1599,8 @@ def combine_tiles(
     actuators = pd.DataFrame.from_dict(actuators)
     actuators.index.name = 'actuators'
     actuators.to_csv(f"{tile_predictions.with_suffix('')}_combined_corrected_actuators.csv")
+    logger.info(f"Org actuators: {str(tile_predictions).replace('_clusters.csv', '_corrected_actuators.csv')}")
+    logger.info(f"New actuators: {tile_predictions.with_suffix('')}_combined_corrected_actuators.csv")
 
 
 @profile
