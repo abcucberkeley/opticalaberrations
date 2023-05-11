@@ -1025,10 +1025,11 @@ def predict_rois(
         cpu_workers=cpu_workers
     )
 
+
 def predict_snr_map(
-        img: Path,
-        window_size: tuple = (64, 64, 64),
-        save_files: bool = False
+    img: Path,
+    window_size: tuple = (64, 64, 64),
+    save_files: bool = False
 ):
 
     logger.info(f"Loading file: {img.name}")
@@ -1036,9 +1037,12 @@ def predict_snr_map(
     logger.info(f"Sample: {sample.shape}")
 
     outdir = Path(f"{img.with_suffix('')}_tiles")
+    if not outdir.exists():
+        save_files = True   # need to generate tile tiff files
+
     outdir.mkdir(exist_ok=True, parents=True)
 
-    # obtain each tile and skip saving to .tif.
+    # obtain each tile filename. Skip saving to .tif if we have them already.
     rois, ztiles, nrows, ncols = preprocessing.get_tiles(
         sample,
         savepath=outdir,
@@ -1047,18 +1051,11 @@ def predict_snr_map(
         save_files=save_files,
     )
 
-    prep = partial(
-        preprocessing.prep_sample,
-        return_psnr=True,
-    )
-
-    snrs = utils.multiprocess(func=prep, jobs=rois,
-                              desc=f'PNSR, {rois.shape[0]} rois per tile.'
-                              )
-
+    prep = partial(preprocessing.prep_sample, return_psnr=True)
+    snrs = utils.multiprocess(func=prep, jobs=rois, desc=f'PNSR, {rois.shape[0]} rois per tile.')
     snrs = np.reshape(snrs, (ztiles, nrows, ncols))
-
-    snrs = resize(snrs, sample.shape, order=1, mode='edge')
+    snrs = resize(snrs, (snrs.shape[0], sample.shape[1], sample.shape[2]), order=1, mode='edge')
+    snrs = resize(snrs, sample.shape, order=0, mode='edge')
     imwrite(Path(f"{img.with_suffix('')}_snrs.tif"), snrs.astype(np.float32), dtype=np.float32)
 
 
@@ -1495,6 +1492,7 @@ def aggregate_predictions(
 def combine_tiles(
     tile_predictions: Path,
     corrections: list,
+    dm_calibration: Path = Path('../calibration/aang/28_mode_calibration.csv')
 ):
     """
     Combine tiles from several DM patterns based on cluster IDs
@@ -1503,7 +1501,15 @@ def combine_tiles(
         corrections: a list of tuples (clusterid, path to .tif scan taken with the given DM pattern)
 
     """
-    original_image = load_sample(str(tile_predictions).replace('_tiles_predictions_aggregated_clusters.csv', '.tif'))
+    original_image = load_sample(
+        str(tile_predictions).replace('_tiles_predictions_aggregated_clusters.csv', '.tif')
+    )
+
+    original_acts = pd.read_csv(
+        str(tile_predictions).replace('_clusters.csv', '_corrected_actuators.csv'),
+        index_col=0,
+        header=0
+    )
 
     with open(str(tile_predictions).replace('_aggregated_clusters.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
@@ -1513,7 +1519,6 @@ def combine_tiles(
             f"img.shape {original_image.shape} != json's input_shape {tuple(predictions_settings['input_shape'])}"
         )
 
-    predictions = pd.read_csv(tile_predictions, index_col=['z', 'y', 'x'], header=0)
     correction_scans = np.zeros((len(corrections), *original_image.shape))
     error_maps = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
     snr_scans = np.zeros((len(corrections), *original_image.shape))            # series of 3d p2v maps aka a 4d array
@@ -1523,31 +1528,73 @@ def combine_tiles(
         correction_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '.tif'))
         snr_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_snrs.tif'))
 
-    # indices = np.argmin(error_maps, axis=0)     # locate the correction with the lowest error for every voxel (3D array)
-    indices = np.argmax(snr_scans, axis=0)     # locate the correction with the highest snr for every voxel (3D array)
+    # indices = np.argmin(error_maps, axis=0)  # locate the correction with the lowest error for every voxel (3D array)
+    indices = np.argmax(snr_scans, axis=0)  # locate the correction with the highest snr for every voxel (3D array)
     z, y, x = np.indices(indices.shape)
     combined_errormap = error_maps[indices, z, y, x]    # retrieve the best p2v
-    combined_snrmap = snr_scans[indices, z, y, x]    # retrieve the best snr
+    combined_snrmap = snr_scans[indices, z, y, x]       # retrieve the best snr
     combined = correction_scans[indices, z, y, x]       # retrieve the best data
-
-    # zw, yw, xw = predictions_settings['window_size']
-    # ztiles = predictions.index.get_level_values('z').unique().shape[0]
-    # ytiles = predictions.index.get_level_values('y').unique().shape[0]
-    # xtiles = predictions.index.get_level_values('x').unique().shape[0]
-    #
-    # for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
-    #     zts, yts, xts = z * zw, y * yw, x * xw
-    #     zte, yte, xte = (z * zw) + zw, (y * yw) + yw, (x * xw) + xw
-    #     c = int(predictions.loc[(z, y, x), 'cluster'])
-    #
-    #     idx = np.argmin(error_maps[:, zts:zte, yts:yte, xts:xte], axis=0)
-    #     combined_errormap = error_maps[idx, zts:zte, yts:yte, xts:xte]
-    #     combined = correction_scans[idx, zts:zte, yts:yte, xts:xte]
 
     imwrite(f"{tile_predictions.with_suffix('')}_volume_used.tif", indices.astype(np.uint16))
     imwrite(f"{tile_predictions.with_suffix('')}_combined.tif", combined.astype(np.float32))
     imwrite(f"{tile_predictions.with_suffix('')}_combined_error.tif", combined_errormap.astype(np.float32))
     imwrite(f"{tile_predictions.with_suffix('')}_combined_snr.tif", combined_snrmap.astype(np.float32))
+
+    tile_ids = resize(
+        indices,
+        (
+            predictions_settings['ztiles'],
+            predictions_settings['ytiles'],
+            predictions_settings['xtiles'],
+        ),
+        order=0,
+        mode='edge',
+        anti_aliasing=False,
+        preserve_range=True,
+    )
+    z_indices, y_indices, x_indices = np.indices(tile_ids.shape)
+
+    coefficients, actuators = {}, {}
+    for z_tile_index in range(predictions_settings['ztiles']):
+        for i, path in enumerate(corrections[1:]):  # skip the before
+            clusterid = i + (len(corrections[1:]) * z_tile_index)
+            model_pred = str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_tiles_predictions.csv')
+            dm_state = original_acts[f'z{z_tile_index}_c{clusterid}'].values
+
+            # tile id is the column header, rows are the predictions
+            predictions = pd.read_csv(
+                model_pred,
+                index_col=0,
+                header=0,
+                usecols=lambda col: col == 'ansi' or col.startswith('z')
+            )
+            losers = np.argwhere((tile_ids != clusterid) | (z_indices != z_tile_index))
+            losers = [f'z{z}-y{y}-x{x}' for z, y, x in losers]
+            predictions[losers] = 0  # set these losers to zero
+
+            pred = predictions[predictions != 0].agg('median', axis=1)
+
+            pred = Wavefront(
+                np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
+                order='ansi',
+                lam_detection=predictions_settings['wavelength']
+            )
+
+            coefficients[f'z{z_tile_index}_c{clusterid}'] = pred.amplitudes
+
+            actuators[f'z{z_tile_index}_c{clusterid}'] = utils.zernikies_to_actuators(
+                pred.amplitudes,
+                dm_calibration=dm_calibration,
+                dm_state=dm_state,
+            )
+
+    coefficients = pd.DataFrame.from_dict(coefficients)
+    coefficients.index.name = 'ansi'
+    coefficients.to_csv(f"{tile_predictions.with_suffix('')}_combined_zernike_coefficients.csv")
+
+    actuators = pd.DataFrame.from_dict(actuators)
+    actuators.index.name = 'actuators'
+    actuators.to_csv(f"{tile_predictions.with_suffix('')}_combined_corrected_actuators.csv")
 
 
 @profile
