@@ -1551,8 +1551,12 @@ def combine_tiles(
         mode='edge',
         anti_aliasing=False,
         preserve_range=True,
-    )
+    ).astype(np.float)
     z_indices, y_indices, x_indices = np.indices(tile_ids.shape)
+
+    tile_ids[tile_ids == 0] = np.nan
+    tile_ids += np.nanmax(tile_ids) * z_indices
+    tile_ids -= 1
 
     coefficients, actuators = {}, {}
     for z_tile_index in range(predictions_settings['ztiles']):
@@ -1568,11 +1572,10 @@ def combine_tiles(
                 header=0,
                 usecols=lambda col: col == 'ansi' or col.startswith('z')
             )
-            losers = np.argwhere((tile_ids != clusterid) | (z_indices != z_tile_index))
-            losers = [f'z{z}-y{y}-x{x}' for z, y, x in losers]
-            predictions[losers] = 0  # set these losers to zero
-
-            pred = predictions[predictions != 0].agg('median', axis=1)
+            winners = np.argwhere(tile_ids == clusterid)
+            winners = [f'z{z}-y{y}-x{x}' for z, y, x in winners]
+            pred = predictions[winners]
+            pred = pred[pred != 0].agg('median', axis=1)
 
             pred = Wavefront(
                 np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
