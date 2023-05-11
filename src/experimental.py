@@ -1503,23 +1503,23 @@ def combine_tiles(
     tile_ids -= 1
 
     coefficients, actuators = {}, {}
-    for z_tile_index in range(predictions_settings['ztiles']):
-        for i, path in enumerate(corrections[1:]):  # skip the before
+    for i, path in enumerate(corrections[1:]):  # skip the before
+        model_pred = str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_tiles_predictions.csv')
+
+        predictions = utils.create_multiindex_tile_dataframe(model_pred)
+        stdevs = utils.create_multiindex_tile_dataframe(model_pred.replace('_predictions.csv', '_stdevs.csv'))
+
+        logger.info(Path(model_pred).name)
+        unconfident_tiles, zero_confident_tiles, all_zeros_tiles = utils.get_tile_confidence(
+            predictions=predictions,
+            stdevs=stdevs,
+            prediction_threshold=prediction_threshold,
+            ignore_modes=predictions_settings['ignore_modes'],
+            verbose=True
+        )
+        for z_tile_index in range(predictions_settings['ztiles']):
             clusterid = i + (len(corrections[1:]) * z_tile_index)
-            model_pred = str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_tiles_predictions.csv')
             dm_state = original_acts[f'z{z_tile_index}_c{clusterid}'].values
-
-            predictions = utils.create_multiindex_tile_dataframe(model_pred)
-            stdevs = utils.create_multiindex_tile_dataframe(model_pred.replace('_predictions.csv', '_stdevs.csv'))
-
-            logger.info(f'z{z_tile_index}_c{clusterid}')
-            unconfident_tiles, zero_confident_tiles, all_zeros_tiles = utils.get_tile_confidence(
-                predictions=predictions,
-                stdevs=stdevs,
-                prediction_threshold=prediction_threshold,
-                ignore_modes=predictions_settings['ignore_modes'],
-                verbose=True
-            )
 
             winners = np.where(tile_ids == clusterid)
             pred = predictions.loc[winners and ~unconfident_tiles]
