@@ -1261,9 +1261,10 @@ def aggregate_predictions(
     nn_coords = np.array(errormapdf[~unconfident_tiles].index.to_list())
     nn_values = errormapdf[~unconfident_tiles].values
     myInterpolator = NearestNDInterpolator(nn_coords, nn_values)
-    errormap = myInterpolator(np.array(errormapdf.index.to_list()))
-    errormap = np.reshape(errormap, (ztiles, ytiles, xtiles))
-    errormap = resize(errormap, vol.shape, order=1, mode='edge')
+    errormap = myInterpolator(np.array(errormapdf.index.to_list())) # value for every tile
+    errormap = np.reshape(errormap, (ztiles, ytiles, xtiles))   # back to 3d arrays
+    errormap = resize(errormap, (ztiles, vol.shape[1], vol.shape[2]),  order=1, mode='edge') # linear interp XY
+    errormap = resize(errormap, vol.shape,  order=0, mode='edge')   # nearest neighbor for z
     # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
     imwrite(Path(f"{model_pred.with_suffix('')}_aggregated_p2v_error.tif"), errormap.astype(np.float32))
 
@@ -1280,13 +1281,13 @@ def aggregate_predictions(
     cluster_colors = np.split(
         np.array(sns.color_palette(clusters3d_colormap, n_colors=(max_isoplanatic_clusters * ztiles)))*255,
         ztiles,
-    )
+    )   # list of colors for each z tiles
 
     clusters3d_colormap = []
-    for cc in cluster_colors:
-        clusters3d_colormap.extend([zero_confident_color, *cc])
-    clusters3d_colormap.extend([unconfident_color])
-    clusters3d_colormap = np.array(clusters3d_colormap)
+    for cc in cluster_colors: # for each z tile's colors
+        clusters3d_colormap.extend([zero_confident_color, *cc]) # append the same zero color (e.g. yellow) at the front
+    clusters3d_colormap.extend([unconfident_color]) # append the unconfident color (e.g. white) to the end
+    clusters3d_colormap = np.array(clusters3d_colormap) # yellow, blue, orange,...  yellow, ...  white
 
     coefficients, actuators = {}, {}
     for z in valid_predictions.groups.keys():   # basically loop through all ztiles, unless no valid predictions exist
@@ -1312,11 +1313,11 @@ def aggregate_predictions(
         predictions.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
         stdevs.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
 
-        predictions.loc[all_zeros_tiles, 'cluster'] = z * (max_isoplanatic_clusters + 1)
-        stdevs.loc[all_zeros_tiles, 'cluster'] = z * (max_isoplanatic_clusters + 1)
+        predictions.loc[all_zeros_tiles, 'cluster'] = 0         # z * (max_isoplanatic_clusters + 1)
+        stdevs.loc[all_zeros_tiles, 'cluster'] = 0              # z * (max_isoplanatic_clusters + 1)
 
-        predictions.loc[zero_confident_tiles, 'cluster'] = z * (max_isoplanatic_clusters + 1)
-        stdevs.loc[zero_confident_tiles, 'cluster'] = z * (max_isoplanatic_clusters + 1)
+        predictions.loc[zero_confident_tiles, 'cluster'] = 0    # z * (max_isoplanatic_clusters + 1)
+        stdevs.loc[zero_confident_tiles, 'cluster'] = 0         # z * (max_isoplanatic_clusters + 1)
 
         predictions.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
         stdevs.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
