@@ -1277,9 +1277,16 @@ def aggregate_predictions(
     valid_stdevs = stdevs.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_stdevs = valid_stdevs.groupby('z')
 
-    clusters3d_colormap = sns.color_palette(clusters3d_colormap, n_colors=(max_isoplanatic_clusters * ztiles))
-    clusters3d_colormap = np.array(clusters3d_colormap)*255
-    clusters3d_colormap = np.append(clusters3d_colormap, [zero_confident_color, unconfident_color], axis=0)
+    cluster_colors = np.split(
+        np.array(sns.color_palette(clusters3d_colormap, n_colors=(max_isoplanatic_clusters * ztiles)))*255,
+        ztiles,
+    )
+
+    clusters3d_colormap = []
+    for cc in cluster_colors:
+        clusters3d_colormap.extend([zero_confident_color, *cc])
+    clusters3d_colormap.extend([unconfident_color])
+    clusters3d_colormap = np.array(clusters3d_colormap)
 
     coefficients, actuators = {}, {}
     for z in valid_predictions.groups.keys():   # basically loop through all ztiles, unless no valid predictions exist
@@ -1304,6 +1311,15 @@ def aggregate_predictions(
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
         predictions.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
         stdevs.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
+
+        predictions.loc[all_zeros_tiles, 'cluster'] = z * (max_isoplanatic_clusters + 1)
+        stdevs.loc[all_zeros_tiles, 'cluster'] = z * (max_isoplanatic_clusters + 1)
+
+        predictions.loc[zero_confident_tiles, 'cluster'] = z * (max_isoplanatic_clusters + 1)
+        stdevs.loc[zero_confident_tiles, 'cluster'] = z * (max_isoplanatic_clusters + 1)
+
+        predictions.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
+        stdevs.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
 
         clusters = ztile_preds.groupby('cluster')
         for c in range(n_clusters+1):
@@ -1358,19 +1374,11 @@ def aggregate_predictions(
     actuators.index.name = 'actuators'
     actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
 
-    # generate cluster id for zero and unconfident
-    zero_confident_cluster = np.where(np.all(clusters3d_colormap == zero_confident_color, axis=1))[0][0]
-    unconfident_cluster = np.where(np.all(clusters3d_colormap == unconfident_color, axis=1))[0][0]
-
-    # assign cluster ids for zero and unconfident
-    predictions.loc[all_zeros_tiles, 'cluster'] = zero_confident_cluster
-    predictions.loc[zero_confident_tiles, 'cluster'] = zero_confident_cluster
-    predictions.loc[unconfident_tiles, 'cluster'] = unconfident_cluster
     predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters.csv")
 
-    clusters3d_heatmap = np.full_like(vol, unconfident_cluster, dtype=np.float32)
+    clusters3d_heatmap = np.full_like(vol, len(clusters3d_colormap)-1, dtype=np.float32)
     wavefront_heatmap = np.zeros((ztiles, *vol.shape[1:]), dtype=np.float32)
-    wavefront_rgb = np.full((ztiles, *vol.shape[1:]), unconfident_cluster, dtype=np.float32)
+    wavefront_rgb = np.full((ztiles, *vol.shape[1:]), len(clusters3d_colormap)-1, dtype=np.float32)
 
     zw, yw, xw = predictions_settings['window_size']
     logger.info(f"volume_size = {vol.shape}")
