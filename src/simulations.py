@@ -41,7 +41,7 @@ warnings.filterwarnings('ignore')
 
 
 @profile
-def plot_zernike_pyramid(amp=.1, wavelength=.510):
+def plot_zernike_pyramid(amp=.1, wavelength=.510, weighted=False):
     plt.rcParams.update({
         'font.size': 12,
         'axes.titlesize': 14,
@@ -51,11 +51,22 @@ def plot_zernike_pyramid(amp=.1, wavelength=.510):
         'legend.fontsize': 12,
     })
 
+    cmaps = ['Reds', 'OrRd', 'YlOrRd_r', 'YlGn', 'Greens', 'YlGnBu', 'Blues', 'BuPu', 'Purples', 'PuRd', 'pink']
+    cmaps = [sns.color_palette(c, n_colors=256, as_cmap=True) for c in cmaps]
+
+    left, width = .25, .5
+    bottom, height = .25, .5
+    right = left + width
+    top = bottom + height
+
     for nth_order in range(1, 11):
         for k, savepath in enumerate([
-            f'../data/zernikes/{nth_order}th_zernike_pyramid.png',
-            f'../data/zernikes/{nth_order}th_zernike_pyramid_db.png'
+            Path(f'../data/zernikes/{nth_order}th_zernike_pyramid'),
+            Path(f'../data/zernikes/{nth_order}th_zernike_pyramid_db')
         ]):
+            if weighted:
+                savepath = Path(f"{savepath.parent}/{savepath.name}_weighted")
+
             if k == 0:
                 plt.style.use('default')
             else:
@@ -64,7 +75,7 @@ def plot_zernike_pyramid(amp=.1, wavelength=.510):
             fig = plt.figure(figsize=(3*nth_order, 2*nth_order))
             gs = fig.add_gridspec(nth_order+1, 2*nth_order+1)
 
-            for n in range(nth_order+1):
+            for n in trange(nth_order+1):
                 for i, m in enumerate(range(-nth_order, nth_order+1)):
                     ax = fig.add_subplot(gs[n, i])
                     ax.axis('off')
@@ -74,23 +85,68 @@ def plot_zernike_pyramid(amp=.1, wavelength=.510):
                             z = Zernike((n, m))
                             w = Wavefront({z.index_ansi: amp}, lam_detection=wavelength).wave(size=100)
 
-                            if n == 0 and m == 0:
-                                mode = f"$\lambda$ = {wavelength} $\mu$m\n" \
-                                       f"Amplitude={amp} $\mu$m RMS\n\n"\
-                                       f"{round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$\n" \
-                                       f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$"
-                            else:
-                                mode = f"{round(np.nanmax(w) - np.nanmin(w), 2)} $\lambda$\n" \
-                                       f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$"
+                            # if n == 0 and m == 0:
+                            #     mode = f"$\lambda$ = {wavelength} $\mu$m\n" \
+                            #            f"Amplitude={amp} $\mu$m RMS\n\n"\
+                            #            f"{round(np.nanmax(w) - np.nanmin(w), 2):.2f} $\lambda$\n" \
+                            #            f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$"
+                            # else:
+                            #     mode = f"{round(np.nanmax(w) - np.nanmin(w), 2):.2f} $\lambda$\n" \
+                            #            f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$"
 
-                            mat = plot_wavefront(ax, w, label=None, nas=(), vmin=-.5, vmax=.5, hcolorbar=True)
+                            mode = f"{round(np.nanmax(w) - np.nanmin(w), 2):.2f} $\lambda$\n" \
+                                   f"{z.index_ansi}: $Z_{{n={z.n}}}^{{m={z.m}}}$"
                             ax.set_title(mode)
 
+                            if weighted:
+                                if n < 2:
+                                    mat = ax.imshow(
+                                        w,
+                                        cmap='Greys',
+                                        vmin=-.5,
+                                        vmax=.5,
+                                    )
+                                elif n >= 2 and n <= 4:
+                                    mat = ax.imshow(
+                                        w,
+                                        cmap='Spectral_r',
+                                        vmin=-.5,
+                                        vmax=.5,
+                                    )
+                                else:
+                                    mat = ax.imshow(
+                                        w,
+                                        cmap=cmaps[abs(m)],
+                                        vmin=-.5,
+                                        vmax=.5,
+                                    )
+                            else:
+                                mat = ax.imshow(
+                                    w,
+                                    cmap='Spectral_r',
+                                    vmin=-.5,
+                                    vmax=.5,
+                                )
+
+                            ax.set_yticks([])
+                            ax.set_xticks([])
+
                         except ValueError:
+
+                            if weighted and n > 4:
+                                ax.text(
+                                    0.5 * (left + right), 0.5 * (bottom + top),
+                                    f"1/{abs(m) + 2}",
+                                    horizontalalignment='center',
+                                    verticalalignment='center',
+                                    transform=ax.transAxes
+                                )
                             continue
 
             plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-            plt.savefig(savepath, bbox_inches='tight', pad_inches=.25)
+            plt.savefig(savepath.with_suffix('.png'), bbox_inches='tight', pad_inches=.25)
+            plt.savefig(savepath.with_suffix('.pdf'), bbox_inches='tight', pad_inches=.25)
+            plt.savefig(savepath.with_suffix('.svg'), bbox_inches='tight', pad_inches=.25)
 
 
 @profile
