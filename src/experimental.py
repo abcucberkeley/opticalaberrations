@@ -1476,7 +1476,9 @@ def combine_tiles(
         header=0
     )
 
+    acts_suffix = "_combined_corrected_actuators.csv"
     base_path = str(corrected_actuators_csv).replace('_tiles_predictions_aggregated_corrected_actuators.csv', '')
+    base_path = base_path.replace(acts_suffix, '') # remove this if it exists
     base_path = Path(base_path.replace('_corrected_cluster_actuators.csv', '')) # also remove this if it exists
 
     with open(f"{base_path}_tiles_predictions_settings.json") as f:
@@ -1569,7 +1571,7 @@ def combine_tiles(
     actuators.index.name = 'actuators'
     actuators.sort_index(axis=1, inplace=True)
 
-    acts_path = f"{base_path}_combined_corrected_actuators.csv"
+    acts_path = f"{base_path}{acts_suffix}" # used in
     actuators.to_csv(acts_path)
     logger.info(f"Org actuators: {corrected_actuators_csv}")
     logger.info(f"New actuators: {acts_path}")
