@@ -1093,6 +1093,7 @@ def predict_tiles(
 
     logger.info(f"Loading file: {img.name}")
     sample = load_sample(img)
+    logger.info(f"Sample: {sample.shape}")
     psnr = preprocessing.prep_sample(
         sample,
         return_psnr=True,
@@ -1101,7 +1102,7 @@ def predict_tiles(
         edge_filter=False,
         filter_mask_dilation=False,
     )
-    logger.info(f"Sample: {sample.shape}")
+
 
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
@@ -1561,17 +1562,19 @@ def combine_tiles(
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
     coefficients.sort_index(axis=1, inplace=True)
-    coefficients.to_csv(f"{base_path}_combined_zernike_coefficients.csv")
+    new_zcoeff_path = f"{base_path}_combined_zernike_coefficients.csv"
+    coefficients.to_csv(new_zcoeff_path)
 
     actuators = pd.DataFrame.from_dict(actuators)
     actuators.index.name = 'actuators'
     actuators.sort_index(axis=1, inplace=True)
 
-    actuators.to_csv(f"{base_path}_combined_corrected_actuators.csv")
+    acts_path = f"{base_path}_combined_corrected_actuators.csv"
+    actuators.to_csv(acts_path)
     logger.info(f"Org actuators: {corrected_actuators_csv}")
-    logger.info(f"New actuators: {base_path}_corrected_cluster_actuators.csv")
-    logger.info(f"New predictions: {base_path}_combined_zernike_coefficients.csv")
-    logger.info(f"columns: {actuators.columns.values}")
+    logger.info(f"New actuators: {acts_path}")
+    logger.info(f"New predictions: {new_zcoeff_path}")
+    logger.info(f"Columns: {actuators.columns.values}")
 
 
 @profile
