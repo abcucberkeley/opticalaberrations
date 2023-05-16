@@ -1260,9 +1260,13 @@ def aggregate_predictions(
     errormapdf = predictions['p2v'].copy()
     nn_coords = np.array(errormapdf[~unconfident_tiles].index.to_list())
     nn_values = errormapdf[~unconfident_tiles].values
-    myInterpolator = NearestNDInterpolator(nn_coords, nn_values)
-    errormap = myInterpolator(np.array(errormapdf.index.to_list())) # value for every tile
-    errormap = np.reshape(errormap, (ztiles, ytiles, xtiles))   # back to 3d arrays
+    try:
+        myInterpolator = NearestNDInterpolator(nn_coords, nn_values)
+        errormap = myInterpolator(np.array(errormapdf.index.to_list())) # value for every tile
+        errormap = np.reshape(errormap, (ztiles, ytiles, xtiles))  # back to 3d arrays
+    except ValueError:
+        logger.warning(f'Not much we can interpolate with here. {nn_coords=}')
+        errormap = np.full((ztiles, ytiles, xtiles), fill_value=nn_values[0]) # back to 3d arrays, value for every tile
     errormap = resize(errormap, (ztiles, vol.shape[1], vol.shape[2]),  order=1, mode='edge') # linear interp XY
     errormap = resize(errormap, vol.shape,  order=0, mode='edge')   # nearest neighbor for z
     # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
@@ -1566,6 +1570,7 @@ def combine_tiles(
     actuators.to_csv(f"{base_path}_combined_corrected_actuators.csv")
     logger.info(f"Org actuators: {corrected_actuators_csv}")
     logger.info(f"New actuators: {base_path}_corrected_cluster_actuators.csv")
+    logger.info(f"New predictions: {base_path}_combined_zernike_coefficients.csv")
     logger.info(f"columns: {actuators.columns.values}")
 
 
