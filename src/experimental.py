@@ -1311,7 +1311,10 @@ def aggregate_predictions(
             max_isoplanatic_clusters = max_silhouette
 
         n_clusters = min(max_isoplanatic_clusters, len(ztile_preds))
-        ztile_preds['cluster'] = KMeans(init="k-means++", n_clusters=n_clusters).fit_predict(ztile_preds) + 1
+        kmeans = KMeans(init="k-means++", n_clusters=n_clusters)
+        kmeans.fit(ztile_preds)
+
+        ztile_preds['cluster'] = kmeans.predict(ztile_preds) + 1
         ztile_preds['cluster'] += z * (max_isoplanatic_clusters + 1)
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
@@ -1328,17 +1331,23 @@ def aggregate_predictions(
         stdevs.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
 
         clusters = ztile_preds.groupby('cluster')
-        for c in range(n_clusters+1):
-            if c == 0:    # "before" volume
-                c += z * (max_isoplanatic_clusters + 1)
+        for k in range(n_clusters+1):
+            c = k + z * (max_isoplanatic_clusters + 1)
+
+            if k == 0:    # "before" volume
                 pred = np.zeros(n_modes)   # "before" will not have a wavefront update here.
                 pred_std = np.zeros(n_modes)
-            else:       # "after" volumes
-                c += z * (max_isoplanatic_clusters + 1)
-                g = clusters.get_group(c).index  # get all tiles that belong to cluster "c"
+            else:         # "after" volumes
+
+                g = clusters.get_group(c).index
+
                 # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
-                pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)
-                pred_std = ztile_stds.loc[g].mask(where_unconfident).agg(aggregation_rule, axis=0)
+                if aggregation_rule == 'centers':
+                    pred = kmeans.cluster_centers_[k-1]
+                    pred_std = ztile_stds.loc[g].mask(where_unconfident).agg('mean', axis=0)
+                else:
+                    pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)
+                    pred_std = ztile_stds.loc[g].mask(where_unconfident).agg(aggregation_rule, axis=0)
 
             cluster = f'z{z}_c{c}'
 
