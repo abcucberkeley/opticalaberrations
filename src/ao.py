@@ -1066,18 +1066,18 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             else:
                 logger.error(f"Error")
 
-        if os.name != 'nt': # if not on windows
-            try:
-                logger.info(f'Updating permissions for all files in {args.input.parent}')
-                subprocess.call(['chmod', '-R', 'a+rw', args.input.parent])
-            except AttributeError:
-                pass
-
-            try:
-                logger.info(f'Updating permissions for all files in {args.datadir}')
-                subprocess.call(['chmod', '-R', 'a+rw', args.datadir])
-            except AttributeError:
-                pass
+        # if os.name != 'nt': # if not on windows
+        #     try:
+        #         logger.info(f'Updating permissions for all files in {args.input.parent}')
+        #         subprocess.call(['chmod', '-R', 'a+rw', args.input.parent])
+        #     except AttributeError:
+        #         pass
+        #
+        #     try:
+        #         logger.info(f'Updating permissions for all files in {args.datadir}')
+        #         subprocess.call(['chmod', '-R', 'a+rw', args.datadir])
+        #     except AttributeError:
+        #         pass
 
         logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
