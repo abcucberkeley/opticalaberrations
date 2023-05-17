@@ -1267,7 +1267,7 @@ def aggregate_predictions(
         errormap = np.reshape(errormap, (ztiles, ytiles, xtiles))  # back to 3d arrays
     except ValueError:
         logger.warning(f'Not much we can interpolate with here. {nn_coords=}')
-        errormap = np.full((ztiles, ytiles, xtiles), fill_value=nn_values[0]) # back to 3d arrays, value for every tile
+        errormap = np.zeros((ztiles, ytiles, xtiles)) # back to 3d arrays, zero for every tile
     errormap = resize(errormap, (ztiles, vol.shape[1], vol.shape[2]),  order=1, mode='edge') # linear interp XY
     errormap = resize(errormap, vol.shape,  order=0, mode='edge')   # nearest neighbor for z
     # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
