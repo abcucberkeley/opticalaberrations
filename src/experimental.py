@@ -1490,6 +1490,8 @@ def combine_tiles(
     base_path = base_path.replace(acts_suffix, '') # remove this if it exists
     base_path = Path(base_path.replace('_corrected_cluster_actuators.csv', '')) # also remove this if it exists
 
+    output_base_path = str(corrections[0]).replace('_tiles_predictions_aggregated_p2v_error.tif', '')
+
     with open(f"{base_path}_tiles_predictions_settings.json") as f:
         predictions_settings = ujson.load(f)
 
@@ -1573,14 +1575,14 @@ def combine_tiles(
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
     coefficients.sort_index(axis=1, inplace=True)
-    new_zcoeff_path = f"{base_path}_combined_zernike_coefficients.csv"
+    new_zcoeff_path = f"{output_base_path}_combined_zernike_coefficients.csv"
     coefficients.to_csv(new_zcoeff_path)
 
     actuators = pd.DataFrame.from_dict(actuators)
     actuators.index.name = 'actuators'
     actuators.sort_index(axis=1, inplace=True)
 
-    acts_path = f"{base_path}{acts_suffix}" # used in
+    acts_path = f"{output_base_path}{acts_suffix}" # used in Labview
     actuators.to_csv(acts_path)
     logger.info(f"Org actuators: {corrected_actuators_csv}")
     logger.info(f"New actuators: {acts_path}")
