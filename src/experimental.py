@@ -1513,10 +1513,10 @@ def combine_tiles(
     combined_snrmap = snr_scans[indices, z, y, x]       # retrieve the best snr
     combined = correction_scans[indices, z, y, x]       # retrieve the best data
 
-    imwrite(f"{base_path}_volume_used.tif", indices.astype(np.uint16))
-    imwrite(f"{base_path}_combined.tif", combined.astype(np.float32))
-    imwrite(f"{base_path}_combined_error.tif", combined_errormap.astype(np.float32))
-    imwrite(f"{base_path}_combined_snr.tif", combined_snrmap.astype(np.float32))
+    imwrite(f"{output_base_path}_volume_used.tif", indices.astype(np.uint16))
+    imwrite(f"{output_base_path}_combined.tif", combined.astype(np.float32))
+    imwrite(f"{output_base_path}_combined_error.tif", combined_errormap.astype(np.float32))
+    imwrite(f"{output_base_path}_combined_snr.tif", combined_snrmap.astype(np.float32))
 
     tile_ids = resize(
         indices,
