@@ -823,11 +823,10 @@ def rolling_fourier_embeddings(
         cores=cpu_workers,
         desc='Compute FFTs'
     )
-    avg_otf = resize_with_crop_or_pad(np.nanmean(otfs, axis=0), crop_shape=iotf.shape)
 
     if no_phase:
         emb = compute_emb(
-            avg_otf,
+            resize_with_crop_or_pad(np.nanmean(np.abs(otfs), axis=0), crop_shape=iotf.shape),
             iotf,
             val=alpha_val,
             ratio=ratio,
@@ -838,7 +837,7 @@ def rolling_fourier_embeddings(
         )
     else:
         alpha = compute_emb(
-            avg_otf,
+            resize_with_crop_or_pad(np.nanmean(np.abs(otfs), axis=0), crop_shape=iotf.shape),
             iotf,
             val=alpha_val,
             ratio=ratio,
@@ -915,6 +914,8 @@ def rolling_fourier_embeddings(
                 axes[0, 1].set_title('XZ')
                 axes[0, 2].set_title('YZ')
                 savesvg(fig, f'{plot}_avg_interference_pattern.svg')
+        else:
+            avg_otf = resize_with_crop_or_pad(np.nanmean(otfs, axis=0), crop_shape=iotf.shape)
 
         phi = compute_emb(
             avg_otf,
