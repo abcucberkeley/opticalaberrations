@@ -1233,6 +1233,15 @@ def aggregate_predictions(
     lateral_voxel_size = predictions_settings['sample_voxel_size'][2]
     window_size = predictions_settings['window_size']
 
+    samplepsfgen = SyntheticPSF(
+        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        psf_shape=window_size,
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
+
     predict_snr_map(
         Path(str(model_pred).replace('_tiles_predictions.csv', '.tif')),
         window_size=window_size
@@ -1393,7 +1402,8 @@ def aggregate_predictions(
 
     clusters3d_heatmap = np.full_like(vol, len(clusters3d_colormap)-1, dtype=np.float32)
     wavefront_heatmap = np.zeros((ztiles, *vol.shape[1:]), dtype=np.float32)
-    wavefront_rgb = np.full((ztiles, *vol.shape[1:]), len(clusters3d_colormap)-1, dtype=np.float32)
+    psf_heatmap = np.zeros((ztiles, *vol.shape[1:]), dtype=np.float32)
+    clusters_rgb = np.full((ztiles, *vol.shape[1:]), len(clusters3d_colormap)-1, dtype=np.float32)
 
     zw, yw, xw = predictions_settings['window_size']
     logger.info(f"volume_size = {vol.shape}")
@@ -1403,18 +1413,34 @@ def aggregate_predictions(
     for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
         c = predictions.loc[(z, y, x), 'cluster']
 
-        wavefront_rgb[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((yw, xw), int(c))    # cluster group id
+        clusters_rgb[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((yw, xw), int(c))    # cluster group id
         wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.nan_to_num(wavefronts[(z, y, x)].wave(xw), nan=0)
+        psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.max(samplepsfgen.single_psf(wavefronts[(z, y, x)]), axis=0)
         clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((zw, yw, xw), int(c))
 
     imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap.astype(np.float32))
+    imwrite(f"{model_pred.with_suffix('')}_aggregated_psfs.tif", psf_heatmap.astype(np.float32))
 
     scaled_wavefront_heatmap = (wavefront_heatmap - np.nanpercentile(wavefront_heatmap, 1)) / \
         (np.nanpercentile(wavefront_heatmap, 99) - np.nanpercentile(wavefront_heatmap, 1))
     scaled_wavefront_heatmap = np.clip(scaled_wavefront_heatmap, a_min=0, a_max=1)
-    wavefront_rgb = clusters3d_colormap[wavefront_rgb.astype(np.ubyte)] * scaled_wavefront_heatmap[..., np.newaxis]
-    wavefront_rgb = wavefront_rgb.astype(np.ubyte)
-    imwrite(f"{model_pred.with_suffix('')}_aggregated_clusters_wavefronts.tif", wavefront_rgb, photometric='rgb')
+    wavefront_rgb = clusters3d_colormap[clusters_rgb.astype(np.ubyte)] * scaled_wavefront_heatmap[..., np.newaxis]
+    imwrite(
+        f"{model_pred.with_suffix('')}_aggregated_clusters_wavefronts.tif",
+        wavefront_rgb.astype(np.ubyte),
+        photometric='rgb'
+    )
+
+    scaled_psf_heatmap = (psf_heatmap - np.nanpercentile(psf_heatmap, 1)) / \
+        (np.nanpercentile(psf_heatmap, 99) - np.nanpercentile(psf_heatmap, 1))
+    scaled_psf_heatmap = np.clip(scaled_psf_heatmap, a_min=0, a_max=1)
+    psfs_rgb = clusters3d_colormap[clusters_rgb.astype(np.ubyte)] * scaled_psf_heatmap[..., np.newaxis]
+    psfs_rgb = psfs_rgb
+    imwrite(
+        f"{model_pred.with_suffix('')}_aggregated_clusters_psfs.tif",
+        psfs_rgb.astype(np.ubyte),
+        photometric='rgb'
+    )
 
     clusters3d = clusters3d_colormap[clusters3d_heatmap.astype(np.ubyte)] * vol[..., np.newaxis]
     clusters3d = clusters3d.astype(np.ubyte)
