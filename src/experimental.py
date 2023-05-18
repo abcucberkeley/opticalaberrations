@@ -1263,11 +1263,11 @@ def aggregate_predictions(
     nn_values = errormapdf[~unconfident_tiles].values
     try:
         myInterpolator = NearestNDInterpolator(nn_coords, nn_values)
-        errormap = myInterpolator(np.array(errormapdf.index.to_list())) # value for every tile
+        errormap = myInterpolator(np.array(errormapdf.index.to_list()))  # value for every tile
         errormap = np.reshape(errormap, (ztiles, ytiles, xtiles))  # back to 3d arrays
     except ValueError:
         logger.warning(f'Not much we can interpolate with here. {nn_coords=}')
-        errormap = np.zeros((ztiles, ytiles, xtiles)) # back to 3d arrays, zero for every tile
+        errormap = np.zeros((ztiles, ytiles, xtiles))  # back to 3d arrays, zero for every tile
     errormap = resize(errormap, (ztiles, vol.shape[1], vol.shape[2]),  order=1, mode='edge') # linear interp XY
     errormap = resize(errormap, vol.shape,  order=0, mode='edge')   # nearest neighbor for z
     # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
@@ -1290,9 +1290,9 @@ def aggregate_predictions(
 
     clusters3d_colormap = []
     for cc in cluster_colors: # for each z tile's colors
-        clusters3d_colormap.extend([zero_confident_color, *cc]) # append the same zero color (e.g. yellow) at the front
-    clusters3d_colormap.extend([unconfident_color]) # append the unconfident color (e.g. white) to the end
-    clusters3d_colormap = np.array(clusters3d_colormap) # yellow, blue, orange,...  yellow, ...  white
+        clusters3d_colormap.extend([zero_confident_color, *cc])  # append the same zero color (e.g. yellow) at the front
+    clusters3d_colormap.extend([unconfident_color])  # append the unconfident color (e.g. white) to the end
+    clusters3d_colormap = np.array(clusters3d_colormap)  # yellow, blue, orange,...  yellow, ...  white
 
     coefficients, actuators = {}, {}
     for z in valid_predictions.groups.keys():   # basically loop through all ztiles, unless no valid predictions exist
@@ -1414,12 +1414,12 @@ def aggregate_predictions(
     scaled_wavefront_heatmap = np.clip(scaled_wavefront_heatmap, a_min=0, a_max=1)
     wavefront_rgb = clusters3d_colormap[wavefront_rgb.astype(np.ubyte)] * scaled_wavefront_heatmap[..., np.newaxis]
     wavefront_rgb = wavefront_rgb.astype(np.ubyte)
-    imwrite(f"{model_pred.with_suffix('')}_aggregated_clusters.tif", wavefront_rgb, photometric='rgb')
+    imwrite(f"{model_pred.with_suffix('')}_aggregated_clusters_wavefronts.tif", wavefront_rgb, photometric='rgb')
 
     clusters3d = clusters3d_colormap[clusters3d_heatmap.astype(np.ubyte)] * vol[..., np.newaxis]
     clusters3d = clusters3d.astype(np.ubyte)
     imwrite(
-        f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.tif",
+        f"{model_pred.with_suffix('')}_aggregated_clusters.tif",
         clusters3d,
         photometric='rgb',
         imagej=True,
@@ -1432,7 +1432,7 @@ def aggregate_predictions(
         ytiles=ytiles,
         ztiles=ztiles,
         image=vol,
-        save_path=Path(f"{model_pred.with_suffix('')}_aggregated_patchs.tif"),
+        save_path=Path(f"{model_pred.with_suffix('')}_aggregated_error_landscape.tif"),
         window_size=predictions_settings['window_size'],
         lateral_voxel_size=lateral_voxel_size,
         axial_voxel_size=axial_voxel_size,
