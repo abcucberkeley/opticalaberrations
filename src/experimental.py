@@ -23,6 +23,7 @@ from skimage.transform import resize
 from sklearn.metrics import silhouette_samples, silhouette_score
 from joblib import Parallel, delayed
 from scipy.interpolate import NearestNDInterpolator
+from scipy.ndimage import shift
 
 import utils
 import vis
@@ -1103,6 +1104,9 @@ def predict_tiles(
         filter_mask_dilation=False,
     )
 
+    # for s in [8, 16, 32, 48, 64]:
+    #     shifted = shift(sample, shift=(0, 0, -1*s))
+    #     imwrite(f"{img.with_suffix('')}_shifted_x{s}.tif", shifted.astype(np.float32))
 
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
@@ -1365,6 +1369,9 @@ def aggregate_predictions(
                 order='ansi',
                 lam_detection=wavelength
             )
+            imwrite(
+                Path(f"{model_pred.with_suffix('')}_aggregated_{cluster}_wavefront.tif"), pred.wave().astype(np.float32)
+            )
 
             pred_std = Wavefront(
                 np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0),
@@ -1377,7 +1384,7 @@ def aggregate_predictions(
                     vis.diagnosis,
                     pred=pred,
                     pred_std=pred_std,
-                    save_path=Path(f"{model_pred.with_suffix('')}_aggregated_diagnosis_{cluster}"),
+                    save_path=Path(f"{model_pred.with_suffix('')}_aggregated_{cluster}_diagnosis"),
                 )
                 pool.apply_async(task)
 
