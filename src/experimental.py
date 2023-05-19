@@ -1240,7 +1240,7 @@ def aggregate_predictions(
     window_size = predictions_settings['window_size']
 
     samplepsfgen = SyntheticPSF(
-        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        psf_type=Path(__file__).parent.parent.resolve() / 'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
         psf_shape=window_size,
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
@@ -1494,6 +1494,53 @@ def aggregate_predictions(
     logger.info(f'Done. Waiting for plots to write for {model_pred.with_suffix("")}')
     pool.close()    # close the pool
     pool.join()     # wait for all tasks to complete
+
+    non_zero_tiles = ~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)
+    with Path(f"{model_pred.with_suffix('')}_aggregate_settings.json").open('w') as f:
+        json = dict(
+        model_pred=str(model_pred),
+        dm_calibration=str(dm_calibration),
+        dm_state=str(dm_state),
+        majority_threshold=float(majority_threshold),
+        min_percentile=int(min_percentile),
+        max_percentile=int(max_percentile),
+        prediction_threshold=float(prediction_threshold),
+        aggregation_rule=str(aggregation_rule),
+        dm_damping_scalar=float(dm_damping_scalar),
+        max_isoplanatic_clusters=int(max_isoplanatic_clusters),
+        optimize_max_isoplanatic_clusters=bool(optimize_max_isoplanatic_clusters),
+        ignore_tile=list(ignore_tile) if ignore_tile is not None else None,
+        clusters3d_colormap=str(clusters3d_colormap),
+        zero_confident_color=list(zero_confident_color),
+        unconfident_color=list(unconfident_color),
+        window_size=list(window_size),
+        wavelength=float(wavelength),
+        axial_voxel_size = float(axial_voxel_size),
+        lateral_voxel_size = float(lateral_voxel_size),
+        ztiles=int(ztiles),
+        ytiles=int(ytiles),
+        xtiles=int(xtiles),
+        volume_size = list(vol.shape),
+
+        total_confident_zero_tiles= int(zero_confident_tiles.sum()),
+        total_unconfident_tiles= int(unconfident_tiles.sum()),
+        total_all_zeros_tiles= int(all_zeros_tiles.sum()),
+        total_non_zero_tiles= int(non_zero_tiles.sum()),
+
+        confident_zero_tiles= list(zero_confident_tiles),
+        unconfident_tiles= list(unconfident_tiles),
+        all_zeros_tiles= list(all_zeros_tiles),
+        non_zero_tiles= list(non_zero_tiles),
+        )
+        ujson.dump(
+            json,
+            f,
+            indent=4,
+            sort_keys=False,
+            ensure_ascii=False,
+            escape_forward_slashes=False
+        )
+
 
     return coefficients
 
