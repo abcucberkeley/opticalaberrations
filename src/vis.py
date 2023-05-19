@@ -66,24 +66,40 @@ def savesvg(
             f.write(filedata)
 
 
-def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, colorbar=True, aspect=None, log=False):
+def plot_mip(
+    xy,
+    xz,
+    yz,
+    vol,
+    label='',
+    gamma=.5,
+    cmap='hot',
+    dxy=.108,
+    dz=.2,
+    colorbar=True,
+    aspect=None,
+    log=False,
+    mip=True,
+):
     def formatter(x, pos, dd):
         return f'{np.ceil(x * dd).astype(int):1d}'
 
     if log:
-        norm = mcolors.LogNorm()
+        t = 1e-4
+        norm = mcolors.LogNorm(vmin=t, vmax=1)
+        vol[vol < t] = t
     else:
         vol = vol ** gamma
         vol = np.nan_to_num(vol)
         norm = None
 
     if xy is not None:
-        m = xy.imshow(
-            np.max(vol, axis=0),
-            cmap=cmap,
-            aspect=aspect,
-            norm=norm
-        )
+        if mip:
+            v = np.max(vol, axis=0)
+        else:
+            v = vol[vol.shape[0]//2, :, :]
+
+        m = xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
         xy.yaxis.set_ticks_position('right')
         xy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
         xy.yaxis.set_major_formatter(partial(formatter, dd=dxy))
@@ -92,12 +108,12 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
         xy.set_xlabel('XY ($\mu$m)')
 
     if xz is not None:
-        m = xz.imshow(
-            np.max(vol, axis=1),
-            cmap=cmap,
-            aspect=aspect,
-            norm=norm
-        )
+        if mip:
+            v = np.max(vol, axis=1)
+        else:
+            v = vol[:, vol.shape[0] // 2, :]
+
+        m = xz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
         xz.yaxis.set_ticks_position('right')
         xz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
         xz.yaxis.set_major_formatter(partial(formatter, dd=dz))
@@ -106,12 +122,12 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
         xz.set_xlabel('XZ ($\mu$m)')
 
     if yz is not None:
-        m = yz.imshow(
-            np.max(vol, axis=2),
-            cmap=cmap,
-            aspect=aspect,
-            norm=norm
-        )
+        if mip:
+            v = np.max(vol, axis=2)
+        else:
+            v = vol[:, :, vol.shape[0] // 2]
+
+        m = yz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
         yz.yaxis.set_ticks_position('right')
         yz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
         yz.yaxis.set_major_formatter(partial(formatter, dd=dz))
@@ -1676,6 +1692,7 @@ def compare_ao_iterations(
                 dz=dz,
                 colorbar=True,
                 log=True,
+                mip=False
             )
             contours = ax_fft.contour(
                 np.nanmax(results['iotf'], axis=0),
@@ -1711,6 +1728,7 @@ def compare_ao_iterations(
                 dz=dz,
                 colorbar=False,
                 log=True,
+                mip=False
             )
             contours = ax_fft.contour(
                 np.nanmax(results['iotf'], axis=0),
