@@ -302,6 +302,7 @@ def create_synthetic_sample(
     random_crop: Any,
     noise: bool,
     normalize: bool,
+    fog: bool,
     emb: bool,
     embedding_option: list,
     alpha_val: str = 'abs',
@@ -403,6 +404,11 @@ def parse_args(args):
     parser.add_argument(
         '--normalize', action='store_true',
         help='toggle to scale the generated PSFs to 1.0'
+    )
+
+    parser.add_argument(
+        '--fog', action='store_true',
+        help='toggle to add a random hazy background'
     )
 
     parser.add_argument(
@@ -547,6 +553,7 @@ def main(args=None):
         outdir=args.outdir,
         noise=args.noise,
         normalize=args.normalize,
+        fog=args.fog,
         modes=args.modes,
         input_shape=args.input_shape,
         psf_type=args.psf_type,
