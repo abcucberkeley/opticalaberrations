@@ -60,8 +60,9 @@ class PsfGenerator3D:
         kz = self.dz * idx
         self.theoretical_psf(kx=kx, ky=ky, kz=kz)
         self.psf_type = psf_type
-        if (isinstance(self.psf_type, Path) or isinstance(self.psf_type, str)) and Path(self.psf_type).exists():
+        if (isinstance(self.psf_type, Path) or isinstance(self.psf_type, str)):
             print(f'loading my psf {self.psf_type}')
+        if (isinstance(self.psf_type, Path) or isinstance(self.psf_type, str)) and Path(self.psf_type).exists():
             with h5py.File(self.psf_type, 'r') as file:
                 self.psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
 
