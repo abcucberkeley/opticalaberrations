@@ -1623,6 +1623,7 @@ def plot_beads_dataset(
             ax.spines[['right', 'top']].set_visible(False)
             ax.text(.5, .95, f"Mode: {mode}", horizontalalignment='center', transform=ax.transAxes)
             plt.setp(ax.get_yticklabels()[0], visible=False)
+            plt.setp(ax.get_xticklabels()[0], visible=False)
 
             if mode == 14:
                 ax.legend(frameon=False, ncol=1, loc='center', title='NA', bbox_to_anchor=[1.5, .5])
