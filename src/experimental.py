@@ -1432,8 +1432,14 @@ def aggregate_predictions(
         c = predictions.loc[(z, y, x), 'cluster']
 
         clusters_rgb[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((yw, xw), int(c))    # cluster group id
-        wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.nan_to_num(wavefronts[(z, y, x)].wave(xw), nan=0)
-        psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.max(samplepsfgen.single_psf(wavefronts[(z, y, x)]), axis=0)
+
+        if c == len(clusters3d_colormap)-1:
+            wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
+            psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
+        else:
+            wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.nan_to_num(wavefronts[(z, y, x)].wave(xw), nan=0)
+            psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.max(samplepsfgen.single_psf(wavefronts[(z, y, x)]), axis=0)
+
         clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((zw, yw, xw), int(c))
 
     imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap.astype(np.float32))
