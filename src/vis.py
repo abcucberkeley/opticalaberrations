@@ -15,7 +15,8 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 from numpy.lib.stride_tricks import sliding_window_view
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import pandas as pd
-from matplotlib.ticker import FormatStrFormatter, LogFormatterMathtext
+from matplotlib.ticker import FormatStrFormatter, LogFormatterMathtext, LogLocator
+from matplotlib.cm import ScalarMappable
 from typing import Any, Union, Optional
 import numpy as np
 import matplotlib.patches as patches
@@ -69,15 +70,19 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
     def formatter(x, pos, dd):
         return f'{np.ceil(x * dd).astype(int):1d}'
 
-    vol = vol ** gamma
-    vol = np.nan_to_num(vol)
+    if log:
+        norm = mcolors.LogNorm()
+    else:
+        vol = vol ** gamma
+        vol = np.nan_to_num(vol)
+        norm = None
 
     if xy is not None:
         m = xy.imshow(
             np.max(vol, axis=0),
             cmap=cmap,
             aspect=aspect,
-            norm=mcolors.LogNorm(vmin=0.09, vmax=1) if log else None
+            norm=norm
         )
         xy.yaxis.set_ticks_position('right')
         xy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
@@ -91,7 +96,7 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
             np.max(vol, axis=1),
             cmap=cmap,
             aspect=aspect,
-            norm=mcolors.LogNorm(vmin=0.09, vmax=1) if log else None
+            norm=norm
         )
         xz.yaxis.set_ticks_position('right')
         xz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
@@ -105,7 +110,7 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
             np.max(vol, axis=2),
             cmap=cmap,
             aspect=aspect,
-            norm=mcolors.LogNorm(vmin=0.09, vmax=1) if log else None
+            norm=norm
         )
         yz.yaxis.set_ticks_position('right')
         yz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
@@ -127,7 +132,7 @@ def plot_mip(xy, xz, yz, vol, label='', gamma=.5, cmap='hot', dxy=.108, dz=.2, c
         else:
             formatter = FormatStrFormatter("%.1f")
 
-        cb = plt.colorbar(m, cax=cax)
+        cb = plt.colorbar(m, cax, norm=norm)
         cax.yaxis.set_major_formatter(formatter)
         cax.set_ylabel(f"{label}")
         cax.yaxis.set_label_position("left")
@@ -1613,7 +1618,7 @@ def compare_ao_iterations(
     num_iters: int,
     save_path: Path,
     psf_cmap: str = 'hot',
-    fft_cmap: str = 'Greys_r',
+    fft_cmap: str = 'hot',
     gamma: float = .5,
     dxy: float = .108,
     dz: float = .2,
@@ -1637,8 +1642,8 @@ def compare_ao_iterations(
     vmin = -.5
     vmax = .5
 
-    noao_otf = results[0]['ml_img_fft'] / np.nanpercentile(results[0]['ml_img_fft'], 99.99)
-    noao_otf_hist = noao_otf.flatten() ** gamma
+    noao_otf = results[0]['ml_img_fft'] / np.nanmax(results[0]['ml_img_fft'])
+    noao_otf_hist = noao_otf.flatten()
 
     for i in range(num_iters):
         ax_img = fig.add_subplot(gs[0, i])
@@ -1646,28 +1651,25 @@ def compare_ao_iterations(
 
         if i == 0:
             otf = noao_otf
-            # otf = results['iotf'] / np.nanpercentile(results['iotf'], 99.99)
-
             plot_mip(
                 xy=ax_img,
                 xz=None,
                 yz=None,
                 gamma=gamma,
-                label='OpticalNet',
+                label=f'OpticalNet [$\gamma$={gamma}]',
                 vol=results['noao_img'],
                 cmap=psf_cmap,
                 dxy=dxy,
                 dz=dz,
                 colorbar=True,
             )
-            ax_img.set_title(f'No AO')
+            ax_img.set_title(f'No AO ($\mu$m)')
 
             plot_mip(
                 xy=ax_fft,
                 xz=None,
                 yz=None,
-                gamma=gamma,
-                label='|$\log_{10}$ FFT|',
+                label='OTF Strength',
                 vol=otf,
                 cmap=fft_cmap,
                 dxy=dxy,
@@ -1680,13 +1682,13 @@ def compare_ao_iterations(
                 levels=[0, 1],
                 origin='lower',
                 linestyles='dashed',
-                colors='red'
+                colors='green'
             )
             ax_fft.axis('off')
         else:
-            ax_img.set_title(f'Round {i}\nXY ($\mu$m)')
-            otf = results[i]['ml_img_fft'] / np.nanpercentile(results[0]['ml_img_fft'], 99.99)
-            otf_hist = otf.flatten() ** gamma
+            ax_img.set_title(f'Round {i}')
+            otf = results[i]['ml_img_fft'] / np.nanmax(results[0]['ml_img_fft'])
+            otf_hist = otf.flatten()
 
             plot_mip(
                 xy=ax_img,
@@ -1703,7 +1705,6 @@ def compare_ao_iterations(
                 xy=ax_fft,
                 xz=None,
                 yz=None,
-                gamma=gamma,
                 vol=otf,
                 cmap=fft_cmap,
                 dxy=dxy,
@@ -1716,7 +1717,7 @@ def compare_ao_iterations(
                 levels=[0, 1],
                 origin='lower',
                 linestyles='dashed',
-                colors='red'
+                colors='green'
             )
             ax_fft.axis('off')
 
@@ -1733,8 +1734,9 @@ def compare_ao_iterations(
         ax_hist.spines['left'].set_visible(False)
         ax_hist.set_xlim(10**-3, 10**-.5)
         ax_hist.set_xticks([10**-3, 10**-2.5, 10**-2, 10**-1.5, 10**-1, 10**-.5])
-        ax_hist.set_yticks([10**-5, 10**-3, 10**-1, 10])
+        ax_hist.set_yticks([10**-5, 10**-3, 10**-1, 10], fontsize=10)
         ax_hist.set_xscale('log')
+        ax_hist.tick_params(axis='both', labelsize=10)
 
         ax_img.set_xlabel('')
         ax_fft.set_xlabel('')
@@ -1774,7 +1776,7 @@ def compare_ao_iterations(
     plt.savefig(f'{save_path}.png', bbox_inches='tight', dpi=300, pad_inches=.25)
     plt.savefig(f'{save_path}.pdf', bbox_inches='tight', dpi=300, pad_inches=.25)
 
-    fig = plt.figure(figsize=(8, 12))
+    fig = plt.figure(figsize=(10, 15))
     gs = fig.add_gridspec(6, 3)
     zz = 20
 
@@ -1827,11 +1829,11 @@ def compare_ao_iterations(
         ml_axz.set_xlabel('')
 
         if i == 0:
-            noao_ax.set_title('No AO\nXY ($\mu$m)')
-            gt_ax.set_title('Shack–Hartmann\nXY ($\mu$m)')
-            ml_ax.set_title('OpticalNet\nXY ($\mu$m)')
-        ml_axz.set_ylabel('OpticalNet\nXZ ($\mu$m)')
+            noao_ax.set_title('No AO ($\mu$m)')
+            gt_ax.set_title('Shack–Hartmann')
+            ml_ax.set_title('OpticalNet')
+        ml_axz.set_title('OpticalNet (XZ)')
 
-    plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.01, wspace=.2)
-    plt.savefig(f'{save_path}_depth.png', bbox_inches='tight', dpi=300, pad_inches=.25)
-    plt.savefig(f'{save_path}_depth.pdf', bbox_inches='tight', dpi=300, pad_inches=.25)
+    plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.01, wspace=.01)
+    plt.savefig(f'{save_path}_mips.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+    plt.savefig(f'{save_path}_mips.pdf', bbox_inches='tight', dpi=300, pad_inches=.25)
