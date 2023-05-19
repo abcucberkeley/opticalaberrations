@@ -16,6 +16,8 @@ from pathlib import Path
 from tifffile import imwrite
 import numpy as np
 import raster_geometry as rg
+import imgaug.augmenters as iaa
+from skimage.filters import gaussian
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -132,6 +134,7 @@ def sim(
     snr: tuple,
     emb: bool = True,
     noise: bool = True,
+    fog: bool = False,
     normalize: bool = True,
     remove_background: bool = True,
     random_crop: Any = None,
@@ -187,6 +190,13 @@ def sim(
             mean=gen.mean_background_noise,
             sigma=gen.sigma_background_noise
         )
+
+        if fog:
+            aug = iaa.Fog()
+            fog = np.array([aug.augment_image(zplane) for zplane in img])
+            fog = gaussian(fog, sigma=4)
+            rand_noise += np.sqrt(psnr)/2 * fog
+
         inputs = rand_noise + img
         maxcounts = np.max(inputs)
     else:
