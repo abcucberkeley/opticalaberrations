@@ -516,6 +516,10 @@ def parse_args(args):
         "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
     )
+    predict_tiles.add_argument(
+        "--shift", default=0, type=int,
+        help='optional flag for applying digital x shift'
+    )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
 
@@ -980,7 +984,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     ideal_empirical_psf=args.ideal_empirical_psf,
                     digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
-                    preloaded=preloaded
+                    preloaded=preloaded,
+                    shifting=(0, 0, args.shift)
                 )
             elif args.func == 'aggregate_predictions':
                 experimental.aggregate_predictions(
