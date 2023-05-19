@@ -1083,6 +1083,7 @@ def predict_tiles(
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = 361,
     cpu_workers: int = -1,
+    shifting: tuple = (0, 0, 0)
 ):
 
     preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
@@ -1104,9 +1105,10 @@ def predict_tiles(
         filter_mask_dilation=False,
     )
 
-    # for s in [8, 16, 32, 48, 64]:
-    #     shifted = shift(sample, shift=(0, 0, -1*s))
-    #     imwrite(f"{img.with_suffix('')}_shifted_x{s}.tif", shifted.astype(np.float32))
+    if any(np.array(shifting) != 0):
+        sample = shift(sample, shift=(-1*shifting[0], -1*shifting[1], -1*shifting[2]))
+        img = Path(f"{img.with_suffix('')}_shifted_z{shifting[0]}_y{shifting[1]}_x{shifting[2]}.tif")
+        imwrite(img, sample.astype(np.float32))
 
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
