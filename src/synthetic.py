@@ -103,11 +103,7 @@ class SyntheticPSF:
         self.amplitude_ranges = amplitude_ranges
         self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size))
 
-        if (isinstance(psf_type, Path) or isinstance(psf_type, str)) and Path(psf_type).exists():
-            with h5py.File(psf_type, 'r') as file:
-                self.psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
-        else:
-            self.psf_type = psf_type
+        self.psf_type = psf_type
 
         self.psfgen = PsfGenerator3D(
             psf_shape=self.psf_shape,

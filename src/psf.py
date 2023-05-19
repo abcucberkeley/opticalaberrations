@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 from skimage.transform import rescale
 from line_profiler_pycharm import profile
-
+import h5py
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -60,6 +60,10 @@ class PsfGenerator3D:
         kz = self.dz * idx
         self.theoretical_psf(kx=kx, ky=ky, kz=kz)
         self.psf_type = psf_type
+        if (isinstance(self.psf_type, Path) or isinstance(self.psf_type, str)) and Path(self.psf_type).exists():
+            print(f'loading my psf {self.psf_type}')
+            with h5py.File(self.psf_type, 'r') as file:
+                self.psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
 
     @profile
     def theoretical_psf(self, kx, ky, kz):
