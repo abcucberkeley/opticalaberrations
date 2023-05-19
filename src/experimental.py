@@ -1325,11 +1325,20 @@ def aggregate_predictions(
             max_silhouette = results['silhouette'].idxmax()
             max_isoplanatic_clusters = max_silhouette
 
-        n_clusters = min(max_isoplanatic_clusters, len(ztile_preds))
-        kmeans = KMeans(init="k-means++", n_clusters=n_clusters)
-        kmeans.fit(ztile_preds)
+        # weight zernike coefficients by their mth order for clustering
+        features = ztile_preds.copy()
+        for mode, twin in Wavefront(np.zeros(features.shape[1])).twins.items():
+            if twin is not None:
+                features[mode.index_ansi] /= abs(mode.m - 1)
+                features[twin.index_ansi] /= twin.m + 1
+            else:  # spherical modes
+                features[mode.index_ansi] /= mode.m + 1
 
-        ztile_preds['cluster'] = kmeans.predict(ztile_preds) + 1
+        n_clusters = min(max_isoplanatic_clusters, len(features))
+        kmeans = KMeans(init="k-means++", n_clusters=n_clusters)
+        kmeans.fit(features)
+
+        ztile_preds['cluster'] = kmeans.predict(features) + 1
         ztile_preds['cluster'] += z * (max_isoplanatic_clusters + 1)
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
