@@ -570,7 +570,7 @@ def eval_dataset(
     residuals.sort_values(by=['modes', 'iteration_index', 'na'], ascending=[True, True, False], inplace=True)
     print(residuals)
 
-    savepath = Path(f'{datadir}/evaluation')
+    savepath = Path(f'{datadir}/beads_evaluation')
     residuals.to_csv(f'{savepath}.csv')
     logger.info(f'{savepath}.csv')
     vis.plot_beads_dataset(results, residuals, savepath=savepath)
