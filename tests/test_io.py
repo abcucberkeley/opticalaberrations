@@ -14,11 +14,12 @@ import pytest
 
 from src import experimental
 from src import preprocessing
+from src import backend
 
 
 @pytest.mark.run(order=1)
 def test_load_sample(kargs):
-    sample = experimental.load_sample(kargs['inputs'])
+    sample = backend.load_sample(kargs['inputs'])
     assert sample.shape == kargs['input_shape']
 
 
@@ -46,7 +47,7 @@ def test_ideal_empirical_psf(kargs):
 
 @pytest.mark.run(order=4)
 def test_psnr(kargs):
-    sample = experimental.load_sample(kargs['inputs'])
+    sample = backend.load_sample(kargs['inputs'])
 
     psnr = preprocessing.prep_sample(
         sample,
@@ -67,7 +68,7 @@ def test_preprocessing(kargs):
         kargs['lateral_voxel_size'],
         kargs['lateral_voxel_size']
     )
-    sample = experimental.load_sample(kargs['inputs'])
+    sample = backend.load_sample(kargs['inputs'])
 
     sample = preprocessing.prep_sample(
         sample,

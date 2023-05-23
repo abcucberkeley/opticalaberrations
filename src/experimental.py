@@ -16,7 +16,7 @@ import pandas as pd
 import seaborn as sns
 from tifffile import imread, imwrite
 from line_profiler_pycharm import profile
-from numpy.lib.stride_tricks import sliding_window_view
+
 import multiprocessing as mp
 from sklearn.cluster import KMeans
 from skimage.transform import resize
@@ -28,14 +28,12 @@ from scipy.ndimage import shift
 import utils
 import vis
 import backend
-import preprocessing
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
-from data_utils import get_image
 from preloaded import Preloadedmodelclass
-from embeddings import remove_interference_pattern, fourier_embeddings, rolling_fourier_embeddings
-from preprocessing import round_to_even, optimal_rolling_strides
+from embeddings import remove_interference_pattern
+from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles
 
 import logging
 logger = logging.getLogger('')
@@ -44,22 +42,6 @@ try:
     import cupy as cp
 except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
-
-
-@profile
-def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
-    if isinstance(data, np.ndarray):
-        img = data.astype(np.float32)
-    elif isinstance(data, bytes):
-        data = Path(str(data, "utf-8"))
-        img = get_image(data).astype(np.float32)
-    elif isinstance(data, tf.Tensor):
-        path = Path(str(data.numpy(), "utf-8"))
-        img = get_image(path).astype(tf.float32)
-    else:
-        path = Path(str(data))
-        img = get_image(path).astype(np.float32)
-    return np.squeeze(img)
 
 
 @profile
@@ -124,120 +106,6 @@ def estimate_and_save_new_dm(
     return dm.values
 
 
-def preprocess(
-    file: Union[tf.Tensor, Path, str],
-    modelpsfgen: SyntheticPSF,
-    samplepsfgen: SyntheticPSF,
-    freq_strength_threshold: float = .01,
-    digital_rotations: Optional[int] = 361,
-    remove_background: bool = True,
-    read_noise_bias: float = 5,
-    normalize: bool = True,
-    edge_filter: bool = True,
-    filter_mask_dilation: bool = True,
-    plot: Any = None,
-    no_phase: bool = False,
-    fov_is_small: bool = True,
-    rolling_strides: Optional[tuple] = None
-):
-    if isinstance(file, tf.Tensor):
-        file = Path(str(file.numpy(), "utf-8"))
-
-    if isinstance(plot, bool) and plot:
-        plot = file.with_suffix('')
-
-    sample = load_sample(file)
-
-    if fov_is_small: # only going to center crop and predict on that single FOV (fourier_embeddings)
-        sample = preprocessing.prep_sample(
-            sample,
-            model_fov=modelpsfgen.psf_fov,              # this is what we will crop to
-            sample_voxel_size=samplepsfgen.voxel_size,
-            remove_background=remove_background,
-            normalize=normalize,
-            edge_filter=edge_filter,
-            filter_mask_dilation=filter_mask_dilation,
-            read_noise_bias=read_noise_bias,
-            plot=plot if plot else None
-        )
-
-        return fourier_embeddings(
-            sample,
-            iotf=modelpsfgen.iotf,
-            plot=plot if plot else None,
-            no_phase=no_phase,
-            remove_interference=True,
-            embedding_option=modelpsfgen.embedding_option,
-            freq_strength_threshold=freq_strength_threshold,
-            digital_rotations=digital_rotations,
-            poi_shape=modelpsfgen.psf_shape[1:]
-        )
-    else: # at least one tile fov dimension is larger than model fov
-        model_window_size = (
-            round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
-            round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
-            round_to_even(modelpsfgen.psf_fov[2] / samplepsfgen.voxel_size[2]),
-        )   # number of sample voxels that make up a model psf.
-
-        model_window_size = np.minimum(model_window_size, sample.shape)
-
-        # how many non-overlapping rois can we split this tile fov into (round down)
-        rois = sliding_window_view(
-            sample,
-            window_shape=model_window_size
-        )   # stride = 1.
-
-        # decimate from all available windows to the stride we want (either rolling_strides or model_window_size)
-        if rolling_strides is not None:
-            strides = rolling_strides
-        else:
-            strides = model_window_size
-
-        rois = rois[
-           ::strides[0],
-           ::strides[1],
-           ::strides[2]
-        ]
-
-        throwaway = np.array(sample.shape) - ((np.array(rois.shape[:3])-1) * strides + rois.shape[-3:])
-        if any(throwaway > (np.array(sample.shape) / 4)):
-            raise Exception(f'You are throwing away {throwaway} voxels out of {sample.shape}, with stride length'
-                            f'{strides}. Change rolling_strides.')
-
-        ztiles, nrows, ncols = rois.shape[:3]
-        rois = np.reshape(rois, (-1, *model_window_size))
-
-        prep = partial(
-            preprocessing.prep_sample,
-            sample_voxel_size=samplepsfgen.voxel_size,
-            remove_background=remove_background,
-            normalize=normalize,
-            edge_filter=edge_filter,
-            filter_mask_dilation=filter_mask_dilation,
-            read_noise_bias=read_noise_bias,
-        )
-
-        rois = utils.multiprocess(func=prep, jobs=rois,
-                                  desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
-                                       f'stride length {strides}, '
-                                       f'throwing away {throwaway} voxels')
-
-        return rolling_fourier_embeddings(  # aka "large_fov"
-            rois,
-            iotf=modelpsfgen.iotf,
-            plot=plot,
-            no_phase=no_phase,
-            remove_interference=True,
-            embedding_option=modelpsfgen.embedding_option,
-            freq_strength_threshold=freq_strength_threshold,
-            digital_rotations=digital_rotations,
-            poi_shape=modelpsfgen.psf_shape[1:],
-            nrows=nrows,
-            ncols=ncols,
-            ztiles=ztiles
-        )
-
-
 def generate_embeddings(
     file: Union[tf.Tensor, Path, str],
     model: Union[tf.keras.Model, Path, str],
@@ -264,8 +132,8 @@ def generate_embeddings(
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
 
-    sample = load_sample(file)
-    psnr = preprocessing.prep_sample(
+    sample = backend.load_sample(file)
+    psnr = prep_sample(
         sample,
         return_psnr=True,
         remove_background=True,
@@ -285,7 +153,7 @@ def generate_embeddings(
         z_voxel_size=axial_voxel_size
     )
 
-    sample = preprocessing.prep_sample(
+    sample = prep_sample(
         sample,
         sample_voxel_size=samplepsfgen.voxel_size,
         remove_background=remove_background,
@@ -296,7 +164,7 @@ def generate_embeddings(
         plot=file.with_suffix('') if plot else None,
     )
 
-    return preprocess(
+    return backend.preprocess(
         sample,
         modelpsfgen=modelpsfgen,
         samplepsfgen=samplepsfgen,
@@ -482,7 +350,7 @@ def predict(
     generate_fourier_embeddings = partial(
         utils.multiprocess,
         func=partial(
-            preprocess,
+            backend.preprocess,
             modelpsfgen=modelpsfgen,
             samplepsfgen=samplepsfgen,
             freq_strength_threshold=freq_strength_threshold,
@@ -598,8 +466,8 @@ def predict_sample(
     no_phase = True if preloadedmodel.input_shape[1] == 3 else False
 
     logger.info(f"Loading file: {img.name}")
-    sample = load_sample(img)
-    psnr = preprocessing.prep_sample(
+    sample = backend.load_sample(img)
+    psnr = prep_sample(
         sample,
         return_psnr=True,
         remove_background=True,
@@ -619,7 +487,7 @@ def predict_sample(
         z_voxel_size=axial_voxel_size
     )
 
-    embeddings = preprocess(
+    embeddings = backend.preprocess(
         sample,
         modelpsfgen=premodelpsfgen,
         samplepsfgen=samplepsfgen,
@@ -776,8 +644,8 @@ def predict_large_fov(
     )
     no_phase = True if preloadedmodel.input_shape[1] == 3 else False
 
-    sample = load_sample(img)
-    psnr = preprocessing.prep_sample(
+    sample = backend.load_sample(img)
+    psnr = prep_sample(
         sample,
         return_psnr=True,
         remove_background=True,
@@ -797,7 +665,7 @@ def predict_large_fov(
         z_voxel_size=axial_voxel_size
     )
 
-    embeddings = preprocess(
+    embeddings = backend.preprocess(
         sample,
         modelpsfgen=premodelpsfgen,
         samplepsfgen=samplepsfgen,
@@ -941,10 +809,10 @@ def predict_rois(
     outdir.mkdir(exist_ok=True, parents=True)
 
     logger.info(f"Loading file: {img.name}")
-    sample = np.squeeze(get_image(img).astype(float))
+    sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
 
-    rois, ztiles, nrows, ncols = preprocessing.find_roi(
+    rois, ztiles, nrows, ncols = find_roi(
         sample,
         savepath=outdir,
         pois=pois,
@@ -1027,7 +895,7 @@ def predict_snr_map(
 ):
 
     logger.info(f"Loading file: {img.name}")
-    sample = load_sample(img)
+    sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
 
     outdir = Path(f"{img.with_suffix('')}_tiles")
@@ -1037,7 +905,7 @@ def predict_snr_map(
     outdir.mkdir(exist_ok=True, parents=True)
 
     # obtain each tile filename. Skip saving to .tif if we have them already.
-    rois, ztiles, nrows, ncols = preprocessing.get_tiles(
+    rois, ztiles, nrows, ncols = get_tiles(
         sample,
         savepath=outdir,
         strides=window_size,
@@ -1045,7 +913,7 @@ def predict_snr_map(
         save_files=save_files,
     )
 
-    prep = partial(preprocessing.prep_sample, return_psnr=True)
+    prep = partial(prep_sample, return_psnr=True)
     snrs = utils.multiprocess(func=prep, jobs=rois, desc=f'PNSR, {rois.shape[0]} rois per tile.')
     snrs = np.reshape(snrs, (ztiles, nrows, ncols))
     snrs = resize(snrs, (snrs.shape[0], sample.shape[1], sample.shape[2]), order=1, mode='edge')
@@ -1088,9 +956,9 @@ def predict_tiles(
     )
 
     logger.info(f"Loading file: {img.name}")
-    sample = load_sample(img)
+    sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
-    psnr = preprocessing.prep_sample(
+    psnr = prep_sample(
         sample,
         return_psnr=True,
         remove_background=True,
@@ -1108,7 +976,7 @@ def predict_tiles(
     outdir.mkdir(exist_ok=True, parents=True)
 
     # obtain each tile and save to .tif.
-    rois, ztiles, nrows, ncols = preprocessing.get_tiles(
+    rois, ztiles, nrows, ncols = get_tiles(
         sample,
         savepath=outdir,
         strides=window_size,
@@ -1214,7 +1082,7 @@ def aggregate_predictions(
     pd.options.display.width = 200
     pd.options.display.max_columns = 20
 
-    vol = load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
+    vol = backend.load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
     vol -= np.percentile(vol, 5)
     vol /= np.percentile(vol, 98)
     vol = np.clip(vol, 0, 1)
@@ -1593,9 +1461,9 @@ def combine_tiles(
     snr_scans = np.zeros((len(corrections), *image_shape))            # series of 3d p2v maps aka a 4d array
 
     for t, path in enumerate(corrections):
-        error_maps[t] = load_sample(path)
-        correction_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '.tif'))
-        snr_scans[t] = load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_snrs.tif'))
+        error_maps[t] = backend.load_sample(path)
+        correction_scans[t] = backend.load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '.tif'))
+        snr_scans[t] = backend.load_sample(str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_snrs.tif'))
 
     # indices = np.argmin(error_maps, axis=0)  # locate the correction with the lowest error for every voxel (3D array)
     indices = np.argmax(snr_scans, axis=0)  # locate the correction with the highest snr for every voxel (3D array)

@@ -23,7 +23,6 @@ import vis
 import backend
 import preprocessing
 from wavefront import Wavefront
-from experimental import load_sample
 from embeddings import fft
 from synthetic import SyntheticPSF
 
@@ -258,7 +257,7 @@ def eval_mode(
     with open(str(prediction_path).replace('_zernike_coefficients.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
 
-    noisy_img = load_sample(input_path)
+    noisy_img = backend.load_sample(input_path)
     maxcounts = np.max(noisy_img)
     psnr = predictions_settings['psnr']
     gen = backend.load_metadata(
@@ -483,7 +482,7 @@ def eval_dataset(
                     continue
             if prediction_path is None: logger.warning(f'Prediction not found for: {file.name}')
 
-            ml_img = load_sample(file)
+            ml_img = backend.load_sample(file)
             ml_img -= 100
             ml_img = preprocessing.prep_sample(
                 ml_img,
@@ -493,7 +492,7 @@ def eval_dataset(
                 sample_voxel_size=predictions_settings['sample_voxel_size']
             )
 
-            pr_img = load_sample(pr_path)
+            pr_img = backend.load_sample(pr_path)
             pr_img -= 100
             pr_img = preprocessing.prep_sample(
                 pr_img,
@@ -641,7 +640,7 @@ def eval_ao_dataset(
             logger.warning(f'GT not found for: {file.name}')
             gt_wavefront = None
 
-        ml_img = load_sample(file)
+        ml_img = backend.load_sample(file)
         ml_img -= 100
 
         ml_img = preprocessing.prep_sample(
@@ -663,7 +662,7 @@ def eval_ao_dataset(
         #     break
 
     noao = sorted(datadir.glob('NoAO*CamA*.tif'))[-1]
-    noao_img = load_sample(noao)
+    noao_img = backend.load_sample(noao)
     noao_img -= 100
     noao_img = preprocessing.prep_sample(
         noao_img,
@@ -698,7 +697,7 @@ def eval_ao_dataset(
 
     results['noao_img'] = noao_img
 
-    ml_img = load_sample(sorted(datadir.glob('MLAO*CamA*.tif'))[-1])
+    ml_img = backend.load_sample(sorted(datadir.glob('MLAO*CamA*.tif'))[-1])
     ml_img -= 100
 
     results['ml_img'] = preprocessing.prep_sample(
@@ -709,7 +708,7 @@ def eval_ao_dataset(
         sample_voxel_size=predictions_settings['sample_voxel_size']
     )
 
-    gt_img = load_sample(sorted(datadir.glob('SHAO*CamA*.tif'))[-1])
+    gt_img = backend.load_sample(sorted(datadir.glob('SHAO*CamA*.tif'))[-1])
     gt_img -= 100
     results['gt_img'] = preprocessing.prep_sample(
         gt_img,
@@ -807,7 +806,7 @@ def plot_dataset_mips(datadir: Path):
             continue
 
         noao_img = preprocessing.prep_sample(
-            load_sample(noao_path),
+            backend.load_sample(noao_path),
             normalize=True,
             remove_background=True,
             windowing=False,
@@ -815,7 +814,7 @@ def plot_dataset_mips(datadir: Path):
         )
 
         ml_img = preprocessing.prep_sample(
-            load_sample(prediction_path),
+            backend.load_sample(prediction_path),
             normalize=True,
             remove_background=True,
             windowing=False,
@@ -823,7 +822,7 @@ def plot_dataset_mips(datadir: Path):
         )
 
         gt_img = preprocessing.prep_sample(
-            load_sample(sh_path),
+            backend.load_sample(sh_path),
             normalize=True,
             remove_background=True,
             windowing=False,
@@ -849,7 +848,7 @@ def eval_bleaching_rate(datadir: Path):
     results = {}
 
     def get_stats(path: Path, key: int, background: int = 100):
-        img = load_sample(path)
+        img = backend.load_sample(path)
         img -= background  # remove background offset
 
         quality = preprocessing.prep_sample(

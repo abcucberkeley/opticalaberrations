@@ -12,7 +12,6 @@ import sys
 import h5py
 from datetime import datetime
 from pathlib import Path
-from pprint import pprint
 from typing import Any, Union, Optional
 from itertools import repeat
 from functools import partial
@@ -22,6 +21,7 @@ import pandas as pd
 from skimage.restoration import richardson_lucy
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
 import numpy as np
 import scipy as sp
@@ -47,9 +47,9 @@ import data_utils
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
-from embeddings import fourier_embeddings, fft
+from embeddings import remove_interference_pattern, fourier_embeddings, rolling_fourier_embeddings
+from preprocessing import prep_sample, round_to_even, optimal_rolling_strides
 
-from tensorflow.keras import Model
 from phasenet import PhaseNet
 
 from stem import Stem
@@ -222,6 +222,136 @@ def save_metadata(
         if isinstance(psf_type, str) or isinstance(psf_type, Path):
             with h5py.File(psf_type, 'r+') as f:
                 add_param(file, name='psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
+
+
+@profile
+def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
+    if isinstance(data, np.ndarray):
+        img = data.astype(np.float32)
+    elif isinstance(data, bytes):
+        data = Path(str(data, "utf-8"))
+        img = data_utils.get_image(data).astype(np.float32)
+    elif isinstance(data, tf.Tensor):
+        path = Path(str(data.numpy(), "utf-8"))
+        img = data_utils.get_image(path).astype(tf.float32)
+    else:
+        path = Path(str(data))
+        img = data_utils.get_image(path).astype(np.float32)
+    return np.squeeze(img)
+
+
+def preprocess(
+    file: Union[tf.Tensor, Path, str],
+    modelpsfgen: SyntheticPSF,
+    samplepsfgen: SyntheticPSF,
+    freq_strength_threshold: float = .01,
+    digital_rotations: Optional[int] = 361,
+    remove_background: bool = True,
+    read_noise_bias: float = 5,
+    normalize: bool = True,
+    edge_filter: bool = True,
+    filter_mask_dilation: bool = True,
+    plot: Any = None,
+    no_phase: bool = False,
+    fov_is_small: bool = True,
+    rolling_strides: Optional[tuple] = None
+):
+    if isinstance(file, tf.Tensor):
+        file = Path(str(file.numpy(), "utf-8"))
+
+    if isinstance(plot, bool) and plot:
+        plot = file.with_suffix('')
+
+    sample = load_sample(file)
+
+    if fov_is_small: # only going to center crop and predict on that single FOV (fourier_embeddings)
+        sample = prep_sample(
+            sample,
+            model_fov=modelpsfgen.psf_fov,              # this is what we will crop to
+            sample_voxel_size=samplepsfgen.voxel_size,
+            remove_background=remove_background,
+            normalize=normalize,
+            edge_filter=edge_filter,
+            filter_mask_dilation=filter_mask_dilation,
+            read_noise_bias=read_noise_bias,
+            plot=plot if plot else None
+        )
+
+        return fourier_embeddings(
+            sample,
+            iotf=modelpsfgen.iotf,
+            plot=plot if plot else None,
+            no_phase=no_phase,
+            remove_interference=True,
+            embedding_option=modelpsfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
+            poi_shape=modelpsfgen.psf_shape[1:]
+        )
+    else: # at least one tile fov dimension is larger than model fov
+        model_window_size = (
+            round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
+            round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
+            round_to_even(modelpsfgen.psf_fov[2] / samplepsfgen.voxel_size[2]),
+        )   # number of sample voxels that make up a model psf.
+
+        model_window_size = np.minimum(model_window_size, sample.shape)
+
+        # how many non-overlapping rois can we split this tile fov into (round down)
+        rois = sliding_window_view(
+            sample,
+            window_shape=model_window_size
+        )   # stride = 1.
+
+        # decimate from all available windows to the stride we want (either rolling_strides or model_window_size)
+        if rolling_strides is not None:
+            strides = rolling_strides
+        else:
+            strides = model_window_size
+
+        rois = rois[
+           ::strides[0],
+           ::strides[1],
+           ::strides[2]
+        ]
+
+        throwaway = np.array(sample.shape) - ((np.array(rois.shape[:3])-1) * strides + rois.shape[-3:])
+        if any(throwaway > (np.array(sample.shape) / 4)):
+            raise Exception(f'You are throwing away {throwaway} voxels out of {sample.shape}, with stride length'
+                            f'{strides}. Change rolling_strides.')
+
+        ztiles, nrows, ncols = rois.shape[:3]
+        rois = np.reshape(rois, (-1, *model_window_size))
+
+        prep = partial(
+            prep_sample,
+            sample_voxel_size=samplepsfgen.voxel_size,
+            remove_background=remove_background,
+            normalize=normalize,
+            edge_filter=edge_filter,
+            filter_mask_dilation=filter_mask_dilation,
+            read_noise_bias=read_noise_bias,
+        )
+
+        rois = utils.multiprocess(func=prep, jobs=rois,
+                                  desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
+                                       f'stride length {strides}, '
+                                       f'throwing away {throwaway} voxels')
+
+        return rolling_fourier_embeddings(  # aka "large_fov"
+            rois,
+            iotf=modelpsfgen.iotf,
+            plot=plot,
+            no_phase=no_phase,
+            remove_interference=True,
+            embedding_option=modelpsfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
+            poi_shape=modelpsfgen.psf_shape[1:],
+            nrows=nrows,
+            ncols=ncols,
+            ztiles=ztiles
+        )
 
 
 @profile

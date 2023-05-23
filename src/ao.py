@@ -21,6 +21,8 @@ import cli
 import experimental
 import experimental_llsm
 import experimental_eval
+
+from backend import load_sample
 from preprocessing import prep_sample
 from preloaded import Preloadedmodelclass
 from embeddings import measure_fourier_snr
@@ -827,7 +829,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                 )
 
             elif args.func == 'psnr':
-                sample = experimental.load_sample(args.input)
+                sample = load_sample(args.input)
                 prep_sample(
                     sample,
                     remove_background=True,
@@ -839,7 +841,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                 )
 
             elif args.func == 'fourier_snr':
-                sample = experimental.load_sample(args.input)
+                sample = load_sample(args.input)
                 psnr = prep_sample(
                     sample,
                     remove_background=True,
@@ -853,7 +855,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
 
             elif args.func == 'preprocessing':
                 sample_voxel_size = (args.axial_voxel_size, args.lateral_voxel_size, args.lateral_voxel_size)
-                sample = experimental.load_sample(args.input)
+                sample = load_sample(args.input)
                 prep_sample(
                     sample,
                     sample_voxel_size=sample_voxel_size,
