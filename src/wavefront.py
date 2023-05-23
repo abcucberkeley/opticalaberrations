@@ -35,7 +35,7 @@ class Wavefront:
 
     def __init__(
         self,
-        amplitudes: Union[None, np.ndarray, list, tuple, dict],
+        amplitudes: Union[None, np.ndarray, list, tuple, dict, Path, str],
         order: str = 'ansi',
         modes: int = 55,
         lam_detection: float = .510,
