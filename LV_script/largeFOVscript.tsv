@@ -1,0 +1,11 @@
+0	Scan	before.tif	14.811s
+1	Copy	Transpose and 180	3.581s
+2	ML Correction	 predict_tiles on rotated files Set DM . Drop 1st clstr result	13.949s
+3	Scan	after_threestacks.tif	
+4	Copy	Transpose and 180	
+5	ML Correction	 LV_auto_batch.bat on rotated files Set DM 	
+6	For loop	10 iterations. 	
+7	  Scan	loop_fourstacks.tif	
+8	  Copy	Transpose and 180	
+9	  ML Correction	 LV_auto_batch.bat on rotated files Set DM 	
+10	Loop end		
