@@ -1510,7 +1510,7 @@ def aggregate_predictions(
         max_isoplanatic_clusters=int(max_isoplanatic_clusters),
         optimize_max_isoplanatic_clusters=bool(optimize_max_isoplanatic_clusters),
         ignore_tile=list(ignore_tile) if ignore_tile is not None else None,
-        clusters3d_colormap=str(clusters3d_colormap),
+        clusters3d_colormap=list(clusters3d_colormap),
         zero_confident_color=list(zero_confident_color),
         unconfident_color=list(unconfident_color),
         window_size=list(window_size),
