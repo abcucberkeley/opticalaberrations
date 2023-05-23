@@ -277,7 +277,6 @@ def generate_embeddings(
 
     samplepsfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
-        snr=psnr,
         psf_shape=sample.shape,
         n_modes=model.output_shape[1],
         lam_detection=wavelength,
@@ -695,7 +694,7 @@ def predict_sample(
             dm_damping_scalar=dm_damping_scalar
         )
 
-    psf = samplepsfgen.single_psf(phi=p, normed=True, noise=False)
+    psf = samplepsfgen.single_psf(phi=p, normed=True)
     imwrite(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
     imwrite(f"{img.with_suffix('')}_sample_predictions_wavefront.tif", p.wave(), dtype=np.float32)
 
@@ -859,7 +858,7 @@ def predict_large_fov(
             dm_damping_scalar=dm_damping_scalar
         )
 
-    psf = samplepsfgen.single_psf(phi=p, normed=True, noise=False)
+    psf = samplepsfgen.single_psf(phi=p, normed=True)
     imwrite(f"{img.with_suffix('')}_large_fov_predictions_psf.tif", psf)
     imwrite(f"{img.with_suffix('')}_large_fov_predictions_wavefront.tif", p.wave(), dtype=np.float32)
 
@@ -1802,7 +1801,7 @@ def phase_retrieval(
             dm_damping_scalar=dm_damping_scalar
         )
 
-    psf = psfgen.single_psf(pred, normed=True, noise=False)
+    psf = psfgen.single_psf(pred, normed=True)
     imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf)
 
     if plot:

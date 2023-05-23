@@ -1005,7 +1005,6 @@ def measure_fourier_snr(
     spsf = samplepsfgen.single_psf(
         phi=0,
         normed=True,
-        noise=True,
         meta=False,
     )
     sotf = np.abs(fft(spsf))
@@ -1015,7 +1014,6 @@ def measure_fourier_snr(
     ipsf = samplepsfgen.single_psf(
         phi=0,
         normed=True,
-        noise=False,
         meta=False,
     )
     iotf = np.abs(fft(ipsf))

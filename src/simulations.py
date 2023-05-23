@@ -210,7 +210,6 @@ def plot_embedding_pyramid(
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
-        snr=1000,
         cpu_workers=-1,
     )
     waves = np.arange(-.3, .35, step=.05).round(2)
@@ -230,7 +229,6 @@ def plot_embedding_pyramid(
                             psf = gen.single_psf(
                                 wavefront,
                                 normed=True,
-                                noise=False,
                                 meta=False,
                             )
 
@@ -325,7 +323,6 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
             y_voxel_size=.108,
             z_voxel_size=.2,
             batch_size=batch_size,
-            snr=30,
             cpu_workers=-1,
         )
 
@@ -452,10 +449,9 @@ def plot_fov(n_modes=55, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
                     x_voxel_size=x_voxel_size,
                     y_voxel_size=y_voxel_size,
                     z_voxel_size=z_voxel_size,
-                    snr=100,
                     cpu_workers=-1,
                 )
-                window = gen.single_psf(w, normed=True, noise=False)
+                window = gen.single_psf(w, normed=True)
                 #window = center_crop(psf, crop_shape=tuple(3 * [r]))
 
                 fft = np.fft.fftn(window)
@@ -606,7 +602,6 @@ def plot_embeddings(
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
-        snr=1000,
         cpu_workers=-1,
     )
 
@@ -617,10 +612,9 @@ def plot_embeddings(
             phi = np.zeros(n_modes)
             phi[mode] = amp
 
-            psf, amps, snr, maxcounts, lls_defocus_offset = gen.single_psf(
+            psf, amps, lls_defocus_offset = gen.single_psf(
                 phi=phi,
                 normed=True,
-                noise=False,
                 meta=True,
             )
 
@@ -720,7 +714,6 @@ def plot_rotations(
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
-        snr=1000,
         cpu_workers=-1,
     )
 
@@ -744,10 +737,9 @@ def plot_rotations(
                 v[z.index_ansi] = amp * np.cos(deg / 360 * 2 * np.pi)
                 v[twin.index_ansi] = amp * np.sin(deg / 360 * 2 * np.pi)
 
-            psf, amps, snr, maxcounts, lls_defocus_offset = gen.single_psf(
+            psf, amps, lls_defocus_offset = gen.single_psf(
                 phi=v,
                 normed=True,
-                noise=False,
                 meta=True,
             )
 
@@ -857,7 +849,6 @@ def plot_shapes_embeddings(
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
-        snr=1000,
         cpu_workers=-1,
     )
 
@@ -880,10 +871,9 @@ def plot_shapes_embeddings(
                 phi = np.zeros(n_modes)
                 phi[mode] = amp
 
-                psf, amps, snr, maxcounts, lls_defocus_offset = gen.single_psf(
+                psf, amps, lls_defocus_offset = gen.single_psf(
                     phi=phi,
                     normed=True,
-                    noise=False,
                     meta=True,
                 )
 
@@ -1005,7 +995,6 @@ def plot_gaussian_filters(
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
-        snr=20,
         cpu_workers=-1,
     )
 
@@ -1014,7 +1003,7 @@ def plot_gaussian_filters(
             phi = np.zeros(n_modes)
             phi[mode] = amp
 
-            window, amps, snr, maxcounts = gen.single_otf(
+            window, amps, llsd = gen.single_otf(
                 phi=phi,
                 normed=True,
                 noise=True,
@@ -1102,7 +1091,6 @@ def plot_simulation(
         x_voxel_size=x_voxel_size,
         y_voxel_size=y_voxel_size,
         z_voxel_size=z_voxel_size,
-        snr=100,
         cpu_workers=-1,
     )
 
@@ -1136,7 +1124,6 @@ def plot_simulation(
             psf = gen.single_psf(
                 phi=phi,
                 normed=True,
-                noise=True,
                 meta=False,
             )
 
@@ -1168,7 +1155,6 @@ def plot_signal(n_modes=55, wavelength=.605):
         x_voxel_size=.1,
         y_voxel_size=.1,
         z_voxel_size=.1,
-        snr=100,
         cpu_workers=-1,
 
     )
@@ -1185,7 +1171,7 @@ def plot_signal(n_modes=55, wavelength=.605):
             abr = 0 if j == 0 else round(w.peak2valley())
             signal[i][abr] = {}
 
-            psf = gen.single_psf(w, normed=True, noise=False)
+            psf = gen.single_psf(w, normed=True)
 
             # psf_cmap = 'hot'
             # fig, axes = plt.subplots(len(res), 4)
@@ -1428,7 +1414,6 @@ def plot_inputs(
     x_voxel_size=.15,
     y_voxel_size=.15,
     z_voxel_size=.6,
-    psnr=100,
     wavelength: float = .605,
     psf_cmap: str = 'Spectral_r',
     threshold: float = .01,
@@ -1506,12 +1491,11 @@ def plot_inputs(
             x_voxel_size=x_voxel_size,
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
-            snr=psnr,
             cpu_workers=-1,
         )
 
-        inputs = gen.single_otf(w, normed=True, noise=False)
-        psf = gen.single_psf(w, normed=True, noise=False)
+        inputs = gen.single_otf(w, normed=True)
+        psf = gen.single_psf(w, normed=True)
 
         otf = np.fft.fftn(psf)
         otf = np.fft.fftshift(otf)

@@ -8,7 +8,6 @@ from typing import Any, Union
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
-import h5py
 import numpy as np
 from pathlib import Path
 from functools import partial
@@ -20,6 +19,7 @@ from tifffile import TiffFile
 from psf import PsfGenerator3D
 from wavefront import Wavefront
 from preprocessing import prep_sample
+from utils import randuniform
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -51,9 +51,6 @@ class SyntheticPSF:
             na_detection=1.0,
             lam_detection=.510,
             refractive_index=1.33,
-            snr=(10, 50),
-            mean_background_noise=100,
-            sigma_background_noise=(5, 10),
             cpu_workers=-1
     ):
         """
@@ -74,7 +71,6 @@ class SyntheticPSF:
             na_detection: numerical aperture of detection objective
             lam_detection: wavelength in microns
             refractive_index: refractive index
-            snr: scalar or range for a uniform signal-to-noise ratio dist
             cpu_workers: number of CPU threads to use for generating PSFs
             embedding_option: type of fourier embedding to use
         """
@@ -85,13 +81,10 @@ class SyntheticPSF:
         self.lam_detection = lam_detection
         self.na_detection = na_detection
         self.batch_size = batch_size
-        self.mean_background_noise = mean_background_noise
-        self.sigma_background_noise = sigma_background_noise
         self.x_voxel_size = x_voxel_size  # desired voxel size
         self.y_voxel_size = y_voxel_size
         self.z_voxel_size = z_voxel_size
         self.voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
-        self.snr = snr
         self.cpu_workers = cpu_workers
         self.distribution = distribution
         self.mode_weights = mode_weights
@@ -118,7 +111,6 @@ class SyntheticPSF:
         self.ipsf = self.theoretical_psf(normed=True)
         self.iotf = np.abs(self.fft(self.ipsf, padsize=None))
         self.iotf = self._normalize(self.iotf, self.iotf)
-
 
     @profile
     def update_ideal_psf_with_empirical(
@@ -157,36 +149,6 @@ class SyntheticPSF:
         self.iotf = np.nan_to_num(self.iotf, nan=0)
         self.iotf = self._normalize(self.iotf, self.iotf)
         self.iotf *= self.na_mask()
-
-    def _randuniform(self, var):
-        """Returns a random number (uniform chance) in the range provided by var. If var is a scalar, var is simply returned.
-
-        Args:
-            var : (as scalar) Returned as is.
-            var : (as list) Range to provide a random number
-
-        Returns:
-            _type_: ndarray or scalar. Random sample from the range provided.
-
-        """
-        var = (var, var) if np.isscalar(var) else var
-
-        # star unpacks a list, so that var's values become the separate arguments here
-        return np.random.uniform(*var)
-
-    def _normal_noise(self, mean, sigma, size):
-        mean = self._randuniform(mean)
-        sigma = self._randuniform(sigma)
-        return np.random.normal(loc=mean, scale=sigma, size=size).astype(np.float32)
-
-    def _poisson_noise(self, image):
-        return np.random.poisson(lam=image).astype(np.float32) - image
-
-    def _random_noise(self, image, mean, sigma):
-        normal_noise_img = self._normal_noise(mean=mean, sigma=sigma, size=image.shape)
-        poisson_noise_img = self._poisson_noise(image=image)
-        noise = normal_noise_img + poisson_noise_img
-        return noise
 
     @profile
     def theoretical_psf(self, normed: bool = True):
@@ -247,7 +209,6 @@ class SyntheticPSF:
         psf = np.abs(np.fft.ifftshift(psf))
         return psf
 
-
     @profile
     def _normalize(self, emb, otf, freq_strength_threshold: float = 0.):
         emb /= np.nanpercentile(np.abs(otf), 99.99)
@@ -265,10 +226,8 @@ class SyntheticPSF:
         self,
         phi: Any = None,
         normed: bool = True,
-        noise: bool = False,
         meta: bool = False,
         no_phase: bool = False,
-        snr_post_aberration: bool = True,
         lls_defocus_offset: Any = None
     ):
         """
@@ -278,7 +237,6 @@ class SyntheticPSF:
             noise: a toggle to add noise
             meta: return extra variables for debugging
             no_phase: used only when meta=true.
-            snr_post_aberration: increase photons in aberrated psf to match snr of ideal psf
             lls_defocus_offset: optional shift of the excitation and detection focal plan (microns)
         """
         if not isinstance(phi, Wavefront):
@@ -296,34 +254,11 @@ class SyntheticPSF:
 
         if isinstance(lls_defocus_offset, tuple):
             if phi.peak2valley(na=1.0) <= 1.:
-                lls_defocus_offset = self._randuniform(lls_defocus_offset)
+                lls_defocus_offset = randuniform(lls_defocus_offset)
             else:
                 lls_defocus_offset = 0.
 
         psf = self.psfgen.incoherent_psf(phi, lls_defocus_offset=lls_defocus_offset)
-        snr = self._randuniform(self.snr)
-
-        if snr_post_aberration:
-            psf *= snr ** 2
-        else:
-            total_counts_ideal = np.sum(self.ipsf)  # peak value of ideal psf is 1, self.ipsf = 1
-            total_counts = total_counts_ideal * snr ** 2  # total photons of ideal psf with desired SNR
-            total_counts_abr = np.sum(psf)  # total photons in aberrated psf
-
-            # scale aberrated psf to have the same number of photons as ideal psf
-            # (e.g. aberration doesn't destroy/create light)
-            psf *= total_counts / total_counts_abr
-
-        if noise:
-            rand_noise = self._random_noise(
-                image=psf,
-                mean=self.mean_background_noise,
-                sigma=self.sigma_background_noise,
-            )
-            psf += rand_noise
-
-        psnr = np.sqrt(np.max(psf))  # peak snr will drop as aberration smooshes psf
-        maxcount = np.max(psf)
 
         if normed:
             psf /= np.max(psf)
@@ -332,7 +267,7 @@ class SyntheticPSF:
             if no_phase:
                 phi.amplitudes = np.abs(phi.amplitudes)
 
-            return psf, phi.amplitudes, psnr, maxcount, lls_defocus_offset
+            return psf, phi.amplitudes, lls_defocus_offset
         else:
             return psf
 
@@ -361,21 +296,18 @@ class SyntheticPSF:
             self.single_psf,
             meta=True,
             normed=True,
-            noise=True,
         )
 
         while True:
-            inputs, amplitudes, psnrs, maxcounts, lls_defocus_offsets = zip(
+            inputs, amplitudes, lls_defocus_offsets = zip(
                 *self.batch(gen, [self.amplitude_ranges]*self.batch_size)
             )
 
             x = np.expand_dims(np.stack(inputs, axis=0), -1)
             y = np.stack(amplitudes, axis=0)
-            psnrs = np.stack(psnrs, axis=0)
-            maxcounts = np.stack(maxcounts, axis=0)
             lls_defocus_offsets = np.stack(lls_defocus_offsets, axis=0)
 
             if debug:
-                yield x, y, psnrs, maxcounts, lls_defocus_offsets
+                yield x, y, lls_defocus_offsets
             else:
                 yield x, y

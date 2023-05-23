@@ -170,7 +170,7 @@ def check_criteria(
     embedding='',
     modes='',
     max_amplitude=1.,
-    snr_range=None,
+    photons_range=None,
 ):
     path = str(file)
     amp = float(str([s for s in file.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.'))
@@ -180,7 +180,7 @@ def check_criteria(
             and embedding in path \
             and f"z{modes}" in path \
             and amp <= max_amplitude \
-            and snr_range is None or (snr_range is not None and snr_range[0] <= snr[0] and snr[1] <= snr_range[1]) \
+            and photons_range is None or (photons_range is not None and photons_range[0] <= snr[0] and snr[1] <= photons_range[1]) \
             and check_sample(file) == 1:
         return path
 
@@ -195,7 +195,7 @@ def load_dataset(
     embedding='',
     modes='',
     max_amplitude=1.,
-    snr_range=None,
+    photons_range=None,
 ):
     check = partial(
         check_criteria,
@@ -203,7 +203,7 @@ def load_dataset(
         embedding=embedding,
         modes=modes,
         max_amplitude=max_amplitude,
-        snr_range=snr_range
+        photons_range=photons_range
     )
     files = multiprocess(
         func=check,
@@ -265,7 +265,7 @@ def collect_dataset(
     no_phase=False,
     input_coverage=1.,
     embedding_option='spatial_planes',
-    snr_range=None,
+    photons_range=None,
     iotf=None,
     metadata=False,
     lls_defocus: bool = False
@@ -297,7 +297,7 @@ def collect_dataset(
             embedding=embedding,
             distribution=distribution,
             max_amplitude=max_amplitude,
-            snr_range=snr_range
+            photons_range=photons_range
         )
 
         train = train_data.map(lambda x: tf.py_function(load, [x], dtypes))
@@ -321,7 +321,7 @@ def collect_dataset(
             embedding=embedding,
             distribution=distribution,
             max_amplitude=max_amplitude,
-            snr_range=snr_range
+            photons_range=photons_range
         )
 
         data = data.map(lambda x: tf.py_function(load, [x], dtypes))

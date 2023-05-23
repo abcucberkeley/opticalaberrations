@@ -36,7 +36,6 @@ from tensorflow_addons.optimizers import SGDW
 
 from tensorflow.keras.callbacks import CSVLogger
 from tensorflow.keras.callbacks import ModelCheckpoint
-from tensorflow.keras.callbacks import LambdaCallback
 from tensorflow.keras.callbacks import EarlyStopping
 from callbacks import Defibrillator
 from callbacks import LearningRateScheduler
@@ -453,7 +452,6 @@ def eval_rotation(
                 rho = np.mean(rhos[squared_error < 700])
                 confident = rho / std_rho > 1 # is SNR above 1? # either confident-A or unconfident
 
-
             df['mse'] = mse
 
             twin_angle = b  # evaluate the curve fit when there is no digital rotation.
@@ -801,7 +799,7 @@ def dual_stage_prediction(
     if estimate_sign_with_decon:
         logger.info(f"Estimating signs w/ Decon")
         abrs = range(init_preds.shape[0]) if len(init_preds.shape) > 1 else range(1)
-        make_psf = partial(gen.single_psf, normed=True, noise=False)
+        make_psf = partial(gen.single_psf, normed=True)
         psfs = np.stack(gen.batch(
             make_psf,
             [Wavefront(init_preds[i], lam_detection=gen.lam_detection) for i in abrs]
@@ -943,316 +941,6 @@ def predict_dataset(
         return preds, np.zeros_like(preds)
 
 
-def deconstruct(
-        model: Path,
-        cpu_workers: int = -1,
-        x_voxel_size: float = .15,
-        y_voxel_size: float = .15,
-        z_voxel_size: float = .6,
-        wavelength: float = .605,
-        eval_distribution: str = 'powerlaw'
-):
-    m = load(model)
-    m.summary()
-
-    modes = m.layers[-1].output_shape[-1]
-    input_shape = m.layers[0].input_shape[0][1:-1]
-
-    for i in range(6):
-        psfargs = dict(
-            snr=100,
-            n_modes=modes,
-            distribution=eval_distribution,
-            lam_detection=wavelength,
-            amplitude_ranges=((.05 * i), (.05 * (i + 1))),
-            psf_shape=3 * [input_shape[-1]],
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            batch_size=1,
-            cpu_workers=cpu_workers,
-        )
-        gen = SyntheticPSF(**psfargs)
-        psf, y, psnr, maxcounts, lls_defocus_offset = next(gen.generator(debug=True))
-        p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1)
-
-        p = Wavefront(p, lam_detection=wavelength)
-        logger.info('Prediction')
-        pprint(p.zernikes)
-
-        logger.info('GT')
-        y = Wavefront(y, lam_detection=wavelength)
-        pprint(y.zernikes)
-
-        diff = Wavefront(y - p, lam_detection=wavelength)
-        p_psf = gen.single_psf(p)
-        gt_psf = gen.single_psf(y)
-        corrected_psf = gen.single_psf(diff)
-
-        psf = np.squeeze(psf[0], axis=-1)
-        save_path = Path(f'{model}/deconstruct/{eval_distribution}/')
-        save_path.mkdir(exist_ok=True, parents=True)
-
-        vis.diagnostic_assessment(
-            psf=psf,
-            gt_psf=gt_psf,
-            predicted_psf=p_psf,
-            corrected_psf=corrected_psf,
-            psnr=psnr,
-            maxcounts=maxcounts,
-            y=y,
-            pred=p,
-            save_path=save_path / f'{i}',
-            display=False
-        )
-
-        vis.plot_dmodes(
-            psf=psf,
-            gen=gen,
-            y=y,
-            pred=p,
-            save_path=save_path / f'{i}_dmodes',
-        )
-
-
-def kernels(modelpath: Path, activation='relu'):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-
-    def factorization(n):
-        """Calculates kernel grid dimensions."""
-        for i in range(int(np.sqrt(float(n))), 0, -1):
-            if n % i == 0:
-                return i, n // i
-
-    logger.info(f"Model: {modelpath}")
-    model = load(modelpath)
-    layers = [layer for layer in model.layers if str(layer.name).startswith('conv')]
-
-    if isinstance(activation, str):
-        activation = tf.keras.layers.Activation(activation)
-
-    logger.info("Plotting learned kernels")
-    for i, layer in enumerate(layers):
-        fig, ax = plt.subplots(figsize=(8, 11))
-        grid, biases = layer.get_weights()
-        logger.info(f"Layer [{layer.name}]: {layer.output_shape}, {grid.shape}")
-
-        grid = activation(grid)
-        grid = np.squeeze(grid, axis=0)
-
-        with tf.name_scope(layer.name):
-            low, high = tf.reduce_min(grid), tf.reduce_max(grid)
-            grid = (grid - low) / (high - low)
-            grid = tf.pad(grid, ((1, 1), (1, 1), (0, 0), (0, 0)))
-
-            r, c, chan_in, chan_out = grid.shape
-            grid_r, grid_c = factorization(chan_out)
-
-            grid = tf.transpose(grid, (3, 0, 1, 2))
-            grid = tf.reshape(grid, tf.stack([grid_c, r * grid_r, c, chan_in]))
-            grid = tf.transpose(grid, (0, 2, 1, 3))
-            grid = tf.reshape(grid, tf.stack([1, c * grid_c, r * grid_r, chan_in]))
-            grid = tf.transpose(grid, (0, 2, 1, 3))
-
-            while grid.shape[3] > 4:
-                a, b = tf.split(grid, 2, axis=3)
-                grid = tf.concat([a, b], axis=0)
-
-            _, a, b, channels = grid.shape
-            if channels == 2:
-                grid = tf.concat([grid, tf.zeros((1, a, b, 1))], axis=3)
-
-        img = grid[-1, :, :, 0]
-        ax.imshow(img)
-        ax.set_aspect('equal')
-        ax.axis('off')
-        vis.savesvg(fig, f'{modelpath}/kernels_{layer.name}.svg')
-
-
-def featuremaps(
-        modelpath: Path,
-        amplitude_range: float,
-        wavelength: float,
-        psf_type: str,
-        x_voxel_size: float,
-        y_voxel_size: float,
-        z_voxel_size: float,
-        cpu_workers: int,
-        psnr: int,
-):
-    plt.rcParams.update({
-        'font.size': 25,
-        'axes.titlesize': 30,
-        'xtick.labelsize': 20,
-        'ytick.labelsize': 20,
-        'legend.fontsize': 20,
-    })
-
-    logger.info(f"Models: {modelpath}")
-    model = load(modelpath)
-
-    input_shape = model.layers[1].output_shape[1:-1]
-    modes = model.layers[-1].output_shape[-1]
-    model = Model(
-        inputs=model.input,
-        outputs=[layer.output for layer in model.layers],
-    )
-    phi = np.zeros(modes)
-    phi[10] = amplitude_range
-    amplitude_range = Wavefront(phi, lam_detection=wavelength)
-
-    psfargs = dict(
-        n_modes=modes,
-        psf_type=psf_type,
-        psf_shape=3 * [input_shape[1]],
-        distribution='single',
-        lam_detection=wavelength,
-        amplitude_ranges=amplitude_range,
-        x_voxel_size=x_voxel_size,
-        y_voxel_size=y_voxel_size,
-        z_voxel_size=z_voxel_size,
-        batch_size=1,
-        snr=psnr,
-        cpu_workers=cpu_workers,
-    )
-    gen = SyntheticPSF(**psfargs)
-
-    if input_shape[0] == 3 or input_shape[0] == 6:
-        inputs = gen.single_otf(
-            amplitude_range,
-            normed=True,
-            noise=True,
-            na_mask=True,
-            ratio=True,
-        )
-    else:
-        inputs = gen.single_psf(amplitude_range, normed=True, noise=True)
-
-    inputs = np.expand_dims(np.stack(inputs, axis=0), 0)
-    inputs = np.expand_dims(np.stack(inputs, axis=0), -1)
-
-    layers = [layer.name for layer in model.layers[1:25]]
-    maps = model.predict(inputs)[1:25]
-    nrows = sum([1 for fmap in maps if len(fmap.shape[1:]) >= 3])
-
-    fig = plt.figure(figsize=(150, 600))
-    gs = fig.add_gridspec((nrows * input_shape[0]) + 1, 8)
-
-    i = 0
-    logger.info('Plotting featuremaps...')
-    for name, fmap in zip(layers, maps):
-        logger.info(f"Layer {name}: {fmap.shape}")
-        fmap = fmap[0]
-
-        if fmap.ndim < 2:
-            continue
-
-        if layers[0] == 'patchify':
-            patches = fmap.shape[-2]
-            features = fmap.shape[-1]
-            fmap_size = patches // int(np.sqrt(maps[0].shape[-2]))
-            fmap = np.reshape(fmap, (fmap.shape[0], fmap_size, fmap_size, features))
-
-        if len(fmap.shape) == 4:
-            if input_shape[0] == 3 or input_shape[0] == 6:
-
-                i += 1
-                features = fmap.shape[-1]
-                window = fmap.shape[1], fmap.shape[2]
-                grid = np.zeros((window[0] * input_shape[0], window[1] * features))
-
-                for j in range(input_shape[0]):
-                    for f in range(features):
-                        vol = fmap[j, :, :, f]
-                        grid[
-                        j * window[0]:(j + 1) * window[0],
-                        f * window[1]:(f + 1) * window[1]
-                        ] = vol
-
-                space = grid.flatten()
-                vmin = np.nanquantile(space, .02)
-                vmax = np.nanquantile(space, .98)
-                vcenter = (vmin + vmax) / 2
-                step = .01
-
-                highcmap = plt.get_cmap('YlOrRd', 256)
-                lowcmap = plt.get_cmap('terrain', 256)
-                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-                cmap = mcolors.ListedColormap(cmap)
-
-                ax = fig.add_subplot(gs[i, :])
-                ax.set_title(f"{name.upper()} {fmap.shape}")
-                m = ax.imshow(grid, cmap=cmap, vmin=vmin, vmax=vmax)
-                ax.set_aspect('equal')
-                ax.axis('off')
-
-                cax = inset_axes(ax, width="1%", height="100%", loc='center right', borderpad=-3)
-                cb = plt.colorbar(m, cax=cax)
-                cax.yaxis.set_label_position("right")
-            else:
-                for j in range(3):
-                    i += 1
-                    features = fmap.shape[-1]
-                    if j == 0:
-                        window = fmap.shape[1], fmap.shape[2]
-                    elif j == 1:
-                        window = fmap.shape[0], fmap.shape[2]
-                    else:
-                        window = fmap.shape[0], fmap.shape[1]
-
-                    grid = np.zeros((window[0], window[1] * features))
-
-                    for f in range(features):
-                        vol = np.max(fmap[:, :, :, f], axis=j)
-                        grid[:, f * window[1]:(f + 1) * window[1]] = vol
-
-                    ax = fig.add_subplot(gs[i, :])
-
-                    if j == 0:
-                        ax.set_title(f"{name.upper()} {fmap.shape}")
-
-                    ax.imshow(grid, cmap='hot', vmin=0, vmax=1)
-                    ax.set_aspect('equal')
-                    ax.axis('off')
-        else:
-            i += 1
-            features = fmap.shape[-1]
-            window = fmap.shape[0], fmap.shape[1]
-            grid = np.zeros((window[0], window[1] * features))
-
-            for f in range(features):
-                vol = fmap[:, :, f]
-                # vol = (vol - vol.min()) / (vol.max() - vol.min())
-                grid[:, f * window[1]:(f + 1) * window[1]] = vol
-
-            # from tifffile import imwrite
-            # imwrite(f'{modelpath}/{name.upper()}_{i}.tif', grid)
-
-            ax = fig.add_subplot(gs[i, :])
-            ax.set_title(f"{name.upper()} {fmap.shape}")
-            m = ax.imshow(grid, cmap='Spectral_r')
-            ax.set_aspect('equal')
-            ax.axis('off')
-
-            cax = inset_axes(ax, width="1%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_label_position("right")
-
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{modelpath}/featuremaps.pdf', bbox_inches='tight', pad_inches=.25)
-    return fig
-
-
 def train(
         dataset: Path,
         outdir: Path,
@@ -1281,8 +969,8 @@ def train(
         z_voxel_size: float,
         modes: int,
         pmodes: int,
-        min_psnr: int,
-        max_psnr: int,
+        min_photons: int,
+        max_photons: int,
         epochs: int,
         mul: bool,
         roi: Any = None,
@@ -1440,20 +1128,6 @@ def train(
         verbose=1,
     )
 
-    features = LambdaCallback(
-        on_epoch_end=lambda epoch, logs: featuremaps(
-            modelpath=outdir,
-            amplitude_range=.3,
-            wavelength=wavelength,
-            psf_type=psf_type,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            cpu_workers=-1,
-            psnr=100,
-        ) if epoch % 50 == 0 else epoch
-    )
-
     tensorboard = TensorBoardCallback(
         log_dir=outdir,
         histogram_freq=1,
@@ -1483,7 +1157,7 @@ def train(
         config = dict(
             psf_type=psf_type,
             psf_shape=inputs,
-            snr=(min_psnr, max_psnr),
+            photons=(min_photons, max_photons),
             n_modes=modes,
             distribution=distribution,
             embedding_option=embedding,
@@ -1508,7 +1182,7 @@ def train(
             max_amplitude=max_amplitude,
             no_phase=no_phase,
             lls_defocus=lls_defocus,
-            snr_range=(min_psnr, max_psnr)
+            photons_range=(min_photons, max_photons)
         )
 
         sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
