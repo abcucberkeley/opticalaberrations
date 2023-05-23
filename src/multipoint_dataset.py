@@ -96,6 +96,7 @@ def save_synthetic_sample(
 
 def beads(
     image_shape: tuple,
+    photons: int = 1,
     object_size: Optional[int] = 0,
     num_objs: int = 1,
     fill_radius: float = .4,
@@ -123,16 +124,16 @@ def beads(
                     int(image_shape[0] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius)),
                     3
                 ),
-            ).astype(np.float32)
+            ).astype(np.float32) * photons
         else:
             if fill_radius > 0:
                 reference[
                     rng.integers(int(image_shape[0] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius))),
                     rng.integers(int(image_shape[1] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius))),
                     rng.integers(int(image_shape[2] * (.5 - fill_radius)), int(image_shape[2] * (.5 + fill_radius))),
-                ] = 1
+                ] = photons
             else:
-                reference[image_shape[0] // 2, image_shape[1] // 2, image_shape[2] // 2] = 1
+                reference[image_shape[0] // 2, image_shape[1] // 2, image_shape[2] // 2] = photons
 
     return reference
 
@@ -158,8 +159,9 @@ def sim(
     quantum_efficiency: float = .82,
 ):
     photons = randuniform(photons)
-    reference = photons * beads(
+    reference = beads(
         image_shape=gen.psf_shape,
+        photons=photons,
         object_size=None,
         num_objs=npoints,
     )
