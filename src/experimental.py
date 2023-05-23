@@ -1752,7 +1752,7 @@ def phase_retrieval(
     )
     pupil = pr_result.phase / (2 * np.pi)  # convert radians to waves
     pupil[pupil != 0.] -= np.mean(pupil[pupil != 0.])   # remove a piston term by subtracting the mean of the pupil
-    pr_result.phase = utils.waves2microns(pupil, wavelength=psfgen.lam_detection)  # convert waves to microns before fitting.
+    pr_result.phase = utils.waves2microns(pupil, wavelength=psfgen.lam_detection)  # convert waves to um before fitting.
     pr_result.fit_to_zernikes(num_modes-1, mapping=osa2degrees)  # pyotf's zernikes now in um rms
     pr_result.phase = pupil  # phase is now again in waves
 
@@ -1764,7 +1764,7 @@ def phase_retrieval(
     ignore_modes = list(map(int, ignore_modes))
 
     if use_pyotf_zernikes:
-        # use pyotf definition of zernikes and fit using them.  I suspect m=0 modes have opposite sign to our definition.
+        # use pyotf definition of zernikes and fit using them. I suspect m=0 modes have opposite sign to our definition.
         pred = np.zeros(num_modes)
         pred[1:] = cp.asnumpy(pr_result.zd_result.pcoefs)
         pred[ignore_modes] = 0.
