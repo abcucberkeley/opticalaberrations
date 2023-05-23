@@ -5,6 +5,7 @@ ENV=~/anaconda3/envs/ml/bin/python
 
 #PSF_TYPE='widefield'
 #PSF_TYPE='confocal'
+#PSF_TYPE='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat'
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 xVOXEL=.108
 yVOXEL=.108
@@ -29,8 +30,8 @@ mkdir -p $LOGS
 
 SAMPLES_PER_JOB=100
 SAMPLES_PER_BIN=200
-mPSNR=($(seq 11 10 51))
-xPSNR=($(seq 20 10 60))
+mPH=($(seq 1 10000 100000))
+xPH=($(seq 10000 10000 100000))
 amps1=($(seq 0 .01 .24))
 amps2=($(seq .01 .01 .25))
 SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
@@ -39,7 +40,7 @@ DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
 
 for DIST in `seq 1 ${#DISTRIBUTIONS[@]}`
 do
-  for SNR in `seq 1 ${#xPSNR[@]}`
+  for PH in `seq 1 ${#xPH[@]}`
   do
     for AMP in `seq 1 ${#amps1[@]}`
     do
@@ -62,8 +63,8 @@ do
           j="${j} --outdir ${OUTDIR}"
           j="${j} --modes ${MODES}"
           j="${j} --input_shape ${SHAPE}"
-          j="${j} --min_psnr ${mPSNR[$SNR-1]}"
-          j="${j} --max_psnr ${xPSNR[$SNR-1]}"
+          j="${j} --min_photons ${mPH[$PH-1]}"
+          j="${j} --max_photons ${xPH[$PH-1]}"
           j="${j} --min_amplitude ${amps1[$AMP-1]}"
           j="${j} --max_amplitude ${amps2[$AMP-1]}"
           j="${j} --min_lls_defocus_offset $MIN_LLS_OFFSET"
@@ -76,7 +77,7 @@ do
           j="${j} --lam_detection ${LAMBDA}"
           j="${j} --cpu_workers ${CPUS}"
 
-          JOB="${TITLE}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-iter#${S}"
+          JOB="${TITLE}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-photons${xPH[$PH-1]}-amp${amps2[$AMP-1]}-iter#${S}"
 
           task="/usr/bin/sbatch"
           task="${task} --qos=abc_normal --nice=1111111111"

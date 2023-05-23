@@ -23,8 +23,8 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=true
 
 MODES=15
-TITLE='fourier_embeddings'
-DATASET='train'
+TITLE='eval_dataset'
+DATASET='test'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -37,8 +37,8 @@ if [ "$DATASET" = "train" ];then
   SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=200
   OBJS=(1 2 3 4 5)
-  mPSNR=($(seq 1 5 46))
-  xPSNR=($(seq 5 5 50))
+  mPH=($(seq 1 50000 460000))
+  xPH=($(seq 50000 50000 500000))
   amps1=($(seq 0 .01 .24))
   amps2=($(seq .01 .01 .25))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
@@ -49,8 +49,8 @@ else
   SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=100
   OBJS=(1 5 10 25 50 100 150 200 250 300)
-  mPSNR=($(seq 1 10 91))
-  xPSNR=($(seq 10 10 100))
+  mPH=($(seq 1 100000 910000))
+  xPH=($(seq 100000 100000 1000000))
   amps1=($(seq 0 .05 .45))
   amps2=($(seq .05 .05 .50))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
@@ -60,7 +60,7 @@ fi
 
 for DIST in `seq 1 ${#DISTRIBUTIONS[@]}`
 do
-  for SNR in `seq 1 ${#xPSNR[@]}`
+  for PH in `seq 1 ${#xPH[@]}`
   do
     for AMP in `seq 1 ${#amps1[@]}`
     do
@@ -88,8 +88,8 @@ do
             j="${j} --outdir ${OUTDIR}"
             j="${j} --modes ${MODES}"
             j="${j} --input_shape ${SHAPE}"
-            j="${j} --min_psnr ${mPSNR[$SNR-1]}"
-            j="${j} --max_psnr ${xPSNR[$SNR-1]}"
+            j="${j} --min_photons ${mPH[$PH-1]}"
+            j="${j} --max_photons ${xPH[$PH-1]}"
             j="${j} --min_amplitude ${amps1[$AMP-1]}"
             j="${j} --max_amplitude ${amps2[$AMP-1]}"
             j="${j} --min_lls_defocus_offset -$MAX_LLS_OFFSET"
@@ -138,7 +138,7 @@ do
               task="${task} --partition=abc"
             fi
 
-            JOB="${TITLE}-${DATASET}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-psnr${xPSNR[$SNR-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
+            JOB="${TITLE}-${DATASET}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-photons${xPH[$PH-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
             task="${task} --cpus-per-task=${CPUS}"
             task="${task} --mem='${MEM}'"
             task="${task} --job-name=${JOB}"
