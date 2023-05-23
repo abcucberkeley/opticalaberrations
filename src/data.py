@@ -6,7 +6,6 @@ import tensorflow as tf
 
 
 import cli
-import shapes
 import simulations
 import data_utils
 
@@ -63,10 +62,7 @@ def main(args=None):
        
     Path('../data/').mkdir(parents=True, exist_ok=True) # add output directory if it doesn't exist
 
-    if args.cmd == "shapes":
-        shapes.simobjects()
-
-    elif args.cmd == "inputs":
+    if args.cmd == "inputs":
         simulations.plot_inputs()
 
     elif args.cmd == "dist":
@@ -98,9 +94,6 @@ def main(args=None):
 
     elif args.cmd == "embeddings_pyramid":
         simulations.plot_embedding_pyramid()
-
-    elif args.cmd == "similarity":
-        shapes.similarity()
 
     elif args.cmd == "check":
         data_utils.check_dataset(args.datadir)
