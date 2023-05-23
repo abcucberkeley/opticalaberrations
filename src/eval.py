@@ -323,7 +323,7 @@ def plot_heatmap(means, wavelength, savepath, label=f'Peak signal-to-noise ratio
 
     ax.set_ylabel(
         'Average peak-to-valley aberration'
-        rf'($\lambda = {int(wavelength * 1000)}~nm$)'
+        rf' ($\lambda = {int(wavelength * 1000)}~nm$)'
     )
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
     ax.set_yticks(np.arange(0, 6, 1))
