@@ -80,6 +80,7 @@ def plot_mip(
     aspect=None,
     log=False,
     mip=True,
+    ticks=True
 ):
     def formatter(x, pos, dd):
         return f'{np.ceil(x * dd).astype(int):1d}'
@@ -100,12 +101,16 @@ def plot_mip(
             v = vol[vol.shape[0]//2, :, :]
 
         m = xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
-        xy.yaxis.set_ticks_position('right')
-        xy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
-        xy.yaxis.set_major_formatter(partial(formatter, dd=dxy))
-        xy.xaxis.set_major_locator(plt.MaxNLocator(6))
-        xy.yaxis.set_major_locator(plt.MaxNLocator(6))
+
         xy.set_xlabel('XY ($\mu$m)')
+        if ticks:
+            xy.yaxis.set_ticks_position('right')
+            xy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
+            xy.yaxis.set_major_formatter(partial(formatter, dd=dxy))
+            xy.xaxis.set_major_locator(plt.MaxNLocator(6))
+            xy.yaxis.set_major_locator(plt.MaxNLocator(6))
+        else:
+            xy.axis('off')
 
     if xz is not None:
         if mip:
@@ -114,12 +119,16 @@ def plot_mip(
             v = vol[:, vol.shape[0] // 2, :]
 
         m = xz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
-        xz.yaxis.set_ticks_position('right')
-        xz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
-        xz.yaxis.set_major_formatter(partial(formatter, dd=dz))
-        xz.xaxis.set_major_locator(plt.MaxNLocator(6))
-        xz.yaxis.set_major_locator(plt.MaxNLocator(6))
+
         xz.set_xlabel('XZ ($\mu$m)')
+        if ticks:
+            xz.yaxis.set_ticks_position('right')
+            xz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
+            xz.yaxis.set_major_formatter(partial(formatter, dd=dz))
+            xz.xaxis.set_major_locator(plt.MaxNLocator(6))
+            xz.yaxis.set_major_locator(plt.MaxNLocator(6))
+        else:
+            xz.axis('off')
 
     if yz is not None:
         if mip:
@@ -128,12 +137,16 @@ def plot_mip(
             v = vol[:, :, vol.shape[0] // 2]
 
         m = yz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
-        yz.yaxis.set_ticks_position('right')
-        yz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
-        yz.yaxis.set_major_formatter(partial(formatter, dd=dz))
-        yz.xaxis.set_major_locator(plt.MaxNLocator(6))
-        yz.yaxis.set_major_locator(plt.MaxNLocator(6))
+
         yz.set_xlabel('YZ ($\mu$m)')
+        if ticks:
+            yz.yaxis.set_ticks_position('right')
+            yz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
+            yz.yaxis.set_major_formatter(partial(formatter, dd=dz))
+            yz.xaxis.set_major_locator(plt.MaxNLocator(6))
+            yz.yaxis.set_major_locator(plt.MaxNLocator(6))
+        else:
+            yz.axis('off')
 
     if colorbar:
         if xy is not None:
@@ -259,7 +272,7 @@ def diagnostic_assessment(
         gt_psf: np.array,
         predicted_psf: np.array,
         corrected_psf: np.array,
-        psnr: Any,
+        photons: Any,
         maxcounts: Any,
         y: Wavefront,
         pred: Wavefront,
@@ -291,8 +304,8 @@ def diagnostic_assessment(
         psf = np.squeeze(psf, axis=-1)
         psf = np.squeeze(psf, axis=0)
 
-    if not np.isscalar(psnr):
-        psnr = psnr[0]
+    if not np.isscalar(photons):
+        photons = photons[0]
 
     if not np.isscalar(maxcounts):
         maxcounts = maxcounts[0]
@@ -301,18 +314,18 @@ def diagnostic_assessment(
     pred_wave = pred.wave(size=100)
     diff = y_wave - pred_wave
 
-    fig = plt.figure(figsize=(17, 17))
-    gs = fig.add_gridspec(5 if gt_psf is None else 6, 4)
+    fig = plt.figure(figsize=(13, 15))
+    gs = fig.add_gridspec(4 if gt_psf is None else 5, 4)
 
-    ax_gt = fig.add_subplot(gs[:2, 0])
-    ax_pred = fig.add_subplot(gs[:2, 1])
-    ax_diff = fig.add_subplot(gs[:2, 2])
-    cax = fig.add_axes([0.05, 0.7, 0.02, .175])
+    ax_gt = fig.add_subplot(gs[0, 0])
+    ax_pred = fig.add_subplot(gs[0, 1])
+    ax_diff = fig.add_subplot(gs[0, 2])
+    cax = fig.add_axes([0.05, 0.75, 0.02, .15])
 
     # input
-    ax_xy = fig.add_subplot(gs[2, 0])
-    ax_xz = fig.add_subplot(gs[2, 1])
-    ax_yz = fig.add_subplot(gs[2, 2])
+    ax_xy = fig.add_subplot(gs[1, 0])
+    ax_xz = fig.add_subplot(gs[1, 1])
+    ax_yz = fig.add_subplot(gs[1, 2])
 
     # predictions
     ax_pxy = fig.add_subplot(gs[-2, 0])
@@ -357,8 +370,8 @@ def diagnostic_assessment(
     ax_cxy.set_xlabel(r'XY ($\mu$m)')
     ax_cxz.set_xlabel(r'XZ ($\mu$m)')
     ax_cyz.set_xlabel(r'YZ ($\mu$m)')
-    ax_xz.set_title(f"PSNR: {psnr:.2f}")
-    ax_yz.set_title(f"Max photon count: {maxcounts:.0f}")
+    ax_xz.set_title(f"Total photons: {photons:.1G}")
+    ax_yz.set_title(f"Max counts: {maxcounts:.1G}")
 
     if transform_to_align_to_DM:
         psf = np.transpose(np.rot90(psf, k=2, axes=(1, 2)), axes=(0, 2, 1))    # 180 rotate, then transpose
@@ -371,7 +384,8 @@ def diagnostic_assessment(
         label=f'Input (MIP) [$\gamma$={gamma}]',
         cmap=psf_cmap,
         dxy=dxy,
-        dz=dz
+        dz=dz,
+        ticks=False
     )
     plot_mip(
         xy=ax_pxy,
@@ -381,7 +395,8 @@ def diagnostic_assessment(
         label=f'Predicted [$\gamma$={gamma}]',
         cmap=psf_cmap,
         dxy=dxy,
-        dz=dz
+        dz=dz,
+        ticks=False
     )
     plot_mip(
         xy=ax_cxy,
@@ -391,19 +406,21 @@ def diagnostic_assessment(
         label=f'Corrected [$\gamma$={gamma}]',
         cmap=psf_cmap,
         dxy=dxy,
-        dz=dz
+        dz=dz,
     )
 
     if gt_psf is not None:
-        ax_xygt = fig.add_subplot(gs[3, 0])
-        ax_xzgt = fig.add_subplot(gs[3, 1])
-        ax_yzgt = fig.add_subplot(gs[3, 2])
+        ax_xygt = fig.add_subplot(gs[2, 0])
+        ax_xzgt = fig.add_subplot(gs[2, 1])
+        ax_yzgt = fig.add_subplot(gs[2, 2])
         plot_mip(
             xy=ax_xygt,
             xz=ax_xzgt,
             yz=ax_yzgt,
             vol=gt_psf,
-            label=f'Simulated [$\gamma$={gamma}]')
+            label=f'Simulated [$\gamma$={gamma}]',
+            ticks=False
+        )
 
     ax_zcoff.barh(
         np.arange(len(pred.amplitudes)) - bar_width / 2,
@@ -475,7 +492,7 @@ def diagnostic_assessment(
     for ax in [ax_gt, ax_pred, ax_diff]:
         ax.axis('off')
 
-    savesvg(fig, f'{save_path}.svg')
+    savesvg(fig, f'{save_path}.svg', wspace=.15, hspace=.15)
 
     if display:
         plt.tight_layout()

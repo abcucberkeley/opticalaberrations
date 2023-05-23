@@ -18,7 +18,7 @@ import swifter
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from preprocessing import remove_background_noise
+from preprocessing import prep_sample
 from line_profiler_pycharm import profile
 from tqdm import tqdm
 from tifffile import imwrite
@@ -43,29 +43,25 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 @profile
-def simulate_beads(psf, gen, snr, object_size=0, num_objs=1, beads=None, noise=None):
+def simulate_beads(psf, beads=None, photons=100000, object_size=0, num_objs=1, noise=True):
+
     if beads is None:
         beads = multipoint_dataset.beads(
-            gen=gen,
+            image_shape=psf.shape,
+            photons=photons,
             object_size=object_size,
             num_objs=num_objs,
-            radius=.1
         )
 
-    img = utils.fftconvolution(sample=beads, kernel=psf)
-    img *= snr ** 2
+    psf /= np.sum(psf)
+    inputs = utils.fftconvolution(sample=beads, kernel=psf)
 
-    if noise is None:
-        noise = gen._random_noise(
-            image=img,
-            mean=gen.mean_background_noise,
-            sigma=gen.sigma_background_noise
-        )
+    if noise:
+        inputs = utils.add_noise(inputs)
+    else:  # convert image to counts
+        inputs = utils.electrons2counts(inputs)
 
-    noisy_img = noise + img
-    noisy_img = remove_background_noise(noisy_img)
-    noisy_img /= np.max(noisy_img)
-    return noisy_img
+    return inputs
 
 
 def generate_fourier_embeddings(
@@ -91,7 +87,6 @@ def generate_fourier_embeddings(
     psf = psfgen.single_psf(
         phi=wavefront,
         normed=True,
-        noise=False,
         meta=False,
     )
 
@@ -99,7 +94,7 @@ def generate_fourier_embeddings(
         psf=psf,
         beads=ref,
         gen=psfgen,
-        snr=hashtable['snr']
+        photons=hashtable['photons']
     )
 
     emb = embeddings.fourier_embeddings(
@@ -137,7 +132,6 @@ def iter_evaluate(
     model = backend.load(modelpath)
     gen = backend.load_metadata(
         modelpath,
-        snr=1000,
         signed=True,
         rotate=True,
         batch_size=batch_size,
@@ -632,7 +626,7 @@ def iterheatmap(
 @profile
 def random_samples(
     model: Path,
-    psnr: int = 30,
+    photons: int = 1e5,
     batch_size: int = 128,
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
@@ -647,19 +641,18 @@ def random_samples(
         for amplitude_range in [(.05, .1), (.1, .2), (.2, .3)]:
             gen = backend.load_metadata(
                 model,
-                snr=1000,
                 amplitude_ranges=amplitude_range,
                 distribution=dist,
                 signed=False if eval_sign == 'positive_only' else True,
                 rotate=True,
                 mode_weights='pyramid',
                 psf_shape=(64, 64, 64),
-                mean_background_noise=0,
             )
             for s in range(10):
                 for num_objs in tqdm([1, 2, 5, 25, 50, 100, 150]):
                     reference = multipoint_dataset.beads(
-                        gen=gen,
+                        photons=photons,
+                        image_shape=gen.psf_shape,
                         object_size=0,
                         num_objs=num_objs
                     )
@@ -675,23 +668,14 @@ def random_samples(
                     )
 
                     # aberrated PSF without noise
-                    psf, y, snr, maxcounts, y_lls_defocus = gen.single_psf(
+                    psf, y, y_lls_defocus = gen.single_psf(
                         phi=phi,
                         normed=True,
-                        noise=False,
                         meta=True,
-                        lls_defocus_offset=(-1, 1)
+                        lls_defocus_offset=(0, 0)
                     )
 
-                    img = utils.fftconvolution(sample=reference, kernel=psf)
-                    img *= psnr ** 2
-
-                    rand_noise = gen._random_noise(
-                        image=img,
-                        mean=0,
-                        sigma=gen.sigma_background_noise
-                    )
-                    noisy_img = rand_noise + img
+                    noisy_img = simulate_beads(psf, beads=reference, noise=True)
                     maxcounts = np.max(noisy_img)
                     noisy_img /= maxcounts
 
@@ -745,13 +729,11 @@ def random_samples(
                     y_wave = Wavefront(y, lam_detection=gen.lam_detection)
                     residuals = Wavefront(residuals, lam_detection=gen.lam_detection)
 
-                    p_psf = gen.single_psf(p_wave, normed=True, noise=True)
-                    gt_psf = gen.single_psf(y_wave, normed=True, noise=True)
+                    p_psf = gen.single_psf(p_wave, normed=True)
+                    gt_psf = gen.single_psf(y_wave, normed=True)
 
                     corrected_psf = gen.single_psf(residuals)
-                    corrected_noisy_img = utils.fftconvolution(sample=reference, kernel=corrected_psf)
-                    corrected_noisy_img *= psnr ** 2
-                    corrected_noisy_img = rand_noise + corrected_noisy_img
+                    corrected_noisy_img = simulate_beads(corrected_psf, beads=reference, noise=True)
                     corrected_noisy_img /= np.max(corrected_noisy_img)
 
                     imwrite(save_path / f'psf_{s}.tif', noisy_img)
@@ -763,7 +745,7 @@ def random_samples(
                         gt_psf=gt_psf,
                         predicted_psf=p_psf,
                         corrected_psf=corrected_noisy_img,
-                        psnr=psnr,
+                        photons=photons,
                         maxcounts=maxcounts,
                         y=y_wave,
                         pred=p_wave,
@@ -785,7 +767,7 @@ def eval_object(
     modelpath,
     na: float = 1.0,
     batch_size: int = 100,
-    snr_range: tuple = (21, 30),
+    photons_range: tuple = (1e4, 1e5),
     n_samples: int = 10,
     eval_sign: str = 'positive_only',
     savepath: Any = None,
@@ -801,20 +783,19 @@ def eval_object(
     kernel = gen.single_psf(
         phi=w,
         normed=True,
-        noise=False,
         meta=False,
     )
 
     k = np.where(phi > 0)[0]
     for isize in tqdm([0, 1, 2, 3, 4, 5], desc=f"Evaluate different sizes [mode #{k}]"):
-        psnr = gen._randuniform(snr_range)
+        photons = gen._randuniform(photons_range)
         inputs = np.array([
             simulate_beads(
                 psf=kernel,
                 gen=gen,
                 object_size=isize,
                 num_objs=1,
-                snr=psnr,
+                photons=photons,
             )
             for i in range(n_samples)
         ])[..., np.newaxis]
@@ -980,7 +961,6 @@ def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
         kernel = gen.single_psf(
             phi=w,
             normed=True,
-            noise=False,
             meta=False,
         )
         ax_xy.imshow(np.max(kernel, axis=0)**.5, vmin=0, vmax=1, cmap='hot')
