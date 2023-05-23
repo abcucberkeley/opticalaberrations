@@ -15,6 +15,7 @@ from astropy import convolution
 import multiprocessing as mp
 from line_profiler_pycharm import profile
 from typing import Any, List, Union, Optional, Generator
+from scipy import constants
 
 from preprocessing import resize_with_crop_or_pad
 from wavefront import Wavefront
@@ -69,6 +70,22 @@ def multiprocess(
     return np.array(logs)
 
 
+def photons2electrons(image, quantum_efficiency: float = .82):
+    return image * quantum_efficiency
+
+
+def electrons2photons(image, quantum_efficiency: float = .82):
+    return image / quantum_efficiency
+
+
+def electrons2counts(image, electrons_per_count: float = .22):
+    return image / electrons_per_count
+
+
+def counts2electrons(image, electrons_per_count: float = .22):
+    return image * electrons_per_count
+
+
 def randuniform(var):
     """
     Returns a random number (uniform chance) in the range provided by var. If var is a scalar, var is simply returned.
@@ -118,13 +135,13 @@ def add_noise(
     """
     sigma_background_noise *= electrons_per_count  # electrons;  40 counts = 40 * .22 electrons per count
     dark_read_noise = normal_noise(mean=0, sigma=sigma_background_noise, size=image.shape)  # dark image in electrons
-    shot_noise = poisson_noise(image=image) / quantum_efficiency  # convert shot noise to electrons
+    shot_noise = photons2electrons(poisson_noise(image=image), quantum_efficiency=quantum_efficiency)
 
-    image *= quantum_efficiency             # convert image from photons to electrons
+    image = photons2electrons(image, quantum_efficiency=quantum_efficiency)
     image += shot_noise + dark_read_noise
-    image /= electrons_per_count            # convert image to counts
+    image = electrons2counts(image, electrons_per_count=electrons_per_count)
 
-    image += mean_background_offset         # add camera offset
+    image += mean_background_offset    # add camera offset (camera offset in counts)
     image[image < 0] = 0
     return image
 

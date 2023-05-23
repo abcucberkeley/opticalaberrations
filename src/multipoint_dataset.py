@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 import cli
-from utils import mean_min_distance, randuniform, add_noise
+from utils import mean_min_distance, randuniform, add_noise, electrons2counts
 from preprocessing import prep_sample, resize_with_crop_or_pad
 from utils import fftconvolution, multiprocess
 from synthetic import SyntheticPSF
@@ -187,7 +187,7 @@ def sim(
             electrons_per_count=electrons_per_count,
         )
     else:  # convert image to counts
-        inputs = img / electrons_per_count
+        inputs = electrons2counts(img, electrons_per_count=electrons_per_count)
 
     maxcounts = np.max(inputs)
 
@@ -200,7 +200,7 @@ def sim(
             odir = outdir/e
             odir.mkdir(exist_ok=True, parents=True)
 
-            inputs = prep_sample(
+            embeddings = prep_sample(
                 inputs,
                 sample_voxel_size=gen.voxel_size,
                 model_fov=gen.psf_fov,
@@ -213,7 +213,7 @@ def sim(
             )
 
             embeddings = np.squeeze(fourier_embeddings(
-                inputs=inputs,
+                inputs=embeddings,
                 iotf=gen.iotf,
                 embedding_option=e,
                 alpha_val=alpha_val,

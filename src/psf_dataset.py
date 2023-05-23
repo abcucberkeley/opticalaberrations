@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 import cli
-from utils import multiprocess, add_noise, randuniform
+from utils import multiprocess, add_noise, randuniform, electrons2counts
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 
@@ -114,7 +114,7 @@ def sim(
             electrons_per_count=electrons_per_count,
         )
     else:  # convert image to counts
-        inputs = kernel / electrons_per_count
+        inputs = electrons2counts(kernel, electrons_per_count=electrons_per_count)
 
     maxcounts = np.max(inputs)
 
