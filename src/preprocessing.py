@@ -686,11 +686,11 @@ def get_tiles(
     return np.array(rois), ztiles, nrows, ncols
 
 
-def optimal_rolling_strides(modelpsfgen, samplepsfgen, sample_shape):
+def optimal_rolling_strides(model_psf_fov, sample_voxel_size, sample_shape):
     model_window_size = (
-        round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
-        round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
-        round_to_even(modelpsfgen.psf_fov[2] / samplepsfgen.voxel_size[2]),
+        round_to_even(model_psf_fov[0] / sample_voxel_size[0]),
+        round_to_even(model_psf_fov[1] / sample_voxel_size[1]),
+        round_to_even(model_psf_fov[2] / sample_voxel_size[2]),
     )  # number of sample voxels that make up a model psf.
 
     model_window_size = np.minimum(model_window_size, sample_shape)

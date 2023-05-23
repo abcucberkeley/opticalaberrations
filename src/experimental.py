@@ -812,7 +812,7 @@ def predict_large_fov(
         normalize=True,
         edge_filter=False,
         fov_is_small=False,
-        rolling_strides=optimal_rolling_strides(premodelpsfgen, samplepsfgen, sample.shape),
+        rolling_strides=optimal_rolling_strides(premodelpsfgen.psf_fov, sample_voxel_size, sample.shape),
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
     )
 
@@ -1180,7 +1180,7 @@ def predict_tiles(
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
-        rolling_strides=optimal_rolling_strides(premodelpsfgen, samplepsfgen, window_size),
+        rolling_strides=optimal_rolling_strides(premodelpsfgen.psf_fov, samplepsfgen.voxel_size, window_size),
         cpu_workers=cpu_workers,
     )
 
