@@ -613,7 +613,6 @@ def predict_sample(
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
-        snr=psnr,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -792,7 +791,6 @@ def predict_large_fov(
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
-        snr=psnr,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -964,7 +962,6 @@ def predict_rois(
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
-        snr=100,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -1122,7 +1119,6 @@ def predict_tiles(
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
-        snr=psnr,
         psf_shape=window_size,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -1717,7 +1713,6 @@ def phase_retrieval(
 
     psfgen = SyntheticPSF(
         psf_type='widefield',
-        snr=100,
         psf_shape=data.shape,
         n_modes=num_modes,
         lam_detection=wavelength,
