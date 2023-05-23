@@ -263,7 +263,6 @@ def eval_mode(
     psnr = predictions_settings['psnr']
     gen = backend.load_metadata(
         model_path,
-        snr=psnr,
         psf_shape=noisy_img.shape,
         psf_type='widefield' if save_postfix == 'pr' else None,
         z_voxel_size=.1 if save_postfix == 'pr' else None,
@@ -310,7 +309,6 @@ def eval_mode(
 
         psfgen = backend.load_metadata(
             model_path,
-            snr=psnr,
             psf_shape=(64, 64, 64),
             psf_type='widefield' if save_postfix == 'pr' else None,
             z_voxel_size=.1 if save_postfix == 'pr' else None,
