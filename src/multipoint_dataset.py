@@ -11,7 +11,7 @@ import os
 import time
 import ujson
 from functools import partial
-from typing import Any
+from typing import Any, Optional
 from pathlib import Path
 from tifffile import imwrite
 import numpy as np
@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 import cli
-from utils import mean_min_distance
+from utils import mean_min_distance, randuniform, add_noise
 from preprocessing import prep_sample, resize_with_crop_or_pad
 from utils import fftconvolution, multiprocess
 from synthetic import SyntheticPSF
@@ -40,7 +40,7 @@ def save_synthetic_sample(
     savepath,
     inputs,
     amps,
-    snr,
+    photons,
     maxcounts,
     p2v,
     avg_min_distance,
@@ -67,7 +67,7 @@ def save_synthetic_sample(
             order=str(gen.order),
             zernikes=amps.tolist(),
             lls_defocus_offset=float(lls_defocus_offset),
-            snr=int(snr),
+            photons=int(photons),
             shape=inputs.shape,
             maxcounts=int(maxcounts),
             npoints=int(npoints),
@@ -95,32 +95,45 @@ def save_synthetic_sample(
 
 
 def beads(
-    gen: SyntheticPSF,
-    object_size: float = 0,
+    image_shape: tuple,
+    object_size: Optional[int] = 0,
     num_objs: int = 1,
-    radius: float = .4,
+    fill_radius: float = .4,
 ):
+    """
+    Args:
+        image_shape: image size
+        object_size: bead size (0 for diffraction-limited beads)
+        num_objs: number of beads
+        fill_radius: (0 for a single bead at the center of the image)
+    """
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
-    reference = np.zeros(gen.psf_shape)
+    reference = np.zeros(image_shape)
+    rng = np.random.default_rng()
 
     for i in range(num_objs):
+        if object_size is None:
+            object_size = np.random.choice([0, 1, 2], p=[.95, .04, .01])
+
         if object_size > 0:
             reference += rg.sphere(
-                shape=gen.psf_shape,
+                shape=image_shape,
                 radius=object_size,
-                position=np.random.uniform(low=(.5 - radius), high=(.5 + radius), size=3)
-            ).astype(np.float32) * np.random.random()
+                position=rng.integers(
+                    int(image_shape[0] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius)),
+                    3
+                ),
+            ).astype(np.float32)
         else:
-            if radius > 0:
+            if fill_radius > 0:
                 reference[
-                    np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
-                    np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
-                    np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
-                ] += np.random.random()
+                    rng.integers(int(image_shape[0] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius))),
+                    rng.integers(int(image_shape[1] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius))),
+                    rng.integers(int(image_shape[2] * (.5 - fill_radius)), int(image_shape[2] * (.5 + fill_radius))),
+                ] = 1
             else:
-                reference[gen.psf_shape[0] // 2, gen.psf_shape[1] // 2, gen.psf_shape[2] // 2] += np.random.random()
+                reference[image_shape[0] // 2, image_shape[1] // 2, image_shape[2] // 2] = 1
 
-    reference /= np.max(reference)
     return reference
 
 
@@ -129,69 +142,54 @@ def sim(
     outdir: Path,
     gen: SyntheticPSF,
     npoints: int,
-    snr: tuple,
+    photons: tuple,
     emb: bool = True,
     noise: bool = True,
     normalize: bool = True,
     remove_background: bool = True,
     random_crop: Any = None,
-    radius: float = .4,
     embedding_option: list = (),
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
-    lls_defocus_offset: Any = 0.
+    lls_defocus_offset: Any = 0.,
+    sigma_background_noise=40,
+    mean_background_offset=100,
+    electrons_per_count: float = .22,
+    quantum_efficiency: float = .82,
 ):
-    np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
-    reference = np.zeros(gen.psf_shape)
+    photons = randuniform(photons)
+    reference = photons * beads(
+        image_shape=gen.psf_shape,
+        object_size=None,
+        num_objs=npoints,
+    )
 
     # aberrated PSF without noise
-    kernel, amps, estsnr, maxcounts, lls_defocus_offset = gen.single_psf(
+    kernel, amps, lls_defocus_offset = gen.single_psf(
         phi=gen.amplitude_ranges,
         lls_defocus_offset=lls_defocus_offset,
         normed=True,
-        noise=False,
         meta=True,
     )
+    kernel /= np.sum(kernel)
+
+    img = fftconvolution(sample=reference, kernel=kernel)  # image in photons
 
     p2v = Wavefront(amps, lam_detection=gen.lam_detection).peak2valley(na=1.0)
-
-    for i in range(npoints):
-        sphere_radius = np.random.choice([0, 1, 2], p=[.95, .04, .01])
-
-        if sphere_radius > 0:
-            reference += rg.sphere(
-                shape=gen.psf_shape,
-                radius=sphere_radius,
-                position=np.random.uniform(low=.2, high=.8, size=3)
-            ).astype(np.float32) * np.random.random()
-        else:
-            if radius > 0:
-                reference[
-                    np.random.randint(int(gen.psf_shape[0] * (.5 - radius)), int(gen.psf_shape[0] * (.5 + radius))),
-                    np.random.randint(int(gen.psf_shape[1] * (.5 - radius)), int(gen.psf_shape[1] * (.5 + radius))),
-                    np.random.randint(int(gen.psf_shape[2] * (.5 - radius)), int(gen.psf_shape[2] * (.5 + radius)))
-                ] += np.random.random()
-            else:
-                reference[gen.psf_shape[0] // 2, gen.psf_shape[1] // 2, gen.psf_shape[2] // 2] += np.random.random()
-
     avg_min_distance = mean_min_distance(reference, voxel_size=gen.voxel_size) if npoints > 1 else 0.
 
-    reference /= np.max(reference)
-    img = fftconvolution(sample=reference, kernel=kernel)
-    psnr = gen._randuniform(snr)
-    img *= psnr ** 2
-
     if noise:
-        rand_noise = gen._random_noise(
-            image=img,
-            mean=gen.mean_background_noise,
-            sigma=gen.sigma_background_noise
+        inputs = add_noise(
+            img,
+            mean_background_offset=mean_background_offset,
+            sigma_background_noise=sigma_background_noise,
+            quantum_efficiency=quantum_efficiency,
+            electrons_per_count=electrons_per_count,
         )
-        inputs = rand_noise + img
-        maxcounts = np.max(inputs)
-    else:
-        maxcounts = np.max(img)
-        inputs = img
+    else:  # convert image to counts
+        inputs = img / electrons_per_count
+
+    maxcounts = np.max(inputs)
 
     if random_crop is not None:
         crop = int(np.random.uniform(low=random_crop, high=gen.psf_shape[0]+1))
@@ -211,7 +209,7 @@ def sim(
                 edge_filter=False,
                 filter_mask_dilation=False,
                 read_noise_bias=5,
-                # plot=odir/filename,
+                plot=odir/filename,
             )
 
             embeddings = np.squeeze(fourier_embeddings(
@@ -220,14 +218,14 @@ def sim(
                 embedding_option=e,
                 alpha_val=alpha_val,
                 phi_val=phi_val,
-                # plot=odir/filename
+                plot=odir/filename
             ))
 
             save_synthetic_sample(
                 odir/filename,
                 embeddings,
                 amps=amps,
-                snr=psnr,
+                photons=photons,
                 maxcounts=maxcounts,
                 npoints=npoints,
                 p2v=p2v,
@@ -247,14 +245,14 @@ def sim(
             edge_filter=False,
             filter_mask_dilation=False,
             read_noise_bias=5,
-            # plot=outdir/filename,
+            plot=outdir/filename,
         )
 
         save_synthetic_sample(
             outdir/filename,
             inputs,
             amps=amps,
-            snr=psnr,
+            photons=photons,
             maxcounts=maxcounts,
             npoints=npoints,
             avg_min_distance=avg_min_distance,
@@ -283,8 +281,8 @@ def create_synthetic_sample(
     x_voxel_size: float,
     y_voxel_size: float,
     z_voxel_size: float,
-    min_psnr: int,
-    max_psnr: int,
+    min_photons: int,
+    max_photons: int,
     lam_detection: float,
     refractive_index: float,
     na_detection: float,
@@ -292,6 +290,7 @@ def create_synthetic_sample(
     random_crop: Any,
     noise: bool,
     normalize: bool,
+    fog: bool,
     emb: bool,
     embedding_option: list,
     alpha_val: str = 'abs',
@@ -308,7 +307,6 @@ def create_synthetic_sample(
         order='ansi',
         cpu_workers=cpu_workers,
         n_modes=modes,
-        snr=1000,
         psf_type=psf_type,
         distribution=distribution,
         mode_weights=mode_dist,
@@ -334,7 +332,7 @@ def create_synthetic_sample(
     else:
         outdir = outdir / f"{distribution}"
 
-    outdir = outdir / f"psnr_{min_psnr}-{max_psnr}"
+    outdir = outdir / f"photons_{min_photons}-{max_photons}"
     outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
                       f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
@@ -346,7 +344,7 @@ def create_synthetic_sample(
         outdir=outdir,
         gen=gen,
         npoints=npoints,
-        snr=(min_psnr, max_psnr),
+        photons=(min_photons, max_photons),
         emb=emb,
         embedding_option=embedding_option,
         random_crop=random_crop,
@@ -396,6 +394,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        '--fog', action='store_true',
+        help='toggle to add a random hazy background'
+    )
+
+    parser.add_argument(
         "--x_voxel_size", default=.108, type=float,
         help='lateral voxel size in microns for X'
     )
@@ -425,13 +428,13 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--min_psnr", default=10, type=int,
-        help="minimum PSNR for training samples"
+        "--min_photons", default=5000, type=int,
+        help="minimum photons for training samples"
     )
 
     parser.add_argument(
-        "--max_psnr", default=50, type=int,
-        help="maximum PSNR for training samples"
+        "--max_photons", default=10000, type=int,
+        help="maximum photons for training samples"
     )
 
     parser.add_argument(
@@ -537,6 +540,7 @@ def main(args=None):
         outdir=args.outdir,
         noise=args.noise,
         normalize=args.normalize,
+        fog=args.fog,
         modes=args.modes,
         input_shape=args.input_shape,
         psf_type=args.psf_type,
@@ -554,8 +558,8 @@ def main(args=None):
         x_voxel_size=args.x_voxel_size,
         y_voxel_size=args.y_voxel_size,
         z_voxel_size=args.z_voxel_size,
-        min_psnr=args.min_psnr,
-        max_psnr=args.max_psnr,
+        min_photons=args.min_photons,
+        max_photons=args.max_photons,
         lam_detection=args.lam_detection,
         refractive_index=args.refractive_index,
         na_detection=args.na_detection,

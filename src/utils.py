@@ -69,6 +69,66 @@ def multiprocess(
     return np.array(logs)
 
 
+def randuniform(var):
+    """
+    Returns a random number (uniform chance) in the range provided by var. If var is a scalar, var is simply returned.
+
+    Args:
+        var : (as scalar) Returned as is.
+        var : (as list) Range to provide a random number
+
+    Returns:
+        _type_: ndarray or scalar. Random sample from the range provided.
+
+    """
+    var = (var, var) if np.isscalar(var) else var
+
+    # star unpacks a list, so that var's values become the separate arguments here
+    return np.random.uniform(*var)
+
+
+def normal_noise(mean: float, sigma: float, size: tuple) -> np.array:
+    mean = randuniform(mean)
+    sigma = randuniform(sigma)
+    return np.random.normal(loc=mean, scale=sigma, size=size).astype(np.float32)
+
+
+def poisson_noise(image: np.ndarray) -> np.array:
+    return np.random.poisson(lam=image).astype(np.float32) - image
+
+
+def add_noise(
+    image: np.ndarray,
+    mean_background_offset: int = 100,
+    sigma_background_noise: int = 40,
+    quantum_efficiency: float = .82,
+    electrons_per_count: float = .22,
+):
+    """
+
+    Args:
+        image: noise-free image in photons
+        mean_background_offset: camera background offset
+        sigma_background_noise: read noise from the camera
+        quantum_efficiency: quantum efficiency of the camera
+        electrons_per_count: conversion factor to go from electrons to counts
+
+    Returns:
+        noisy image in counts
+    """
+    sigma_background_noise *= electrons_per_count  # electrons;  40 counts = 40 * .22 electrons per count
+    dark_read_noise = normal_noise(mean=0, sigma=sigma_background_noise, size=image.shape)  # dark image in electrons
+    shot_noise = poisson_noise(image=image) / quantum_efficiency  # convert shot noise to electrons
+
+    image *= quantum_efficiency             # convert image from photons to electrons
+    image += shot_noise + dark_read_noise
+    image /= electrons_per_count            # convert image to counts
+
+    image += mean_background_offset         # add camera offset
+    image[image < 0] = 0
+    return image
+
+
 def microns2waves(a, wavelength):
     return a/wavelength
 
@@ -152,7 +212,7 @@ def peak2valley(w, wavelength: float = .510, na: float = 1.0) -> float:
 def compute_signal_lost(phi, gen, res):
     hashtbl = {}
     w = Wavefront(phi, order='ansi')
-    psf = gen.single_psf(w, normed=True, noise=False)
+    psf = gen.single_psf(w, normed=True)
     abr = 0 if np.count_nonzero(phi) == 0 else round(w.peak2valley())
 
     for k, r in enumerate(res):
@@ -243,9 +303,9 @@ def fftconvolution(kernel, sample):
         sample = np.squeeze(sample)
 
     conv = convolution.convolve_fft(sample, kernel, allow_huge=True)
-    conv /= np.nanmax(conv)
-    conv = np.nan_to_num(conv, nan=0, neginf=0, posinf=0)
-    conv[conv < 0] = 0
+    # conv /= np.nanmax(conv)
+    # conv = np.nan_to_num(conv, nan=0, neginf=0, posinf=0)
+    # conv[conv < 0] = 0
     return conv
 
 

@@ -20,8 +20,7 @@ import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 import cli
-from preprocessing import remove_background_noise
-from utils import multiprocess
+from utils import multiprocess, add_noise, randuniform
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 
@@ -37,7 +36,7 @@ def save_synthetic_sample(
     savepath,
     inputs,
     amps,
-    snr,
+    photons,
     maxcounts,
     p2v,
     gen,
@@ -53,8 +52,8 @@ def save_synthetic_sample(
             order=str(gen.order),
             zernikes=amps.tolist(),
             lls_defocus_offset=float(lls_defocus_offset),
-            snr=int(snr),
             shape=inputs.shape,
+            photons=int(photons),
             maxcounts=int(maxcounts),
             peak2peak=float(p2v),
             x_voxel_size=float(gen.x_voxel_size),
@@ -81,50 +80,52 @@ def sim(
     filename: str,
     outdir: Path,
     gen: SyntheticPSF,
-    snr: tuple,
+    photons: tuple,
     noise: bool = True,
     normalize: bool = True,
-    remove_background: bool = True,
-    lls_defocus_offset: Any = 0.
+    lls_defocus_offset: Any = 0.,
+    sigma_background_noise=40,
+    mean_background_offset=100,
+    electrons_per_count: float = .22,
+    quantum_efficiency: float = .82,
+
 ):
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
+    photons = randuniform(photons)
 
     # aberrated PSF without noise
-    kernel, amps, estsnr, maxcounts, lls_defocus_offset = gen.single_psf(
+    kernel, amps, lls_defocus_offset = gen.single_psf(
         phi=gen.amplitude_ranges,
         lls_defocus_offset=lls_defocus_offset,
         normed=True,
-        noise=False,
         meta=True,
     )
+    kernel /= np.sum(kernel)
+    kernel *= photons
 
     p2v = Wavefront(amps, lam_detection=gen.lam_detection).peak2valley(na=1.0)
-    psnr = gen._randuniform(snr)
-    img = kernel * psnr ** 2
 
     if noise:
-        rand_noise = gen._random_noise(
-            image=img,
-            mean=gen.mean_background_noise,
-            sigma=gen.sigma_background_noise
+        inputs = add_noise(
+            kernel,
+            mean_background_offset=mean_background_offset,
+            sigma_background_noise=sigma_background_noise,
+            quantum_efficiency=quantum_efficiency,
+            electrons_per_count=electrons_per_count,
         )
-        noisy_img = rand_noise + img
-        maxcounts = np.max(noisy_img)
-    else:
-        maxcounts = np.max(img)
-        noisy_img = img
+    else:  # convert image to counts
+        inputs = kernel / electrons_per_count
 
-    if remove_background:
-        noisy_img = remove_background_noise(noisy_img)
+    maxcounts = np.max(inputs)
 
     if normalize:
-        noisy_img /= np.max(noisy_img)
+        inputs /= np.max(inputs)
 
     save_synthetic_sample(
         outdir/filename,
-        noisy_img,
+        inputs,
         amps=amps,
-        snr=psnr,
+        photons=photons,
         maxcounts=maxcounts,
         p2v=p2v,
         gen=gen,
@@ -148,8 +149,8 @@ def create_synthetic_sample(
     x_voxel_size: float,
     y_voxel_size: float,
     z_voxel_size: float,
-    min_psnr: int,
-    max_psnr: int,
+    min_photons: int,
+    max_photons: int,
     lam_detection: float,
     refractive_index: float,
     na_detection: float,
@@ -163,7 +164,6 @@ def create_synthetic_sample(
         order='ansi',
         cpu_workers=cpu_workers,
         n_modes=modes,
-        snr=1000,
         psf_type=psf_type,
         distribution=distribution,
         mode_weights=mode_dist,
@@ -189,9 +189,9 @@ def create_synthetic_sample(
     else:
         outdir = outdir / f"{distribution}"
 
-    outdir = outdir / f"psnr_{min_psnr}-{max_psnr}"
+    outdir = outdir / f"photons_{min_photons}-{max_photons}"
     outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-                          f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+                      f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
     outdir.mkdir(exist_ok=True, parents=True)
 
@@ -199,7 +199,7 @@ def create_synthetic_sample(
         filename=filename,
         outdir=outdir,
         gen=gen,
-        snr=(min_psnr, max_psnr),
+        photons=(min_photons, max_photons),
         noise=noise,
         normalize=normalize,
         lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset)
@@ -258,13 +258,13 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--min_psnr", default=10, type=int,
-        help="minimum PSNR for training samples"
+        "--min_photons", default=5000, type=int,
+        help="minimum photons for training samples"
     )
 
     parser.add_argument(
-        "--max_psnr", default=50, type=int,
-        help="maximum PSNR for training samples"
+        "--max_photons", default=10000, type=int,
+        help="maximum photons for training samples"
     )
 
     parser.add_argument(
@@ -365,8 +365,8 @@ def main(args=None):
         x_voxel_size=args.x_voxel_size,
         y_voxel_size=args.y_voxel_size,
         z_voxel_size=args.z_voxel_size,
-        min_psnr=args.min_psnr,
-        max_psnr=args.max_psnr,
+        min_photons=args.min_photons,
+        max_photons=args.max_photons,
         lam_detection=args.lam_detection,
         refractive_index=args.refractive_index,
         na_detection=args.na_detection,

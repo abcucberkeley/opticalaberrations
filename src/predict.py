@@ -56,10 +56,6 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--psnr", default=30, type=float, help='peak signal-to-noise ratio'
-    )
-
-    parser.add_argument(
         "--n_modes", default=55, type=int, help='number zernike modes'
     )
 
@@ -94,28 +90,6 @@ def main(args=None):
             z_voxel_size=args.z_voxel_size,
             embedding_option=args.embedding_option
         )
-
-    elif args.target == "featuremaps":
-        backend.featuremaps(
-            modelpath=args.model,
-            wavelength=args.wavelength,
-            psf_type=args.psf_type,
-            amplitude_range=args.amplitude_range,
-            psnr=args.psnr,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            cpu_workers=args.cpu_workers
-        )
-
-    elif args.target == "kernels":
-        backend.kernels(modelpath=args.model)
-
-    elif args.target == "deconstruct":
-        backend.deconstruct(
-            model=args.model,
-        )
-
     else:
         print("Error: unknown action!")
 

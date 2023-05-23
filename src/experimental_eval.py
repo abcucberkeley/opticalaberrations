@@ -315,9 +315,9 @@ def eval_mode(
             psf_type='widefield' if save_postfix == 'pr' else None,
             z_voxel_size=.1 if save_postfix == 'pr' else None,
         )
-        p_psf = psfgen.single_psf(p_wave, normed=True, noise=False)
-        gt_psf = psfgen.single_psf(y_wave, normed=True, noise=False)
-        corrected_psf = psfgen.single_psf(diff, normed=True, noise=False)
+        p_psf = psfgen.single_psf(p_wave, normed=True)
+        gt_psf = psfgen.single_psf(y_wave, normed=True)
+        corrected_psf = psfgen.single_psf(diff, normed=True)
 
         plt.style.use("default")
         vis.diagnostic_assessment(
@@ -570,7 +570,7 @@ def eval_dataset(
     residuals.sort_values(by=['modes', 'iteration_index', 'na'], ascending=[True, True, False], inplace=True)
     print(residuals)
 
-    savepath = Path(f'{datadir}/evaluation')
+    savepath = Path(f'{datadir}/beads_evaluation')
     residuals.to_csv(f'{savepath}.csv')
     logger.info(f'{savepath}.csv')
     vis.plot_beads_dataset(results, residuals, savepath=savepath)

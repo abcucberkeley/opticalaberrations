@@ -277,7 +277,6 @@ def generate_embeddings(
 
     samplepsfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
-        snr=psnr,
         psf_shape=sample.shape,
         n_modes=model.output_shape[1],
         lam_detection=wavelength,
@@ -695,7 +694,7 @@ def predict_sample(
             dm_damping_scalar=dm_damping_scalar
         )
 
-    psf = samplepsfgen.single_psf(phi=p, normed=True, noise=False)
+    psf = samplepsfgen.single_psf(phi=p, normed=True)
     imwrite(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
     imwrite(f"{img.with_suffix('')}_sample_predictions_wavefront.tif", p.wave(), dtype=np.float32)
 
@@ -859,7 +858,7 @@ def predict_large_fov(
             dm_damping_scalar=dm_damping_scalar
         )
 
-    psf = samplepsfgen.single_psf(phi=p, normed=True, noise=False)
+    psf = samplepsfgen.single_psf(phi=p, normed=True)
     imwrite(f"{img.with_suffix('')}_large_fov_predictions_psf.tif", psf)
     imwrite(f"{img.with_suffix('')}_large_fov_predictions_wavefront.tif", p.wave(), dtype=np.float32)
 
@@ -1325,11 +1324,20 @@ def aggregate_predictions(
             max_silhouette = results['silhouette'].idxmax()
             max_isoplanatic_clusters = max_silhouette
 
-        n_clusters = min(max_isoplanatic_clusters, len(ztile_preds))
-        kmeans = KMeans(init="k-means++", n_clusters=n_clusters)
-        kmeans.fit(ztile_preds)
+        # weight zernike coefficients by their mth order for clustering
+        features = ztile_preds.copy()
+        for mode, twin in Wavefront(np.zeros(features.shape[1])).twins.items():
+            if twin is not None:
+                features[mode.index_ansi] /= abs(mode.m - 1)
+                features[twin.index_ansi] /= twin.m + 1
+            else:  # spherical modes
+                features[mode.index_ansi] /= mode.m + 1
 
-        ztile_preds['cluster'] = kmeans.predict(ztile_preds) + 1
+        n_clusters = min(max_isoplanatic_clusters, len(features))
+        kmeans = KMeans(init="k-means++", n_clusters=n_clusters)
+        kmeans.fit(features)
+
+        ztile_preds['cluster'] = kmeans.predict(features) + 1
         ztile_preds['cluster'] += z * (max_isoplanatic_clusters + 1)
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
@@ -1423,8 +1431,14 @@ def aggregate_predictions(
         c = predictions.loc[(z, y, x), 'cluster']
 
         clusters_rgb[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((yw, xw), int(c))    # cluster group id
-        wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.nan_to_num(wavefronts[(z, y, x)].wave(xw), nan=0)
-        psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.max(samplepsfgen.single_psf(wavefronts[(z, y, x)]), axis=0)
+
+        if c == len(clusters3d_colormap)-1:
+            wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
+            psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
+        else:
+            wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.nan_to_num(wavefronts[(z, y, x)].wave(xw), nan=0)
+            psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.max(samplepsfgen.single_psf(wavefronts[(z, y, x)]), axis=0)
+
         clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((zw, yw, xw), int(c))
 
     imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap.astype(np.float32))
@@ -1787,7 +1801,7 @@ def phase_retrieval(
             dm_damping_scalar=dm_damping_scalar
         )
 
-    psf = psfgen.single_psf(pred, normed=True, noise=False)
+    psf = psfgen.single_psf(pred, normed=True)
     imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf)
 
     if plot:

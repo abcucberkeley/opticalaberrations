@@ -79,11 +79,11 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--min_psnr", default=1, type=int, help="minimum PSNR for training samples"
+        "--min_photons", default=1, type=int, help="minimum photons for training samples"
     )
 
     train_parser.add_argument(
-        "--max_psnr", default=100, type=int, help="maximum PSNR for training samples"
+        "--max_photons", default=100, type=int, help="maximum photons for training samples"
     )
 
     train_parser.add_argument(
@@ -236,8 +236,8 @@ def main(args=None):
             warmup=args.warmup,
             decay_period=args.decay_period,
             pmodes=args.modes if args.pmodes is None else args.pmodes,
-            min_psnr=args.min_psnr,
-            max_psnr=args.max_psnr,
+            min_photons=args.min_photons,
+            max_photons=args.max_photons,
             max_amplitude=args.max_amplitude,
             distribution=args.dist,
             samplelimit=args.samplelimit,
