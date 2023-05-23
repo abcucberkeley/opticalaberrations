@@ -199,7 +199,7 @@ def preprocess(
            ::strides[2]
         ]
 
-        throwaway = sample.shape - ((np.array(rois.shape[:3])-1) * strides + rois.shape[-3:])
+        throwaway = np.array(sample.shape) - ((np.array(rois.shape[:3])-1) * strides + rois.shape[-3:])
         if any(throwaway > (np.array(sample.shape) / 4)):
             raise Exception(f'You are throwing away {throwaway} voxels out of {sample.shape}, with stride length'
                             f'{strides}. Change rolling_strides.')
@@ -346,9 +346,7 @@ def reconstruct_wavefront_error_landscape(
 
     Args:
         wavefronts: wavefronts at each tile location
-        volume_shape: Number of pixels in full volume
         na: Numerical aperature limit which to use for calculating p2v error
-        wavelength:
 
     Returns:
         terrain3d: wavefront error in units of waves
@@ -1552,7 +1550,6 @@ def aggregate_predictions(
             ensure_ascii=False,
             escape_forward_slashes=False
         )
-
 
     return coefficients
 
