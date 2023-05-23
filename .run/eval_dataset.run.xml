@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="eval_dataset $USER_HOME$/nvme2/Data/TestsForThayer/20230317/fish/mode3/" />
+    <option name="PARAMETERS" value="eval_dataset $USER_HOME$/nvme2/Data/TestsForThayer/20230224_beads_15model/manybeads/ --precomputed" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
