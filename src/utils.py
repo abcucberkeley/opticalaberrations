@@ -111,6 +111,7 @@ def normal_noise(mean: float, sigma: float, size: tuple) -> np.array:
 
 
 def poisson_noise(image: np.ndarray) -> np.array:
+    image = np.nan_to_num(image, nan=0)
     return np.random.poisson(lam=image).astype(np.float32) - image
 
 
@@ -319,10 +320,15 @@ def fftconvolution(kernel, sample):
     if sample.shape[0] == 1 or sample.shape[-1] == 1:
         sample = np.squeeze(sample)
 
-    conv = convolution.convolve_fft(sample, kernel, allow_huge=True)
-    # conv /= np.nanmax(conv)
-    # conv = np.nan_to_num(conv, nan=0, neginf=0, posinf=0)
-    # conv[conv < 0] = 0
+    conv = convolution.convolve_fft(
+        sample,
+        kernel,
+        allow_huge=True,
+        normalize_kernel=False,
+        nan_treatment='fill',
+        fill_value=0
+    )
+    conv[conv < 0] = 0  # clip negative small values
     return conv
 
 
