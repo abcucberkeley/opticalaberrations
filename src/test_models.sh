@@ -20,12 +20,12 @@ do
       MODEL="$PRETRAINED/opticalnet-$MODES"
 
       python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-      --task "$MODEL.h5 --eval_sign $EVALSIGN --digital_rotations random" \
+      --task "$MODEL.h5 --eval_sign $EVALSIGN --digital_rotations --batch_size 128 random" \
       --taskname random \
       --name $MODEL/$EVALSIGN/samples
 
       python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-      --task "$MODEL.h5 --eval_sign $EVALSIGN --digital_rotations modes" \
+      --task "$MODEL.h5 --eval_sign $EVALSIGN --digital_rotations --batch_size 128 modes" \
       --taskname evalmodes \
       --name $MODEL/$EVALSIGN/evalmodes
 

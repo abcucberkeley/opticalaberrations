@@ -844,7 +844,12 @@ def eval_object(
 
 
 @profile
-def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bool = True):
+def evaluate_modes(
+    model: Path,
+    eval_sign: str = 'signed',
+    batch_size: int = 512,
+    digital_rotations: bool = True
+):
     outdir = model.with_suffix('') / eval_sign / 'evalmodes'
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
@@ -866,6 +871,7 @@ def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bo
             phi=classes,
             photons=photons,
             modelpath=model,
+            batch_size=batch_size,
             eval_sign=eval_sign,
             savepath=savepath,
             digital_rotations=361 if digital_rotations else None
