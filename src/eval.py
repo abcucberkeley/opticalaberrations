@@ -1,3 +1,5 @@
+import itertools
+
 import matplotlib
 matplotlib.use('Agg')
 
@@ -43,7 +45,7 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 @profile
-def simulate_beads(psf, beads=None, photons=100000, object_size=0, num_objs=1, noise=True):
+def simulate_beads(psf, beads=None, photons=100000, object_size=0, num_objs=1, noise=True, fill_radius=.4):
 
     if beads is None:
         beads = multipoint_dataset.beads(
@@ -51,6 +53,7 @@ def simulate_beads(psf, beads=None, photons=100000, object_size=0, num_objs=1, n
             photons=photons,
             object_size=object_size,
             num_objs=num_objs,
+            fill_radius=fill_radius
         )
 
     psf /= np.sum(psf)
@@ -627,7 +630,7 @@ def iterheatmap(
 def random_samples(
     model: Path,
     photons: int = 1e5,
-    batch_size: int = 128,
+    batch_size: int = 512,
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
 ):
@@ -684,10 +687,19 @@ def random_samples(
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
+                    embeddings = backend.preprocess(
+                        noisy_img,
+                        modelpsfgen=gen,
+                        digital_rotations=361 if digital_rotations else None,
+                        remove_background=True,
+                        normalize=True,
+                        plot=save_path / f'{s}',
+                    )
+
                     if digital_rotations:
                         res = backend.predict_rotation(
                             m,
-                            noisy_img,
+                            embeddings,
                             save_path=save_path / f'{s}',
                             psfgen=gen,
                             no_phase=no_phase,
@@ -698,7 +710,7 @@ def random_samples(
                     else:
                         res = backend.bootstrap_predict(
                             m,
-                            noisy_img,
+                            embeddings,
                             psfgen=gen,
                             no_phase=no_phase,
                             batch_size=batch_size,
@@ -765,107 +777,81 @@ def random_samples(
 def eval_object(
     phi,
     modelpath,
+    photons: list,
     na: float = 1.0,
-    batch_size: int = 100,
-    photons_range: tuple = (1e4, 1e5),
+    batch_size: int = 512,
     n_samples: int = 10,
-    eval_sign: str = 'positive_only',
+    eval_sign: str = 'rotations',
     savepath: Any = None,
+    digital_rotations: Optional[int] = 361
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]])
-    no_phase = True if model.input_shape[1] == 3 else False
 
-    w = Wavefront(phi, lam_detection=gen.lam_detection)
-    p2v = w.peak2valley(na=na)
-    df = pd.DataFrame([], columns=['aberration', 'prediction', 'residuals', 'object_size'])
+    df = pd.DataFrame([], columns=['aberration', 'prediction', 'residuals', 'photons'])
+    wavefronts = [Wavefront(w, lam_detection=gen.lam_detection) for w in phi]
+    p2v = [w.peak2valley(na=na) for w in wavefronts]
+    kernels = [gen.single_psf(phi=w, normed=True) for w in wavefronts]
 
-    kernel = gen.single_psf(
-        phi=w,
-        normed=True,
-        meta=False,
+    inputs = np.stack([
+        backend.preprocess(
+            simulate_beads(psf=kernels[k], object_size=0, num_objs=5, photons=ph, noise=True, fill_radius=.4),
+            modelpsfgen=gen,
+            digital_rotations=digital_rotations,
+            remove_background=True,
+            normalize=True,
+            plot=f"{savepath}_{p2v[k]}_{ph}_{i}"
+        )
+        for k, ph, i in itertools.product(range(len(kernels)), photons, range(n_samples))
+    ], axis=0)
+    ys = np.stack([phi[k] for k, ph, i in itertools.product(range(len(kernels)), photons, range(n_samples))])
+
+    inputs = tf.data.Dataset.from_tensor_slices(inputs)
+
+    res = backend.predict_dataset(
+        model,
+        inputs=inputs,
+        psfgen=gen,
+        batch_size=batch_size,
+        save_path=[f"{savepath}_{a}_{ph}_{i}" for a, ph, i in itertools.product(p2v, photons, range(n_samples))],
+        digital_rotations=digital_rotations,
+        plot_rotations=True
     )
 
-    k = np.where(phi > 0)[0]
-    for isize in tqdm([0, 1, 2, 3, 4, 5], desc=f"Evaluate different sizes [mode #{k}]"):
-        photons = gen._randuniform(photons_range)
-        inputs = np.array([
-            simulate_beads(
-                psf=kernel,
-                gen=gen,
-                object_size=isize,
-                num_objs=1,
-                photons=photons,
-            )
-            for i in range(n_samples)
-        ])[..., np.newaxis]
-        ys = np.array([phi for i in inputs])
+    try:
+        preds, stdev = res
+    except ValueError:
+        preds, stdev, lls_defocus = res
 
-        if eval_sign == 'rotations':
-            res = backend.predict_rotation(
-                model,
-                inputs,
-                save_path=savepath,
-                psfgen=gen,
-                batch_size=batch_size,
-                no_phase=no_phase,
-                cpu_workers=1
-            )
-        else:
-            res = backend.bootstrap_predict(
-                model,
-                inputs,
-                psfgen=gen,
-                batch_size=batch_size,
-                n_samples=1,
-                no_phase=no_phase,
-                cpu_workers=1
-            )
+    if eval_sign == 'positive_only':
+        ys = np.abs(ys)
+        preds = np.abs(preds)[:, :ys.shape[-1]]
 
-        try:
-            preds, stdev = res
-        except ValueError:
-            preds, stdev, lls_defocus = res
+    residuals = ys - preds
+    p = pd.DataFrame(
+        np.stack([p2v[k] for k, ph, i in itertools.product(range(len(kernels)), photons, range(n_samples))]),
+        columns=['aberration']
+    )
+    p['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
+    p['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
+    p['photons'] = np.concatenate([photons for i in itertools.product(phi, range(n_samples))])
 
-        if eval_sign == 'positive_only':
-            ys = np.abs(ys)
-            if len(preds.shape) > 1:
-                preds = np.abs(preds)[:, :ys.shape[-1]]
-            else:
-                preds = np.abs(preds)[np.newaxis, :ys.shape[-1]]
-        else:
-            if len(preds.shape) > 1:
-                preds = preds[:, :ys.shape[-1]]
-            else:
-                preds = preds[np.newaxis, :ys.shape[-1]]
+    df = df.append(p, ignore_index=True)
 
-        residuals = ys - preds
-
-        p = pd.DataFrame([p2v for i in inputs], columns=['aberration'])
-        p['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
-        p['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
-        p['object_size'] = 1 if isize == 0 else isize * 2
-
-        for z in range(preds.shape[-1]):
-            p[f'z{z}_ground_truth'] = ys[:, z]
-            p[f'z{z}_prediction'] = preds[:, z]
-            p[f'z{z}_residual'] = residuals[:, z]
-
-        df = df.append(p, ignore_index=True)
-
-        if savepath is not None:
-            df.to_csv(f'{savepath}_predictions.csv')
+    if savepath is not None:
+        df.to_csv(f'{savepath}_predictions.csv')
 
     return df
 
 
 @profile
-def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
+def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bool = True):
     outdir = model.with_suffix('') / eval_sign / 'evalmodes'
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
-    waves = np.arange(1e-5, .75, step=.05)
+    photons = [10000, 100000, 200000, 400000, 600000, 800000, 1000000]
+    waves = np.arange(.05, .3, step=.05).round(2)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
 
     for i in range(3, modelspecs.n_modes):
@@ -876,14 +862,18 @@ def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
 
         classes = aberrations.copy()
         classes[:, i] = waves
-        job = partial(eval_object, modelpath=model, eval_sign=eval_sign, savepath=savepath)
-        preds = utils.multiprocess(func=job, jobs=list(classes), cores=-1)
-        df = pd.DataFrame([]).append(preds, ignore_index=True)
+        df = eval_object(
+            phi=classes,
+            photons=photons,
+            modelpath=model,
+            eval_sign=eval_sign,
+            savepath=savepath,
+            digital_rotations=361 if digital_rotations else None
+        )
 
         bins = np.arange(0, 10.25, .25)
         df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
-
-        means = pd.pivot_table(df, values='residuals', index='bins', columns='object_size', aggfunc=np.mean)
+        means = pd.pivot_table(df, values='residuals', index='bins', columns='photons', aggfunc=np.mean)
         means = means.sort_index().interpolate()
         logger.info(means)
 
@@ -939,8 +929,9 @@ def evaluate_modes(model: Path, eval_sign: str = 'positive_only'):
         cbar.ax.yaxis.set_ticks_position('right')
         cbar.ax.yaxis.set_label_position('left')
 
-        ax.set_xlabel(f'Diameter of the simulated object (pixels)')
-        ax.set_xlim(1, 10)
+        ax.set_xlabel(f'Integrated photons')
+        ax.set_xlim(photons[0], photons[-1])
+        ax.set_xticks(photons)
         ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         ax.set_ylabel(

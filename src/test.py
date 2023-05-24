@@ -49,7 +49,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--batch_size", default=128, type=int, help='number of samples per batch'
+        "--batch_size", default=512, type=int, help='number of samples per batch'
     )
 
     parser.add_argument(
@@ -120,6 +120,7 @@ def main(args=None):
         eval.evaluate_modes(
             args.model,
             eval_sign=args.eval_sign,
+            digital_rotations=args.digital_rotations,
         )
 
     elif args.target == "random":

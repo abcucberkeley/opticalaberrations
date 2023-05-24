@@ -153,17 +153,6 @@ def generate_embeddings(
         z_voxel_size=axial_voxel_size
     )
 
-    sample = prep_sample(
-        sample,
-        sample_voxel_size=samplepsfgen.voxel_size,
-        remove_background=remove_background,
-        normalize=normalize,
-        edge_filter=edge_filter,
-        filter_mask_dilation=filter_mask_dilation,
-        read_noise_bias=read_noise_bias,
-        plot=file.with_suffix('') if plot else None,
-    )
-
     return backend.preprocess(
         sample,
         modelpsfgen=modelpsfgen,
