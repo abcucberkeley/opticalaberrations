@@ -1,9 +1,6 @@
 import logging
-import time
 from pathlib import Path
-
 from subprocess import call
-
 import cli
 
 
@@ -115,7 +112,7 @@ def main(args=None):
     args = parse_args(args)
     logging.info(args)
 
-    outdir = Path(f"{args.outdir}/{args.name}")
+    outdir = Path(f"{args.outdir}/{args.name}").resolve()
     outdir.mkdir(exist_ok=True, parents=True)
     profiler = f"/usr/bin/time -v -o {outdir}/{args.script.split('.')[0]}_profile.log "
 
