@@ -663,7 +663,6 @@ def fourier_embeddings(
         pois: Any = None,
         remove_interference: bool = True,
         embedding_option: str = 'spatial_planes',
-        edge_filter: bool = False,
         digital_rotations: Optional[int] = None,
         poi_shape: tuple = (64, 64),
         debug_rotations: bool = False
@@ -687,7 +686,6 @@ def fourier_embeddings(
         input_coverage: optional crop to the realspace image
         log10: optional toggle to take log10 of the FFT
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
-        edge_filter: a toggle for running an edge filter pass on the alpha embeddings
         digital_rotations: optional digital rotations to the embeddings
         poi_shape: shape for the planes of interests (POIs)
         embedding_option: type of embedding to use.
@@ -724,12 +722,7 @@ def fourier_embeddings(
                 embedding_option=embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
-            if edge_filter:
-                emb = scharr(emb)
-                emb /= np.nanpercentile(emb, 90)
-                emb[emb > 1] = 1
         else:
-
             alpha = compute_emb(
                 otf,
                 iotf,
@@ -740,11 +733,6 @@ def fourier_embeddings(
                 embedding_option=embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
             )
-
-            if edge_filter:
-                alpha = scharr(alpha)
-                alpha /= np.nanpercentile(alpha, 90)
-                alpha[alpha > 1] = 1
 
             if remove_interference:
                 otf = remove_interference_pattern(

@@ -249,8 +249,6 @@ def preprocess(
     remove_background: bool = True,
     read_noise_bias: float = 5,
     normalize: bool = True,
-    edge_filter: bool = True,
-    filter_mask_dilation: bool = True,
     plot: Any = None,
     no_phase: bool = False,
     fov_is_small: bool = True,
@@ -274,8 +272,6 @@ def preprocess(
             sample_voxel_size=samplepsfgen.voxel_size,
             remove_background=remove_background,
             normalize=normalize,
-            edge_filter=edge_filter,
-            filter_mask_dilation=filter_mask_dilation,
             read_noise_bias=read_noise_bias,
             plot=plot if plot else None
         )
@@ -331,8 +327,6 @@ def preprocess(
             sample_voxel_size=samplepsfgen.voxel_size,
             remove_background=remove_background,
             normalize=normalize,
-            edge_filter=edge_filter,
-            filter_mask_dilation=filter_mask_dilation,
             read_noise_bias=read_noise_bias,
         )
 

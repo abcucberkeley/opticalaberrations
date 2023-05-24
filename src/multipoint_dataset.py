@@ -208,8 +208,6 @@ def sim(
                 model_fov=gen.psf_fov,
                 remove_background=remove_background,
                 normalize=normalize,
-                edge_filter=False,
-                filter_mask_dilation=False,
                 read_noise_bias=5,
                 plot=odir/filename,
             )
@@ -244,8 +242,6 @@ def sim(
             model_fov=gen.psf_fov,
             remove_background=remove_background,
             normalize=normalize,
-            edge_filter=False,
-            filter_mask_dilation=False,
             read_noise_bias=5,
             plot=outdir/filename,
         )

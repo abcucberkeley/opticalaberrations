@@ -116,8 +116,6 @@ def generate_embeddings(
     remove_background: bool = True,
     read_noise_bias: float = 5,
     normalize: bool = True,
-    edge_filter: bool = False,
-    filter_mask_dilation: bool = True,
     plot: bool = False,
     fov_is_small: bool = True,
     preloaded: Preloadedmodelclass = None,
@@ -138,8 +136,6 @@ def generate_embeddings(
         return_psnr=True,
         remove_background=True,
         normalize=False,
-        edge_filter=False,
-        filter_mask_dilation=False,
     )
     logger.info(f"Sample: {sample.shape}")
 
@@ -158,11 +154,11 @@ def generate_embeddings(
         modelpsfgen=modelpsfgen,
         samplepsfgen=samplepsfgen,
         freq_strength_threshold=freq_strength_threshold,
-        remove_background=True,
-        normalize=True,
-        edge_filter=False,
+        remove_background=remove_background,
+        normalize=normalize,
         fov_is_small=fov_is_small,
         digital_rotations=digital_rotations,
+        read_noise_bias=read_noise_bias,
         plot=file.with_suffix('') if plot else None,
     )
 
@@ -348,8 +344,6 @@ def predict(
             no_phase=no_phase,
             remove_background=True,
             normalize=True,
-            edge_filter=False,
-            filter_mask_dilation=True,
             fov_is_small=fov_is_small,
             rolling_strides=rolling_strides,
         ),
@@ -461,8 +455,6 @@ def predict_sample(
         return_psnr=True,
         remove_background=True,
         normalize=False,
-        edge_filter=False,
-        filter_mask_dilation=False,
     )
     logger.info(f"Sample: {sample.shape}")
 
@@ -483,8 +475,6 @@ def predict_sample(
         digital_rotations=digital_rotations,
         remove_background=True,
         normalize=True,
-        edge_filter=False,
-        filter_mask_dilation=True,
         fov_is_small=True,
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
@@ -639,8 +629,6 @@ def predict_large_fov(
         return_psnr=True,
         remove_background=True,
         normalize=False,
-        edge_filter=False,
-        filter_mask_dilation=False,
     )
     logger.info(f"Sample: {sample.shape}")
 
@@ -663,7 +651,6 @@ def predict_large_fov(
         freq_strength_threshold=freq_strength_threshold,
         remove_background=True,
         normalize=True,
-        edge_filter=False,
         fov_is_small=False,
         rolling_strides=optimal_rolling_strides(premodelpsfgen.psf_fov, sample_voxel_size, sample.shape),
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
@@ -952,8 +939,6 @@ def predict_tiles(
         return_psnr=True,
         remove_background=True,
         normalize=False,
-        edge_filter=False,
-        filter_mask_dilation=False,
     )
 
     if any(np.array(shifting) != 0):

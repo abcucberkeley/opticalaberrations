@@ -100,14 +100,6 @@ def parse_args(args):
         help='a toggle for rescaling the image to the max value'
     )
     preprocessing.add_argument(
-        "--edge_filter", action='store_true',
-        help='a toggle to look for sharp edges in the given image using a 3D Canny detector'
-    )
-    preprocessing.add_argument(
-        "--filter_mask_dilation", action='store_true',
-        help='optional toggle to dilate the edge filter mask'
-    )
-    preprocessing.add_argument(
         "--remove_background", action='store_true',
         help='a toggle for background subtraction'
     )
@@ -136,10 +128,6 @@ def parse_args(args):
     embeddings.add_argument(
         "--fov_is_small", action='store_true',
         help='a toggle for cropping input image to match the model\'s FOV'
-    )
-    embeddings.add_argument(
-        "--edge_filter", action='store_true',
-        help='a toggle to look for share edges in the given image using a 3D Canny detector.'
     )
     embeddings.add_argument(
         "--ideal_empirical_psf", default=None, type=Path,
@@ -836,8 +824,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     return_psnr=True,
                     plot=None,
                     normalize=False,
-                    edge_filter=False,
-                    filter_mask_dilation=False,
                 )
 
             elif args.func == 'fourier_snr':
@@ -848,8 +834,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     return_psnr=True,
                     plot=None,
                     normalize=False,
-                    edge_filter=False,
-                    filter_mask_dilation=False,
                 )
                 measure_fourier_snr(sample, psnr=psnr, plot=args.input.with_suffix('.svg'))
 
@@ -862,8 +846,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     remove_background=args.remove_background,
                     read_noise_bias=args.read_noise_bias,
                     normalize=args.normalize,
-                    edge_filter=args.edge_filter,
-                    filter_mask_dilation=args.filter_mask_dilation,
                     plot=args.input.with_suffix('') if args.plot else None,
                 )
 
@@ -876,7 +858,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     wavelength=args.wavelength,
                     plot=args.plot,
                     ideal_empirical_psf=args.ideal_empirical_psf,
-                    edge_filter=args.edge_filter,
                     preloaded=preloaded,
                 )
 
