@@ -10,7 +10,7 @@ import sys
 from functools import partial
 from pathlib import Path
 from typing import Any, Optional
-from matplotlib.ticker import FormatStrFormatter
+from matplotlib.ticker import FormatStrFormatter, LogFormatterExponent
 import matplotlib.colors as mcolors
 
 import matplotlib.pyplot as plt
@@ -20,7 +20,6 @@ import swifter
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from preprocessing import prep_sample
 from line_profiler_pycharm import profile
 from tqdm import tqdm
 from tifffile import imwrite
@@ -780,7 +779,7 @@ def eval_object(
     photons: list,
     na: float = 1.0,
     batch_size: int = 512,
-    n_samples: int = 10,
+    n_samples: int = 1,
     eval_sign: str = 'rotations',
     savepath: Any = None,
     digital_rotations: Optional[int] = 361
@@ -795,12 +794,12 @@ def eval_object(
 
     inputs = np.stack([
         backend.preprocess(
-            simulate_beads(psf=kernels[k], object_size=0, num_objs=5, photons=ph, noise=True, fill_radius=.4),
+            simulate_beads(psf=kernels[k], object_size=0, num_objs=1, photons=ph, noise=True, fill_radius=0),
             modelpsfgen=gen,
             digital_rotations=digital_rotations,
             remove_background=True,
             normalize=True,
-            plot=f"{savepath}_{p2v[k]}_{ph}_{i}"
+            #plot=f"{savepath}_{p2v[k]}_{ph}_{i}"
         )
         for k, ph, i in itertools.product(range(len(kernels)), photons, range(n_samples))
     ], axis=0)
@@ -815,7 +814,7 @@ def eval_object(
         batch_size=batch_size,
         save_path=[f"{savepath}_{a}_{ph}_{i}" for a, ph, i in itertools.product(p2v, photons, range(n_samples))],
         digital_rotations=digital_rotations,
-        plot_rotations=True
+        #plot_rotations=True
     )
 
     try:
@@ -850,8 +849,9 @@ def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bo
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
-    photons = [10000, 100000, 200000, 400000, 600000, 800000, 1000000]
-    waves = np.arange(.05, .3, step=.05).round(2)
+    photons = [1, 1000, 10000, 50000, 100000, 200000, 400000, 600000, 800000, 1000000]
+    labels = ['1', '$10^3$', '$10^4$', '$5 \\times 10^4$', '$10^5$', '$2 \\times 10^5$', '$4 \\times 10^5$', '$6 \\times 10^5$', '$8 \\times 10^5$', '$10^6$']
+    waves = np.arange(1e-5, .6, step=.05).round(2)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
 
     for i in range(3, modelspecs.n_modes):
@@ -901,7 +901,7 @@ def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bo
         cmap = mcolors.ListedColormap(cmap)
 
         contours = ax.contourf(
-            means.columns.values,
+            np.arange(len(photons)),
             means.index.values,
             means.values,
             cmap=cmap,
@@ -924,26 +924,24 @@ def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bo
             ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
         )
 
-        cbar.ax.set_ylabel(rf'Average peak-to-valley residuals ($\lambda = 510~nm$)')
+        cbar.ax.set_ylabel(rf'Residuals; average peak-to-valley ($\lambda = {int(modelspecs.lam_detection*1000)}~nm$)')
         cbar.ax.set_title(r'$\lambda$')
         cbar.ax.yaxis.set_ticks_position('right')
         cbar.ax.yaxis.set_label_position('left')
 
         ax.set_xlabel(f'Integrated photons')
-        ax.set_xlim(photons[0], photons[-1])
-        ax.set_xticks(photons)
-        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        ax.set_xticks(np.arange(len(photons)))
+        ax.set_xticklabels(labels)
+        plt.ticklabel_format(axis='x', style='scientific', scilimits=(0, 6))
 
-        ax.set_ylabel(
-            'Average peak-to-valley aberration'
-            rf' ($\lambda = 510~nm$)'
-        )
+        ax.set_ylabel('Initial aberration (average peak-to-valley)')
         ax.set_yticks(np.arange(0, 6, .5), minor=True)
         ax.set_yticks(np.arange(0, 6, 1))
         ax.set_ylim(.25, 5)
 
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
+        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         phi = np.zeros_like(classes[-1, :])
         phi[i] = .2
@@ -967,3 +965,4 @@ def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bo
 
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
