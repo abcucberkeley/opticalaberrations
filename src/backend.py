@@ -243,7 +243,7 @@ def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
 def preprocess(
     file: Union[tf.Tensor, Path, str],
     modelpsfgen: SyntheticPSF,
-    samplepsfgen: SyntheticPSF,
+    samplepsfgen: Optional[SyntheticPSF] = None,
     freq_strength_threshold: float = .01,
     digital_rotations: Optional[int] = 361,
     remove_background: bool = True,
@@ -256,6 +256,9 @@ def preprocess(
     fov_is_small: bool = True,
     rolling_strides: Optional[tuple] = None
 ):
+    if samplepsfgen is None:
+        samplepsfgen = modelpsfgen
+
     if isinstance(file, tf.Tensor):
         file = Path(str(file.numpy(), "utf-8"))
 
@@ -359,7 +362,7 @@ def bootstrap_predict(
         model: tf.keras.Model,
         inputs: np.array,
         psfgen: SyntheticPSF,
-        batch_size: int = 128,
+        batch_size: int = 512,
         n_samples: int = 10,
         no_phase: bool = False,
         padsize: Any = None,
@@ -1016,7 +1019,6 @@ def predict_dataset(
         digital_rotations: an array of digital rotations to apply to evaluate model's confidence
         plot: optional toggle to plot predictions
         plot_rotations: optional toggle to plot digital rotations
-        strategy: tf.Strategy to use for inference
 
     Returns:
         average prediction, stdev
