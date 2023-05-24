@@ -29,6 +29,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--outdir", default="../models", type=Path, help='path to save eval'
+    )
+
+    parser.add_argument(
         "--niter", default=1, type=int, help='number of iterations'
     )
 
