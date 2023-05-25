@@ -354,6 +354,7 @@ def predict(
             rolling_strides=rolling_strides,
         ),
         desc='Generate Fourier embeddings',
+        unit=' tile',
         cores=cpu_workers
     )
 

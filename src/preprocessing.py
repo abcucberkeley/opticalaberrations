@@ -676,7 +676,10 @@ def get_tiles(
     rois = []
     for i, (z, y, x) in enumerate(itertools.product(
         range(ztiles), range(nrows), range(ncols),
-        desc=f"Locating tiles: {[windows.shape[0]]}")
+        desc=f"Locating tiles: {[windows.shape[0]]}",
+        bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
+        unit=' tile',
+    )
     ):
         tile = f"z{z}-y{y}-x{x}"
         if save_files:

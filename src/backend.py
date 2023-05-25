@@ -1062,7 +1062,9 @@ def predict_dataset(
                     ),
                 ),
                 total=len(save_path),
-                desc="Evaluate predictions"
+                desc="Evaluate predictions",
+                unit=' evals',
+                bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
             ))
 
         jobs = np.array([list(zip(*j)) for j in jobs])
