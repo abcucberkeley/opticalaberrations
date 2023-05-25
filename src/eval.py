@@ -858,7 +858,10 @@ def evaluate_modes(
     n_samples: Optional[int] = 1,
     digital_rotations: bool = True
 ):
-    outdir = model.with_suffix('') / eval_sign / 'evalmodes'
+    num_objs = 1 if num_objs is None else num_objs
+    n_samples = 1 if n_samples is None else n_samples
+
+    outdir = model.with_suffix('') / eval_sign / 'evalmodes' / f'num_objs_{num_objs}'
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
@@ -871,14 +874,14 @@ def evaluate_modes(
         if i == 4:
             continue
 
-        savepath = outdir / f'num_objs_{num_objs}' / f"m{i}"
+        savepath = outdir / f"m{i}"
 
         classes = aberrations.copy()
         classes[:, i] = waves
         df = eval_object(
             phi=classes,
-            num_objs=1 if num_objs is None else num_objs,
-            n_samples=1 if n_samples is None else n_samples,
+            num_objs=num_objs,
+            n_samples=n_samples,
             photons=photons,
             modelpath=model,
             batch_size=batch_size,
