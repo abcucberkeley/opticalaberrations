@@ -359,7 +359,7 @@ def predict(
             inp=[x],
             Tout=tf.float32,
         ),
-    ).unbatch()
+    ).unbatch() # unroll because each input generates 360 embs to predict here, and we must rebatch on the whole set
 
     preds, std = backend.predict_dataset(
         model,
@@ -372,7 +372,10 @@ def predict(
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
         confidence_threshold=confidence_threshold,
-        desc=f"ROIs [{rois.shape[0]}] x [{digital_rotations}] Rotations",
+        desc=f"[{rois.shape[0]} ROIs] x [{digital_rotations} Rotations] = "
+             f"{rois.shape[0] * digital_rotations} predictions, requires "
+             f"{int(np.ceil(rois.shape[0] * digital_rotations / batch_size))} batches. "
+             f"emb={6*64*64 * batch_size * 32 / 8 / 1e6:.2f} MB/batch. ",
     )
 
     tile_names = [f.with_suffix('').name for f in rois]

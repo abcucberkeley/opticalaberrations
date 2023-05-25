@@ -1022,7 +1022,7 @@ def predict_dataset(
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
     ignore_modes = list(map(int, ignore_modes))
     logger.info(f"Ignoring modes: {ignore_modes}")
-    logger.info(f"[BS={batch_size}] {desc}")
+    logger.info(f"[Batch size={batch_size}] {desc}")
     inputs = inputs.batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
 
     if digital_rotations is not None:
@@ -1031,8 +1031,9 @@ def predict_dataset(
 
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-    inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE)
+    inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE) # prefetch will fill GPU RAM
 
+    # operations mapped and batched gets executed here (emb=>rotations=>predictions).
     preds = model.predict(inputs, verbose=verbose)
 
     preds[:, ignore_modes] = 0.
