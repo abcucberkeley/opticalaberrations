@@ -19,15 +19,20 @@ do
   do
       MODEL="$PRETRAINED/opticalnet-$MODES"
 
-      python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-      --task "$MODEL.h5 --eval_sign $EVALSIGN --digital_rotations --batch_size 128 random" \
-      --taskname random \
-      --name $MODEL/$EVALSIGN/samples
+#      python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#      --task "$MODEL.h5 --eval_sign $EVALSIGN --digital_rotations --batch_size 128 random" \
+#      --taskname random \
+#      --name $MODEL/$EVALSIGN/samples
 
       python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
       --task "$MODEL.h5 --eval_sign $EVALSIGN --digital_rotations --batch_size 128 modes" \
       --taskname evalmodes \
-      --name $MODEL/$EVALSIGN/evalmodes
+      --name $MODEL/$EVALSIGN/evalmodes/'num_objs_1'
+
+      python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+      --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 --digital_rotations --batch_size 128 modes" \
+      --taskname evalmodes \
+      --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
 
 #      for NA in 1.
 #      do

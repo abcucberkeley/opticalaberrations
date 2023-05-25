@@ -135,7 +135,7 @@ def iter_evaluate(
     gen = backend.load_metadata(
         modelpath,
         signed=True,
-        rotate=True,
+        rotate=False,
         batch_size=batch_size,
         psf_shape=3*[model.input_shape[2]]
     )
@@ -776,22 +776,31 @@ def eval_object(
     photons: list,
     na: float = 1.0,
     batch_size: int = 512,
+    num_objs: int = 1,
     n_samples: int = 1,
     eval_sign: str = 'rotations',
     savepath: Any = None,
     digital_rotations: Optional[int] = 361
 ):
     model = backend.load(modelpath)
-    gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]])
+    gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]], rotate=False)
 
     df = pd.DataFrame([], columns=['aberration', 'prediction', 'residuals', 'photons'])
-    wavefronts = [Wavefront(w, lam_detection=gen.lam_detection) for w in phi]
+    wavefronts = [Wavefront(w, lam_detection=gen.lam_detection, rotate=False) for w in phi]
     p2v = [w.peak2valley(na=na) for w in wavefronts]
     kernels = [gen.single_psf(phi=w, normed=True) for w in wavefronts]
+    n_samples = 1 if num_objs == 1 else n_samples
 
     inputs = np.stack([
         backend.preprocess(
-            simulate_beads(psf=kernels[k], object_size=0, num_objs=1, photons=ph, noise=True, fill_radius=0),
+            simulate_beads(
+                psf=kernels[k],
+                object_size=0,
+                num_objs=num_objs,
+                photons=ph,
+                noise=True,
+                fill_radius=0 if num_objs == 0 else .35
+            ),
             modelpsfgen=gen,
             digital_rotations=digital_rotations,
             remove_background=True,
@@ -835,7 +844,7 @@ def eval_object(
     df = df.append(p, ignore_index=True)
 
     if savepath is not None:
-        df.to_csv(f'{savepath}_predictions.csv')
+        df.to_csv(f'{savepath}_predictions_num_objs_{num_objs}.csv')
 
     return df
 
@@ -845,6 +854,8 @@ def evaluate_modes(
     model: Path,
     eval_sign: str = 'signed',
     batch_size: int = 512,
+    num_objs: Optional[int] = 1,
+    n_samples: Optional[int] = 1,
     digital_rotations: bool = True
 ):
     outdir = model.with_suffix('') / eval_sign / 'evalmodes'
@@ -860,12 +871,14 @@ def evaluate_modes(
         if i == 4:
             continue
 
-        savepath = outdir / f"m{i}"
+        savepath = outdir / f'num_objs_{num_objs}' / f"m{i}"
 
         classes = aberrations.copy()
         classes[:, i] = waves
         df = eval_object(
             phi=classes,
+            num_objs=1 if num_objs is None else num_objs,
+            n_samples=1 if n_samples is None else n_samples,
             photons=photons,
             modelpath=model,
             batch_size=batch_size,

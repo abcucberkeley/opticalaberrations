@@ -45,6 +45,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--num_objs", default=None, type=int, help='number of beads to evaluate'
+    )
+
+    parser.add_argument(
         "--n_samples", default=None, type=int, help='number of samples to evaluate'
     )
 
@@ -120,6 +124,8 @@ def main(args=None):
         eval.evaluate_modes(
             args.model,
             eval_sign=args.eval_sign,
+            num_objs=args.num_objs,
+            n_samples=args.n_samples,
             batch_size=args.batch_size,
             digital_rotations=args.digital_rotations,
         )
