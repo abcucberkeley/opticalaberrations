@@ -10,7 +10,7 @@ import sys
 from functools import partial
 from pathlib import Path
 from typing import Any, Optional
-from matplotlib.ticker import FormatStrFormatter
+from matplotlib.ticker import FormatStrFormatter, LogFormatterExponent
 import matplotlib.colors as mcolors
 
 import matplotlib.pyplot as plt
@@ -20,7 +20,6 @@ import swifter
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from preprocessing import prep_sample
 from line_profiler_pycharm import profile
 from tqdm import tqdm
 from tifffile import imwrite
@@ -126,7 +125,7 @@ def iter_evaluate(
     threshold: float = 0.,
     no_phase: bool = False,
     batch_size: int = 100,
-    snr_range: tuple = (21, 30),
+    photons_range: tuple = (100000, 100000),
     eval_sign: str = 'positive_only',
     digital_rotations: bool = False,
     rotations: Optional[int] = 361,
@@ -148,14 +147,14 @@ def iter_evaluate(
         samplelimit=samplelimit,
         distribution=distribution,
         no_phase=no_phase,
-        snr_range=snr_range,
+        photons_range=photons_range,
         metadata=True
     )
     # this runs multiple samples (aka images) at a time.
     # ys is a 2D array, rows are each sample, columns give aberration in zernike coeffs
     metadata = np.array(list(metadata.take(-1)))
     ys = np.array([i.numpy() for i in metadata[:, 0]])[:, :predicted_modes]
-    snrs = np.array([i.numpy() for i in metadata[:, 1]])
+    photons = np.array([i.numpy() for i in metadata[:, 1]])
     p2v = np.array([i.numpy() for i in metadata[:, 2]])
     npoints = np.array([i.numpy() for i in metadata[:, 3]])
     dists = np.array([i.numpy() for i in metadata[:, 4]])
@@ -171,7 +170,7 @@ def iter_evaluate(
         'niter': np.zeros_like(ids, dtype=int),  # iteration index.
         'aberration': p2v,  # initial p2v aberration. Constant over iterations.
         'residuals': p2v,  # remaining p2v aberration after ML correction.
-        'snr': snrs,  # signal-to-noise
+        'photons': photons,  # integrated photons
         'distance': dists,  # average distance to nearst bead
         'file': files,  # file = binary image file filled with zeros except at location of beads
     })
@@ -236,7 +235,7 @@ def iter_evaluate(
         current['niter'] = k
         current['aberration'] = p2v
         current['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in res]
-        current['snr'] = snrs
+        current['photons'] = photons
         current['neighbors'] = npoints
         current['distance'] = dists
         current['file'] = files
@@ -258,7 +257,7 @@ def iter_evaluate(
 
 
 @profile
-def plot_heatmap(means, wavelength, savepath, label=f'Peak signal-to-noise ratio', lims=(0, 100)):
+def plot_heatmap(means, wavelength, savepath, label='Integrated photons', lims=(0, 100)):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -309,25 +308,22 @@ def plot_heatmap(means, wavelength, savepath, label=f'Peak signal-to-noise ratio
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Average peak-to-valley residuals ($\lambda = {int(wavelength * 1000)}~nm$)')
+    cbar.ax.set_ylabel(rf'Residuals; average peak-to-valley ($\lambda = {int(wavelength * 1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
     ax.set_xlabel(label)
     ax.set_xlim(lims)
-    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-    ax.set_ylabel(
-        'Average peak-to-valley aberration'
-        rf' ($\lambda = {int(wavelength * 1000)}~nm$)'
-    )
+    ax.set_ylabel('Initial aberration (average peak-to-valley)')
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
     ax.set_yticks(np.arange(0, 6, 1))
     ax.set_ylim(.25, 5)
 
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)
+    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
     plt.tight_layout()
 
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
@@ -369,7 +365,7 @@ def snrheatmap(
             na=na,
             input_coverage=input_coverage,
             batch_size=batch_size,
-            snr_range=(0, 100),
+            photons_range=(0, 10**6),
             eval_sign=eval_sign,
             digital_rotations=digital_rotations
         )
@@ -378,7 +374,7 @@ def snrheatmap(
     df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
 
     means = pd.pivot_table(
-        df[df['niter'] == niter], values='residuals', index='bins', columns='snr', aggfunc=np.mean
+        df[df['niter'] == niter], values='residuals', index='bins', columns='photons', aggfunc=np.mean
     )
     means = means.sort_index().interpolate()
 
@@ -389,8 +385,8 @@ def snrheatmap(
         means,
         wavelength=modelspecs.lam_detection,
         savepath=savepath,
-        label=f'Peak signal-to-noise ratio',
-        lims=(0, 100)
+        label=f'Integrated photons',
+        lims=(0, 10**6)
     )
 
     for z in range(3, modelspecs.n_modes):
@@ -406,7 +402,7 @@ def snrheatmap(
 
             bins = np.arange(0, 10.25, .25)
             df[f'z{z}_bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
-            means = pd.pivot_table(df, values=f'z{z}_residual', index=f'z{z}_bins', columns='snr', aggfunc=np.mean)
+            means = pd.pivot_table(df, values=f'z{z}_residual', index=f'z{z}_bins', columns='photons', aggfunc=np.mean)
             means = means.sort_index().interpolate()
             logger.info(f"z{z}")
             logger.info(means)
@@ -416,8 +412,8 @@ def snrheatmap(
                 means,
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath.with_name(f"{savepath.name}_z{z}"),
-                label=f'Peak signal-to-noise ratio',
-                lims=(0, 100)
+                label=f'Integrated photons',
+                lims=(0, 10**6)
             )
         except KeyError:
             logger.warning(f"No evaluation found for z{z}")
@@ -433,7 +429,7 @@ def densityheatmap(
     samplelimit: Any = None,
     input_coverage: float = 1.0,
     batch_size: int = 100,
-    snr_range: tuple = (21, 30),
+    photons_range: tuple = (100000, 100000),
     eval_sign: str = 'positive_only',
     digital_rotations: bool = False,
 ):
@@ -458,7 +454,7 @@ def densityheatmap(
             samplelimit=samplelimit,
             distribution=distribution,
             na=na,
-            snr_range=snr_range,
+            photons_range=photons_range,
             input_coverage=input_coverage,
             batch_size=batch_size,
             eval_sign=eval_sign,
@@ -528,7 +524,7 @@ def iterheatmap(
     input_coverage: float = 1.0,
     no_phase: bool = False,
     batch_size: int = 1024,
-    snr_range: tuple = (21, 30),
+    photons_range: tuple = (100000, 100000),
     eval_sign: str = 'positive_only',
     digital_rotations: bool = False,
 ):
@@ -551,7 +547,7 @@ def iterheatmap(
             modelpath=modelpath,
             samplelimit=samplelimit,
             na=na,
-            snr_range=snr_range,
+            photons_range=photons_range,
             input_coverage=input_coverage,
             no_phase=no_phase,
             batch_size=batch_size,
@@ -780,7 +776,7 @@ def eval_object(
     photons: list,
     na: float = 1.0,
     batch_size: int = 512,
-    n_samples: int = 10,
+    n_samples: int = 1,
     eval_sign: str = 'rotations',
     savepath: Any = None,
     digital_rotations: Optional[int] = 361
@@ -795,12 +791,12 @@ def eval_object(
 
     inputs = np.stack([
         backend.preprocess(
-            simulate_beads(psf=kernels[k], object_size=0, num_objs=5, photons=ph, noise=True, fill_radius=.4),
+            simulate_beads(psf=kernels[k], object_size=0, num_objs=1, photons=ph, noise=True, fill_radius=0),
             modelpsfgen=gen,
             digital_rotations=digital_rotations,
             remove_background=True,
             normalize=True,
-            plot=f"{savepath}_{p2v[k]}_{ph}_{i}"
+            #plot=f"{savepath}_{p2v[k]}_{ph}_{i}"
         )
         for k, ph, i in itertools.product(range(len(kernels)), photons, range(n_samples))
     ], axis=0)
@@ -815,7 +811,7 @@ def eval_object(
         batch_size=batch_size,
         save_path=[f"{savepath}_{a}_{ph}_{i}" for a, ph, i in itertools.product(p2v, photons, range(n_samples))],
         digital_rotations=digital_rotations,
-        plot_rotations=True
+        #plot_rotations=True
     )
 
     try:
@@ -845,13 +841,19 @@ def eval_object(
 
 
 @profile
-def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bool = True):
+def evaluate_modes(
+    model: Path,
+    eval_sign: str = 'signed',
+    batch_size: int = 512,
+    digital_rotations: bool = True
+):
     outdir = model.with_suffix('') / eval_sign / 'evalmodes'
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
-    photons = [10000, 100000, 200000, 400000, 600000, 800000, 1000000]
-    waves = np.arange(.05, .3, step=.05).round(2)
+    photons = [1, 1000, 10000, 50000, 100000, 200000, 400000, 600000, 800000, 1000000]
+    labels = ['1', '$10^3$', '$10^4$', '$5 \\times 10^4$', '$10^5$', '$2 \\times 10^5$', '$4 \\times 10^5$', '$6 \\times 10^5$', '$8 \\times 10^5$', '$10^6$']
+    waves = np.arange(1e-5, .6, step=.05).round(2)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
 
     for i in range(3, modelspecs.n_modes):
@@ -866,6 +868,7 @@ def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bo
             phi=classes,
             photons=photons,
             modelpath=model,
+            batch_size=batch_size,
             eval_sign=eval_sign,
             savepath=savepath,
             digital_rotations=361 if digital_rotations else None
@@ -901,7 +904,7 @@ def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bo
         cmap = mcolors.ListedColormap(cmap)
 
         contours = ax.contourf(
-            means.columns.values,
+            np.arange(len(photons)),
             means.index.values,
             means.values,
             cmap=cmap,
@@ -924,26 +927,23 @@ def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bo
             ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
         )
 
-        cbar.ax.set_ylabel(rf'Average peak-to-valley residuals ($\lambda = 510~nm$)')
+        cbar.ax.set_ylabel(rf'Residuals; average peak-to-valley ($\lambda = {int(modelspecs.lam_detection*1000)}~nm$)')
         cbar.ax.set_title(r'$\lambda$')
         cbar.ax.yaxis.set_ticks_position('right')
         cbar.ax.yaxis.set_label_position('left')
 
         ax.set_xlabel(f'Integrated photons')
-        ax.set_xlim(photons[0], photons[-1])
-        ax.set_xticks(photons)
-        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        ax.set_xticks(np.arange(len(photons)))
+        ax.set_xticklabels(labels)
 
-        ax.set_ylabel(
-            'Average peak-to-valley aberration'
-            rf' ($\lambda = 510~nm$)'
-        )
+        ax.set_ylabel('Initial aberration (average peak-to-valley)')
         ax.set_yticks(np.arange(0, 6, .5), minor=True)
         ax.set_yticks(np.arange(0, 6, 1))
         ax.set_ylim(.25, 5)
 
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
+        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         phi = np.zeros_like(classes[-1, :])
         phi[i] = .2
@@ -967,3 +967,4 @@ def evaluate_modes(model: Path, eval_sign: str = 'signed', digital_rotations: bo
 
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)

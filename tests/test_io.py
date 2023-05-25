@@ -55,8 +55,6 @@ def test_psnr(kargs):
         return_psnr=True,
         plot=None,
         normalize=False,
-        edge_filter=False,
-        filter_mask_dilation=False,
     )
     assert math.isclose(psnr, 30, rel_tol=1)
 
@@ -75,8 +73,6 @@ def test_preprocessing(kargs):
         sample_voxel_size=sample_voxel_size,
         remove_background=True,
         normalize=True,
-        edge_filter=False,
-        filter_mask_dilation=False,
         plot=kargs['inputs'].with_suffix('') if kargs['plot'] else None,
     )
     assert sample.shape == kargs['input_shape']

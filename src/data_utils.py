@@ -79,7 +79,7 @@ def get_sample(
         with open(path.with_suffix('.json')) as f:
             hashtbl = ujson.load(f)
 
-        snr = hashtbl['snr']
+        photons = hashtbl['photons']
         npoints = hashtbl['npoints']
 
         try:
@@ -106,7 +106,7 @@ def get_sample(
             avg_min_distance = 0.
 
         if metadata:
-            return zernikes, snr, p2v, npoints, avg_min_distance, str(path)
+            return zernikes, photons, p2v, npoints, avg_min_distance, str(path)
         else:
             img = get_image(path)
 
@@ -174,13 +174,13 @@ def check_criteria(
 ):
     path = str(file)
     amp = float(str([s for s in file.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.'))
-    snr = tuple(map(int, str([s.strip('psnr_') for s in file.parts if s.startswith('psnr_')][0]).split('-')))
+    photons = tuple(map(int, str([s.strip('photons_') for s in file.parts if s.startswith('photons_')][0]).split('-')))
 
     if distribution in path \
             and embedding in path \
             and f"z{modes}" in path \
             and amp <= max_amplitude \
-            and photons_range is None or (photons_range is not None and photons_range[0] <= snr[0] and snr[1] <= photons_range[1]) \
+            and photons_range is None or (photons_range is not None and photons_range[0] <= photons[0] and photons[1] <= photons_range[1]) \
             and check_sample(file) == 1:
         return path
 
@@ -271,7 +271,7 @@ def collect_dataset(
     lls_defocus: bool = False
 ):
     if metadata:
-        # amps, snr, peak2peak, npoints, avg_min_distance, filename
+        # amps, photons, peak2peak, npoints, avg_min_distance, filename
         dtypes = [tf.float32, tf.int32, tf.float32, tf.float32, tf.float32, tf.string]
     else:
         # img, amps

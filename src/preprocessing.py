@@ -21,10 +21,7 @@ from scipy.spatial import KDTree
 from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.patches as patches
 from line_profiler_pycharm import profile
-from skimage.morphology import ball
-from skimage.morphology import dilation
 from skimage.filters import window, difference_of_gaussians
-from canny import CannyEdgeDetector3D
 from tifffile import TiffFile
 
 try:
@@ -281,8 +278,6 @@ def prep_sample(
     model_fov: Any = None,
     remove_background: bool = True,
     read_noise_bias: float = 5,
-    edge_filter: bool = False,
-    filter_mask_dilation: bool = True,
     plot: Any = None,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
@@ -299,8 +294,6 @@ def prep_sample(
         plot: plot or save .svg's
         remove_background: subtract background.
         normalize: scale values between 0 and 1.
-        edge_filter: look for share edges in the given image using a 3D Canny detector.
-        filter_mask_dilation: optional toggle to dilate the edge filter mask
         read_noise_bias: bias offset for camera noise
         windowing: optional toggle to apply to mask the input with a window to avoid boundary effects
     Returns:
@@ -385,21 +378,6 @@ def prep_sample(
 
     if normalize:  # safe division to not get nans for blank images
         sample = np.where(sample == 0, 0, sample/np.nanmax(sample))
-
-    if edge_filter:
-        mask = CannyEdgeDetector3D(
-            sample,
-            sigma=.5,
-            lowthresholdratio=0.3,
-            highthresholdratio=0.2,
-            weak_voxel=1.5*(st.mode(sample, axis=None).mode[0] + 1e-6),
-            strong_voxel=np.nanmax(sample)
-        ).detect().astype(np.float32)
-
-        if filter_mask_dilation:
-            mask = dilation(mask, ball(1)).astype(np.float32)
-
-        sample *= mask
 
     if plot is not None:
         plot_mip(

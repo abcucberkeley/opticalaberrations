@@ -23,6 +23,7 @@ from line_profiler_pycharm import profile
 from scipy import ndimage
 from astropy import convolution
 from skspatial.objects import Plane, Points
+from skimage.restoration import estimate_sigma
 
 try:
     import cupy as cp
@@ -282,16 +283,26 @@ def remove_interference_pattern(
     poi[1] = np.clip(poi[1], a_min=half_length, a_max=(psf.shape[1] - half_length) - 1)
     poi[2] = np.clip(poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
     init_pos = [p-half_length for p in poi]
-    kernel = blured_psf[
-        init_pos[0]:init_pos[0]+kernel_size,
-        init_pos[1]:init_pos[1]+kernel_size,
-        init_pos[2]:init_pos[2]+kernel_size,
-    ]
+
+    # kernel = blured_psf[
+    #     init_pos[0]:init_pos[0]+kernel_size,
+    #     init_pos[1]:init_pos[1]+kernel_size,
+    #     init_pos[2]:init_pos[2]+kernel_size,
+    # ]
 
     # convolve template with the input image
     effective_kernel_width = 1
     kernel = gaussian_kernel(kernlen=[kernel_size]*3, std=effective_kernel_width)
-    convolved_psf = convolution.convolve_fft(blured_psf, kernel, allow_huge=True, boundary='fill')
+
+    convolved_psf = convolution.convolve_fft(
+        blured_psf,
+        kernel,
+        allow_huge=True,
+        boundary='fill',
+        nan_treatment='fill',
+        fill_value=0,
+        normalize_kernel=False
+    )
     convolved_psf -= np.nanmin(convolved_psf)
     convolved_psf /= np.nanmax(convolved_psf)
 
@@ -302,30 +313,38 @@ def remove_interference_pattern(
             convolved_psf,
             min_distance=min_distance,
             threshold_rel=.3,
-            threshold_abs=np.nanstd(psf),
             exclude_border=int(np.floor(effective_kernel_width)),
             p_norm=2,
             num_peaks=max_num_peaks
         ).astype(int)
 
         beads = np.zeros_like(psf)
-        for p in detected_peaks:
-            try:
-                fov = convolved_psf[
-                    p[0]-(min_distance+1):p[0]+(min_distance+1),
-                    p[1]-(min_distance+1):p[1]+(min_distance+1),
-                    p[2]-(min_distance+1):p[2]+(min_distance+1),
-                ]
-                if np.nanmax(fov) > convolved_psf[p[0], p[1], p[2]]:
-                    continue    # we are not at the summit if a max nearby is available.
-                else:
-                    beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
-                    pois.append(p)  # keep peak
 
-            except Exception:
-                # keep peak if we are at the border of the image
-                beads[p[0], p[1], p[2]] = psf[p[0], p[1], p[2]]
-                pois.append(p)
+        if len(detected_peaks) == 1:
+            p = detected_peaks[0]
+            beads[p[0], p[1], p[2]] = 1
+            pois.append(p)
+
+        else:
+            for p in detected_peaks:
+                try:
+                    fov = convolved_psf[
+                        p[0]-(min_distance+1):p[0]+(min_distance+1),
+                        p[1]-(min_distance+1):p[1]+(min_distance+1),
+                        p[2]-(min_distance+1):p[2]+(min_distance+1),
+                    ]
+                    peak_value = max(psf[p[0], p[1], p[2]], blured_psf[p[0], p[1], p[2]])
+
+                    if np.nanmax(fov) > convolved_psf[p[0], p[1], p[2]]:
+                        continue    # we are not at the summit if a max nearby is available.
+                    else:
+                        beads[p[0], p[1], p[2]] = peak_value
+                        pois.append(p)  # keep peak
+
+                except Exception:
+                    # keep peak if we are at the border of the image
+                    beads[p[0], p[1], p[2]] = peak_value
+                    pois.append(p)
 
         pois = np.array(pois)
     else:
@@ -340,10 +359,10 @@ def remove_interference_pattern(
     for i, p in enumerate(pois):
         good_psnr[i] = (np.nanmax(
             psf[
-            max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
-            max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
-            max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
-            ]) - baseline) / noise > min_psnr
+                max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
+                max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
+                max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
+        ]) - baseline) / noise > min_psnr
 
     #logger.info(f"{pois.shape[0]} objects detected. {np.count_nonzero(good_psnr)} were above {min_psnr} min_psnr")
     pois = pois[good_psnr]  # remove points that are below peak snr
@@ -361,6 +380,10 @@ def remove_interference_pattern(
 
     if pois.shape[0] > 0:
         interference_pattern = fft(beads)
+
+        if np.all(beads == 0) or np.all(interference_pattern == 0):
+            raise Exception("Bad interference pattern")
+
         corrected_otf = otf / interference_pattern
 
         if windowing:
@@ -377,6 +400,9 @@ def remove_interference_pattern(
             corrected_psf = ifft(corrected_otf)
 
         corrected_psf /= np.nanmax(corrected_psf)
+
+        if np.all(corrected_psf == 0) or np.any(np.isnan(corrected_psf)):
+            raise Exception("Couldn't remove interference pattern")
 
         if plot is not None:
             plot_interference(
@@ -637,7 +663,6 @@ def fourier_embeddings(
         pois: Any = None,
         remove_interference: bool = True,
         embedding_option: str = 'spatial_planes',
-        edge_filter: bool = False,
         digital_rotations: Optional[int] = None,
         poi_shape: tuple = (64, 64),
         debug_rotations: bool = False
@@ -661,7 +686,6 @@ def fourier_embeddings(
         input_coverage: optional crop to the realspace image
         log10: optional toggle to take log10 of the FFT
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
-        edge_filter: a toggle for running an edge filter pass on the alpha embeddings
         digital_rotations: optional digital rotations to the embeddings
         poi_shape: shape for the planes of interests (POIs)
         embedding_option: type of embedding to use.
@@ -684,60 +708,53 @@ def fourier_embeddings(
     if input_coverage != 1.:
         psf = resize_with_crop_or_pad(psf, crop_shape=[int(s * input_coverage) for s in psf.shape])
 
-    if no_phase:
-        emb = compute_emb(
-            otf,
-            iotf,
-            val=alpha_val,
-            ratio=ratio,
-            norm=norm,
-            log10=log10,
-            embedding_option=embedding_option,
-            freq_strength_threshold=freq_strength_threshold,
-        )
-        if edge_filter:
-            emb = scharr(emb)
-            emb /= np.nanpercentile(emb, 90)
-            emb[emb > 1] = 1
+    if np.all(psf == 0):
+        emb = np.zeros((3, *poi_shape)) if no_phase else np.zeros((6, *poi_shape))
     else:
-
-        alpha = compute_emb(
-            otf,
-            iotf,
-            val=alpha_val,
-            ratio=ratio,
-            norm=norm,
-            log10=log10,
-            embedding_option=embedding_option,
-            freq_strength_threshold=freq_strength_threshold,
-        )
-
-        if edge_filter:
-            alpha = scharr(alpha)
-            alpha /= np.nanpercentile(alpha, 90)
-            alpha[alpha > 1] = 1
-
-        if remove_interference:
-            otf = remove_interference_pattern(
-                psf,
+        if no_phase:
+            emb = compute_emb(
                 otf,
-                plot=plot,
-                pois=pois,
-                windowing=True
+                iotf,
+                val=alpha_val,
+                ratio=ratio,
+                norm=norm,
+                log10=log10,
+                embedding_option=embedding_option,
+                freq_strength_threshold=freq_strength_threshold,
+            )
+        else:
+            alpha = compute_emb(
+                otf,
+                iotf,
+                val=alpha_val,
+                ratio=ratio,
+                norm=norm,
+                log10=log10,
+                embedding_option=embedding_option,
+                freq_strength_threshold=freq_strength_threshold,
             )
 
-        phi = compute_emb(
-            otf,
-            iotf,
-            val=phi_val,
-            ratio=False,
-            norm=False,
-            log10=False,
-            embedding_option='spatial_planes',
-            freq_strength_threshold=freq_strength_threshold,
-        )
+            if remove_interference:
+                otf = remove_interference_pattern(
+                    psf,
+                    otf,
+                    plot=plot,
+                    pois=pois,
+                    windowing=True
+                )
 
-        emb = np.concatenate([alpha, phi], axis=0)
+            phi = compute_emb(
+                otf,
+                iotf,
+                val=phi_val,
+                ratio=False,
+                norm=False,
+                log10=False,
+                embedding_option='spatial_planes',
+                freq_strength_threshold=freq_strength_threshold,
+            )
+
+            emb = np.concatenate([alpha, phi], axis=0)
 
     if emb.shape[1:] != poi_shape:
         emb = resize(emb, output_shape=(3 if no_phase else 6, *poi_shape))

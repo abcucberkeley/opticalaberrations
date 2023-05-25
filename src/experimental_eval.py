@@ -857,8 +857,6 @@ def eval_bleaching_rate(datadir: Path):
             remove_background=True,
             plot=None,
             normalize=False,
-            edge_filter=False,
-            filter_mask_dilation=False,
         )
 
         imin = np.nanmin(img)

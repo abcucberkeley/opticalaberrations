@@ -99,7 +99,7 @@ def beads(
     photons: int = 1,
     object_size: Optional[int] = 0,
     num_objs: int = 1,
-    fill_radius: float = .4,
+    fill_radius: float = .35,
 ):
     """
     Args:
@@ -121,8 +121,7 @@ def beads(
                 shape=image_shape,
                 radius=object_size,
                 position=rng.integers(
-                    int(image_shape[0] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius)),
-                    3
+                    int(image_shape[0] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius)), 3
                 ),
             ).astype(np.float32) * photons
         else:
@@ -208,8 +207,6 @@ def sim(
                 model_fov=gen.psf_fov,
                 remove_background=remove_background,
                 normalize=normalize,
-                edge_filter=False,
-                filter_mask_dilation=False,
                 read_noise_bias=5,
                 plot=odir/filename,
             )
@@ -244,8 +241,6 @@ def sim(
             model_fov=gen.psf_fov,
             remove_background=remove_background,
             normalize=normalize,
-            edge_filter=False,
-            filter_mask_dilation=False,
             read_noise_bias=5,
             plot=outdir/filename,
         )
