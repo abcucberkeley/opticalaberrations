@@ -22,7 +22,7 @@ def test_fourier_embeddings(kargs):
         lateral_voxel_size=kargs['lateral_voxel_size'],
         wavelength=kargs['wavelength'],
         plot=kargs['plot'],
-        match_model_fov=True
+        fov_is_small=True
     )
     assert emb.shape == kargs['embeddings_shape']
 
@@ -36,7 +36,7 @@ def test_rolling_fourier_embeddings(kargs):
         lateral_voxel_size=kargs['lateral_voxel_size'],
         wavelength=kargs['wavelength'],
         plot=kargs['plot'],
-        match_model_fov=False
+        fov_is_small=False
     )
     assert emb.shape == kargs['embeddings_shape']
 
@@ -51,6 +51,6 @@ def test_embeddings_with_digital_rotations(kargs):
         wavelength=kargs['wavelength'],
         plot=kargs['plot'],
         digital_rotations=kargs['digital_rotations'],
-        match_model_fov=False
+        fov_is_small=False
     )
     assert emb.shape == kargs['rotations_shape']
