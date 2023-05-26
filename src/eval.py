@@ -858,6 +858,16 @@ def evaluate_modes(
     n_samples: Optional[int] = 1,
     digital_rotations: bool = True
 ):
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
     num_objs = 1 if num_objs is None else num_objs
     n_samples = 1 if n_samples is None else n_samples
 
@@ -867,8 +877,37 @@ def evaluate_modes(
 
     photons = [1, 1000, 10000, 50000, 100000, 200000, 400000, 600000, 800000, 1000000]
     labels = ['1', '$10^3$', '$10^4$', '$5 \\times 10^4$', '$10^5$', '$2 \\times 10^5$', '$4 \\times 10^5$', '$6 \\times 10^5$', '$8 \\times 10^5$', '$10^6$']
-    waves = np.arange(1e-5, .6, step=.05).round(2)
+    waves = np.arange(1e-5, .55, step=.05).round(2)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
+    gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
+
+
+    fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(8, 8))
+
+    for i, a in enumerate(waves[::-1]):
+        for j, ph in enumerate(photons):
+            phi = np.zeros_like(aberrations[0])
+            phi[3] = a
+
+            w = Wavefront(phi, lam_detection=gen.lam_detection)
+            kernel = gen.single_psf(phi=w, normed=True, meta=False)
+
+            img = simulate_beads(
+                psf=kernel,
+                object_size=0,
+                photons=ph,
+                noise=True,
+                fill_radius=0
+            )
+            img /= img.max()
+
+            axes[i, j].imshow(np.max(img, axis=0) ** .5, vmin=0, vmax=1, cmap='hot')
+            axes[i, j].axis('off')
+
+    plt.tight_layout()
+    plt.savefig(f'{outdir}_templateheatmap.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{outdir}_templateheatmap.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{outdir}_templateheatmap.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     for i in range(3, modelspecs.n_modes):
         if i == 4:
@@ -963,7 +1002,6 @@ def evaluate_modes(
 
         phi = np.zeros_like(classes[-1, :])
         phi[i] = .2
-        gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
         w = Wavefront(phi, lam_detection=gen.lam_detection)
         kernel = gen.single_psf(
             phi=w,
