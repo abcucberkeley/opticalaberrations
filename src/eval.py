@@ -777,7 +777,6 @@ def eval_object(
     na: float = 1.0,
     batch_size: int = 512,
     num_objs: int = 1,
-    n_samples: int = 1,
     eval_sign: str = 'rotations',
     savepath: Any = None,
     digital_rotations: Optional[int] = 361
@@ -789,7 +788,6 @@ def eval_object(
     wavefronts = [Wavefront(w, lam_detection=gen.lam_detection, rotate=False) for w in phi]
     p2v = [w.peak2valley(na=na) for w in wavefronts]
     kernels = [gen.single_psf(phi=w, normed=True) for w in wavefronts]
-    n_samples = 1 if num_objs == 1 else n_samples
 
     inputs = np.stack([
         backend.preprocess(
@@ -805,11 +803,11 @@ def eval_object(
             digital_rotations=digital_rotations,
             remove_background=True,
             normalize=True,
-            #plot=f"{savepath}_{p2v[k]}_{ph}_{i}"
+            # plot=f"{savepath}_{p2v[k]}_{ph}"
         )
-        for k, ph, i in itertools.product(range(len(kernels)), photons, range(n_samples))
+        for k, ph in itertools.product(range(len(kernels)), photons)
     ], axis=0)
-    ys = np.stack([phi[k] for k, ph, i in itertools.product(range(len(kernels)), photons, range(n_samples))])
+    ys = np.stack([phi[k] for k, ph, i in itertools.product(range(len(kernels)), photons)])
 
     inputs = tf.data.Dataset.from_tensor_slices(inputs)
 
@@ -818,9 +816,9 @@ def eval_object(
         inputs=inputs,
         psfgen=gen,
         batch_size=batch_size,
-        save_path=[f"{savepath}_{a}_{ph}_{i}" for a, ph, i in itertools.product(p2v, photons, range(n_samples))],
+        save_path=[f"{savepath}_{a}_{ph}" for a, ph, i in itertools.product(p2v, photons)],
         digital_rotations=digital_rotations,
-        #plot_rotations=True
+        # plot_rotations=True
     )
 
     try:
@@ -834,12 +832,12 @@ def eval_object(
 
     residuals = ys - preds
     p = pd.DataFrame(
-        np.stack([p2v[k] for k, ph, i in itertools.product(range(len(kernels)), photons, range(n_samples))]),
+        np.stack([p2v[k] for k, ph, i in itertools.product(range(len(kernels)), photons)]),
         columns=['aberration']
     )
     p['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
     p['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
-    p['photons'] = np.concatenate([photons for i in itertools.product(phi, range(n_samples))])
+    p['photons'] = np.concatenate([photons for i in itertools.product(phi)])
 
     df = df.append(p, ignore_index=True)
 
@@ -855,7 +853,6 @@ def evaluate_modes(
     eval_sign: str = 'signed',
     batch_size: int = 512,
     num_objs: Optional[int] = 1,
-    n_samples: Optional[int] = 1,
     digital_rotations: bool = True
 ):
     plt.rcParams.update({
@@ -869,7 +866,6 @@ def evaluate_modes(
     })
 
     num_objs = 1 if num_objs is None else num_objs
-    n_samples = 1 if n_samples is None else n_samples
 
     outdir = model.with_suffix('') / eval_sign / 'evalmodes' / f'num_objs_{num_objs}'
     outdir.mkdir(parents=True, exist_ok=True)
@@ -920,7 +916,6 @@ def evaluate_modes(
         df = eval_object(
             phi=classes,
             num_objs=num_objs,
-            n_samples=n_samples,
             photons=photons,
             modelpath=model,
             batch_size=batch_size,

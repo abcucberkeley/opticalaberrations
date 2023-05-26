@@ -125,7 +125,6 @@ def main(args=None):
             args.model,
             eval_sign=args.eval_sign,
             num_objs=args.num_objs,
-            n_samples=args.n_samples,
             batch_size=args.batch_size,
             digital_rotations=args.digital_rotations,
         )
