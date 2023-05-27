@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from line_profiler_pycharm import profile
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from tifffile import imwrite
 
 import embeddings
@@ -44,18 +44,32 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 @profile
-def simulate_beads(psf, beads=None, photons=100000, object_size=0, num_objs=1, noise=True, fill_radius=.4):
+def simulate_beads(
+    psf,
+    beads=None,
+    photons=100000,
+    maxcounts=None,
+    object_size=0,
+    num_objs=1,
+    noise=True,
+    fill_radius=.4
+):
 
     if beads is None:
         beads = multipoint_dataset.beads(
             image_shape=psf.shape,
-            photons=photons,
+            photons=photons if maxcounts is None else 1,
             object_size=object_size,
             num_objs=num_objs,
             fill_radius=fill_radius
         )
 
-    psf /= np.sum(psf)
+    if maxcounts is not None:
+        psf /= psf.max()
+        psf *= maxcounts
+    else:
+        psf /= np.sum(psf)
+
     inputs = utils.fftconvolution(sample=beads, kernel=psf)
 
     if noise:
@@ -257,7 +271,7 @@ def iter_evaluate(
 
 
 @profile
-def plot_heatmap(means, wavelength, savepath, label='Integrated photons', lims=(0, 100)):
+def plot_heatmap(means, wavelength, savepath, label='Integrated photons', lims=(0, 100), ax=None, cax=None):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -268,7 +282,12 @@ def plot_heatmap(means, wavelength, savepath, label='Integrated photons', lims=(
         'xtick.major.pad': 10
     })
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+    if cax is None:
+        cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+
     levels = [
         0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
         .5, .6, .7, .8, .9,
@@ -296,7 +315,6 @@ def plot_heatmap(means, wavelength, savepath, label='Integrated photons', lims=(
     )
     ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
-    cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
     cbar = plt.colorbar(
         contours,
         cax=cax,
@@ -328,7 +346,9 @@ def plot_heatmap(means, wavelength, savepath, label='Integrated photons', lims=(
 
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    return fig
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    return ax
 
 
 @profile
@@ -795,7 +815,8 @@ def eval_object(
                 psf=kernels[k],
                 object_size=0,
                 num_objs=num_objs,
-                photons=ph,
+                # photons=ph,
+                maxcounts=ph,
                 noise=True,
                 fill_radius=0 if num_objs == 0 else .35
             ),
@@ -807,7 +828,7 @@ def eval_object(
         )
         for k, ph in itertools.product(range(len(kernels)), photons)
     ], axis=0)
-    ys = np.stack([phi[k] for k, ph, i in itertools.product(range(len(kernels)), photons)])
+    ys = np.stack([phi[k] for k, ph in itertools.product(range(len(kernels)), photons)])
 
     inputs = tf.data.Dataset.from_tensor_slices(inputs)
 
@@ -816,7 +837,7 @@ def eval_object(
         inputs=inputs,
         psfgen=gen,
         batch_size=batch_size,
-        save_path=[f"{savepath}_{a}_{ph}" for a, ph, i in itertools.product(p2v, photons)],
+        save_path=[f"{savepath}_{a}_{ph}" for a, ph in itertools.product(p2v, photons)],
         digital_rotations=digital_rotations,
         # plot_rotations=True
     )
@@ -832,7 +853,7 @@ def eval_object(
 
     residuals = ys - preds
     p = pd.DataFrame(
-        np.stack([p2v[k] for k, ph, i in itertools.product(range(len(kernels)), photons)]),
+        np.stack([p2v[k] for k, ph in itertools.product(range(len(kernels)), photons)]),
         columns=['aberration']
     )
     p['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
@@ -872,11 +893,11 @@ def evaluate_modes(
     modelspecs = backend.load_metadata(model)
 
     photons = [1, 1000, 10000, 50000, 100000, 200000, 400000, 600000, 800000, 1000000]
+    # photons = [1, 100, 200, 400, 600, 800, 1000, 1250, 1500, 2000]
     labels = ['1', '$10^3$', '$10^4$', '$5 \\times 10^4$', '$10^5$', '$2 \\times 10^5$', '$4 \\times 10^5$', '$6 \\times 10^5$', '$8 \\times 10^5$', '$10^6$']
     waves = np.arange(1e-5, .55, step=.05).round(2)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
-
 
     fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(8, 8))
 
@@ -886,21 +907,27 @@ def evaluate_modes(
             phi[3] = a
 
             w = Wavefront(phi, lam_detection=gen.lam_detection)
-            kernel = gen.single_psf(phi=w, normed=True, meta=False)
+            kernel = gen.single_psf(phi=w, meta=False)
 
             img = simulate_beads(
                 psf=kernel,
                 object_size=0,
                 photons=ph,
+                # maxcounts=ph,
                 noise=True,
                 fill_radius=0
             )
-            img /= img.max()
 
-            axes[i, j].imshow(np.max(img, axis=0) ** .5, vmin=0, vmax=1, cmap='hot')
+            axes[i, j].imshow(np.max(img, axis=0) ** .5, cmap='hot')
             axes[i, j].axis('off')
+            axes[i, j].set_title(
+                f"{int(np.max(img)/1e3)}$\\times 10^3$" if np.max(img) > 1e4 else int(np.max(img)),
+                # f"{int(np.sum(img)/1e6)}$\\times 10^6$" if np.sum(img) > 1e6 else int(np.sum(img)),
+                fontsize=8,
+                pad=1
+            )
 
-    plt.tight_layout()
+    plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.25, wspace=.25)
     plt.savefig(f'{outdir}_templateheatmap.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{outdir}_templateheatmap.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{outdir}_templateheatmap.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
@@ -928,6 +955,7 @@ def evaluate_modes(
         df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
         means = pd.pivot_table(df, values='residuals', index='bins', columns='photons', aggfunc=np.mean)
         means = means.sort_index().interpolate()
+        means.columns = np.arange(len(photons))
         logger.info(means)
 
         fig = plt.figure(figsize=(8, 8))
@@ -994,6 +1022,181 @@ def evaluate_modes(
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
         ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+        phi = np.zeros_like(classes[-1, :])
+        phi[i] = .2
+        w = Wavefront(phi, lam_detection=gen.lam_detection)
+        kernel = gen.single_psf(
+            phi=w,
+            normed=True,
+            meta=False,
+        )
+        ax_xy.imshow(np.max(kernel, axis=0)**.5, vmin=0, vmax=1, cmap='hot')
+        ax_xz.imshow(np.max(kernel, axis=1)**.5, vmin=0, vmax=1, cmap='hot')
+        ax_yz.imshow(np.max(kernel, axis=2)**.5, vmin=0, vmax=1, cmap='hot')
+        ax_wavevfront.imshow(w.wave(size=100), vmin=-1, vmax=1, cmap='Spectral_r')
+
+        for a, t in zip([ax_xy, ax_xz, ax_yz, ax_wavevfront], ['XY', 'XZ', 'YZ', 'Wavefront']):
+            a.axis('off')
+            a.set_title(t)
+
+        plt.tight_layout()
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+@profile
+def eval_object_iter(
+    phi,
+    modelpath,
+    niter: int = 10,
+    photons: int = 1e5,
+    na: float = 1.0,
+    batch_size: int = 512,
+    eval_sign: str = 'rotations',
+    savepath: Any = None,
+    digital_rotations: Optional[int] = 361
+):
+    model = backend.load(modelpath)
+    gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]], rotate=False)
+    df = pd.DataFrame([], columns=['aberration', 'prediction', 'residuals', 'iter'])
+
+    for i in trange(1, niter+1):
+        wavefronts = [Wavefront(w, lam_detection=gen.lam_detection, rotate=False) for w in phi]
+        p2v = [w.peak2valley(na=na) for w in wavefronts]
+        kernels = [gen.single_psf(phi=w, normed=False) for w in wavefronts]
+
+        if i == 1:
+            p = pd.DataFrame(p2v, columns=['aberration'])
+            p['prediction'] = p2v
+            p['residuals'] = p2v
+            p['iter'] = 0
+            df = df.append(p, ignore_index=True)
+
+        inputs = np.stack([
+            backend.preprocess(
+                simulate_beads(
+                    psf=kernels[w],
+                    object_size=0,
+                    num_objs=1,
+                    # photons=photons,
+                    maxcounts=1000,
+                    noise=True,
+                    fill_radius=0
+                ),
+                modelpsfgen=gen,
+                digital_rotations=digital_rotations,
+                remove_background=True,
+                normalize=True,
+                # plot=f"{savepath}_{p2v[k]}_{ph}"
+            )
+            for w in range(len(wavefronts))
+        ], axis=0)
+        ys = np.stack([phi[w] for w in range(len(wavefronts))])
+
+        inputs = tf.data.Dataset.from_tensor_slices(inputs)
+
+        res = backend.predict_dataset(
+            model,
+            inputs=inputs,
+            psfgen=gen,
+            batch_size=batch_size,
+            save_path=[f"{savepath}_{i}" for i in range(len(wavefronts))],
+            digital_rotations=digital_rotations,
+            # plot_rotations=True
+        )
+
+        try:
+            preds, stdev = res
+        except ValueError:
+            preds, stdev, lls_defocus = res
+
+        if eval_sign == 'positive_only':
+            ys = np.abs(ys)
+            preds = np.abs(preds)[:, :ys.shape[-1]]
+
+        residuals = ys - preds
+        p = pd.DataFrame(p2v, columns=['aberration'])
+        p['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
+        p['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
+        p['iter'] = i
+        df = df.append(p, ignore_index=True)
+
+        phi = residuals
+
+    return df
+
+
+@profile
+def evaluate_modes_iterative(
+    model: Path,
+    niter: int = 10,
+    eval_sign: str = 'signed',
+    batch_size: int = 512,
+    num_objs: Optional[int] = 1,
+    digital_rotations: bool = True
+):
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    outdir = model.with_suffix('') / eval_sign / 'evalmodes' / f'num_objs_{num_objs}'
+    outdir.mkdir(parents=True, exist_ok=True)
+    modelspecs = backend.load_metadata(model)
+
+    waves = np.arange(1e-5, .55, step=.05).round(2)
+    aberrations = np.zeros((len(waves), modelspecs.n_modes))
+    gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
+
+    for i in range(3, modelspecs.n_modes):
+        if i == 4:
+            continue
+
+        savepath = outdir / f"m{i}"
+
+        classes = aberrations.copy()
+        classes[:, i] = waves
+        df = eval_object_iter(
+            phi=classes,
+            niter=niter,
+            modelpath=model,
+            batch_size=batch_size,
+            eval_sign=eval_sign,
+            savepath=savepath,
+            digital_rotations=361 if digital_rotations else None
+        )
+
+        bins = np.arange(0, 10.25, .25)
+        df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+        means = pd.pivot_table(df, values='residuals', index='bins', columns='iter', aggfunc=np.mean)
+        means = means.sort_index().interpolate()
+        logger.info(means)
+
+        fig = plt.figure(figsize=(8, 8))
+        gs = fig.add_gridspec(4, 4)
+        ax_xy = fig.add_subplot(gs[0, 0])
+        ax_xz = fig.add_subplot(gs[0, 1])
+        ax_yz = fig.add_subplot(gs[0, 2])
+        ax_wavevfront = fig.add_subplot(gs[0, -1])
+        ax = fig.add_subplot(gs[1:, :])
+        cax = fig.add_axes([1.01, 0.08, 0.03, 0.7])
+
+        plot_heatmap(
+            means,
+            ax=ax,
+            cax=cax,
+            wavelength=modelspecs.lam_detection,
+            savepath=savepath,
+            label=f'Number of iterations',
+            lims=(0, niter)
+        )
 
         phi = np.zeros_like(classes[-1, :])
         phi[i] = .2

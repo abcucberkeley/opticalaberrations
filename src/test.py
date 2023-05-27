@@ -121,13 +121,22 @@ def main(args=None):
         logging.warning(f"Cupy not supported on your system: {e}")
 
     if args.target == 'modes':
-        eval.evaluate_modes(
-            args.model,
-            eval_sign=args.eval_sign,
-            num_objs=args.num_objs,
-            batch_size=args.batch_size,
-            digital_rotations=args.digital_rotations,
-        )
+        if args.niter > 1:
+            eval.evaluate_modes_iterative(
+                args.model,
+                niter=args.niter,
+                eval_sign=args.eval_sign,
+                batch_size=args.batch_size,
+                digital_rotations=args.digital_rotations,
+            )
+        else:
+            eval.evaluate_modes(
+                args.model,
+                eval_sign=args.eval_sign,
+                num_objs=args.num_objs,
+                batch_size=args.batch_size,
+                digital_rotations=args.digital_rotations,
+            )
 
     elif args.target == "random":
         eval.random_samples(
