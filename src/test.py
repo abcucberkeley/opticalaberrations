@@ -81,11 +81,6 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--input_coverage", default=1.0, type=float, help='faction of the image to feed into the model '
-                                                          '(then padded to keep the original image size)'
-    )
-
-    parser.add_argument(
         "--gpu_workers", default=1, type=int, help='number of GPUs to use'
     )
 
@@ -152,7 +147,6 @@ def main(args=None):
             datadir=args.datadir,
             distribution=args.dist,
             samplelimit=args.n_samples,
-            input_coverage=args.input_coverage,
             na=args.na,
             batch_size=args.batch_size,
             eval_sign=args.eval_sign,
@@ -165,7 +159,6 @@ def main(args=None):
             datadir=args.datadir,
             distribution=args.dist,
             samplelimit=args.n_samples,
-            input_coverage=args.input_coverage,
             na=args.na,
             batch_size=args.batch_size,
             eval_sign=args.eval_sign,
@@ -178,7 +171,6 @@ def main(args=None):
             datadir=args.datadir,
             distribution=args.dist,
             samplelimit=args.n_samples,
-            input_coverage=args.input_coverage,
             na=args.na,
             batch_size=args.batch_size,
             eval_sign=args.eval_sign,

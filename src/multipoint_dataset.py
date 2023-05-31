@@ -177,7 +177,10 @@ def sim(
     img = fftconvolution(sample=reference, kernel=kernel)  # image in photons
 
     p2v = Wavefront(amps, lam_detection=gen.lam_detection).peak2valley(na=1.0)
-    avg_min_distance = mean_min_distance(reference, voxel_size=gen.voxel_size) if npoints > 1 else 0.
+    if npoints > 1:
+        avg_min_distance = np.nan_to_num(mean_min_distance(reference, voxel_size=gen.voxel_size), nan=0)
+    else:
+        avg_min_distance = 0.
 
     if noise:
         inputs = add_noise(
@@ -235,26 +238,16 @@ def sim(
                 lls_defocus_offset=lls_defocus_offset
             )
     else:
-        inputs = prep_sample(
-            inputs,
-            sample_voxel_size=gen.voxel_size,
-            model_fov=gen.psf_fov,
-            remove_background=remove_background,
-            normalize=normalize,
-            read_noise_bias=5,
-            plot=outdir/filename,
-        )
-
         save_synthetic_sample(
             outdir/filename,
             inputs,
+            gt=reference,
             amps=amps,
             photons=photons,
             maxcounts=maxcounts,
             npoints=npoints,
             avg_min_distance=avg_min_distance,
             p2v=p2v,
-            gt=reference,
             gen=gen,
             lls_defocus_offset=lls_defocus_offset
         )
