@@ -323,6 +323,10 @@ def plot_heatmap(means, wavelength, savepath, label='Integrated photons', lims=(
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
+    if label == 'Integrated photons':
+        ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
+        ax.set_xticks(np.arange(0, 1e6+10e4, 5e4), minor=True)
+
     ax.set_xlabel(label)
     ax.set_xlim(lims)
 
@@ -382,12 +386,12 @@ def snrheatmap(
         )
 
     bins = np.arange(0, 10.25, .25)
-    pbins = np.arange(0, 1e6+5e4, 5e4)
+    pbins = np.arange(0, 1e6+10e4, 5e4)
     df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
-    df['photons'] = pd.cut(df['photons'], pbins, labels=pbins[1:], include_lowest=True)
+    df['pbins'] = pd.cut(df['photons'], pbins, labels=pbins[:-1], include_lowest=True)
 
     means = pd.pivot_table(
-        df[df['niter'] == niter], values='residuals', index='bins', columns='photons', aggfunc=np.mean
+        df[df['niter'] == niter], values='residuals', index='bins', columns='pbins', aggfunc=np.mean
     )
     means = means.sort_index().interpolate()
 
@@ -446,7 +450,7 @@ def densityheatmap(
     for col, label, lims in zip(
         ['neighbors', 'distance'],
         ['Number of objects', 'Average distance to nearest neighbor (microns)'],
-        [(1, 300), (0, 4)]
+        [(1, 300), (0, 2)]
     ):
         bins = np.arange(0, 10.25, .25)
         df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
