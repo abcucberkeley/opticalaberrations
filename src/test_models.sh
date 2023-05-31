@@ -13,7 +13,7 @@ ITERS=10
 MAX=10000
 PRETRAINED="../pretrained_models/lattice_yumb_x108um_y108um_z200um/"
 
-for EVALSIGN in positive_only signed
+for EVALSIGN in signed positive_only
 do
   for MODES in 15 28 45
   do
@@ -35,20 +35,20 @@ do
 #      --taskname evalmodes \
 #      --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
 
-      BATCH=3500
+      BATCH=512
       for NA in 1.
       do
-        python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
+        python manager.py slurm test.py --partition abc_a100 --mem '128GB' --cpus 4 --gpus 1 \
         --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter 1 --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/snrheatmaps
 
-        python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
+        python manager.py slurm test.py --partition abc_a100 --mem '128GB' --cpus 4 --gpus 1 \
         --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter 1 --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/densityheatmaps
 
-        python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
+        python manager.py slurm test.py --partition abc_a100 --mem '128GB' --cpus 4 --gpus 1 \
         --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter $ITERS --eval_sign $EVALSIGN $ROTATIONS iterheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/iterheatmaps

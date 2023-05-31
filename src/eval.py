@@ -382,7 +382,9 @@ def snrheatmap(
         )
 
     bins = np.arange(0, 10.25, .25)
+    pbins = np.arange(0, 1e6+5e4, 5e4)
     df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
+    df['photons'] = pd.cut(df['photons'], pbins, labels=pbins[1:], include_lowest=True)
 
     means = pd.pivot_table(
         df[df['niter'] == niter], values='residuals', index='bins', columns='photons', aggfunc=np.mean
