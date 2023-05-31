@@ -313,7 +313,8 @@ def create_synthetic_sample(
         na_detection=na_detection,
     )
 
-    #outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
+    if not randomize_voxel_size:
+        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
     outdir = outdir / f"i{input_shape}"
     outdir = outdir / f"z{modes}"
 
