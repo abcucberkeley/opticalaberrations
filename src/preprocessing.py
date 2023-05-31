@@ -202,7 +202,7 @@ def dog(
             im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)   # more blurred
 
             mask = cp.array(tukey_window(np.ones(image.shape)))
-            mask[mask <  .9] = np.nan
+            mask[mask < .9] = np.nan
             mask[mask >= .9] = 1
 
             if cp.nanstd(im2*mask) < 3:  # this is sparse
@@ -235,13 +235,23 @@ def remove_background_noise(
         A simple function to remove background noise from a given image.
         Also uses difference of gaussians to bandpass (reject past nyquist, reject DC/background/scattering
     """
+
+    try:
+        image = cp.array(image)
+    except Exception:
+        logger.warning("No CUDA-capable device is detected")
+
     if method == 'mode':
         mode = int(st.mode(image, axis=None).mode[0])
         image -= mode + read_noise_bias
     else:
         image = dog(image, low_sigma=0.7, high_sigma=1.5)
     image[image < 0] = 0
-    return image
+
+    if isinstance(image, cp.ndarray):
+        return cp.asnumpy(image)
+    else:
+        return image
 
 
 def tukey_window(image: np.ndarray, alpha: float = .5):
@@ -339,10 +349,8 @@ def prep_sample(
         axes[0, 1].set_title(f"PSNR: {measure_snr(sample)}")
 
     if remove_background:
-        sample = cp.array(sample)
         sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)
         psnr = measure_snr(sample)
-        sample = cp.asnumpy(sample)
     else:
         psnr = measure_snr(sample)
 
