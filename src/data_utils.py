@@ -167,15 +167,18 @@ def check_criteria(
     modes='',
     max_amplitude=1.,
     photons_range=None,
+    npoints_range=None,
 ):
     path = str(file)
     amp = float(str([s for s in file.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.'))
     photons = tuple(map(int, str([s.strip('photons_') for s in file.parts if s.startswith('photons_')][0]).split('-')))
+    npoints = int([s.strip('npoints_') for s in file.parts if s.startswith('npoints')][0])
 
     if distribution in path \
             and embedding in path \
             and f"z{modes}" in path \
             and amp <= max_amplitude \
+            and npoints_range is None or npoints >= npoints_range[0] and npoints <= npoints_range[1] \
             and photons_range is None or (photons_range is not None and photons_range[0] <= photons[0] and photons[1] <= photons_range[1]) \
             and check_sample(file) == 1:
         return path
@@ -192,6 +195,7 @@ def load_dataset(
     modes='',
     max_amplitude=1.,
     photons_range=None,
+    npoints_range=None,
 ):
     check = partial(
         check_criteria,
@@ -199,7 +203,8 @@ def load_dataset(
         embedding=embedding,
         modes=modes,
         max_amplitude=max_amplitude,
-        photons_range=photons_range
+        photons_range=photons_range,
+        npoints_range=npoints_range
     )
     files = multiprocess(
         func=check,
@@ -262,6 +267,7 @@ def collect_dataset(
     input_coverage=1.,
     embedding_option='spatial_planes',
     photons_range=None,
+    npoints_range=None,
     iotf=None,
     metadata=False,
     lls_defocus: bool = False
@@ -293,7 +299,8 @@ def collect_dataset(
             embedding=embedding,
             distribution=distribution,
             max_amplitude=max_amplitude,
-            photons_range=photons_range
+            photons_range=photons_range,
+            npoints_range=npoints_range,
         )
 
         train = train_data.map(lambda x: tf.py_function(load, [x], dtypes))
@@ -317,7 +324,8 @@ def collect_dataset(
             embedding=embedding,
             distribution=distribution,
             max_amplitude=max_amplitude,
-            photons_range=photons_range
+            photons_range=photons_range,
+            npoints_range=npoints_range,
         )
 
         data = data.map(lambda x: tf.py_function(load, [x], dtypes))
