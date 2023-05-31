@@ -24,7 +24,6 @@ from line_profiler_pycharm import profile
 from tqdm import tqdm, trange
 from tifffile import imwrite
 
-import embeddings
 import utils
 import data_utils
 import backend
@@ -85,7 +84,6 @@ def generate_fourier_embeddings(
     data: pd.DataFrame,
     psfgen: SyntheticPSF,
     no_phase: bool = False,
-    input_coverage: float = 1.0,
     digital_rotations: Optional[int] = None,
 ):
     hashtable = data[data['id'] == image_id].iloc[0].to_dict()
@@ -109,20 +107,16 @@ def generate_fourier_embeddings(
     noisy_img = simulate_beads(
         psf=psf,
         beads=ref,
-        gen=psfgen,
         photons=hashtable['photons']
     )
 
-    emb = embeddings.fourier_embeddings(
+    emb = backend.preprocess(
         noisy_img,
-        iotf=psfgen.iotf,
+        modelpsfgen=psfgen,
+        digital_rotations=digital_rotations,
         no_phase=no_phase,
-        alpha_val='abs',
-        phi_val='angle',
-        remove_interference=True,
-        input_coverage=input_coverage,
-        embedding_option=psfgen.embedding_option,
-        digital_rotations=digital_rotations
+        remove_background=True,
+        normalize=True,
     )
     return emb
 
@@ -135,12 +129,12 @@ def iter_evaluate(
     samplelimit: int = 1,
     na: float = 1.0,
     distribution: str = '/',
-    input_coverage: float = 1.0,
     threshold: float = 0.,
     no_phase: bool = False,
     batch_size: int = 100,
-    photons_range: tuple = (100000, 100000),
-    eval_sign: str = 'positive_only',
+    photons_range: Optional[tuple] = None,
+    npoints_range: Optional[tuple] = None,
+    eval_sign: str = 'signed',
     digital_rotations: bool = False,
     rotations: Optional[int] = 361,
     savepath: Any = None,
@@ -162,6 +156,7 @@ def iter_evaluate(
         distribution=distribution,
         no_phase=no_phase,
         photons_range=photons_range,
+        npoints_range=npoints_range,
         metadata=True
     )
     # this runs multiple samples (aka images) at a time.
@@ -206,30 +201,27 @@ def iter_evaluate(
             psfgen=gen,
             no_phase=no_phase,
             digital_rotations=rotations if digital_rotations else None,
-            input_coverage=input_coverage,
         )
 
-        check = data_utils.get_image(files[0])
+        inputs = tf.data.Dataset.from_tensor_slices(ids)
+        inputs = inputs.map(lambda image_id: tf.py_function(updated_embeddings, [image_id], tf.float32))
 
-        # need to get this working with digital rotations and a dynamic batchsize
-        if k == 1 and (check.shape[0] == 3 or check.shape[0] == 6):
-            # check if embeddings has been pre-computed
-            inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(files))
-            inputs = inputs.map(lambda x: tf.py_function(data_utils.get_image, [x], tf.float32))
-        else:
-            inputs = tf.data.Dataset.from_tensor_slices(ids)
-            inputs = inputs.map(lambda image_id: tf.py_function(updated_embeddings, [image_id], tf.float32))
-
-        ps, stdev = backend.predict_dataset(
+        res = backend.predict_dataset(
             model,
             inputs,
             psfgen=gen,
             batch_size=batch_size,
             threshold=threshold,
             desc=f'Predicting (iter #{k})',
+            save_path=[f.with_stem('') for f in files],
             digital_rotations=rotations if digital_rotations else None,
             plot_rotations=False,
         )
+
+        try:
+            ps, stdev = res
+        except ValueError:
+            ps, stdev, lls_defocus = res
 
         if eval_sign == 'positive_only':
             ys = np.abs(ys)
@@ -359,13 +351,12 @@ def snrheatmap(
     distribution: str = '/',
     samplelimit: Any = None,
     na: float = 1.0,
-    input_coverage: float = 1.0,
     batch_size: int = 100,
-    eval_sign: str = 'positive_only',
+    eval_sign: str = 'signed',
     digital_rotations: bool = False,
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = modelpath.with_suffix('') / eval_sign / f'snrheatmaps_{input_coverage}'
+    savepath = modelpath.with_suffix('') / eval_sign / f'snrheatmaps'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -383,9 +374,9 @@ def snrheatmap(
             savepath=savepath,
             samplelimit=samplelimit,
             na=na,
-            input_coverage=input_coverage,
             batch_size=batch_size,
-            photons_range=(0, 10**6),
+            photons_range=None,
+            npoints_range=(1, 1),
             eval_sign=eval_sign,
             digital_rotations=digital_rotations
         )
@@ -409,35 +400,6 @@ def snrheatmap(
         lims=(0, 10**6)
     )
 
-    for z in range(3, modelspecs.n_modes):
-        if z == 4: continue  # ignore defocus
-
-        try:
-            df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
-                lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
-            )
-            df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
-                lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
-            )
-
-            bins = np.arange(0, 10.25, .25)
-            df[f'z{z}_bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
-            means = pd.pivot_table(df, values=f'z{z}_residual', index=f'z{z}_bins', columns='photons', aggfunc=np.mean)
-            means = means.sort_index().interpolate()
-            logger.info(f"z{z}")
-            logger.info(means)
-            means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
-
-            plot_heatmap(
-                means,
-                wavelength=modelspecs.lam_detection,
-                savepath=savepath.with_name(f"{savepath.name}_z{z}"),
-                label=f'Integrated photons',
-                lims=(0, 10**6)
-            )
-        except KeyError:
-            logger.warning(f"No evaluation found for z{z}")
-
 
 @profile
 def densityheatmap(
@@ -447,15 +409,13 @@ def densityheatmap(
     distribution: str = '/',
     na: float = 1.0,
     samplelimit: Any = None,
-    input_coverage: float = 1.0,
     batch_size: int = 100,
-    photons_range: tuple = (100000, 100000),
-    eval_sign: str = 'positive_only',
+    eval_sign: str = 'signed',
     digital_rotations: bool = False,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
-    savepath = modelpath.with_suffix('') / eval_sign / f'densityheatmaps_{input_coverage}'
+    savepath = modelpath.with_suffix('') / eval_sign / f'densityheatmaps'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -474,8 +434,8 @@ def densityheatmap(
             samplelimit=samplelimit,
             distribution=distribution,
             na=na,
-            photons_range=photons_range,
-            input_coverage=input_coverage,
+            photons_range=(1e5, 2e5),
+            npoints_range=None,
             batch_size=batch_size,
             eval_sign=eval_sign,
             digital_rotations=digital_rotations
@@ -484,7 +444,7 @@ def densityheatmap(
     for col, label, lims in zip(
         ['neighbors', 'distance'],
         ['Number of objects', 'Average distance to nearest neighbor (microns)'],
-        [(1, 150), (0, 4)]
+        [(1, 300), (0, 4)]
     ):
         bins = np.arange(0, 10.25, .25)
         df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
@@ -503,35 +463,6 @@ def densityheatmap(
             lims=lims
         )
 
-        for z in range(3, modelspecs.n_modes):
-            if z == 4: continue  # ignore defocus
-
-            try:
-                df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
-                    lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
-                )
-                df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
-                    lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
-                )
-
-                bins = np.arange(0, 10.25, .25)
-                df[f'z{z}_bins'] = pd.cut(df[f'z{z}_ground_truth'], bins, labels=bins[1:], include_lowest=True)
-                means = pd.pivot_table(df, values=f'z{z}_residual', index=f'z{z}_bins', columns=col, aggfunc=np.mean)
-                means = means.sort_index().interpolate()
-                logger.info(f"z{z}")
-                logger.info(means)
-                means.to_csv(savepath.with_name(f"{savepath.name}_{col}_z{z}.csv"))
-
-                plot_heatmap(
-                    means,
-                    wavelength=modelspecs.lam_detection,
-                    savepath=savepath.with_name(f"{savepath.name}_{col}_z{z}"),
-                    label=label,
-                    lims=lims
-                )
-            except KeyError:
-                logger.warning(f"No evaluation found for z{z}")
-
 
 @profile
 def iterheatmap(
@@ -541,15 +472,13 @@ def iterheatmap(
     distribution: str = '/',
     samplelimit: Any = None,
     na: float = 1.0,
-    input_coverage: float = 1.0,
     no_phase: bool = False,
     batch_size: int = 1024,
-    photons_range: tuple = (100000, 100000),
-    eval_sign: str = 'positive_only',
+    eval_sign: str = 'signed',
     digital_rotations: bool = False,
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = modelpath.with_suffix('') / eval_sign / f'iterheatmaps_{input_coverage}'
+    savepath = modelpath.with_suffix('') / eval_sign / f'iterheatmaps'
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
@@ -567,8 +496,8 @@ def iterheatmap(
             modelpath=modelpath,
             samplelimit=samplelimit,
             na=na,
-            photons_range=photons_range,
-            input_coverage=input_coverage,
+            photons_range=(1e5, 2e5),
+            npoints_range=(1, 1),
             no_phase=no_phase,
             batch_size=batch_size,
             eval_sign=eval_sign,
@@ -600,46 +529,6 @@ def iterheatmap(
         label=f'Number of iterations',
         lims=(0, niter)
     )
-
-    for z in range(3, modelspecs.n_modes):
-        if z == 4: continue  # ignore defocus
-
-        try:
-            df[f"z{z}_ground_truth"] = df[f"z{z}_ground_truth"].swifter.apply(
-                lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
-            )
-            df[f"z{z}_residual"] = df[f"z{z}_residual"].swifter.apply(
-                lambda x: Wavefront({z: x}, lam_detection=modelspecs.lam_detection).peak2valley()
-            )
-
-            means = pd.pivot_table(
-                df[df['niter'] == 0], values=f"z{z}_residual", index='id', columns='niter', aggfunc=np.mean
-            )
-            for i in range(1, niter + 1):
-                means[i] = pd.pivot_table(
-                    df[df['niter'] == i], values=f"z{z}_residual", index='id', columns='niter', aggfunc=np.mean
-                )
-
-            bins = np.arange(0, 10.25, .25)
-            means.index = pd.cut(means[0], bins, labels=bins[1:], include_lowest=True)
-            means.index.name = 'bins'
-            means = means.groupby("bins").agg("mean")
-            means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
-            means = means.sort_index().interpolate()
-
-            logger.info(f"z{z}")
-            logger.info(means)
-            means.to_csv(savepath.with_name(f"{savepath.name}_z{z}.csv"))
-
-            plot_heatmap(
-                means,
-                wavelength=modelspecs.lam_detection,
-                savepath=savepath.with_name(f"{savepath.name}_z{z}"),
-                label=f'Number of iterations',
-                lims=(0, niter)
-            )
-        except KeyError:
-            logger.warning(f"No evaluation found for z{z}")
 
 
 @profile
@@ -797,7 +686,7 @@ def eval_object(
     na: float = 1.0,
     batch_size: int = 512,
     num_objs: int = 1,
-    eval_sign: str = 'rotations',
+    eval_sign: str = 'signed',
     savepath: Any = None,
     digital_rotations: Optional[int] = 361
 ):
@@ -1054,7 +943,7 @@ def eval_object_iter(
     photons: int = 5e5,
     na: float = 1.0,
     batch_size: int = 512,
-    eval_sign: str = 'rotations',
+    eval_sign: str = 'signed',
     savepath: Any = None,
     digital_rotations: Optional[int] = 361
 ):
