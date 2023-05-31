@@ -70,89 +70,85 @@ def get_sample(
         lls_defocus: bool = False,
         defocus_only: bool = False
 ):
+    if isinstance(path, tf.Tensor):
+        path = Path(str(path.numpy(), "utf-8"))
+    else:
+        path = Path(str(path))
+
+    with open(path.with_suffix('.json')) as f:
+        hashtbl = ujson.load(f)
+
+    photons = hashtbl['photons']
+    npoints = hashtbl['npoints']
+
     try:
-        if isinstance(path, tf.Tensor):
-            path = Path(str(path.numpy(), "utf-8"))
-        else:
-            path = Path(str(path))
+        lls_defocus_offset = np.nan_to_num(hashtbl['lls_defocus_offset'], nan=0)
+    except KeyError:
+        lls_defocus_offset = 0.
 
-        with open(path.with_suffix('.json')) as f:
-            hashtbl = ujson.load(f)
+    if defocus_only:
+        zernikes = [lls_defocus_offset]
+    else:
+        zernikes = hashtbl['zernikes']
 
-        photons = hashtbl['photons']
-        npoints = hashtbl['npoints']
+        if lls_defocus:
+            zernikes.append(lls_defocus_offset)
 
-        try:
-            lls_defocus_offset = hashtbl['lls_defocus_offset']
-        except KeyError:
-            lls_defocus_offset = 0.
+    try:
+        p2v = hashtbl['peak2peak']
+    except KeyError:
+        p2v = Wavefront(zernikes, lam_detection=float(hashtbl['wavelength'])).peak2valley()
 
-        if defocus_only:
-            zernikes = [lls_defocus_offset]
-        else:
-            zernikes = hashtbl['zernikes']
+    try:
+        avg_min_distance = np.nan_to_num(hashtbl['avg_min_distance'], nan=0)
+    except KeyError:
+        avg_min_distance = 0.
 
-            if lls_defocus:
-                zernikes.append(lls_defocus_offset)
+    if metadata:
+        return zernikes, photons, p2v, npoints, avg_min_distance, str(path)
+    else:
+        img = get_image(path)
 
-        try:
-            p2v = hashtbl['peak2peak']
-        except KeyError:
-            p2v = Wavefront(zernikes, lam_detection=float(hashtbl['wavelength'])).peak2valley()
+        if input_coverage != 1.:
+            img = resize_with_crop_or_pad(img, crop_shape=[int(s * input_coverage) for s in img.psf_shape])
 
-        try:
-            avg_min_distance = hashtbl['avg_min_distance']
-        except KeyError:
-            avg_min_distance = 0.
+        if img.shape[0] == img.shape[1] and iotf is not None:
+            img = embeddings.fourier_embeddings(
+                img,
+                iotf=iotf,
+                padsize=None,
+                alpha_val='abs',
+                phi_val='angle',
+                remove_interference=True,
+                embedding_option=embedding_option,
+            )
 
-        if metadata:
-            return zernikes, photons, p2v, npoints, avg_min_distance, str(path)
-        else:
-            img = get_image(path)
+        if no_phase and img.shape[0] == 6:
+            img = img[:3]
+            wave = Wavefront(zernikes)
 
-            if input_coverage != 1.:
-                img = resize_with_crop_or_pad(img, crop_shape=[int(s * input_coverage) for s in img.psf_shape])
+            for i, a in enumerate(zernikes):
+                mode = Zernike(i)
+                twin = Zernike((mode.n, mode.m * -1))
 
-            if img.shape[0] == img.shape[1] and iotf is not None:
-                img = embeddings.fourier_embeddings(
-                    img,
-                    iotf=iotf,
-                    padsize=None,
-                    alpha_val='abs',
-                    phi_val='angle',
-                    remove_interference=True,
-                    embedding_option=embedding_option,
-                )
-
-            if no_phase and img.shape[0] == 6:
-                img = img[:3]
-                wave = Wavefront(zernikes)
-
-                for i, a in enumerate(zernikes):
-                    mode = Zernike(i)
-                    twin = Zernike((mode.n, mode.m * -1))
-
-                    if mode.index_ansi > twin.index_ansi:
-                        continue
+                if mode.index_ansi > twin.index_ansi:
+                    continue
+                else:
+                    if mode.m != 0 and wave.zernikes.get(twin) is not None:
+                        if np.sign(a) == -1:
+                            zernikes[mode.index_ansi] *= -1
+                            zernikes[twin.index_ansi] *= -1
                     else:
-                        if mode.m != 0 and wave.zernikes.get(twin) is not None:
-                            if np.sign(a) == -1:
-                                zernikes[mode.index_ansi] *= -1
-                                zernikes[twin.index_ansi] *= -1
-                        else:
-                            zernikes[i] = np.abs(a)
+                        zernikes[i] = np.abs(a)
 
-            return img, zernikes
-
-    except Exception as e:
-        logger.warning(f"Corrupted file {path}: {e}")
+        return img, zernikes
 
 
 @profile
 def check_sample(path):
     try:
         with open(path.with_suffix('.json')) as f:
-            pass
+            ujson.load(f)
 
         with TiffFile(path) as tif:
             pass
