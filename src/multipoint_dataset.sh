@@ -49,10 +49,10 @@ else
   SAMPLES_PER_JOB=1
   SAMPLES_PER_BIN=1
   OBJS=(1 5 10 25 50 100 150 200 250 300)
-  mPH=($(seq 1 25000 1000000))
-  xPH=($(seq 25000 25000 1000000))
-  amps1=($(seq 0 .01 .49))
-  amps2=($(seq .01 .01 .50))
+  mPH=($(seq 1 50000 1000000))
+  xPH=($(seq 50000 50000 1000000))
+  amps1=($(seq 0 .05 .45))
+  amps2=($(seq .05 .05 .50))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(mixed)
 fi
