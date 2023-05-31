@@ -151,7 +151,7 @@ def check_sample(path):
             ujson.load(f)
 
         with TiffFile(path) as tif:
-            pass
+            tif.asarray()
         return 1
 
     except Exception as e:
@@ -174,14 +174,16 @@ def check_criteria(
     photons = tuple(map(int, str([s.strip('photons_') for s in file.parts if s.startswith('photons_')][0]).split('-')))
     npoints = int([s.strip('npoints_') for s in file.parts if s.startswith('npoints')][0])
 
-    if distribution in path \
-            and embedding in path \
-            and f"z{modes}" in path \
-            and amp <= max_amplitude \
-            and npoints_range is None or npoints >= npoints_range[0] and npoints <= npoints_range[1] \
-            and photons_range is None or (photons_range is not None and photons_range[0] <= photons[0] and photons[1] <= photons_range[1]) \
-            and check_sample(file) == 1:
+    if check_sample(file) == 1 \
+        and distribution in path \
+        and embedding in path \
+        and f"z{modes}" in path \
+        and amp <= max_amplitude \
+        and npoints >= npoints_range[0] and npoints <= npoints_range[1] if npoints_range is not None else True \
+        and photons_range[0] <= photons[0] and photons[1] <= photons_range[1] if photons_range is not None else True:
         return path
+    else:
+        return None
 
 
 @profile
@@ -244,7 +246,7 @@ def load_dataset(
 
 @profile
 def check_dataset(datadir):
-    jobs = multiprocess(func=check_sample, jobs=Path(datadir).rglob('*.tif'), cores=-1)
+    jobs = multiprocess(func=check_sample, jobs=Path(datadir).rglob('*[!_gt|!_realspace].tif'), cores=-1)
     corrupted = [j for j in jobs if j != 1]
     corrupted = pd.DataFrame(corrupted, columns=['path'])
     logger.info(f"Corrupted files [{corrupted.index.shape[0]}]")
