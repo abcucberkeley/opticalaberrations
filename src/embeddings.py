@@ -282,8 +282,8 @@ def remove_interference_pattern(
     poi[0] = np.clip(poi[0], a_min=half_length, a_max=(psf.shape[0] - half_length) - 1)
     poi[1] = np.clip(poi[1], a_min=half_length, a_max=(psf.shape[1] - half_length) - 1)
     poi[2] = np.clip(poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
-    init_pos = [p-half_length for p in poi]
 
+    # init_pos = [p-half_length for p in poi]
     # kernel = blured_psf[
     #     init_pos[0]:init_pos[0]+kernel_size,
     #     init_pos[1]:init_pos[1]+kernel_size,

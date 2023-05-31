@@ -815,8 +815,8 @@ def eval_object(
                 psf=kernels[k],
                 object_size=0,
                 num_objs=num_objs,
-                # photons=ph,
-                maxcounts=ph,
+                photons=ph,
+                # maxcounts=ph,
                 noise=True,
                 fill_radius=0 if num_objs == 0 else .35
             ),
@@ -1051,7 +1051,7 @@ def eval_object_iter(
     phi,
     modelpath,
     niter: int = 10,
-    photons: int = 1e5,
+    photons: int = 5e5,
     na: float = 1.0,
     batch_size: int = 512,
     eval_sign: str = 'rotations',
@@ -1080,8 +1080,8 @@ def eval_object_iter(
                     psf=kernels[w],
                     object_size=0,
                     num_objs=1,
-                    # photons=photons,
-                    maxcounts=1000,
+                    photons=photons,
+                    # maxcounts=1000,
                     noise=True,
                     fill_radius=0
                 ),
@@ -1089,12 +1089,10 @@ def eval_object_iter(
                 digital_rotations=digital_rotations,
                 remove_background=True,
                 normalize=True,
-                # plot=f"{savepath}_{p2v[k]}_{ph}"
+                plot=f"{savepath}_p2v_{w}_iter_{i}"
             )
             for w in range(len(wavefronts))
         ], axis=0)
-        ys = np.stack([phi[w] for w in range(len(wavefronts))])
-
         inputs = tf.data.Dataset.from_tensor_slices(inputs)
 
         res = backend.predict_dataset(
@@ -1102,9 +1100,9 @@ def eval_object_iter(
             inputs=inputs,
             psfgen=gen,
             batch_size=batch_size,
-            save_path=[f"{savepath}_{i}" for i in range(len(wavefronts))],
+            save_path=[f"{savepath}_p2v_{w}_iter_{i}" for w in range(len(wavefronts))],
             digital_rotations=digital_rotations,
-            # plot_rotations=True
+            plot_rotations=True
         )
 
         try:
@@ -1113,10 +1111,10 @@ def eval_object_iter(
             preds, stdev, lls_defocus = res
 
         if eval_sign == 'positive_only':
-            ys = np.abs(ys)
-            preds = np.abs(preds)[:, :ys.shape[-1]]
+            phi = np.abs(phi)
+            preds = np.abs(preds)[:, :phi.shape[-1]]
 
-        residuals = ys - preds
+        residuals = phi - preds
         p = pd.DataFrame(p2v, columns=['aberration'])
         p['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
         p['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
@@ -1152,6 +1150,7 @@ def evaluate_modes_iterative(
     modelspecs = backend.load_metadata(model)
 
     waves = np.arange(1e-5, .55, step=.05).round(2)
+    waves = [0.]
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
 
