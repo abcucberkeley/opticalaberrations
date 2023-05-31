@@ -1150,7 +1150,6 @@ def evaluate_modes_iterative(
     modelspecs = backend.load_metadata(model)
 
     waves = np.arange(1e-5, .55, step=.05).round(2)
-    waves = [0.]
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
 
