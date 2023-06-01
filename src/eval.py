@@ -204,7 +204,7 @@ def iter_evaluate(
         )
 
         inputs = tf.data.Dataset.from_tensor_slices(ids)
-        inputs = inputs.map(lambda image_id: tf.py_function(updated_embeddings, [image_id], tf.float32)).unbatch()
+        inputs = inputs.map(lambda image_id: tf.py_function(updated_embeddings, [image_id], tf.float32))
 
         res = backend.predict_dataset(
             model,
@@ -388,11 +388,12 @@ def snrheatmap(
     bins = np.arange(0, 10.25, .25)
     pbins = np.arange(0, 1e6+10e4, 5e4)
     df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
-    df['pbins'] = pd.cut(df['photons'], pbins, labels=pbins[:-1], include_lowest=True)
+    df['pbins'] = pd.cut(df['photons'], pbins, labels=pbins[1:], include_lowest=True)
 
     means = pd.pivot_table(
         df[df['niter'] == niter], values='residuals', index='bins', columns='pbins', aggfunc=np.mean
     )
+    means.insert(0, 0, bins[1:means.shape[0]+1])
     means = means.sort_index().interpolate()
 
     logger.info(means)

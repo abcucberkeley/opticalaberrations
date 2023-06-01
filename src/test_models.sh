@@ -8,9 +8,9 @@ SHAPE=64
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/eval_dataset/test/x108-y108-z200/i$SHAPE/z15"
 
-ROTATIONS='--digital_rotations'
+ROTATIONS='' #'--digital_rotations'
 ITERS=10
-MAX=1000
+MAX=10000
 PRETRAINED="../pretrained_models/lattice_yumb_x108um_y108um_z200um/"
 
 for EVALSIGN in signed #positive_only
