@@ -35,20 +35,20 @@ do
 #      --taskname evalmodes \
 #      --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
 
-      BATCH=512
+      BATCH=1024
       for NA in 1.
       do
-        python manager.py slurm test.py --partition abc_a100 --mem '128GB' --cpus 4 --gpus 1 \
+        python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
         --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter 1 --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/snrheatmaps
 
-        python manager.py slurm test.py --partition abc_a100 --mem '128GB' --cpus 4 --gpus 1 \
+        python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
         --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter 1 --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/densityheatmaps
 
-        python manager.py slurm test.py --partition abc_a100 --mem '128GB' --cpus 4 --gpus 1 \
+        python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
         --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter $ITERS --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS iterheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/iterheatmaps
