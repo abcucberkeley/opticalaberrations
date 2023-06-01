@@ -8,7 +8,7 @@ SHAPE=64
 PSF_TYPE='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
 DATA="/clusterfs/nvme/thayer/dataset/eval_dataset/test/x108-y108-z200/i$SHAPE/z15"
 
-ROTATIONS='' #'--digital_rotations'
+ROTATIONS='--digital_rotations'
 ITERS=10
 MAX=10000
 PRETRAINED="../pretrained_models/lattice_yumb_x108um_y108um_z200um/"
@@ -39,12 +39,12 @@ do
       for NA in 1.
       do
         python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
-        --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter 1 --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
+        --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter 1 --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/snrheatmaps
 
         python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
-        --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter 1 --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
+        --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter 1 --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/densityheatmaps
 
