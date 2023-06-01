@@ -204,7 +204,13 @@ def iter_evaluate(
         )
 
         inputs = tf.data.Dataset.from_tensor_slices(ids)
-        inputs = inputs.map(lambda image_id: tf.py_function(updated_embeddings, [image_id], tf.float32))
+        inputs = inputs.map(
+            lambda image_id: tf.py_function(
+                updated_embeddings,
+                inp=[image_id],
+                Tout=tf.float32,
+            )
+        )
 
         res = backend.predict_dataset(
             model,
