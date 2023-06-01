@@ -10,7 +10,7 @@ DATA="/clusterfs/nvme/thayer/dataset/eval_dataset/test/x108-y108-z200/i$SHAPE/z1
 
 ROTATIONS='--digital_rotations'
 ITERS=10
-MAX=10000
+MAX=1000
 PRETRAINED="../pretrained_models/lattice_yumb_x108um_y108um_z200um/"
 
 for EVALSIGN in signed #positive_only
@@ -35,7 +35,7 @@ do
 #      --taskname evalmodes \
 #      --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
 
-      BATCH=1024
+      BATCH=3072
       for NA in 1.
       do
         python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
