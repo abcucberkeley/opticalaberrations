@@ -100,14 +100,13 @@ def main(args=None):
     args = parse_args(args)
     logger.info(args)
 
+    tf.keras.backend.set_floatx('float32')
     physical_devices = tf.config.list_physical_devices('GPU')
-
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
     try:
         import cupy as cp
-
         if len(physical_devices) > 1:
             cp.fft.config.use_multi_gpus = True
             cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
@@ -115,67 +114,76 @@ def main(args=None):
     except ImportError as e:
         logging.warning(f"Cupy not supported on your system: {e}")
 
-    if args.target == 'modes':
-        if args.niter > 1:
-            eval.evaluate_modes_iterative(
-                args.model,
-                niter=args.niter,
+    strategy = tf.distribute.MirroredStrategy(
+        devices=[f"{physical_devices[i].device_type}:{i}" for i in range(len(physical_devices))]
+    )
+
+    gpu_workers = strategy.num_replicas_in_sync
+    logging.info(f'Number of active GPUs: {gpu_workers}')
+
+    with strategy.scope():
+        if args.target == 'modes':
+            if args.niter > 1:
+                eval.evaluate_modes_iterative(
+                    args.model,
+                    niter=args.niter,
+                    eval_sign=args.eval_sign,
+                    batch_size=args.batch_size,
+                    digital_rotations=args.digital_rotations,
+                )
+            else:
+                eval.evaluate_modes(
+                    args.model,
+                    eval_sign=args.eval_sign,
+                    num_objs=args.num_objs,
+                    batch_size=args.batch_size,
+                    digital_rotations=args.digital_rotations,
+                )
+
+        elif args.target == "random":
+            eval.random_samples(
+                model=args.model,
                 eval_sign=args.eval_sign,
                 batch_size=args.batch_size,
                 digital_rotations=args.digital_rotations,
             )
-        else:
-            eval.evaluate_modes(
-                args.model,
-                eval_sign=args.eval_sign,
-                num_objs=args.num_objs,
+        elif args.target == 'snrheatmap':
+            eval.snrheatmap(
+                niter=args.niter,
+                modelpath=args.model,
+                datadir=args.datadir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
                 batch_size=args.batch_size,
+                eval_sign=args.eval_sign,
+                digital_rotations=args.digital_rotations,
+            )
+        elif args.target == 'densityheatmap':
+            eval.densityheatmap(
+                niter=args.niter,
+                modelpath=args.model,
+                datadir=args.datadir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=args.batch_size,
+                eval_sign=args.eval_sign,
+                digital_rotations=args.digital_rotations,
+            )
+        elif args.target == 'iterheatmap':
+            eval.iterheatmap(
+                niter=args.niter,
+                modelpath=args.model,
+                datadir=args.datadir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=args.batch_size,
+                eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
             )
 
-    elif args.target == "random":
-        eval.random_samples(
-            model=args.model,
-            eval_sign=args.eval_sign,
-            batch_size=args.batch_size,
-            digital_rotations=args.digital_rotations,
-        )
-    elif args.target == 'snrheatmap':
-        eval.snrheatmap(
-            niter=args.niter,
-            modelpath=args.model,
-            datadir=args.datadir,
-            distribution=args.dist,
-            samplelimit=args.n_samples,
-            na=args.na,
-            batch_size=args.batch_size,
-            eval_sign=args.eval_sign,
-            digital_rotations=args.digital_rotations,
-        )
-    elif args.target == 'densityheatmap':
-        eval.densityheatmap(
-            niter=args.niter,
-            modelpath=args.model,
-            datadir=args.datadir,
-            distribution=args.dist,
-            samplelimit=args.n_samples,
-            na=args.na,
-            batch_size=args.batch_size,
-            eval_sign=args.eval_sign,
-            digital_rotations=args.digital_rotations,
-        )
-    elif args.target == 'iterheatmap':
-        eval.iterheatmap(
-            niter=args.niter,
-            modelpath=args.model,
-            datadir=args.datadir,
-            distribution=args.dist,
-            samplelimit=args.n_samples,
-            na=args.na,
-            batch_size=args.batch_size,
-            eval_sign=args.eval_sign,
-            digital_rotations=args.digital_rotations,
-        )
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 

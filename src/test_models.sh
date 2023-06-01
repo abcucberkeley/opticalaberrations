@@ -15,7 +15,7 @@ PRETRAINED="../pretrained_models/lattice_yumb_x108um_y108um_z200um/"
 
 for EVALSIGN in signed #positive_only
 do
-  for MODES in 15 28 45
+  for MODES in 15 #28 45
   do
       MODEL="$PRETRAINED/opticalnet-$MODES"
 
@@ -35,7 +35,7 @@ do
 #      --taskname evalmodes \
 #      --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
 
-      BATCH=1024
+      BATCH=3500
       for NA in 1.
       do
         python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
