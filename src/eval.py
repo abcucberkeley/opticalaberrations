@@ -451,7 +451,7 @@ def densityheatmap(
     for col, label, lims in zip(
         ['neighbors', 'distance'],
         ['Number of objects', 'Average distance to nearest neighbor (microns)'],
-        [(1, 300), (0, 2)]
+        [(1, 150), (0, 2)]
     ):
         bins = np.arange(0, 10.25, .25)
         df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
