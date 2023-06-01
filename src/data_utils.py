@@ -174,13 +174,13 @@ def check_criteria(
     photons = tuple(map(int, str([s.strip('photons_') for s in file.parts if s.startswith('photons_')][0]).split('-')))
     npoints = int([s.strip('npoints_') for s in file.parts if s.startswith('npoints')][0])
 
-    if check_sample(file) == 1 \
-        and distribution in path \
+    if  distribution in path \
         and embedding in path \
         and f"z{modes}" in path \
         and amp <= max_amplitude \
         and npoints >= npoints_range[0] and npoints <= npoints_range[1] if npoints_range is not None else True \
-        and photons_range[0] <= photons[0] and photons[1] <= photons_range[1] if photons_range is not None else True:
+        and photons_range[0] <= photons[0] and photons[1] <= photons_range[1] if photons_range is not None else True \
+        and check_sample(file) == 1:    # access file system only after everything else has passed.
         return path
     else:
         return None
@@ -212,7 +212,8 @@ def load_dataset(
         func=check,
         jobs=Path(datadir).rglob('*[!_gt|!_realspace].tif'),
         cores=-1,
-        desc='Loading dataset hashtable'
+        desc='Loading dataset hashtable',
+        unit=' .tif candidates checked'
     )
     files = [f for f in files if f is not None]
     logger.info(f'Registered files: {len(files)}')
