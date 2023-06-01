@@ -35,7 +35,7 @@ do
 #      --taskname evalmodes \
 #      --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
 
-      BATCH=3500
+      BATCH=1024
       for NA in 1.
       do
         python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
