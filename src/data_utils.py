@@ -178,8 +178,8 @@ def check_criteria(
         and embedding in path \
         and f"z{modes}" in path \
         and amp <= max_amplitude \
-        and npoints >= npoints_range[0] and npoints <= npoints_range[1] if npoints_range is not None else True \
-        and photons_range[0] <= photons[0] and photons[1] <= photons_range[1] if photons_range is not None else True \
+        and ((npoints_range[0] <= npoints <= npoints_range[1]) if npoints_range is not None else True) \
+        and ((photons_range[0] <= photons[0] and photons[1] <= photons_range[1]) if photons_range is not None else True) \
         and check_sample(file) == 1:    # access file system only after everything else has passed.
         return path
     else:
