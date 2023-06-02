@@ -174,7 +174,8 @@ def check_criteria(
     photons = tuple(map(int, str([s.strip('photons_') for s in file.parts if s.startswith('photons_')][0]).split('-')))
     npoints = int([s.strip('npoints_') for s in file.parts if s.startswith('npoints')][0])
 
-    if  distribution in path \
+    # if distribution=='/' is stupid hack to deal with Windows paths
+    if (distribution=='/' or distribution in path) \
         and embedding in path \
         and f"z{modes}" in path \
         and amp <= max_amplitude \
@@ -199,6 +200,11 @@ def load_dataset(
     photons_range=None,
     npoints_range=None,
 ):
+    logger.info(f'Looking for files that meet:'
+                f' {npoints_range=}'
+                f' photons_range=({int(photons_range[0]):,} photons to {int(photons_range[1]):,} photons)'
+                f' {max_amplitude=}'
+                f' {modes=}')
     check = partial(
         check_criteria,
         distribution=distribution,
