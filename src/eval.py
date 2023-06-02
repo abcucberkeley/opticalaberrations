@@ -247,6 +247,7 @@ def iter_evaluate(
         current['niter'] = k
         current['aberration'] = p2v
         current['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in res]
+        current['residuals_umRMS'] = [np.linalg.norm(i) for i in res]
         current['photons'] = photons
         current['neighbors'] = npoints
         current['distance'] = dists
