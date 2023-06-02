@@ -95,6 +95,11 @@ def get_sample(
             zernikes.append(lls_defocus_offset)
 
     try:
+        umRMS = hashtbl['umRMS']
+    except KeyError:
+        umRMS = np.linalg.norm(hashtbl['zernikes'])
+
+    try:
         p2v = hashtbl['peak2peak']
     except KeyError:
         p2v = Wavefront(zernikes, lam_detection=float(hashtbl['wavelength'])).peak2valley()
@@ -105,7 +110,7 @@ def get_sample(
         avg_min_distance = 0.
 
     if metadata:
-        return zernikes, photons, p2v, npoints, avg_min_distance, str(path)
+        return zernikes, photons, p2v, umRMS, npoints, avg_min_distance, str(path)
     else:
         img = get_image(path)
 
@@ -282,8 +287,8 @@ def collect_dataset(
     lls_defocus: bool = False
 ):
     if metadata:
-        # amps, photons, peak2peak, npoints, avg_min_distance, filename
-        dtypes = [tf.float32, tf.int32, tf.float32, tf.float32, tf.float32, tf.string]
+        #               amps, photons,   peak2peak, umRMS,     npoints, avg_min_distance, filename
+        dtypes = [tf.float32, tf.int32, tf.float32, tf.float32, tf.float32, tf.float32, tf.string]
     else:
         # img, amps
         dtypes = [tf.float32, tf.float32]

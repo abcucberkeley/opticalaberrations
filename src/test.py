@@ -216,6 +216,7 @@ def main(args=None):
                     ensure_ascii=False,
                     escape_forward_slashes=False
                 )
+                logging.info(f"Saved: {f.name}")
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
