@@ -139,6 +139,15 @@ def iter_evaluate(
     rotations: Optional[int] = 361,
     savepath: Any = None,
 ):
+    """
+    Gathers the set of .tif files that meet the input criteria.
+    Predicts on all of those for (niter) iterations.
+    Results go into dataframe called "results"
+    Saves "results" dataframe to _predictions.csv file
+
+    Returns:
+        "results" dataframe
+    """
     model = backend.load(modelpath)
     gen = backend.load_metadata(
         modelpath,
@@ -158,8 +167,9 @@ def iter_evaluate(
         photons_range=photons_range,
         npoints_range=npoints_range,
         metadata=True
-    )
-    # this runs multiple samples (aka images) at a time.
+    ) # metadata is a list of arrays
+
+    # This runs multiple samples (aka images) at a time.
     # ys is a 2D array, rows are each sample, columns give aberration in zernike coeffs
     metadata = np.array(list(metadata.take(-1)))
     ys = np.array([i.numpy() for i in metadata[:, 0]])[:, :predicted_modes]
@@ -171,8 +181,8 @@ def iter_evaluate(
     files = np.array([Path(str(i.numpy(), "utf-8")) for i in metadata[:, -1]])
     ids = np.arange(ys.shape[0], dtype=int)
 
-    # 'results' is going to be written out as the .csv.
-    # It holds the information from every iteration.
+    # 'results' is a df to be written out as the _predictions.csv.
+    # 'results' holds the information from every iteration.
     # Initialize it first with the zeroth iteration.
     results = pd.DataFrame.from_dict({
         # image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
@@ -273,12 +283,12 @@ def iter_evaluate(
         ys = res
 
     if savepath is not None: logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
+
     return results
 
 
 @profile
-def plot_heatmap(means, wavelength, savepath:Path, label='Integrated photons', lims=(0, 100), ax=None, cax=None,
-                 ylabel_units=rf'peak-to-valley ($\lambda = {int(510 * 1000)}~nm$)'):
+def plot_heatmap_p2v(means, wavelength, savepath:Path, label='Integrated photons', lims=(0, 100), ax=None, cax=None, ):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -333,7 +343,7 @@ def plot_heatmap(means, wavelength, savepath:Path, label='Integrated photons', l
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Residuals; average {ylabel_units}')
+    cbar.ax.set_ylabel(rf'Residuals; average peak-to-valley ($\lambda = {int(wavelength*1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
@@ -341,21 +351,116 @@ def plot_heatmap(means, wavelength, savepath:Path, label='Integrated photons', l
     if label == 'Integrated photons':
         ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
         ax.set_xticks(np.arange(0, 1e6+10e4, 5e4), minor=True)
+    elif label == 'Number of iterations':
+        ax.set_xticks(np.arange(0, means.columns.values.max()+1, 1), minor=False)
 
     ax.set_xlabel(label)
     ax.set_xlim(lims)
 
-    ax.set_ylabel(f'Initial aberration (average {ylabel_units})')
+    ax.set_ylabel(f'Initial aberration (average peak-to-valley ($\lambda = {int(wavelength*1000)}~nm$)')
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
     ax.set_yticks(np.arange(0, 6, 1))
-    ax.set_ylim(.25, 5)
+    ax.set_ylim(0, 5)
 
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
     plt.tight_layout()
 
-    savepath = Path(f'{savepath}_{ylabel_units.split()[0]}')
+    savepath = Path(f'{savepath}_p2v')
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    logger.info(f'Saved: {savepath.resolve()}.png  .pdf  .svg')
+    return ax
+@profile
+def plot_heatmap_umRMS(means, wavelength, savepath:Path, label='Integrated photons', lims=(0, 100), ax=None, cax=None, x=None,y=None,z=None):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+    if cax is None:
+        cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+
+    levels = np.array([
+        0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
+        .5, .6, .7, .8, .9,
+        1, 1.25, 1.5, 1.75, 2., 2.5,
+        3., 4., 5.,
+    ])
+
+    umRMS_per_p2v_factor = round(np.percentile(means.to_numpy(), 90) / np.max(levels), 2)
+    levels *= umRMS_per_p2v_factor
+    vmin, vmax, vcenter, step = levels[0], levels[-1], levels[10], levels[1] - levels[0]
+    highcmap = plt.get_cmap('magma_r', 256)
+    lowcmap = plt.get_cmap('GnBu_r', 256)
+    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+    cmap = mcolors.ListedColormap(cmap)
+
+    contours = ax.contourf(
+        means.columns.values,
+        means.index.values,
+        means.values,
+        cmap=cmap,
+        levels=levels,
+        extend='max',
+        linewidths=2,
+        linestyles='dashed',
+    )
+
+    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+
+    cbar = plt.colorbar(
+        contours,
+        cax=cax,
+        fraction=0.046,
+        pad=0.04,
+        extend='both',
+        spacing='proportional',
+        format=FormatStrFormatter("%.2f"),
+        ticks=np.array([0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]) * umRMS_per_p2v_factor,
+    )
+    cbar.ax.set_ylabel(r'Residuals; average $\mu$mRMS')
+    cbar.ax.set_title(r'$\mu$mRMS')
+    cbar.ax.yaxis.set_ticks_position('right')
+    cbar.ax.yaxis.set_label_position('left')
+
+    ax.tripcolor(x, y, z)
+    #ax.tricontourf(x, y, z, 20)  # choose 20 contour levels, just to show how good its interpolation is
+    ax.plot(x, y, 'ko ')
+
+    if label == 'Integrated photons':
+        ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
+        ax.set_xticks(np.arange(0, 1e6+10e4, 5e4), minor=True)
+    elif label == 'Number of iterations':
+        ax.set_xticks(np.arange(0, means.columns.values.max() + 1, 1), minor=False)
+
+    ax.set_xlabel(label)
+    ax.set_xlim(lims)
+
+    ax.set_ylabel(f'Initial aberration (average $\mu$mRMS')
+    ax.set_yticks(np.arange(0, 6, .5) * umRMS_per_p2v_factor, minor=True)
+    ax.set_yticks(np.arange(0, 6, 1) * umRMS_per_p2v_factor)
+    ax.set_ylim(0, levels[-1])
+
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    plt.tight_layout()
+
+    savepath = Path(f'{savepath}_umRMS')
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
@@ -416,7 +521,7 @@ def snrheatmap(
     logger.info(means)
     means.to_csv(f'{savepath}.csv')
 
-    plot_heatmap(
+    plot_heatmap_p2v(
         means,
         wavelength=modelspecs.lam_detection,
         savepath=savepath,
@@ -479,7 +584,7 @@ def densityheatmap(
         means = means.sort_index().interpolate()
         means.to_csv(f'{savepath}_{col}.csv')
 
-        plot_heatmap(
+        plot_heatmap_p2v(
             means,
             wavelength=modelspecs.lam_detection,
             savepath=f'{savepath}_{col}',
@@ -491,7 +596,7 @@ def densityheatmap(
 @profile
 def iterheatmap(
     modelpath: Path,
-    datadir: Path,
+    datadir: Path, # folder or _predictions.csv file
     niter: int = 5,
     distribution: str = '/',
     samplelimit: Any = None,
@@ -512,8 +617,9 @@ def iterheatmap(
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
 
     if datadir.suffix == '.csv':
-        df = pd.read_csv(datadir, header=0, index_col=0)
+        df = pd.read_csv(datadir, header=0, index_col=0) # read previous results, ignoring criteria
     else:
+        # make new inferences and obtain new results
         df = iter_evaluate(
             datadir,
             savepath=savepath,
@@ -529,8 +635,7 @@ def iterheatmap(
             digital_rotations=digital_rotations
         )
 
-    for value, ylabel_units in zip(['residuals', 'residuals_umRMS'],
-                                   [rf'peak-to-valley ($\lambda = {int(510 * 1000)}~nm$)', 'umRMS']):
+    for value in ('residuals', 'residuals_umRMS'):
         means = pd.pivot_table(
             df[df['niter'] == 0], values=value, index='id', columns='niter', aggfunc=np.mean
         )
@@ -539,7 +644,7 @@ def iterheatmap(
                 df[df['niter'] == i], values=value, index='id', columns='niter', aggfunc=np.mean
             )
 
-        bins = np.arange(0, 10.25, .25)
+        bins = np.linspace(0, np.max(means.to_numpy()), num=25)
         means.index = pd.cut(means[0], bins, labels=bins[1:], include_lowest=True)
         means.index.name = 'bins'
         means = means.groupby("bins").agg("mean")
@@ -552,14 +657,37 @@ def iterheatmap(
         pd.options.display.precision = 3
         logger.info(f'Saved: {savepath.resolve()}.csv \n{means}')
 
-        plot_heatmap(
-            means,
-            wavelength=modelspecs.lam_detection,
-            savepath=savepath,
-            label=f'Number of iterations',
-            ylabel_units=ylabel_units,
-            lims=(0, niter)
-        )
+        if value == 'residuals':
+            plot_heatmap_p2v(
+                means,
+                wavelength=modelspecs.lam_detection,
+                savepath=savepath,
+                label=f'Number of iterations',
+                lims=(0, niter)
+            )
+        else:
+            full = pd.pivot_table(
+                df[df['niter'] == 0], values=value, index='id', columns='niter', aggfunc=np.mean
+            )
+            for i in range(1, niter + 1):
+                full[i] = pd.pivot_table(
+                    df[df['niter'] == i], values=value, index='id', columns='niter', aggfunc=np.mean
+                )
+            z = full.to_numpy().flatten()
+            x, y = np.meshgrid(full.columns.values, full[0].values)
+            x = x.flatten()
+            y = y.flatten()
+
+            plot_heatmap_umRMS(
+                means,
+                wavelength=modelspecs.lam_detection,
+                savepath=savepath,
+                label=f'Number of iterations',
+                lims=(0, niter),
+                x=x,
+                y=y,
+                z=z,
+            )
     return savepath
 
 
@@ -1107,7 +1235,7 @@ def evaluate_modes_iterative(
         ax = fig.add_subplot(gs[1:, :])
         cax = fig.add_axes([1.01, 0.08, 0.03, 0.7])
 
-        plot_heatmap(
+        plot_heatmap_p2v(
             means,
             ax=ax,
             cax=cax,

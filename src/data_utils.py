@@ -286,6 +286,11 @@ def collect_dataset(
     metadata=False,
     lls_defocus: bool = False
 ):
+    """
+    Returns:
+        metadata=True -> (amps, photons, peak2peak, umRMS, npoints, avg_min_distance, filename)
+        metadata=False-> img & zern
+    """
     if metadata:
         #               amps, photons,   peak2peak, umRMS,     npoints, avg_min_distance, filename
         dtypes = [tf.float32, tf.int32, tf.float32, tf.float32, tf.float32, tf.float32, tf.string]
@@ -340,9 +345,9 @@ def collect_dataset(
             max_amplitude=max_amplitude,
             photons_range=photons_range,
             npoints_range=npoints_range,
-        )
+        ) # TF dataset
 
-        data = data.map(lambda x: tf.py_function(load, [x], dtypes))
+        data = data.map(lambda x: tf.py_function(load, [x], dtypes)) # TFdataset -> img & zern or -> metadata df
 
         if not metadata:
             for i in data.take(1):

@@ -26,7 +26,7 @@ def parse_args(args):
     parser.add_argument("target", type=str, help="target of interest to evaluate")
 
     parser.add_argument(
-        "--datadir", help='path to eval dataset', type=Path
+        "--datadir", help='path to eval dataset. Can be a folder or a .csv', type=Path
     )
 
     parser.add_argument(
