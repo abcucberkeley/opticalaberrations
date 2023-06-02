@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/test.py" />
-    <option name="PARAMETERS" value="../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5 --datadir ../dataset/test/x108-y108-z200/i64/z15 --na 1.0 --n_samples 5 --niter 5 --eval_sign signed iterheatmap" />
+    <option name="PARAMETERS" value="../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5 --datadir V:\thayer\dataset\eval_dataset\test\x108-y108-z200\i64\z15\mixed --na 1.0 --n_samples 1 --niter 10 --eval_sign signed --photons_min 0.5e5 --photons_max 1.5e5 --digital_rotations --batch_size 400 iterheatmap" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

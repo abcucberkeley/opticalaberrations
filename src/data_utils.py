@@ -200,11 +200,11 @@ def load_dataset(
     photons_range=None,
     npoints_range=None,
 ):
-    logger.info(f'Looking for files that meet:'
-                f' {npoints_range=}'
-                f' photons_range=({int(photons_range[0]):,} photons to {int(photons_range[1]):,} photons)'
-                f' {max_amplitude=}'
-                f' {modes=}')
+    logger.info(f'Searching for files that meet:'
+                f' npoints_range=({int(npoints_range[0]):,} objects to {int(npoints_range[1]):,} objects),'
+                f' photons_range=({int(photons_range[0]):,} photons to {int(photons_range[1]):,} photons),'
+                f' {max_amplitude=},'
+                f' number of {modes=}',)
     check = partial(
         check_criteria,
         distribution=distribution,
@@ -222,11 +222,11 @@ def load_dataset(
         unit=' .tif candidates checked'
     )
     files = [f for f in files if f is not None]
-    logger.info(f'Registered files: {len(files)}')
+    logger.info(f'.tif files that meet criteria: {len(files)} files')
 
     if samplelimit is not None:
         files = np.random.choice(files, samplelimit, replace=False).tolist()
-        logger.info(f'Selected files: {len(files)}')
+        logger.info(f'.tif files selected ({samplelimit=}): {len(files)} files')
 
     dataset_size = len(files) * multiplier
     ds = tf.data.Dataset.from_tensor_slices(files)
@@ -238,15 +238,15 @@ def load_dataset(
         val = ds.take(val_size)
 
         logger.info(
-            f"`{datadir}`: "
-            f"training [{tf.data.experimental.cardinality(train).numpy()}], "
-            f"validation [{tf.data.experimental.cardinality(val).numpy()}]"
+            f"datadir={datadir.resolve()} : "
+            f"training has {tf.data.experimental.cardinality(train).numpy()} elements, "
+            f"validation has {tf.data.experimental.cardinality(val).numpy()} elements"
         )
         return train, val
     else:
         logger.info(
-            f"`{datadir}`: "
-            f"dataset [{tf.data.experimental.cardinality(ds).numpy()}]"
+            f"datadir={datadir.resolve()} : "
+            f"dataset has {tf.data.experimental.cardinality(ds).numpy()} elements"
         )
         return ds
 

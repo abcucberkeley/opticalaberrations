@@ -9,6 +9,7 @@ import tensorflow as tf
 
 import cli
 import eval
+import ujson
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -82,6 +83,14 @@ def parse_args(args):
 
     parser.add_argument(
         "--gpu_workers", default=1, type=int, help='number of GPUs to use'
+    )
+
+    parser.add_argument(
+        "--photons_min", default=1e5, type=float, help='min number of photons to use'
+    )
+
+    parser.add_argument(
+        "--photons_max", default=2e5, type=float, help='max number of photons to use'
     )
 
     parser.add_argument(
@@ -172,7 +181,7 @@ def main(args=None):
                 digital_rotations=args.digital_rotations,
             )
         elif args.target == 'iterheatmap':
-            eval.iterheatmap(
+            savepath = eval.iterheatmap(
                 niter=args.niter,
                 modelpath=args.model,
                 datadir=args.datadir,
@@ -182,7 +191,31 @@ def main(args=None):
                 batch_size=args.batch_size,
                 eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
+                photons_range=(args.photons_min, args.photons_max)
             )
+            with Path(f"{savepath.with_suffix('')}_eval_iterheatmap_settings.json").open('w') as f:
+                json = dict(
+                    niter=int(args.niter),
+                    modelpath=str(args.model),
+                    datadir=str(args.datadir),
+                    distribution=str(args.dist),
+                    samplelimit=int(args.n_samples),
+                    na=float(args.na),
+                    batch_size=int(args.batch_size),
+                    eval_sign=bool(args.eval_sign),
+                    digital_rotations=bool(args.digital_rotations),
+                    photons_min=float(args.photons_min),
+                    photons_max=float(args.photons_max),
+                )
+
+                ujson.dump(
+                    json,
+                    f,
+                    indent=4,
+                    sort_keys=False,
+                    ensure_ascii=False,
+                    escape_forward_slashes=False
+                )
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

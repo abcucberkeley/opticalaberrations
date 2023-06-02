@@ -218,10 +218,14 @@ def iter_evaluate(
             psfgen=gen,
             batch_size=batch_size,
             threshold=threshold,
-            desc=f'Predicting (iter #{k})',
-            save_path=[f.with_stem('') for f in files],
+            save_path=[f.with_suffix("") for f in files],
             digital_rotations=rotations if digital_rotations else None,
             plot_rotations=False,
+            desc=f'Predicting (iter #{k}) '
+                f"[{files.shape[0]} files] x [{rotations if digital_rotations else None} Rotations] = "
+                f"{files.shape[0] * (rotations if digital_rotations else 1)} predictions, requires "
+                f"{int(np.ceil(files.shape[0] * (rotations if digital_rotations else 1) / batch_size))} batches. "
+                f"emb={int(6 * 64 * 64 * batch_size * 32 / 8 / 1e6):,} MB/batch. ",
         )
 
         try:
@@ -266,11 +270,12 @@ def iter_evaluate(
         # update the aberration for the next iteration with the residue
         ys = res
 
+    if savepath is not None: logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
     return results
 
 
 @profile
-def plot_heatmap(means, wavelength, savepath, label='Integrated photons', lims=(0, 100), ax=None, cax=None):
+def plot_heatmap(means, wavelength, savepath:Path, label='Integrated photons', lims=(0, 100), ax=None, cax=None):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -351,6 +356,7 @@ def plot_heatmap(means, wavelength, savepath, label='Integrated photons', lims=(
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
+    logger.info(f'Saved: {savepath.resolve()}.png  .pdf  .svg')
     return ax
 
 
@@ -490,6 +496,7 @@ def iterheatmap(
     batch_size: int = 1024,
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
+    photons_range: Optional[tuple] = None,
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / eval_sign / f'iterheatmaps'
@@ -510,7 +517,7 @@ def iterheatmap(
             modelpath=modelpath,
             samplelimit=samplelimit,
             na=na,
-            photons_range=(1e5, 2e5),
+            photons_range=photons_range,
             npoints_range=(1, 1),
             no_phase=no_phase,
             batch_size=batch_size,
@@ -532,9 +539,12 @@ def iterheatmap(
     means = means.groupby("bins").agg("mean")
     means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
     means = means.sort_index().interpolate()
-
-    logger.info(means)
     means.to_csv(f'{savepath}.csv')
+
+    pd.options.display.width = 500
+    pd.options.display.max_columns = 15
+    pd.options.display.precision = 3
+    logger.info(f'Saved: {savepath.resolve()}.csv \n{means}')
 
     plot_heatmap(
         means,
@@ -543,6 +553,7 @@ def iterheatmap(
         label=f'Number of iterations',
         lims=(0, niter)
     )
+    return savepath
 
 
 @profile
