@@ -653,7 +653,10 @@ def eval_rotation(
         results.append(df)
 
     results = pd.concat(results, ignore_index=True)
-    results.to_csv(Path(f'{save_path}_rotations.csv'))
+    try:
+        results.to_csv(Path(f'{save_path}_rotations.csv'))
+    except PermissionError:
+        logger.error(f'Permission denied: {save_path.resolve()}_rotations.csv')
 
     if plot is not None:
         vis.plot_rotations(Path(f'{plot}_rotations.csv'))
