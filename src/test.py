@@ -1,3 +1,8 @@
+import os
+import re
+import subprocess
+import multiprocessing as mp
+
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
@@ -101,122 +106,162 @@ def parse_args(args):
         "--pois", default=None, help="matlab file that outlines peaks of interest coordinates"
     )
 
+    parser.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
+
     return parser.parse_args(args)
 
 
 def main(args=None):
+    command_flags = sys.argv[1:] if args is None else args
     timeit = time.time()
     args = parse_args(args)
     logger.info(args)
 
-    tf.keras.backend.set_floatx('float32')
-    physical_devices = tf.config.list_physical_devices('GPU')
-    for gpu_instance in physical_devices:
-        tf.config.experimental.set_memory_growth(gpu_instance, True)
+    if args.cluster:
+        hostname = "master.abc.berkeley.edu"
+        username = "thayeralshaabi"
+        partition = "abc_a100"
 
-    try:
-        import cupy as cp
-        if len(physical_devices) > 1:
-            cp.fft.config.use_multi_gpus = True
-            cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
+        cluster_env = f"~/anaconda3/envs/ml/bin/python"
+        cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
+        script = f"{cluster_repo}/src/{__file__}"
 
-    except ImportError as e:
-        logging.warning(f"Cupy not supported on your system: {e}")
+        flags = ' '.join(command_flags)
+        flags = re.sub(pattern='--cluster', repl='', string=flags)
+        flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
+        flags = flags.replace("..", cluster_repo)       # regex stinks at replacing ".."
+        flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
+        flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
+        flags = re.sub(pattern='--batch_size \d+', repl='--batch_size 3500', string=flags)
+        taskname = f"{args.func}_{args.input.stem}"
 
-    strategy = tf.distribute.MirroredStrategy(
-        devices=[f"{physical_devices[i].device_type}:{i}" for i in range(len(physical_devices))]
-    )
+        sjob = f"srun "
+        sjob += f"--exclusive  "
+        sjob += f"-p {partition} "
+        sjob += f" --nodes=1 "
+        sjob += f"--job-name={taskname} "
+        sjob += f"--pty {cluster_env} {script} {flags}"
 
-    gpu_workers = strategy.num_replicas_in_sync
-    logging.info(f'Number of active GPUs: {gpu_workers}')
+        subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
+    else:
+        if os.name == 'nt':
+            mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
 
-    with strategy.scope():
-        if args.target == 'modes':
-            if args.niter > 1:
-                eval.evaluate_modes_iterative(
-                    args.model,
+        tf.keras.backend.set_floatx('float32')
+        physical_devices = tf.config.list_physical_devices('GPU')
+        for gpu_instance in physical_devices:
+            tf.config.experimental.set_memory_growth(gpu_instance, True)
+
+        try:
+            import cupy as cp
+            if len(physical_devices) > 1:
+                cp.fft.config.use_multi_gpus = True
+                cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
+
+        except ImportError as e:
+            logging.warning(f"Cupy not supported on your system: {e}")
+
+        strategy = tf.distribute.MirroredStrategy(
+            devices=[f"{physical_devices[i].device_type}:{i}" for i in range(len(physical_devices))]
+        )
+
+        gpu_workers = strategy.num_replicas_in_sync
+        logging.info(f'Number of active GPUs: {gpu_workers}')
+
+        with strategy.scope():
+            if args.target == 'modes':
+                if args.niter > 1:
+                    eval.evaluate_modes_iterative(
+                        args.model,
+                        niter=args.niter,
+                        eval_sign=args.eval_sign,
+                        batch_size=args.batch_size,
+                        digital_rotations=args.digital_rotations,
+                    )
+                else:
+                    eval.evaluate_modes(
+                        args.model,
+                        eval_sign=args.eval_sign,
+                        num_objs=args.num_objs,
+                        batch_size=args.batch_size,
+                        digital_rotations=args.digital_rotations,
+                    )
+
+            elif args.target == "random":
+                eval.random_samples(
+                    model=args.model,
+                    eval_sign=args.eval_sign,
+                    batch_size=args.batch_size,
+                    digital_rotations=args.digital_rotations,
+                )
+            elif args.target == 'snrheatmap':
+                eval.snrheatmap(
                     niter=args.niter,
-                    eval_sign=args.eval_sign,
+                    modelpath=args.model,
+                    datadir=args.datadir,
+                    distribution=args.dist,
+                    samplelimit=args.n_samples,
+                    na=args.na,
                     batch_size=args.batch_size,
+                    eval_sign=args.eval_sign,
                     digital_rotations=args.digital_rotations,
                 )
-            else:
-                eval.evaluate_modes(
-                    args.model,
-                    eval_sign=args.eval_sign,
-                    num_objs=args.num_objs,
+            elif args.target == 'densityheatmap':
+                eval.densityheatmap(
+                    niter=args.niter,
+                    modelpath=args.model,
+                    datadir=args.datadir,
+                    distribution=args.dist,
+                    samplelimit=args.n_samples,
+                    na=args.na,
                     batch_size=args.batch_size,
+                    eval_sign=args.eval_sign,
                     digital_rotations=args.digital_rotations,
                 )
-
-        elif args.target == "random":
-            eval.random_samples(
-                model=args.model,
-                eval_sign=args.eval_sign,
-                batch_size=args.batch_size,
-                digital_rotations=args.digital_rotations,
-            )
-        elif args.target == 'snrheatmap':
-            eval.snrheatmap(
-                niter=args.niter,
-                modelpath=args.model,
-                datadir=args.datadir,
-                distribution=args.dist,
-                samplelimit=args.n_samples,
-                na=args.na,
-                batch_size=args.batch_size,
-                eval_sign=args.eval_sign,
-                digital_rotations=args.digital_rotations,
-            )
-        elif args.target == 'densityheatmap':
-            eval.densityheatmap(
-                niter=args.niter,
-                modelpath=args.model,
-                datadir=args.datadir,
-                distribution=args.dist,
-                samplelimit=args.n_samples,
-                na=args.na,
-                batch_size=args.batch_size,
-                eval_sign=args.eval_sign,
-                digital_rotations=args.digital_rotations,
-            )
-        elif args.target == 'iterheatmap':
-            savepath = eval.iterheatmap(
-                niter=args.niter,
-                modelpath=args.model,
-                datadir=args.datadir,
-                distribution=args.dist,
-                samplelimit=args.n_samples,
-                na=args.na,
-                batch_size=args.batch_size,
-                eval_sign=args.eval_sign,
-                digital_rotations=args.digital_rotations,
-                photons_range=(args.photons_min, args.photons_max)
-            )
-            with Path(f"{savepath.with_suffix('')}_eval_iterheatmap_settings.json").open('w') as f:
-                json = dict(
-                    niter=int(args.niter),
-                    modelpath=str(args.model),
-                    datadir=str(args.datadir),
-                    distribution=str(args.dist),
-                    samplelimit=int(args.n_samples),
-                    na=float(args.na),
-                    batch_size=int(args.batch_size),
-                    eval_sign=bool(args.eval_sign),
-                    digital_rotations=bool(args.digital_rotations),
-                    photons_min=float(args.photons_min),
-                    photons_max=float(args.photons_max),
+            elif args.target == 'iterheatmap':
+                savepath = eval.iterheatmap(
+                    niter=args.niter,
+                    modelpath=args.model,
+                    datadir=args.datadir,
+                    distribution=args.dist,
+                    samplelimit=args.n_samples,
+                    na=args.na,
+                    batch_size=args.batch_size,
+                    eval_sign=args.eval_sign,
+                    digital_rotations=args.digital_rotations,
+                    photons_range=(args.photons_min, args.photons_max)
                 )
+                with Path(f"{savepath.with_suffix('')}_eval_iterheatmap_settings.json").open('w') as f:
+                    json = dict(
+                        niter=int(args.niter),
+                        modelpath=str(args.model),
+                        datadir=str(args.datadir),
+                        distribution=str(args.dist),
+                        samplelimit=int(args.n_samples),
+                        na=float(args.na),
+                        batch_size=int(args.batch_size),
+                        eval_sign=bool(args.eval_sign),
+                        digital_rotations=bool(args.digital_rotations),
+                        photons_min=float(args.photons_min),
+                        photons_max=float(args.photons_max),
+                    )
 
-                ujson.dump(
-                    json,
-                    f,
-                    indent=4,
-                    sort_keys=False,
-                    ensure_ascii=False,
-                    escape_forward_slashes=False
-                )
-                logging.info(f"Saved: {f.name}")
+                    ujson.dump(
+                        json,
+                        f,
+                        indent=4,
+                        sort_keys=False,
+                        ensure_ascii=False,
+                        escape_forward_slashes=False
+                    )
+                    logging.info(f"Saved: {f.name}")
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
