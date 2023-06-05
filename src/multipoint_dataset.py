@@ -162,7 +162,7 @@ def sim(
     reference = beads(
         image_shape=gen.psf_shape,
         photons=photons,
-        object_size=None,
+        object_size=0,
         num_objs=npoints,
         fill_radius=fill_radius,
     )
