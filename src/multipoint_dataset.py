@@ -156,6 +156,7 @@ def sim(
     mean_background_offset=100,
     electrons_per_count: float = .22,
     quantum_efficiency: float = .82,
+    fill_radius: float = 0.0,
 ):
     photons = randuniform(photons)
     reference = beads(
@@ -163,6 +164,7 @@ def sim(
         photons=photons,
         object_size=None,
         num_objs=npoints,
+        fill_radius=fill_radius,
     )
 
     # aberrated PSF without noise
@@ -287,6 +289,7 @@ def create_synthetic_sample(
     phi_val: str = 'angle',
     min_lls_defocus_offset: float = 0.,
     max_lls_defocus_offset: float = 0.,
+    fill_radius: float = 0.,
 ):
     if randomize_voxel_size:
         x_voxel_size = np.random.uniform(low=x_voxel_size-.025, high=x_voxel_size+.025)
@@ -343,7 +346,8 @@ def create_synthetic_sample(
         normalize=normalize,
         alpha_val=alpha_val,
         phi_val=phi_val,
-        lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset)
+        lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset),
+        fill_radius=fill_radius,
     )
 
 
@@ -494,6 +498,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--fill_radius", default=0.0, type=float,
+        help="Fractional cube that defines where a bead may be placed in X Y Z."
+    )
+
+    parser.add_argument(
         "--lam_detection", default=.510, type=float,
         help='wavelength in microns'
     )
@@ -555,6 +564,7 @@ def main(args=None):
         refractive_index=args.refractive_index,
         na_detection=args.na_detection,
         cpu_workers=args.cpu_workers,
+        fill_radius=args.fill_radius,
     )
 
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]

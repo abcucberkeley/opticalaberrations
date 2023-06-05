@@ -43,6 +43,7 @@ if [ "$DATASET" = "train" ];then
   amps2=($(seq .01 .01 .25))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
+  FILL_RADIUS=0.3
 
 else
   TYPE=''
@@ -55,6 +56,7 @@ else
   amps2=($(seq .025 .025 .50))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(mixed)
+  FILL_RADIUS=0.0
 fi
 
 
@@ -99,6 +101,7 @@ do
             j="${j} --y_voxel_size ${yVOXEL}"
             j="${j} --z_voxel_size ${zVOXEL}"
             j="${j} --na_detection ${NA}"
+            j="${j} --fill_radius ${FILL_RADIUS}"
             j="${j} --lam_detection ${LAMBDA}"
             j="${j} --cpu_workers ${CPUS}"
 
