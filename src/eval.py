@@ -277,7 +277,11 @@ def iter_evaluate(
         results = results.append(current, ignore_index=True)
 
         if savepath is not None:
-            results.to_csv(f'{savepath}_predictions.csv')
+            try:
+                results.to_csv(f'{savepath}_predictions.csv')
+            except PermissionError:
+                savepath = f'{savepath}_x'
+                results.to_csv(f'{savepath}_predictions.csv')
 
         # update the aberration for the next iteration with the residue
         ys = res
