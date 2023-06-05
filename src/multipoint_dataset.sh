@@ -47,7 +47,7 @@ if [ "$DATASET" = "train" ];then
 
 else
   TYPE=''
-  SAMPLES_PER_JOB=50
+  SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=50
   OBJS=(1 )
   mPH=($(seq     1 50000 1050000))
