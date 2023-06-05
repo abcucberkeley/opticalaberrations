@@ -27,7 +27,7 @@ TITLE='eval_dataset'
 DATASET='test'
 
 MODE_DIST='pyramid'
-OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
+OUTDIR="/clusterfs/nvme/thayer/dan_dataset/${TITLE}/${DATASET}"
 LOGS="${OUTDIR}/logs"
 mkdir -p $OUTDIR
 mkdir -p $LOGS
@@ -47,15 +47,15 @@ if [ "$DATASET" = "train" ];then
 
 else
   TYPE=''
-  SAMPLES_PER_JOB=10
-  SAMPLES_PER_BIN=10
-  OBJS=(1 2 3 5 10 25 50 100 125 150)
-  mPH=($(seq 1 50000 1000000))
-  xPH=($(seq 50000 50000 1000000))
-  amps1=($(seq 0 .025 .475))
-  amps2=($(seq .025 .025 .50))
+  SAMPLES_PER_JOB=50
+  SAMPLES_PER_BIN=50
+  OBJS=(1 )
+  mPH=($(seq     1 50000 1050000))
+  xPH=($(seq 50000 50000 1050000))
+  amps1=($(seq    0 .025 .475))
+  amps2=($(seq .025 .025 .50 ))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
-  DISTRIBUTIONS=(mixed)
+  DISTRIBUTIONS=(mixed powerlaw)
   FILL_RADIUS=0.0
 fi
 
