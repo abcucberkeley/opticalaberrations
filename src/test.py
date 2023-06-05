@@ -127,7 +127,7 @@ def main(args=None):
 
         cluster_env = f"~/anaconda3/envs/ml/bin/python"
         cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
-        script = f"{cluster_repo}/src/{__file__}"
+        script = f"{cluster_repo}/src/test.py"
 
         flags = ' '.join(command_flags)
         flags = re.sub(pattern='--cluster', repl='', string=flags)
@@ -139,8 +139,8 @@ def main(args=None):
         flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
         flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
         flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
-        flags = re.sub(pattern='--batch_size \d+', repl='--batch_size 3500', string=flags)
-        taskname = f"{args.func}_{args.input.stem}"
+        # flags = re.sub(pattern='--batch_size \d+', repl='--batch_size 300', string=flags)
+        taskname = f"{args.target}"
 
         sjob = f"srun "
         sjob += f"--exclusive  "
