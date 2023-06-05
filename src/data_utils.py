@@ -230,7 +230,7 @@ def load_dataset(
     logger.info(f'.tif files that meet criteria: {len(files)} files')
 
     if samplelimit is not None:
-        files = np.random.choice(files, samplelimit, replace=False).tolist()
+        files = np.random.choice(files, min(samplelimit,len(files)), replace=False).tolist()
         logger.info(f'.tif files selected ({samplelimit=}): {len(files)} files')
 
     dataset_size = len(files) * multiplier
