@@ -52,12 +52,12 @@ def save_synthetic_sample(
 ):
 
     if gt is not None:
-        imwrite(f"{savepath}_gt.tif", gt.astype(np.float32), compression='deflate', metadata={'axes': 'TZYX'})
+        imwrite(f"{savepath}_gt.tif", gt.astype(np.float32), compression='deflate')
 
     if realspace is not None:
-        imwrite(f"{savepath}_realspace.tif", realspace.astype(np.float32), compression='deflate', metadata={'axes': 'TZYX'})
+        imwrite(f"{savepath}_realspace.tif", realspace.astype(np.float32), compression='deflate')
 
-    imwrite(f"{savepath}.tif", inputs.astype(np.float32), compression='deflate', metadata={'axes': 'TZYX'})
+    imwrite(f"{savepath}.tif", inputs.astype(np.float32), compression='deflate')
     logger.info(f"Saved: {savepath.resolve()}.tif")
 
     with Path(f"{savepath}.json").open('w') as f:
