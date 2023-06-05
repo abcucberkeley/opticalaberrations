@@ -766,6 +766,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         sjob += f"--exclusive  "
         sjob += f"-p {partition} "
         sjob += f" --nodes=1 "
+        sjob += f" --mem=500GB "  # request basically all memory
         sjob += f"--job-name={taskname} "
         sjob += f"--pty {cluster_env} {script} {flags}"
 
