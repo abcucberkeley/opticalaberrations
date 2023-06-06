@@ -347,7 +347,7 @@ def plot_heatmap_p2v(means, wavelength, savepath:Path, label='Integrated photons
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Residuals; average peak-to-valley ($\lambda = {int(wavelength*1000)}~nm$)')
+    cbar.ax.set_ylabel(rf'Residuals (average peak-to-valley, $\lambda = {int(wavelength*1000)}~nm$)')
     cbar.ax.set_title(r'$\lambda$')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
@@ -361,7 +361,7 @@ def plot_heatmap_p2v(means, wavelength, savepath:Path, label='Integrated photons
     ax.set_xlabel(label)
     ax.set_xlim(lims)
 
-    ax.set_ylabel(f'Initial aberration (average peak-to-valley ($\lambda = {int(wavelength*1000)}~nm$)')
+    ax.set_ylabel(rf'Initial aberration (average peak-to-valley, $\lambda = {int(wavelength*1000)}~nm$)')
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
     ax.set_yticks(np.arange(0, 6, 1))
     ax.set_ylim(0, 5)
@@ -436,7 +436,7 @@ def plot_heatmap_umRMS(means, wavelength, savepath:Path, label='Integrated photo
         format=FormatStrFormatter("%.2f"),
         ticks=np.array([0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]) * umRMS_per_p2v_factor,
     )
-    cbar.ax.set_ylabel(r'Residuals; average $\mu$mRMS')
+    cbar.ax.set_ylabel(r'Residuals (average $\mu$mRMS)')
     cbar.ax.set_title(r'$\mu$mRMS')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
@@ -454,7 +454,7 @@ def plot_heatmap_umRMS(means, wavelength, savepath:Path, label='Integrated photo
     ax.set_xlabel(label)
     ax.set_xlim(lims)
 
-    ax.set_ylabel(f'Initial aberration (average $\mu$mRMS')
+    ax.set_ylabel(f'Initial aberration (average $\mu$mRMS)')
     ax.set_yticks(np.arange(0, 6, .5) * umRMS_per_p2v_factor, minor=True)
     ax.set_yticks(np.arange(0, 6, 1) * umRMS_per_p2v_factor)
     ax.set_ylim(0, levels[-1])
