@@ -287,7 +287,7 @@ def remove_interference_pattern(
     high_snr =  preprocessing.measure_snr(psf) > 30 # SNR good enough for template
 
     if high_snr:
-        logger.info('Using template')
+        # logger.info('Using template')
         init_pos = [p-half_length for p in poi]
         kernel = blured_psf[
             init_pos[0]:init_pos[0]+kernel_size,
@@ -296,7 +296,7 @@ def remove_interference_pattern(
         ]
         effective_kernel_width = kernel_size // 2
     else: # SNR isn't good enough for template, use a gaussian kernel
-        logger.info('Using gaussian kernel')
+        # logger.info('Using gaussian kernel')
         effective_kernel_width = 1
         kernel = gaussian_kernel(kernlen=[kernel_size]*3, std=effective_kernel_width)
 
