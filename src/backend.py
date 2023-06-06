@@ -72,7 +72,7 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 @profile
-def load(model_path: Path, mosaic=False):
+def load(model_path: Path, mosaic=False) -> tf.keras.Model:
     model_path = Path(model_path)
 
     if 'resnet' in str(model_path):
@@ -101,8 +101,7 @@ def load(model_path: Path, mosaic=False):
         else:
             model_path = Path(list(model_path.rglob('*.h5'))[0])
 
-        model = load_model(model_path, custom_objects=custom_objects)
-        return model
+        return load_model(model_path, custom_objects=custom_objects)
 
     else:
         try:
@@ -120,8 +119,7 @@ def load(model_path: Path, mosaic=False):
                 else:
                     model_path = str(list(model_path.rglob('*.h5'))[0])
 
-                model = load_model(model_path, custom_objects=custom_objects)
-                return model
+                return load_model(model_path, custom_objects=custom_objects)
 
         except Exception as e:
             logger.exception(e)

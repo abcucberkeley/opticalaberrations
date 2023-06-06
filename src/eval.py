@@ -268,6 +268,7 @@ def iter_evaluate(
         current['neighbors'] = npoints
         current['distance'] = dists
         current['file'] = files
+        current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in files]
 
         for z in range(ps.shape[-1]):
             current[f'z{z}_ground_truth'] = ys[:, z]
