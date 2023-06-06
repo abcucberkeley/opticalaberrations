@@ -286,10 +286,21 @@ def remove_interference_pattern(
 
     high_snr =  preprocessing.measure_snr(psf) > 30 # SNR good enough for template
 
-    # convolve template with the input image
-    effective_kernel_width = 1
-    kernel = gaussian_kernel(kernlen=[kernel_size]*3, std=effective_kernel_width)
+    if high_snr:
+        logger.info('Using template')
+        init_pos = [p-half_length for p in poi]
+        kernel = blured_psf[
+            init_pos[0]:init_pos[0]+kernel_size,
+            init_pos[1]:init_pos[1]+kernel_size,
+            init_pos[2]:init_pos[2]+kernel_size,
+        ]
+        effective_kernel_width = kernel_size // 2
+    else: # SNR isn't good enough for template, use a gaussian kernel
+        logger.info('Using gaussian kernel')
+        effective_kernel_width = 1
+        kernel = gaussian_kernel(kernlen=[kernel_size]*3, std=effective_kernel_width)
 
+    # convolve template with the input image
     convolved_psf = convolution.convolve_fft(
         blured_psf,
         kernel,
@@ -382,7 +393,7 @@ def remove_interference_pattern(
 
         corrected_otf = otf / interference_pattern
 
-        if windowing:
+        if windowing and not high_snr:
             window_border = np.floor((corrected_otf.shape - np.array(window_size)) // 2).astype(int)
             window_extent = corrected_otf.shape - window_border * 2
 
