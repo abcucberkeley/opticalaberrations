@@ -441,9 +441,9 @@ def plot_heatmap_umRMS(means, wavelength, savepath:Path, label='Integrated photo
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
-    ax.tripcolor(x, y, z)
+    #ax.tripcolor(x, y, z)
     #ax.tricontourf(x, y, z, 20)  # choose 20 contour levels, just to show how good its interpolation is
-    ax.plot(x, y, 'ko ')
+    #ax.plot(x, y, 'ko ')
 
     if label == 'Integrated photons':
         ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
@@ -620,6 +620,7 @@ def iterheatmap(
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
 
+    logger.info(f'{savepath=}')
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0) # read previous results, ignoring criteria
     else:
