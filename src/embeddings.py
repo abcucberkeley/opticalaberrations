@@ -8,6 +8,7 @@ from functools import lru_cache
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
+from tifffile import imwrite
 
 import numpy as np
 from tqdm import tqdm
@@ -247,7 +248,7 @@ def remove_interference_pattern(
         windowing: bool = True,
         window_size: tuple = (21, 21, 21),
         plot_interference_pattern: bool = False,
-        min_psnr: float = 15.0
+        min_psnr: float = 15.0,
 ):
     """
     Normalize interference pattern from the given FFT
@@ -283,12 +284,7 @@ def remove_interference_pattern(
     poi[1] = np.clip(poi[1], a_min=half_length, a_max=(psf.shape[1] - half_length) - 1)
     poi[2] = np.clip(poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
 
-    # init_pos = [p-half_length for p in poi]
-    # kernel = blured_psf[
-    #     init_pos[0]:init_pos[0]+kernel_size,
-    #     init_pos[1]:init_pos[1]+kernel_size,
-    #     init_pos[2]:init_pos[2]+kernel_size,
-    # ]
+    high_snr =  preprocessing.measure_snr(psf) > 30 # SNR good enough for template
 
     # convolve template with the input image
     effective_kernel_width = 1
@@ -572,8 +568,8 @@ def rotate_coords(
         coords = cp.array(
             cp.meshgrid(
                 cp.arange(shape[0]),
-                cp.arange(shape[1]),
-                cp.arange(shape[2]),
+                cp.arange(shape[1]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
+                cp.arange(shape[2]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
                 indexing='ij'
             )
         )
@@ -593,8 +589,8 @@ def rotate_coords(
         coords = np.array(
             np.meshgrid(
                 np.arange(shape[0]),
-                np.arange(shape[1]),
-                np.arange(shape[2]),
+                np.arange(shape[1]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
+                np.arange(shape[2]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
                 indexing='ij'
             )
         )
@@ -638,10 +634,7 @@ def rotate_embeddings(
                 desc=f"Generating digital rotations [{plot.name}]"
         )):
             for plane in range(emb.shape[1]):
-
-                fig = plt.figure()
-                plt.imshow(emb[i, 0, :, :])
-                savesvg(fig, f'{plot}_rot{angle:05}.tif')
+                imwrite(f'{plot}_rot{angle:05}.tif', emb[i, 0, :, :].astype(np.float32) , compression='deflate', dtype=np.float32)
 
     return emb
 

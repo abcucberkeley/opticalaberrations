@@ -465,3 +465,7 @@ def get_tile_confidence(
         )
 
     return unconfident_tiles, zero_confident_tiles, all_zeros_tiles
+
+
+def convert_to_windows_file_string(f):
+    return str(f).replace('/', '\\').replace("\\clusterfs\\nvme\\", "V:\\")
