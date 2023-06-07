@@ -1239,7 +1239,7 @@ def plot_rotations(results: Path):
         mse = df.mse.values[0]
         confident = df.confident.values[0].astype(bool)
 
-        if rho > 0 and confident:
+        if np.abs(rho) > 0 and confident:
             title_color = 'g'
         else:
             title_color = 'C0' if confident else 'r'
