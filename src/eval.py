@@ -405,7 +405,7 @@ def plot_heatmap_umRMS(means, wavelength, savepath:Path, label='Integrated photo
         3., 4., 5.,
     ])
 
-    umRMS_per_p2v_factor = round(np.percentile(means.to_numpy(), 90) / np.max(levels), 2)
+    umRMS_per_p2v_factor = round(np.percentile(means.to_numpy(), 98) / np.max(levels), 2)
     levels *= umRMS_per_p2v_factor
     vmin, vmax, vcenter, step = levels[0], levels[-1], levels[10], levels[1] - levels[0]
     highcmap = plt.get_cmap('magma_r', 256)
