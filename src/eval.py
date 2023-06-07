@@ -380,8 +380,21 @@ def plot_heatmap_p2v(means, wavelength, savepath:Path, label='Integrated photons
 
     logger.info(f'Saved: {savepath.resolve()}.png  .pdf  .svg')
     return ax
+
+
 @profile
-def plot_heatmap_umRMS(means, wavelength, savepath:Path, label='Integrated photons', lims=(0, 100), ax=None, cax=None, x=None,y=None,z=None):
+def plot_heatmap_umRMS(
+        means,
+        wavelength,
+        savepath:Path,
+        label='Integrated photons',
+        lims=(0, 100),
+        ax=None,
+        cax=None,
+        x=None,
+        y=None,
+        z=None
+):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -923,6 +936,69 @@ def eval_object(
     return df
 
 
+def plot_templates(model: Path, num_objs: Optional[int] = 1):
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    num_objs = 1 if num_objs is None else num_objs
+
+    outdir = model.with_suffix('') / 'evalmodes' / 'templates' / f'num_objs_{num_objs}'
+    outdir.mkdir(parents=True, exist_ok=True)
+    modelspecs = backend.load_metadata(model)
+
+    photons = [1, 1000, 10000, 50000, 100000, 200000, 400000, 600000, 800000, 1000000]
+    waves = np.arange(1e-5, .55, step=.05).round(2)
+    aberrations = np.zeros((len(waves), modelspecs.n_modes))
+    gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
+
+    # plot templates
+    for i in range(3, modelspecs.n_modes):
+        if i == 4:
+            continue
+
+        savepath = outdir / f"m{i}"
+
+        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(8, 8))
+
+        for t, a in enumerate(waves[::-1]):
+            for j, ph in enumerate(photons):
+                phi = np.zeros_like(aberrations[0])
+                phi[i] = a
+
+                w = Wavefront(phi, lam_detection=gen.lam_detection)
+                kernel = gen.single_psf(phi=w, meta=False)
+
+                img = simulate_beads(
+                    psf=kernel,
+                    object_size=0,
+                    photons=ph,
+                    # maxcounts=ph,
+                    noise=True,
+                    fill_radius=0
+                )
+
+                axes[t, j].imshow(np.max(img, axis=0) ** .5, cmap='hot')
+                axes[t, j].axis('off')
+                axes[t, j].set_title(
+                    f"{int(np.max(img) / 1e3)}$\\times 10^3$" if np.max(img) > 1e4 else int(np.max(img)),
+                    # f"{int(np.sum(img)/1e6)}$\\times 10^6$" if np.sum(img) > 1e6 else int(np.sum(img)),
+                    fontsize=8,
+                    pad=1
+                )
+
+        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.25, wspace=.25)
+        plt.savefig(f'{savepath}_templateheatmap.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}_templateheatmap.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}_templateheatmap.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
 @profile
 def evaluate_modes(
     model: Path,
@@ -954,38 +1030,7 @@ def evaluate_modes(
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
 
-    fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(8, 8))
-
-    for i, a in enumerate(waves[::-1]):
-        for j, ph in enumerate(photons):
-            phi = np.zeros_like(aberrations[0])
-            phi[3] = a
-
-            w = Wavefront(phi, lam_detection=gen.lam_detection)
-            kernel = gen.single_psf(phi=w, meta=False)
-
-            img = simulate_beads(
-                psf=kernel,
-                object_size=0,
-                photons=ph,
-                # maxcounts=ph,
-                noise=True,
-                fill_radius=0
-            )
-
-            axes[i, j].imshow(np.max(img, axis=0) ** .5, cmap='hot')
-            axes[i, j].axis('off')
-            axes[i, j].set_title(
-                f"{int(np.max(img)/1e3)}$\\times 10^3$" if np.max(img) > 1e4 else int(np.max(img)),
-                # f"{int(np.sum(img)/1e6)}$\\times 10^6$" if np.sum(img) > 1e6 else int(np.sum(img)),
-                fontsize=8,
-                pad=1
-            )
-
-    plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.25, wspace=.25)
-    plt.savefig(f'{outdir}_templateheatmap.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{outdir}_templateheatmap.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{outdir}_templateheatmap.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plot_templates(model=model, num_objs=1)
 
     for i in range(3, modelspecs.n_modes):
         if i == 4:

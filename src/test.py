@@ -12,6 +12,12 @@ import time
 from pathlib import Path
 import tensorflow as tf
 
+
+try:
+    import cupy as cp
+except ImportError as e:
+    logging.warning(f"Cupy not supported on your system: {e}")
+
 import cli
 import eval
 import ujson
@@ -116,7 +122,6 @@ def parse_args(args):
 
 def main(args=None):
     command_flags = sys.argv[1:] if args is None else args
-    timeit = time.time()
     args = parse_args(args)
     logger.info(args)
 
@@ -163,13 +168,14 @@ def main(args=None):
         if os.name == 'nt':
             mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
 
+        timeit = time.time()
+
         tf.keras.backend.set_floatx('float32')
         physical_devices = tf.config.list_physical_devices('GPU')
         for gpu_instance in physical_devices:
             tf.config.experimental.set_memory_growth(gpu_instance, True)
 
         try:
-            import cupy as cp
             if len(physical_devices) > 1:
                 cp.fft.config.use_multi_gpus = True
                 cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
