@@ -224,6 +224,8 @@ def iter_evaluate(
             )
         )
 
+        number_of_batches = int(np.ceil(files.shape[0] * (rotations if digital_rotations else 1) / batch_size))
+        emb_megabytes_per_batch = 6 * 64 * 64 * batch_size * 32 / 8 / 1e6
         res = backend.predict_dataset(
             model,
             inputs,
@@ -236,8 +238,8 @@ def iter_evaluate(
             desc=f'Predicting (iter #{k}) '
                 f"[{files.shape[0]} files] x [{rotations if digital_rotations else None} Rotations] = "
                 f"{files.shape[0] * (rotations if digital_rotations else 1)} predictions, requires "
-                f"{int(np.ceil(files.shape[0] * (rotations if digital_rotations else 1) / batch_size))} batches. "
-                f"emb={int(6 * 64 * 64 * batch_size * 32 / 8 / 1e6):,} MB/batch. ",
+                f"{number_of_batches} batches. "
+                f"emb={int(emb_megabytes_per_batch):,} MB/batch. total={int(emb_megabytes_per_batch * batch_size /1000):,} GB/batch.",
         )
 
         try:
@@ -345,6 +347,7 @@ def plot_heatmap_p2v(means, wavelength, savepath:Path, label='Integrated photons
         extend='both',
         spacing='proportional',
         format=FormatStrFormatter("%.2f"),
+        shrink=0.85,
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
@@ -435,6 +438,7 @@ def plot_heatmap_umRMS(means, wavelength, savepath:Path, label='Integrated photo
         extend='both',
         spacing='proportional',
         format=FormatStrFormatter("%.2f"),
+        shrink=0.85,
         ticks=np.array([0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]) * umRMS_per_p2v_factor,
     )
     cbar.ax.set_ylabel(r'Residuals (average $\mu$mRMS)')

@@ -161,7 +161,7 @@ def main(args=None):
             logger.info(f"SLURMD_NODENAME = {os.environ.get('SLURMD_NODENAME')}")
         if os.environ.get('SLURM_JOB_PARTITION') is not None:
             logger.info(f"SLURM_JOB_PARTITION = {os.environ.get('SLURM_JOB_PARTITION')}")
-            
+
         if os.name == 'nt':
             mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
 
