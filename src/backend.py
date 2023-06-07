@@ -614,8 +614,8 @@ def eval_rotation(
                 rhos = np.zeros_like(rhos)
                 confident = 0.
             else:
-                rho = np.abs(np.median(rhos))
-                rho *= rho > threshold  # keep it if it's above threshold, or else set to zero.
+                rho = np.median(rhos)
+                rho *= np.abs(rho) > threshold  # keep it if it's above threshold, or else set to zero.
 
                 if all(np.abs(rhos) < confidence_threshold):
                     confident = 1
