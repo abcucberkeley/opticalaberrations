@@ -645,7 +645,7 @@ def rotate_embeddings(
                 desc=f"Generating digital rotations [{plot.name}]"
         )):
             for plane in range(emb.shape[1]):
-                imwrite(f'{plot}_rot{angle:05}.tif', emb[i, 0, :, :].astype(np.float32) , compression='deflate', dtype=np.float32)
+                imwrite(f'{plot}_rot{angle:05}.tif', emb[i, 0, :, :].astype(np.float32), compression='deflate', dtype=np.float32)
 
     return emb
 
