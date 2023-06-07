@@ -328,7 +328,7 @@ def fftconvolution(kernel, sample):
         normalize_kernel=False,
         nan_treatment='fill',
         fill_value=0
-    ).as_type(sample.dtype)   # otherwise returns as float64
+    ).astype(sample.dtype)   # otherwise returns as float64
     conv[conv < 0] = 0  # clip negative small values
     return conv
 
