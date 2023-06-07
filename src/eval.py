@@ -351,7 +351,6 @@ def plot_heatmap_p2v(means, wavelength, savepath:Path, label='Integrated photons
     )
 
     cbar.ax.set_ylabel(rf'Residuals (average peak-to-valley, $\lambda = {int(wavelength*1000)}~nm$)')
-    cbar.ax.set_title(r'$\lambda$', pad=10)
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
@@ -440,7 +439,6 @@ def plot_heatmap_umRMS(means, wavelength, savepath:Path, label='Integrated photo
         ticks=np.array([0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]) * umRMS_per_p2v_factor,
     )
     cbar.ax.set_ylabel(r'Residuals (average $\mu$mRMS)')
-    cbar.ax.set_title(r'$\mu$mRMS', pad=10)
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
