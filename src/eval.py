@@ -264,10 +264,11 @@ def iter_evaluate(
             digital_rotations=rotations if digital_rotations else None,
             plot_rotations=False,
             desc=f'Predicting (iter #{k}) '
-                f"[{files.shape[0]} files] x [{rotations if digital_rotations else None} Rotations] = "
-                f"{files.shape[0] * (rotations if digital_rotations else 1)} predictions, requires "
-                f"{number_of_batches} batches. "
-                f"emb={int(emb_megabytes_per_batch):,} MB/batch. total={int(emb_megabytes_per_batch * batch_size /1000):,} GB/batch.",
+                 f"[{files.shape[0]} files] x [{rotations if digital_rotations else None} Rotations] = "
+                 f"{files.shape[0] * (rotations if digital_rotations else 1):,} predictions, requires "
+                 f"{number_of_batches} batches, "
+                 f"emb={int(emb_megabytes_per_batch):,}MB/batch, "
+                 f"total={int(emb_megabytes_per_batch * batch_size /1000):,}GB.",
         )
 
         try:
