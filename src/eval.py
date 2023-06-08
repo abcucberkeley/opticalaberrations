@@ -103,18 +103,19 @@ def simulate_beads(
     return inputs
 
 
-def generate_fourier_embeddings(
+def generate_sample(
     image_id: int,
     data: pd.DataFrame,
     psfgen: SyntheticPSF,
+    iter_number: Optional[int] = None,
     no_phase: bool = False,
     digital_rotations: Optional[int] = None,
 ):
     hashtable = data[data['id'] == image_id].iloc[0].to_dict()
-
     f = Path(str(hashtable['file']))
+    beads = Path(str(hashtable['beads']))
     ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
-    ref = np.squeeze(data_utils.get_image(f.with_stem(f'{f.stem}_gt')))
+    ref = np.squeeze(data_utils.get_image(beads))
 
     wavefront = Wavefront(
         ys,
@@ -134,15 +135,23 @@ def generate_fourier_embeddings(
         photons=hashtable['photons']
     )
 
-    emb = backend.preprocess(
-        noisy_img,
-        modelpsfgen=psfgen,
-        digital_rotations=digital_rotations,
-        no_phase=no_phase,
-        remove_background=True,
-        normalize=True,
-    )
-    return emb
+    outdir = Path(f"{beads.parent}/iter_{iter_number}")
+    outdir.mkdir(exist_ok=True, parents=True)
+    savepath = outdir/f.name
+
+    imwrite(savepath, noisy_img.astype(np.float32), dtype=np.float32)
+    return savepath
+
+    # emb = backend.preprocess(
+    #     noisy_img,
+    #     modelpsfgen=psfgen,
+    #     digital_rotations=digital_rotations,
+    #     no_phase=no_phase,
+    #     remove_background=True,
+    #     normalize=True,
+    #     # plot=True
+    # )
+    # return emb
 
 
 @profile
@@ -203,7 +212,9 @@ def iter_evaluate(
     npoints = np.array([i.numpy() for i in metadata[:, 4]])
     dists = np.array([i.numpy() for i in metadata[:, 5]])
     files = np.array([Path(str(i.numpy(), "utf-8")) for i in metadata[:, -1]])
+    beads = np.array([f.with_stem(f'{f.stem}_gt') for f in files])
     ids = np.arange(ys.shape[0], dtype=int)
+    del metadata
 
     # 'results' is a df to be written out as the _predictions.csv.
     # 'results' holds the information from every iteration.
@@ -217,8 +228,9 @@ def iter_evaluate(
         'residuals_umRMS': umRMS,  # remaining umRMS aberration after ML correction.
         'photons': photons,  # integrated photons
         'distance': dists,  # average distance to nearst bead
-        'file': files,  # file = binary image file filled with zeros except at location of beads
+        'file': files,  # path to realspace images
         'file_windows': [utils.convert_to_windows_file_string(f) for f in files],  # stupid windows path
+        'beads': beads,  # path to binary image file filled with zeros except at location of beads
     })
 
     # make 3 more columns for every z mode,
@@ -235,19 +247,47 @@ def iter_evaluate(
         df_subset = ['id', 'file', 'photons'] + [cc for cc in
                                                  results.columns[results.columns.str.endswith('_residual')]]
         previous = previous[df_subset].reset_index()    # trim to just the columns we need and reindex
-        updated_embeddings = partial(
-            generate_fourier_embeddings,
-            data=previous,
-            psfgen=gen,
-            no_phase=no_phase,
-            digital_rotations=rotations if digital_rotations else None,
+        paths = utils.multiprocess(
+            func=partial(
+                generate_sample,
+                iter_number=k,
+                data=previous,
+                psfgen=gen,
+                no_phase=no_phase,
+                digital_rotations=rotations if digital_rotations else None,
+            ),
+            jobs=ids,
+            desc='Generate samples',
+            unit=' sample',
+            cores=-1
         )
 
-        inputs = tf.data.Dataset.from_tensor_slices(ids)
+        current = pd.DataFrame(ids, columns=['id'])
+        current['photons'] = photons
+        current['neighbors'] = npoints
+        current['distance'] = dists
+        current['niter'] = k
+        current['aberration'] = p2v
+        current['beads'] = beads
+        current['file'] = paths
+        current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
+
+        generate_fourier_embeddings = partial(
+            backend.preprocess,
+            modelpsfgen=gen,
+            digital_rotations=rotations if digital_rotations else None,
+            no_phase=no_phase,
+            remove_background=True,
+            normalize=True,
+            fov_is_small=True,
+            # plot=True,
+        )
+
+        inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
         inputs = inputs.map(
-            lambda image_id: tf.py_function(
-                updated_embeddings,
-                inp=[image_id],
+            lambda x: tf.py_function(
+                generate_fourier_embeddings,
+                inp=[x],
                 Tout=tf.float32,
             )
         )
@@ -260,12 +300,12 @@ def iter_evaluate(
             psfgen=gen,
             batch_size=batch_size,
             threshold=threshold,
-            save_path=[f.with_suffix("") for f in files],
+            save_path=[f.with_suffix("") for f in paths],
             digital_rotations=rotations if digital_rotations else None,
-            plot_rotations=False,
+            # plot_rotations=True,
             desc=f'Predicting (iter #{k}) '
-                 f"[{files.shape[0]} files] x [{rotations if digital_rotations else None} Rotations] = "
-                 f"{files.shape[0] * (rotations if digital_rotations else 1):,} predictions, requires "
+                 f"[{paths.shape[0]} files] x [{rotations if digital_rotations else None} Rotations] = "
+                 f"{paths.shape[0] * (rotations if digital_rotations else 1):,} predictions, requires "
                  f"{number_of_batches} batches, "
                  f"emb={int(emb_megabytes_per_batch):,}MB/batch, "
                  f"total={int(emb_megabytes_per_batch * batch_size /1000):,}GB.",
@@ -290,16 +330,8 @@ def iter_evaluate(
 
         res = ys - ps
 
-        current = pd.DataFrame(ids, columns=['id'])
-        current['niter'] = k
-        current['aberration'] = p2v
         current['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in res]
         current['residuals_umRMS'] = [np.linalg.norm(i) for i in res]
-        current['photons'] = photons
-        current['neighbors'] = npoints
-        current['distance'] = dists
-        current['file'] = files
-        current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in files]
 
         for z in range(ps.shape[-1]):
             current[f'z{z}_ground_truth'] = ys[:, z]
@@ -318,7 +350,8 @@ def iter_evaluate(
         # update the aberration for the next iteration with the residue
         ys = res
 
-    if savepath is not None: logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
+    if savepath is not None:
+        logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
 
     return results
 
@@ -409,8 +442,21 @@ def plot_heatmap_p2v(means, wavelength, savepath:Path, label='Integrated photons
 
     logger.info(f'Saved: {savepath.resolve()}.png  .pdf  .svg')
     return ax
+
+
 @profile
-def plot_heatmap_umRMS(means, wavelength, savepath:Path, label='Integrated photons', lims=(0, 100), ax=None, cax=None, x=None,y=None,z=None):
+def plot_heatmap_umRMS(
+        means,
+        wavelength,
+        savepath:Path,
+        label='Integrated photons',
+        lims=(0, 100),
+        ax=None,
+        cax=None,
+        x=None,
+        y=None,
+        z=None
+):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -952,6 +998,69 @@ def eval_object(
     return df
 
 
+def plot_templates(model: Path, num_objs: Optional[int] = 1):
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    num_objs = 1 if num_objs is None else num_objs
+
+    outdir = model.with_suffix('') / 'evalmodes' / 'templates' / f'num_objs_{num_objs}'
+    outdir.mkdir(parents=True, exist_ok=True)
+    modelspecs = backend.load_metadata(model)
+
+    photons = [1, 1000, 10000, 50000, 100000, 200000, 400000, 600000, 800000, 1000000]
+    waves = np.arange(1e-5, .55, step=.05).round(2)
+    aberrations = np.zeros((len(waves), modelspecs.n_modes))
+    gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
+
+    # plot templates
+    for i in range(3, modelspecs.n_modes):
+        if i == 4:
+            continue
+
+        savepath = outdir / f"m{i}"
+
+        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(8, 8))
+
+        for t, a in enumerate(waves[::-1]):
+            for j, ph in enumerate(photons):
+                phi = np.zeros_like(aberrations[0])
+                phi[i] = a
+
+                w = Wavefront(phi, lam_detection=gen.lam_detection)
+                kernel = gen.single_psf(phi=w, meta=False)
+
+                img = simulate_beads(
+                    psf=kernel,
+                    object_size=0,
+                    photons=ph,
+                    # maxcounts=ph,
+                    noise=True,
+                    fill_radius=0
+                )
+
+                axes[t, j].imshow(np.max(img, axis=0) ** .5, cmap='hot')
+                axes[t, j].axis('off')
+                axes[t, j].set_title(
+                    f"{int(np.max(img) / 1e3)}$\\times 10^3$" if np.max(img) > 1e4 else int(np.max(img)),
+                    # f"{int(np.sum(img)/1e6)}$\\times 10^6$" if np.sum(img) > 1e6 else int(np.sum(img)),
+                    fontsize=8,
+                    pad=1
+                )
+
+        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.25, wspace=.25)
+        plt.savefig(f'{savepath}_templateheatmap.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}_templateheatmap.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}_templateheatmap.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
 @profile
 def evaluate_modes(
     model: Path,
@@ -983,38 +1092,7 @@ def evaluate_modes(
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
 
-    fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(8, 8))
-
-    for i, a in enumerate(waves[::-1]):
-        for j, ph in enumerate(photons):
-            phi = np.zeros_like(aberrations[0])
-            phi[3] = a
-
-            w = Wavefront(phi, lam_detection=gen.lam_detection)
-            kernel = gen.single_psf(phi=w, meta=False)
-
-            img = simulate_beads(
-                psf=kernel,
-                object_size=0,
-                photons=ph,
-                # maxcounts=ph,
-                noise=True,
-                fill_radius=0
-            )
-
-            axes[i, j].imshow(np.max(img, axis=0) ** .5, cmap='hot')
-            axes[i, j].axis('off')
-            axes[i, j].set_title(
-                f"{int(np.max(img)/1e3)}$\\times 10^3$" if np.max(img) > 1e4 else int(np.max(img)),
-                # f"{int(np.sum(img)/1e6)}$\\times 10^6$" if np.sum(img) > 1e6 else int(np.sum(img)),
-                fontsize=8,
-                pad=1
-            )
-
-    plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.25, wspace=.25)
-    plt.savefig(f'{outdir}_templateheatmap.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{outdir}_templateheatmap.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{outdir}_templateheatmap.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plot_templates(model=model, num_objs=1)
 
     for i in range(3, modelspecs.n_modes):
         if i == 4:

@@ -986,7 +986,7 @@ def dual_stage_prediction(
 
 @profile
 def predict_dataset(
-        model: tf.keras.Model,
+        model: Union[tf.keras.Model, Path],
         inputs: tf.data.Dataset,
         psfgen: SyntheticPSF,
         save_path: list,
@@ -1012,12 +1012,14 @@ def predict_dataset(
         desc: test to display for the progressbar
         verbose: a toggle for progress bar
         digital_rotations: an array of digital rotations to apply to evaluate model's confidence
-        plot: optional toggle to plot predictions
         plot_rotations: optional toggle to plot digital rotations
 
     Returns:
         average prediction, stdev
     """
+
+    if isinstance(model, Path):
+        model = load(model)
 
     no_phase = True if model.input_shape[1] == 3 else False
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
@@ -1026,9 +1028,15 @@ def predict_dataset(
     logger.info(f"[Batch size={batch_size}] {desc}")
     inputs = inputs.batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
 
+    # for i in inputs.take(1):
+    #     logger.info(i.numpy().shape)
+
     if digital_rotations is not None:
         inputs = inputs.map(lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:])))
         inputs = inputs.unbatch().batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
+
+        # for i in inputs.take(1):
+        #     logger.info(i.numpy().shape)
 
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF

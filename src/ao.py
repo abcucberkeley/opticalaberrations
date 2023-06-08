@@ -789,9 +789,13 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         for gpu_instance in physical_devices:
             tf.config.experimental.set_memory_growth(gpu_instance, True)
 
-        if len(physical_devices) > 1:
-            cp.fft.config.use_multi_gpus = True
-            cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
+        try:
+            if len(physical_devices) > 1:
+                cp.fft.config.use_multi_gpus = True
+                cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
+
+        except ImportError as e:
+            logging.warning(f"Cupy not supported on your system: {e}")
 
         strategy = tf.distribute.MirroredStrategy(
             devices=[f"{physical_devices[i].device_type}:{i}" for i in range(len(physical_devices))]
