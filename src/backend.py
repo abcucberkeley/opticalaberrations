@@ -527,7 +527,7 @@ def eval_rotation(
             xdata = rotations * np.abs(mode.m)
             df['twin_angle'] = xdata
 
-            ydata = np.degrees(ydata)
+            ydata = np.degrees(ydata) % 180 # so now agnostic to direction
 
             rho = rhos[np.argmin(np.abs(ydata))]
             std_rho = np.std(rhos).round(3)
@@ -550,11 +550,14 @@ def eval_rotation(
             ydata_masked = ydata[data_mask]
             offset = ydata_masked[0]
             ydata_masked = np.unwrap(ydata_masked, period=180)
+            # put start between -90 and +90
             ydata_masked = ((ydata_masked - offset - xdata_masked) + 90) % 180 - 90 + offset + xdata_masked
 
             m = 1
             b = linear_fit_fixed_slope(xdata_masked, ydata_masked, m)  # refit without bad data points
             fit = m * xdata + b
+            fit_p180 = m * xdata + (b + 180)
+            fit_n180 = m * xdata + (b - 180)
 
             number_of_wraps = (fit - ydata) // 180
             below = ydata + (number_of_wraps * 180)
@@ -563,8 +566,22 @@ def eval_rotation(
             below_is_better = np.abs(fit-below) < np.abs(fit-above)
             ydata[below_is_better] = below[below_is_better]
 
+            junk, twin_angles  = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
+            twin_angles = np.degrees(twin_angles)
+            leave_sign_votes_for = np.abs(angle_diff(twin_angles, fit)) > np.minimum(np.abs(angle_diff(twin_angles, fit_p180)), np.abs(angle_diff(twin_angles, fit_n180)))
+            leave_sign_votes_for = np.sum(leave_sign_votes_for[data_mask].astype(int))
+            leave_sign_votes_against = len(twin_angles[data_mask]) - leave_sign_votes_for
+
+            if leave_sign_votes_for > leave_sign_votes_against:
+                fitted_twin_angle_b = b  # evaluate the curve fit when there is no digital rotation.
+                df['swapped_sign'] = False
+            else:
+                fitted_twin_angle_b = (b + 180) % 360  # evaluate the curve fit when there is no digital rotation.
+                df['swapped_sign'] = True
+
             df['pred_twin_angle'] = ydata
             df['fitted_twin_angle'] = m * df['twin_angle'] + b
+            df['fitted_twin_angle_b'] = fitted_twin_angle_b
 
             squared_error = np.square(fit - ydata)
             mse = np.mean(squared_error)
@@ -579,7 +596,7 @@ def eval_rotation(
 
             df['mse'] = mse
 
-            twin_angle = b  # evaluate the curve fit when there is no digital rotation.
+
 
             """
                 rho is already set to zero if `fraction_of_kept_points` and/or `mse` are bad
@@ -594,7 +611,7 @@ def eval_rotation(
                 stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
                 confident = 0.
             elif confident and rho > 0:  # confident-A
-                preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
+                preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(fitted_twin_angle_b))
                 stdevs[mode.index_ansi], stdevs[twin.index_ansi] = std_rho, std_rho
             elif confident and rho == 0:  # confident-Z
                 preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
@@ -660,6 +677,10 @@ def eval_rotation(
         vis.plot_rotations(Path(f'{plot}_rotations.csv'))
 
     return preds, stdevs
+
+
+def angle_diff(a, b):
+    return np.degrees(np.arctan2(np.sin(np.radians(a - b)), np.cos(np.radians(a - b))))
 
 
 @profile

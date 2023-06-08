@@ -1236,6 +1236,9 @@ def plot_rotations(results: Path):
 
         rho = df.aggr_rho.values[0]
         stdev = df.aggr_std_dev.values[0]
+        aggr_mode_amp = df.aggr_mode_amp.values[0]
+        aggr_twin_amp = df.aggr_twin_amp.values[0]
+        fitted_twin_angle_b = df.fitted_twin_angle_b.values[0]
         mse = df.mse.values[0]
         confident = df.confident.values[0].astype(bool)
 
@@ -1264,11 +1267,11 @@ def plot_rotations(results: Path):
             fit_ax.scatter(xdata[data_mask], ydata[data_mask], s=2, color='grey')
 
             fit_ax.set_title(
-                # f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, '
-                # f'm{twin.index_ansi}={preds[twin.index_ansi]:.3f} '
-                f'$\\rho$={rho:.3f} $\mu$RMS, '
+                f'[{aggr_mode_amp:.3f}, {aggr_twin_amp:.3f}] '
+                #f'$\\rho$={rho:.3f} $\mu$RMS, '
                 f'$\\rho/\\sigma={rho / stdev:.3f}, \\sigma$={stdev:.3f}, '
-                f'MSE={mse:.0f}',
+                f'MSE={mse:.0f} '
+                f'$\\angle={fitted_twin_angle_b:.0f}^{{\\degree}}_{{twin}},{fitted_twin_angle_b/np.abs(mode.m):.0f}\\degree$',
                 color=title_color
             )
 
