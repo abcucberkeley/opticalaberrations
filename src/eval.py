@@ -79,18 +79,19 @@ def simulate_beads(
     return inputs
 
 
-def generate_fourier_embeddings(
+def generate_sample(
     image_id: int,
     data: pd.DataFrame,
     psfgen: SyntheticPSF,
+    iter_number: Optional[int] = None,
     no_phase: bool = False,
     digital_rotations: Optional[int] = None,
 ):
     hashtable = data[data['id'] == image_id].iloc[0].to_dict()
-
     f = Path(str(hashtable['file']))
+    beads = Path(str(hashtable['beads']))
     ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
-    ref = np.squeeze(data_utils.get_image(f.with_stem(f'{f.stem}_gt')))
+    ref = np.squeeze(data_utils.get_image(beads))
 
     wavefront = Wavefront(
         ys,
@@ -110,15 +111,23 @@ def generate_fourier_embeddings(
         photons=hashtable['photons']
     )
 
-    emb = backend.preprocess(
-        noisy_img,
-        modelpsfgen=psfgen,
-        digital_rotations=digital_rotations,
-        no_phase=no_phase,
-        remove_background=True,
-        normalize=True,
-    )
-    return emb
+    outdir = Path(f"{beads.parent}/iter_{iter_number}")
+    outdir.mkdir(exist_ok=True, parents=True)
+    savepath = outdir/f.name
+
+    imwrite(savepath, noisy_img.astype(np.float32), dtype=np.float32)
+    return savepath
+
+    # emb = backend.preprocess(
+    #     noisy_img,
+    #     modelpsfgen=psfgen,
+    #     digital_rotations=digital_rotations,
+    #     no_phase=no_phase,
+    #     remove_background=True,
+    #     normalize=True,
+    #     # plot=True
+    # )
+    # return emb
 
 
 @profile
@@ -179,7 +188,9 @@ def iter_evaluate(
     npoints = np.array([i.numpy() for i in metadata[:, 4]])
     dists = np.array([i.numpy() for i in metadata[:, 5]])
     files = np.array([Path(str(i.numpy(), "utf-8")) for i in metadata[:, -1]])
+    beads = np.array([f.with_stem(f'{f.stem}_gt') for f in files])
     ids = np.arange(ys.shape[0], dtype=int)
+    del metadata
 
     # 'results' is a df to be written out as the _predictions.csv.
     # 'results' holds the information from every iteration.
@@ -193,7 +204,8 @@ def iter_evaluate(
         'residuals_umRMS': umRMS,  # remaining umRMS aberration after ML correction.
         'photons': photons,  # integrated photons
         'distance': dists,  # average distance to nearst bead
-        'file': files,  # file = binary image file filled with zeros except at location of beads
+        'file': files,  # path to realspace images
+        'beads': beads,  # path to binary image file filled with zeros except at location of beads
     })
 
     # make 3 more columns for every z mode,
@@ -207,19 +219,47 @@ def iter_evaluate(
     # ys contains the current GT aberration of every sample.
     for k in range(1, niter+1):
         before = results[results['niter'] == k - 1]
-        updated_embeddings = partial(
-            generate_fourier_embeddings,
-            data=before,
-            psfgen=gen,
-            no_phase=no_phase,
-            digital_rotations=rotations if digital_rotations else None,
+        paths = utils.multiprocess(
+            func=partial(
+                generate_sample,
+                iter_number=k,
+                data=before,
+                psfgen=gen,
+                no_phase=no_phase,
+                digital_rotations=rotations if digital_rotations else None,
+            ),
+            jobs=ids,
+            desc='Generate samples',
+            unit=' sample',
+            cores=-1
         )
 
-        inputs = tf.data.Dataset.from_tensor_slices(ids)
+        current = pd.DataFrame(ids, columns=['id'])
+        current['photons'] = photons
+        current['neighbors'] = npoints
+        current['distance'] = dists
+        current['niter'] = k
+        current['aberration'] = p2v
+        current['beads'] = beads
+        current['file'] = paths
+        current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
+
+        generate_fourier_embeddings = partial(
+            backend.preprocess,
+            modelpsfgen=gen,
+            digital_rotations=rotations if digital_rotations else None,
+            no_phase=no_phase,
+            remove_background=True,
+            normalize=True,
+            fov_is_small=True,
+            # plot=True,
+        )
+
+        inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
         inputs = inputs.map(
-            lambda image_id: tf.py_function(
-                updated_embeddings,
-                inp=[image_id],
+            lambda x: tf.py_function(
+                generate_fourier_embeddings,
+                inp=[x],
                 Tout=tf.float32,
             )
         )
@@ -232,12 +272,12 @@ def iter_evaluate(
             psfgen=gen,
             batch_size=batch_size,
             threshold=threshold,
-            save_path=[f.with_suffix("") for f in files],
+            save_path=[f.with_suffix("") for f in paths],
             digital_rotations=rotations if digital_rotations else None,
-            plot_rotations=False,
+            # plot_rotations=True,
             desc=f'Predicting (iter #{k}) '
-                f"[{files.shape[0]} files] x [{rotations if digital_rotations else None} Rotations] = "
-                f"{files.shape[0] * (rotations if digital_rotations else 1)} predictions, requires "
+                f"[{paths.shape[0]} files] x [{rotations if digital_rotations else None} Rotations] = "
+                f"{paths.shape[0] * (rotations if digital_rotations else 1)} predictions, requires "
                 f"{number_of_batches} batches. "
                 f"emb={int(emb_megabytes_per_batch):,} MB/batch. total={int(emb_megabytes_per_batch * batch_size /1000):,} GB/batch.",
         )
@@ -261,16 +301,8 @@ def iter_evaluate(
 
         res = ys - ps
 
-        current = pd.DataFrame(ids, columns=['id'])
-        current['niter'] = k
-        current['aberration'] = p2v
         current['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in res]
         current['residuals_umRMS'] = [np.linalg.norm(i) for i in res]
-        current['photons'] = photons
-        current['neighbors'] = npoints
-        current['distance'] = dists
-        current['file'] = files
-        current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in files]
 
         for z in range(ps.shape[-1]):
             current[f'z{z}_ground_truth'] = ys[:, z]
@@ -289,7 +321,8 @@ def iter_evaluate(
         # update the aberration for the next iteration with the residue
         ys = res
 
-    if savepath is not None: logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
+    if savepath is not None:
+        logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
 
     return results
 
