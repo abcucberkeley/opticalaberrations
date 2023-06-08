@@ -180,7 +180,8 @@ def check_criteria(
     npoints = int([s.strip('npoints_') for s in file.parts if s.startswith('npoints')][0])
 
     # if distribution=='/' is stupid hack to deal with Windows paths
-    if (distribution=='/' or distribution in path) \
+    if 'iter' not in path \
+        and (distribution == '/' or distribution in path) \
         and embedding in path \
         and f"z{modes}" in path \
         and amp <= max_amplitude \
