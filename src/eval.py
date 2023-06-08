@@ -218,6 +218,7 @@ def iter_evaluate(
         'photons': photons,  # integrated photons
         'distance': dists,  # average distance to nearst bead
         'file': files,  # file = binary image file filled with zeros except at location of beads
+        'file_windows': [utils.convert_to_windows_file_string(f) for f in files],  # stupid windows path
     })
 
     # make 3 more columns for every z mode,
