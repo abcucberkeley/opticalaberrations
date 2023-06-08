@@ -51,7 +51,8 @@ def simulate_beads(
     object_size=0,
     num_objs=1,
     noise=True,
-    fill_radius=.4
+    fill_radius=.4,
+    fast=False,
 ):
 
     if beads is None:
@@ -69,7 +70,30 @@ def simulate_beads(
     else:
         psf /= np.sum(psf)
 
-    inputs = utils.fftconvolution(sample=beads, kernel=psf)
+    if fast:
+        original_shape = beads.shape
+        inputs = np.zeros_like(beads)
+        bead_indices = np.vstack(np.nonzero(beads)).transpose()
+        shift_amount = bead_indices - np.array(beads.shape)//2
+
+        pad_amount = np.max(np.abs(shift_amount), axis=None)
+        inputs = np.pad(inputs, pad_width=pad_amount)
+        psf = np.pad(psf, pad_width=pad_amount)
+        beads = np.pad(beads, pad_width=pad_amount)
+
+        bead_indices = np.vstack(np.nonzero(beads)).transpose()
+        shift_amount = bead_indices - np.array(beads.shape) // 2
+        for idx, shift in zip(bead_indices, shift_amount):
+            inputs += np.roll(psf*beads[tuple(idx)], shift, axis=(0,1,2))
+
+        inputs=inputs[
+               pad_amount:pad_amount + original_shape[0],
+               pad_amount:pad_amount + original_shape[1],
+               pad_amount:pad_amount + original_shape[2],
+               ]
+
+    else:
+        inputs = utils.fftconvolution(sample=beads, kernel=psf)  # takes 1 second.
 
     if noise:
         inputs = utils.add_noise(inputs)
