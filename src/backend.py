@@ -986,7 +986,7 @@ def dual_stage_prediction(
 
 @profile
 def predict_dataset(
-        model: tf.keras.Model,
+        model: Union[tf.keras.Model, Path],
         inputs: tf.data.Dataset,
         psfgen: SyntheticPSF,
         save_path: list,
@@ -1017,6 +1017,9 @@ def predict_dataset(
     Returns:
         average prediction, stdev
     """
+
+    if isinstance(model, Path):
+        model = load(model)
 
     no_phase = True if model.input_shape[1] == 3 else False
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
