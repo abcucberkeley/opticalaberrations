@@ -231,10 +231,13 @@ def iter_evaluate(
 
     # ys contains the current GT aberration of every sample.
     for k in range(1, niter+1):
-        before = results[results['niter'] == k - 1]
+        previous = results[results['niter'] == k - 1]
+        df_subset = ['id', 'file', 'photons'] + [cc for cc in
+                                                 results.columns[results.columns.str.endswith('_residual')]]
+        previous = previous[df_subset].reset_index()    # trim to just the columns we need and reindex
         updated_embeddings = partial(
             generate_fourier_embeddings,
-            data=before,
+            data=previous,
             psfgen=gen,
             no_phase=no_phase,
             digital_rotations=rotations if digital_rotations else None,
