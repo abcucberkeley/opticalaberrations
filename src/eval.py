@@ -244,9 +244,6 @@ def iter_evaluate(
     # ys contains the current GT aberration of every sample.
     for k in range(1, niter+1):
         previous = results[results['niter'] == k - 1]
-        df_subset = ['id', 'file', 'photons'] + [cc for cc in
-                                                 results.columns[results.columns.str.endswith('_residual')]]
-        previous = previous[df_subset].reset_index()    # trim to just the columns we need and reindex
         paths = utils.multiprocess(
             func=partial(
                 generate_sample,

@@ -278,7 +278,7 @@ def main(args=None):
                     )
                     logging.info(f"Saved: {f.name}")
 
-    logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+        logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 
 if __name__ == "__main__":
