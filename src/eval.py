@@ -52,7 +52,7 @@ def simulate_beads(
     num_objs=1,
     noise=True,
     fill_radius=.4,
-    fast=True,
+    fast=False,
 ):
 
     if beads is None:
