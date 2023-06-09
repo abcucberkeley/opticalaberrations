@@ -23,7 +23,7 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='eval_dataset'
+TITLE='single_mode'
 DATASET='test'
 
 MODE_DIST='pyramid'
@@ -47,7 +47,7 @@ if [ "$DATASET" = "train" ];then
 
 else
   TYPE=''
-  SAMPLES_PER_JOB=100
+  SAMPLES_PER_JOB=10
   SAMPLES_PER_BIN=200
   OBJS=(1 )
   mPH=($(seq     1 50000 1050000))
@@ -55,7 +55,7 @@ else
   amps1=($(seq    0 .025 .475))
   amps2=($(seq .025 .025 .50 ))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
-  DISTRIBUTIONS=(mixed powerlaw)
+  DISTRIBUTIONS=(single)
   FILL_RADIUS=0.0
 fi
 
@@ -84,7 +84,7 @@ do
             j="${j} --mode_dist ${MODE_DIST}"
             j="${j} --iters ${SAMPLES_PER_JOB}"
             j="${j} --signed"
-            j="${j} --rotate"
+            # j="${j} --rotate"
             j="${j} --noise"
             j="${j} --normalize"
             j="${j} --outdir ${OUTDIR}"
