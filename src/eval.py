@@ -212,7 +212,7 @@ def iter_evaluate(
     npoints = np.array([i.numpy() for i in metadata[:, 4]])
     dists = np.array([i.numpy() for i in metadata[:, 5]])
     files = np.array([Path(str(i.numpy(), "utf-8")) for i in metadata[:, -1]])
-    beads = np.array([f.with_stem(f'{f.stem}_gt') for f in files])
+    beads = np.array([f.with_name(f'{f.stem}_gt' + f.suffix) for f in files]) # for python >= 3.9 can use .with_stem
     ids = np.arange(ys.shape[0], dtype=int)
     del metadata
 
