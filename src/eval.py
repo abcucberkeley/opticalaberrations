@@ -1,6 +1,5 @@
 import itertools
 import time
-import cupy as cp
 import matplotlib
 matplotlib.use('Agg')
 
@@ -271,9 +270,6 @@ def iter_evaluate(
         current['beads'] = beads
         current['file'] = paths
         current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
-
-        if cp is not None:
-            cp._default_memory_pool.free_all_blocks()   #free any pooled cupy memory so
 
         generate_fourier_embeddings = partial(
             backend.preprocess,
