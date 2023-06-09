@@ -279,7 +279,7 @@ def iter_evaluate(
             remove_background=True,
             normalize=True,
             fov_is_small=True,
-            # plot=True,
+            plot=True,
         )
 
         inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
@@ -301,7 +301,7 @@ def iter_evaluate(
             threshold=threshold,
             save_path=[f.with_suffix("") for f in paths],
             digital_rotations=rotations if digital_rotations else None,
-            # plot_rotations=True,
+            plot_rotations=True,
             desc=f'Predicting (iter #{k}) '
                  f"[{paths.shape[0]} files] x [{rotations if digital_rotations else None} Rotations] = "
                  f"{paths.shape[0] * (rotations if digital_rotations else 1):,} predictions, requires "
@@ -1085,14 +1085,28 @@ def evaluate_modes(
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
-    photons = [1, 1000, 10000, 50000, 100000, 200000, 400000, 600000, 800000, 1000000]
+    photons = [10000, 20000, 40000, 60000, 80000, 100000, 200000, 400000, 600000, 800000, 1000000]
     # photons = [1, 100, 200, 400, 600, 800, 1000, 1250, 1500, 2000]
-    labels = ['1', '$10^3$', '$10^4$', '$5 \\times 10^4$', '$10^5$', '$2 \\times 10^5$', '$4 \\times 10^5$', '$6 \\times 10^5$', '$8 \\times 10^5$', '$10^6$']
     waves = np.arange(1e-5, .55, step=.05).round(2)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
 
-    plot_templates(model=model, num_objs=1)
+    # plot_templates(model=model, num_objs=1)
+
+    levels = [
+        0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
+        .5, .6, .7, .8, .9,
+        1, 1.25, 1.5, 1.75, 2., 2.5,
+        3., 4., 5.,
+    ]
+
+    vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
+    highcmap = plt.get_cmap('magma_r', 256)
+    lowcmap = plt.get_cmap('GnBu_r', 256)
+    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+    cmap = mcolors.ListedColormap(cmap)
 
     for i in range(3, modelspecs.n_modes):
         if i == 4:
@@ -1117,7 +1131,6 @@ def evaluate_modes(
         df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
         means = pd.pivot_table(df, values='residuals', index='bins', columns='photons', aggfunc=np.mean)
         means = means.sort_index().interpolate()
-        means.columns = np.arange(len(photons))
         logger.info(means)
 
         fig = plt.figure(figsize=(8, 8))
@@ -1126,25 +1139,24 @@ def evaluate_modes(
         ax_xz = fig.add_subplot(gs[0, 1])
         ax_yz = fig.add_subplot(gs[0, 2])
         ax_wavevfront = fig.add_subplot(gs[0, -1])
-        ax = fig.add_subplot(gs[1:, :])
 
-        levels = [
-            0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
-            .5, .6, .7, .8, .9,
-            1, 1.25, 1.5, 1.75, 2., 2.5,
-            3., 4., 5.,
-        ]
+        #ax = fig.add_subplot(gs[1:, 0])
+        axt = fig.add_subplot(gs[1:, :])
 
-        vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
-        highcmap = plt.get_cmap('magma_r', 256)
-        lowcmap = plt.get_cmap('GnBu_r', 256)
-        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-        cmap = mcolors.ListedColormap(cmap)
+        # contours = ax.contourf(
+        #     means.columns,
+        #     means.index.values,
+        #     means.values,
+        #     cmap=cmap,
+        #     levels=levels,
+        #     extend='max',
+        #     linewidths=2,
+        #     linestyles='dashed',
+        # )
+        # ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
-        contours = ax.contourf(
-            np.arange(len(photons)),
+        contours = axt.contourf(
+            means.columns,
             means.index.values,
             means.values,
             cmap=cmap,
@@ -1153,7 +1165,7 @@ def evaluate_modes(
             linewidths=2,
             linestyles='dashed',
         )
-        ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+        axt.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
         cax = fig.add_axes([1.01, 0.08, 0.03, 0.7])
         cbar = plt.colorbar(
@@ -1172,18 +1184,25 @@ def evaluate_modes(
         cbar.ax.yaxis.set_ticks_position('right')
         cbar.ax.yaxis.set_label_position('left')
 
-        ax.set_xlabel(f'Integrated photons')
-        ax.set_xticks(np.arange(len(photons)))
-        ax.set_xticklabels(labels)
-
-        ax.set_ylabel('Initial aberration (average peak-to-valley)')
-        ax.set_yticks(np.arange(0, 6, .5), minor=True)
-        ax.set_yticks(np.arange(0, 6, 1))
-        ax.set_ylim(.25, 5)
-
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        axt.set_ylabel('Initial aberration (average peak-to-valley)')
+        axt.set_yticks(np.arange(0, 6, .5), minor=True)
+        # ax.set_yticks(np.arange(0, 6, .5), minor=True)
+        axt.set_yticks(np.arange(0, 6, 1))
+        # ax.set_yticks(np.arange(0, 6, 1))
+        axt.set_ylim(.25, 5)
+        # ax.set_ylim(.25, 5)
+        # axt.set_yticklabels([])
+        # ax.set_xscale('log')
+        # ax.set_xlim(1, 1e3)
+        axt.set_xscale('log')
+        axt.set_xlim(1e4, 1e6)
+        axt.set_xlabel(f'Integrated photons')
+        # ax.spines['right'].set_visible(False)
+        axt.spines['right'].set_visible(False)
+        # ax.spines['left'].set_visible(False)
+        axt.spines['left'].set_visible(False)
+        # ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        axt.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         phi = np.zeros_like(classes[-1, :])
         phi[i] = .2
