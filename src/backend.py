@@ -527,7 +527,7 @@ def eval_rotation(
             xdata = rotations * np.abs(mode.m)
             df['twin_angle'] = xdata
 
-            ydata = np.degrees(ydata) % 180 # so now agnostic to direction
+            ydata = np.degrees(ydata) #% 180 # so now agnostic to direction
 
             rho = rhos[np.argmin(np.abs(ydata))]
             std_rho = np.std(rhos).round(3)
@@ -543,8 +543,8 @@ def eval_rotation(
 
             # exclude if rho is unusually small
             # (which can lead to small, but dominant primary mode near discontinuity)
-            data_mask[rhos < rho / 2] = 0.
-            df['valid_points'] = np.ones(xdata.shape[0], dtype=bool) # data_mask
+            data_mask[rhos < np.mean(rhos) - np.std(rhos)] = 0.
+            df['valid_points'] = np.ones(xdata.shape[0], dtype=bool)  # data_mask
 
             xdata_masked = xdata[data_mask]
             ydata_masked = ydata[data_mask]
@@ -557,7 +557,6 @@ def eval_rotation(
             b = linear_fit_fixed_slope(xdata_masked, ydata_masked, m)  # refit without bad data points
             fit = m * xdata + b
             fit_p180 = m * xdata + (b + 180)
-            fit_n180 = m * xdata + (b - 180)
 
             number_of_wraps = (fit - ydata) // 180
             below = ydata + (number_of_wraps * 180)
@@ -566,9 +565,9 @@ def eval_rotation(
             below_is_better = np.abs(fit-below) < np.abs(fit-above)
             ydata[below_is_better] = below[below_is_better]
 
-            junk, twin_angles  = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
+            junk, twin_angles = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
             twin_angles = np.degrees(twin_angles)
-            leave_sign_votes_for = np.abs(angle_diff(twin_angles, fit)) > np.minimum(np.abs(angle_diff(twin_angles, fit_p180)), np.abs(angle_diff(twin_angles, fit_n180)))
+            leave_sign_votes_for = np.abs(angle_diff(twin_angles, fit)) < np.abs(angle_diff(twin_angles, fit_p180))
             leave_sign_votes_for = np.sum(leave_sign_votes_for[data_mask].astype(int))
             leave_sign_votes_against = len(twin_angles[data_mask]) - leave_sign_votes_for
 
@@ -595,7 +594,6 @@ def eval_rotation(
                 confident = rho / std_rho > 1 # is SNR above 1? # either confident-A or unconfident
 
             df['mse'] = mse
-
 
 
             """

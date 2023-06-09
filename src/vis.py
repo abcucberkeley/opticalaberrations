@@ -1270,8 +1270,8 @@ def plot_rotations(results: Path):
                 f'[{aggr_mode_amp:.3f}, {aggr_twin_amp:.3f}] '
                 #f'$\\rho$={rho:.3f} $\mu$RMS, '
                 f'$\\rho/\\sigma={rho / stdev:.3f}, \\sigma$={stdev:.3f}, '
-                f'MSE={mse:.0f} '
-                f'$\\angle={fitted_twin_angle_b:.0f}^{{\\degree}}_{{twin}},{fitted_twin_angle_b/np.abs(mode.m):.0f}\\degree$',
+                f'MSE={mse:.0f}, '
+                f'$\\angle({fitted_twin_angle_b:.0f}^{{\\degree}}_{{twin}},{fitted_twin_angle_b/np.abs(mode.m):.0f}\\degree)$',
                 color=title_color
             )
 
