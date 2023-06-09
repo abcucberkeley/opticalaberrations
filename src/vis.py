@@ -979,8 +979,6 @@ def compare_mips(
     savesvg(fig, f'{save_path}.svg')
 
 
-
-
 def plot_interference(
         plot,
         plot_interference_pattern,
@@ -1170,9 +1168,11 @@ def plot_embeddings(
     cax.set_ylabel(r'Embedding ($\alpha$)')
 
     if emb.shape[0] > 3:
-        p_vmin = -1
-        p_vmax = 1
+        # phase embedding limit = 95th percentile or 0.25, round to nearest 1/2 rad
+        p_vmax = max(np.ceil(np.nanpercentile(np.abs(emb[3:]), 95)*2)/2, .25)
+        p_vmin = -p_vmax
         p_vcenter = 0
+        step = p_vmax/10
 
         p_cmap = np.vstack((
             plt.get_cmap('GnBu_r' if p_vmin == 0 else 'GnBu_r', 256)(
@@ -1189,9 +1189,9 @@ def plot_embeddings(
         axes[-1, 1].imshow(emb[4], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
         axes[-1, 2].imshow(emb[5], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
         cax = inset_axes(axes[-1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
-        cb = plt.colorbar(m, cax=cax)
+        cb = plt.colorbar(m, cax=cax, format=lambda x, _: f"{x:.1f}")
         cax.yaxis.set_label_position("right")
-        cax.set_ylabel(r'Embedding ($\varphi$)')
+        cax.set_ylabel(r'Embedding ($\varphi$, radians)')
 
     for ax in axes.flatten():
         ax.axis('off')
