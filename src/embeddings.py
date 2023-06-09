@@ -90,12 +90,12 @@ def principle_planes(emb):
 
 
 @profile
-def spatial_planes(emb):
+def spatial_planes(emb, z_support: int=10):
     midplane = emb.shape[0] // 2
     return np.stack([
         emb[midplane, :, :],
         np.nanmean(emb[midplane:midplane + 5, :, :], axis=0),
-        np.nanmean(emb[midplane + 5:midplane + 10, :, :], axis=0),
+        np.nanmean(emb[midplane + 5:midplane + z_support, :, :], axis=0),
     ], axis=0)
 
 
@@ -385,7 +385,7 @@ def remove_interference_pattern(
             max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
         ]
 
-    if pois.shape[0] > 0:
+    if pois.shape[0] > 0: # found anything?
         interference_pattern = fft(beads)
 
         if np.all(beads == 0) or np.all(interference_pattern == 0):
@@ -549,7 +549,7 @@ def compute_emb(
         return principle_planes(emb)
 
     elif embedding_option.lower() == 'spatial_planes' or embedding_option.lower() == 'sp':
-        return spatial_planes(emb)
+        return spatial_planes(emb, z_support=20 if val == 'angle' else 10)
 
     elif embedding_option.lower() == 'average_planes' or embedding_option.lower() == 'ap':
         return average_planes(emb)
