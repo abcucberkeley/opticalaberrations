@@ -1176,11 +1176,11 @@ def plot_embeddings(
 
         p_cmap = np.vstack((
             plt.get_cmap('GnBu_r' if p_vmin == 0 else 'GnBu_r', 256)(
-                np.linspace(0, 1 - step, int(abs(p_vcenter - p_vmin) / step))
+                np.linspace(0, 1, int(abs(p_vcenter - p_vmin) / step))
             ),
             [1, 1, 1, 1],
             plt.get_cmap('YlOrRd' if p_vmax == 3 else 'OrRd', 256)(
-                np.linspace(0, 1 + step, int(abs(p_vcenter - p_vmax) / step))
+                np.linspace(0, 1, int(abs(p_vcenter - p_vmax) / step))
             )
         ))
         p_cmap = mcolors.ListedColormap(p_cmap)
