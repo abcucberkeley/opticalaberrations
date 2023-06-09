@@ -1,7 +1,6 @@
 import itertools
 import time
-try:
-    import cupy as cp
+import cupy as cp
 import matplotlib
 matplotlib.use('Agg')
 
