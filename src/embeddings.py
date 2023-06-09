@@ -95,7 +95,7 @@ def spatial_planes(emb):
     return np.stack([
         emb[midplane, :, :],
         np.nanmean(emb[midplane:midplane + 5, :, :], axis=0),
-        np.nanmean(emb[midplane + 5:midplane + 10, :, :], axis=0),
+        np.nanmean(emb[midplane + 5:midplane + 20, :, :], axis=0),
     ], axis=0)
 
 
