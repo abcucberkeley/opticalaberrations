@@ -86,7 +86,7 @@ def simulate_beads(
         for idx, shift in zip(bead_indices, shift_amount):
             inputs += np.roll(psf*beads[tuple(idx)], shift, axis=(0,1,2))
 
-        inputs=inputs[
+        inputs = inputs[
                pad_amount:pad_amount + original_shape[0],
                pad_amount:pad_amount + original_shape[1],
                pad_amount:pad_amount + original_shape[2],
@@ -231,6 +231,7 @@ def iter_evaluate(
         'file': files,  # path to realspace images
         'file_windows': [utils.convert_to_windows_file_string(f) for f in files],  # stupid windows path
         'beads': beads,  # path to binary image file filled with zeros except at location of beads
+        'neighbors': npoints, # number of beads
     })
 
     # make 3 more columns for every z mode,
@@ -243,6 +244,7 @@ def iter_evaluate(
 
     # ys contains the current GT aberration of every sample.
     for k in range(1, niter+1):
+        timeit = time.time()
         previous = results[results['niter'] == k - 1]
         paths = utils.multiprocess(
             func=partial(
@@ -346,6 +348,7 @@ def iter_evaluate(
 
         # update the aberration for the next iteration with the residue
         ys = res
+        logging.info(f"Time elapsed for iter : {time.time() - timeit:.2f} sec.")
 
     if savepath is not None:
         logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
