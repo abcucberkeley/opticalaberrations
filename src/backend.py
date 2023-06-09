@@ -486,10 +486,10 @@ def eval_rotation(
     """
 
     def cart2pol(x, y):
-        """Convert cartesian (x, y) to polar (rho, phi)
+        """Convert cartesian (x, y) to polar (rho, phi_in_radians)
         """
         rho = np.sqrt(x ** 2 + y ** 2)
-        phi = np.arctan2(y, x)
+        phi = np.arctan2(y, x)  # Note role reversal: the "y-coordinate" is 1st parameter, the "x-coordinate" is 2nd.
         return (rho, phi)
 
     def pol2cart(rho, phi):
