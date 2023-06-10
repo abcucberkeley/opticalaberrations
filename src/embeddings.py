@@ -90,12 +90,12 @@ def principle_planes(emb):
 
 
 @profile
-def spatial_planes(emb, z_support: int=10):
+def spatial_planes(emb, max_zsupport: int=10):
     midplane = emb.shape[0] // 2
     return np.stack([
         emb[midplane, :, :],
         np.nanmean(emb[midplane:midplane + 5, :, :], axis=0),
-        np.nanmean(emb[midplane + 5:midplane + z_support, :, :], axis=0),
+        np.nanmean(emb[midplane + 5:midplane + max_zsupport, :, :], axis=0),
     ], axis=0)
 
 
@@ -549,7 +549,16 @@ def compute_emb(
         return principle_planes(emb)
 
     elif embedding_option.lower() == 'spatial_planes' or embedding_option.lower() == 'sp':
-        return spatial_planes(emb, z_support=20 if val == 'angle' else 10)
+        return spatial_planes(emb, max_zsupport=20 if val == 'angle' else 10)
+
+    elif embedding_option.lower() == 'spatial_planes10' or embedding_option.lower() == 'sp':
+        return spatial_planes(emb, max_zsupport=10)
+
+    elif embedding_option.lower() == 'spatial_planes20' or embedding_option.lower() == 'sp':
+        return spatial_planes(emb, max_zsupport=20)
+
+    elif embedding_option.lower() == 'spatial_planes1020' or embedding_option.lower() == 'sp':
+        return spatial_planes(emb, max_zsupport=20 if val == 'angle' else 10)
 
     elif embedding_option.lower() == 'average_planes' or embedding_option.lower() == 'ap':
         return average_planes(emb)

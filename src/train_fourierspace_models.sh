@@ -10,18 +10,20 @@ NO_PHASE='--no_phase'
 DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
 EMB="spatial_planes"
-DATASET='lls_defocus_embeddings'
+DATASET='new_embeddings'
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/train"
 BATCH=2048
 NETWORK=opticalnet
 
-for MODES in 15 28
+for EMB in spatial_planes10 spatial_planes20 spatial_planes1020
 do
-  python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 2 --gpus 4 --cpus 16 \
-  --task "--multinode $DEFOCUS_ONLY --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH" \
-  --taskname $NETWORK \
-  --name new/$DATASET/$NETWORK-$MODES-defocus-only
-done
+  for MODES in 15
+  do
+    python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 1 --gpus 4 --cpus 16 \
+    --task "--multinode --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA/i$SHAPE/z$MODES --input_shape $SHAPE --depth_scalar $DEPTH" \
+    --taskname $NETWORK \
+    --name new/$DATASET/$NETWORK-$MODES-$EMB
+  done
 
 
 #MODES=45
