@@ -27,7 +27,7 @@ TITLE='new_embeddings'
 DATASET='train'
 
 MODE_DIST='pyramid'
-OUTDIR="/clusterfs/nvme/thayer/${TITLE}/${DATASET}"
+OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
 LOGS="${OUTDIR}/logs"
 mkdir -p $OUTDIR
 mkdir -p $LOGS
