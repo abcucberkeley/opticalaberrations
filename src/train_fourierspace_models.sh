@@ -11,7 +11,7 @@ DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
 EMB="spatial_planes"
 DATASET='new_embeddings'
-DATA="/clusterfs/nvme/thayer/dataset/$DATASET/train"
+DATA="/clusterfs/nvme/thayer/dataset/new_embeddings/train"
 BATCH=2048
 NETWORK=opticalnet
 
@@ -24,7 +24,7 @@ do
     --taskname $NETWORK \
     --name new/$DATASET/$NETWORK-$MODES-$EMB
   done
-
+done
 
 #MODES=45
 #python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
