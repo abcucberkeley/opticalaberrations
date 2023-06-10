@@ -11,7 +11,7 @@ DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
 EMB="spatial_planes"
 DATASET='new_embeddings'
-DATA="/clusterfs/nvme/thayer/dataset/new_embeddings/train"
+DATA="/clusterfs/nvme/thayer/dataset/new_embeddings/train/x108-y108-z200/"
 BATCH=2048
 NETWORK=opticalnet
 
