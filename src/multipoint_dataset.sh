@@ -23,11 +23,11 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='single_mode'
-DATASET='test'
+TITLE='new_embeddings'
+DATASET='train'
 
 MODE_DIST='pyramid'
-OUTDIR="/clusterfs/nvme/thayer/dan_dataset/${TITLE}/${DATASET}"
+OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
 LOGS="${OUTDIR}/logs"
 mkdir -p $OUTDIR
 mkdir -p $LOGS
@@ -44,12 +44,11 @@ if [ "$DATASET" = "train" ];then
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
   FILL_RADIUS=0.3
-
 else
   TYPE=''
   SAMPLES_PER_JOB=10
   SAMPLES_PER_BIN=200
-  OBJS=(1 )
+  OBJS=(1)
   mPH=($(seq     1 50000 1050000))
   xPH=($(seq 50000 50000 1050000))
   amps1=($(seq    0 .025 .475))
@@ -84,7 +83,7 @@ do
             j="${j} --mode_dist ${MODE_DIST}"
             j="${j} --iters ${SAMPLES_PER_JOB}"
             j="${j} --signed"
-            # j="${j} --rotate"
+            j="${j} --rotate"
             j="${j} --noise"
             j="${j} --normalize"
             j="${j} --outdir ${OUTDIR}"
@@ -109,7 +108,7 @@ do
               j="${j} --randomize_voxel_size"
             fi
 
-            for e in spatial_planes
+            for e in spatial_planes10 spatial_planes20 spatial_planes1020
             do
               j="${j} --embedding_option ${e}"
             done
