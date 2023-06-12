@@ -393,6 +393,20 @@ def remove_interference_pattern(
 
         corrected_otf = otf / interference_pattern
 
+        # code to look at the realspace psf that goes into the phase emb
+        # midplane = corrected_otf.shape[0] // 2
+        # corrected_otf[:midplane - 20] = 0
+        # corrected_otf[midplane-5:midplane+5] = 0
+        # corrected_otf[midplane + 20:] = 0
+
+        # # code to recenter the corrected_psf to remove phase ramps. (uses heavy gaussian blur)
+        # corrected_psf = ifft(corrected_otf)
+        # convolved_corrected_psf = ndimage.gaussian_filter(corrected_psf, sigma=7)
+        # center_of_corrected_psf = np.unravel_index(np.argmax(convolved_corrected_psf, axis=None), corrected_psf.shape)
+        # pixel_shift_for_corrected_psf = np.array(center_of_corrected_psf) - (np.array(corrected_psf.shape) // 2)
+        # # If we put bead at the center of 64 cube, it will have a phase ramp, so don't do the next line.
+        # corrected_otf *= pix_shift_to_phase_ramp(pixel_shift_for_corrected_psf, corrected_otf.shape)
+
         if windowing and not high_snr:
             window_border = np.floor((corrected_otf.shape - np.array(window_size)) // 2).astype(int)
             window_extent = corrected_otf.shape - window_border * 2
@@ -463,6 +477,28 @@ def remove_interference_pattern(
 
         return otf
 
+
+def pix_shift_to_phase_ramp(pix_shift, array_shape):
+    """
+
+    Args:
+        pix_shift (3 elements): Amount of real space pixels to shift the image by
+        array_shape (3 elements): the image shape
+
+    Returns:
+        The complex phase factor (e^i*phi), a 3D phase ramp,
+        that can multiply the 3D FFT by to get the desired shift.
+
+    """
+    zz, yy, xx = np.mgrid[
+        0:array_shape[0],
+        0:array_shape[1],
+        0:array_shape[2],
+    ]
+    delta = 2 * np.pi * np.array(pix_shift) / np.array(array_shape)
+    ramp3d = zz * delta[0] + yy * delta[1] + xx * delta[2]
+    ramp3d -= np.mean(ramp3d) # make ramp centered about zero.
+    return np.exp(1j*ramp3d)
 
 @profile
 def compute_emb(
