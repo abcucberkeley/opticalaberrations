@@ -716,11 +716,12 @@ def iterheatmap(
             digital_rotations=digital_rotations
         )
 
+    max_iter = df['niter'].max()
     for value in ('residuals', 'residuals_umRMS'):
         means = pd.pivot_table(
             df[df['niter'] == 0], values=value, index='id', columns='niter', aggfunc=np.mean
         )
-        for i in range(1, niter+1):
+        for i in range(1, max_iter+1):
             means[i] = pd.pivot_table(
                 df[df['niter'] == i], values=value, index='id', columns='niter', aggfunc=np.mean
             )
@@ -750,7 +751,7 @@ def iterheatmap(
             full = pd.pivot_table(
                 df[df['niter'] == 0], values=value, index='id', columns='niter', aggfunc=np.mean
             )
-            for i in range(1, niter + 1):
+            for i in range(1, max_iter + 1):
                 full[i] = pd.pivot_table(
                     df[df['niter'] == i], values=value, index='id', columns='niter', aggfunc=np.mean
                 )
