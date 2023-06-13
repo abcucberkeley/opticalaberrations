@@ -116,6 +116,14 @@ def parse_args(args):
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
+    parser.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
+    parser.add_argument(
+        "--plot_rotations", action='store_true',
+        help='a toggle for plotting predictions for digital rotations'
+    )
 
     return parser.parse_args(args)
 
@@ -227,6 +235,8 @@ def main(args=None):
                     batch_size=args.batch_size,
                     eval_sign=args.eval_sign,
                     digital_rotations=args.digital_rotations,
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
                 )
             elif args.target == 'densityheatmap':
                 eval.densityheatmap(
@@ -239,6 +249,8 @@ def main(args=None):
                     batch_size=args.batch_size,
                     eval_sign=args.eval_sign,
                     digital_rotations=args.digital_rotations,
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
                 )
             elif args.target == 'iterheatmap':
                 savepath = eval.iterheatmap(
@@ -251,7 +263,9 @@ def main(args=None):
                     batch_size=args.batch_size,
                     eval_sign=args.eval_sign,
                     digital_rotations=args.digital_rotations,
-                    photons_range=(args.photons_min, args.photons_max)
+                    photons_range=(args.photons_min, args.photons_max),
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
                 )
                 with Path(f"{savepath.with_suffix('')}_eval_iterheatmap_settings.json").open('w') as f:
                     json = dict(

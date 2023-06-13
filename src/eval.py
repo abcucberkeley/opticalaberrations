@@ -171,6 +171,8 @@ def iter_evaluate(
     digital_rotations: bool = False,
     rotations: Optional[int] = 361,
     savepath: Any = None,
+    plot: Any = None,
+    plot_rotations: bool = False,
 ):
     """
     Gathers the set of .tif files that meet the input criteria.
@@ -279,7 +281,7 @@ def iter_evaluate(
             remove_background=True,
             normalize=True,
             fov_is_small=True,
-            plot=True,
+            plot=plot,
         )
 
         inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
@@ -301,7 +303,7 @@ def iter_evaluate(
             threshold=threshold,
             save_path=[f.with_suffix("") for f in paths],
             digital_rotations=rotations if digital_rotations else None,
-            plot_rotations=True,
+            plot_rotations=plot_rotations,
             desc=f'Predicting (iter #{k}) '
                  f"[{paths.shape[0]} files] x [{rotations if digital_rotations else None} Rotations] = "
                  f"{paths.shape[0] * (rotations if digital_rotations else 1):,} predictions, requires "
@@ -561,6 +563,8 @@ def snrheatmap(
     batch_size: int = 100,
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
+    plot: Any = None,
+    plot_rotations: bool = False,
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / eval_sign / f'snrheatmaps'
@@ -585,7 +589,9 @@ def snrheatmap(
             photons_range=None,
             npoints_range=(1, 1),
             eval_sign=eval_sign,
-            digital_rotations=digital_rotations
+            digital_rotations=digital_rotations,
+            plot=plot,
+            plot_rotations=plot_rotations,
         )
 
     bins = np.arange(0, 10.25, .25)
@@ -622,6 +628,8 @@ def densityheatmap(
     batch_size: int = 100,
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
+    plot: Any = None,
+    plot_rotations: bool = False,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -648,7 +656,9 @@ def densityheatmap(
             npoints_range=None,
             batch_size=batch_size,
             eval_sign=eval_sign,
-            digital_rotations=digital_rotations
+            digital_rotations=digital_rotations,
+            plot=plot,
+            plot_rotations=plot_rotations,
         )
 
     for col, label, lims in zip(
@@ -687,6 +697,8 @@ def iterheatmap(
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
     photons_range: Optional[tuple] = None,
+    plot: Any = None,
+    plot_rotations: bool = False,
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / eval_sign / f'iterheatmaps'
@@ -714,7 +726,9 @@ def iterheatmap(
             no_phase=no_phase,
             batch_size=batch_size,
             eval_sign=eval_sign,
-            digital_rotations=digital_rotations
+            digital_rotations=digital_rotations,
+            plot=plot,
+            plot_rotations=plot_rotations,
         )
 
     max_iter = df['niter'].max()
