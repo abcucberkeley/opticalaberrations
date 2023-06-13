@@ -137,7 +137,7 @@ def generate_sample(
     )
 
     if savedir is not None:
-        outdir = Path(savedir / f"{beads.parent} / iter_{iter_number}")
+        outdir = Path(f"{savedir} / {beads.parent} / iter_{iter_number}")
         outdir.mkdir(exist_ok=True, parents=True)
         savepath = outdir / f.name
 
@@ -254,7 +254,7 @@ def iter_evaluate(
             func=partial(
                 generate_sample,
                 iter_number=k,
-                savedir=savepath,
+                savedir=savepath.resolve(),
                 data=previous,
                 psfgen=gen,
                 no_phase=no_phase,
