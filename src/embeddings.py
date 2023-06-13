@@ -497,7 +497,7 @@ def pix_shift_to_phase_ramp(pix_shift, array_shape):
     ]
     delta = 2 * np.pi * np.array(pix_shift) / np.array(array_shape)
     ramp3d = zz * delta[0] + yy * delta[1] + xx * delta[2]
-    ramp3d -= np.mean(ramp3d) # make ramp centered about zero.
+    ramp3d -= np.mean(ramp3d)  # make ramp centered about zero.
     return np.exp(1j*ramp3d)
 
 @profile
