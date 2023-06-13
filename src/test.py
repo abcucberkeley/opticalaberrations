@@ -105,7 +105,12 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--plot", action='store_true', help='only plot, do not recompute errors'
+        "--plot", action='store_true', help='only plot, do not recompute errors, or a toggle for plotting predictions'
+    )
+
+    parser.add_argument(
+        "--plot_rotations", action='store_true',
+        help='a toggle for plotting predictions for digital rotations'
     )
 
     parser.add_argument(
@@ -115,14 +120,6 @@ def parse_args(args):
     parser.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
-    )
-    parser.add_argument(
-        "--plot", action='store_true',
-        help='a toggle for plotting predictions'
-    )
-    parser.add_argument(
-        "--plot_rotations", action='store_true',
-        help='a toggle for plotting predictions for digital rotations'
     )
 
     return parser.parse_args(args)
