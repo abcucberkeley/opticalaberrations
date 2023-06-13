@@ -193,11 +193,15 @@ def save_metadata(
                 h5file.create_dataset(name, data=data)
 
             if isinstance(data, str):
-                assert h5file.get(name)[()] == data, f"Failed to write {name}"
+                if h5file.get(name)[()] == data:
+                    logger.info(f"`{name}` : {data}")
+                elif h5file.get(name)[()] == bytes(data, 'ASCII'):
+                    logger.info(f"`{name}` : {data}")
+                else:
+                    logger.error(f"{name} has value of {h5file.get(name)[()]}, but we wanted '{data}'")
             else:
                 assert np.allclose(h5file.get(name)[()], data), f"Failed to write {name}"
-
-            logger.info(f"`{name}`: {h5file.get(name)[()]}")
+                logger.info(f"`{name}`: {h5file.get(name)[()]}")
 
         except Exception as e:
             logger.error(e)
@@ -220,6 +224,8 @@ def save_metadata(
         if isinstance(psf_type, str) or isinstance(psf_type, Path):
             with h5py.File(psf_type, 'r+') as f:
                 add_param(file, name='psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
+
+    logger.info(f"Saved model with additional metadata: {filepath.resolve()}")
 
 
 @profile
