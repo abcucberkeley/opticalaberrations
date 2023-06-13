@@ -10,7 +10,6 @@ import logging
 logger = logging.getLogger('')
 
 
-@profile
 def deskew(
     img: Path,
     axial_voxel_size: float,
@@ -43,7 +42,6 @@ def deskew(
     call(job, shell=True)
 
 
-@profile
 def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
     matlab = 'matlab '
     matlab += f' -wait'
@@ -75,7 +73,6 @@ def decon(img: Path, psf: Path, iters: int = 10, plot: bool = False):
         )
 
 
-@profile
 def detect_rois(
     img: Path,
     axial_voxel_size: float,

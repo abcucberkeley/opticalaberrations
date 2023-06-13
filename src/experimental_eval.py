@@ -103,7 +103,6 @@ def plot_dm_actuators(
     vis.savesvg(fig, save_path)
 
 
-@profile
 def eval_dm(
     datadir: Path,
     num_modes: int = 15,
@@ -408,7 +407,6 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
     return results
 
 
-@profile
 def eval_dataset(
     datadir: Path,
     flat: Any = None,
@@ -573,7 +571,6 @@ def eval_dataset(
     vis.plot_beads_dataset(results, residuals, savepath=savepath)
 
 
-@profile
 def eval_ao_dataset(
     datadir: Path,
     flat: Any = None,
@@ -741,7 +738,6 @@ def eval_ao_dataset(
     )
 
 
-@profile
 def plot_dataset_mips(datadir: Path):
     mldir = Path(datadir/'MLResults')
 
@@ -843,7 +839,6 @@ def plot_dataset_mips(datadir: Path):
         )
 
 
-@profile
 def eval_bleaching_rate(datadir: Path):
     results = {}
 
