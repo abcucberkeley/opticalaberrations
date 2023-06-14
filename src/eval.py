@@ -137,7 +137,7 @@ def generate_sample(
     )
 
     if savedir is not None:
-        outdir = Path(f"{savedir} / {beads.parent} / iter_{iter_number}")
+        outdir = savedir / f'{beads.parent}' / f'iter_{iter_number}'  # "/" joins path/strs as long one is Path object
         outdir.mkdir(exist_ok=True, parents=True)
         savepath = outdir / f.name
 
