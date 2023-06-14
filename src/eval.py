@@ -108,6 +108,7 @@ def generate_sample(
     data: pd.DataFrame,
     psfgen: SyntheticPSF,
     iter_number: Optional[int] = None,
+    savedir: Optional[Path] = None,
     no_phase: bool = False,
     digital_rotations: Optional[int] = None,
 ):
@@ -135,23 +136,24 @@ def generate_sample(
         photons=hashtable['photons']
     )
 
-    outdir = Path(f"{beads.parent}/iter_{iter_number}")
-    outdir.mkdir(exist_ok=True, parents=True)
-    savepath = outdir/f.name
+    if savedir is not None:
+        outdir = Path(f"{savedir} / {beads.parent} / iter_{iter_number}")
+        outdir.mkdir(exist_ok=True, parents=True)
+        savepath = outdir / f.name
 
-    imwrite(savepath, noisy_img.astype(np.float32), dtype=np.float32)
-    return savepath
-
-    # emb = backend.preprocess(
-    #     noisy_img,
-    #     modelpsfgen=psfgen,
-    #     digital_rotations=digital_rotations,
-    #     no_phase=no_phase,
-    #     remove_background=True,
-    #     normalize=True,
-    #     # plot=True
-    # )
-    # return emb
+        imwrite(savepath, noisy_img.astype(np.float32), dtype=np.float32)
+        return savepath
+    else:
+        emb = backend.preprocess(
+            noisy_img,
+            modelpsfgen=psfgen,
+            digital_rotations=digital_rotations,
+            no_phase=no_phase,
+            remove_background=True,
+            normalize=True,
+            # plot=True
+        )
+        return emb
 
 
 @profile
@@ -253,6 +255,7 @@ def iter_evaluate(
             func=partial(
                 generate_sample,
                 iter_number=k,
+                savedir=savepath.resolve(),
                 data=previous,
                 psfgen=gen,
                 no_phase=no_phase,
@@ -361,7 +364,7 @@ def iter_evaluate(
 
 
 @profile
-def plot_heatmap_p2v(means, wavelength, savepath:Path, label='Integrated photons', lims=(0, 100), ax=None, cax=None, ):
+def plot_heatmap_p2v(means, wavelength, savepath: Path, label='Integrated photons', lims=(0, 100), ax=None, cax=None):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -595,27 +598,40 @@ def snrheatmap(
             plot_rotations=plot_rotations,
         )
 
-    bins = np.arange(0, 10.25, .25)
+    df = df[df['niter'] == niter]
+
     pbins = np.arange(0, 1e6+10e4, 5e4)
-    df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
     df['pbins'] = pd.cut(df['photons'], pbins, labels=pbins[1:], include_lowest=True)
 
-    means = pd.pivot_table(
-        df[df['niter'] == niter], values='residuals', index='bins', columns='pbins', aggfunc=np.mean
+    bins = np.arange(0, 10.25, .25).round(2)
+    df['ibins'] = pd.cut(
+        df['aberration'],
+        bins,
+        labels=bins[1:],
+        include_lowest=True
     )
-    means.insert(0, 0, bins[1:means.shape[0]+1])
-    means = means.sort_index().interpolate()
 
-    logger.info(means)
+    means = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=np.nanmean)
+    means.insert(0, 0, means.index.values)
+
+    try:
+        means = means.sort_index().interpolate()
+    except ValueError:
+        pass
+
     means.to_csv(f'{savepath}.csv')
+    logger.info(f'Saved: {savepath.resolve()}.csv \n{means}')
 
     plot_heatmap_p2v(
         means,
         wavelength=modelspecs.lam_detection,
         savepath=savepath,
         label=f'Integrated photons',
-        lims=(0, 10**6)
+        lims=(0, 10 ** 6)
     )
+
+    return savepath
+
 
 
 @profile
@@ -662,24 +678,31 @@ def densityheatmap(
             plot_rotations=plot_rotations,
         )
 
+    df = df[df['niter'] == niter]
+
+    bins = np.arange(0, 10.25, .25).round(2)
+    df['ibins'] = pd.cut(
+        df['aberration'],
+        bins,
+        labels=bins[1:],
+        include_lowest=True
+    )
+
     for col, label, lims in zip(
         ['neighbors', 'distance'],
         ['Number of objects', 'Average distance to nearest neighbor (microns)'],
         [(1, 150), (0, 2)]
     ):
-        bins = np.arange(0, 10.25, .25)
-        df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
-
-        means = pd.pivot_table(
-            df[df['niter'] == niter], values='residuals', index='bins', columns=col, aggfunc=np.mean
-        )
+        means = pd.pivot_table(df, values='residuals', index='ibins', columns=col, aggfunc=np.nanmean)
         means = means.sort_index().interpolate()
-        means.to_csv(f'{savepath}_{col}.csv')
+
+        means.to_csv(f'{savepath}.csv')
+        logger.info(f'Saved: {savepath.resolve()}.csv \n{means}')
 
         plot_heatmap_p2v(
             means,
             wavelength=modelspecs.lam_detection,
-            savepath=f'{savepath}_{col}',
+            savepath=Path(f'{savepath}_{col}'),
             label=label,
             lims=lims
         )
@@ -742,7 +765,7 @@ def iterheatmap(
                 df[df['niter'] == i], values=value, index='id', columns='niter', aggfunc=np.mean
             )
 
-        bins = np.linspace(0, np.max(means.to_numpy()), num=25)
+        bins = np.linspace(0, np.nanmax(means.values), num=25)
         means.index = pd.cut(means[0], bins, labels=bins[1:], include_lowest=True)
         means.index.name = 'bins'
         means = means.groupby("bins").agg("mean")
@@ -764,27 +787,12 @@ def iterheatmap(
                 lims=(0, niter)
             )
         else:
-            full = pd.pivot_table(
-                df[df['niter'] == 0], values=value, index='id', columns='niter', aggfunc=np.mean
-            )
-            for i in range(1, max_iter + 1):
-                full[i] = pd.pivot_table(
-                    df[df['niter'] == i], values=value, index='id', columns='niter', aggfunc=np.mean
-                )
-            z = full.to_numpy().flatten()
-            x, y = np.meshgrid(full.columns.values, full[0].values)
-            x = x.flatten()
-            y = y.flatten()
-
             plot_heatmap_umRMS(
                 means,
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
                 label=f'Number of iterations',
                 lims=(0, niter),
-                x=x,
-                y=y,
-                z=z,
             )
     return savepath
 
