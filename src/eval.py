@@ -611,7 +611,12 @@ def snrheatmap(
     )
 
     means = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=np.nanmean)
-    means = means.sort_index().interpolate()
+    means.insert(0, 0, means.index.values)
+
+    try:
+        means = means.sort_index().interpolate()
+    except ValueError:
+        pass
 
     means.to_csv(f'{savepath}.csv')
     logger.info(f'Saved: {savepath.resolve()}.csv \n{means}')
