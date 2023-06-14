@@ -150,7 +150,7 @@ def main(args=None):
         flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
         flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
         # flags = re.sub(pattern='--batch_size \d+', repl='--batch_size 300', string=flags)
-        taskname = f"{args.target}"
+        taskname = f"{args.target}_{Path(args.model).stem}"
 
         sjob = f"srun "
         sjob += f"--exclusive  "
