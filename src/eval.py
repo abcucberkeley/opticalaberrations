@@ -201,7 +201,8 @@ def iter_evaluate(
         no_phase=no_phase,
         photons_range=photons_range,
         npoints_range=npoints_range,
-        metadata=True
+        metadata=True,
+        suffix_to_avoid="_sample_predictions_psf.tif"
     ) # metadata is a list of arrays
 
     # This runs multiple samples (aka images) at a time.

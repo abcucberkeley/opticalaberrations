@@ -173,6 +173,7 @@ def check_criteria(
     max_amplitude=1.,
     photons_range=None,
     npoints_range=None,
+    suffix_to_avoid=None,
 ):
     path = str(file)
     amp = float(str([s for s in file.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.'))
@@ -187,6 +188,7 @@ def check_criteria(
         and amp <= max_amplitude \
         and ((npoints_range[0] <= npoints <= npoints_range[1]) if npoints_range is not None else True) \
         and ((photons_range[0] <= photons[0] and photons[1] <= photons_range[1]) if photons_range is not None else True) \
+        and ((not path.endswith(suffix_to_avoid)) if suffix_to_avoid is not None else True) \
         and check_sample(file) == 1:    # access file system only after everything else has passed.
         return path
     else:
@@ -205,6 +207,7 @@ def load_dataset(
     max_amplitude=1.,
     photons_range=None,
     npoints_range=None,
+    suffix_to_avoid=None,
 ):
     logger.info(
         f'Searching for files that meet:'
@@ -221,7 +224,8 @@ def load_dataset(
         modes=modes,
         max_amplitude=max_amplitude,
         photons_range=photons_range,
-        npoints_range=npoints_range
+        npoints_range=npoints_range,
+        suffix_to_avoid=suffix_to_avoid,
     )
     files = multiprocess(
         func=check,
@@ -286,6 +290,7 @@ def collect_dataset(
     embedding_option='spatial_planes',
     photons_range=None,
     npoints_range=None,
+    suffix_to_avoid=None,
     iotf=None,
     metadata=False,
     lls_defocus: bool = False
@@ -324,6 +329,7 @@ def collect_dataset(
             max_amplitude=max_amplitude,
             photons_range=photons_range,
             npoints_range=npoints_range,
+            suffix_to_avoid=suffix_to_avoid
         )
 
         train = train_data.map(lambda x: tf.py_function(load, [x], dtypes))
@@ -349,6 +355,7 @@ def collect_dataset(
             max_amplitude=max_amplitude,
             photons_range=photons_range,
             npoints_range=npoints_range,
+            suffix_to_avoid=suffix_to_avoid,
         ) # TF dataset
 
         data = data.map(lambda x: tf.py_function(load, [x], dtypes)) # TFdataset -> img & zern or -> metadata df
