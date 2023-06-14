@@ -351,14 +351,12 @@ def iter_evaluate(
             except PermissionError:
                 savepath = f'{savepath}_x'
                 results.to_csv(f'{savepath}_predictions.csv')
+            logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
 
         # update the aberration for the next iteration with the residue
         ys = res
         logging.info(f'Iteration #{k} took {(time.time() - timeit) / 60:.1f} minutes to run. '
                      f'{(time.time() - timeit) / 60 * (niter - k):.1f} minutes left to go.')
-
-    if savepath is not None:
-        logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
 
     return results
 
