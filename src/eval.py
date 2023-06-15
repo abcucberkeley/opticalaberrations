@@ -319,6 +319,7 @@ def iter_evaluate(
         cpu_workers=-1,
     ).T
     current[prediction_cols] = predictions.values[:paths.shape[0]]
+    current[ground_truth_cols] = previous[residual_cols]
 
     if eval_sign == 'positive_only':
         current[prediction_cols] = current[prediction_cols].abs()

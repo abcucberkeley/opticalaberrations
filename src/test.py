@@ -126,7 +126,7 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
-def run_task(k, args):
+def run_task(iter_num, args):
     tf.keras.backend.set_floatx('float32')
     physical_devices = tf.config.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
@@ -152,7 +152,7 @@ def run_task(k, args):
             if args.niter > 1:
                 eval.evaluate_modes_iterative(
                     args.model,
-                    niter=k,
+                    niter=iter_num,
                     eval_sign=args.eval_sign,
                     batch_size=args.batch_size,
                     digital_rotations=args.digital_rotations,
@@ -174,7 +174,7 @@ def run_task(k, args):
             )
         elif args.target == 'snrheatmap':
             eval.snrheatmap(
-                niter=k,
+                niter=iter_num,
                 modelpath=args.model,
                 datadir=args.datadir,
                 distribution=args.dist,
@@ -188,7 +188,7 @@ def run_task(k, args):
             )
         elif args.target == 'densityheatmap':
             eval.densityheatmap(
-                niter=k,
+                niter=iter_num,
                 modelpath=args.model,
                 datadir=args.datadir,
                 distribution=args.dist,
@@ -202,7 +202,7 @@ def run_task(k, args):
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
-                niter=k,
+                niter=iter_num,
                 modelpath=args.model,
                 datadir=args.datadir,
                 distribution=args.dist,
@@ -217,7 +217,7 @@ def run_task(k, args):
             )
             with Path(f"{savepath.with_suffix('')}_eval_iterheatmap_settings.json").open('w') as f:
                 json = dict(
-                    niter=int(k),
+                    niter=int(iter_num),
                     modelpath=str(args.model),
                     datadir=str(args.datadir),
                     distribution=str(args.dist),
@@ -295,7 +295,7 @@ def main(args=None):
         for k in range(1, args.niter + 1):
 
             t = time.time()
-            task = partial(run_task, k=k, args=args)
+            task = partial(run_task, iter_num=k, args=args)
 
             # Need to shut down the process after each iteration to clear its context and vram 'safely'
             p = mp.Process(target=task, name=args.target)
