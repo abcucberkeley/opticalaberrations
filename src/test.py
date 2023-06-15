@@ -152,7 +152,7 @@ def run_task(iter_num, args):
             if args.niter > 1:
                 eval.evaluate_modes_iterative(
                     args.model,
-                    niter=iter_num,
+                    iter_num=iter_num,
                     eval_sign=args.eval_sign,
                     batch_size=args.batch_size,
                     digital_rotations=args.digital_rotations,
@@ -174,7 +174,7 @@ def run_task(iter_num, args):
             )
         elif args.target == 'snrheatmap':
             eval.snrheatmap(
-                niter=iter_num,
+                iter_num=iter_num,
                 modelpath=args.model,
                 datadir=args.datadir,
                 distribution=args.dist,
@@ -188,7 +188,7 @@ def run_task(iter_num, args):
             )
         elif args.target == 'densityheatmap':
             eval.densityheatmap(
-                niter=iter_num,
+                iter_num=iter_num,
                 modelpath=args.model,
                 datadir=args.datadir,
                 distribution=args.dist,
@@ -202,7 +202,7 @@ def run_task(iter_num, args):
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
-                niter=iter_num,
+                iter_num=iter_num,
                 modelpath=args.model,
                 datadir=args.datadir,
                 distribution=args.dist,
@@ -217,7 +217,7 @@ def run_task(iter_num, args):
             )
             with Path(f"{savepath.with_suffix('')}_eval_iterheatmap_settings.json").open('w') as f:
                 json = dict(
-                    niter=int(iter_num),
+                    iter_num=int(iter_num),
                     modelpath=str(args.model),
                     datadir=str(args.datadir),
                     distribution=str(args.dist),

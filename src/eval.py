@@ -201,7 +201,7 @@ def collect_data(
     results = pd.DataFrame.from_dict({
         # image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
         'id': ids,
-        'niter': np.zeros_like(ids, dtype=int),  # iteration index.
+        'iter_num': np.zeros_like(ids, dtype=int),  # iteration index.
         'aberration': p2v,  # initial p2v aberration. Constant over iterations.
         'residuals': p2v,  # remaining p2v aberration after ML correction.
         'residuals_umRMS': umRMS,  # remaining umRMS aberration after ML correction.
@@ -225,7 +225,7 @@ def collect_data(
 def iter_evaluate(
     datapath,
     modelpath,
-    niter: int = 5,
+    iter_num: int = 5,
     samplelimit: int = 1,
     na: float = 1.0,
     distribution: str = '/',
@@ -243,7 +243,7 @@ def iter_evaluate(
 ):
     """
     Gathers the set of .tif files that meet the input criteria.
-    Predicts on all of those for (niter) iterations.
+    Predicts on all of those for (iter_num) iterations.
     Results go into dataframe called "results"
     Saves "results" dataframe to _predictions.csv file
 
@@ -261,7 +261,8 @@ def iter_evaluate(
         psf_shape=3 * [model.input_shape[2]]
     )
 
-    if niter == 1:
+    if iter_num == 1:
+        # on first call, setup the dataframe with the 0th iteration stuff
         results = collect_data(
             datapath=datapath,
             model=model,
@@ -280,12 +281,12 @@ def iter_evaluate(
     prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
     ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
     residual_cols = [col for col in results.columns if col.endswith('_residual')]
-    previous = results[results['niter'] == niter - 1]
+    previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
 
     paths = utils.multiprocess(
         func=partial(
             generate_sample,
-            iter_number=niter,
+            iter_number=iter_num,
             savedir=savepath.resolve(),
             data=previous,
             psfgen=gen,
@@ -299,7 +300,7 @@ def iter_evaluate(
     )
 
     current = previous.copy()
-    current['niter'] = niter
+    current['iter_num'] = iter_num
     current['file'] = paths
     current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
 
@@ -549,7 +550,7 @@ def plot_heatmap_umRMS(
 def snrheatmap(
     modelpath: Path,
     datadir: Path,
-    niter: int = 1,
+    iter_num: int = 1,
     distribution: str = '/',
     samplelimit: Any = None,
     na: float = 1.0,
@@ -572,7 +573,7 @@ def snrheatmap(
         df = pd.read_csv(datadir, header=0, index_col=0)
     else:
         df = iter_evaluate(
-            niter=niter,
+            iter_num=iter_num,
             modelpath=modelpath,
             datapath=datadir,
             savepath=savepath,
@@ -587,7 +588,7 @@ def snrheatmap(
             plot_rotations=plot_rotations,
         )
 
-    df = df[df['niter'] == niter]
+    df = df[df['iter_num'] == iter_num]
 
     pbins = np.arange(0, 1e6+10e4, 5e4)
     df['pbins'] = pd.cut(df['photons'], pbins, labels=pbins[1:], include_lowest=True)
@@ -627,7 +628,7 @@ def snrheatmap(
 def densityheatmap(
     modelpath: Path,
     datadir: Path,
-    niter: int = 1,
+    iter_num: int = 1,
     distribution: str = '/',
     na: float = 1.0,
     samplelimit: Any = None,
@@ -651,7 +652,7 @@ def densityheatmap(
         df = pd.read_csv(datadir, header=0, index_col=0)
     else:
         df = iter_evaluate(
-            niter=niter,
+            iter_num=iter_num,
             modelpath=modelpath,
             datapath=datadir,
             savepath=savepath,
@@ -667,7 +668,7 @@ def densityheatmap(
             plot_rotations=plot_rotations,
         )
 
-    df = df[df['niter'] == niter]
+    df = df[df['iter_num'] == iter_num]
 
     bins = np.arange(0, 10.25, .25).round(2)
     df['ibins'] = pd.cut(
@@ -701,7 +702,7 @@ def densityheatmap(
 def iterheatmap(
     modelpath: Path,
     datadir: Path, # folder or _predictions.csv file
-    niter: int = 5,
+    iter_num: int = 5,
     distribution: str = '/',
     samplelimit: Any = None,
     na: float = 1.0,
@@ -726,13 +727,13 @@ def iterheatmap(
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0) # read previous results, ignoring criteria
         logger.info(f'Using "{datadir}"')
-        logger.info(f'Found {len(df.id.unique())} samples, {df.niter.max()} iterations.')
+        logger.info(f'Found {len(df.id.unique())} samples, {df.iter_num.max()} iterations.')
     else:
         # make new inferences and obtain new results
         df = iter_evaluate(
             datadir,
             savepath=savepath,
-            niter=niter,
+            iter_num=iter_num,
             modelpath=modelpath,
             samplelimit=samplelimit,
             na=na,
@@ -746,14 +747,14 @@ def iterheatmap(
             plot_rotations=plot_rotations,
         )
 
-    max_iter = df['niter'].max()
+    max_iter = df['iter_num'].max()
     for value in ('residuals', 'residuals_umRMS'):
         means = pd.pivot_table(
-            df[df['niter'] == 0], values=value, index='id', columns='niter', aggfunc=np.median
+            df[df['iter_num'] == 0], values=value, index='id', columns='iter_num', aggfunc=np.median
         )
         for i in range(1, max_iter+1):
             means[i] = pd.pivot_table(
-                df[df['niter'] == i], values=value, index='id', columns='niter', aggfunc=np.median
+                df[df['iter_num'] == i], values=value, index='id', columns='iter_num', aggfunc=np.median
             )
 
         bins = np.linspace(0, np.nanmax(means.values), num=25)
@@ -775,7 +776,7 @@ def iterheatmap(
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
                 label=f'Number of iterations',
-                lims=(0, niter),
+                lims=(0, iter_num),
                 agg='median',
             )
         elif value == 'residuals_umRMS':
@@ -784,7 +785,7 @@ def iterheatmap(
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
                 label=f'Number of iterations',
-                lims=(0, niter),
+                lims=(0, iter_num),
                 agg='median',
             )
         else:
@@ -1252,7 +1253,7 @@ def evaluate_modes(
 def eval_object_iter(
     phi,
     modelpath,
-    niter: int = 10,
+    iter_num: int = 10,
     photons: int = 5e5,
     na: float = 1.0,
     batch_size: int = 512,
@@ -1264,7 +1265,7 @@ def eval_object_iter(
     gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]], rotate=False)
     df = pd.DataFrame([], columns=['aberration', 'prediction', 'residuals', 'iter'])
 
-    for i in trange(1, niter+1):
+    for i in trange(1, iter_num+1):
         wavefronts = [Wavefront(w, lam_detection=gen.lam_detection, rotate=False) for w in phi]
         p2v = [w.peak2valley(na=na) for w in wavefronts]
         kernels = [gen.single_psf(phi=w, normed=False) for w in wavefronts]
@@ -1331,7 +1332,7 @@ def eval_object_iter(
 @profile
 def evaluate_modes_iterative(
     model: Path,
-    niter: int = 10,
+    iter_num: int = 10,
     eval_sign: str = 'signed',
     batch_size: int = 512,
     num_objs: Optional[int] = 1,
@@ -1365,7 +1366,7 @@ def evaluate_modes_iterative(
         classes[:, i] = waves
         df = eval_object_iter(
             phi=classes,
-            niter=niter,
+            iter_num=iter_num,
             modelpath=model,
             batch_size=batch_size,
             eval_sign=eval_sign,
@@ -1395,7 +1396,7 @@ def evaluate_modes_iterative(
             wavelength=modelspecs.lam_detection,
             savepath=savepath,
             label=f'Number of iterations',
-            lims=(0, niter)
+            lims=(0, iter_num)
         )
 
         phi = np.zeros_like(classes[-1, :])
