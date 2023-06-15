@@ -1010,6 +1010,112 @@ def dual_stage_prediction(
 
 
 @profile
+def predict_files(
+    paths: np.ndarray,
+    outdir: Path,
+    model: tf.keras.Model,
+    modelpsfgen: SyntheticPSF,
+    samplepsfgen: SyntheticPSF,
+    dm_calibration: Any,
+    dm_state: Any,
+    wavelength: float = .510,
+    ignore_modes: list = (0, 1, 2, 4),
+    prediction_threshold: float = 0.,
+    freq_strength_threshold: float = .01,
+    confidence_threshold: float = .02,
+    batch_size: int = 1,
+    digital_rotations: Optional[int] = 361,
+    rolling_strides: Optional[tuple] = None,
+    fov_is_small: bool = True,
+    plot: bool = True,
+    plot_rotations: bool = False,
+    cpu_workers: int = -1,
+):
+    no_phase = True if model.input_shape[1] == 3 else False
+
+    generate_fourier_embeddings = partial(
+        utils.multiprocess,
+        func=partial(
+            preprocess,
+            modelpsfgen=modelpsfgen,
+            samplepsfgen=samplepsfgen,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
+            plot=plot,
+            no_phase=no_phase,
+            remove_background=True,
+            normalize=True,
+            fov_is_small=fov_is_small,
+            rolling_strides=rolling_strides,
+        ),
+        desc='Generate Fourier embeddings',
+        unit=' file',
+        cores=cpu_workers
+    )
+
+    inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
+    inputs = inputs.batch(batch_size).map(
+        lambda x: tf.py_function(
+            generate_fourier_embeddings,
+            inp=[x],
+            Tout=tf.float32,
+        ),
+    ).unbatch()  # unroll because each input generates 360 embs to predict here, and we must rebatch on the whole set
+
+    preds, std = predict_dataset(
+        model,
+        inputs=inputs,
+        psfgen=modelpsfgen,
+        batch_size=batch_size,
+        ignore_modes=ignore_modes,
+        threshold=prediction_threshold,
+        save_path=[f.with_suffix('') for f in paths],
+        plot_rotations=plot_rotations,
+        digital_rotations=digital_rotations,
+        confidence_threshold=confidence_threshold,
+        desc=f"[{paths.shape[0]} ROIs] x [{digital_rotations} Rotations] = "
+             f"{paths.shape[0] * digital_rotations} predictions, requires "
+             f"{int(np.ceil(paths.shape[0] * digital_rotations / batch_size))} batches. "
+             f"emb={6*64*64 * batch_size * 32 / 8 / 1e6:.2f} MB/batch. ",
+    )
+
+    tile_names = [f.with_suffix('').name for f in paths]
+    predictions = pd.DataFrame(preds.T, columns=tile_names)
+    predictions['mean'] = predictions[tile_names].mean(axis=1)
+    predictions['median'] = predictions[tile_names].median(axis=1)
+    predictions['min'] = predictions[tile_names].min(axis=1)
+    predictions['max'] = predictions[tile_names].max(axis=1)
+    predictions['std'] = predictions[tile_names].std(axis=1)
+    predictions.index.name = 'ansi'
+    predictions.to_csv(f"{outdir}_predictions.csv")
+
+    stdevs = pd.DataFrame(std.T, columns=tile_names)
+    stdevs['mean'] = stdevs[tile_names].mean(axis=1)
+    stdevs['median'] = stdevs[tile_names].median(axis=1)
+    stdevs['min'] = stdevs[tile_names].min(axis=1)
+    stdevs['max'] = stdevs[tile_names].max(axis=1)
+    stdevs['std'] = stdevs[tile_names].std(axis=1)
+    stdevs.index.name = 'ansi'
+    stdevs.to_csv(f"{outdir}_stdevs.csv")
+
+    if dm_calibration is not None:
+        actuators = {}
+
+        for t in tile_names:
+            actuators[t] = utils.zernikies_to_actuators(
+                predictions[t].values,
+                dm_calibration=dm_calibration,
+                dm_state=dm_state,
+            )
+
+        actuators = pd.DataFrame.from_dict(actuators)
+        actuators.index.name = 'actuators'
+        actuators.to_csv(f"{outdir}_predictions_corrected_actuators.csv")
+
+    return predictions
+
+
+@profile
 def predict_dataset(
         model: Union[tf.keras.Model, Path],
         inputs: tf.data.Dataset,
