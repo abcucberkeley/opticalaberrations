@@ -362,7 +362,15 @@ def iter_evaluate(
 
 
 @profile
-def plot_heatmap_p2v(means, wavelength, savepath: Path, label='Integrated photons', lims=(0, 100), ax=None, cax=None):
+def plot_heatmap_p2v(means,
+                     wavelength,
+                     savepath: Path,
+                     label='Integrated photons',
+                     lims=(0, 100),
+                     ax=None,
+                     cax=None,
+                     agg='mean',
+                     ):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -417,7 +425,7 @@ def plot_heatmap_p2v(means, wavelength, savepath: Path, label='Integrated photon
         ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Residuals (average peak-to-valley, $\lambda = {int(wavelength*1000)}~nm$)')
+    cbar.ax.set_ylabel(rf'Residuals ({agg} peak-to-valley, $\lambda = {int(wavelength*1000)}~nm$)')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
@@ -430,7 +438,7 @@ def plot_heatmap_p2v(means, wavelength, savepath: Path, label='Integrated photon
     ax.set_xlabel(label)
     ax.set_xlim(lims)
 
-    ax.set_ylabel(rf'Initial aberration (average peak-to-valley, $\lambda = {int(wavelength*1000)}~nm$)')
+    ax.set_ylabel(rf'Initial aberration ({agg} peak-to-valley, $\lambda = {int(wavelength*1000)}~nm$)')
     ax.set_yticks(np.arange(0, 6, .5), minor=True)
     ax.set_yticks(np.arange(0, 6, 1))
     ax.set_ylim(0, 5)
@@ -458,9 +466,7 @@ def plot_heatmap_umRMS(
         lims=(0, 100),
         ax=None,
         cax=None,
-        x=None,
-        y=None,
-        z=None
+        agg='mean',
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -518,13 +524,9 @@ def plot_heatmap_umRMS(
         format=FormatStrFormatter("%.2f"),
         ticks=np.array([0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]) * umRMS_per_p2v_factor,
     )
-    cbar.ax.set_ylabel(r'Residuals (average $\mu$mRMS)')
+    cbar.ax.set_ylabel(fr'Residuals ({agg} $\mu$mRMS)')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
-
-    #ax.tripcolor(x, y, z)
-    #ax.tricontourf(x, y, z, 20)  # choose 20 contour levels, just to show how good its interpolation is
-    #ax.plot(x, y, 'ko ')
 
     if label == 'Integrated photons':
         ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
@@ -535,7 +537,7 @@ def plot_heatmap_umRMS(
     ax.set_xlabel(label)
     ax.set_xlim(lims)
 
-    ax.set_ylabel(f'Initial aberration (average $\mu$mRMS)')
+    ax.set_ylabel(fr'Initial aberration ({agg} $\mu$mRMS)')
     ax.set_yticks(np.arange(0, 6, .5) * umRMS_per_p2v_factor, minor=True)
     ax.set_yticks(np.arange(0, 6, 1) * umRMS_per_p2v_factor)
     ax.set_ylim(0, levels[-1])
@@ -731,9 +733,11 @@ def iterheatmap(
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
 
-    logger.info(f'{savepath=}')
+    logger.info(f'Save path = {savepath.resolve()}')
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0) # read previous results, ignoring criteria
+        logger.info(f'Using "{datadir}"')
+        logger.info(f'Found {len(df.id.unique())} samples, {df.niter.max()} iterations.')
     else:
         # make new inferences and obtain new results
         df = iter_evaluate(
@@ -756,17 +760,17 @@ def iterheatmap(
     max_iter = df['niter'].max()
     for value in ('residuals', 'residuals_umRMS'):
         means = pd.pivot_table(
-            df[df['niter'] == 0], values=value, index='id', columns='niter', aggfunc=np.mean
+            df[df['niter'] == 0], values=value, index='id', columns='niter', aggfunc=np.median
         )
         for i in range(1, max_iter+1):
             means[i] = pd.pivot_table(
-                df[df['niter'] == i], values=value, index='id', columns='niter', aggfunc=np.mean
+                df[df['niter'] == i], values=value, index='id', columns='niter', aggfunc=np.median
             )
 
         bins = np.linspace(0, np.nanmax(means.values), num=25)
         means.index = pd.cut(means[0], bins, labels=bins[1:], include_lowest=True)
         means.index.name = 'bins'
-        means = means.groupby("bins").agg("mean")
+        means = means.groupby("bins").agg("median")
         means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
         means = means.sort_index().interpolate()
         means.to_csv(f'{savepath}.csv')
@@ -782,16 +786,21 @@ def iterheatmap(
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
                 label=f'Number of iterations',
-                lims=(0, niter)
+                lims=(0, niter),
+                agg='median',
             )
-        else:
+        elif value == 'residuals_umRMS':
             plot_heatmap_umRMS(
                 means,
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
                 label=f'Number of iterations',
                 lims=(0, niter),
+                agg='median',
             )
+        else:
+            raise Exception(f"We don't have code for this case: {value}")
+
     return savepath
 
 
