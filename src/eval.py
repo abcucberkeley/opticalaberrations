@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 import swifter
+import ujson
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -972,7 +973,7 @@ def eval_object(
                 photons=ph,
                 # maxcounts=ph,
                 noise=True,
-                fill_radius=0 if num_objs == 0 else .35
+                fill_radius=0 if num_objs == 1 else .35
             ),
             modelpsfgen=gen,
             digital_rotations=digital_rotations,
@@ -1109,8 +1110,8 @@ def evaluate_modes(
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
-    photons = [10000, 20000, 40000, 60000, 80000, 100000, 200000, 400000, 600000, 800000, 1000000]
-    # photons = [1, 100, 200, 400, 600, 800, 1000, 1250, 1500, 2000]
+    photons = np.arange(0, 1e6+5e4, 5e4)
+    photons[0] = 1e4
     waves = np.arange(1e-5, .55, step=.05).round(2)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
@@ -1246,180 +1247,6 @@ def evaluate_modes(
             a.set_title(t)
 
         plt.tight_layout()
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-
-@profile
-def eval_object_iter(
-    phi,
-    modelpath,
-    iter_num: int = 10,
-    photons: int = 5e5,
-    na: float = 1.0,
-    batch_size: int = 512,
-    eval_sign: str = 'signed',
-    savepath: Any = None,
-    digital_rotations: Optional[int] = 361
-):
-    model = backend.load(modelpath)
-    gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]], rotate=False)
-    df = pd.DataFrame([], columns=['aberration', 'prediction', 'residuals', 'iter'])
-
-    for i in trange(1, iter_num+1):
-        wavefronts = [Wavefront(w, lam_detection=gen.lam_detection, rotate=False) for w in phi]
-        p2v = [w.peak2valley(na=na) for w in wavefronts]
-        kernels = [gen.single_psf(phi=w, normed=False) for w in wavefronts]
-
-        if i == 1:
-            p = pd.DataFrame(p2v, columns=['aberration'])
-            p['prediction'] = p2v
-            p['residuals'] = p2v
-            p['iter'] = 0
-            df = df.append(p, ignore_index=True)
-
-        inputs = np.stack([
-            backend.preprocess(
-                simulate_beads(
-                    psf=kernels[w],
-                    object_size=0,
-                    num_objs=1,
-                    photons=photons,
-                    # maxcounts=1000,
-                    noise=True,
-                    fill_radius=0
-                ),
-                modelpsfgen=gen,
-                digital_rotations=digital_rotations,
-                remove_background=True,
-                normalize=True,
-                plot=f"{savepath}_p2v_{w}_iter_{i}"
-            )
-            for w in range(len(wavefronts))
-        ], axis=0)
-        inputs = tf.data.Dataset.from_tensor_slices(inputs)
-
-        res = backend.predict_dataset(
-            model,
-            inputs=inputs,
-            psfgen=gen,
-            batch_size=batch_size,
-            save_path=[f"{savepath}_p2v_{w}_iter_{i}" for w in range(len(wavefronts))],
-            digital_rotations=digital_rotations,
-            plot_rotations=True
-        )
-
-        try:
-            preds, stdev = res
-        except ValueError:
-            preds, stdev, lls_defocus = res
-
-        if eval_sign == 'positive_only':
-            phi = np.abs(phi)
-            preds = np.abs(preds)[:, :phi.shape[-1]]
-
-        residuals = phi - preds
-        p = pd.DataFrame(p2v, columns=['aberration'])
-        p['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
-        p['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
-        p['iter'] = i
-        df = df.append(p, ignore_index=True)
-
-        phi = residuals
-
-    return df
-
-
-@profile
-def evaluate_modes_iterative(
-    model: Path,
-    iter_num: int = 10,
-    eval_sign: str = 'signed',
-    batch_size: int = 512,
-    num_objs: Optional[int] = 1,
-    digital_rotations: bool = True
-):
-    plt.rcParams.update({
-        'font.size': 12,
-        'axes.titlesize': 14,
-        'axes.labelsize': 14,
-        'xtick.labelsize': 12,
-        'ytick.labelsize': 12,
-        'legend.fontsize': 12,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-
-    outdir = model.with_suffix('') / eval_sign / 'evalmodes' / f'num_objs_{num_objs}'
-    outdir.mkdir(parents=True, exist_ok=True)
-    modelspecs = backend.load_metadata(model)
-
-    waves = np.arange(1e-5, .55, step=.05).round(2)
-    aberrations = np.zeros((len(waves), modelspecs.n_modes))
-    gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
-
-    for i in range(3, modelspecs.n_modes):
-        if i == 4:
-            continue
-
-        savepath = outdir / f"m{i}"
-
-        classes = aberrations.copy()
-        classes[:, i] = waves
-        df = eval_object_iter(
-            phi=classes,
-            iter_num=iter_num,
-            modelpath=model,
-            batch_size=batch_size,
-            eval_sign=eval_sign,
-            savepath=savepath,
-            digital_rotations=361 if digital_rotations else None
-        )
-
-        bins = np.arange(0, 10.25, .25)
-        df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
-        means = pd.pivot_table(df, values='residuals', index='bins', columns='iter', aggfunc=np.mean)
-        means = means.sort_index().interpolate()
-        logger.info(means)
-
-        fig = plt.figure(figsize=(8, 8))
-        gs = fig.add_gridspec(4, 4)
-        ax_xy = fig.add_subplot(gs[0, 0])
-        ax_xz = fig.add_subplot(gs[0, 1])
-        ax_yz = fig.add_subplot(gs[0, 2])
-        ax_wavevfront = fig.add_subplot(gs[0, -1])
-        ax = fig.add_subplot(gs[1:, :])
-        cax = fig.add_axes([1.01, 0.08, 0.03, 0.7])
-
-        plot_heatmap_p2v(
-            means,
-            ax=ax,
-            cax=cax,
-            wavelength=modelspecs.lam_detection,
-            savepath=savepath,
-            label=f'Number of iterations',
-            lims=(0, iter_num)
-        )
-
-        phi = np.zeros_like(classes[-1, :])
-        phi[i] = .2
-        w = Wavefront(phi, lam_detection=gen.lam_detection)
-        kernel = gen.single_psf(
-            phi=w,
-            normed=True,
-            meta=False,
-        )
-        ax_xy.imshow(np.max(kernel, axis=0)**.5, vmin=0, vmax=1, cmap='hot')
-        ax_xz.imshow(np.max(kernel, axis=1)**.5, vmin=0, vmax=1, cmap='hot')
-        ax_yz.imshow(np.max(kernel, axis=2)**.5, vmin=0, vmax=1, cmap='hot')
-        ax_wavevfront.imshow(w.wave(size=100), vmin=-1, vmax=1, cmap='Spectral_r')
-
-        for a, t in zip([ax_xy, ax_xz, ax_yz, ax_wavevfront], ['XY', 'XZ', 'YZ', 'Wavefront']):
-            a.axis('off')
-            a.set_title(t)
-
-        plt.tight_layout()
-
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
