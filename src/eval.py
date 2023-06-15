@@ -156,6 +156,71 @@ def generate_sample(
         return emb
 
 
+def collect_data(
+    datapath,
+    model,
+    gen,
+    samplelimit: int = 1,
+    distribution: str = '/',
+    no_phase: bool = False,
+    batch_size: int = 100,
+    photons_range: Optional[tuple] = None,
+    npoints_range: Optional[tuple] = None,
+):
+
+    predicted_modes = model.output_shape[-1]
+
+    metadata = data_utils.collect_dataset(
+        datapath,
+        modes=gen.n_modes,
+        samplelimit=samplelimit,
+        distribution=distribution,
+        no_phase=no_phase,
+        photons_range=photons_range,
+        npoints_range=npoints_range,
+        metadata=True,
+        suffix_to_avoid="_sample_predictions_psf.tif"
+    )  # metadata is a list of arrays
+
+    # This runs multiple samples (aka images) at a time.
+    # ys is a 2D array, rows are each sample, columns give aberration in zernike coeffs
+    metadata = np.array(list(metadata.take(-1)))
+    ys = np.array([i.numpy() for i in metadata[:, 0]])[:, :predicted_modes]
+    photons = np.array([i.numpy() for i in metadata[:, 1]])
+    p2v = np.array([i.numpy() for i in metadata[:, 2]])
+    umRMS = np.array([i.numpy() for i in metadata[:, 3]])
+    npoints = np.array([i.numpy() for i in metadata[:, 4]])
+    dists = np.array([i.numpy() for i in metadata[:, 5]])
+    files = np.array([Path(str(i.numpy(), "utf-8")) for i in metadata[:, -1]])
+    beads = np.array([f.with_name(f'{f.stem}_gt' + f.suffix) for f in files])  # for python >= 3.9 can use .with_stem
+    ids = np.arange(ys.shape[0], dtype=int)
+
+    # 'results' is a df to be written out as the _predictions.csv.
+    # 'results' holds the information from every iteration.
+    # Initialize it first with the zeroth iteration.
+    results = pd.DataFrame.from_dict({
+        # image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
+        'id': ids,
+        'niter': np.zeros_like(ids, dtype=int),  # iteration index.
+        'aberration': p2v,  # initial p2v aberration. Constant over iterations.
+        'residuals': p2v,  # remaining p2v aberration after ML correction.
+        'residuals_umRMS': umRMS,  # remaining umRMS aberration after ML correction.
+        'photons': photons,  # integrated photons
+        'distance': dists,  # average distance to nearst bead
+        'file': files,  # path to realspace images
+        'file_windows': [utils.convert_to_windows_file_string(f) for f in files],  # stupid windows path
+        'beads': beads,  # path to binary image file filled with zeros except at location of beads
+        'neighbors': npoints,  # number of beads
+    })
+
+    for z in range(ys.shape[-1]):
+        results[f'z{z}_ground_truth'] = ys[:, z]
+        results[f'z{z}_prediction'] = np.zeros_like(ys[:, z])
+        results[f'z{z}_residual'] = ys[:, z]
+
+    return results
+
+
 @profile
 def iter_evaluate(
     datapath,
@@ -185,178 +250,101 @@ def iter_evaluate(
     Returns:
         "results" dataframe
     """
+
     model = backend.load(modelpath)
+
     gen = backend.load_metadata(
         modelpath,
         signed=True,
         rotate=False,
         batch_size=batch_size,
-        psf_shape=3*[model.input_shape[2]]
+        psf_shape=3 * [model.input_shape[2]]
     )
-    predicted_modes = model.output_shape[-1]
 
-    metadata = data_utils.collect_dataset(
-        datapath,
-        modes=gen.n_modes,
-        samplelimit=samplelimit,
-        distribution=distribution,
-        no_phase=no_phase,
-        photons_range=photons_range,
-        npoints_range=npoints_range,
-        metadata=True,
-        suffix_to_avoid="_sample_predictions_psf.tif"
-    ) # metadata is a list of arrays
-
-    # This runs multiple samples (aka images) at a time.
-    # ys is a 2D array, rows are each sample, columns give aberration in zernike coeffs
-    metadata = np.array(list(metadata.take(-1)))
-    ys = np.array([i.numpy() for i in metadata[:, 0]])[:, :predicted_modes]
-    photons = np.array([i.numpy() for i in metadata[:, 1]])
-    p2v = np.array([i.numpy() for i in metadata[:, 2]])
-    umRMS = np.array([i.numpy() for i in metadata[:, 3]])
-    npoints = np.array([i.numpy() for i in metadata[:, 4]])
-    dists = np.array([i.numpy() for i in metadata[:, 5]])
-    files = np.array([Path(str(i.numpy(), "utf-8")) for i in metadata[:, -1]])
-    beads = np.array([f.with_name(f'{f.stem}_gt' + f.suffix) for f in files]) # for python >= 3.9 can use .with_stem
-    ids = np.arange(ys.shape[0], dtype=int)
-    del metadata
-
-    # 'results' is a df to be written out as the _predictions.csv.
-    # 'results' holds the information from every iteration.
-    # Initialize it first with the zeroth iteration.
-    results = pd.DataFrame.from_dict({
-        # image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
-        'id': ids,
-        'niter': np.zeros_like(ids, dtype=int),  # iteration index.
-        'aberration': p2v,  # initial p2v aberration. Constant over iterations.
-        'residuals': p2v,  # remaining p2v aberration after ML correction.
-        'residuals_umRMS': umRMS,  # remaining umRMS aberration after ML correction.
-        'photons': photons,  # integrated photons
-        'distance': dists,  # average distance to nearst bead
-        'file': files,  # path to realspace images
-        'file_windows': [utils.convert_to_windows_file_string(f) for f in files],  # stupid windows path
-        'beads': beads,  # path to binary image file filled with zeros except at location of beads
-        'neighbors': npoints, # number of beads
-    })
-
-    # make 3 more columns for every z mode,
-    # all in terms of zernike coeffs. _residual will become the next iteration's ground truth.
-    # iteration zero will have _prediction = zero, GT = _residual = starting aberration
-    for z in range(ys.shape[-1]):
-        results[f'z{z}_ground_truth'] = ys[:, z]
-        results[f'z{z}_prediction'] = np.zeros_like(ys[:, z])
-        results[f'z{z}_residual'] = ys[:, z]
-
-    # ys contains the current GT aberration of every sample.
-    for k in range(1, niter+1):
-        timeit = time.time()
-        previous = results[results['niter'] == k - 1]
-        paths = utils.multiprocess(
-            func=partial(
-                generate_sample,
-                iter_number=k,
-                savedir=savepath.resolve(),
-                data=previous,
-                psfgen=gen,
-                no_phase=no_phase,
-                digital_rotations=rotations if digital_rotations else None,
-            ),
-            jobs=ids,
-            desc='Generate samples',
-            unit=' sample',
-            cores=-1
-        )
-
-        current = pd.DataFrame(ids, columns=['id'])
-        current['photons'] = photons
-        current['neighbors'] = npoints
-        current['distance'] = dists
-        current['niter'] = k
-        current['aberration'] = p2v
-        current['beads'] = beads
-        current['file'] = paths
-        current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
-
-        generate_fourier_embeddings = partial(
-            backend.preprocess,
-            modelpsfgen=gen,
-            digital_rotations=rotations if digital_rotations else None,
+    if niter == 1:
+        results = collect_data(
+            datapath=datapath,
+            model=model,
+            gen=gen,
+            samplelimit=samplelimit,
+            distribution=distribution,
             no_phase=no_phase,
-            remove_background=True,
-            normalize=True,
-            fov_is_small=True,
-            plot=plot,
-        )
-
-        inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
-        inputs = inputs.map(
-            lambda x: tf.py_function(
-                generate_fourier_embeddings,
-                inp=[x],
-                Tout=tf.float32,
-            )
-        )
-
-        number_of_batches = int(np.ceil(files.shape[0] * (rotations if digital_rotations else 1) / batch_size))
-        emb_megabytes_per_batch = 6 * 64 * 64 * batch_size * 32 / 8 / 1e6
-        res = backend.predict_dataset(
-            model,
-            inputs,
-            psfgen=gen,
             batch_size=batch_size,
-            threshold=threshold,
-            save_path=[f.with_suffix("") for f in paths],
-            digital_rotations=rotations if digital_rotations else None,
-            plot_rotations=plot_rotations,
-            desc=f'Predicting (iter #{k}) '
-                 f"[{paths.shape[0]} files] x [{rotations if digital_rotations else None} Rotations] = "
-                 f"{paths.shape[0] * (rotations if digital_rotations else 1):,} predictions, requires "
-                 f"{number_of_batches} batches, "
-                 f"emb={int(emb_megabytes_per_batch):,}MB/batch, "
-                 f"total={int(emb_megabytes_per_batch * batch_size /1000):,}GB.",
+            photons_range=photons_range,
+            npoints_range=npoints_range,
         )
+    else:
+        # read previous results, ignoring criteria
+        results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
 
+    prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
+    ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
+    residual_cols = [col for col in results.columns if col.endswith('_residual')]
+    previous = results[results['niter'] == niter - 1]
+
+    paths = utils.multiprocess(
+        func=partial(
+            generate_sample,
+            iter_number=niter,
+            savedir=savepath.resolve(),
+            data=previous,
+            psfgen=gen,
+            no_phase=no_phase,
+            digital_rotations=rotations if digital_rotations else None,
+        ),
+        jobs=previous['id'].values,
+        desc='Generate samples',
+        unit=' sample',
+        cores=-1
+    )
+
+    current = previous.copy()
+    current['niter'] = niter
+    current['file'] = paths
+    current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
+
+    predictions = backend.predict_files(
+        paths=paths,
+        outdir=savepath,
+        model=model,
+        modelpsfgen=gen,
+        samplepsfgen=None,
+        dm_calibration=None,
+        dm_state=None,
+        batch_size=batch_size,
+        fov_is_small=True,
+        plot=plot,
+        plot_rotations=plot_rotations,
+        digital_rotations=rotations if digital_rotations else None,
+        cpu_workers=-1,
+    ).T
+    current[prediction_cols] = predictions.values[:paths.shape[0]]
+
+    if eval_sign == 'positive_only':
+        current[prediction_cols] = current[prediction_cols].abs()
+        current[ground_truth_cols] = current[ground_truth_cols].abs()
+
+    current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
+
+    current['residuals'] = current.apply(
+        lambda row: Wavefront(row[residual_cols].values, lam_detection=gen.lam_detection).peak2valley(na=na),
+        axis=1
+    )
+
+    current['residuals_umRMS'] = current.apply(
+        lambda row: np.linalg.norm(row[residual_cols].values),
+        axis=1
+    )
+
+    results = results.append(current, ignore_index=True)
+
+    if savepath is not None:
         try:
-            ps, stdev = res
-        except ValueError:
-            ps, stdev, lls_defocus = res
-
-        if eval_sign == 'positive_only':
-            ys = np.abs(ys)
-            if len(ps.shape) > 1:
-                ps = np.abs(ps)[:, :ys.shape[-1]]
-            else:
-                ps = np.abs(ps)[np.newaxis, :ys.shape[-1]]
-        else:
-            if len(ps.shape) > 1:
-                ps = ps[:, :ys.shape[-1]]
-            else:
-                ps = ps[np.newaxis, :ys.shape[-1]]
-
-        res = ys - ps
-
-        current['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in res]
-        current['residuals_umRMS'] = [np.linalg.norm(i) for i in res]
-
-        for z in range(ps.shape[-1]):
-            current[f'z{z}_ground_truth'] = ys[:, z]
-            current[f'z{z}_prediction'] = ps[:, z]
-            current[f'z{z}_residual'] = res[:, z]
-
-        results = results.append(current, ignore_index=True)
-
-        if savepath is not None:
-            try:
-                results.to_csv(f'{savepath}_predictions.csv')
-            except PermissionError:
-                savepath = f'{savepath}_x'
-                results.to_csv(f'{savepath}_predictions.csv')
-            logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
-
-        # update the aberration for the next iteration with the residue
-        ys = res
-        logging.info(f'Iteration #{k} took {(time.time() - timeit) / 60:.1f} minutes to run. '
-                     f'{(time.time() - timeit) / 60 * (niter - k):.1f} minutes left to go.')
+            results.to_csv(f'{savepath}_predictions.csv')
+        except PermissionError:
+            savepath = f'{savepath}_x'
+            results.to_csv(f'{savepath}_predictions.csv')
+        logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
 
     return results
 
@@ -743,8 +731,8 @@ def iterheatmap(
             modelpath=modelpath,
             samplelimit=samplelimit,
             na=na,
-            photons_range=photons_range,
-            npoints_range=(1, 1),
+            photons_range=None,
+            npoints_range=None,
             no_phase=no_phase,
             batch_size=batch_size,
             eval_sign=eval_sign,
