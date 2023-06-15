@@ -283,6 +283,7 @@ def iter_evaluate(
     residual_cols = [col for col in results.columns if col.endswith('_residual')]
     previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
 
+    # create realspace images for the current iteration
     paths = utils.multiprocess(
         func=partial(
             generate_sample,
@@ -319,7 +320,7 @@ def iter_evaluate(
         digital_rotations=rotations if digital_rotations else None,
         cpu_workers=-1,
     ).T
-    current[prediction_cols] = predictions.values[:paths.shape[0]]
+    current[prediction_cols] = predictions.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[ground_truth_cols] = previous[residual_cols]
 
     if eval_sign == 'positive_only':
@@ -328,6 +329,7 @@ def iter_evaluate(
 
     current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
 
+    # compute residuals for each sample
     current['residuals'] = current.apply(
         lambda row: Wavefront(row[residual_cols].values, lam_detection=gen.lam_detection).peak2valley(na=na),
         axis=1
@@ -737,8 +739,8 @@ def iterheatmap(
             modelpath=modelpath,
             samplelimit=samplelimit,
             na=na,
-            photons_range=None,
-            npoints_range=None,
+            photons_range=photons_range,
+            npoints_range=(1, 1),
             no_phase=no_phase,
             batch_size=batch_size,
             eval_sign=eval_sign,
@@ -768,7 +770,7 @@ def iterheatmap(
         pd.options.display.width = 500
         pd.options.display.max_columns = 15
         pd.options.display.precision = 3
-        logger.info(f'Saved: {savepath.resolve()}.csv \n{means}')
+        logger.info(f'Saved: {savepath.resolve()}.csv')
 
         if value == 'residuals':
             plot_heatmap_p2v(
