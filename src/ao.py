@@ -35,6 +35,8 @@ def parse_args(args):
     )
     subparsers.required = True
 
+    cluster_nodes_idle = subparsers.add_parser("cluster_nodes_idle")
+
     deskew = subparsers.add_parser("deskew")
     deskew.add_argument("input", type=Path, help="path to input .tif file")
     deskew.add_argument(
@@ -740,11 +742,19 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
     logger = logging.getLogger('')
     logger.info(args)
 
-    if args.cluster:
-        hostname = "master.abc.berkeley.edu"
-        username = "thayeralshaabi"
-        partition = "abc_a100"
+    hostname = "master.abc.berkeley.edu"
+    username = "thayeralshaabi"
+    partition = "abc_a100"
 
+    if args.func == 'cluster_nodes_idle':
+        table = subprocess.run(f"ssh {username}@{hostname} \"sinfo -p {partition} --states idle -O NODES\"",
+                               stdout=subprocess.PIPE,
+                               )
+        number_of_idle_nodes = int(str(table.stdout).split("NODES")[1].split(r"\n")[1])
+        print(f'Number of idle nodes is {number_of_idle_nodes} on {partition}.')
+        return number_of_idle_nodes
+
+    if args.cluster:
         cluster_env = f"~/anaconda3/envs/ml/bin/python"
         cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
         script = f"{cluster_repo}/src/ao.py"
