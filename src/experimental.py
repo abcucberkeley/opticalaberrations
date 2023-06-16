@@ -1413,7 +1413,7 @@ def combine_tiles(
     actuators.index.name = 'actuators'
     actuators.sort_index(axis=1, inplace=True)
 
-    acts_path = f"{output_base_path}{acts_suffix}" # used in Labview
+    acts_path = f"{output_base_path}{acts_suffix}"  # used in LabVIEW
     actuators.to_csv(acts_path)
     logger.info(f"Org actuators: {corrected_actuators_csv}")
     logger.info(f"New actuators: {acts_path}")
