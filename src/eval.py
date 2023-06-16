@@ -779,7 +779,7 @@ def iterheatmap(
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
                 label=f'Number of iterations',
-                lims=(0, iter_num),
+                lims=(0, max_iter),
                 agg='median',
             )
         elif value == 'residuals_umRMS':
@@ -788,7 +788,7 @@ def iterheatmap(
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
                 label=f'Number of iterations',
-                lims=(0, iter_num),
+                lims=(0, max_iter),
                 agg='median',
             )
         else:
@@ -1040,8 +1040,10 @@ def plot_templates(model: Path, num_objs: Optional[int] = 1):
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
-    photons = [1, 1000, 10000, 50000, 100000, 200000, 400000, 600000, 800000, 1000000]
+    photons = np.arange(0, 1e6+5e4, 5e4)
+    photons[0] = 1e4
     waves = np.arange(1e-5, .55, step=.05).round(2)
+
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
 
@@ -1052,7 +1054,7 @@ def plot_templates(model: Path, num_objs: Optional[int] = 1):
 
         savepath = outdir / f"m{i}"
 
-        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(8, 8))
+        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(14, 10))
 
         for t, a in enumerate(waves[::-1]):
             for j, ph in enumerate(photons):
@@ -1080,7 +1082,7 @@ def plot_templates(model: Path, num_objs: Optional[int] = 1):
                     pad=1
                 )
 
-        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.25, wspace=.25)
+        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.15, wspace=.15)
         plt.savefig(f'{savepath}_templateheatmap.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}_templateheatmap.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}_templateheatmap.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
