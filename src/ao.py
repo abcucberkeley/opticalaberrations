@@ -1,3 +1,4 @@
+import atexit
 import os
 import subprocess
 import multiprocessing as mp
@@ -9,7 +10,6 @@ import time
 import sys
 import tensorflow as tf
 from pathlib import Path
-import argparse
 import re
 
 try:
@@ -1078,18 +1078,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             else:
                 logger.error(f"Error")
 
-        # if os.name != 'nt': # if not on windows
-        #     try:
-        #         logger.info(f'Updating permissions for all files in {args.input.parent}')
-        #         subprocess.call(['chmod', '-R', 'a+rw', args.input.parent])
-        #     except AttributeError:
-        #         pass
-        #
-        #     try:
-        #         logger.info(f'Updating permissions for all files in {args.datadir}')
-        #         subprocess.call(['chmod', '-R', 'a+rw', args.datadir])
-        #     except AttributeError:
-        #         pass
+            atexit.register(strategy._extended._collective_ops._pool.close)
 
         logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

@@ -1,3 +1,4 @@
+import atexit
 import os
 import re
 import subprocess
@@ -149,22 +150,13 @@ def run_task(iter_num, args):
 
     with strategy.scope():
         if args.target == 'modes':
-            if args.niter > 1:
-                eval.evaluate_modes_iterative(
-                    args.model,
-                    iter_num=iter_num,
-                    eval_sign=args.eval_sign,
-                    batch_size=args.batch_size,
-                    digital_rotations=args.digital_rotations,
-                )
-            else:
-                eval.evaluate_modes(
-                    args.model,
-                    eval_sign=args.eval_sign,
-                    num_objs=args.num_objs,
-                    batch_size=args.batch_size,
-                    digital_rotations=args.digital_rotations,
-                )
+            eval.evaluate_modes(
+                args.model,
+                eval_sign=args.eval_sign,
+                num_objs=args.num_objs,
+                batch_size=args.batch_size,
+                digital_rotations=args.digital_rotations,
+            )
         elif args.target == "random":
             eval.random_samples(
                 model=args.model,
@@ -239,6 +231,8 @@ def run_task(iter_num, args):
                     escape_forward_slashes=False
                 )
                 logging.info(f"Saved: {f.name}")
+
+            atexit.register(strategy._extended._collective_ops._pool.close)
 
 
 def main(args=None):

@@ -1,3 +1,5 @@
+import atexit
+
 import numexpr
 numexpr.set_num_threads(numexpr.detect_number_of_cores())
 
@@ -248,6 +250,8 @@ def main(args=None):
             lls_defocus=args.lls_defocus,
             defocus_only=args.defocus_only,
         )
+
+        atexit.register(strategy._extended._collective_ops._pool.close)
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
