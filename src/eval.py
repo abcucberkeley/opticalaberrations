@@ -355,15 +355,16 @@ def iter_evaluate(
 
 
 @profile
-def plot_heatmap_p2v(means,
-                     wavelength,
-                     savepath: Path,
-                     label='Integrated photons',
-                     lims=(0, 100),
-                     ax=None,
-                     cax=None,
-                     agg='mean',
-                     ):
+def plot_heatmap_p2v(
+    dataframe,
+    wavelength,
+    savepath: Path,
+    label='Integrated photons',
+    lims=(0, 100),
+    ax=None,
+    cax=None,
+    agg='mean',
+):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -396,9 +397,9 @@ def plot_heatmap_p2v(means,
     cmap = mcolors.ListedColormap(cmap)
 
     contours = ax.contourf(
-        means.columns.values,
-        means.index.values,
-        means.values,
+        dataframe.columns.values,
+        dataframe.index.values,
+        dataframe.values,
         cmap=cmap,
         levels=levels,
         extend='max',
@@ -426,7 +427,7 @@ def plot_heatmap_p2v(means,
         ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
         ax.set_xticks(np.arange(0, 1e6+10e4, 5e4), minor=True)
     elif label == 'Number of iterations':
-        ax.set_xticks(np.arange(0, means.columns.values.max()+1, 1), minor=False)
+        ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
 
     ax.set_xlabel(label)
     ax.set_xlim(lims)
@@ -452,14 +453,14 @@ def plot_heatmap_p2v(means,
 
 @profile
 def plot_heatmap_umRMS(
-        means,
-        wavelength,
-        savepath:Path,
-        label='Integrated photons',
-        lims=(0, 100),
-        ax=None,
-        cax=None,
-        agg='mean',
+    dataframe,
+    wavelength,
+    savepath:Path,
+    label='Integrated photons',
+    lims=(0, 100),
+    ax=None,
+    cax=None,
+    agg='mean',
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -484,7 +485,7 @@ def plot_heatmap_umRMS(
         3., 4., 5.,
     ])
 
-    umRMS_per_p2v_factor = round(np.percentile(means.to_numpy(), 98) / np.max(levels), 2)
+    umRMS_per_p2v_factor = round(np.percentile(dataframe.to_numpy(), 98) / np.max(levels), 2)
     levels *= umRMS_per_p2v_factor
     vmin, vmax, vcenter, step = levels[0], levels[-1], levels[10], levels[1] - levels[0]
     highcmap = plt.get_cmap('magma_r', 256)
@@ -495,9 +496,9 @@ def plot_heatmap_umRMS(
     cmap = mcolors.ListedColormap(cmap)
 
     contours = ax.contourf(
-        means.columns.values,
-        means.index.values,
-        means.values,
+        dataframe.columns.values,
+        dataframe.index.values,
+        dataframe.values,
         cmap=cmap,
         levels=levels,
         extend='max',
@@ -525,7 +526,7 @@ def plot_heatmap_umRMS(
         ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
         ax.set_xticks(np.arange(0, 1e6+10e4, 5e4), minor=True)
     elif label == 'Number of iterations':
-        ax.set_xticks(np.arange(0, means.columns.values.max() + 1, 1), minor=False)
+        ax.set_xticks(np.arange(0, dataframe.columns.values.max() + 1, 1), minor=False)
 
     ax.set_xlabel(label)
     ax.set_xlim(lims)
@@ -562,6 +563,7 @@ def snrheatmap(
     digital_rotations: bool = False,
     plot: Any = None,
     plot_rotations: bool = False,
+    agg: str = 'median'
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / eval_sign / f'snrheatmaps'
@@ -604,27 +606,27 @@ def snrheatmap(
         include_lowest=True
     )
 
-    means = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=np.nanmean)
-    means.insert(0, 0, means.index.values)
+    dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
+    dataframe.insert(0, 0, dataframe.index.values)
 
     try:
-        means = means.sort_index().interpolate()
+        dataframe = dataframe.sort_index().interpolate()
     except ValueError:
         pass
 
-    means.to_csv(f'{savepath}.csv')
-    logger.info(f'Saved: {savepath.resolve()}.csv \n{means}')
+    dataframe.to_csv(f'{savepath}.csv')
+    logger.info(f'Saved: {savepath.resolve()}.csv')
 
     plot_heatmap_p2v(
-        means,
+        dataframe,
         wavelength=modelspecs.lam_detection,
         savepath=savepath,
         label=f'Integrated photons',
-        lims=(0, 10 ** 6)
+        lims=(0, 10 ** 6),
+        agg=agg
     )
 
     return savepath
-
 
 
 @profile
@@ -640,6 +642,7 @@ def densityheatmap(
     digital_rotations: bool = False,
     plot: Any = None,
     plot_rotations: bool = False,
+    agg: str = 'median'
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -686,18 +689,19 @@ def densityheatmap(
         ['Number of objects', 'Average distance to nearest neighbor (microns)'],
         [(1, 150), (0, 2)]
     ):
-        means = pd.pivot_table(df, values='residuals', index='ibins', columns=col, aggfunc=np.nanmean)
-        means = means.sort_index().interpolate()
+        dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns=col, aggfunc=agg)
+        dataframe = dataframe.sort_index().interpolate()
 
-        means.to_csv(f'{savepath}.csv')
-        logger.info(f'Saved: {savepath.resolve()}.csv \n{means}')
+        dataframe.to_csv(f'{savepath}.csv')
+        logger.info(f'Saved: {savepath.resolve()}.csv')
 
         plot_heatmap_p2v(
-            means,
+            dataframe,
             wavelength=modelspecs.lam_detection,
             savepath=Path(f'{savepath}_{col}'),
             label=label,
-            lims=lims
+            lims=lims,
+            agg=agg
         )
 
 
@@ -716,6 +720,7 @@ def iterheatmap(
     photons_range: Optional[tuple] = None,
     plot: Any = None,
     plot_rotations: bool = False,
+    agg: str = 'median'
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / eval_sign / f'iterheatmaps'
@@ -752,30 +757,22 @@ def iterheatmap(
 
     max_iter = df['iter_num'].max()
     for value in ('residuals', 'residuals_umRMS'):
-        means = pd.pivot_table(
-            df[df['iter_num'] == 0], values=value, index='id', columns='iter_num', aggfunc=np.median
-        )
+        dataframe = pd.pivot_table(df[df['iter_num'] == 0], values=value, index='id', columns='iter_num')
         for i in range(1, max_iter+1):
-            means[i] = pd.pivot_table(
-                df[df['iter_num'] == i], values=value, index='id', columns='iter_num', aggfunc=np.median
-            )
+            dataframe[i] = pd.pivot_table(df[df['iter_num'] == i], values=value, index='id', columns='iter_num')
 
-        bins = np.linspace(0, np.nanmax(means.values), num=25)
-        means.index = pd.cut(means[0], bins, labels=bins[1:], include_lowest=True)
-        means.index.name = 'bins'
-        means = means.groupby("bins").agg("median")
-        means.loc[0] = pd.Series({cc: 0 for cc in means.columns})
-        means = means.sort_index().interpolate()
-        means.to_csv(f'{savepath}.csv')
-
-        pd.options.display.width = 500
-        pd.options.display.max_columns = 15
-        pd.options.display.precision = 3
+        bins = np.linspace(0, np.nanmax(df[value]), num=25)
+        dataframe.index = pd.cut(dataframe[0], bins, labels=bins[1:], include_lowest=True)
+        dataframe.index.name = 'bins'
+        dataframe = dataframe.groupby("bins").agg(agg)
+        dataframe.loc[0] = pd.Series({cc: 0 for cc in dataframe.columns})
+        dataframe = dataframe.sort_index().interpolate()
+        dataframe.to_csv(f'{savepath}.csv')
         logger.info(f'Saved: {savepath.resolve()}.csv')
 
         if value == 'residuals':
             plot_heatmap_p2v(
-                means,
+                dataframe,
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
                 label=f'Number of iterations',
@@ -784,7 +781,7 @@ def iterheatmap(
             )
         elif value == 'residuals_umRMS':
             plot_heatmap_umRMS(
-                means,
+                dataframe,
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
                 label=f'Number of iterations',
@@ -944,6 +941,71 @@ def random_samples(
     pool.join()     # wait for all tasks to complete
 
 
+def plot_templates(model: Path, num_objs: Optional[int] = 1):
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    num_objs = 1 if num_objs is None else num_objs
+
+    outdir = model.with_suffix('') / 'evalmodes' / 'templates' / f'num_objs_{num_objs}'
+    outdir.mkdir(parents=True, exist_ok=True)
+    modelspecs = backend.load_metadata(model)
+
+    photons = np.arange(0, 1e6+5e4, 5e4)
+    photons[0] = 1e4
+    waves = np.arange(1e-5, .55, step=.05).round(2)
+
+    aberrations = np.zeros((len(waves), modelspecs.n_modes))
+    gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
+
+    # plot templates
+    for i in range(3, modelspecs.n_modes):
+        if i == 4:
+            continue
+
+        savepath = outdir / f"m{i}"
+
+        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(14, 10))
+
+        for t, a in enumerate(waves[::-1]):
+            for j, ph in enumerate(photons):
+                phi = np.zeros_like(aberrations[0])
+                phi[i] = a
+
+                w = Wavefront(phi, lam_detection=gen.lam_detection)
+                kernel = gen.single_psf(phi=w, meta=False)
+
+                img = simulate_beads(
+                    psf=kernel,
+                    object_size=0,
+                    photons=ph,
+                    # maxcounts=ph,
+                    noise=True,
+                    fill_radius=0
+                )
+
+                axes[t, j].imshow(np.max(img, axis=0) ** .5, cmap='hot')
+                axes[t, j].axis('off')
+                axes[t, j].set_title(
+                    f"{int(np.max(img) / 1e3)}$\\times 10^3$" if np.max(img) > 1e4 else int(np.max(img)),
+                    # f"{int(np.sum(img)/1e6)}$\\times 10^6$" if np.sum(img) > 1e6 else int(np.sum(img)),
+                    fontsize=8,
+                    pad=1
+                )
+
+        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.15, wspace=.15)
+        plt.savefig(f'{savepath}_templateheatmap.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}_templateheatmap.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}_templateheatmap.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
 @profile
 def eval_object(
     phi,
@@ -1023,78 +1085,14 @@ def eval_object(
     return df
 
 
-def plot_templates(model: Path, num_objs: Optional[int] = 1):
-    plt.rcParams.update({
-        'font.size': 12,
-        'axes.titlesize': 14,
-        'axes.labelsize': 14,
-        'xtick.labelsize': 12,
-        'ytick.labelsize': 12,
-        'legend.fontsize': 12,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-
-    num_objs = 1 if num_objs is None else num_objs
-
-    outdir = model.with_suffix('') / 'evalmodes' / 'templates' / f'num_objs_{num_objs}'
-    outdir.mkdir(parents=True, exist_ok=True)
-    modelspecs = backend.load_metadata(model)
-
-    photons = np.arange(0, 1e6+5e4, 5e4)
-    photons[0] = 1e4
-    waves = np.arange(1e-5, .55, step=.05).round(2)
-
-    aberrations = np.zeros((len(waves), modelspecs.n_modes))
-    gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
-
-    # plot templates
-    for i in range(3, modelspecs.n_modes):
-        if i == 4:
-            continue
-
-        savepath = outdir / f"m{i}"
-
-        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(14, 10))
-
-        for t, a in enumerate(waves[::-1]):
-            for j, ph in enumerate(photons):
-                phi = np.zeros_like(aberrations[0])
-                phi[i] = a
-
-                w = Wavefront(phi, lam_detection=gen.lam_detection)
-                kernel = gen.single_psf(phi=w, meta=False)
-
-                img = simulate_beads(
-                    psf=kernel,
-                    object_size=0,
-                    photons=ph,
-                    # maxcounts=ph,
-                    noise=True,
-                    fill_radius=0
-                )
-
-                axes[t, j].imshow(np.max(img, axis=0) ** .5, cmap='hot')
-                axes[t, j].axis('off')
-                axes[t, j].set_title(
-                    f"{int(np.max(img) / 1e3)}$\\times 10^3$" if np.max(img) > 1e4 else int(np.max(img)),
-                    # f"{int(np.sum(img)/1e6)}$\\times 10^6$" if np.sum(img) > 1e6 else int(np.sum(img)),
-                    fontsize=8,
-                    pad=1
-                )
-
-        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.15, wspace=.15)
-        plt.savefig(f'{savepath}_templateheatmap.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}_templateheatmap.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}_templateheatmap.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-
 @profile
 def evaluate_modes(
     model: Path,
     eval_sign: str = 'signed',
     batch_size: int = 512,
     num_objs: Optional[int] = 1,
-    digital_rotations: bool = True
+    digital_rotations: bool = True,
+    agg: str = 'median'
 ):
     plt.rcParams.update({
         'font.size': 12,
@@ -1156,9 +1154,8 @@ def evaluate_modes(
 
         bins = np.arange(0, 10.25, .25)
         df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
-        means = pd.pivot_table(df, values='residuals', index='bins', columns='photons', aggfunc=np.mean)
-        means = means.sort_index().interpolate()
-        logger.info(means)
+        dataframe = pd.pivot_table(df, values='residuals', index='bins', columns='photons', aggfunc=agg)
+        dataframe = dataframe.sort_index().interpolate()
 
         fig = plt.figure(figsize=(8, 8))
         gs = fig.add_gridspec(4, 4)
@@ -1171,9 +1168,9 @@ def evaluate_modes(
         axt = fig.add_subplot(gs[1:, :])
 
         # contours = ax.contourf(
-        #     means.columns,
-        #     means.index.values,
-        #     means.values,
+        #     dataframe.columns,
+        #     dataframe.index.values,
+        #     dataframe.values,
         #     cmap=cmap,
         #     levels=levels,
         #     extend='max',
@@ -1183,9 +1180,9 @@ def evaluate_modes(
         # ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
         contours = axt.contourf(
-            means.columns,
-            means.index.values,
-            means.values,
+            dataframe.columns,
+            dataframe.index.values,
+            dataframe.values,
             cmap=cmap,
             levels=levels,
             extend='max',
@@ -1206,12 +1203,12 @@ def evaluate_modes(
             ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
         )
 
-        cbar.ax.set_ylabel(rf'Residuals; average peak-to-valley ($\lambda = {int(modelspecs.lam_detection*1000)}~nm$)')
+        cbar.ax.set_ylabel(rf'Residuals ({agg} peak-to-valley, $\lambda = {int(modelspecs.lam_detection*1000)}~nm$)')
         cbar.ax.set_title(r'$\lambda$')
         cbar.ax.yaxis.set_ticks_position('right')
         cbar.ax.yaxis.set_label_position('left')
 
-        axt.set_ylabel('Initial aberration (average peak-to-valley)')
+        axt.set_ylabel(rf'Initial aberration ({agg} peak-to-valley, $\lambda = {int(modelspecs.lam_detection*1000)}~nm$)')
         axt.set_yticks(np.arange(0, 6, .5), minor=True)
         # ax.set_yticks(np.arange(0, 6, .5), minor=True)
         axt.set_yticks(np.arange(0, 6, 1))

@@ -99,11 +99,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--photons_min", default=1e5, type=float, help='min number of photons to use'
+        "--photons_min", default=5e5, type=float, help='min number of photons to use'
     )
 
     parser.add_argument(
-        "--photons_max", default=2e5, type=float, help='max number of photons to use'
+        "--photons_max", default=6e5, type=float, help='max number of photons to use'
     )
 
     parser.add_argument(
@@ -232,7 +232,7 @@ def run_task(iter_num, args):
                 )
                 logging.info(f"Saved: {f.name}")
 
-            atexit.register(strategy._extended._collective_ops._pool.close)
+        atexit.register(strategy._extended._collective_ops._pool.close)
 
 
 def main(args=None):
@@ -289,10 +289,8 @@ def main(args=None):
         for k in range(1, args.niter + 1):
 
             t = time.time()
-            task = partial(run_task, iter_num=k, args=args)
-
             # Need to shut down the process after each iteration to clear its context and vram 'safely'
-            p = mp.Process(target=task, name=args.target)
+            p = mp.Process(target=partial(run_task, iter_num=k, args=args), name=args.target)
             p.start()
             p.join()
             p.close()
