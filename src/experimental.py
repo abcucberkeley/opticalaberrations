@@ -728,6 +728,7 @@ def predict_rois(
             ztiles=int(ztiles),
             ytiles=int(nrows),
             xtiles=int(ncols),
+            dm_calibration=str(dm_calibration),
         )
 
         ujson.dump(
@@ -885,6 +886,7 @@ def predict_tiles(
             ytiles=int(nrows),
             xtiles=int(ncols),
             psnr=psnr,
+            dm_calibration=str(dm_calibration),
         )
 
         ujson.dump(
@@ -1300,7 +1302,6 @@ def combine_tiles(
     corrections: list,
     prediction_threshold: float = 0.25,
     aggregation_rule: str = 'median',
-    dm_calibration: Path = Path('../calibration/aang/28_mode_calibration.csv')
 ):
     """
     Combine tiles from several DM patterns based on cluster IDs
@@ -1325,6 +1326,8 @@ def combine_tiles(
 
     with open(f"{base_path}_tiles_predictions_settings.json") as f:
         predictions_settings = ujson.load(f)
+
+    dm_calibration = predictions_settings['dm_calibration']
 
     image_shape = tuple(predictions_settings['input_shape'])
 
