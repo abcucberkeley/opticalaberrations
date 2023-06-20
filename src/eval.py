@@ -777,7 +777,7 @@ def iterheatmap(
                 savepath=savepath,
                 label=f'Number of iterations',
                 lims=(0, max_iter),
-                agg='median',
+                agg=agg,
             )
         elif value == 'residuals_umRMS':
             plot_heatmap_umRMS(
@@ -786,7 +786,7 @@ def iterheatmap(
                 savepath=savepath,
                 label=f'Number of iterations',
                 lims=(0, max_iter),
-                agg='median',
+                agg=agg,
             )
         else:
             raise Exception(f"We don't have code for this case: {value}")
