@@ -24,7 +24,7 @@ RAND_VSIZE=false
 
 MODES=15
 TITLE='new_embeddings'
-DATASET='train'
+DATASET='test'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -46,15 +46,15 @@ if [ "$DATASET" = "train" ];then
   FILL_RADIUS=0.3
 else
   TYPE=''
-  SAMPLES_PER_JOB=10
-  SAMPLES_PER_BIN=200
-  OBJS=(1)
+  SAMPLES_PER_JOB=25
+  SAMPLES_PER_BIN=25
+  OBJS=(1 2 3 5 10 25 50 100 125 150)
   mPH=($(seq     1 50000 1050000))
   xPH=($(seq 50000 50000 1050000))
   amps1=($(seq    0 .025 .475))
-  amps2=($(seq .025 .025 .50 ))
+  amps2=($(seq .025 .025 .50))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
-  DISTRIBUTIONS=(single)
+  DISTRIBUTIONS=(mixed)
   FILL_RADIUS=0.0
 fi
 
