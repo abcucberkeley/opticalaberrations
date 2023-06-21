@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="calibrate_dm U:\Data\20221003_Korra_TestForThayer\20230228\45_DM_cal C:\AangSettings\PhaseRetrival\PR_outputs\PSF\Zernike_Aang_Bax272.csv" />
+    <option name="PARAMETERS" value="calibrate_dm U:\Data\TestsForThayer\20230620_recheck_DM_cal\Check_DM_cal C:\AangSettings\PhaseRetrival\PR_outputs\PSF\Zernike_Aang_Bax272.csv" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
