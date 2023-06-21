@@ -8,8 +8,8 @@ NODES='abc'
 #PSF_TYPE='confocal'
 #PSF_TYPE='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat'
 PSF_TYPE="/clusterfs/nvme/thayer/dataset/lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat"
-xVOXEL=.108
-yVOXEL=.108
+xVOXEL=.097
+yVOXEL=.097
 zVOXEL=.200
 LAMBDA=.510
 NA=1.0
@@ -23,8 +23,8 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='new_embeddings'
-DATASET='test'
+TITLE='new_voxelsize'
+DATASET='train'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -34,8 +34,8 @@ mkdir -p $LOGS
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
-  SAMPLES_PER_JOB=100
-  SAMPLES_PER_BIN=200
+  SAMPLES_PER_JOB=200
+  SAMPLES_PER_BIN=800
   OBJS=(1 2 3 4 5)
   mPH=($(seq 1 50000 460000))
   xPH=($(seq 50000 50000 500000))
@@ -108,7 +108,7 @@ do
               j="${j} --randomize_voxel_size"
             fi
 
-            for e in spatial_planes10 spatial_planes20 spatial_planes1020
+            for e in spatial_planes spatial_planes1020
             do
               j="${j} --embedding_option ${e}"
             done

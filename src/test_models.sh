@@ -19,23 +19,23 @@ do
   do
       MODEL="$PRETRAINED/opticalnet-15-$EMB"
 
-       BATCH=768
-      python manager.py slurm test.py --partition abc_a100 --mem '125GB' --cpus 4 --gpus 1 \
-      --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH random" \
-      --taskname random \
-      --name $MODEL/$EVALSIGN/samples
+#      BATCH=128
+#      python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#      --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH random" \
+#      --taskname random \
+#      --name $MODEL/$EVALSIGN/samples
+#
+#      python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#      --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modes" \
+#      --taskname evalmodes \
+#      --name $MODEL/$EVALSIGN/evalmodes/'num_objs_1'
+#
+#      python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#      --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 $ROTATIONS --batch_size $BATCH modes" \
+#      --taskname evalmodes \
+#      --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
 
-      python manager.py slurm test.py --partition abc_a100 --mem '125GB' --cpus 4 --gpus 1 \
-      --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modes" \
-      --taskname evalmodes \
-      --name $MODEL/$EVALSIGN/evalmodes/'num_objs_1'
-
-      python manager.py slurm test.py --partition abc_a100 --mem '125GB' --cpus 4 --gpus 1 \
-      --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 $ROTATIONS --batch_size $BATCH modes" \
-      --taskname evalmodes \
-      --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
-
-      BATCH=3072
+      BATCH=2048
       for NA in 1.
       do
         python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
