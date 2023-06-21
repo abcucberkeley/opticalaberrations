@@ -585,7 +585,7 @@ def compute_emb(
         return principle_planes(emb)
 
     elif embedding_option.lower() == 'spatial_planes' or embedding_option.lower() == 'sp':
-        return spatial_planes(emb, max_zsupport=20 if val == 'angle' else 10)
+        return spatial_planes(emb, max_zsupport=10)
 
     elif embedding_option.lower() == 'spatial_planes10' or embedding_option.lower() == 'sp':
         return spatial_planes(emb, max_zsupport=10)
