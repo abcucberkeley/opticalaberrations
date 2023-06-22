@@ -138,7 +138,7 @@ def generate_sample(
     )
 
     if savedir is not None:
-        outdir = savedir / f'{beads.parent}' / f'iter_{iter_number}'  # "/" joins path/strs as long one is Path object
+        outdir = savedir / '/'.join(beads.parent.parts[-4:]) / f'iter_{iter_number}'
         outdir.mkdir(exist_ok=True, parents=True)
         savepath = outdir / f.name
 
@@ -296,7 +296,7 @@ def iter_evaluate(
             digital_rotations=rotations if digital_rotations else None,
         ),
         jobs=previous['id'].values,
-        desc='Generate samples',
+        desc=f'Generate samples: {savepath.resolve()}',
         unit=' sample',
         cores=-1
     )
@@ -308,7 +308,7 @@ def iter_evaluate(
 
     predictions = backend.predict_files(
         paths=paths,
-        outdir=savepath,
+        outdir=savepath/f'iter_{iter_num}',
         model=model,
         modelpsfgen=gen,
         samplepsfgen=None,
@@ -708,7 +708,7 @@ def densityheatmap(
 @profile
 def iterheatmap(
     modelpath: Path,
-    datadir: Path, # folder or _predictions.csv file
+    datadir: Path,  # folder or _predictions.csv file
     iter_num: int = 5,
     distribution: str = '/',
     samplelimit: Any = None,
