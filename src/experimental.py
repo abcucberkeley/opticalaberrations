@@ -1336,6 +1336,8 @@ def combine_tiles(
 
     dm_calibration = predictions_settings['dm_calibration']
     dm_calibration = re.sub(pattern="\\\\", repl='/', string=dm_calibration)  # regex needs four backslashes to indicate one
+    dm_calibration = Path(__file__).parent / dm_calibration  # for some reason we are not in the src folder already
+
     logger.info(f'dm_calibration file is {Path(dm_calibration).resolve()}')
 
     image_shape = tuple(predictions_settings['input_shape'])
