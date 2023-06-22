@@ -1102,7 +1102,6 @@ def aggregate_predictions(
                 logger.warning(f'Not enough tiles to make another cluster.  '
                             f'This cluster will not have a wavefront update: z{z}_c{c}')
             else:         # "after" volumes
-
                 g = clusters.get_group(c).index
 
                 # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
@@ -1335,6 +1334,7 @@ def combine_tiles(
         predictions_settings = ujson.load(f)
 
     dm_calibration = predictions_settings['dm_calibration']
+    logger.info(f'dm_calibration file is {Path(dm_calibration).resolve()}')
 
     image_shape = tuple(predictions_settings['input_shape'])
 
