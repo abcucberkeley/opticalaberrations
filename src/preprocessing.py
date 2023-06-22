@@ -309,7 +309,9 @@ def prep_sample(
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
+    sample_path = ''
     if isinstance(sample, Path):
+        sample_path = sample.name
         with TiffFile(sample) as tif:
             sample = tif.asarray()
 
@@ -400,7 +402,7 @@ def prep_sample(
         savesvg(fig, f'{plot}_preprocessing.svg')
 
     if return_psnr:
-        logger.info(f"PSNR: {psnr}")
+        logger.info(f"PSNR: {psnr:4}   {sample_path}")
         return psnr
     else:
         return sample.astype(np.float32)

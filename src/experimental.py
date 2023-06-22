@@ -789,7 +789,7 @@ def predict_snr_map(
     )
 
     prep = partial(prep_sample, return_psnr=True)
-    snrs = utils.multiprocess(func=prep, jobs=rois, desc=f'PNSR, {rois.shape[0]} rois per tile.')
+    snrs = utils.multiprocess(func=prep, jobs=rois, desc=f'Calc PNSRs.', unit="tiles")
     snrs = np.reshape(snrs, (ztiles, nrows, ncols))
     snrs = resize(snrs, (snrs.shape[0], sample.shape[1], sample.shape[2]), order=1, mode='edge')
     snrs = resize(snrs, sample.shape, order=0, mode='edge')
@@ -1090,12 +1090,17 @@ def aggregate_predictions(
         stdevs.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
 
         clusters = ztile_preds.groupby('cluster')
-        for k in range(n_clusters+1):
+        for k in range(max_isoplanatic_clusters + 1):
             c = k + z * (max_isoplanatic_clusters + 1)
 
             if k == 0:    # "before" volume
                 pred = np.zeros(n_modes)   # "before" will not have a wavefront update here.
                 pred_std = np.zeros(n_modes)
+            elif k >= n_clusters:  # if we didn't have enough tiles
+                pred = np.zeros(n_modes)  # these will not have a wavefront update here.
+                pred_std = np.zeros(n_modes)
+                logger.warning(f'Not enough tiles to make another cluster.  '
+                            f'This cluster will not have a wavefront update: z{z}_c{c}')
             else:         # "after" volumes
 
                 g = clusters.get_group(c).index
@@ -1150,6 +1155,8 @@ def aggregate_predictions(
     actuators = pd.DataFrame.from_dict(actuators)
     actuators.index.name = 'actuators'
     actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
+    logger.info(f"Saved {model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
+    logger.info(f"with _corrected_actuators for : {actuators.columns.tolist()}")
 
     predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters.csv")
 
@@ -1316,7 +1323,7 @@ def combine_tiles(
         index_col=0,
         header=0
     )
-
+    logger.info(f'Original actuators from _corrected_actuators.csv = {original_acts.columns.tolist()}')
     acts_suffix = "_combined_corrected_actuators.csv"
     base_path = str(corrected_actuators_csv).replace('_tiles_predictions_aggregated_corrected_actuators.csv', '')
     base_path = base_path.replace(acts_suffix, '') # remove this if it exists
