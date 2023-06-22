@@ -1,5 +1,6 @@
 import matplotlib
 matplotlib.use('Agg')
+import re
 
 from functools import partial
 import ujson
@@ -1334,6 +1335,7 @@ def combine_tiles(
         predictions_settings = ujson.load(f)
 
     dm_calibration = predictions_settings['dm_calibration']
+    dm_calibration = re.sub(pattern="\\\\", repl='/', string=dm_calibration)  # regex needs four backslashes to indicate one
     logger.info(f'dm_calibration file is {Path(dm_calibration).resolve()}')
 
     image_shape = tuple(predictions_settings['input_shape'])
