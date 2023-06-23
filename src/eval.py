@@ -17,12 +17,11 @@ import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 import swifter
-import ujson
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 from line_profiler_pycharm import profile
-from tqdm import tqdm, trange
+from tqdm import tqdm
 from tifffile import imwrite
 
 import utils
@@ -169,7 +168,6 @@ def collect_data(
     samplelimit: int = 1,
     distribution: str = '/',
     no_phase: bool = False,
-    batch_size: int = 100,
     photons_range: Optional[tuple] = None,
     npoints_range: Optional[tuple] = None,
 ):
@@ -276,7 +274,6 @@ def iter_evaluate(
             samplelimit=samplelimit,
             distribution=distribution,
             no_phase=no_phase,
-            batch_size=batch_size,
             photons_range=photons_range,
             npoints_range=npoints_range,
         )
@@ -830,7 +827,8 @@ def random_samples(
                         photons=photons,
                         image_shape=gen.psf_shape,
                         object_size=0,
-                        num_objs=num_objs
+                        num_objs=num_objs,
+                        fill_radius=.3 if num_objs > 1 else 0
                     )
 
                     phi = Wavefront(

@@ -8,8 +8,8 @@ NODES='abc'
 #PSF_TYPE='confocal'
 #PSF_TYPE='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat'
 PSF_TYPE="/clusterfs/nvme/thayer/dataset/lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat"
-xVOXEL=.097
-yVOXEL=.097
+xVOXEL=.108
+yVOXEL=.108
 zVOXEL=.200
 LAMBDA=.510
 NA=1.0
@@ -23,8 +23,8 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='new_voxelsize'
-DATASET='train'
+TITLE='new_embeddings'
+DATASET='test'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -55,7 +55,7 @@ else
   amps2=($(seq .025 .025 .50))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(mixed)
-  FILL_RADIUS=0.0
+  FILL_RADIUS=0.3
 fi
 
 
