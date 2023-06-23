@@ -116,45 +116,50 @@ def generate_sample(
     hashtable = data[data['id'] == image_id].iloc[0].to_dict()
     f = Path(str(hashtable['file']))
     beads = Path(str(hashtable['beads']))
-    ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
-    ref = np.squeeze(data_utils.get_image(beads))
-
-    wavefront = Wavefront(
-        ys,
-        modes=psfgen.n_modes,
-        lam_detection=psfgen.lam_detection,
-    )
-
-    psf = psfgen.single_psf(
-        phi=wavefront,
-        normed=True,
-        meta=False,
-    )
-
-    noisy_img = simulate_beads(
-        psf=psf,
-        beads=ref,
-        photons=hashtable['photons']
-    )
 
     if savedir is not None:
         outdir = savedir / '/'.join(beads.parent.parts[-4:]) / f'iter_{iter_number}'
         outdir.mkdir(exist_ok=True, parents=True)
         savepath = outdir / f.name
 
-        imwrite(savepath, noisy_img.astype(np.float32), dtype=np.float32)
+    if savepath.exists():
         return savepath
     else:
-        emb = backend.preprocess(
-            noisy_img,
-            modelpsfgen=psfgen,
-            digital_rotations=digital_rotations,
-            no_phase=no_phase,
-            remove_background=True,
-            normalize=True,
-            # plot=True
+        ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
+        ref = np.squeeze(data_utils.get_image(beads))
+
+        wavefront = Wavefront(
+            ys,
+            modes=psfgen.n_modes,
+            lam_detection=psfgen.lam_detection,
         )
-        return emb
+
+        psf = psfgen.single_psf(
+            phi=wavefront,
+            normed=True,
+            meta=False,
+        )
+
+        noisy_img = simulate_beads(
+            psf=psf,
+            beads=ref,
+            photons=hashtable['photons']
+        )
+
+        if savedir is not None:
+            imwrite(savepath, noisy_img.astype(np.float32), dtype=np.float32)
+            return savepath
+        else:
+            emb = backend.preprocess(
+                noisy_img,
+                modelpsfgen=psfgen,
+                digital_rotations=digital_rotations,
+                no_phase=no_phase,
+                remove_background=True,
+                normalize=True,
+                # plot=True
+            )
+            return emb
 
 
 def collect_data(
@@ -296,7 +301,7 @@ def iter_evaluate(
             digital_rotations=rotations if digital_rotations else None,
         ),
         jobs=previous['id'].values,
-        desc=f'Generate samples: {savepath.resolve()}',
+        desc=f'Generate samples ({savepath.resolve()})',
         unit=' sample',
         cores=-1
     )

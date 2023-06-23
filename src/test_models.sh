@@ -39,17 +39,17 @@ do
       for NA in 1.
       do
         python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
-        --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter 1 --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
+        --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --n_samples $MAX --niter 1 --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/snrheatmaps
 
         python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
-        --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter 1 --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
+        --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --n_samples $MAX --niter 1 --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/densityheatmaps
 
         python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
-        --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --niter $ITERS --eval_sign $EVALSIGN $ROTATIONS iterheatmap" \
+        --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --n_samples $MAX --niter $ITERS --eval_sign $EVALSIGN $ROTATIONS iterheatmap" \
         --taskname $NA \
         --name $MODEL/$EVALSIGN/iterheatmaps
       done
