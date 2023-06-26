@@ -1,5 +1,4 @@
 import itertools
-import time
 import matplotlib
 matplotlib.use('Agg')
 
@@ -10,8 +9,9 @@ import sys
 from functools import partial
 from pathlib import Path
 from typing import Any, Optional
-from matplotlib.ticker import FormatStrFormatter, LogFormatterExponent
+from matplotlib.ticker import FormatStrFormatter, PercentFormatter
 import matplotlib.colors as mcolors
+import seaborn as sns
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -366,6 +366,7 @@ def plot_heatmap_p2v(
     ax=None,
     cax=None,
     agg='mean',
+    predictions: Optional[pd.DataFrame] = None
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -378,10 +379,19 @@ def plot_heatmap_p2v(
     })
 
     if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 6))
+
+        if predictions is not None:
+            fig = plt.figure(figsize=(12, 8))
+            gs = fig.add_gridspec(3, 4)
+            ax = fig.add_subplot(gs[:, :-1])
+            ax1 = fig.add_subplot(gs[0, -1])
+            ax2 = fig.add_subplot(gs[1, -1])
+            ax3 = fig.add_subplot(gs[2, -1])
+        else:
+            fig, ax = plt.subplots(figsize=(8, 6))
 
     if cax is None:
-        cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+        cax = fig.add_axes([1.03, 0.08, 0.03, 0.87])
 
     levels = [
         0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
@@ -409,6 +419,138 @@ def plot_heatmap_p2v(
         linestyles='dashed',
     )
     ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+
+    if predictions is not None:
+
+        x = predictions[
+            (predictions.pbins >= 5e5) & (predictions.pbins <= 6e5) &
+            (predictions.ibins >= 1.5) & (predictions.ibins <= 2.5)
+        ]
+        ax1 = sns.histplot(
+            ax=ax1,
+            data=x,
+            x="residuals",
+            stat='percent',
+            kde=True,
+            bins=25,
+            color='dimgrey'
+        )
+        ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
+        ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
+        ax1.legend(frameon=False, ncol=1, loc='upper center')
+        ax1.set_ylim(0, 30)
+        ax1.set_xlim(0, 3)
+        ax1.set_xlabel('Residuals')
+        ax1.set_ylabel('')
+
+        x = predictions[
+            (predictions.pbins >= 2e5) & (predictions.pbins <= 3e5) &
+            (predictions.ibins >= 1.5) & (predictions.ibins <= 2.5)
+        ]
+        ax2 = sns.histplot(
+            ax=ax2,
+            data=x,
+            x="residuals",
+            stat='percent',
+            kde=True,
+            bins=25,
+            color='dimgrey'
+        )
+        ax2.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
+        ax2.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+        ax2.set_ylim(0, 30)
+        ax2.set_xlim(0, 3)
+        ax2.set_xlabel('Residuals')
+        ax2.set_ylabel('')
+
+        x = predictions[
+            (predictions.pbins <= 1e5) &
+            (predictions.ibins >= 1.5) & (predictions.ibins <= 2.5)
+        ]
+        ax3 = sns.histplot(
+            ax=ax3,
+            data=x,
+            x="residuals",
+            stat='percent',
+            kde=True,
+            bins=25,
+            color='dimgrey'
+        )
+        ax3.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
+        ax3.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+        ax3.set_ylim(0, 30)
+        ax3.set_xlim(0, 3)
+        ax3.set_xlabel('Residuals')
+        ax3.set_ylabel('')
+
+
+        ax1.text(
+            .9, .8, 'A',
+            horizontalalignment='center',
+            verticalalignment='center',
+            fontsize=20,
+            color='k',
+            transform=ax1.transAxes
+        )
+        ax.add_patch(
+            plt.Rectangle((.5, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+        )
+
+        ax.text(
+            .55, .4, 'A',
+            horizontalalignment='center',
+            verticalalignment='center',
+            fontsize=20,
+            color='k',
+            transform=ax.transAxes
+        )
+
+        ax.add_patch(
+            plt.Rectangle((.2, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+        )
+        ax.text(
+            .25, .4, 'B',
+            horizontalalignment='center',
+            verticalalignment='center',
+            fontsize=20,
+            color='k',
+            transform=ax.transAxes
+        )
+        ax2.text(
+            .9, .8, 'B',
+            horizontalalignment='center',
+            verticalalignment='center',
+            fontsize=20,
+            color='k',
+            transform=ax2.transAxes
+        )
+
+        ax.add_patch(
+            plt.Rectangle((0, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+        )
+        ax.text(
+            .05, .4, 'C',
+            horizontalalignment='center',
+            verticalalignment='center',
+            fontsize=20,
+            color='k',
+            transform=ax.transAxes
+        )
+        ax3.text(
+            .9, .8, 'C',
+            horizontalalignment='center',
+            verticalalignment='center',
+            fontsize=20,
+            color='k',
+            transform=ax3.transAxes
+        )
+
+        ax1.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+        ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        ax2.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+        ax2.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        ax3.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+        ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     cbar = plt.colorbar(
         contours,
@@ -621,6 +763,7 @@ def snrheatmap(
 
     plot_heatmap_p2v(
         dataframe,
+        predictions=df,
         wavelength=modelspecs.lam_detection,
         savepath=savepath,
         label=f'Integrated photons',
