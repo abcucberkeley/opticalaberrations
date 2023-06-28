@@ -366,7 +366,7 @@ def plot_heatmap_p2v(
     ax=None,
     cax=None,
     agg='mean',
-    predictions: Optional[pd.DataFrame] = None
+    histograms: Optional[pd.DataFrame] = None
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -380,13 +380,13 @@ def plot_heatmap_p2v(
 
     if ax is None:
 
-        if predictions is not None:
+        if histograms is not None:
             fig = plt.figure(figsize=(12, 8))
             gs = fig.add_gridspec(3, 4)
-            ax = fig.add_subplot(gs[:, :-1])
-            ax1 = fig.add_subplot(gs[0, -1])
-            ax2 = fig.add_subplot(gs[1, -1])
-            ax3 = fig.add_subplot(gs[2, -1])
+            ax = fig.add_subplot(gs[:, 1:])
+            ax1 = fig.add_subplot(gs[0, 0])
+            ax2 = fig.add_subplot(gs[1, 0])
+            ax3 = fig.add_subplot(gs[2, 0])
         else:
             fig, ax = plt.subplots(figsize=(8, 6))
 
@@ -420,137 +420,270 @@ def plot_heatmap_p2v(
     )
     ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
-    if predictions is not None:
+    if histograms is not None:
+        if label == 'Integrated photons':
+            x = histograms[
+                (histograms.pbins <= 1e5) &
+                (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
+            ]
+            ax1 = sns.histplot(
+                ax=ax1,
+                data=x,
+                x="residuals",
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+            ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
+            ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
+            ax1.set_ylim(0, 30)
+            ax1.set_xlim(0, 3)
+            ax1.set_xlabel('Residuals')
+            ax1.set_ylabel('')
+            ax1.text(
+                .9, .8, 'A',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax1.transAxes
+            )
 
-        x = predictions[
-            (predictions.pbins >= 5e5) & (predictions.pbins <= 6e5) &
-            (predictions.ibins >= 1.5) & (predictions.ibins <= 2.5)
-        ]
-        ax1 = sns.histplot(
-            ax=ax1,
-            data=x,
-            x="residuals",
-            stat='percent',
-            kde=True,
-            bins=25,
-            color='dimgrey'
-        )
-        ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
-        ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
-        ax1.legend(frameon=False, ncol=1, loc='upper center')
-        ax1.set_ylim(0, 30)
-        ax1.set_xlim(0, 3)
-        ax1.set_xlabel('Residuals')
-        ax1.set_ylabel('')
+            ax.add_patch(
+                plt.Rectangle((0, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .05, .4, 'A',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
 
-        x = predictions[
-            (predictions.pbins >= 2e5) & (predictions.pbins <= 3e5) &
-            (predictions.ibins >= 1.5) & (predictions.ibins <= 2.5)
-        ]
-        ax2 = sns.histplot(
-            ax=ax2,
-            data=x,
-            x="residuals",
-            stat='percent',
-            kde=True,
-            bins=25,
-            color='dimgrey'
-        )
-        ax2.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
-        ax2.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
-        ax2.set_ylim(0, 30)
-        ax2.set_xlim(0, 3)
-        ax2.set_xlabel('Residuals')
-        ax2.set_ylabel('')
+            x = histograms[
+                (histograms.pbins >= 2e5) & (histograms.pbins <= 3e5) &
+                (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
+            ]
+            ax2 = sns.histplot(
+                ax=ax2,
+                data=x,
+                x="residuals",
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+            ax2.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
+            ax2.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+            ax2.set_ylim(0, 30)
+            ax2.set_xlim(0, 3)
+            ax2.set_xlabel('Residuals')
+            ax2.set_ylabel('')
+            ax2.text(
+                .9, .8, 'B',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax2.transAxes
+            )
 
-        x = predictions[
-            (predictions.pbins <= 1e5) &
-            (predictions.ibins >= 1.5) & (predictions.ibins <= 2.5)
-        ]
-        ax3 = sns.histplot(
-            ax=ax3,
-            data=x,
-            x="residuals",
-            stat='percent',
-            kde=True,
-            bins=25,
-            color='dimgrey'
-        )
-        ax3.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
-        ax3.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
-        ax3.set_ylim(0, 30)
-        ax3.set_xlim(0, 3)
-        ax3.set_xlabel('Residuals')
-        ax3.set_ylabel('')
+            ax.add_patch(
+                plt.Rectangle((.5, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+
+            ax.text(
+                .55, .4, 'C',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
 
 
-        ax1.text(
-            .9, .8, 'A',
-            horizontalalignment='center',
-            verticalalignment='center',
-            fontsize=20,
-            color='k',
-            transform=ax1.transAxes
-        )
-        ax.add_patch(
-            plt.Rectangle((.5, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
-        )
+            x = histograms[
+                (histograms.pbins >= 5e5) & (histograms.pbins <= 6e5) &
+                (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
+            ]
+            ax3 = sns.histplot(
+                ax=ax3,
+                data=x,
+                x="residuals",
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+            ax3.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
+            ax3.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+            ax3.set_ylim(0, 30)
+            ax3.set_xlim(0, 3)
+            ax3.set_xlabel('Residuals')
+            ax3.set_ylabel('')
+            ax3.text(
+                .9, .8, 'C',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax3.transAxes
+            )
 
-        ax.text(
-            .55, .4, 'A',
-            horizontalalignment='center',
-            verticalalignment='center',
-            fontsize=20,
-            color='k',
-            transform=ax.transAxes
-        )
+            ax.add_patch(
+                plt.Rectangle((.2, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .25, .4, 'B',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
 
-        ax.add_patch(
-            plt.Rectangle((.2, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
-        )
-        ax.text(
-            .25, .4, 'B',
-            horizontalalignment='center',
-            verticalalignment='center',
-            fontsize=20,
-            color='k',
-            transform=ax.transAxes
-        )
-        ax2.text(
-            .9, .8, 'B',
-            horizontalalignment='center',
-            verticalalignment='center',
-            fontsize=20,
-            color='k',
-            transform=ax2.transAxes
-        )
+            ax1.legend(frameon=False, ncol=1, loc='upper left')
+            ax1.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax2.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax2.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax3.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        ax.add_patch(
-            plt.Rectangle((0, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
-        )
-        ax.text(
-            .05, .4, 'C',
-            horizontalalignment='center',
-            verticalalignment='center',
-            fontsize=20,
-            color='k',
-            transform=ax.transAxes
-        )
-        ax3.text(
-            .9, .8, 'C',
-            horizontalalignment='center',
-            verticalalignment='center',
-            fontsize=20,
-            color='k',
-            transform=ax3.transAxes
-        )
+        elif label == f'Number of iterations':
 
-        ax1.yaxis.set_major_formatter(PercentFormatter(decimals=0))
-        ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-        ax2.yaxis.set_major_formatter(PercentFormatter(decimals=0))
-        ax2.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-        ax3.yaxis.set_major_formatter(PercentFormatter(decimals=0))
-        ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            x = histograms[
+                (histograms.iter_num == 3) &
+                (histograms.aberration >= 3.5) & (histograms.aberration <= 4.5)
+            ]
+            ax1 = sns.histplot(
+                ax=ax1,
+                data=x,
+                x="residuals",
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+            ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
+            ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
+            ax1.set_ylim(0, 80)
+            ax1.set_xlim(0, 5)
+            ax1.set_xlabel('Residuals')
+            ax1.set_ylabel('')
+            ax1.text(
+                .9, .8, 'A',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax1.transAxes
+            )
+
+            ax.add_patch(
+                plt.Rectangle((.05, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .3, .8, 'A',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            x = histograms[
+                (histograms.iter_num == 2) &
+                (histograms.aberration >= 2.5) & (histograms.aberration <= 3.5)
+            ]
+            ax2 = sns.histplot(
+                ax=ax2,
+                data=x,
+                x="residuals",
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+            ax2.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
+            ax2.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+            ax2.set_ylim(0, 80)
+            ax2.set_xlim(0, 5)
+            ax2.set_xlabel('Residuals')
+            ax2.set_ylabel('')
+            ax2.text(
+                .9, .8, 'B',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax2.transAxes
+            )
+
+            ax.add_patch(
+                plt.Rectangle((.15, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .2, .6, 'B',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            x = histograms[
+                (histograms.iter_num == 1) &
+                (histograms.aberration >= 1.5) & (histograms.aberration <= 2.5)
+            ]
+            ax3 = sns.histplot(
+                ax=ax3,
+                data=x,
+                x="residuals",
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+
+            ax3.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
+            ax3.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+            ax3.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
+            ax3.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
+            ax3.set_ylim(0, 80)
+            ax3.set_xlim(0, 5)
+            ax3.set_xlabel('Residuals')
+            ax3.set_ylabel('')
+            ax3.text(
+                .9, .8, 'C',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax3.transAxes
+            )
+
+            ax.add_patch(
+                plt.Rectangle((.25, .7), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .1, .4, 'C',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            ax1.legend(frameon=False, ncol=1, loc='upper center')
+            ax1.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax2.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax2.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax3.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     cbar = plt.colorbar(
         contours,
@@ -763,7 +896,7 @@ def snrheatmap(
 
     plot_heatmap_p2v(
         dataframe,
-        predictions=df,
+        # histograms=df,
         wavelength=modelspecs.lam_detection,
         savepath=savepath,
         label=f'Integrated photons',
@@ -878,7 +1011,7 @@ def iterheatmap(
 
     logger.info(f'Save path = {savepath.resolve()}')
     if datadir.suffix == '.csv':
-        df = pd.read_csv(datadir, header=0, index_col=0) # read previous results, ignoring criteria
+        df = pd.read_csv(datadir, header=0, index_col=0)  # read previous results, ignoring criteria
         logger.info(f'Using "{datadir}"')
         logger.info(f'Found {len(df.id.unique())} samples, {df.iter_num.max()} iterations.')
     else:
@@ -918,6 +1051,7 @@ def iterheatmap(
         if value == 'residuals':
             plot_heatmap_p2v(
                 dataframe,
+                histograms=df,
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
                 label=f'Number of iterations',
