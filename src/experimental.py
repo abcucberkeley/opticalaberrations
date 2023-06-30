@@ -1028,11 +1028,11 @@ def aggregate_predictions(
     predictions['cluster'] = np.nan
     stdevs['cluster'] = np.nan
 
-    valid_predictions = predictions.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
-    valid_predictions = valid_predictions.groupby('z')
+    # valid_predictions = predictions.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
+    valid_predictions = predictions.groupby('z')
 
-    valid_stdevs = stdevs.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
-    valid_stdevs = valid_stdevs.groupby('z')
+    # valid_stdevs = stdevs.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
+    valid_stdevs = predictions.groupby('z')
 
     cluster_colors = np.split(
         np.array(sns.color_palette(clusters3d_colormap, n_colors=(max_isoplanatic_clusters * ztiles)))*255,
@@ -1040,7 +1040,7 @@ def aggregate_predictions(
     )   # list of colors for each z tiles
 
     clusters3d_colormap = []
-    for cc in cluster_colors: # for each z tile's colors
+    for cc in cluster_colors:  # for each z tile's colors
         clusters3d_colormap.extend([zero_confident_color, *cc])  # append the same zero color (e.g. yellow) at the front
     clusters3d_colormap.extend([unconfident_color])  # append the unconfident color (e.g. white) to the end
     clusters3d_colormap = np.array(clusters3d_colormap)  # yellow, blue, orange,...  yellow, ...  white
@@ -1070,11 +1070,16 @@ def aggregate_predictions(
             else:  # spherical modes
                 features[mode.index_ansi] /= mode.m + 1
 
-        n_clusters = min(max_isoplanatic_clusters, len(features))
+        n_clusters = min(max_isoplanatic_clusters, len(features)) + 1
         kmeans = KMeans(init="k-means++", n_clusters=n_clusters)
         kmeans.fit(features)
 
-        ztile_preds['cluster'] = kmeans.predict(features) + 1
+        ztile_preds['cluster'] = kmeans.predict(features)
+
+        # sort clusters by their center's magnitude
+        centers_mag = np.array([np.linalg.norm(kmeans.cluster_centers_[i]) for i in range(n_clusters)])
+        ztile_preds['cluster'] = ztile_preds['cluster'].replace(dict(zip(np.argsort(centers_mag), range(n_clusters))))
+
         ztile_preds['cluster'] += z * (max_isoplanatic_clusters + 1)
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
@@ -1089,6 +1094,10 @@ def aggregate_predictions(
 
         predictions.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
         stdevs.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
+
+        # remove the first (null) cluster from the dataframe
+        # we'll the original DM for this cluster
+        ztile_preds = ztile_preds[ztile_preds['cluster'] != 0]
 
         clusters = ztile_preds.groupby('cluster')
         for k in range(max_isoplanatic_clusters + 1):
