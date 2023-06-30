@@ -47,10 +47,8 @@ import data_utils
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
-from embeddings import remove_interference_pattern, fourier_embeddings, rolling_fourier_embeddings
-from preprocessing import prep_sample, round_to_even, optimal_rolling_strides
-
-from phasenet import PhaseNet
+from embeddings import fourier_embeddings, rolling_fourier_embeddings
+from preprocessing import prep_sample, round_to_even
 
 from stem import Stem
 from activation import MaskedActivation
@@ -61,6 +59,7 @@ import opticalnet
 import opticalresnet
 import baseline
 import otfnet
+
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -1293,6 +1292,7 @@ def train(
             mul=mul,
             no_phase=no_phase
         )
+
     elif network == 'baseline':
         model = baseline.Baseline(
             name='Baseline',
@@ -1301,16 +1301,13 @@ def train(
             width_scalar=width_scalar,
             activation=activation,
         )
+
     elif network == 'otfnet':
         model = otfnet.OTFNet(
             name='OTFNet',
             modes=pmodes
         )
-    elif network == 'phasenet':
-        model = PhaseNet(
-            name='PhaseNet',
-            modes=pmodes
-        )
+
     else:
         model = load(Path(network))
         checkpoint = tf.train.Checkpoint(model)
@@ -1322,34 +1319,28 @@ def train(
         else:
             logger.info("Initializing from scratch")
 
-    if network == 'phasenet':
+    if network == 'baseline':
         inputs = (input_shape, input_shape, input_shape, 1)
-        lr = .0003
-        opt = Adam(learning_rate=lr)
-        loss = 'mse'
     else:
-        if network == 'baseline':
-            inputs = (input_shape, input_shape, input_shape, 1)
-        else:
-            inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
+        inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
 
-        loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
+    loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
 
-        """
-            Adam: A Method for Stochastic Optimization: httpsz://arxiv.org/pdf/1412.6980
-            SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
-            Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
-        """
-        if opt.lower() == 'adam':
-            opt = Adam(learning_rate=lr)
-        elif opt == 'sgd':
-            opt = SGD(learning_rate=lr, momentum=0.9)
-        elif opt.lower() == 'adamw':
-            opt = AdamW(learning_rate=lr, weight_decay=wd)
-        elif opt == 'sgdw':
-            opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
-        else:
-            raise ValueError(f'Unknown optimizer `{opt}`')
+    """
+        Adam: A Method for Stochastic Optimization: httpsz://arxiv.org/pdf/1412.6980
+        SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
+        Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
+    """
+    if opt.lower() == 'adam':
+        opt = Adam(learning_rate=lr)
+    elif opt == 'sgd':
+        opt = SGD(learning_rate=lr, momentum=0.9)
+    elif opt.lower() == 'adamw':
+        opt = AdamW(learning_rate=lr, weight_decay=wd)
+    elif opt == 'sgdw':
+        opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
+    else:
+        raise ValueError(f'Unknown optimizer `{opt}`')
 
     if not restored:
         model = model.build(input_shape=inputs)
