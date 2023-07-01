@@ -1076,8 +1076,12 @@ def aggregate_predictions(
 
         ztile_preds['cluster'] = kmeans.predict(features)
 
-        # sort clusters by their center's magnitude
-        centers_mag = np.array([np.linalg.norm(kmeans.cluster_centers_[i]) for i in range(n_clusters)])
+        # sort clusters by p2v
+        centers_mag = [
+            ztile_preds[ztile_preds['cluster'] == i].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0).values
+            for i in range(n_clusters)
+        ]
+        centers_mag = np.array([Wavefront(np.nan_to_num(c, nan=0)).peak2valley() for c in centers_mag])
         ztile_preds['cluster'] = ztile_preds['cluster'].replace(dict(zip(np.argsort(centers_mag), range(n_clusters))))
 
         ztile_preds['cluster'] += z * (max_isoplanatic_clusters + 1)
