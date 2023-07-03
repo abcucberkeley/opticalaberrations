@@ -934,6 +934,179 @@ def kmeans_clustering(data, k):
     return silhouette
 
 
+def cluster_tiles(
+    predictions: pd.DataFrame,
+    stdevs: pd.DataFrame,
+    where_unconfident: pd.DataFrame,
+    dm_calibration: Path,
+    dm_state: Any,
+    savepath: Path,
+    plot: bool = False,
+    wavelength: float = .510,
+    aggregation_rule: str = 'mean',
+    max_isoplanatic_clusters: int = 3,
+    optimize_max_isoplanatic_clusters: bool = False,
+    dm_damping_scalar: float = 1,
+):
+    """
+        Group tiles with similar wavefronts together,
+        adding a new column to the `predictions` dataframe to indicate the predicted cluster ID for each tile
+
+    Args:
+        predictions: dataframe of all predictions indexed by tile IDs
+        stdevs: dataframe of all standard deviations of the predictions indexed by tile IDs
+        where_unconfident: dataframe mask for unconfident tiles
+        dm_calibration: DM calibration file
+        dm_state: current DM
+        savepath: path to save DMs for each selected cluster
+        wavelength: detection wavelength
+        aggregation_rule: metric to use to combine wavefronts of all tiles in a given cluster
+        max_isoplanatic_clusters: max number of clusters
+        optimize_max_isoplanatic_clusters: a toggle to find the optimal number of clusters automatically
+        dm_damping_scalar: optional scalar to apply for the DM of each cluster
+        plot: a toggle to plot the wavefront for each cluster
+
+    Returns:
+        Updated prediction, stdevs dataframes
+    """
+    # create a new column for cluster ids.
+    predictions['cluster'] = np.nan
+    stdevs['cluster'] = np.nan
+
+    pool = mp.Pool(processes=4)  # async pool for plotting
+
+    # valid_predictions = predictions.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
+    valid_predictions = predictions.groupby('z')
+
+    # valid_stdevs = stdevs.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
+    valid_stdevs = stdevs.groupby('z')
+
+    coefficients, actuators = {}, {}
+    for z in valid_predictions.groups.keys():  # basically loop through all ztiles, unless no valid predictions exist
+        ztile_preds = valid_predictions.get_group(z)
+        ztile_preds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
+
+        ztile_stds = valid_stdevs.get_group(z)
+        ztile_stds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
+
+        if optimize_max_isoplanatic_clusters:
+            logger.info('KMeans calculating...')
+            ks = np.arange(2, max_isoplanatic_clusters + 1)
+            ans = Parallel(n_jobs=-1, verbose=0)(delayed(kmeans_clustering)(ztile_preds.values, k) for k in ks)
+            results = pd.DataFrame(ans, index=ks, columns=['silhouette'])
+            max_silhouette = results['silhouette'].idxmax()
+            max_isoplanatic_clusters = max_silhouette
+
+        # weight zernike coefficients by their mth order for clustering
+        features = ztile_preds.copy()
+        for mode, twin in Wavefront(np.zeros(features.shape[1])).twins.items():
+            if twin is not None:
+                features[mode.index_ansi] /= abs(mode.m - 1)
+                features[twin.index_ansi] /= twin.m + 1
+            else:  # spherical modes
+                features[mode.index_ansi] /= mode.m + 1
+
+        n_clusters = min(max_isoplanatic_clusters, len(features)) + 1
+        clustering = KMeans(init="k-means++", n_clusters=n_clusters, max_iter=1000)
+        clustering.fit(features)
+
+        # from sklearn_extra.cluster import KMedoids
+        # clustering = KMedoids(init="k-medoids++", n_clusters=n_clusters, max_iter=1000)
+        # clustering.fit(features)
+
+        ztile_preds['cluster'] = clustering.predict(features)
+
+        # sort clusters by p2v
+        centers_mag = [
+            ztile_preds[ztile_preds['cluster'] == i].mask(where_unconfident).drop(columns='cluster').agg(
+                aggregation_rule, axis=0
+            ).values
+            for i in range(n_clusters)
+        ]
+        centers_mag = np.array([Wavefront(np.nan_to_num(c, nan=0)).peak2valley() for c in centers_mag])
+        ztile_preds['cluster'] = ztile_preds['cluster'].replace(dict(zip(np.argsort(centers_mag), range(n_clusters))))
+
+        ztile_preds['cluster'] += z * (max_isoplanatic_clusters + 1)
+
+        # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
+        predictions.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
+        stdevs.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
+
+        # remove the first (null) cluster from the dataframe
+        # we'll the original DM for this cluster
+        ztile_preds = ztile_preds[ztile_preds['cluster'] != 0]
+
+        clusters = ztile_preds.groupby('cluster')
+        for k in range(max_isoplanatic_clusters + 1):
+            c = k + z * (max_isoplanatic_clusters + 1)
+
+            if k == 0:  # "before" volume
+                pred = np.zeros(features.shape[-1])  # "before" will not have a wavefront update here.
+                pred_std = np.zeros(features.shape[-1])
+            elif k >= n_clusters:  # if we didn't have enough tiles
+                pred = np.zeros(features.shape[-1])  # these will not have a wavefront update here.
+                pred_std = np.zeros(features.shape[-1])
+                logger.warning(f'Not enough tiles to make another cluster.  '
+                               f'This cluster will not have a wavefront update: z{z}_c{c}')
+            else:  # "after" volumes
+                g = clusters.get_group(c).index
+
+                # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
+                if aggregation_rule == 'centers':
+                    pred = clustering.cluster_centers_[k - 1]
+                    pred_std = ztile_stds.loc[g].mask(where_unconfident).agg('mean', axis=0)
+                else:
+                    pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)
+                    pred_std = ztile_stds.loc[g].mask(where_unconfident).agg(aggregation_rule, axis=0)
+
+            cluster = f'z{z}_c{c}'
+
+            pred = Wavefront(
+                np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
+                order='ansi',
+                lam_detection=wavelength
+            )
+            imwrite(
+                Path(f"{savepath}_aggregated_{cluster}_wavefront.tif"), pred.wave().astype(np.float32)
+            )
+
+            pred_std = Wavefront(
+                np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0),
+                order='ansi',
+                lam_detection=wavelength
+            )
+
+            if plot:
+                task = partial(
+                    vis.diagnosis,
+                    pred=pred,
+                    pred_std=pred_std,
+                    save_path=Path(f"{savepath}_aggregated_{cluster}_diagnosis"),
+                )
+                pool.apply_async(task)
+
+            coefficients[cluster] = pred.amplitudes
+
+            actuators[cluster] = utils.zernikies_to_actuators(
+                pred.amplitudes,
+                dm_calibration=dm_calibration,
+                dm_state=dm_state,
+                scalar=dm_damping_scalar
+            )
+
+    coefficients = pd.DataFrame.from_dict(coefficients)
+    coefficients.index.name = 'ansi'
+    coefficients.to_csv(f"{savepath}_aggregated_zernike_coefficients.csv")
+
+    actuators = pd.DataFrame.from_dict(actuators)
+    actuators.index.name = 'actuators'
+    actuators.to_csv(f"{savepath}_aggregated_corrected_actuators.csv")
+    logger.info(f"Saved {savepath}_aggregated_corrected_actuators.csv")
+    logger.info(f"with _corrected_actuators for : {actuators.columns.tolist()}")
+
+    return predictions, stdevs
+
+
 @profile
 def aggregate_predictions(
     model_pred: Path,
@@ -942,14 +1115,14 @@ def aggregate_predictions(
     majority_threshold: float = .5,
     min_percentile: int = 1,
     max_percentile: int = 99,
-    prediction_threshold: float = 0.25, # peak to valley in waves. you already have this diffraction limited data
+    prediction_threshold: float = 0.25,  # peak to valley in waves. you already have this diffraction limited data
     aggregation_rule: str = 'mean',
     dm_damping_scalar: float = 1,
     max_isoplanatic_clusters: int = 3,
     optimize_max_isoplanatic_clusters: bool = False,
     plot: bool = False,
     ignore_tile: Any = None,
-    clusters3d_colormap: str = 'tab10',
+    clusters3d_colormap: str = 'tab20',
     zero_confident_color: tuple = (255, 255, 0),
     unconfident_color: tuple = (255, 255, 255),
     preloaded: Preloadedmodelclass = None,
@@ -1007,7 +1180,6 @@ def aggregate_predictions(
     ztiles = predictions.index.get_level_values('z').unique().shape[0]
     ytiles = predictions.index.get_level_values('y').unique().shape[0]
     xtiles = predictions.index.get_level_values('x').unique().shape[0]
-    n_modes = np.sum([1 for col in predictions if str(col).isdigit()])
 
     errormapdf = predictions['p2v'].copy()
     nn_coords = np.array(errormapdf[~unconfident_tiles].index.to_list())
@@ -1019,20 +1191,10 @@ def aggregate_predictions(
     except ValueError:
         logger.warning(f'Not much we can interpolate with here. {nn_coords=}')
         errormap = np.zeros((ztiles, ytiles, xtiles))  # back to 3d arrays, zero for every tile
-    errormap = resize(errormap, (ztiles, vol.shape[1], vol.shape[2]),  order=1, mode='edge') # linear interp XY
+    errormap = resize(errormap, (ztiles, vol.shape[1], vol.shape[2]),  order=1, mode='edge')  # linear interp XY
     errormap = resize(errormap, vol.shape,  order=0, mode='edge')   # nearest neighbor for z
     # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
     imwrite(Path(f"{model_pred.with_suffix('')}_aggregated_p2v_error.tif"), errormap.astype(np.float32))
-
-    # create a new column for cluster ids.
-    predictions['cluster'] = np.nan
-    stdevs['cluster'] = np.nan
-
-    # valid_predictions = predictions.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
-    valid_predictions = predictions.groupby('z')
-
-    # valid_stdevs = stdevs.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
-    valid_stdevs = predictions.groupby('z')
 
     cluster_colors = np.split(
         np.array(sns.color_palette(clusters3d_colormap, n_colors=(max_isoplanatic_clusters * ztiles)))*255,
@@ -1045,131 +1207,29 @@ def aggregate_predictions(
     clusters3d_colormap.extend([unconfident_color])  # append the unconfident color (e.g. white) to the end
     clusters3d_colormap = np.array(clusters3d_colormap)  # yellow, blue, orange,...  yellow, ...  white
 
-    coefficients, actuators = {}, {}
-    for z in valid_predictions.groups.keys():   # basically loop through all ztiles, unless no valid predictions exist
-        ztile_preds = valid_predictions.get_group(z)
-        ztile_preds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
+    predictions, stdevs = cluster_tiles(
+        predictions=predictions,
+        stdevs=stdevs,
+        where_unconfident=where_unconfident,
+        dm_calibration=dm_calibration,
+        dm_state=dm_state,
+        savepath=model_pred.with_suffix(''),
+        dm_damping_scalar=dm_damping_scalar,
+        wavelength=wavelength,
+        aggregation_rule=aggregation_rule,
+        max_isoplanatic_clusters=max_isoplanatic_clusters,
+        optimize_max_isoplanatic_clusters=optimize_max_isoplanatic_clusters,
+        plot=plot,
+    )
 
-        ztile_stds = valid_stdevs.get_group(z)
-        ztile_stds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
+    predictions.loc[all_zeros_tiles, 'cluster'] = 0  # z * (max_isoplanatic_clusters + 1)
+    stdevs.loc[all_zeros_tiles, 'cluster'] = 0  # z * (max_isoplanatic_clusters + 1)
 
-        if optimize_max_isoplanatic_clusters:
-            logger.info('KMeans calculating...')
-            ks = np.arange(2, max_isoplanatic_clusters+1)
-            ans = Parallel(n_jobs=-1, verbose=0)(delayed(kmeans_clustering)(ztile_preds.values, k) for k in ks)
-            results = pd.DataFrame(ans, index=ks, columns=['silhouette'])
-            max_silhouette = results['silhouette'].idxmax()
-            max_isoplanatic_clusters = max_silhouette
+    predictions.loc[zero_confident_tiles, 'cluster'] = 0  # z * (max_isoplanatic_clusters + 1)
+    stdevs.loc[zero_confident_tiles, 'cluster'] = 0  # z * (max_isoplanatic_clusters + 1)
 
-        # weight zernike coefficients by their mth order for clustering
-        features = ztile_preds.copy()
-        for mode, twin in Wavefront(np.zeros(features.shape[1])).twins.items():
-            if twin is not None:
-                features[mode.index_ansi] /= abs(mode.m - 1)
-                features[twin.index_ansi] /= twin.m + 1
-            else:  # spherical modes
-                features[mode.index_ansi] /= mode.m + 1
-
-        n_clusters = min(max_isoplanatic_clusters, len(features)) + 1
-        kmeans = KMeans(init="k-means++", n_clusters=n_clusters)
-        kmeans.fit(features)
-
-        ztile_preds['cluster'] = kmeans.predict(features)
-
-        # sort clusters by p2v
-        centers_mag = [
-            ztile_preds[ztile_preds['cluster'] == i].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0).values
-            for i in range(n_clusters)
-        ]
-        centers_mag = np.array([Wavefront(np.nan_to_num(c, nan=0)).peak2valley() for c in centers_mag])
-        ztile_preds['cluster'] = ztile_preds['cluster'].replace(dict(zip(np.argsort(centers_mag), range(n_clusters))))
-
-        ztile_preds['cluster'] += z * (max_isoplanatic_clusters + 1)
-
-        # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
-        predictions.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
-        stdevs.loc[ztile_preds.index, 'cluster'] = ztile_preds['cluster']
-
-        predictions.loc[all_zeros_tiles, 'cluster'] = 0         # z * (max_isoplanatic_clusters + 1)
-        stdevs.loc[all_zeros_tiles, 'cluster'] = 0              # z * (max_isoplanatic_clusters + 1)
-
-        predictions.loc[zero_confident_tiles, 'cluster'] = 0    # z * (max_isoplanatic_clusters + 1)
-        stdevs.loc[zero_confident_tiles, 'cluster'] = 0         # z * (max_isoplanatic_clusters + 1)
-
-        predictions.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
-        stdevs.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
-
-        # remove the first (null) cluster from the dataframe
-        # we'll the original DM for this cluster
-        ztile_preds = ztile_preds[ztile_preds['cluster'] != 0]
-
-        clusters = ztile_preds.groupby('cluster')
-        for k in range(max_isoplanatic_clusters + 1):
-            c = k + z * (max_isoplanatic_clusters + 1)
-
-            if k == 0:    # "before" volume
-                pred = np.zeros(n_modes)   # "before" will not have a wavefront update here.
-                pred_std = np.zeros(n_modes)
-            elif k >= n_clusters:  # if we didn't have enough tiles
-                pred = np.zeros(n_modes)  # these will not have a wavefront update here.
-                pred_std = np.zeros(n_modes)
-                logger.warning(f'Not enough tiles to make another cluster.  '
-                            f'This cluster will not have a wavefront update: z{z}_c{c}')
-            else:         # "after" volumes
-                g = clusters.get_group(c).index
-
-                # come up with a pred for this cluster based on user's choice of metric ("mean", "median", ...)
-                if aggregation_rule == 'centers':
-                    pred = kmeans.cluster_centers_[k-1]
-                    pred_std = ztile_stds.loc[g].mask(where_unconfident).agg('mean', axis=0)
-                else:
-                    pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)
-                    pred_std = ztile_stds.loc[g].mask(where_unconfident).agg(aggregation_rule, axis=0)
-
-            cluster = f'z{z}_c{c}'
-
-            pred = Wavefront(
-                np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
-                order='ansi',
-                lam_detection=wavelength
-            )
-            imwrite(
-                Path(f"{model_pred.with_suffix('')}_aggregated_{cluster}_wavefront.tif"), pred.wave().astype(np.float32)
-            )
-
-            pred_std = Wavefront(
-                np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0),
-                order='ansi',
-                lam_detection=wavelength
-            )
-
-            if plot:
-                task = partial(
-                    vis.diagnosis,
-                    pred=pred,
-                    pred_std=pred_std,
-                    save_path=Path(f"{model_pred.with_suffix('')}_aggregated_{cluster}_diagnosis"),
-                )
-                pool.apply_async(task)
-
-            coefficients[cluster] = pred.amplitudes
-
-            actuators[cluster] = utils.zernikies_to_actuators(
-                pred.amplitudes,
-                dm_calibration=dm_calibration,
-                dm_state=dm_state,
-                scalar=dm_damping_scalar
-            )
-
-    coefficients = pd.DataFrame.from_dict(coefficients)
-    coefficients.index.name = 'ansi'
-    coefficients.to_csv(f"{model_pred.with_suffix('')}_aggregated_zernike_coefficients.csv")
-
-    actuators = pd.DataFrame.from_dict(actuators)
-    actuators.index.name = 'actuators'
-    actuators.to_csv(f"{model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
-    logger.info(f"Saved {model_pred.with_suffix('')}_aggregated_corrected_actuators.csv")
-    logger.info(f"with _corrected_actuators for : {actuators.columns.tolist()}")
+    predictions.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
+    stdevs.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
 
     predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters.csv")
 
@@ -1313,7 +1373,7 @@ def aggregate_predictions(
             escape_forward_slashes=False
         )
 
-    return coefficients
+    return predictions
 
 
 @profile
