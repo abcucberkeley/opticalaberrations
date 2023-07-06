@@ -399,7 +399,7 @@ def create_multiindex_tile_dataframe(
     predictions['p2v'] = np.nan
     for index, zernikes in predictions.iterrows():
         wavefronts[index] = Wavefront(
-            np.nan_to_num(zernikes.values, nan=0),
+            np.nan_to_num(zernikes.values[:-1], nan=0),
             lam_detection=wavelength,
         )
         predictions.loc[index, 'p2v'] = wavefronts[index].peak2valley(na=1)

@@ -1111,7 +1111,7 @@ def cluster_tiles(
     logger.info(f"Saved {savepath}_aggregated_corrected_actuators.csv")
     logger.info(f"with _corrected_actuators for : {actuators.columns.tolist()}")
 
-    return predictions, stdevs
+    return predictions, stdevs, coefficients
 
 
 @profile
@@ -1214,7 +1214,7 @@ def aggregate_predictions(
     clusters3d_colormap.extend([unconfident_color])  # append the unconfident color (e.g. white) to the end
     clusters3d_colormap = np.array(clusters3d_colormap)  # yellow, blue, orange,...  yellow, ...  white
 
-    predictions, stdevs = cluster_tiles(
+    predictions, stdevs, corrections = cluster_tiles(
         predictions=predictions,
         stdevs=stdevs,
         where_unconfident=where_unconfident,
@@ -1240,10 +1240,12 @@ def aggregate_predictions(
 
     predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters.csv")
 
+    clusters_rgb = np.full((ztiles, *vol.shape[1:]), len(clusters3d_colormap)-1, dtype=np.float32)
     clusters3d_heatmap = np.full_like(vol, len(clusters3d_colormap)-1, dtype=np.float32)
     wavefront_heatmap = np.zeros((ztiles, *vol.shape[1:]), dtype=np.float32)
+    expected_wavefront_heatmap = np.zeros((ztiles, *vol.shape[1:]), dtype=np.float32)
     psf_heatmap = np.zeros((ztiles, *vol.shape[1:]), dtype=np.float32)
-    clusters_rgb = np.full((ztiles, *vol.shape[1:]), len(clusters3d_colormap)-1, dtype=np.float32)
+    expected_psf_heatmap = np.zeros((ztiles, *vol.shape[1:]), dtype=np.float32)
 
     zw, yw, xw = predictions_settings['window_size']
     logger.info(f"volume_size = {vol.shape}")
@@ -1257,46 +1259,74 @@ def aggregate_predictions(
 
             if c == len(clusters3d_colormap)-1:
                 wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
+                expected_wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
+
                 psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
+                expected_psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
             else:
-                wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.nan_to_num(wavefronts[(z, y, x)].wave(xw), nan=0)
-                psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.max(samplepsfgen.single_psf(wavefronts[(z, y, x)]), axis=0)
+                w = wavefronts[(z, y, x)]
+
+                if c != 0:
+                    expected_w = Wavefront(
+                        w.amplitudes_ansi - corrections[f"z{z}_c{int(c)}"].values,
+                        lam_detection=wavelength
+                    )
+                else:
+                    expected_w = w
+
+                wavefront_heatmap[
+                    z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw
+                ] = np.nan_to_num(w.wave(xw), nan=0)
+
+                expected_wavefront_heatmap[
+                    z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw
+                ] = np.nan_to_num(expected_w.wave(xw), nan=0)
+
+                psf_heatmap[
+                    z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw
+                ] = np.max(samplepsfgen.single_psf(w), axis=0)
+
+                expected_psf_heatmap[
+                    z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw
+                ] = np.max(samplepsfgen.single_psf(expected_w), axis=0)
 
             clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((zw, yw, xw), int(c))
 
     imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap.astype(np.float32))
+    imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts_expected.tif", expected_wavefront_heatmap.astype(np.float32))
     imwrite(f"{model_pred.with_suffix('')}_aggregated_psfs.tif", psf_heatmap.astype(np.float32))
+    imwrite(f"{model_pred.with_suffix('')}_aggregated_psfs_expected.tif", expected_psf_heatmap.astype(np.float32))
 
-    scaled_wavefront_heatmap = (wavefront_heatmap - np.nanpercentile(wavefront_heatmap, 1)) / \
-        (np.nanpercentile(wavefront_heatmap, 99) - np.nanpercentile(wavefront_heatmap, 1))
-    scaled_wavefront_heatmap = np.clip(scaled_wavefront_heatmap, a_min=0, a_max=1)
-    wavefront_rgb = clusters3d_colormap[clusters_rgb.astype(np.ubyte)] * scaled_wavefront_heatmap[..., np.newaxis]
-    imwrite(
-        f"{model_pred.with_suffix('')}_aggregated_clusters_wavefronts.tif",
-        wavefront_rgb.astype(np.ubyte),
-        photometric='rgb'
+    def color_clusters(heatmap, labels, colormap, savepath):
+        scaled_heatmap = (heatmap - np.nanpercentile(heatmap, 1)) / \
+                         (np.nanpercentile(heatmap, 99) - np.nanpercentile(heatmap, 1))
+        scaled_heatmap = np.clip(scaled_heatmap, a_min=0, a_max=1)
+        rgb_map = colormap[labels.astype(np.ubyte)] * scaled_heatmap[..., np.newaxis]
+        imwrite(
+            savepath,
+            rgb_map.astype(np.ubyte),
+            photometric='rgb',
+            imagej=True,
+            resolution=(xw, yw),
+        )
+
+    color_clusters(
+        vol,
+        clusters3d_heatmap,
+        clusters3d_colormap,
+        f"{model_pred.with_suffix('')}_aggregated_clusters.tif"
     )
 
-    scaled_psf_heatmap = (psf_heatmap - np.nanpercentile(psf_heatmap, 1)) / \
-        (np.nanpercentile(psf_heatmap, 99) - np.nanpercentile(psf_heatmap, 1))
-    scaled_psf_heatmap = np.clip(scaled_psf_heatmap, a_min=0, a_max=1)
-    psfs_rgb = clusters3d_colormap[clusters_rgb.astype(np.ubyte)] * scaled_psf_heatmap[..., np.newaxis]
-    psfs_rgb = psfs_rgb
-    imwrite(
-        f"{model_pred.with_suffix('')}_aggregated_clusters_psfs.tif",
-        psfs_rgb.astype(np.ubyte),
-        photometric='rgb'
-    )
-
-    clusters3d = clusters3d_colormap[clusters3d_heatmap.astype(np.ubyte)] * vol[..., np.newaxis]
-    clusters3d = clusters3d.astype(np.ubyte)
-    imwrite(
-        f"{model_pred.with_suffix('')}_aggregated_clusters.tif",
-        clusters3d,
-        photometric='rgb',
-        imagej=True,
-        resolution=(xw, yw),
-    )
+    for name, heatmap in zip(
+        ('wavefronts', 'wavefronts_expected', 'psfs', 'psfs_expected'),
+        (wavefront_heatmap, expected_wavefront_heatmap, psf_heatmap, expected_psf_heatmap),
+    ):
+        color_clusters(
+            heatmap,
+            clusters_rgb,
+            clusters3d_colormap,
+            f"{model_pred.with_suffix('')}_aggregated_clusters_{name}.tif"
+        )
 
     reconstruct_wavefront_error_landscape(
         wavefronts=wavefronts,
