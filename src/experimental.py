@@ -1007,18 +1007,25 @@ def cluster_tiles(
                 features[mode.index_ansi] /= mode.m + 1
 
         n_clusters = min(max_isoplanatic_clusters, len(features)) + 1
-        clustering = KMeans(init="k-means++", n_clusters=n_clusters, max_iter=1000)
+        clustering = KMeans(init='random', n_clusters=n_clusters, max_iter=1000)
         clustering.fit(features)
-
-        # from sklearn_extra.cluster import KMedoids
-        # clustering = KMedoids(init="k-medoids++", n_clusters=n_clusters, max_iter=1000)
-        # clustering.fit(features)
 
         ztile_preds['cluster'] = clustering.predict(features)
 
+        """" 
+        Testing kmedians using pyclustering
+        # from pyclustering.cluster.kmedians import kmedians
+        # from pyclustering.cluster.center_initializer import kmeans_plusplus_initializer
+        # initial_centers = kmeans_plusplus_initializer(features.values, n_clusters).initialize()
+        # clustering = kmedians(features.values, initial_medians=initial_centers, tolerance=1e-6)
+        # clustering.process()
+        # medians = np.array(clustering.get_medians())
+        # ztile_preds['cluster'] = clustering.predict(features.values)
+        """
+
         # sort clusters by p2v
         centers_mag = [
-            ztile_preds[ztile_preds['cluster'] == i].mask(where_unconfident).drop(columns='cluster').agg(
+            ztile_preds[ztile_preds['cluster'] == i].mask(where_unconfident).drop(columns='cluster').fillna(0).agg(
                 aggregation_rule, axis=0
             ).values
             for i in range(n_clusters)
@@ -1056,8 +1063,8 @@ def cluster_tiles(
                     pred = clustering.cluster_centers_[k - 1]
                     pred_std = ztile_stds.loc[g].mask(where_unconfident).agg('mean', axis=0)
                 else:
-                    pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').agg(aggregation_rule, axis=0)
-                    pred_std = ztile_stds.loc[g].mask(where_unconfident).agg(aggregation_rule, axis=0)
+                    pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').fillna(0).agg(aggregation_rule, axis=0)
+                    pred_std = ztile_stds.loc[g].mask(where_unconfident).fillna(0).agg(aggregation_rule, axis=0)
 
             cluster = f'z{z}_c{c}'
 
