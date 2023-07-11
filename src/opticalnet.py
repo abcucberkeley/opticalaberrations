@@ -90,12 +90,12 @@ class Patchify(layers.Layer):
         return config
 
     def call(self, inputs, training=True, **kwargs):
-        patches = tf.extract_volume_patches(
-            inputs,
-            ksizes=(1, 1, self.patch_size, self.patch_size, 1),
-            strides=(1, 1, self.patch_size, self.patch_size, 1),
-            padding="VALID",
-        )
+        planes = []
+        for ax in range(inputs.shape[1]):
+            i = tf.nn.space_to_depth(inputs[:, ax], self.patch_size)
+            planes.append(i)
+        patches = tf.stack(planes, axis=1)
+
         patches = self.ln(patches)
         patches = layers.Reshape((inputs.shape[1], -1, patches.shape[-1]))(patches)
         return patches
