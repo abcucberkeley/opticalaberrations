@@ -7,6 +7,7 @@ numexpr.set_num_threads(numexpr.detect_number_of_cores())
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
+import time
 import logging
 import sys
 import h5py
@@ -40,6 +41,13 @@ from tensorflow.keras.callbacks import EarlyStopping
 from callbacks import Defibrillator
 from callbacks import LearningRateScheduler
 from callbacks import TensorBoardCallback
+
+try:
+    import onnx
+    import tf2onnx
+    import onnxruntime
+except ImportError:
+    logging.warning('ONNX is supported on your system.')
 
 import utils
 import vis
@@ -171,6 +179,35 @@ def load_metadata(
             **kwargs
         )
     return psfgen
+
+
+def convert2onnx(model_path, dtype='float32'):
+    model = load(model_path)
+    input_shape = model.input_shape
+    input_signature = [tf.TensorSpec(input_shape, dtype=dtype, name='embeddings')]
+    onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature=input_signature, opset=13)
+    onnx.save(onnx_model, f"{model_path}.onnx")
+
+    embeddings = np.zeros((360, *input_shape[1:]), dtype=dtype)
+
+    timeit = time.time()
+    sess = onnxruntime.InferenceSession(f"{model_path}.onnx", providers=["CUDAExecutionProvider"])
+    results_ort = sess.run(["regressor"], {"embeddings": embeddings})
+    logging.info(f"Runtime for ONNX model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
+    del sess
+
+    timeit = time.time()
+    model = load(model_path)
+    results_tf = model.predict(embeddings, batch_size=360)[np.newaxis, ...]
+    logging.info(f"Runtime for TF model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
+
+    for ort_res, tf_res in zip(results_ort, results_tf):
+        np.testing.assert_allclose(
+            ort_res,
+            tf_res,
+            rtol=1e-5,
+            atol=1e-5,
+        )
 
 
 def save_metadata(
@@ -1244,7 +1281,7 @@ def train(
         roi: Any = None,
         refractive_index: float = 1.33,
         no_phase: bool = False,
-        plot_patches: bool = False,
+        plot_patches: bool = True,
         lls_defocus: bool = False,
         defocus_only: bool = False,
 ):
