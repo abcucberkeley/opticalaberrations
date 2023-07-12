@@ -555,8 +555,8 @@ def plot_heatmap_p2v(
         elif label == f'Number of iterations':
 
             x = histograms[
-                (histograms.iter_num == 3) &
-                (histograms.aberration >= 3.5) & (histograms.aberration <= 4.5)
+                (histograms.iter_num == 1) &
+                (histograms.aberration >= 2.5) & (histograms.aberration <= 3.5)
             ]
             ax1 = sns.histplot(
                 ax=ax1,
@@ -567,6 +567,9 @@ def plot_heatmap_p2v(
                 bins=25,
                 color='dimgrey'
             )
+
+            ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
+            ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
             ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
             ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
             ax1.set_ylim(0, 80)
@@ -583,10 +586,10 @@ def plot_heatmap_p2v(
             )
 
             ax.add_patch(
-                plt.Rectangle((.05, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+                plt.Rectangle((.05, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
             )
             ax.text(
-                .3, .8, 'A',
+                .1, .6, 'A',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -635,8 +638,8 @@ def plot_heatmap_p2v(
             )
 
             x = histograms[
-                (histograms.iter_num == 1) &
-                (histograms.aberration >= 1.5) & (histograms.aberration <= 2.5)
+                (histograms.iter_num == 5) &
+                (histograms.aberration >= 2.5) & (histograms.aberration <= 3.5)
             ]
             ax3 = sns.histplot(
                 ax=ax3,
@@ -647,9 +650,6 @@ def plot_heatmap_p2v(
                 bins=25,
                 color='dimgrey'
             )
-
-            ax3.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
-            ax3.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
             ax3.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
             ax3.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
             ax3.set_ylim(0, 80)
@@ -666,16 +666,17 @@ def plot_heatmap_p2v(
             )
 
             ax.add_patch(
-                plt.Rectangle((.25, .7), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+                plt.Rectangle((.45, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
             )
             ax.text(
-                .1, .4, 'C',
+                .5, .6, 'C',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
                 color='k',
                 transform=ax.transAxes
             )
+
 
             ax1.legend(frameon=False, ncol=1, loc='upper center')
             ax1.yaxis.set_major_formatter(PercentFormatter(decimals=0))
