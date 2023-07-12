@@ -47,7 +47,7 @@ try:
     import tf2onnx
     import onnxruntime
 except ImportError:
-    logging.warning('ONNX is supported on your system.')
+    pass
 
 import utils
 import vis
@@ -187,27 +187,40 @@ def convert2onnx(model_path, dtype='float32'):
     input_signature = [tf.TensorSpec(input_shape, dtype=dtype, name='embeddings')]
     onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature=input_signature, opset=13)
     onnx.save(onnx_model, f"{model_path}.onnx")
+    del onnx_model
 
     embeddings = np.zeros((360, *input_shape[1:]), dtype=dtype)
 
     timeit = time.time()
-    sess = onnxruntime.InferenceSession(f"{model_path}.onnx", providers=["CUDAExecutionProvider"])
+    sess = onnxruntime.InferenceSession(f"{model_path}.onnx", providers=['TensorrtExecutionProvider'])
+    results_trt = sess.run(["regressor"], {"embeddings": embeddings})
+    logging.info(f"Runtime for ONNX model: Tensorrt => {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
+    del sess
+
+    timeit = time.time()
+    sess = onnxruntime.InferenceSession(f"{model_path}.onnx", providers=['CUDAExecutionProvider'])
     results_ort = sess.run(["regressor"], {"embeddings": embeddings})
-    logging.info(f"Runtime for ONNX model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
+    logging.info(f"Runtime for ONNX model: CUDA => {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
     del sess
 
     timeit = time.time()
     model = load(model_path)
     results_tf = model.predict(embeddings, batch_size=360)[np.newaxis, ...]
-    logging.info(f"Runtime for TF model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
+    logging.info(f"Runtime for TF model: CUDA => {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
 
-    for ort_res, tf_res in zip(results_ort, results_tf):
-        np.testing.assert_allclose(
-            ort_res,
-            tf_res,
-            rtol=1e-5,
-            atol=1e-5,
-        )
+    np.testing.assert_allclose(
+        results_trt,
+        results_tf,
+        rtol=1e-5,
+        atol=1e-5,
+    )
+
+    np.testing.assert_allclose(
+        results_ort,
+        results_tf,
+        rtol=1e-5,
+        atol=1e-5,
+    )
 
 
 def save_metadata(
