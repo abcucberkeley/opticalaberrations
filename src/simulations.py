@@ -99,7 +99,7 @@ def plot_zernike_pyramid(amp=.1, wavelength=.510, weighted=False):
                             ax.set_title(mode)
 
                             if weighted:
-                                if n < 2:
+                                if z.index_ansi in [0, 1, 2, 4]:
                                     mat = ax.imshow(
                                         w,
                                         cmap='Greys',

@@ -442,7 +442,7 @@ def plot_heatmap_p2v(
             ax1.set_xlabel('Residuals')
             ax1.set_ylabel('')
             ax1.text(
-                .9, .8, 'A',
+                .9, .8, 'I',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -454,7 +454,7 @@ def plot_heatmap_p2v(
                 plt.Rectangle((0, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
             )
             ax.text(
-                .05, .4, 'A',
+                .05, .4, 'I',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -482,7 +482,7 @@ def plot_heatmap_p2v(
             ax2.set_xlabel('Residuals')
             ax2.set_ylabel('')
             ax2.text(
-                .9, .8, 'B',
+                .9, .8, 'II',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -491,18 +491,16 @@ def plot_heatmap_p2v(
             )
 
             ax.add_patch(
-                plt.Rectangle((.5, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+                plt.Rectangle((.2, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
             )
-
             ax.text(
-                .55, .4, 'C',
+                .25, .4, 'II',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
                 color='k',
                 transform=ax.transAxes
             )
-
 
             x = histograms[
                 (histograms.pbins >= 5e5) & (histograms.pbins <= 6e5) &
@@ -524,7 +522,7 @@ def plot_heatmap_p2v(
             ax3.set_xlabel('Residuals')
             ax3.set_ylabel('')
             ax3.text(
-                .9, .8, 'C',
+                .9, .8, 'III',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -533,10 +531,11 @@ def plot_heatmap_p2v(
             )
 
             ax.add_patch(
-                plt.Rectangle((.2, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+                plt.Rectangle((.5, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
             )
+
             ax.text(
-                .25, .4, 'B',
+                .55, .4, 'III',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -577,7 +576,7 @@ def plot_heatmap_p2v(
             ax1.set_xlabel('Residuals')
             ax1.set_ylabel('')
             ax1.text(
-                .9, .8, 'A',
+                .9, .8, 'I',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -589,7 +588,7 @@ def plot_heatmap_p2v(
                 plt.Rectangle((.05, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
             )
             ax.text(
-                .1, .6, 'A',
+                .1, .6, 'I',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -617,7 +616,7 @@ def plot_heatmap_p2v(
             ax2.set_xlabel('Residuals')
             ax2.set_ylabel('')
             ax2.text(
-                .9, .8, 'B',
+                .9, .8, 'II',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -629,7 +628,7 @@ def plot_heatmap_p2v(
                 plt.Rectangle((.15, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
             )
             ax.text(
-                .2, .6, 'B',
+                .2, .6, 'II',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -657,7 +656,7 @@ def plot_heatmap_p2v(
             ax3.set_xlabel('Residuals')
             ax3.set_ylabel('')
             ax3.text(
-                .9, .8, 'C',
+                .9, .8, 'III',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -669,14 +668,13 @@ def plot_heatmap_p2v(
                 plt.Rectangle((.45, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
             )
             ax.text(
-                .5, .6, 'C',
+                .5, .6, 'III',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
                 color='k',
                 transform=ax.transAxes
             )
-
 
             ax1.legend(frameon=False, ncol=1, loc='upper center')
             ax1.yaxis.set_major_formatter(PercentFormatter(decimals=0))
@@ -897,7 +895,7 @@ def snrheatmap(
 
     plot_heatmap_p2v(
         dataframe,
-        # histograms=df,
+        histograms=df,
         wavelength=modelspecs.lam_detection,
         savepath=savepath,
         label=f'Integrated photons',
