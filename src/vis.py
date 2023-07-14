@@ -17,6 +17,9 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 from numpy.lib.stride_tricks import sliding_window_view
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.ticker import FormatStrFormatter, LogFormatterMathtext
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+import matplotlib.font_manager as fm
+
 from typing import Any, Union, Optional
 import numpy as np
 import matplotlib.patches as patches
@@ -1486,11 +1489,13 @@ def plot_beads_dataset(
     vmin, vmax = -.75, .75
     for val, label in zip(
             ["p2v_gt", "p2v_residual"],
-            [r"Remaining aberration ($\lambda$)", r"Disagreement ($\lambda$)"]
+            [r"Residuals ($\lambda$)", r"Disagreement ($\lambda$)"]
     ):
 
         fig = plt.figure(figsize=(14, 16))
         gs = fig.add_gridspec(7, 8)
+
+        zernikes_dict = list(set(Zernike(int(j)) for j in range(15)))
 
         for i, modes in enumerate(['05-05', '03-05', '05-08', '10-12']):
 
@@ -1523,6 +1528,19 @@ def plot_beads_dataset(
             )
             wf_mip.axis('off')
             wf_mip.set_title(zlabel)
+
+            if i == 0:
+                scalebar = AnchoredSizeBar(
+                    wf_mip.transData,
+                    2/dxy,
+                    r'2 $\mu$m',
+                    'lower right',
+                    pad=0.1,
+                    color='white',
+                    frameon=False,
+                    size_vertical=1
+                )
+                wf_mip.add_artist(scalebar)
 
             wf_wavefront = fig.add_subplot(gs[0, col+1])
             plot_wavefront(
@@ -1638,6 +1656,7 @@ def plot_beads_dataset(
                 hue="na",
                 palette='tab10',
                 ci='sd',
+                hue_order=[1.0, .95, .85],
                 legend=False if mode != 14 else 'auto'
             )
 
@@ -1646,11 +1665,11 @@ def plot_beads_dataset(
             ax.grid(which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
             # ax.axhline(y=.5, color="red", dashes=(2, 1), zorder=3)
             ax.spines[['right', 'top']].set_visible(False)
-            # ax.text(
-            #     .5, .95, f"Mode {mode}: $Z_{{n={zernikes[mode].n}}}^{{m={zernikes[mode].m}}}$",
-            #     horizontalalignment='center',
-            #     transform=ax.transAxes
-            # )
+            ax.text(
+                .5, .9, f"Mode {mode}: $Z_{{n={zernikes_dict[mode].n}}}^{{m={zernikes_dict[mode].m}}}$",
+                horizontalalignment='center',
+                transform=ax.transAxes
+            )
             plt.setp(ax.get_yticklabels()[0], visible=False)
             plt.setp(ax.get_xticklabels()[0], visible=False)
 
