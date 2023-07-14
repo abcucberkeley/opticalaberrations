@@ -1489,7 +1489,7 @@ def plot_beads_dataset(
     vmin, vmax = -.75, .75
     for val, label in zip(
             ["p2v_gt", "p2v_residual"],
-            [r"Residuals ($\lambda$)", r"Disagreement ($\lambda$)"]
+            [r"Aberration ($\lambda$)", r"Disagreement ($\lambda$)"]
     ):
 
         fig = plt.figure(figsize=(14, 16))
