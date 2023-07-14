@@ -1469,6 +1469,7 @@ def plot_beads_dataset(
     dxy: float = .108,
     dz: float = .2,
     pltstyle: Any = None,
+    transform_to_align_to_DM: bool = True
 ):
     plt.rcParams.update({
         'font.size': 12,
@@ -1512,12 +1513,13 @@ def plot_beads_dataset(
                 xz=None,
                 yz=None,
                 gamma=gamma,
-                vol=k['gt_img'],
+                vol=np.transpose(np.rot90(k['gt_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+                    if transform_to_align_to_DM else k['gt_img'],
                 cmap=psf_cmap,
                 dxy=dxy,
                 dz=dz,
                 colorbar=True if col == 0 else False,
-                label='WF NoAO' if col == 0 else 0,
+                label='Widefield\nIteration 0' if col == 0 else 0,
             )
             wf_mip.axis('off')
             wf_mip.set_title(zlabel)
@@ -1539,15 +1541,16 @@ def plot_beads_dataset(
                 xz=None,
                 yz=None,
                 gamma=gamma,
-                vol=k['ml_img'],
+                vol=np.transpose(np.rot90(k['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+                    if transform_to_align_to_DM else k['ml_img'],
                 cmap=psf_cmap,
                 dxy=dxy,
                 dz=dz,
                 colorbar=True if col == 0 else False,
-                label='LS NoAO' if col == 0 else 0,
+                label='OpticalNet\nIteration 0' if col == 0 else 0,
             )
             ls_mip.axis('off')
-            ls_mip.set_title('XY (10 $\mu$m)')
+            # ls_mip.set_title('XY (10 $\mu$m)')
 
             ml_wavefront = fig.add_subplot(gs[1, col+1])
             plot_wavefront(
@@ -1566,15 +1569,16 @@ def plot_beads_dataset(
                 xz=None,
                 yz=None,
                 gamma=gamma,
-                vol=r1['ml_img'],
+                vol=np.transpose(np.rot90(r1['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+                    if transform_to_align_to_DM else r1['ml_img'],
                 cmap=psf_cmap,
                 dxy=dxy,
                 dz=dz,
                 colorbar=True if col == 0 else False,
-                label='OpticalNet' if col == 0 else 0,
+                label='OpticalNet\nIteration 1' if col == 0 else 0,
             )
             diff_mip.axis('off')
-            diff_mip.set_title('Round 1')
+            # diff_mip.set_title('Round 1')
 
             diff_wavefront = fig.add_subplot(gs[2, col+1])
             plot_wavefront(
@@ -1593,15 +1597,16 @@ def plot_beads_dataset(
                 xz=None,
                 yz=None,
                 gamma=gamma,
-                vol=r2['ml_img'],
+                vol=np.transpose(np.rot90(r2['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+                    if transform_to_align_to_DM else r2['ml_img'],
                 cmap=psf_cmap,
                 dxy=dxy,
                 dz=dz,
                 colorbar=True if col == 0 else False,
-                label='OpticalNet' if col == 0 else 0,
+                label='OpticalNet\nIteration 2' if col == 0 else 0,
             )
             diff_mip2.axis('off')
-            diff_mip2.set_title('Round 2')
+            # diff_mip2.set_title('Round 2')
 
             diff_wavefront2 = fig.add_subplot(gs[3, col+1])
             plot_wavefront(
@@ -1639,9 +1644,13 @@ def plot_beads_dataset(
             ax.set_xlim((0, max(residuals['iteration_index'])))
             ax.set_ylim((0, 2) if val == 'p2v_gt' else (0, 1))
             ax.grid(which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
-            ax.axhline(y=.5, color="red", dashes=(2, 1), zorder=3)
+            # ax.axhline(y=.5, color="red", dashes=(2, 1), zorder=3)
             ax.spines[['right', 'top']].set_visible(False)
-            ax.text(.5, .95, f"Mode: {mode}", horizontalalignment='center', transform=ax.transAxes)
+            # ax.text(
+            #     .5, .95, f"Mode {mode}: $Z_{{n={zernikes[mode].n}}}^{{m={zernikes[mode].m}}}$",
+            #     horizontalalignment='center',
+            #     transform=ax.transAxes
+            # )
             plt.setp(ax.get_yticklabels()[0], visible=False)
             plt.setp(ax.get_xticklabels()[0], visible=False)
 
