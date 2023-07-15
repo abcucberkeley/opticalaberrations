@@ -18,7 +18,6 @@ from numpy.lib.stride_tricks import sliding_window_view
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.ticker import FormatStrFormatter, LogFormatterMathtext
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
-import matplotlib.font_manager as fm
 
 from typing import Any, Union, Optional
 import numpy as np
@@ -1484,7 +1483,7 @@ def plot_beads_dataset(
         'axes.autolimit_mode': 'round_numbers'
     })
 
-    df = residuals.groupby('mode_1')["na", "iteration_index", "p2v_gt", "p2v_residual"]
+    heatmaps = residuals.groupby('mode_1')["na", "iteration_index", "p2v_gt", "p2v_residual", "mode_2"]
 
     vmin, vmax = -.75, .75
     for val, label in zip(
@@ -1523,11 +1522,14 @@ def plot_beads_dataset(
                 cmap=psf_cmap,
                 dxy=dxy,
                 dz=dz,
-                colorbar=True if col == 0 else False,
-                label='Widefield\nIteration 0' if col == 0 else 0,
+                colorbar=False,
             )
-            wf_mip.axis('off')
+            wf_mip.axis('on')
             wf_mip.set_title(zlabel)
+            wf_mip.set_ylabel('Widefield\nIteration 0' if col == 0 else '')
+            wf_mip.set_xlabel('')
+            wf_mip.set_yticks([])
+            wf_mip.set_xticks([])
 
             if i == 0:
                 scalebar = AnchoredSizeBar(
@@ -1564,11 +1566,13 @@ def plot_beads_dataset(
                 cmap=psf_cmap,
                 dxy=dxy,
                 dz=dz,
-                colorbar=True if col == 0 else False,
-                label='OpticalNet\nIteration 0' if col == 0 else 0,
+                colorbar=False,
             )
-            ls_mip.axis('off')
-            # ls_mip.set_title('XY (10 $\mu$m)')
+            ls_mip.axis('on')
+            ls_mip.set_ylabel('OpticalNet\nIteration 0' if col == 0 else '')
+            ls_mip.set_xlabel('')
+            ls_mip.set_yticks([])
+            ls_mip.set_xticks([])
 
             ml_wavefront = fig.add_subplot(gs[1, col+1])
             plot_wavefront(
@@ -1592,11 +1596,13 @@ def plot_beads_dataset(
                 cmap=psf_cmap,
                 dxy=dxy,
                 dz=dz,
-                colorbar=True if col == 0 else False,
-                label='OpticalNet\nIteration 1' if col == 0 else 0,
+                colorbar=False,
             )
-            diff_mip.axis('off')
-            # diff_mip.set_title('Round 1')
+            diff_mip.axis('on')
+            diff_mip.set_ylabel('OpticalNet\nIteration 1' if col == 0 else '')
+            diff_mip.set_xlabel('')
+            diff_mip.set_yticks([])
+            diff_mip.set_xticks([])
 
             diff_wavefront = fig.add_subplot(gs[2, col+1])
             plot_wavefront(
@@ -1620,11 +1626,13 @@ def plot_beads_dataset(
                 cmap=psf_cmap,
                 dxy=dxy,
                 dz=dz,
-                colorbar=True if col == 0 else False,
-                label='OpticalNet\nIteration 2' if col == 0 else 0,
+                colorbar=False,
             )
-            diff_mip2.axis('off')
-            # diff_mip2.set_title('Round 2')
+            diff_mip2.axis('on')
+            diff_mip2.set_ylabel('OpticalNet\nIteration 2' if col == 0 else '')
+            diff_mip2.set_xlabel('')
+            diff_mip2.set_yticks([])
+            diff_mip2.set_xticks([])
 
             diff_wavefront2 = fig.add_subplot(gs[3, col+1])
             plot_wavefront(
@@ -1641,50 +1649,46 @@ def plot_beads_dataset(
                 mode += 1
 
             try:
-                g = df.get_group(str(mode).zfill(2))
+                g = heatmaps.get_group(str(mode).zfill(2))
             except KeyError:
                 continue
 
             row += 4
             col *= 2
             ax = fig.add_subplot(gs[row, col:col+2])
-            ax = sns.lineplot(
-                data=g,
-                ax=ax,
-                x="iteration_index",
-                y=val,
-                hue="na",
-                palette='tab10',
-                ci='sd',
-                hue_order=[1.0, .95, .85],
-                legend=False if mode != 14 else 'auto'
-            )
+            g = g[g['na'] == .85].pivot("iteration_index", "mode_2",  val)
 
-            ax.set_xlim((0, max(residuals['iteration_index'])))
-            ax.set_ylim((0, 2) if val == 'p2v_gt' else (0, 1))
-            ax.grid(which="both", axis='both', lw=.25, ls='--', zorder=0, color='lightgrey')
-            # ax.axhline(y=.5, color="red", dashes=(2, 1), zorder=3)
-            ax.spines[['right', 'top']].set_visible(False)
-            ax.text(
-                .5, .9, f"Mode {mode}: $Z_{{n={zernikes_dict[mode].n}}}^{{m={zernikes_dict[mode].m}}}$",
-                horizontalalignment='center',
-                transform=ax.transAxes
+            colors = sns.color_palette('magma_r', n_colors=7 if val == 'p2v_gt' else 5)
+            levels = np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .25)
+            cmap, norm = matplotlib.colors.from_levels_and_colors(levels, colors, extend="max")
+
+            im = ax.imshow(g.values, cmap=cmap, norm=norm)
+            ax.set(
+                yticks=range(g.shape[0]),
+                xticks=range(g.shape[1]),
+                xticklabels=[3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+                yticklabels=g.index
             )
-            plt.setp(ax.get_yticklabels()[0], visible=False)
-            plt.setp(ax.get_xticklabels()[0], visible=False)
+            ax.set_title(f"Mode {mode}: $Z_{{n={zernikes_dict[mode].n}}}^{{m={zernikes_dict[mode].m}}}$")
 
             if mode == 14:
-                ax.legend(frameon=False, ncol=1, loc='center', title='NA', bbox_to_anchor=[1.5, .5])
+                cbar_ax = inset_axes(ax, width="90%", height="10%", loc='center right', borderpad=-20)
+                plt.colorbar(
+                    im,
+                    cax=cbar_ax,
+                    spacing="proportional",
+                    orientation="horizontal",
+                )
 
-            if col == 0:
-                ax.set_ylabel(label)
+                cbar_ax.set_xlabel(label)
+
+            if mode in [3, 8, 12]:
+                ax.set_ylabel('Iteration')
             else:
                 ax.set_ylabel('')
                 ax.set_yticklabels([])
 
-            if row == 6:
-                ax.set_xlabel('Iteration')
-            else:
+            if mode not in [11, 12, 13, 14]:
                 ax.set_xlabel('')
                 ax.set_xticklabels([])
 
