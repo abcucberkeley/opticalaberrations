@@ -1749,7 +1749,20 @@ def compare_ao_iterations(
                 dz=dz,
                 colorbar=True,
             )
-            ax_img.set_title(f'No AO ($\mu$m)')
+            ax_img.set_title(f'No AO')
+            ax_img.axis('off')
+
+            scalebar = AnchoredSizeBar(
+                ax_img.transData,
+                5 / dxy,
+                r'5 $\mu$m',
+                'lower left',
+                pad=0.1,
+                color='white',
+                frameon=False,
+                size_vertical=1
+            )
+            ax_img.add_artist(scalebar)
 
             plot_mip(
                 xy=ax_fft,
@@ -1788,6 +1801,8 @@ def compare_ao_iterations(
                 dz=dz,
                 colorbar=False,
             )
+            ax_img.axis('off')
+
             plot_mip(
                 xy=ax_fft,
                 xz=None,
@@ -1860,11 +1875,12 @@ def compare_ao_iterations(
         for ax in [ax_ml, ax_sh]:
             ax.axis('off')
 
-    plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.01, wspace=.2)
+    plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.01, wspace=.01)
     plt.savefig(f'{save_path}.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+    plt.savefig(f'{save_path}.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
     plt.savefig(f'{save_path}.pdf', bbox_inches='tight', dpi=300, pad_inches=.25)
 
-    fig = plt.figure(figsize=(10, 15))
+    fig = plt.figure(figsize=(8, 14))
     gs = fig.add_gridspec(6, 3)
     zz = 20
 
@@ -1888,6 +1904,18 @@ def compare_ao_iterations(
             label=f'{int(i*zz*dz):1d}$-${int((i+1)*zz*dz):1d}$~\mu$m'
         )
         noao_ax.set_xlabel('')
+        noao_ax.axis('off')
+        scalebar = AnchoredSizeBar(
+            noao_ax.transData,
+            5 / dxy,
+            r'5 $\mu$m',
+            'lower left',
+            pad=0.1,
+            color='white',
+            frameon=False,
+            size_vertical=1
+        )
+        noao_ax.add_artist(scalebar)
 
         plot_mip(
             xy=gt_ax,
@@ -1901,6 +1929,18 @@ def compare_ao_iterations(
             colorbar=False,
         )
         gt_ax.set_xlabel('')
+        gt_ax.axis('off')
+        scalebar = AnchoredSizeBar(
+            gt_ax.transData,
+            5 / dxy,
+            r'5 $\mu$m',
+            'lower left',
+            pad=0.1,
+            color='white',
+            frameon=False,
+            size_vertical=1
+        )
+        gt_ax.add_artist(scalebar)
 
         plot_mip(
             xy=ml_ax,
@@ -1914,14 +1954,40 @@ def compare_ao_iterations(
             colorbar=False,
         )
         ml_ax.set_xlabel('')
+        ml_ax.axis('off')
+        scalebar = AnchoredSizeBar(
+            ml_ax.transData,
+            5 / dxy,
+            r'5 $\mu$m',
+            'lower left',
+            pad=0.1,
+            color='white',
+            frameon=False,
+            size_vertical=1
+        )
+        ml_ax.add_artist(scalebar)
+
         ml_axz.set_xlabel('')
+        ml_axz.axis('off')
+        scalebar = AnchoredSizeBar(
+            ml_axz.transData,
+            5 / dz,
+            r'5 $\mu$m',
+            'lower left',
+            pad=0.1,
+            color='white',
+            frameon=False,
+            size_vertical=1
+        )
+        ml_axz.add_artist(scalebar)
 
         if i == 0:
-            noao_ax.set_title('No AO ($\mu$m)')
+            noao_ax.set_title('No AO')
             gt_ax.set_title('Shack–Hartmann')
             ml_ax.set_title('OpticalNet')
         ml_axz.set_title('OpticalNet (XZ)')
 
-    plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.01, wspace=.01)
+    plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=0, wspace=0)
     plt.savefig(f'{save_path}_mips.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+    plt.savefig(f'{save_path}_mips.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
     plt.savefig(f'{save_path}_mips.pdf', bbox_inches='tight', dpi=300, pad_inches=.25)
