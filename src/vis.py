@@ -1466,13 +1466,12 @@ def plot_beads_dataset(
     residuals: pd.DataFrame,
     savepath: Path,
     psf_cmap: str = 'hot',
-    fft_cmap: str = 'Greys_r',
     gamma: float = .5,
     dxy: float = .108,
     dz: float = .2,
     wavelength: float = .510,
     pltstyle: Any = None,
-    custum_colormap: bool = True,
+    custum_colormap: bool = False,
     transform_to_align_to_DM: bool = True
 ):
     plt.rcParams.update({
@@ -1487,7 +1486,6 @@ def plot_beads_dataset(
 
     heatmaps = residuals.groupby('mode_1')["na", "iteration_index", "p2v_gt", "p2v_residual", "mode_2"]
 
-    vmin, vmax = -.75, .75
     for val, label in zip(
             ["p2v_gt", "p2v_residual"],
             [
@@ -1556,8 +1554,8 @@ def plot_beads_dataset(
                 wf_wavefront,
                 k['gt_wavefront'].wave(size=100),
                 label='',
-                vmin=vmin,
-                vmax=vmax,
+                vmin=-.75,
+                vmax=.75,
                 nas=[1.0, .85],
                 vcolorbar=True if col == 6 else False,
             )
@@ -1586,8 +1584,8 @@ def plot_beads_dataset(
                 ml_wavefront,
                 k['ml_wavefront'].wave(size=100),
                 label='',
-                vmin=vmin,
-                vmax=vmax,
+                vmin=-.75,
+                vmax=.75,
                 nas=[1.0, .85],
                 vcolorbar=True if col == 6 else False,
             )
@@ -1616,8 +1614,8 @@ def plot_beads_dataset(
                 diff_wavefront,
                 r1['diff_wavefront'].wave(size=100),
                 label='',
-                vmin=vmin,
-                vmax=vmax,
+                vmin=-.75,
+                vmax=.75,
                 nas=[1.0, .85],
                 vcolorbar=True if col == 6 else False,
             )
@@ -1645,8 +1643,8 @@ def plot_beads_dataset(
             plot_wavefront(
                 diff_wavefront2, r2['diff_wavefront'].wave(size=100),
                 label='',
-                vmin=vmin,
-                vmax=vmax,
+                vmin=-.75,
+                vmax=.75,
                 nas=[1.0, .85],
                 vcolorbar=True if col == 6 else False,
             )
@@ -1676,13 +1674,13 @@ def plot_beads_dataset(
                 high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
                 cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
                 cmap = mcolors.ListedColormap(cmap)
+                im = ax.imshow(g.values.T, cmap=cmap, aspect='auto', vmin=levels[0], vmax=levels[-1])
             else:
-                colors = sns.color_palette('magma_r', n_colors=7 if val == 'p2v_gt' else 5)
-                levels = np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .25)
-                cmap, norm = matplotlib.colors.from_levels_and_colors(levels, colors, extend="max")
+                # colors = sns.color_palette('magma_r', n_colors=len(levels))
+                # cmap, norm = matplotlib.colors.from_levels_and_colors(levels, colors, extend="max")
+                # im = ax.imshow(g.values.T, cmap=cmap, norm=norm, aspect='auto')
+                im = ax.imshow(g.values.T, cmap='magma_r', aspect='auto', vmin=levels[0], vmax=levels[-1])
 
-            # im = ax.imshow(g.values.T, cmap=cmap, aspect='auto', norm=norm)
-            im = ax.imshow(g.values.T, cmap=cmap, aspect='auto', vmin=levels[0], vmax=levels[-1])
             ax.set(
                 xticks=range(g.shape[0]),
                 yticks=range(g.shape[1]),
