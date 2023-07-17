@@ -138,6 +138,9 @@ def dog(
     snr_threshold: int = 10,
 ):
     """
+    If image is a cp.ndarray, processing is performed on GPU, and snr_threshold
+    is 
+
     Find features between ``low_sigma`` and ``high_sigma`` in size.
     This function uses the Difference of Gaussians method for applying
     band-pass filters to multi-dimensional arrays. The input array is
@@ -176,8 +179,7 @@ def dog(
         filtered_image : ndarray
     """
     if isinstance(image, cp.ndarray):
-
-        try:
+        try:    # try on GPU
             spatial_dims = image.ndim
 
             low_sigma = cp.array(low_sigma, dtype='float', ndmin=1)
@@ -205,23 +207,24 @@ def dog(
             mask[mask < .9] = np.nan
             mask[mask >= .9] = 1
 
-            if cp.nanstd(im2*mask) < 3:  # this is sparse
-                snr = measure_snr(image*mask)
-                if snr > snr_threshold:
-                    noise = cp.std(image - im2)  # increase the background subtraction by the noise
+            if cp.nanstd(im2*mask) < 3:  # if blurred shows little deviation: this is sparse, will want to more aggressively subtract
+                snr = measure_snr(image*mask)       
+                if snr > snr_threshold:             # sparse, yet SNR of original image is good
+                    noise = cp.std(image - im2)     # increase the background subtraction by the noise
                     return im1 - (im2 + noise)
-                else:
-                    return np.zeros_like(image)
-            else:
+                else:                               # sparse, and SNR of original image is poor
+                    return np.zeros_like(image)     # return zeros
+                
+            else:                                               # This is a dense image
                 filtered_img = im1 - im2
-                if measure_snr(filtered_img) < snr_threshold:
-                    return np.zeros_like(image)
+                if measure_snr(filtered_img) < snr_threshold:   # SNR poor
+                    return np.zeros_like(image)                 # return zeros
                 else:
-                    return filtered_img
+                    return filtered_img                         # SNR good. Return filtered image.
 
         except ImportError:
             return difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
-    else:
+    else:   # try on CPU
         return difference_of_gaussians(image, low_sigma=0.7, high_sigma=1.5)
 
 
@@ -231,9 +234,18 @@ def remove_background_noise(
         read_noise_bias: float = 5,
         method: str = 'difference_of_gaussians',
 ):
-    """
-        A simple function to remove background noise from a given image.
-        Also uses difference of gaussians to bandpass (reject past nyquist, reject DC/background/scattering
+    """ Remove background noise from a given image volume.
+        Difference of gaussians (DoG) works best via bandpass (reject past nyquist, reject non-uniform DC/background/scattering). Runs
+        on GPU. DoG filter also checks if sparse, returns zeros if image doesn't have signal.
+
+    Args:
+        image (np.array): 3D image volume
+        read_noise_bias (float, optional): When method="mode", empty pixels will still be non-zero due to read noise of camera.
+            This value increases the amount subtracted to put empty pixels at zero. Defaults to 5.
+        method (str, optional): method for background subtraction. Defaults to 'difference_of_gaussians'.
+
+    Returns:
+        _type_: np.array
     """
 
     try:
@@ -262,19 +274,12 @@ def tukey_window(image: np.ndarray, alpha: float = .5):
             alpha: the fraction of the window inside the cosine tapered region
                 1.0 = Hann, 0.0 = rect window
     """
-    # 1.0 = Hann, 0.0 = rect window
-    # window_z = tukey(image.shape[0], alpha=alpha)
-    # window_y = tukey(image.shape[1], alpha=alpha)
-    # window_x = tukey(image.shape[2], alpha=alpha)
-    # zv, yv, xv = np.meshgrid(window_z, window_y, window_x, indexing='ij', copy=True)
-    # w = np.multiply(np.multiply(zv, yv), xv)
 
-    # nominally we would use a 3D window, but that will create a spherical mask inscribing the volume
-    # but this will cut a lot of data, we can do better by using cylindrical mask, because we don't use
+    # Nominally we would use a 3D window, but that would create a spherical mask inscribing the volume bounds.
+    # That will cut a lot of data, we can do better by using cylindrical mask, because we don't use
     # an XZ or YZ projection of the FFT.
-    w = window(('tukey', alpha), image.shape[1:])  # 1.0 = Hann, 0.0 = rect window
-    image *= w[np.newaxis, ...]
-    # image = filtered_image * window(('tukey', alpha), image.shape)
+    w = window(('tukey', alpha), image.shape[1:]) # 2D window (basically an inscribed circle in X, Y)
+    image *= w[np.newaxis, ...] # apply 2D window over 3D volume as a cylinder
     return image
 
 
@@ -291,10 +296,15 @@ def prep_sample(
     plot: Any = None,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
-
-        -Background subtraction
+        
+        (Convert to 32bit float)
+        
+        -Background subtraction (via Difference of gaussians)
+        -Crop (or mirror pad) to iPSF FOV's size in microns (if model FOV is given)
+        -Tukey window
         -Normalization to 0-1
-        -Crop (or zero pad) to model field of view
+        
+        Return 32bit float  
 
     Args:
         sample: Input 3D array (or series of 3D arrays)
