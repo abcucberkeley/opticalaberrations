@@ -1662,12 +1662,13 @@ def plot_beads_dataset(
             levels = np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .25)
             cmap, norm = matplotlib.colors.from_levels_and_colors(levels, colors, extend="max")
 
-            im = ax.imshow(g.values, cmap=cmap, norm=norm)
+            # im = ax.imshow(g.values.T, cmap=cmap, aspect='auto', norm=norm)
+            im = ax.imshow(g.values.T, cmap='magma_r', aspect='auto', vmin=levels[0], vmax=levels[-1])
             ax.set(
-                yticks=range(g.shape[0]),
-                xticks=range(g.shape[1]),
-                xticklabels=[3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
-                yticklabels=g.index
+                xticks=range(g.shape[0]),
+                yticks=range(g.shape[1]),
+                yticklabels=[3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+                xticklabels=g.index
             )
             ax.set_title(f"Mode {mode}: $Z_{{n={zernikes_dict[mode].n}}}^{{m={zernikes_dict[mode].m}}}$")
 
@@ -1679,11 +1680,11 @@ def plot_beads_dataset(
                     spacing="proportional",
                     orientation="horizontal",
                 )
-
+                cbar_ax.set_xticks(levels)
                 cbar_ax.set_xlabel(label)
 
             if mode in [3, 8, 12]:
-                ax.set_ylabel('Iteration')
+                ax.set_ylabel('Initial modes')
             else:
                 ax.set_ylabel('')
                 ax.set_yticklabels([])
@@ -1691,8 +1692,10 @@ def plot_beads_dataset(
             if mode not in [11, 12, 13, 14]:
                 ax.set_xlabel('')
                 ax.set_xticklabels([])
+            else:
+                ax.set_xlabel('Iteration')
 
-        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.06, wspace=.06)
+        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.2, wspace=.06)
         plt.savefig(f'{savepath}_{val}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}_{val}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}_{val}.pdf', dpi=300, bbox_inches='tight', pad_inches=.25)
