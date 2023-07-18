@@ -39,7 +39,7 @@ to install the required packages for running our models.
 Once you have Anaconda installed on your system, clone the repo using the following commands:
 
 ```shell
-git clone --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
+git clone -b develop --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
 ```
 
 Create a new `conda` environment using the following commands (will create an environment named "ml"):
