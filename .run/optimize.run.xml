@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="onnx" type="PythonConfigurationType" factoryName="Python" folderName="utils">
+  <configuration default="false" name="optimize" type="PythonConfigurationType" factoryName="Python" folderName="utils">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -14,7 +14,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/config.py" />
-    <option name="PARAMETERS" value="../models/opticalnet-onnx-test/2023-07-10-12-46 onnx" />
+    <option name="PARAMETERS" value="../models/opticalnet-onnx-test/opticalnet-15-spatial_planes-patchlayer/opticalnet/2023-07-11-19-17 optimize" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

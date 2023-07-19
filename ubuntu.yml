@@ -1,6 +1,7 @@
-name: onnx
+name: ml
 channels:
   - esri
+  - nvidia/label/cuda-11.6.0
   - conda-forge
   - anaconda
   - defaults
@@ -34,9 +35,9 @@ dependencies:
   - brunsli=0.1
   - bzip2=1.0.8
   - c-ares=1.18.1
-  - ca-certificates=2023.01.10
+  - ca-certificates=2023.05.30
   - cachetools=4.2.2
-  - certifi=2022.12.7
+  - certifi=2023.5.7
   - cffi=1.15.0
   - cfitsio=3.470
   - charls=2.2.0
@@ -45,6 +46,37 @@ dependencies:
   - cloudpickle=2.0.0
   - colorama=0.4.4
   - cryptography=3.4.8
+  - cuda=11.6.0
+  - cuda-cccl=11.6.55
+  - cuda-command-line-tools=11.6.0
+  - cuda-compiler=11.6.0
+  - cuda-cudart=11.6.55
+  - cuda-cudart-dev=11.6.55
+  - cuda-cuobjdump=11.6.55
+  - cuda-cupti=11.6.55
+  - cuda-cuxxfilt=11.6.55
+  - cuda-driver-dev=11.6.55
+  - cuda-gdb=11.6.55
+  - cuda-libraries=11.6.0
+  - cuda-libraries-dev=11.6.0
+  - cuda-memcheck=11.6.55
+  - cuda-nsight=11.6.55
+  - cuda-nsight-compute=11.6.0
+  - cuda-nvcc=11.6.55
+  - cuda-nvdisasm=11.6.55
+  - cuda-nvml-dev=11.6.55
+  - cuda-nvprof=11.6.55
+  - cuda-nvprune=11.6.55
+  - cuda-nvrtc=11.6.55
+  - cuda-nvrtc-dev=11.6.55
+  - cuda-nvtx=11.6.55
+  - cuda-nvvp=11.6.58
+  - cuda-runtime=11.6.0
+  - cuda-samples=11.6.101
+  - cuda-sanitizer-api=11.6.55
+  - cuda-toolkit=11.6.0
+  - cuda-tools=11.6.0
+  - cuda-visual-tools=11.6.0
   - cudatoolkit=11.3.1
   - cudnn=8.1.0.77
   - cupti=11.3.1
@@ -71,6 +103,7 @@ dependencies:
   - frozenlist=1.2.0
   - fsspec=2022.7.1
   - gast=0.4.0
+  - gds-tools=1.2.0.100
   - giflib=5.2.1
   - glib=2.69.1
   - google-auth=2.6.0
@@ -113,7 +146,17 @@ dependencies:
   - libbrotlicommon=1.0.9
   - libbrotlidec=1.0.9
   - libbrotlienc=1.0.9
+  - libcublas=11.8.1.74
+  - libcublas-dev=11.8.1.74
+  - libcufft=10.7.0.55
+  - libcufft-dev=10.7.0.55
+  - libcufile=1.2.0.100
+  - libcufile-dev=1.2.0.100
+  - libcurand=10.2.9.55
+  - libcurand-dev=10.2.9.55
   - libcurl=7.80.0
+  - libcusolver=11.3.2.55
+  - libcusparse=11.7.1.55
   - libdeflate=1.8
   - libedit=3.1.20210910
   - libev=4.33
@@ -123,6 +166,10 @@ dependencies:
   - libgfortran4=7.5.0
   - libgomp=9.3.0
   - libnghttp2=1.46.0
+  - libnpp=11.6.0.55
+  - libnpp-dev=11.6.0.55
+  - libnvjpeg=11.6.0.55
+  - libnvjpeg-dev=11.6.0.55
   - libpng=1.6.37
   - libprotobuf=3.14.0
   - libsodium=1.0.18
@@ -157,11 +204,13 @@ dependencies:
   - ncurses=6.3
   - nest-asyncio=1.5.6
   - networkx=2.7.1
+  - nsight-compute=2022.1.0.12
   - numcodecs=0.9.1
   - numexpr=2.8.1
+  - numpy-base=1.21.2
   - oauthlib=3.2.0
   - openjpeg=2.4.0
-  - openssl=1.1.1t
+  - openssl=1.1.1u
   - opt_einsum=3.3.0
   - packaging=21.3
   - pandas=1.4.1
@@ -274,6 +323,7 @@ dependencies:
     - cupy-cuda11x==11.5.0
     - cython==0.29.36
     - defusedxml==0.7.1
+    - dphtools==0.0.3
     - fastrlock==0.8.1
     - flyingcircus==0.1.4.0
     - flyingcircus-numeric==0.1.1.2
@@ -285,19 +335,22 @@ dependencies:
     - imgaug==0.4.0
     - line-profiler==4.0.1
     - line-profiler-pycharm==1.1.0
+    - mako==1.2.4
     - mpmath==1.3.0
     - numpy==1.22.4
-    - nvidia-cublas-cu11==11.11.3.6
-    - nvidia-cublas-cu12==12.2.1.16
     - nvidia-cuda-runtime-cu11==11.8.89
     - nvidia-cuda-runtime-cu12==12.2.53
     - nvidia-cudnn-cu11==8.9.2.26
     - nvidia-cudnn-cu12==8.9.2.26
+    - nvidia-pyindex==1.0.9
     - onnx==1.14.0
     - onnxconverter-common==1.13.0
     - onnxruntime-gpu==1.14.0
     - opencv-python==4.7.0.72
+    - platformdirs==3.9.1
     - protobuf==4.23.4
+    - pycuda==2022.2.2
+    - pytools==2023.1
     - raster-geometry==0.1.4.1
     - setuptools-scm==7.1.0
     - shapely==2.0.1

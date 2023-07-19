@@ -90,8 +90,8 @@ def main(args=None):
             z_voxel_size=args.z_voxel_size,
             embedding_option=args.embedding_option
         )
-    elif args.target == "onnx":
-        backend.convert2onnx(
+    elif args.target == "optimize":
+        backend.optimize_model(
             model_path=args.model,
         )
     else:
