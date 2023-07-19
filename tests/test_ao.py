@@ -110,4 +110,4 @@ def test_aggregate_tiles(kargs):
         plot=kargs['plot'],
     )
 
-    assert zernikes.shape[0] == kargs['num_modes']
+    assert zernikes.shape[1] == kargs['num_modes'] + 2
