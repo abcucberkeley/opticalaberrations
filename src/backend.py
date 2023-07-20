@@ -187,6 +187,7 @@ def optimize_model(
     import onnxruntime
     import tensorrt as trt
     import pycuda.driver as cuda
+    import pycuda.autoinit
 
     model = load(model_path)
     input_shape = model.input_shape
