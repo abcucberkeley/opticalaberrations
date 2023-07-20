@@ -187,7 +187,6 @@ def optimize_model(
     import onnxruntime
     import tensorrt as trt
     import pycuda.driver as cuda
-    from onnxconverter_common import auto_mixed_precision
 
     model = load(model_path)
     input_shape = model.input_shape
