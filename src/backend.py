@@ -285,9 +285,10 @@ def optimize_model(
     except AssertionError as e:
         logger.info(e)
 
+    # load onnx model
+    sess = onnxruntime.InferenceSession(f"{model_path}.onnx", providers=['CUDAExecutionProvider'])
 
     timeit = time.time()
-    sess = onnxruntime.InferenceSession(f"{model_path}.onnx", providers=['CUDAExecutionProvider'])
     results_ort = sess.run(["zernikes"], {"embeddings": embeddings})[0]
     logging.info(f"Runtime for ONNX model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
     del sess
@@ -297,7 +298,7 @@ def optimize_model(
     except AssertionError as e:
         logger.info(e)
 
-
+    # load tf model
     model = load(model_path)
 
     timeit = time.time()
