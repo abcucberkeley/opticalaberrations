@@ -176,26 +176,137 @@ def load_metadata(
     return psfgen
 
 
+def convert2onnx(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray, dtype: Any = np.float32):
+    import onnx
+    import tf2onnx
+    import onnxruntime
+
+    # input_signature = [tf.TensorSpec((batch_size, *input_shape[1:]), dtype=dtype, name='embeddings')]
+    # onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature=input_signature)
+    # onnx.save(onnx_model, f"{model_path}.onnx")
+    # del onnx_model
+
+    subprocess.call(
+        f"python -m tf2onnx.convert "
+        f"--saved-model {model_path} "
+        f"--output={model_path}.onnx "
+        f"--rename-inputs embeddings "
+        f"--rename-outputs zernikes "
+        f"--verbose ",
+        shell=True,
+    )
+
+    # load onnx model
+    sess = onnxruntime.InferenceSession(f"{model_path}.onnx", providers=['CUDAExecutionProvider'])
+
+    timeit = time.time()
+    results_ort = sess.run(["zernikes"], {"embeddings": embeddings})[0]
+    return results_ort, time.time() - timeit
+
+
+def convert2trt(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray, dtype: Any = np.float32):
+    import tensorrt as trt
+    import pycuda.driver as cuda
+    import pycuda.autoinit
+
+    if not Path(f"{model_path}.onnx").exists():
+        subprocess.call(
+            f"python -m tf2onnx.convert "
+            f"--saved-model {model_path} "
+            f"--output={model_path}.onnx "
+            f"--rename-inputs embeddings "
+            f"--rename-outputs zernikes "
+            f"--verbose ",
+            shell=True,
+        )
+
+    subprocess.call(
+        f"/usr/src/tensorrt/bin/trtexec "
+        f"--verbose "
+        f"--onnx={model_path}.onnx "
+        f"--saveEngine={model_path}.trt "
+        f"--best",
+        shell=True,
+    )
+
+    timeit = time.time()
+
+    f = open(f"{model_path}.trt", "rb")
+    runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
+    engine = runtime.deserialize_cuda_engine(f.read())
+    context = engine.create_execution_context()
+
+    output = np.empty_like(zernikes, dtype=dtype)
+
+    # Allocate device memory
+    d_input = cuda.mem_alloc(1 * embeddings.nbytes)
+    d_output = cuda.mem_alloc(1 * output.nbytes)
+
+    bindings = [int(d_input), int(d_output)]
+    stream = cuda.Stream()
+
+    def predict(batch):  # result gets copied into output
+        # Transfer input data to device
+        cuda.memcpy_htod_async(d_input, batch, stream)
+        # Execute model
+        context.execute_async_v2(bindings, stream.handle, None)
+        # Transfer predictions back
+        cuda.memcpy_dtoh_async(output, d_output, stream)
+        # Syncronize threads
+        stream.synchronize()
+        return output
+
+    results_trt = predict(embeddings).astype(dtype)
+    return results_trt, time.time() - timeit
+
+
+def convert2tftrt(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray, dtype: Any = np.float32):
+    from tensorflow.python.saved_model import signature_constants
+    from tensorflow.python.saved_model import tag_constants
+    from tensorflow.python.compiler.tensorrt import trt_convert as trt
+
+    def input_fn():
+        input_shapes = [[(256, *embeddings.shape[1:])],
+                        [(360, *embeddings.shape[1:])],
+                        [(512, *embeddings.shape[1:])]]
+        for shapes in input_shapes:
+            yield [np.zeros(x, dtype=dtype) for x in shapes]
+
+    # Instantiate the TF-TRT converter
+    PROFILE_STRATEGY = "Optimal"
+    converter = trt.TrtGraphConverterV2(
+        input_saved_model_dir=model_path,
+        use_dynamic_shape=True,
+        dynamic_shape_profile_strategy=PROFILE_STRATEGY
+    )
+
+    converter.convert()
+    converter.build(input_fn)
+    converter.save(output_saved_model_dir=f'{model_path}_TFTRT')
+
+    saved_model_loaded = tf.saved_model.load(f'{model_path}_TFTRT', tags=[tag_constants.SERVING])
+    infer = saved_model_loaded.signatures['serving_default']
+
+    timeit = time.time()
+    results_tftrt = infer(embeddings)
+    return results_tftrt, time.time() - timeit
+
+
 def optimize_model(
     model_path: Path,
     dtype: Any = np.float32,
     batch_size: int = 100,
     atol: float = 1e-2,
 ):
-    import onnx
-    import tf2onnx
-    import onnxruntime
-    import tensorrt as trt
-    import pycuda.driver as cuda
-    import pycuda.autoinit
 
-    model = load(model_path)
-    input_shape = model.input_shape
-    output_shape = model.output_shape
-
-    gen = load_metadata(Path(f"{model_path}.h5"))
+    def eval_model(predictions: np.ndarray, ground_truth: np.ndarray, atol: float = 1e-2):
+        try:
+            np.testing.assert_allclose(predictions, ground_truth, atol=atol)
+        except AssertionError as e:
+            logger.info(e)
 
     def create_test_sample():
+        gen = load_metadata(Path(f"{model_path}.h5"))
         phi = Wavefront(
             (0, .15),
             modes=gen.n_modes,
@@ -226,77 +337,14 @@ def optimize_model(
     samples = np.array([create_test_sample() for _ in range(batch_size)])
     embeddings, zernikes = np.stack(np.array(samples)[:, 0]), np.stack(np.array(samples)[:, 1])
 
-    # input_signature = [tf.TensorSpec((batch_size, *input_shape[1:]), dtype=dtype, name='embeddings')]
-    # onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature=input_signature)
-    # onnx.save(onnx_model, f"{model_path}.onnx")
-    # del onnx_model
+    results_onnx, timer = convert2onnx(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
+    logging.info(f"Runtime for ONNX model: {embeddings.shape} [{dtype}] - {timer:.2f} sec.")
+    eval_model(predictions=results_onnx, ground_truth=zernikes, atol=atol)
 
-    subprocess.call(
-        f"python -m tf2onnx.convert "
-        f"--saved-model {model_path} "
-        f"--output={model_path}.onnx "
-        f"--rename-inputs embeddings "
-        f"--rename-outputs zernikes "
-        f"--verbose ",
-        shell=True,
-    )
+    results_trt, timer = convert2trt(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
+    logging.info(f"Runtime for TRT model: {embeddings.shape} [{dtype}] - {timer:.2f} sec.")
+    eval_model(predictions=results_trt, ground_truth=zernikes, atol=atol)
 
-    subprocess.call(
-        f"/usr/src/tensorrt/bin/trtexec "
-        f"--verbose "
-        f"--onnx={model_path}.onnx "
-        f"--saveEngine={model_path}.trt "
-        f"--best",
-        shell=True,
-    )
-
-    timeit = time.time()
-
-    f = open(f"{model_path}.trt", "rb")
-    runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
-    engine = runtime.deserialize_cuda_engine(f.read())
-    context = engine.create_execution_context()
-
-    output = np.empty([batch_size, *output_shape[1:]], dtype=dtype)
-
-    # Allocate device memory
-    d_input = cuda.mem_alloc(1 * embeddings.nbytes)
-    d_output = cuda.mem_alloc(1 * output.nbytes)
-
-    bindings = [int(d_input), int(d_output)]
-    stream = cuda.Stream()
-
-    def predict(batch):  # result gets copied into output
-        # Transfer input data to device
-        cuda.memcpy_htod_async(d_input, batch, stream)
-        # Execute model
-        context.execute_async_v2(bindings, stream.handle, None)
-        # Transfer predictions back
-        cuda.memcpy_dtoh_async(output, d_output, stream)
-        # Syncronize threads
-        stream.synchronize()
-        return output
-
-    results_trt = predict(embeddings).astype(dtype)
-    logging.info(f"Runtime for TRT model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
-
-    try:
-        np.testing.assert_allclose(results_trt, zernikes, atol=atol)
-    except AssertionError as e:
-        logger.info(e)
-
-    # load onnx model
-    sess = onnxruntime.InferenceSession(f"{model_path}.onnx", providers=['CUDAExecutionProvider'])
-
-    timeit = time.time()
-    results_ort = sess.run(["zernikes"], {"embeddings": embeddings})[0]
-    logging.info(f"Runtime for ONNX model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
-    del sess
-
-    try:
-        np.testing.assert_allclose(results_ort, zernikes, atol=atol)
-    except AssertionError as e:
-        logger.info(e)
 
     # load tf model
     model = load(model_path)
@@ -304,11 +352,7 @@ def optimize_model(
     timeit = time.time()
     results_tf = model.predict(embeddings, batch_size=batch_size)
     logging.info(f"Runtime for TF model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
-
-    try:
-        np.testing.assert_allclose(results_tf, zernikes, atol=atol)
-    except AssertionError as e:
-        logger.info(e)
+    eval_model(predictions=results_tf, ground_truth=zernikes, atol=atol)
 
 
 def save_metadata(
