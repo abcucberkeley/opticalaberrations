@@ -187,7 +187,7 @@ def optimize_model(
     import onnxruntime
     import tensorrt as trt
     import pycuda.driver as cuda
-    import pycuda.autoinit
+    from onnxconverter_common import auto_mixed_precision
 
     model = load(model_path)
     input_shape = model.input_shape
@@ -226,17 +226,27 @@ def optimize_model(
     samples = np.array([create_test_sample() for _ in range(batch_size)])
     embeddings, zernikes = np.stack(np.array(samples)[:, 0]), np.stack(np.array(samples)[:, 1])
 
-    input_signature = [tf.TensorSpec((batch_size, *input_shape[1:]), dtype=dtype, name='embeddings')]
-    onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature=input_signature, opset=13)
-    onnx.save(onnx_model, f"{model_path}.onnx")
-    del onnx_model
+    # input_signature = [tf.TensorSpec((batch_size, *input_shape[1:]), dtype=dtype, name='embeddings')]
+    # onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature=input_signature)
+    # onnx.save(onnx_model, f"{model_path}.onnx")
+    # del onnx_model
+
+    subprocess.call(
+        f"python -m tf2onnx.convert "
+        f"--saved-model {model_path} "
+        f"--output={model_path}.onnx "
+        f"--rename-inputs embeddings "
+        f"--rename-outputs zernikes "
+        f"--verbose ",
+        shell=True,
+    )
 
     subprocess.call(
         f"/usr/src/tensorrt/bin/trtexec "
         f"--verbose "
         f"--onnx={model_path}.onnx "
         f"--saveEngine={model_path}.trt "
-        f"--noTF32 --fp16" if dtype == np.float16 else "",
+        f"--best",
         shell=True,
     )
 
@@ -278,7 +288,7 @@ def optimize_model(
 
     timeit = time.time()
     sess = onnxruntime.InferenceSession(f"{model_path}.onnx", providers=['CUDAExecutionProvider'])
-    results_ort = sess.run(["regressor"], {"embeddings": embeddings})[0]
+    results_ort = sess.run(["zernikes"], {"embeddings": embeddings})[0]
     logging.info(f"Runtime for ONNX model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
     del sess
 
