@@ -297,8 +297,10 @@ def optimize_model(
     except AssertionError as e:
         logger.info(e)
 
-    timeit = time.time()
+
     model = load(model_path)
+
+    timeit = time.time()
     results_tf = model.predict(embeddings, batch_size=batch_size)
     logging.info(f"Runtime for TF model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
 
