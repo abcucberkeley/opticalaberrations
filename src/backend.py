@@ -137,7 +137,7 @@ def load_metadata(
         z_voxel_size=None,
         **kwargs
 ):
-    """ The model .h5, HDF5 file, is also used to store metadata parameters (wavelength, x_voxel_size, etc) that 
+    """ The model .h5, HDF5 file, is also used to store metadata parameters (wavelength, x_voxel_size, etc) that
     the model was trained with.  The metadata is read from file and is returned within the returned SyntheticPSF class.
 
     Args:
@@ -179,7 +179,7 @@ def load_metadata(
 def convert2onnx(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray, dtype: Any = np.float32):
     import onnx
     import tf2onnx
-    import onnxruntime
+    import onnxruntime as ort
 
     # input_signature = [tf.TensorSpec((batch_size, *input_shape[1:]), dtype=dtype, name='embeddings')]
     # onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature=input_signature)
@@ -197,7 +197,7 @@ def convert2onnx(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray,
     )
 
     # load onnx model
-    sess = onnxruntime.InferenceSession(f"{model_path}.onnx", providers=['CUDAExecutionProvider'])
+    sess = ort.InferenceSession(f"{model_path}.onnx", providers=['CUDAExecutionProvider'])
 
     timeit = time.time()
     results_ort = sess.run(["zernikes"], {"embeddings": embeddings})[0]
@@ -260,36 +260,22 @@ def convert2trt(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray, 
     return results_trt, time.time() - timeit
 
 
-def convert2tftrt(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray, dtype: Any = np.float32):
-    from tensorflow.python.saved_model import signature_constants
-    from tensorflow.python.saved_model import tag_constants
-    from tensorflow.python.compiler.tensorrt import trt_convert as trt
-
-    def input_fn():
-        input_shapes = [[(256, *embeddings.shape[1:])],
-                        [(360, *embeddings.shape[1:])],
-                        [(512, *embeddings.shape[1:])]]
-        for shapes in input_shapes:
-            yield [np.zeros(x, dtype=dtype) for x in shapes]
-
-    # Instantiate the TF-TRT converter
-    PROFILE_STRATEGY = "Optimal"
-    converter = trt.TrtGraphConverterV2(
-        input_saved_model_dir=model_path,
-        use_dynamic_shape=True,
-        dynamic_shape_profile_strategy=PROFILE_STRATEGY
-    )
-
-    converter.convert()
-    converter.build(input_fn)
-    converter.save(output_saved_model_dir=f'{model_path}_TFTRT')
-
-    saved_model_loaded = tf.saved_model.load(f'{model_path}_TFTRT', tags=[tag_constants.SERVING])
-    infer = saved_model_loaded.signatures['serving_default']
+def convert2poly(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray, dtype: Any = np.float32):
+    import onnxruntime as ort
+    from polygraphy.backend.trt import TrtRunner, EngineFromBytes
 
     timeit = time.time()
-    results_tftrt = infer(embeddings)
-    return results_tftrt, time.time() - timeit
+
+    f = open(f"{model_path}.trt", "rb")
+    engine = EngineFromBytes(f.read())
+    runner = TrtRunner(engine)
+
+    with runner:
+        results_trt = np.concatenate([
+            runner.infer({"embeddings": emb[np.newaxis, ...]})["zernikes"]
+            for emb in embeddings
+        ], axis=0)
+        return results_trt, time.time() - timeit
 
 
 def optimize_model(
@@ -339,25 +325,30 @@ def optimize_model(
 
     results_onnx, timer_onnx = convert2onnx(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
     results_trt, timer_trt = convert2trt(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
+    results_poly, timer_poly = convert2poly(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
 
     # load tf model
     model = load(model_path)
 
-    print('-' * 200)
+    print('-' * 100)
     timeit = time.time()
     results_tf = model.predict(embeddings, batch_size=batch_size)
     logging.info(f"Runtime for TF model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
     eval_model(predictions=results_tf, ground_truth=zernikes, atol=atol)
 
-    print('-' * 200)
+    print('-' * 100)
     logging.info(f"Runtime for ONNX model: {embeddings.shape} [{dtype}] - {timer_onnx:.2f} sec.")
     eval_model(predictions=results_onnx, ground_truth=zernikes, atol=atol)
 
-    print('-' * 200)
+    print('-' * 100)
     logging.info(f"Runtime for TRT model: {embeddings.shape} [{dtype}] - {timer_trt:.2f} sec.")
     eval_model(predictions=results_trt, ground_truth=zernikes, atol=atol)
 
-    print('-' * 200)
+    print('-' * 100)
+    logging.info(f"Runtime for Polygraphy model: {embeddings.shape} [{dtype}] - {timer_poly:.2f} sec.")
+    eval_model(predictions=results_poly, ground_truth=zernikes, atol=atol)
+
+    print('-' * 100)
 
 
 def save_metadata(

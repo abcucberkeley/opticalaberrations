@@ -1,4 +1,4 @@
-name: ml
+name: test
 channels:
   - esri
   - nvidia/label/cuda-11.6.0
@@ -318,6 +318,7 @@ dependencies:
   - pip:
     - appdirs==1.4.4
     - blessed==1.19.1
+    - colored==2.2.3
     - coloredlogs==15.0.1
     - cuda-python==12.2.0
     - cupy-cuda11x==11.5.0
@@ -348,6 +349,7 @@ dependencies:
     - onnxruntime-gpu==1.14.0
     - opencv-python==4.7.0.72
     - platformdirs==3.9.1
+    - polygraphy==0.47.1
     - protobuf==4.23.4
     - pycuda==2022.2.2
     - pytools==2023.1
