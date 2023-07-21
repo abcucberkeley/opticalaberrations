@@ -337,22 +337,27 @@ def optimize_model(
     samples = np.array([create_test_sample() for _ in range(batch_size)])
     embeddings, zernikes = np.stack(np.array(samples)[:, 0]), np.stack(np.array(samples)[:, 1])
 
-    results_onnx, timer = convert2onnx(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
-    logging.info(f"Runtime for ONNX model: {embeddings.shape} [{dtype}] - {timer:.2f} sec.")
-    eval_model(predictions=results_onnx, ground_truth=zernikes, atol=atol)
-
-    results_trt, timer = convert2trt(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
-    logging.info(f"Runtime for TRT model: {embeddings.shape} [{dtype}] - {timer:.2f} sec.")
-    eval_model(predictions=results_trt, ground_truth=zernikes, atol=atol)
-
+    results_onnx, timer_onnx = convert2onnx(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
+    results_trt, timer_trt = convert2trt(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
 
     # load tf model
     model = load(model_path)
 
+    print('-' * 200)
     timeit = time.time()
     results_tf = model.predict(embeddings, batch_size=batch_size)
     logging.info(f"Runtime for TF model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
     eval_model(predictions=results_tf, ground_truth=zernikes, atol=atol)
+
+    print('-' * 200)
+    logging.info(f"Runtime for ONNX model: {embeddings.shape} [{dtype}] - {timer_onnx:.2f} sec.")
+    eval_model(predictions=results_onnx, ground_truth=zernikes, atol=atol)
+
+    print('-' * 200)
+    logging.info(f"Runtime for TRT model: {embeddings.shape} [{dtype}] - {timer_trt:.2f} sec.")
+    eval_model(predictions=results_trt, ground_truth=zernikes, atol=atol)
+
+    print('-' * 200)
 
 
 def save_metadata(
