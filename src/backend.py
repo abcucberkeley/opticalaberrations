@@ -217,6 +217,7 @@ def convert2trt(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray, 
             f"--output={model_path}.onnx "
             f"--rename-inputs embeddings "
             f"--rename-outputs zernikes "
+            f"--target tensorrt "
             f"--verbose ",
             shell=True,
         )
@@ -278,6 +279,7 @@ def convert2polygraphy(
             f"--output={model_path}.onnx "
             f"--rename-inputs embeddings "
             f"--rename-outputs zernikes "
+            f"--target tensorrt "
             f"--verbose ",
             shell=True,
         )
