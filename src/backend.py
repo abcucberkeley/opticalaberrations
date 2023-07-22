@@ -192,6 +192,7 @@ def convert2onnx(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray,
         f"--output={model_path}.onnx "
         f"--rename-inputs embeddings "
         f"--rename-outputs zernikes "
+        f"--target tensorrt "
         f"--verbose ",
         shell=True,
     )
@@ -260,22 +261,71 @@ def convert2trt(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray, 
     return results_trt, time.time() - timeit
 
 
-def convert2poly(model_path: Path, embeddings: np.ndarray, zernikes: np.ndarray, dtype: Any = np.float32):
+def convert2polygraphy(
+    model_path: Path,
+    embeddings: np.ndarray,
+    zernikes: np.ndarray,
+    dtype: Any = np.float32,
+    format: str = 'engine',
+):
     import onnxruntime as ort
     from polygraphy.backend.trt import TrtRunner, EngineFromBytes
 
+    if not Path(f"{model_path}.onnx").exists():
+        subprocess.call(
+            f"python -m tf2onnx.convert "
+            f"--saved-model {model_path} "
+            f"--output={model_path}.onnx "
+            f"--rename-inputs embeddings "
+            f"--rename-outputs zernikes "
+            f"--verbose ",
+            shell=True,
+        )
+
+    if format == 'trt' and not Path(f"{model_path}.trt").exists():
+        subprocess.call(
+            f"/usr/src/tensorrt/bin/trtexec "
+            f"--verbose "
+            f"--onnx={model_path}.onnx "
+            f"--saveEngine={model_path}.trt "
+            f"--best",
+            shell=True,
+        )
+    else:
+        n, z, y, x, c = embeddings.shape
+        subprocess.call(
+            f"/usr/src/tensorrt/bin/trtexec "
+            f"--verbose "
+            f"--onnx={model_path}.onnx "
+            f"--saveEngine={model_path}.engine "
+            f"--minShapes=embeddings:1x{z}x{y}x{x}x{c} "
+            f"--optShapes=embeddings:361x{z}x{y}x{x}x{c} "
+            f"--maxShapes=embeddings:512x{z}x{y}x{x}x{c} "
+            f"--best",
+            shell=True,
+        )
+
     timeit = time.time()
 
-    f = open(f"{model_path}.trt", "rb")
-    engine = EngineFromBytes(f.read())
-    runner = TrtRunner(engine)
+    if format == 'trt':
+        f = open(f"{model_path}.trt", "rb")
+        engine = EngineFromBytes(f.read())
+        runner = TrtRunner(engine)
 
-    with runner:
-        results_trt = np.concatenate([
-            runner.infer({"embeddings": emb[np.newaxis, ...]})["zernikes"]
-            for emb in embeddings
-        ], axis=0)
-        return results_trt, time.time() - timeit
+        with runner:
+            results_trt = np.concatenate([
+                runner.infer({"embeddings": emb[np.newaxis, ...]})["zernikes"]
+                for emb in embeddings
+            ], axis=0)
+    else:
+        f = open(f"{model_path}.engine", "rb")
+        engine = EngineFromBytes(f.read())
+        runner = TrtRunner(engine)
+
+        with runner:
+            results_trt = runner.infer({"embeddings": embeddings})["zernikes"]
+
+    return results_trt, time.time() - timeit
 
 
 def optimize_model(
@@ -323,9 +373,21 @@ def optimize_model(
     samples = np.array([create_test_sample() for _ in range(batch_size)])
     embeddings, zernikes = np.stack(np.array(samples)[:, 0]), np.stack(np.array(samples)[:, 1])
 
-    results_onnx, timer_onnx = convert2onnx(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
-    results_trt, timer_trt = convert2trt(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
-    results_poly, timer_poly = convert2poly(model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype)
+    results_onnx, timer_onnx = convert2onnx(
+    model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype
+    )
+
+    results_trt, timer_trt = convert2trt(
+    model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype
+    )
+
+    results_poly, timer_poly = convert2polygraphy(
+        model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype, format='trt'
+    )
+
+    results_poly_engine, timer_poly_engine = convert2polygraphy(
+        model_path=model_path, embeddings=embeddings, zernikes=zernikes, dtype=dtype, format='engine'
+    )
 
     # load tf model
     model = load(model_path)
@@ -333,20 +395,24 @@ def optimize_model(
     print('-' * 100)
     timeit = time.time()
     results_tf = model.predict(embeddings, batch_size=batch_size)
-    logging.info(f"Runtime for TF model: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
+    logging.info(f"Runtime for TF.pb backend: {embeddings.shape} [{dtype}] - {time.time() - timeit:.2f} sec.")
     eval_model(predictions=results_tf, ground_truth=zernikes, atol=atol)
 
     print('-' * 100)
-    logging.info(f"Runtime for ONNX model: {embeddings.shape} [{dtype}] - {timer_onnx:.2f} sec.")
+    logging.info(f"Runtime for ORT.onnx backend: {embeddings.shape} [{dtype}] - {timer_onnx:.2f} sec.")
     eval_model(predictions=results_onnx, ground_truth=zernikes, atol=atol)
 
     print('-' * 100)
-    logging.info(f"Runtime for TRT model: {embeddings.shape} [{dtype}] - {timer_trt:.2f} sec.")
-    eval_model(predictions=results_trt, ground_truth=zernikes, atol=atol)
+    logging.info(f"Runtime for Polygraphy.trt backend: {embeddings.shape} [{dtype}] - {timer_poly:.2f} sec.")
+    eval_model(predictions=results_poly, ground_truth=zernikes, atol=atol)
 
     print('-' * 100)
-    logging.info(f"Runtime for Polygraphy model: {embeddings.shape} [{dtype}] - {timer_poly:.2f} sec.")
-    eval_model(predictions=results_poly, ground_truth=zernikes, atol=atol)
+    logging.info(f"Runtime for Polygraphy.engine backend: {embeddings.shape} [{dtype}] - {timer_poly_engine:.2f} sec.")
+    eval_model(predictions=results_poly_engine, ground_truth=zernikes, atol=atol)
+
+    print('-' * 100)
+    logging.info(f"Runtime for TRT.trt backend: {embeddings.shape} [{dtype}] - {timer_trt:.2f} sec.")
+    eval_model(predictions=results_trt, ground_truth=zernikes, atol=atol)
 
     print('-' * 100)
 
