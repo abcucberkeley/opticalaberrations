@@ -24,7 +24,7 @@ def test_load_sample(kargs):
 
 
 @pytest.mark.run(order=2)
-def test_model(kargs):
+def test_reloadmodel_if_needed(kargs):
     model, modelpsfgen = experimental.reloadmodel_if_needed(modelpath=kargs['model'], preloaded=None)
     model.summary()
     assert model.name

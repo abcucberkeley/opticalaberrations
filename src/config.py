@@ -8,6 +8,7 @@ import tensorflow as tf
 
 import cli
 import backend
+import convert
 
 
 logging.basicConfig(
@@ -67,6 +68,10 @@ def parse_args(args):
         "--gpu_workers", default=1, type=int, help='number of GPUs to use'
     )
 
+    parser.add_argument(
+        "--modelformat", default='trt', help="type of the desired model"
+    )
+
     return parser.parse_args(args)
 
 
@@ -91,8 +96,9 @@ def main(args=None):
             embedding_option=args.embedding_option
         )
     elif args.target == "optimize":
-        backend.optimize_model(
+        convert.optimize_model(
             model_path=args.model,
+            modelformat=args.modelformat
         )
     else:
         print("Error: unknown action!")
