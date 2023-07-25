@@ -14,14 +14,12 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
-logger = trt.Logger(trt.Logger.WARNING)
-
-TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+logger = trt.Logger(trt.Logger.INFO)
 
 
 def compile_engine(model_path):
     f = open(model_path, "rb")
-    runtime = trt.Runtime(TRT_LOGGER)
+    runtime = trt.Runtime(logger)
     engine = runtime.deserialize_cuda_engine(f.read())
     return engine
 
