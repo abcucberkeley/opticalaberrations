@@ -14,7 +14,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/config.py" />
-    <option name="PARAMETERS" value="../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15/model --modelformat polygraphy optimize" />
+    <option name="PARAMETERS" value="../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15/model --modelformat trt optimize" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

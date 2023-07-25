@@ -21,6 +21,7 @@ import numpy as np
 
 import utils
 import backend
+import trt_utils
 from wavefront import Wavefront
 
 import onnx
@@ -154,32 +155,14 @@ def convert2trt(
 
     timeit = time.time()
 
-    f = open(f"{model_path}.trt", "rb")
-    runtime = trt.Runtime(trt.Logger(trt.Logger.WARNING))
-    engine = runtime.deserialize_cuda_engine(f.read())
-    context = engine.create_execution_context()
-
-    output = np.empty_like(zernikes, dtype=dtype)
-
-    # Allocate device memory
-    d_input = cuda.mem_alloc(1 * embeddings.nbytes)
-    d_output = cuda.mem_alloc(1 * output.nbytes)
-
-    bindings = [int(d_input), int(d_output)]
     stream = cuda.Stream()
-
-    def predict(batch):  # result gets copied into output
-        # Transfer input data to device
-        cuda.memcpy_htod_async(d_input, batch, stream)
-        # Execute model
-        context.execute_async_v2(bindings, stream.handle, None)
-        # Transfer predictions back
-        cuda.memcpy_dtoh_async(output, d_output, stream)
-        # Syncronize threads
-        stream.synchronize()
-        return output
-
-    results_trt = predict(embeddings).astype(dtype)
+    with trt_utils.compile_engine(f"{model_path}.trt") as engine:
+        with engine.create_execution_context() as context:
+            results_trt = trt_utils.predict(
+                context=context,
+                stream=stream,
+                inputs=embeddings,
+            )
 
     timer = time.time() - timeit
 
