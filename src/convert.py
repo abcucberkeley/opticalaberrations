@@ -41,6 +41,11 @@ logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 
 
+def batchify(arr, batch_size):
+    for i in range(0, arr.shape[0], batch_size):
+        yield arr[i:i + batch_size]
+
+
 def create_test_sample(
     model_path: Path,
     dtype: Any = np.float32,
@@ -80,7 +85,8 @@ def convert2onnx(
     zernikes: np.ndarray,
     dtype: Any = np.float32,
     atol: float = 1e-2,
-    overwrite: bool = True
+    overwrite: bool = True,
+    batch_size: int = 512,
 ):
 
     # input_signature = [tf.TensorSpec((batch_size, *input_shape[1:]), dtype=dtype, name='embeddings')]
@@ -121,7 +127,8 @@ def convert2trt(
     zernikes: np.ndarray,
     dtype: Any = np.float32,
     atol: float = 1e-2,
-    overwrite: bool = True
+    overwrite: bool = True,
+    batch_size: int = 512,
 ):
     if not Path(f"{model_path}.onnx").exists():
         subprocess.call(
@@ -191,7 +198,8 @@ def convert2polygraphy(
     dtype: Any = np.float32,
     atol: float = 1e-2,
     backend: str = 'engine',
-    overwrite: bool = True
+    overwrite: bool = True,
+    batch_size: int = 512,
 ):
 
     if not Path(f"{model_path}.onnx").exists():
@@ -242,13 +250,17 @@ def convert2polygraphy(
                 runner.infer({"embeddings": emb[np.newaxis, ...]})["zernikes"]
                 for emb in embeddings
             ], axis=0)
+
     else:
         f = open(f"{model_path}.engine", "rb")
         engine = EngineFromBytes(f.read())
         runner = TrtRunner(engine)
 
         with runner:
-            results_trt = runner.infer({"embeddings": embeddings})["zernikes"]
+            results_trt = np.concatenate([
+                runner.infer({"embeddings": batch})["zernikes"]
+                for batch in batchify(embeddings, batch_size=batch_size)
+            ], axis=0)
 
     timer = time.time() - timeit
 
@@ -297,7 +309,8 @@ def optimize_model(
             zernikes=zernikes,
             dtype=dtype,
             atol=atol,
-            overwrite=False
+            overwrite=False,
+            batch_size=batch_size
         )
 
     elif modelformat == 'polygraphy':
@@ -308,7 +321,8 @@ def optimize_model(
             dtype=dtype,
             atol=atol,
             overwrite=False,
-            backend='trt'
+            backend='engine',
+            batch_size=batch_size
         )
 
     elif modelformat == 'trt':
@@ -318,7 +332,8 @@ def optimize_model(
             zernikes=zernikes,
             dtype=dtype,
             atol=atol,
-            overwrite=False
+            overwrite=False,
+            batch_size=batch_size
         )
 
     else:
@@ -338,7 +353,7 @@ def optimize_model(
     except AssertionError as e:
         logger.info(e)
 
-    np.testing.assert_allclose(results, results_tf, atol=1e-2)
     logger.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
     logging.info(f"Runtime for {modelformat} backend: {embeddings.shape} [{dtype}] - {timer:.2f} sec.")
+    np.testing.assert_allclose(results, results_tf, atol=1e-2)
     return results, timer
