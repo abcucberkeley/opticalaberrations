@@ -149,6 +149,9 @@ def load_metadata(
     Returns:
         SyntheticPSF class: ideal PSF that the model was trained on.
     """
+    if not isinstance(model_path, Path):
+        model_path = Path(model_path)
+
     # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
     if not model_path.suffix == '.h5':
         model_path = list(model_path.rglob('*.h5'))[0]  # locate the model if the parent folder path is given

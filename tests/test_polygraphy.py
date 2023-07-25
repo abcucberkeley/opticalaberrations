@@ -35,13 +35,13 @@ def test_polygraphy_trt(kargs):
 
     model = backend.load(kargs['model'])
     timeit = time()
-    results_tf = model.predict(embeddings, batch_size=100)
+    results_tf = model.predict(embeddings, batch_size=kargs['batch_size'])
     timer_tf = time() - timeit
 
     np.testing.assert_allclose(results_polygraphy, results_tf, atol=1e-2)
 
-    logging.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
-    logging.info(f"Runtime for polygraphy.trt backend: {embeddings.shape} - {timer_polygraphy:.2f} sec.")
+    logger.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
+    logger.info(f"Runtime for polygraphy.trt backend: {embeddings.shape} - {timer_polygraphy:.2f} sec.")
 
 
 @pytest.mark.run(order=2)
@@ -60,11 +60,11 @@ def test_polygraphy_engine(kargs):
 
     model = backend.load(kargs['model'])
     timeit = time()
-    results_tf = model.predict(embeddings, batch_size=100)
+    results_tf = model.predict(embeddings, batch_size=kargs['batch_size'])
     timer_tf = time() - timeit
 
     np.testing.assert_allclose(results_polygraphy_engine, results_tf, atol=1e-2)
 
-    logging.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
-    logging.info(f"Runtime for polygraphy.engine backend: {embeddings.shape} - {timer_polygraphy_engine:.2f} sec.")
+    logger.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
+    logger.info(f"Runtime for polygraphy.engine backend: {embeddings.shape} - {timer_polygraphy_engine:.2f} sec.")
 

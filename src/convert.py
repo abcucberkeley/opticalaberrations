@@ -1,3 +1,5 @@
+from functools import partial
+
 import matplotlib
 matplotlib.use('Agg')
 
@@ -261,13 +263,32 @@ def convert2polygraphy(
 def optimize_model(
     model_path: Path,
     dtype: Any = np.float32,
-    batch_size: int = 100,
     atol: float = 1e-2,
-    modelformat: str = 'trt'
+    modelformat: str = 'trt',
+    number_of_samples: int = 10000,
+    batch_size: int = 512,
 ):
 
-    samples = np.array([create_test_sample(Path(f"{model_path}.h5")) for _ in range(batch_size)])
-    embeddings, zernikes = np.stack(np.array(samples)[:, 0]), np.stack(np.array(samples)[:, 1])
+    if not Path(f'{model_path.parent}/embeddings_{number_of_samples}.npy').exists():
+        logger.info(f"Creating [{number_of_samples}] test samples")
+
+        samples = utils.multiprocess(
+            jobs=np.repeat(f"{model_path}.h5", number_of_samples),
+            func=create_test_sample,
+            cores=8,
+            desc=f"Creating test samples"
+        )
+        embeddings, zernikes = np.stack(samples[:, 0]), np.stack(samples[:, 1])
+
+        np.save(f'{model_path.parent}/embeddings_{number_of_samples}', embeddings)
+        np.save(f'{model_path.parent}/zernikes_{number_of_samples}', zernikes)
+
+    else:
+        logger.info(f"Loading [{number_of_samples}] test samples")
+        embeddings = np.load(f'{model_path.parent}/embeddings_{number_of_samples}.npy')
+        zernikes = np.load(f'{model_path.parent}/zernikes_{number_of_samples}.npy')
+
+    logger.info(f"Evaluating samples with [{modelformat}] model")
 
     if modelformat == 'onnx':
         results, timer = convert2onnx(
@@ -276,17 +297,18 @@ def optimize_model(
             zernikes=zernikes,
             dtype=dtype,
             atol=atol,
-            overwrite=True
+            overwrite=False
         )
 
-    elif modelformat == 'polygrahpy':
+    elif modelformat == 'polygraphy':
         results, timer = convert2polygraphy(
             model_path=model_path,
             embeddings=embeddings,
             zernikes=zernikes,
             dtype=dtype,
             atol=atol,
-            overwrite=True
+            overwrite=False,
+            backend='trt'
         )
 
     elif modelformat == 'trt':
@@ -296,21 +318,27 @@ def optimize_model(
             zernikes=zernikes,
             dtype=dtype,
             atol=atol,
-            overwrite=True
+            overwrite=False
         )
 
     else:
-        # load tf model
-        model = backend.load(model_path)
+        timer = 0.
+        results = np.zeros_like(zernikes)
+        logger.error(f"Unknown model format: {modelformat}")
 
-        timeit = time.time()
-        results = model.predict(embeddings, batch_size=batch_size)
-        timer = time.time() - timeit
+    # load tf model
+    model = backend.load(model_path)
 
-        try:
-            np.testing.assert_allclose(results, zernikes, atol=atol)
-        except AssertionError as e:
-            logger.info(e)
+    timeit = time.time()
+    results_tf = model.predict(embeddings, batch_size=batch_size)
+    timer_tf = time.time() - timeit
 
+    try:
+        np.testing.assert_allclose(results_tf, zernikes, atol=atol)
+    except AssertionError as e:
+        logger.info(e)
+
+    np.testing.assert_allclose(results, results_tf, atol=1e-2)
+    logger.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
     logging.info(f"Runtime for {modelformat} backend: {embeddings.shape} [{dtype}] - {timer:.2f} sec.")
     return results, timer
