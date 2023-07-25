@@ -232,8 +232,8 @@ def convert2polygraphy(
                 f"--onnx={model_path}.onnx "
                 f"--saveEngine={model_path}.engine "
                 f"--minShapes=embeddings:1x{z}x{y}x{x}x{c} "
-                f"--optShapes=embeddings:361x{z}x{y}x{x}x{c} "
-                f"--maxShapes=embeddings:512x{z}x{y}x{x}x{c} "
+                f"--optShapes=embeddings:512x{z}x{y}x{x}x{c} "
+                f"--maxShapes=embeddings:1024x{z}x{y}x{x}x{c} "
                 f"--best",
                 shell=True,
             )
@@ -278,7 +278,7 @@ def optimize_model(
     atol: float = 1e-2,
     modelformat: str = 'trt',
     number_of_samples: int = 10000,
-    batch_size: int = 512,
+    batch_size: int = 768,
 ):
 
     if not Path(f'{model_path.parent}/embeddings_{number_of_samples}.npy').exists():
@@ -345,7 +345,7 @@ def optimize_model(
     model = backend.load(model_path)
 
     timeit = time.time()
-    results_tf = model.predict(embeddings, batch_size=batch_size)
+    results_tf = model.predict(embeddings, batch_size=512)
     timer_tf = time.time() - timeit
 
     try:
@@ -353,7 +353,8 @@ def optimize_model(
     except AssertionError as e:
         logger.info(e)
 
-    logger.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
-    logging.info(f"Runtime for {modelformat} backend: {embeddings.shape} [{dtype}] - {timer:.2f} sec.")
+    logger.info(f"Runtime for {embeddings.shape} samples")
+    logger.info(f"TF backend [batchsize=512]: {number_of_samples/timer_tf:.0f} pred/sec [{timer_tf:.2f}]")
+    logger.info(f"{modelformat.upper()} backend [batchsize={batch_size}]: {number_of_samples/timer:.0f} pred/sec [{timer:.2f}]")
     np.testing.assert_allclose(results, results_tf, atol=1e-2)
     return results, timer
