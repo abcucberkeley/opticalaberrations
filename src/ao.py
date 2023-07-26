@@ -146,6 +146,11 @@ def parse_args(args):
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
+    embeddings.add_argument(
+        "--psf_type", default=None, type=str,
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
+             '(Default: None; to keep default mode used during training)'
+    )
 
     detect_rois = subparsers.add_parser("detect_rois")
     detect_rois.add_argument("input", type=Path, help="path to input .tif file")
@@ -246,6 +251,11 @@ def parse_args(args):
         "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
     )
+    predict_sample.add_argument(
+        "--psf_type", default=None, type=str,
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
+             '(Default: None; to keep default mode used during training)'
+    )
 
     predict_large_fov = subparsers.add_parser("predict_large_fov")
     predict_large_fov.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -331,6 +341,11 @@ def parse_args(args):
     predict_large_fov.add_argument(
         "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
+    )
+    predict_large_fov.add_argument(
+        "--psf_type", default=None, type=str,
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
+             '(Default: None; to keep default mode used during training)'
     )
 
     predict_rois = subparsers.add_parser("predict_rois")
@@ -426,6 +441,11 @@ def parse_args(args):
         "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
     )
+    predict_rois.add_argument(
+        "--psf_type", default=None, type=str,
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
+             '(Default: None; to keep default mode used during training)'
+    )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -512,6 +532,11 @@ def parse_args(args):
         "--shift", default=0, type=int,
         help='optional flag for applying digital x shift'
     )
+    predict_tiles.add_argument(
+        "--psf_type", default=None, type=str,
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
+             '(Default: None; to keep default mode used during training)'
+    )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
 
@@ -565,6 +590,11 @@ def parse_args(args):
     aggregate_predictions.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    aggregate_predictions.add_argument(
+        "--psf_type", default=None, type=str,
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
+             '(Default: None; to keep default mode used during training)'
     )
 
     combine_tiles = subparsers.add_parser("combine_tiles")
@@ -883,6 +913,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     plot=args.plot,
                     ideal_empirical_psf=args.ideal_empirical_psf,
                     preloaded=preloaded,
+                    psf_type=args.psf_type
                 )
 
             elif args.func == 'predict_sample':
@@ -909,7 +940,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     ideal_empirical_psf=args.ideal_empirical_psf,
                     digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
-                    preloaded=preloaded
+                    preloaded=preloaded,
+                    psf_type=args.psf_type
                 )
 
             elif args.func == 'predict_large_fov':
@@ -936,7 +968,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     ideal_empirical_psf=args.ideal_empirical_psf,
                     digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
-                    preloaded=preloaded
+                    preloaded=preloaded,
+                    psf_type=args.psf_type
                 )
 
             elif args.func == 'predict_rois':
@@ -966,7 +999,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     ideal_empirical_psf=args.ideal_empirical_psf,
                     digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
-                    preloaded=preloaded
+                    preloaded=preloaded,
+                    psf_type=args.psf_type
                 )
             elif args.func == 'predict_tiles':
                 experimental.predict_tiles(
@@ -992,7 +1026,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded,
-                    shifting=(0, 0, args.shift)
+                    shifting=(0, 0, args.shift),
+                    psf_type=args.psf_type
                 )
             elif args.func == 'aggregate_predictions':
                 experimental.aggregate_predictions(
@@ -1008,7 +1043,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     ignore_tile=args.ignore_tile,
                     dm_damping_scalar=args.dm_damping_scalar,
                     plot=args.plot,
-                    preloaded=preloaded
+                    preloaded=preloaded,
+                    psf_type=args.psf_type
                 )
             elif args.func == 'combine_tiles':
                 experimental.combine_tiles(

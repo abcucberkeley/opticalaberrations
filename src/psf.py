@@ -8,7 +8,7 @@ import logging
 import sys
 from pathlib import Path
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 from skimage.transform import rescale
@@ -36,7 +36,7 @@ class PsfGenerator3D:
             lam_detection: float,
             n: float,
             na_detection: float,
-            psf_type: [str, Path],
+            psf_type: Union[str, Path],
             lls_excitation_profile: Optional[np.ndarray] = None
     ):
         """
@@ -46,7 +46,7 @@ class PsfGenerator3D:
             lam_detection: scalar, wavelength in microns, e.g. 0.5
             n: scalar, refractive index, eg 1.33
             na_detection: scalar, numerical aperture of detection objective, eg 1.1
-            psf_type: widefield, 2photon or confocal, or a path to an LLS excitation profile
+            psf_type: widefield, 2photon, confocal, or a path to an LLS excitation profile
             lls_excitation_profile: None for (widefield, 2photon or confocal),
                 otherwise an array placeholder for an LLS excitation profile loaded from desk
         """
@@ -78,13 +78,24 @@ class PsfGenerator3D:
         if isinstance(lls_excitation_profile, np.ndarray) and lls_excitation_profile.size != 0:
             self.lls_excitation_profile = lls_excitation_profile
         else:
-            if (isinstance(self.psf_type, Path) or isinstance(self.psf_type, str)) and Path(self.psf_type).exists():
-                with h5py.File(self.psf_type, 'r') as file:
-                    self.lls_excitation_profile = file.get('DitheredxzPSFCrossSection')[:, 0]
-            else:
-                self.lls_excitation_profile = None
+            if (isinstance(self.psf_type, Path) or isinstance(self.psf_type, str)):
+                path = Path(self.psf_type)
 
-        if lls_excitation_profile is not None and self.lls_excitation_profile.shape[0] != psf_shape[0]:
+                # check if given file exists
+                if path.exists():
+                    with h5py.File(path, 'r') as file:
+                        self.lls_excitation_profile = file.get('DitheredxzPSFCrossSection')[:, 0]
+
+                # check if given filename exists in the lattice dir and try to load it from there instead
+                elif Path(f"{Path(__file__).parent.parent.resolve()}/lattice/{path.name}").exists():
+
+                    with h5py.File(f"{Path(__file__).parent.parent.resolve()}/lattice/{path.name}", 'r') as file:
+                        self.lls_excitation_profile = file.get('DitheredxzPSFCrossSection')[:, 0]
+
+                else:
+                    self.lls_excitation_profile = None
+
+        if self.lls_excitation_profile is not None and self.lls_excitation_profile.shape[0] != psf_shape[0]:
             lls_profile_dz = 0.1
             lam_excitation = .488
             eff_pixel_size = lam_excitation / self.n * lls_profile_dz

@@ -86,6 +86,14 @@ def reloadmodel_if_needed(
             normalize=True,
         )
 
+    if psf_type is not None and preloaded.modelpsfgen.psf_type != psf_type:
+        logger.info(f"Loading new PSF type: {psf_type}")
+        preloaded = Preloadedmodelclass(
+            modelpath,
+            n_modes=n_modes,
+            psf_type=psf_type,
+        )
+
     return preloaded.model, preloaded.modelpsfgen
 
 
@@ -121,12 +129,14 @@ def generate_embeddings(
     fov_is_small: bool = True,
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
-    digital_rotations: Optional[int] = None
+    digital_rotations: Optional[int] = None,
+    psf_type: Optional[Union[str, Path]] = None,
 ):
 
     model, modelpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
+        psf_type=psf_type,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
@@ -335,14 +345,16 @@ def predict_sample(
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = 361,
+    psf_type: Optional[Union[str, Path]] = None,
     cpu_workers: int = -1
 ):
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
-    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
+    preloadedmodel, preloadedpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
+        psf_type=psf_type,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
@@ -359,8 +371,8 @@ def predict_sample(
     logger.info(f"Sample: {sample.shape}")
 
     samplepsfgen = SyntheticPSF(
-        psf_type=premodelpsfgen.psf_type,
-        lls_excitation_profile=premodelpsfgen.lls_excitation_profile,
+        psf_type=preloadedpsfgen.psf_type,
+        lls_excitation_profile=preloadedpsfgen.lls_excitation_profile,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -371,7 +383,7 @@ def predict_sample(
 
     embeddings = backend.preprocess(
         sample,
-        modelpsfgen=premodelpsfgen,
+        modelpsfgen=preloadedpsfgen,
         samplepsfgen=samplepsfgen,
         digital_rotations=digital_rotations,
         remove_background=True,
@@ -389,7 +401,7 @@ def predict_sample(
             n_samples=num_predictions,
             verbose=verbose,
             gen=samplepsfgen,
-            modelgen=premodelpsfgen,
+            modelgen=preloadedpsfgen,
             batch_size=batch_size,
             prev_pred=prev,
             estimate_sign_with_decon=estimate_sign_with_decon,
@@ -401,7 +413,7 @@ def predict_sample(
         res = backend.predict_rotation(
             preloadedmodel,
             inputs=embeddings,
-            psfgen=premodelpsfgen,
+            psfgen=preloadedpsfgen,
             no_phase=False,
             verbose=verbose,
             batch_size=batch_size,
@@ -449,8 +461,8 @@ def predict_sample(
             model=str(model),
             input_shape=list(sample.shape),
             sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
-            model_voxel_size=list(premodelpsfgen.voxel_size),
-            psf_fov=list(premodelpsfgen.psf_fov),
+            model_voxel_size=list(preloadedpsfgen.voxel_size),
+            psf_fov=list(preloadedpsfgen.psf_fov),
             wavelength=float(wavelength),
             dm_calibration=str(dm_calibration),
             dm_state=str(dm_state),
@@ -462,7 +474,8 @@ def predict_sample(
             ideal_empirical_psf=str(ideal_empirical_psf),
             lls_defocus=float(lls_defocus),
             zernikes=list(coefficients),
-            psnr=psnr
+            psnr=psnr,
+            psf_type=str(preloadedpsfgen.psf_type),
         )
 
         ujson.dump(
@@ -510,15 +523,17 @@ def predict_large_fov(
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = 361,
+    psf_type: Optional[Union[str, Path]] = None,
     cpu_workers: int = -1
 ):
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
     sample_voxel_size = (axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
 
-    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
+    preloadedmodel, preloadedpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
+        psf_type=psf_type,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=sample_voxel_size
     )
@@ -534,8 +549,8 @@ def predict_large_fov(
     logger.info(f"Sample: {sample.shape}")
 
     samplepsfgen = SyntheticPSF(
-        psf_type=premodelpsfgen.psf_type,
-        lls_excitation_profile=premodelpsfgen.lls_excitation_profile,
+        psf_type=preloadedpsfgen.psf_type,
+        lls_excitation_profile=preloadedpsfgen.lls_excitation_profile,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -546,7 +561,7 @@ def predict_large_fov(
 
     embeddings = backend.preprocess(
         sample,
-        modelpsfgen=premodelpsfgen,
+        modelpsfgen=preloadedpsfgen,
         samplepsfgen=samplepsfgen,
         digital_rotations=digital_rotations,
         no_phase=no_phase,
@@ -554,14 +569,14 @@ def predict_large_fov(
         remove_background=True,
         normalize=True,
         fov_is_small=False,
-        rolling_strides=optimal_rolling_strides(premodelpsfgen.psf_fov, sample_voxel_size, sample.shape),
+        rolling_strides=optimal_rolling_strides(preloadedpsfgen.psf_fov, sample_voxel_size, sample.shape),
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
     )
 
     res = backend.predict_rotation(
         preloadedmodel,
         inputs=embeddings,
-        psfgen=premodelpsfgen,
+        psfgen=preloadedpsfgen,
         no_phase=False,
         verbose=verbose,
         batch_size=batch_size,
@@ -610,8 +625,8 @@ def predict_large_fov(
             model=str(model),
             input_shape=list(sample.shape),
             sample_voxel_size=list([axial_voxel_size, lateral_voxel_size, lateral_voxel_size]),
-            model_voxel_size=list(premodelpsfgen.voxel_size),
-            psf_fov=list(premodelpsfgen.psf_fov),
+            model_voxel_size=list(preloadedpsfgen.voxel_size),
+            psf_fov=list(preloadedpsfgen.psf_fov),
             wavelength=float(wavelength),
             dm_calibration=str(dm_calibration),
             dm_state=str(dm_state),
@@ -624,6 +639,7 @@ def predict_large_fov(
             lls_defocus=float(lls_defocus),
             zernikes=list(coefficients),
             psnr=psnr,
+            psf_type=str(preloadedpsfgen.psf_type),
         )
 
         ujson.dump(
@@ -673,12 +689,14 @@ def predict_rois(
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
     digital_rotations: Optional[int] = 361,
+    psf_type: Optional[Union[str, Path]] = None,
     cpu_workers: int = -1
 ):
 
-    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
+    preloadedmodel, preloadedpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
+        psf_type=psf_type,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
@@ -705,8 +723,8 @@ def predict_rois(
     )
 
     samplepsfgen = SyntheticPSF(
-        psf_type=premodelpsfgen.psf_type,
-        lls_excitation_profile=premodelpsfgen.lls_excitation_profile,
+        psf_type=preloadedpsfgen.psf_type,
+        lls_excitation_profile=preloadedpsfgen.lls_excitation_profile,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -721,8 +739,8 @@ def predict_rois(
             model=str(model),
             input_shape=list(sample.shape),
             sample_voxel_size=list(samplepsfgen.voxel_size),
-            model_voxel_size=list(premodelpsfgen.voxel_size),
-            psf_fov=list(premodelpsfgen.psf_fov),
+            model_voxel_size=list(preloadedpsfgen.voxel_size),
+            psf_fov=list(preloadedpsfgen.psf_fov),
             wavelength=float(wavelength),
             prediction_threshold=float(prediction_threshold),
             freq_strength_threshold=float(freq_strength_threshold),
@@ -734,6 +752,7 @@ def predict_rois(
             ytiles=int(nrows),
             xtiles=int(ncols),
             dm_calibration=str(dm_calibration),
+            psf_type=str(preloadedpsfgen.psf_type),
         )
 
         ujson.dump(
@@ -749,7 +768,7 @@ def predict_rois(
         paths=rois,
         outdir=outdir,
         model=preloadedmodel,
-        modelpsfgen=premodelpsfgen,
+        modelpsfgen=preloadedpsfgen,
         samplepsfgen=samplepsfgen,
         dm_calibration=dm_calibration,
         dm_state=dm_state,
@@ -825,12 +844,14 @@ def predict_tiles(
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = 361,
     cpu_workers: int = -1,
-    shifting: tuple = (0, 0, 0)
+    shifting: tuple = (0, 0, 0),
+    psf_type: Optional[Union[str, Path]] = None,
 ):
 
-    preloadedmodel, premodelpsfgen = reloadmodel_if_needed(
+    preloadedmodel, preloadedpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
+        psf_type=psf_type,
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
@@ -862,8 +883,8 @@ def predict_tiles(
     )
 
     samplepsfgen = SyntheticPSF(
-        psf_type=premodelpsfgen.psf_type,
-        lls_excitation_profile=premodelpsfgen.lls_excitation_profile,
+        psf_type=preloadedpsfgen.psf_type,
+        lls_excitation_profile=preloadedpsfgen.lls_excitation_profile,
         psf_shape=window_size,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -878,8 +899,8 @@ def predict_tiles(
             model=str(model),
             input_shape=list(sample.shape),
             sample_voxel_size=list(samplepsfgen.voxel_size),
-            model_voxel_size=list(premodelpsfgen.voxel_size),
-            psf_fov=list(premodelpsfgen.psf_fov),
+            model_voxel_size=list(preloadedpsfgen.voxel_size),
+            psf_fov=list(preloadedpsfgen.psf_fov),
             window_size=list(window_size),
             wavelength=float(wavelength),
             prediction_threshold=float(0),
@@ -893,6 +914,7 @@ def predict_tiles(
             xtiles=int(ncols),
             psnr=psnr,
             dm_calibration=str(dm_calibration),
+            psf_type=str(preloadedpsfgen.psf_type),
         )
 
         ujson.dump(
@@ -908,7 +930,7 @@ def predict_tiles(
         paths=rois,
         outdir=outdir,
         model=preloadedmodel,
-        modelpsfgen=premodelpsfgen,
+        modelpsfgen=preloadedpsfgen,
         samplepsfgen=samplepsfgen,
         dm_calibration=dm_calibration,
         dm_state=dm_state,
@@ -918,11 +940,11 @@ def predict_tiles(
         wavelength=wavelength,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
-        fov_is_small=True if all(np.array(samplepsfgen.psf_fov) <= np.array(premodelpsfgen.psf_fov)) else False,
+        fov_is_small=True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False,
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
-        rolling_strides=optimal_rolling_strides(premodelpsfgen.psf_fov, samplepsfgen.voxel_size, window_size),
+        rolling_strides=optimal_rolling_strides(preloadedpsfgen.psf_fov, samplepsfgen.voxel_size, window_size),
         cpu_workers=cpu_workers,
     )
 
@@ -1138,6 +1160,7 @@ def aggregate_predictions(
     zero_confident_color: tuple = (255, 255, 0),
     unconfident_color: tuple = (255, 255, 255),
     preloaded: Preloadedmodelclass = None,
+    psf_type: Optional[Union[str, Path]] = None,
 ):
     pd.options.display.width = 200
     pd.options.display.max_columns = 20
@@ -1161,7 +1184,7 @@ def aggregate_predictions(
     window_size = predictions_settings['window_size']
 
     samplepsfgen = SyntheticPSF(
-        psf_type=Path(__file__).parent.parent.resolve() / 'lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+        psf_type=predictions_settings['psf_type'] if psf_type is None else psf_type,
         psf_shape=window_size,
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,

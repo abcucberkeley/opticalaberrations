@@ -15,7 +15,7 @@ class Preloadedmodelclass:
             ideal_empirical_psf: Optional[Union[Path, np.ndarray]] = None,
             ideal_empirical_psf_voxel_size: Optional[tuple] = None,
             n_modes: Optional[int] = None,
-            psf_type: Optional[np.ndarray] = None
+            psf_type: Optional[Union[Path, str]] = None
     ):
         
         if ideal_empirical_psf == "None" or ideal_empirical_psf is None:
