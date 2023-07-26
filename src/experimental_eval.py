@@ -768,7 +768,7 @@ def eval_ao_dataset(
     )
 
     samplepsfgen = SyntheticPSF(
-        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         psf_shape=noao_img.shape,
         n_modes=15,
         lam_detection=predictions_settings['wavelength'],

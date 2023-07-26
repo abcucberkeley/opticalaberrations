@@ -157,7 +157,7 @@ def plot_embedding_pyramid(
         x_voxel_size=.108,
         y_voxel_size=.108,
         z_voxel_size=.2,
-        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         datadir='../data/embeddings',
         embedding_option='spatial_planes',
 ):
@@ -310,7 +310,7 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
     for dist in ['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet', 'mixed']:
         psfargs = dict(
             n_modes=55,
-            psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+            psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
             distribution=dist,
             mode_weights='pyramid',
             signed=True,
@@ -566,7 +566,7 @@ def plot_embeddings(
         x_voxel_size=.108,
         y_voxel_size=.108,
         z_voxel_size=.2,
-        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         savepath='../data/embeddings',
         embedding_option='spatial_planes',
 ):
@@ -678,7 +678,7 @@ def plot_rotations(
         x_voxel_size=.108,
         y_voxel_size=.108,
         z_voxel_size=.2,
-        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         savepath='../data/rotations',
         embedding_option='spatial_planes',
 ):
@@ -796,7 +796,7 @@ def plot_shapes_embeddings(
         x_voxel_size=.108,
         y_voxel_size=.108,
         z_voxel_size=.2,
-        psf_type='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         savepath='../data/shapes_embeddings',
         n_modes=55,
         embedding_option='spatial_planes',
@@ -811,7 +811,7 @@ def plot_shapes_embeddings(
         x_voxel_size: Defaults to .108 microns
         y_voxel_size: Defaults to .108 microns
         z_voxel_size: Defaults to .2   microns
-        psf_type: Defaults to '../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'.
+        psf_type: Defaults to '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'.
         savepath: Defaults to '../data/shapes_embeddings'.
     """
     def sphere(image_size, radius=.5, position=.5):

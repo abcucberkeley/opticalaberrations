@@ -52,7 +52,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--psf_type", default='../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        "--psf_type", default='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         help="type of the desired PSF"
     )
 

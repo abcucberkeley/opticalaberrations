@@ -1156,7 +1156,7 @@ def aggregate_predictions(
     window_size = predictions_settings['window_size']
 
     samplepsfgen = SyntheticPSF(
-        psf_type=Path(__file__).parent.parent.resolve() / 'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        psf_type=Path(__file__).parent.parent.resolve() / 'lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         psf_shape=window_size,
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,

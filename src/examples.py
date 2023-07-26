@@ -28,7 +28,7 @@ pois = repo/f'examples/{datadir}/results/Detection3D.mat'
 # Deformable Mirror offsets that produce the Zernike functions
 dm_calibration = repo/'calibration/aang/28_mode_calibration.csv'
 model = repo/'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-28.h5'
-psf_type = repo/'lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat'
+psf_type = repo/'lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'
 # excitation PSF being used.  This is sythesized.
 
 # extra `detect_rois` flags
