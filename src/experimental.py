@@ -52,7 +52,7 @@ def reloadmodel_if_needed(
     ideal_empirical_psf: Union[Path, np.ndarray] = None,
     ideal_empirical_psf_voxel_size: Any = None,
     n_modes: Optional[int] = None,
-    psf_type: Optional[np.ndarray] = None
+    psf_type: Optional[Union[Path, str]] = None
 ):
     if preloaded is None:
         logger.info("Loading new model, because model didn't exist")
@@ -142,6 +142,7 @@ def generate_embeddings(
 
     samplepsfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
+        lls_excitation_profile=modelpsfgen.lls_excitation_profile,
         psf_shape=sample.shape,
         n_modes=model.output_shape[1],
         lam_detection=wavelength,
@@ -359,6 +360,7 @@ def predict_sample(
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
+        lls_excitation_profile=premodelpsfgen.lls_excitation_profile,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -533,6 +535,7 @@ def predict_large_fov(
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
+        lls_excitation_profile=premodelpsfgen.lls_excitation_profile,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -703,6 +706,7 @@ def predict_rois(
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
+        lls_excitation_profile=premodelpsfgen.lls_excitation_profile,
         psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
@@ -859,6 +863,7 @@ def predict_tiles(
 
     samplepsfgen = SyntheticPSF(
         psf_type=premodelpsfgen.psf_type,
+        lls_excitation_profile=premodelpsfgen.lls_excitation_profile,
         psf_shape=window_size,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,

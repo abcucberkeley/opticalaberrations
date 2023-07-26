@@ -8,6 +8,7 @@ import logging
 import sys
 from pathlib import Path
 from copy import deepcopy
+from typing import Optional
 
 import numpy as np
 from skimage.transform import rescale
@@ -28,7 +29,16 @@ class PsfGenerator3D:
     3D PSF generator, courtesy of Martin Weigert (https://github.com/maweigert)
     """
 
-    def __init__(self, psf_shape, units, lam_detection, n, na_detection, psf_type='widefield'):
+    def __init__(
+            self,
+            psf_shape: tuple,
+            units: tuple,
+            lam_detection: float,
+            n: float,
+            na_detection: float,
+            psf_type: [str, Path],
+            lls_excitation_profile: Optional[np.ndarray] = None
+    ):
         """
         Args:
             psf_shape: tuple, psf shape as (z,y,x), e.g. (64,64,64)
@@ -36,7 +46,9 @@ class PsfGenerator3D:
             lam_detection: scalar, wavelength in microns, e.g. 0.5
             n: scalar, refractive index, eg 1.33
             na_detection: scalar, numerical aperture of detection objective, eg 1.1
-            psf_type: widefield or confocal
+            psf_type: widefield, 2photon or confocal, or a path to an LLS excitation profile
+            lls_excitation_profile: None for (widefield, 2photon or confocal),
+                otherwise an array placeholder for an LLS excitation profile loaded from desk
         """
 
         psf_shape = tuple(psf_shape)
@@ -63,9 +75,33 @@ class PsfGenerator3D:
         self.theoretical_psf(kx=kx, ky=ky, kz=kz)
         self.psf_type = psf_type
 
-        if (isinstance(self.psf_type, Path) or isinstance(self.psf_type, str)) and Path(self.psf_type).exists():
-            with h5py.File(self.psf_type, 'r') as file:
-                self.psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
+        if isinstance(lls_excitation_profile, np.ndarray) and lls_excitation_profile.size != 0:
+            self.lls_excitation_profile = lls_excitation_profile
+        else:
+            if (isinstance(self.psf_type, Path) or isinstance(self.psf_type, str)) and Path(self.psf_type).exists():
+                with h5py.File(self.psf_type, 'r') as file:
+                    self.lls_excitation_profile = file.get('DitheredxzPSFCrossSection')[:, 0]
+            else:
+                self.lls_excitation_profile = None
+
+        if lls_excitation_profile is not None and self.lls_excitation_profile.shape[0] != psf_shape[0]:
+            lls_profile_dz = 0.1
+            lam_excitation = .488
+            eff_pixel_size = lam_excitation / self.n * lls_profile_dz
+
+            self.lls_excitation_profile = rescale(
+                self.lls_excitation_profile,
+                (eff_pixel_size / self.dz),
+                order=3,
+            )
+
+            w = psf_shape[0] // 2
+            focal_plane_index = self.lls_excitation_profile.shape[0] // 2
+            self.lls_excitation_profile = self.lls_excitation_profile[
+                focal_plane_index - w:focal_plane_index + w,
+                np.newaxis,
+                np.newaxis
+            ]
 
     @profile
     def theoretical_psf(self, kx, ky, kz):
@@ -134,9 +170,25 @@ class PsfGenerator3D:
         ideal_phi = deepcopy(phi)
         ideal_phi.zernikes = {k: 0. for k, v in ideal_phi.zernikes.items()}
 
+        # set the total PSF to widefield detection PSF
         _psf = self.widefield_psf(phi)
 
-        if self.psf_type == 'widefield':
+        if self.lls_excitation_profile is not None:
+
+            if lls_defocus_offset is not None:
+                if np.isscalar(lls_defocus_offset):
+                    w = self.lls_excitation_profile.shape[0] // 2
+                    focal_plane_index = w + np.round(lls_defocus_offset / self.dz).astype(int)
+                    defocused_lls_excitation_profile = self.lls_excitation_profile[
+                        max(0, focal_plane_index - w):min(focal_plane_index + w, self.lls_excitation_profile.shape[0])
+                    ]
+                    _psf *= defocused_lls_excitation_profile
+                else:
+                    raise Exception(f"Unknown format for `lls_defocus_offset`: {lls_defocus_offset}")
+            else:
+                _psf *= self.lls_excitation_profile
+
+        elif self.psf_type == 'widefield':
             pass
 
         elif self.psf_type == '2photon':
@@ -144,14 +196,16 @@ class PsfGenerator3D:
             _psf = (exc_psf ** 2) * _psf
 
         elif self.psf_type == 'confocal':
+            lls_profile_dz = 0.1
             lam_excitation = .488
+            f = 1  # number of AUs
+
             exc_psf = self.widefield_psf(ideal_phi, lam_excitation=lam_excitation)
 
-            eff_pixel_size = lam_excitation / self.n * 0.1
+            eff_pixel_size = lam_excitation / self.n * lls_profile_dz
             au = 0.61 * (self.lam_detection / self.n) / self.na_detection
-            Z, Y, X = np.ogrid[-200:201, -200:201, -200:201]
+            Z, Y, X = np.ogrid[-200:201, -200:201, -200:201]  # create a meshgrid
 
-            f = 1  # number of AUs
             circ_func = Y ** 2 + X ** 2 <= (f * au / eff_pixel_size) ** 2
             circ_func = circ_func & (Z == 0)
 
@@ -182,32 +236,7 @@ class PsfGenerator3D:
             _psf = exc_psf * det_psf
 
         else:
-            lattice_profile = self.psf_type
-
-            if lls_defocus_offset is not None:
-                if np.isscalar(lls_defocus_offset):
-                    w = lattice_profile.shape[0] // 2
-                    focal_plane_index = w + np.round(lls_defocus_offset / .0367).astype(int)
-                    lattice_profile = lattice_profile[
-                        max(0, focal_plane_index-w):min(focal_plane_index+w, lattice_profile.shape[0])
-                    ]
-                else:
-                    logger.error(f"Unknown format for `lls_defocus_offset`: {lls_defocus_offset}")
-
-            lattice_profile = rescale(
-                lattice_profile,
-                (.0367/self.dz),
-                order=3,
-            )
-
-            w = _psf.shape[0]//2
-            focal_plane_index = lattice_profile.shape[0] // 2
-            lattice_profile = lattice_profile[
-                focal_plane_index-w:focal_plane_index+w,
-                np.newaxis,
-                np.newaxis
-            ]
-            _psf *= lattice_profile
+            raise Exception(f"Unknown PSF type: {self.psf_type}")
 
         _psf /= np.max(_psf)
-        return _psf.astype(np.float32)
+        return _psf.astype(np.float32)  # return total PSF

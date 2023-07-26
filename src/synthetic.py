@@ -35,6 +35,7 @@ class SyntheticPSF:
             self,
             amplitude_ranges=(-.1, .1),
             psf_type='widefield',
+            lls_excitation_profile=None,
             distribution='single',
             embedding_option='spatial_planes',
             mode_weights='pyramid',
@@ -97,6 +98,7 @@ class SyntheticPSF:
         self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size))
 
         self.psf_type = psf_type
+        self.lls_excitation_profile = lls_excitation_profile
 
         self.psfgen = PsfGenerator3D(
             psf_shape=self.psf_shape,
@@ -104,7 +106,8 @@ class SyntheticPSF:
             lam_detection=self.lam_detection,
             n=self.refractive_index,
             na_detection=self.na_detection,
-            psf_type=self.psf_type
+            psf_type=self.psf_type,
+            lls_excitation_profile=self.lls_excitation_profile,
         )
 
         # ideal psf (theoretical, no noise)

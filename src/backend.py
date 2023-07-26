@@ -141,7 +141,7 @@ def load_metadata(
     Args:
         model_path (Path): path to .h5 model, or path to the containing folder.
         psf_shape (Union[tuple, list], optional): dimensions of the SyntheticPSF to return. Defaults to (64, 64, 64).
-        psf_type (str, optional): "widefield" or "confocal". Defaults to None which reads the value from the .h5 file.
+        psf_type (str, optional): codename or path for the PSF type eg. "widefield". Defaults to None which reads the value from the .h5 file.
         n_modes (int, optional): # of Zernike modes to describe aberration. Defaults to None which reads the value from the .h5 file.
         z_voxel_size (float, optional):  Defaults to None which reads the value from the .h5 file.
         **kwargs:  Get passed into SyntheticPSF generator.
@@ -164,7 +164,8 @@ def load_metadata(
             embedding_option = 'spatial_planes'
 
         psfgen = SyntheticPSF(
-            psf_type=np.array(file.get('psf_type')[:]) if psf_type is None else psf_type,
+            psf_type=str(file.get('psf_type')[()]).strip("b'").strip("\'").strip('\"') if psf_type is None else psf_type,
+            lls_excitation_profile=np.array(file.get('lls_excitation_profile')[:]) if psf_type is None else None,
             psf_shape=psf_shape,
             n_modes=int(file.get('n_modes')[()]) if n_modes is None else n_modes,
             lam_detection=float(file.get('wavelength')[()]),
@@ -224,9 +225,13 @@ def save_metadata(
         add_param(file, name='z_voxel_size', data=z_voxel_size)
         add_param(file, name='embedding_option', data=embedding_option)
 
-        if isinstance(psf_type, str) or isinstance(psf_type, Path):
+        if (isinstance(psf_type, Path) or isinstance(psf_type, str)) and Path(psf_type).exists():
             with h5py.File(psf_type, 'r+') as f:
-                add_param(file, name='psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
+                add_param(file, name='psf_type', data=psf_type)
+                add_param(file, name='lls_excitation_profile', data=f.get('DitheredxzPSFCrossSection')[:, 0])
+        else:
+            add_param(file, name='psf_type', data=psf_type)
+            add_param(file, name='lls_excitation_profile', data=[])
 
     logger.info(f"Saved model with additional metadata: {filepath.resolve()}")
 

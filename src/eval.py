@@ -1596,7 +1596,7 @@ def eval_modalities(
                         phi=phi,
                         normed=True,
                         meta=True,
-                        lls_defocus_offset=(0, 0)
+                        lls_defocus_offset=None
                     )
 
                     noisy_img = simulate_beads(psf, beads=reference, noise=True)
