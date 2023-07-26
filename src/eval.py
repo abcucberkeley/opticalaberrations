@@ -1579,19 +1579,18 @@ def eval_modalities(
 
     for dist in ['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet']:
         for amplitude_range in [(0, .05), (.05, .1), (.1, .2), (.2, .3)]:
+            for s in range(10):
+                phi = Wavefront(
+                    amplitude_range,
+                    modes=modalities_generators[0].n_modes,
+                    distribution=dist,
+                    signed=False if eval_sign == 'positive_only' else True,
+                    rotate=True,
+                    mode_weights='pyramid',
+                    lam_detection=modalities_generators[0].lam_detection,
+                )
 
-            phi = Wavefront(
-                amplitude_range,
-                modes=modalities_generators[0].n_modes,
-                distribution=dist,
-                signed=False if eval_sign == 'positive_only' else True,
-                rotate=True,
-                mode_weights='pyramid',
-                lam_detection=modalities_generators[0].lam_detection,
-            )
-
-            for i, gen in enumerate(modalities_generators):
-                for s in range(10):
+                for i, gen in enumerate(modalities_generators):
                     # aberrated PSF without noise
                     psf, y, y_lls_defocus = gen.single_psf(
                         phi=phi,
