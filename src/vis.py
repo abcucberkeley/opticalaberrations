@@ -289,6 +289,7 @@ def diagnostic_assessment(
         dz: float = .2,
         pltstyle: Any = None,
         transform_to_align_to_DM: bool = False,
+        display_otf: bool = False
 ):
     if pltstyle is not None: plt.style.use(pltstyle)
 
@@ -377,6 +378,20 @@ def diagnostic_assessment(
 
     if transform_to_align_to_DM:
         psf = np.transpose(np.rot90(psf, k=2, axes=(1, 2)), axes=(0, 2, 1))    # 180 rotate, then transpose
+
+    if display_otf:
+        from embeddings import fft
+        psf = np.abs(fft(psf))
+        psf /= np.max(psf)
+
+        gt_psf = np.abs(fft(gt_psf))
+        gt_psf /= np.max(gt_psf)
+
+        predicted_psf = np.abs(fft(predicted_psf))
+        predicted_psf /= np.max(predicted_psf)
+
+        corrected_psf = np.abs(fft(corrected_psf))
+        corrected_psf /= np.max(corrected_psf)
 
     plot_mip(
         xy=ax_xy,

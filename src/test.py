@@ -164,6 +164,13 @@ def run_task(iter_num, args):
                 batch_size=args.batch_size,
                 digital_rotations=args.digital_rotations,
             )
+        elif args.target == "modalities":
+            eval.eval_modalities(
+                model=args.model,
+                eval_sign=args.eval_sign,
+                batch_size=args.batch_size,
+                digital_rotations=args.digital_rotations,
+            )
         elif args.target == 'snrheatmap':
             eval.snrheatmap(
                 iter_num=iter_num,

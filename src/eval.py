@@ -1528,3 +1528,210 @@ def evaluate_modes(
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+@profile
+def eval_modalities(
+    model: Path,
+    photons: int = 5e5,
+    batch_size: int = 512,
+    eval_sign: str = 'signed',
+    digital_rotations: bool = False,
+    num_objs: int = 1,
+    psf_shape: tuple = (64, 64, 64),
+    modalities: tuple = (
+        'confocal',
+        'widefield',
+        '2photon',
+        '../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat',
+        '../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat',
+        '../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat',
+        '../lattice/MBHex_NAexc0p43_annulus0p47_0p40_crop0p08_FWHM48p0.mat',
+        '../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat',
+        '../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat',
+        '../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat',
+        '../lattice/v2HexRect_NAexc0p50_NAsigma0p15_annulus0p60-0p40_FWHM_56p0.mat',
+    )
+):
+    m = backend.load(model)
+    m.summary()
+    no_phase = True if m.input_shape[1] == 3 else False
+
+    reference = multipoint_dataset.beads(
+        photons=photons,
+        image_shape=psf_shape,
+        object_size=0,
+        num_objs=num_objs,
+        fill_radius=.3 if num_objs > 1 else 0
+    )
+
+    modalities_generators = [
+        backend.load_metadata(
+            model,
+            signed=False if eval_sign == 'positive_only' else True,
+            rotate=True,
+            mode_weights='pyramid',
+            psf_shape=psf_shape,
+            psf_type=psf_type
+        )
+        for psf_type in modalities
+    ]
+
+    for dist in ['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet']:
+        for amplitude_range in [(0, 0), (.05, .1), (.1, .2), (.2, .3)]:
+
+            phi = Wavefront(
+                amplitude_range,
+                modes=modalities_generators[0].n_modes,
+                distribution=dist,
+                signed=False if eval_sign == 'positive_only' else True,
+                rotate=True,
+                mode_weights='pyramid',
+                lam_detection=modalities_generators[0].lam_detection,
+            )
+
+            for i, gen in enumerate(modalities_generators):
+                for s in range(10):
+                    # aberrated PSF without noise
+                    psf, y, y_lls_defocus = gen.single_psf(
+                        phi=phi,
+                        normed=True,
+                        meta=True,
+                        lls_defocus_offset=(0, 0)
+                    )
+
+                    noisy_img = simulate_beads(psf, beads=reference, noise=True)
+                    maxcounts = np.max(noisy_img)
+                    noisy_img /= maxcounts
+
+                    save_path = Path(
+                        f"{model.with_suffix('')}/"
+                        f"{eval_sign}/"
+                        f"samples/"
+                        f"{dist}/"
+                        f"um-{amplitude_range[-1]}/"
+                        f"mode-{modalities[i].split('_')[0].replace('../lattice/', '')}"
+                    )
+                    save_path.mkdir(exist_ok=True, parents=True)
+
+                    embeddings = backend.preprocess(
+                        noisy_img,
+                        modelpsfgen=gen,
+                        digital_rotations=361 if digital_rotations else None,
+                        remove_background=True,
+                        normalize=True,
+                        plot=save_path / f'{s}',
+                    )
+                    imwrite(save_path / f'{s}_embeddings.tif', embeddings.astype(np.float32))
+
+                    if digital_rotations:
+                        res = backend.predict_rotation(
+                            m,
+                            embeddings,
+                            save_path=save_path / f'{s}',
+                            psfgen=gen,
+                            no_phase=no_phase,
+                            batch_size=batch_size,
+                            plot=save_path / f'{s}',
+                            plot_rotations=save_path / f'{s}',
+                        )
+                    else:
+                        res = backend.bootstrap_predict(
+                            m,
+                            embeddings,
+                            psfgen=gen,
+                            no_phase=no_phase,
+                            batch_size=batch_size,
+                            plot=save_path / f'{s}',
+                        )
+
+                    try:
+                        p, std = res
+                        p_lls_defocus = None
+                    except ValueError:
+                        p, std, p_lls_defocus = res
+
+                    if eval_sign == 'positive_only':
+                        y = np.abs(y)
+                        if len(p.shape) > 1:
+                            p = np.abs(p)[:, :y.shape[-1]]
+                        else:
+                            p = np.abs(p)[np.newaxis, :y.shape[-1]]
+                    else:
+                        if len(p.shape) > 1:
+                            p = p[:, :y.shape[-1]]
+                        else:
+                            p = p[np.newaxis, :y.shape[-1]]
+
+                    residuals = y - p
+
+                    p_wave = Wavefront(p, lam_detection=gen.lam_detection)
+                    y_wave = Wavefront(y, lam_detection=gen.lam_detection)
+                    residuals = Wavefront(residuals, lam_detection=gen.lam_detection)
+
+                    p_psf = gen.single_psf(p_wave, normed=True)
+                    gt_psf = gen.single_psf(y_wave, normed=True)
+
+                    corrected_psf = gen.single_psf(residuals)
+                    corrected_noisy_img = simulate_beads(corrected_psf, beads=reference, noise=True)
+                    corrected_noisy_img /= np.max(corrected_noisy_img)
+
+                    imwrite(save_path / f'{s}_input.tif', noisy_img.astype(np.float32))
+
+                    imwrite(save_path / f'{s}_pred_psf.tif', p_psf.astype(np.float32))
+                    imwrite(save_path / f'{s}_pred_wavefront.tif', p_wave.wave().astype(np.float32))
+
+                    imwrite(save_path / f'{s}_gt_psf.tif', gt_psf.astype(np.float32))
+                    imwrite(save_path / f'{s}_gt_wavefront.tif', y_wave.wave().astype(np.float32))
+
+                    imwrite(save_path / f'{s}_corrected_psf.tif', corrected_psf.astype(np.float32))
+                    imwrite(save_path / f'{s}_corrected_wavefront.tif', residuals.wave().astype(np.float32))
+
+                    processed_input = backend.prep_sample(
+                        noisy_img,
+                        model_fov=gen.psf_fov,  # this is what we will crop to
+                        sample_voxel_size=gen.voxel_size,
+                        remove_background=True,
+                        normalize=True,
+                    )
+
+                    processed_corrected = backend.prep_sample(
+                        corrected_noisy_img,
+                        model_fov=gen.psf_fov,  # this is what we will crop to
+                        sample_voxel_size=gen.voxel_size,
+                        remove_background=True,
+                        normalize=True,
+                    )
+
+                    vis.diagnostic_assessment(
+                        psf=processed_input,
+                        gt_psf=gt_psf,
+                        predicted_psf=p_psf,
+                        corrected_psf=processed_corrected,
+                        photons=photons,
+                        maxcounts=maxcounts,
+                        y=y_wave,
+                        pred=p_wave,
+                        y_lls_defocus=y_lls_defocus,
+                        p_lls_defocus=p_lls_defocus,
+                        save_path=save_path / f'{s}_psf',
+                        display=False,
+                        pltstyle='default'
+                    )
+
+                    vis.diagnostic_assessment(
+                        psf=processed_input,
+                        gt_psf=gt_psf,
+                        predicted_psf=p_psf,
+                        corrected_psf=processed_corrected,
+                        photons=photons,
+                        maxcounts=maxcounts,
+                        y=y_wave,
+                        pred=p_wave,
+                        y_lls_defocus=y_lls_defocus,
+                        p_lls_defocus=p_lls_defocus,
+                        display_otf=True,
+                        save_path=save_path / f'{s}_otf',
+                        display=False,
+                        pltstyle='default'
+                    )
