@@ -7,10 +7,12 @@ All rights reserved.
 import logging
 import sys
 from pathlib import Path
+from copy import deepcopy
 
 import numpy as np
 from skimage.transform import rescale
 from line_profiler_pycharm import profile
+from astropy.convolution import convolve_fft
 import h5py
 
 logging.basicConfig(
@@ -98,17 +100,25 @@ class PsfGenerator3D:
         return self.kmask2 * phi.phase(self.krho, self.kphi, normed=normed, outside=None)
 
     @profile
-    def coherent_psf(self, phi):
+    def coherent_psf(self, phi, lam_excitation=None):
         """
         Returns the coherent psf for a given wavefront phi
 
         Args:
             phi: Zernike/ZernikeWavefront object
         """
+        lam = self.lam_detection if lam_excitation is None else lam_excitation
         phi = self.masked_phase_array(phi)
-        ku = self.kbase * np.exp(2.j * np.pi * phi / self.lam_detection)
+        ku = self.kbase * np.exp(2.j * np.pi * phi / lam)
         res = np.fft.ifftn(ku, axes=(1, 2))
         return np.fft.fftshift(res, axes=(0,))
+
+    def widefield_psf(self, phi, lam_excitation=None):
+        psf = np.abs(self.coherent_psf(phi, lam_excitation=lam_excitation)) ** 2
+        psf = np.array([p / np.sum(p) for p in psf])
+        psf = np.fft.fftshift(psf)
+        psf /= np.max(psf)
+        return psf
 
     @profile
     def incoherent_psf(self, phi, lls_defocus_offset=None):
@@ -121,16 +131,56 @@ class PsfGenerator3D:
             phi: Zernike/ZernikeWavefront object
             lls_defocus_offset: the offset between the excitation and detection focal plan (microns)
         """
-        _psf = np.abs(self.coherent_psf(phi)) ** 2
-        _psf = np.array([p / np.sum(p) for p in _psf])
-        _psf = np.fft.fftshift(_psf)
-        _psf /= np.max(_psf)
+        ideal_phi = deepcopy(phi)
+        ideal_phi.zernikes = {k: 0. for k, v in ideal_phi.zernikes.items()}
+
+        _psf = self.widefield_psf(phi)
 
         if self.psf_type == 'widefield':
             pass
+
+        elif self.psf_type == '2photon':
+            exc_psf = self.widefield_psf(ideal_phi, lam_excitation=.920)
+            _psf = (exc_psf ** 2) * _psf
+
         elif self.psf_type == 'confocal':
-            _psf = _psf**2
-            _psf /= np.max(_psf)
+            lam_excitation = .488
+            exc_psf = self.widefield_psf(ideal_phi, lam_excitation=lam_excitation)
+
+            eff_pixel_size = lam_excitation / self.n * 0.1
+            au = 0.61 * (self.lam_detection / self.n) / self.na_detection
+            Z, Y, X = np.ogrid[-200:201, -200:201, -200:201]
+
+            f = 1  # number of AUs
+            circ_func = Y ** 2 + X ** 2 <= (f * au / eff_pixel_size) ** 2
+            circ_func = circ_func & (Z == 0)
+
+            circ_func = rescale(
+                circ_func.astype(np.float32),
+                (eff_pixel_size/self.dz, eff_pixel_size/self.dy, eff_pixel_size/self.dx),
+                order=0,
+            )
+
+            w = _psf.shape[0]//2
+            focal_plane = np.array(circ_func.shape)//2
+            circ_func = circ_func[
+                focal_plane[0]-w:focal_plane[0]+w,
+                focal_plane[1]-w:focal_plane[1]+w,
+                focal_plane[2]-w:focal_plane[2]+w,
+            ]
+
+            det_psf = convolve_fft(
+                _psf,
+                circ_func,
+                allow_huge=True,
+                normalize_kernel=False,
+                nan_treatment='fill',
+                fill_value=0
+            ).astype(np.float32)
+
+            det_psf[det_psf < 0] = 0  # clip negative small values
+            _psf = exc_psf * det_psf
+
         else:
             lattice_profile = self.psf_type
 
@@ -159,4 +209,5 @@ class PsfGenerator3D:
             ]
             _psf *= lattice_profile
 
+        _psf /= np.max(_psf)
         return _psf.astype(np.float32)
