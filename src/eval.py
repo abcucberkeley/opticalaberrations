@@ -1578,7 +1578,7 @@ def eval_modalities(
     ]
 
     for dist in ['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet']:
-        for amplitude_range in [(0, 0), (.05, .1), (.1, .2), (.2, .3)]:
+        for amplitude_range in [(0, .05), (.05, .1), (.1, .2), (.2, .3)]:
 
             phi = Wavefront(
                 amplitude_range,
