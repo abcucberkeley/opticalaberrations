@@ -1578,8 +1578,12 @@ def eval_modalities(
     ]
 
     for dist in ['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet']:
-        for amplitude_range in [(0, .05), (.05, .1), (.1, .2), (.2, .3)]:
+        for amplitude_range in [(0, 0), (.1, .2), (.2, .3)]:
             for s in range(10):
+
+                if amplitude_range == (0, 0) and s > 0:
+                    continue
+
                 phi = Wavefront(
                     amplitude_range,
                     modes=modalities_generators[0].n_modes,
@@ -1600,6 +1604,7 @@ def eval_modalities(
                     )
 
                     noisy_img = simulate_beads(psf, beads=reference, noise=True)
+                    noisy_img -= 100
                     maxcounts = np.max(noisy_img)
                     noisy_img /= maxcounts
 
@@ -1617,7 +1622,7 @@ def eval_modalities(
                         noisy_img,
                         modelpsfgen=gen,
                         digital_rotations=361 if digital_rotations else None,
-                        remove_background=True,
+                        remove_background=False,
                         normalize=True,
                         plot=save_path / f'{s}',
                     )
