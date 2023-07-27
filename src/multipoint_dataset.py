@@ -16,6 +16,7 @@ from pathlib import Path
 from tifffile import imwrite
 import numpy as np
 import raster_geometry as rg
+from scipy import stats as st
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -41,14 +42,21 @@ def save_synthetic_sample(
     inputs,
     amps,
     photons,
-    maxcounts,
+    counts,
     p2v,
     avg_min_distance,
     gen,
     lls_defocus_offset=0.,
     npoints=1,
     gt=None,
-    realspace=None
+    realspace=None,
+    counts_mode=None,
+    counts_percentiles=None,
+    sigma_background_noise=None,
+    mean_background_offset=None,
+    electrons_per_count=None,
+    quantum_efficiency=None,
+    psf_type=None,
 ):
 
     if gt is not None:
@@ -63,16 +71,22 @@ def save_synthetic_sample(
     with Path(f"{savepath}.json").open('w') as f:
         json = dict(
             path=f"{savepath}.tif",
+            shape=inputs.shape,
             n_modes=int(gen.n_modes),
             order=str(gen.order),
-            zernikes=amps.tolist(),
             lls_defocus_offset=float(lls_defocus_offset),
+            zernikes=amps.tolist(),
             photons=int(photons),
-            shape=inputs.shape,
-            maxcounts=int(maxcounts),
+            counts=int(counts),
+            counts_mode=int(counts_mode),
+            counts_percentiles=counts_percentiles.tolist(),
             npoints=int(npoints),
             peak2peak=float(p2v),
             avg_min_distance=float(avg_min_distance),
+            mean_background_offset=int(mean_background_offset),
+            sigma_background_noise=float(sigma_background_noise),
+            electrons_per_count=float(electrons_per_count),
+            quantum_efficiency=float(quantum_efficiency),
             x_voxel_size=float(gen.x_voxel_size),
             y_voxel_size=float(gen.y_voxel_size),
             z_voxel_size=float(gen.z_voxel_size),
@@ -82,6 +96,7 @@ def save_synthetic_sample(
             mode_weights=str(gen.mode_weights),
             embedding_option=str(gen.embedding_option),
             distribution=str(gen.distribution),
+            psf_type=str(psf_type)
         )
 
         ujson.dump(
@@ -195,7 +210,9 @@ def sim(
     else:  # convert image to counts
         inputs = electrons2counts(img, electrons_per_count=electrons_per_count)
 
-    maxcounts = np.max(inputs)
+    counts = np.sum(inputs)
+    counts_mode = int(st.mode(inputs, axis=None).mode[0])
+    counts_percentiles = np.array([np.percentile(inputs, p) for p in range(1, 101)], dtype=int)
 
     if random_crop is not None:
         crop = int(np.random.uniform(low=random_crop, high=gen.psf_shape[0]+1))
@@ -230,14 +247,21 @@ def sim(
                 embeddings,
                 amps=amps,
                 photons=photons,
-                maxcounts=maxcounts,
+                counts=counts,
+                counts_mode=counts_mode,
+                counts_percentiles=counts_percentiles,
                 npoints=npoints,
                 p2v=p2v,
                 gt=reference,
                 gen=gen,
                 realspace=inputs,
                 avg_min_distance=avg_min_distance,
-                lls_defocus_offset=lls_defocus_offset
+                lls_defocus_offset=lls_defocus_offset,
+                sigma_background_noise=sigma_background_noise,
+                mean_background_offset=mean_background_offset,
+                electrons_per_count=electrons_per_count,
+                quantum_efficiency=quantum_efficiency,
+                psf_type=gen.psf_type,
             )
     else:
         save_synthetic_sample(
@@ -246,12 +270,19 @@ def sim(
             gt=reference,
             amps=amps,
             photons=photons,
-            maxcounts=maxcounts,
+            counts=counts,
+            counts_mode=counts_mode,
+            counts_percentiles=counts_percentiles,
             npoints=npoints,
             avg_min_distance=avg_min_distance,
             p2v=p2v,
             gen=gen,
-            lls_defocus_offset=lls_defocus_offset
+            lls_defocus_offset=lls_defocus_offset,
+            sigma_background_noise=sigma_background_noise,
+            mean_background_offset=mean_background_offset,
+            electrons_per_count=electrons_per_count,
+            quantum_efficiency=quantum_efficiency,
+            psf_type=gen.psf_type,
         )
 
 
@@ -433,8 +464,8 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--psf_type", default='widefield', type=str,
-        help="widefield or confocal"
+        "--psf_type", default='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat', type=str,
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
     )
 
     parser.add_argument(

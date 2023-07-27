@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/config.py" />
-    <option name="PARAMETERS" value="$USER_HOME$/fiona/thayer/opticalaberrations/models/new/lls_defocus_embeddings/opticalnet-z15/opticalnet/2023-02-25-09-05 --psf_type ../lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat --n_modes 15 --wavelength .510 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --embedding_option spatial_planes metadata" />
+    <option name="PARAMETERS" value="$USER_HOME$/fiona/thayer/opticalaberrations/models/new/lls_defocus_embeddings/opticalnet-z15/opticalnet/2023-02-25-09-05 --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat --n_modes 15 --wavelength .510 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --embedding_option spatial_planes metadata" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

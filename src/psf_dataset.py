@@ -15,6 +15,7 @@ from typing import Any
 from pathlib import Path
 from tifffile import imwrite
 import numpy as np
+from scipy import stats as st
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -37,10 +38,17 @@ def save_synthetic_sample(
     inputs,
     amps,
     photons,
-    maxcounts,
+    counts,
     p2v,
     gen,
-    lls_defocus_offset=0.
+    lls_defocus_offset=0.,
+    counts_mode=None,
+    counts_percentiles=None,
+    sigma_background_noise=None,
+    mean_background_offset=None,
+    electrons_per_count=None,
+    quantum_efficiency=None,
+    psf_type=None,
 ):
     logger.info(f"Saved: {savepath}")
     imwrite(f"{savepath}.tif", inputs)
@@ -48,14 +56,20 @@ def save_synthetic_sample(
     with Path(f"{savepath}.json").open('w') as f:
         json = dict(
             path=f"{savepath}.tif",
+            shape=inputs.shape,
             n_modes=int(gen.n_modes),
             order=str(gen.order),
-            zernikes=amps.tolist(),
             lls_defocus_offset=float(lls_defocus_offset),
-            shape=inputs.shape,
+            zernikes=amps.tolist(),
             photons=int(photons),
-            maxcounts=int(maxcounts),
+            counts=int(counts),
+            counts_mode=int(counts_mode),
+            counts_percentiles=counts_percentiles.tolist(),
             peak2peak=float(p2v),
+            mean_background_offset=int(mean_background_offset),
+            sigma_background_noise=float(sigma_background_noise),
+            electrons_per_count=float(electrons_per_count),
+            quantum_efficiency=float(quantum_efficiency),
             x_voxel_size=float(gen.x_voxel_size),
             y_voxel_size=float(gen.y_voxel_size),
             z_voxel_size=float(gen.z_voxel_size),
@@ -63,7 +77,9 @@ def save_synthetic_sample(
             na_detection=float(gen.na_detection),
             refractive_index=float(gen.refractive_index),
             mode_weights=str(gen.mode_weights),
+            embedding_option=str(gen.embedding_option),
             distribution=str(gen.distribution),
+            psf_type=str(psf_type)
         )
 
         ujson.dump(
@@ -116,20 +132,29 @@ def sim(
     else:  # convert image to counts
         inputs = electrons2counts(kernel, electrons_per_count=electrons_per_count)
 
-    maxcounts = np.max(inputs)
+    counts = np.sum(inputs)
+    counts_mode = int(st.mode(inputs, axis=None).mode[0])
+    counts_percentiles = np.array([np.percentile(inputs, p) for p in range(1, 101)], dtype=int)
 
     if normalize:
         inputs /= np.max(inputs)
 
     save_synthetic_sample(
-        outdir/filename,
+        outdir / filename,
         inputs,
         amps=amps,
         photons=photons,
-        maxcounts=maxcounts,
+        counts=counts,
+        counts_mode=counts_mode,
+        counts_percentiles=counts_percentiles,
         p2v=p2v,
         gen=gen,
-        lls_defocus_offset=lls_defocus_offset
+        lls_defocus_offset=lls_defocus_offset,
+        sigma_background_noise=sigma_background_noise,
+        mean_background_offset=mean_background_offset,
+        electrons_per_count=electrons_per_count,
+        quantum_efficiency=quantum_efficiency,
+        psf_type=gen.psf_type,
     )
 
 
@@ -268,8 +293,8 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--psf_type", default='widefield', type=str,
-        help="widefield or confocal"
+        "--psf_type", default='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat', type=str,
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
     )
 
     parser.add_argument(
