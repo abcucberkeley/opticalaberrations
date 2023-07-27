@@ -124,6 +124,12 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
 
+    parser.add_argument(
+        "--psf_type", default=None, type=str,
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
+             '(Default: None; to keep default mode used during training)'
+    )
+
     return parser.parse_args(args)
 
 
@@ -150,7 +156,7 @@ def run_task(iter_num, args):
 
     with strategy.scope():
         if args.target == 'modes':
-            eval.evaluate_modes(
+            savepath = eval.evaluate_modes(
                 args.model,
                 eval_sign=args.eval_sign,
                 num_objs=args.num_objs,
@@ -158,21 +164,21 @@ def run_task(iter_num, args):
                 digital_rotations=args.digital_rotations,
             )
         elif args.target == "random":
-            eval.random_samples(
+            savepath = eval.random_samples(
                 model=args.model,
                 eval_sign=args.eval_sign,
                 batch_size=args.batch_size,
                 digital_rotations=args.digital_rotations,
             )
         elif args.target == "modalities":
-            eval.eval_modalities(
+            savepath = eval.eval_modalities(
                 model=args.model,
                 eval_sign=args.eval_sign,
                 batch_size=args.batch_size,
                 digital_rotations=args.digital_rotations,
             )
         elif args.target == 'snrheatmap':
-            eval.snrheatmap(
+            savepath = eval.snrheatmap(
                 iter_num=iter_num,
                 modelpath=args.model,
                 datadir=args.datadir,
@@ -184,9 +190,10 @@ def run_task(iter_num, args):
                 digital_rotations=args.digital_rotations,
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
+                psf_type=args.psf_type
             )
         elif args.target == 'densityheatmap':
-            eval.densityheatmap(
+            savepath = eval.densityheatmap(
                 iter_num=iter_num,
                 modelpath=args.model,
                 datadir=args.datadir,
@@ -198,6 +205,7 @@ def run_task(iter_num, args):
                 digital_rotations=args.digital_rotations,
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
+                psf_type=args.psf_type
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
@@ -213,31 +221,34 @@ def run_task(iter_num, args):
                 photons_range=(args.photons_min, args.photons_max),
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
+                psf_type=args.psf_type
             )
-            with Path(f"{savepath.with_suffix('')}_eval_iterheatmap_settings.json").open('w') as f:
-                json = dict(
-                    iter_num=int(iter_num),
-                    modelpath=str(args.model),
-                    datadir=str(args.datadir),
-                    distribution=str(args.dist),
-                    samplelimit=int(args.n_samples),
-                    na=float(args.na),
-                    batch_size=int(args.batch_size),
-                    eval_sign=bool(args.eval_sign),
-                    digital_rotations=bool(args.digital_rotations),
-                    photons_min=float(args.photons_min),
-                    photons_max=float(args.photons_max),
-                )
 
-                ujson.dump(
-                    json,
-                    f,
-                    indent=4,
-                    sort_keys=False,
-                    ensure_ascii=False,
-                    escape_forward_slashes=False
-                )
-                logging.info(f"Saved: {f.name}")
+        with Path(f"{savepath.with_suffix('')}_eval_settings.json").open('w') as f:
+            json = dict(
+                iter_num=int(iter_num),
+                modelpath=str(args.model),
+                datadir=str(args.datadir),
+                distribution=str(args.dist),
+                samplelimit=int(args.n_samples),
+                na=float(args.na),
+                batch_size=int(args.batch_size),
+                eval_sign=bool(args.eval_sign),
+                digital_rotations=bool(args.digital_rotations),
+                photons_min=float(args.photons_min),
+                photons_max=float(args.photons_max),
+                psf_type=str(args.psf_type)
+            )
+
+            ujson.dump(
+                json,
+                f,
+                indent=4,
+                sort_keys=False,
+                ensure_ascii=False,
+                escape_forward_slashes=False
+            )
+            logging.info(f"Saved: {f.name}")
 
         atexit.register(strategy._extended._collective_ops._pool.close)
 

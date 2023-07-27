@@ -164,7 +164,6 @@ def generate_sample(
 def collect_data(
     datapath,
     model,
-    gen,
     samplelimit: int = 1,
     distribution: str = '/',
     no_phase: bool = False,
@@ -176,7 +175,7 @@ def collect_data(
 
     metadata = data_utils.collect_dataset(
         datapath,
-        modes=gen.n_modes,
+        modes=predicted_modes,
         samplelimit=samplelimit,
         distribution=distribution,
         no_phase=no_phase,
@@ -244,6 +243,7 @@ def iter_evaluate(
     savepath: Any = None,
     plot: Any = None,
     plot_rotations: bool = False,
+    psf_type: Optional[str] = None
 ):
     """
     Gathers the set of .tif files that meet the input criteria.
@@ -262,6 +262,7 @@ def iter_evaluate(
         signed=True,
         rotate=False,
         batch_size=batch_size,
+        psf_type=psf_type,
         psf_shape=3 * [model.input_shape[2]]
     )
 
@@ -270,7 +271,6 @@ def iter_evaluate(
         results = collect_data(
             datapath=datapath,
             model=model,
-            gen=gen,
             samplelimit=samplelimit,
             distribution=distribution,
             no_phase=no_phase,
@@ -839,7 +839,8 @@ def snrheatmap(
     digital_rotations: bool = False,
     plot: Any = None,
     plot_rotations: bool = False,
-    agg: str = 'median'
+    agg: str = 'median',
+    psf_type: Optional[str] = None
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / eval_sign / f'snrheatmaps'
@@ -849,6 +850,9 @@ def snrheatmap(
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    if psf_type is not None:
+        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
 
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0)
@@ -867,6 +871,7 @@ def snrheatmap(
             digital_rotations=digital_rotations,
             plot=plot,
             plot_rotations=plot_rotations,
+            psf_type=psf_type
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -919,7 +924,8 @@ def densityheatmap(
     digital_rotations: bool = False,
     plot: Any = None,
     plot_rotations: bool = False,
-    agg: str = 'median'
+    agg: str = 'median',
+    psf_type: Optional[str] = None
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -930,6 +936,9 @@ def densityheatmap(
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    if psf_type is not None:
+        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
 
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0)
@@ -949,6 +958,7 @@ def densityheatmap(
             digital_rotations=digital_rotations,
             plot=plot,
             plot_rotations=plot_rotations,
+            psf_type=psf_type
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -981,6 +991,8 @@ def densityheatmap(
             agg=agg
         )
 
+    return savepath
+
 
 @profile
 def iterheatmap(
@@ -997,7 +1009,8 @@ def iterheatmap(
     photons_range: Optional[tuple] = None,
     plot: Any = None,
     plot_rotations: bool = False,
-    agg: str = 'median'
+    agg: str = 'median',
+    psf_type: Optional[str] = None
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / eval_sign / f'iterheatmaps'
@@ -1007,6 +1020,9 @@ def iterheatmap(
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    if psf_type is not None:
+        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
 
     logger.info(f'Save path = {savepath.resolve()}')
     if datadir.suffix == '.csv':
@@ -1030,6 +1046,7 @@ def iterheatmap(
             digital_rotations=digital_rotations,
             plot=plot,
             plot_rotations=plot_rotations,
+            psf_type=psf_type
         )
 
     max_iter = df['iter_num'].max()
@@ -1218,6 +1235,8 @@ def random_samples(
 
     pool.close()    # close the pool
     pool.join()     # wait for all tasks to complete
+
+    return save_path
 
 
 def plot_templates(model: Path, num_objs: Optional[int] = 1):
@@ -1529,6 +1548,8 @@ def evaluate_modes(
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
+    return savepath
+
 
 @profile
 def eval_modalities(
@@ -1614,7 +1635,7 @@ def eval_modalities(
                         f"samples/"
                         f"{dist}/"
                         f"um-{amplitude_range[-1]}/"
-                        f"mode-{modalities[i].split('_')[0].replace('../lattice/', '')}"
+                        f"mode-{modalities[i].replace('../lattice/', '').split('_')[0]}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 
@@ -1739,3 +1760,5 @@ def eval_modalities(
                         display=False,
                         pltstyle='default'
                     )
+
+    return save_path
