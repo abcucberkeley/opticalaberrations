@@ -57,7 +57,7 @@ class SyntheticPSF:
         """
         Args:
             amplitude_ranges: range tuple, array, or wavefront object (in microns)
-            psf_type: widefield or confocal
+            psf_type: widefield, 2photon, confocal, or a path to an LLS excitation profile
             distribution: desired distribution for the amplitudes
             gamma: optional exponent of the powerlaw distribution
             signed: optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes,

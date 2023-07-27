@@ -1444,6 +1444,7 @@ def train(
     else:
         train_data = data_utils.collect_dataset(
             dataset,
+            metadata=False,
             modes=modes,
             distribution=distribution,
             embedding=embedding,

@@ -78,13 +78,15 @@ def get_sample(
     with open(path.with_suffix('.json')) as f:
         hashtbl = ujson.load(f)
 
-    photons = hashtbl['photons']
-    npoints = hashtbl['npoints']
 
-    try:
-        lls_defocus_offset = np.nan_to_num(hashtbl['lls_defocus_offset'], nan=0)
-    except KeyError:
-        lls_defocus_offset = 0.
+    npoints = hashtbl.get('npoints', 1)
+    photons = hashtbl.get('photons', 0)
+    counts = hashtbl.get('counts', 0)
+    counts_mode = hashtbl.get('counts_mode', 0)
+    counts_percentiles = hashtbl.get('counts_percentiles', np.zeros(100))
+
+    lls_defocus_offset = np.nan_to_num(hashtbl.get('lls_defocus_offset', 0), nan=0)
+    avg_min_distance = np.nan_to_num(hashtbl.get('avg_min_distance', 0), nan=0)
 
     if defocus_only:
         zernikes = [lls_defocus_offset]
@@ -104,13 +106,9 @@ def get_sample(
     except KeyError:
         p2v = Wavefront(zernikes, lam_detection=float(hashtbl['wavelength'])).peak2valley()
 
-    try:
-        avg_min_distance = np.nan_to_num(hashtbl['avg_min_distance'], nan=0)
-    except KeyError:
-        avg_min_distance = 0.
-
     if metadata:
-        return zernikes, photons, p2v, umRMS, npoints, avg_min_distance, str(path)
+        return zernikes, photons, counts, counts_mode, counts_percentiles, p2v, umRMS, npoints, avg_min_distance, str(path)
+
     else:
         img = get_image(path)
 
@@ -297,12 +295,22 @@ def collect_dataset(
 ):
     """
     Returns:
-        metadata=True -> (amps, photons, peak2peak, umRMS, npoints, avg_min_distance, filename)
+        metadata=True -> (amps, photons, counts, peak2peak, umRMS, npoints, avg_min_distance, filename)
         metadata=False-> img & zern
     """
     if metadata:
-        #               amps, photons,   peak2peak, umRMS,     npoints, avg_min_distance, filename
-        dtypes = [tf.float32, tf.int32, tf.float32, tf.float32, tf.float32, tf.float32, tf.string]
+        dtypes = [
+            tf.float32,     # amps
+            tf.int32,       # photons
+            tf.int32,       # counts
+            tf.int32,       # counts_mode
+            tf.int32,       # counts_percentiles
+            tf.float32,     # peak2peak
+            tf.float32,     # umRMS
+            tf.float32,     # npoints
+            tf.float32,     # avg_min_distance
+            tf.string       # filename
+        ]
     else:
         # img, amps
         dtypes = [tf.float32, tf.float32]

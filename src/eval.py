@@ -175,51 +175,76 @@ def collect_data(
 
     metadata = data_utils.collect_dataset(
         datapath,
+        metadata=True,
         modes=predicted_modes,
         samplelimit=samplelimit,
         distribution=distribution,
         no_phase=no_phase,
         photons_range=photons_range,
         npoints_range=npoints_range,
-        metadata=True,
         suffix_to_avoid="_sample_predictions_psf.tif"
     )  # metadata is a list of arrays
 
     # This runs multiple samples (aka images) at a time.
-    # ys is a 2D array, rows are each sample, columns give aberration in zernike coeffs
+    # ys is a 2D array, rows are each sample, columns give aberration in zernike coefficients
     metadata = np.array(list(metadata.take(-1)))
-    ys = np.array([i.numpy() for i in metadata[:, 0]])[:, :predicted_modes]
-    photons = np.array([i.numpy() for i in metadata[:, 1]])
-    p2v = np.array([i.numpy() for i in metadata[:, 2]])
-    umRMS = np.array([i.numpy() for i in metadata[:, 3]])
-    npoints = np.array([i.numpy() for i in metadata[:, 4]])
-    dists = np.array([i.numpy() for i in metadata[:, 5]])
-    files = np.array([Path(str(i.numpy(), "utf-8")) for i in metadata[:, -1]])
-    beads = np.array([f.with_name(f'{f.stem}_gt' + f.suffix) for f in files])  # for python >= 3.9 can use .with_stem
-    ids = np.arange(ys.shape[0], dtype=int)
+    ys = np.zeros((metadata.shape[0], predicted_modes))
+    counts_percentiles = np.zeros((metadata.shape[0], 100))
+
+    results = {
+        # image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
+        'id': np.arange(metadata.shape[0], dtype=int),
+        'iter_num': np.zeros(metadata.shape[0], dtype=int),          # iteration index.
+        'aberration': np.zeros(metadata.shape[0], dtype=float),      # initial p2v aberration. Constant over iterations.
+        'residuals': np.zeros(metadata.shape[0], dtype=float),       # remaining p2v aberration after ML correction.
+        'residuals_umRMS': np.zeros(metadata.shape[0], dtype=float), # remaining umRMS aberration after ML correction.
+        'photons': np.zeros(metadata.shape[0], dtype=int),           # integrated photons
+        'counts': np.zeros(metadata.shape[0], dtype=int),            # integrated counts
+        'counts_mode': np.zeros(metadata.shape[0], dtype=int),       # counts mode
+        'distance': np.zeros(metadata.shape[0], dtype=float),        # average distance to nearst bead
+        'neighbors': np.zeros(metadata.shape[0], dtype=int),         # number of beads
+        'file': np.empty(metadata.shape[0], dtype=Path),             # path to realspace images
+        'file_windows': np.empty(metadata.shape[0], dtype=Path),     # stupid windows path
+        'beads': np.zeros(metadata.shape[0], dtype=Path),
+        # path to binary image file filled with zeros except at location of beads
+    }
+
+    # see `data_utils.get_sample` to check order of objects returned
+    for i in range(metadata.shape[0]):
+        ys[i] = metadata[i, 0].numpy()[:predicted_modes]
+
+        results['photons'][i] = metadata[i, 1].numpy()
+        results['counts'][i] = metadata[i, 2].numpy()
+        results['counts_mode'][i] = metadata[i, 3].numpy()
+
+        counts_percentiles[i] = metadata[i, 4].numpy()
+
+        results['aberration'][i] = metadata[i, 5].numpy()
+        results['residuals'][i] = results['aberration'][i]
+
+        results['residuals_umRMS'][i] = metadata[i, 6].numpy()
+
+        results['neighbors'][i] = metadata[i, 7].numpy()
+        results['distance'][i] = metadata[i, 8].numpy()
+
+        f = Path(str(metadata[i, -1].numpy(), "utf-8"))
+        results['file'][i] = f
+        results['file_windows'][i] = utils.convert_to_windows_file_string(f)
+        results['beads'][i] = f.with_name(f'{f.stem}_gt' + f.suffix)
+
 
     # 'results' is a df to be written out as the _predictions.csv.
     # 'results' holds the information from every iteration.
     # Initialize it first with the zeroth iteration.
-    results = pd.DataFrame.from_dict({
-        # image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
-        'id': ids,
-        'iter_num': np.zeros_like(ids, dtype=int),  # iteration index.
-        'aberration': p2v,  # initial p2v aberration. Constant over iterations.
-        'residuals': p2v,  # remaining p2v aberration after ML correction.
-        'residuals_umRMS': umRMS,  # remaining umRMS aberration after ML correction.
-        'photons': photons,  # integrated photons
-        'distance': dists,  # average distance to nearst bead
-        'file': files,  # path to realspace images
-        'file_windows': [utils.convert_to_windows_file_string(f) for f in files],  # stupid windows path
-        'beads': beads,  # path to binary image file filled with zeros except at location of beads
-        'neighbors': npoints,  # number of beads
-    })
+    results = pd.DataFrame.from_dict(results)
 
     for z in range(ys.shape[-1]):
         results[f'z{z}_ground_truth'] = ys[:, z]
         results[f'z{z}_prediction'] = np.zeros_like(ys[:, z])
         results[f'z{z}_residual'] = ys[:, z]
+
+    for p in range(100):
+        results[f'counts_p{p+1}'] = counts_percentiles[:, p]
 
     return results
 
