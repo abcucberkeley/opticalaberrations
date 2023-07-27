@@ -44,17 +44,17 @@ class PsfGenerator3D:
             psf_shape: tuple, psf shape as (z,y,x), e.g. (64,64,64)
             units: tuple, voxel size in microns, e.g. (0.1,0.1,0.1)
             lam_detection: scalar, wavelength in microns, e.g. 0.5
-            n: scalar, refractive index, eg 1.33
-            na_detection: scalar, numerical aperture of detection objective, eg 1.1
-            psf_type: widefield, 2photon, confocal, or a path to an LLS excitation profile
-            lls_excitation_profile: None for (widefield, 2photon or confocal),
-                otherwise an array placeholder for an LLS excitation profile loaded from desk
+            n: scalar, refractive index, e.g. 1.33
+            na_detection: scalar, numerical aperture of detection objective, e.g. 1.1
+            psf_type: 'widefield', '2photon', 'confocal', or a Path to an LLS excitation .mat profile
+            lls_excitation_profile: None when psf_type=[widefield, 2photon, or confocal],
+                otherwise an array storage for an LLS excitation profile loaded from disk
         """
 
         psf_shape = tuple(psf_shape)
         units = tuple(units)
 
-        self.n = n
+        self.n = n  # refractive index, e.g. 1.33
         self.Nz, self.Ny, self.Nx = psf_shape
         self.dz, self.dy, self.dx = units
 
@@ -78,7 +78,8 @@ class PsfGenerator3D:
         if isinstance(lls_excitation_profile, np.ndarray) and lls_excitation_profile.size != 0:
             self.lls_excitation_profile = lls_excitation_profile
         else:
-            if (isinstance(self.psf_type, Path) or isinstance(self.psf_type, str)):
+            # load from file and populate lls_excitation_profile, otherwise self.psf_type is a codeword.
+            if isinstance(self.psf_type, Path) or isinstance(self.psf_type, str):
                 path = Path(self.psf_type)
 
                 # check if given file exists
@@ -96,9 +97,9 @@ class PsfGenerator3D:
                     self.lls_excitation_profile = None
 
         if self.lls_excitation_profile is not None and self.lls_excitation_profile.shape[0] != psf_shape[0]:
-            lls_profile_dz = 0.1
-            lam_excitation = .488
-            eff_pixel_size = lam_excitation / self.n * lls_profile_dz
+            lls_profile_dz = 0.1        # media wavelengths per pix, used when generating the .mat LLS file.
+            lam_excitation = .488       # microns per wavelength, used when generating the .mat LLS file.
+            eff_pixel_size = lam_excitation / self.n * lls_profile_dz   # microns per pix in the .mat LLS file
 
             self.lls_excitation_profile = rescale(
                 self.lls_excitation_profile,
@@ -179,9 +180,9 @@ class PsfGenerator3D:
             lls_defocus_offset: the offset between the excitation and detection focal plan (microns)
         """
         ideal_phi = deepcopy(phi)
-        ideal_phi.zernikes = {k: 0. for k, v in ideal_phi.zernikes.items()}
+        ideal_phi.zernikes = {k: 0. for k, v in ideal_phi.zernikes.items()} # set aberration to zero for ideal_psf
 
-        # set the total PSF to widefield detection PSF
+        # initalize the total PSF with (aberrated) widefield detection PSF
         _psf = self.widefield_psf(phi)
 
         if self.lls_excitation_profile is not None:
@@ -203,8 +204,8 @@ class PsfGenerator3D:
             pass
 
         elif self.psf_type == '2photon':
-            exc_psf = self.widefield_psf(ideal_phi, lam_excitation=.920)
-            _psf = (exc_psf ** 2) * _psf
+            exc_psf = self.widefield_psf(phi, lam_excitation=.920)
+            _psf = exc_psf ** 2
 
         elif self.psf_type == 'confocal':
             lls_profile_dz = 0.1
@@ -213,9 +214,9 @@ class PsfGenerator3D:
 
             exc_psf = self.widefield_psf(ideal_phi, lam_excitation=lam_excitation)
 
-            eff_pixel_size = lam_excitation / self.n * lls_profile_dz
-            au = 0.61 * (self.lam_detection / self.n) / self.na_detection
-            Z, Y, X = np.ogrid[-200:201, -200:201, -200:201]  # create a meshgrid
+            eff_pixel_size = lam_excitation / self.n * lls_profile_dz       # microns per pixel
+            au = 0.61 * (self.lam_detection / self.n) / self.na_detection   # airy radius in microns
+            Z, Y, X = np.ogrid[-200:201, -200:201, -200:201]  # pix pitch=eff_pixel_size (0.1 media wavelengths)
 
             circ_func = Y ** 2 + X ** 2 <= (f * au / eff_pixel_size) ** 2
             circ_func = circ_func & (Z == 0)
@@ -224,8 +225,9 @@ class PsfGenerator3D:
                 circ_func.astype(np.float32),
                 (eff_pixel_size/self.dz, eff_pixel_size/self.dy, eff_pixel_size/self.dx),
                 order=0,
-            )
+            )   # downscale number of voxels to go from ~36nm to 100nm voxel size. Might not work if circ_func has even number of pixels.
 
+            # clip to the number of voxels we want (e.g. _psf.shape)
             w = _psf.shape[0]//2
             focal_plane = np.array(circ_func.shape)//2
             circ_func = circ_func[

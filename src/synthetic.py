@@ -235,7 +235,7 @@ class SyntheticPSF:
     ):
         """
         Args:
-            phi: wavefront object
+            phi: Wavefront object or array of amplitudes of Zernike polynomials (or path to array)
             normed: a toggle to normalize PSF
             noise: a toggle to add noise
             meta: return extra variables for debugging
