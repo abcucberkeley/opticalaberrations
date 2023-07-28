@@ -99,11 +99,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--photons_min", default=5e5, type=float, help='min number of photons to use'
+        "--photons_min", default=1e5, type=float, help='min number of photons to use'
     )
 
     parser.add_argument(
-        "--photons_max", default=6e5, type=float, help='max number of photons to use'
+        "--photons_max", default=2e5, type=float, help='max number of photons to use'
     )
 
     parser.add_argument(
@@ -203,6 +203,7 @@ def run_task(iter_num, args):
                 batch_size=args.batch_size,
                 eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
+                photons_range=(args.photons_min, args.photons_max),
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type

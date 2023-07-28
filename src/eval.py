@@ -869,15 +869,16 @@ def snrheatmap(
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / eval_sign / f'snrheatmaps'
+
+    if psf_type is not None:
+        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
-
-    if psf_type is not None:
-        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
 
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0)
@@ -950,20 +951,22 @@ def densityheatmap(
     plot: Any = None,
     plot_rotations: bool = False,
     agg: str = 'median',
-    psf_type: Optional[str] = None
+    psf_type: Optional[str] = None,
+    photons_range: Optional[tuple] = None,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
     savepath = modelpath.with_suffix('') / eval_sign / f'densityheatmaps'
+
+    if psf_type is not None:
+        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
-
-    if psf_type is not None:
-        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
 
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0)
@@ -976,7 +979,7 @@ def densityheatmap(
             samplelimit=samplelimit,
             distribution=distribution,
             na=na,
-            photons_range=(1e5, 2e5),
+            photons_range=photons_range,
             npoints_range=None,
             batch_size=batch_size,
             eval_sign=eval_sign,
@@ -1039,15 +1042,16 @@ def iterheatmap(
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / eval_sign / f'iterheatmaps'
+
+    if psf_type is not None:
+        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
     savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
-
-    if psf_type is not None:
-        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
 
     logger.info(f'Save path = {savepath.resolve()}')
     if datadir.suffix == '.csv':
@@ -1117,7 +1121,7 @@ def iterheatmap(
 @profile
 def random_samples(
     model: Path,
-    photons: int = 1e5,
+    photons: int = 3e5,
     batch_size: int = 512,
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
@@ -1579,16 +1583,13 @@ def evaluate_modes(
 @profile
 def eval_modalities(
     model: Path,
-    photons: int = 5e5,
+    photons: int = 3e5,
     batch_size: int = 512,
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
     num_objs: int = 1,
     psf_shape: tuple = (64, 64, 64),
     modalities: tuple = (
-        'confocal',
-        'widefield',
-        '2photon',
         '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         '../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat',
         '../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat',
@@ -1597,6 +1598,9 @@ def eval_modalities(
         '../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat',
         '../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat',
         '../lattice/v2HexRect_NAexc0p50_NAsigma0p15_annulus0p60-0p40_FWHM_56p0.mat',
+        'widefield',
+        # 'confocal',
+        # '2photon',
     )
 ):
     m = backend.load(model)
@@ -1657,7 +1661,7 @@ def eval_modalities(
                     save_path = Path(
                         f"{model.with_suffix('')}/"
                         f"{eval_sign}/"
-                        f"samples/"
+                        f"eval_modalities/"
                         f"{dist}/"
                         f"um-{amplitude_range[-1]}/"
                         f"mode-{modalities[i].replace('../lattice/', '').split('_')[0]}"

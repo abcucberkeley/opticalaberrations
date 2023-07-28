@@ -4,10 +4,6 @@ HANDLER=slurm
 ENV=~/anaconda3/envs/ml/bin/python
 NODES='abc'
 
-#PSF_TYPE='widefield'
-#PSF_TYPE='confocal'
-#PSF_TYPE='../lattice/HexRect_NAlattice0.25_NAAnnulusMax0.60_NAsigma0.08.mat'
-PSF_TYPE="/clusterfs/nvme/thayer/dataset/lattice/YuMB_NAlattice0.35_NAAnnulusMax0.40_NAsigma0.1.mat"
 xVOXEL=.108
 yVOXEL=.108
 zVOXEL=.200
@@ -44,6 +40,7 @@ if [ "$DATASET" = "train" ];then
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
   FILL_RADIUS=0.3
+  PSF_TYPE="../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
 else
   TYPE=''
   SAMPLES_PER_JOB=25
@@ -56,6 +53,7 @@ else
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(mixed)
   FILL_RADIUS=0.3
+  PSF_TYPE='widefield'
 fi
 
 
