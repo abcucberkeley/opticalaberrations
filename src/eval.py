@@ -19,6 +19,7 @@ plt.set_loglevel('error')
 import swifter
 import numpy as np
 import pandas as pd
+import scipy.stats as st
 import tensorflow as tf
 from line_profiler_pycharm import profile
 from tqdm import tqdm
@@ -98,6 +99,7 @@ def simulate_beads(
     if noise:
         inputs = utils.add_noise(inputs)
     else:  # convert image to counts
+        inputs = utils.photons2electrons(inputs)
         inputs = utils.electrons2counts(inputs)
 
     return inputs
@@ -1348,68 +1350,89 @@ def eval_object(
     model = backend.load(modelpath)
     gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]], rotate=False)
 
-    df = pd.DataFrame([], columns=['aberration', 'prediction', 'residuals', 'photons'])
     wavefronts = [Wavefront(w, lam_detection=gen.lam_detection, rotate=False) for w in phi]
     p2v = [w.peak2valley(na=na) for w in wavefronts]
     kernels = [gen.single_psf(phi=w, normed=True) for w in wavefronts]
 
-    inputs = np.stack([
-        backend.preprocess(
-            simulate_beads(
-                psf=kernels[k],
-                object_size=0,
-                num_objs=num_objs,
-                photons=ph,
-                # maxcounts=ph,
-                noise=True,
-                fill_radius=0 if num_objs == 1 else .35
-            ),
-            modelpsfgen=gen,
-            digital_rotations=digital_rotations,
-            remove_background=True,
-            normalize=True,
-            # plot=f"{savepath}_{p2v[k]}_{ph}"
-        )
-        for k, ph in itertools.product(range(len(kernels)), photons)
-    ], axis=0)
+    if Path(f"{savepath}_inputs.npy").exists():
+        inputs = np.load(f"{savepath}_inputs.npy")
+    else:
+        inputs = np.stack([
+                simulate_beads(
+                    psf=kernels[k],
+                    object_size=0,
+                    num_objs=num_objs,
+                    photons=ph,
+                    # maxcounts=ph,
+                    noise=True,
+                    fill_radius=0 if num_objs == 1 else .35
+                )
+            for k, ph in tqdm(
+                itertools.product(range(len(kernels)), photons),
+                desc='Generating samples',
+                total=len(kernels) * len(photons)
+            )
+        ], axis=0)[..., np.newaxis]
+        np.save(f"{savepath}_inputs", inputs)
+
+    if Path(f"{savepath}_embeddings.npy").exists():
+        embeddings = np.load(f"{savepath}_embeddings.npy")
+    else:
+        embeddings = np.stack([
+            backend.preprocess(
+                i,
+                modelpsfgen=gen,
+                digital_rotations=digital_rotations,
+                remove_background=True,
+                normalize=True,
+            )
+            for i in tqdm(inputs, desc='Generating fourier embeddings', total=inputs.shape[0])
+        ], axis=0)
+        np.save(f"{savepath}_embeddings", embeddings)
+
     ys = np.stack([phi[k] for k, ph in itertools.product(range(len(kernels)), photons)])
 
-    inputs = tf.data.Dataset.from_tensor_slices(inputs)
+    embeddings = tf.data.Dataset.from_tensor_slices(embeddings)
 
-    res = backend.predict_dataset(
-        model,
-        inputs=inputs,
-        psfgen=gen,
-        batch_size=batch_size,
-        save_path=[f"{savepath}_{a}_{ph}" for a, ph in itertools.product(p2v, photons)],
-        digital_rotations=digital_rotations,
-        # plot_rotations=True
-    )
+    if Path(f"{savepath}_predictions.npy").exists():
+        preds = np.load(f"{savepath}_predictions.npy")
+    else:
+        res = backend.predict_dataset(
+            model,
+            inputs=embeddings,
+            psfgen=gen,
+            batch_size=batch_size,
+            save_path=[f"{savepath}_{a}_{ph}" for a, ph in itertools.product(p2v, photons)],
+            digital_rotations=digital_rotations,
+            # plot_rotations=True
+        )
 
-    try:
-        preds, stdev = res
-    except ValueError:
-        preds, stdev, lls_defocus = res
+        try:
+            preds, stdev = res
+        except ValueError:
+            preds, stdev, lls_defocus = res
+
+        np.save(f"{savepath}_predictions", preds)
 
     if eval_sign == 'positive_only':
         ys = np.abs(ys)
         preds = np.abs(preds)[:, :ys.shape[-1]]
 
     residuals = ys - preds
-    p = pd.DataFrame(
-        np.stack([p2v[k] for k, ph in itertools.product(range(len(kernels)), photons)]),
-        columns=['aberration']
-    )
+
+    p = pd.DataFrame([p2v[k] for k, ph in itertools.product(range(len(kernels)), photons)], columns=['aberration'])
     p['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
     p['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
     p['photons'] = np.concatenate([photons for i in itertools.product(phi)])
+    p['counts'] = [np.sum(i) for i in inputs]
 
-    df = df.append(p, ignore_index=True)
+    for percentile in range(1, 101):
+        p[f'counts_p{percentile}'] = [np.percentile(i, percentile) for i in inputs]
 
     if savepath is not None:
-        df.to_csv(f'{savepath}_predictions_num_objs_{num_objs}.csv')
+        p.to_csv(f'{savepath}_predictions_num_objs_{num_objs}.csv')
 
-    return df
+    return p
 
 
 @profile
@@ -1468,20 +1491,37 @@ def evaluate_modes(
 
         classes = aberrations.copy()
         classes[:, i] = waves
-        df = eval_object(
-            phi=classes,
-            num_objs=num_objs,
-            photons=photons,
-            modelpath=model,
-            batch_size=batch_size,
-            eval_sign=eval_sign,
-            savepath=savepath,
-            digital_rotations=361 if digital_rotations else None
-        )
 
-        bins = np.arange(0, 10.25, .25)
-        df['bins'] = pd.cut(df['aberration'], bins, labels=bins[1:], include_lowest=True)
-        dataframe = pd.pivot_table(df, values='residuals', index='bins', columns='photons', aggfunc=agg)
+        path = Path(f'{savepath}_predictions_num_objs_{num_objs}.csv')
+        if path.exists():
+            df = pd.read_csv(path, index_col=0, header=0)
+        else:
+            df = eval_object(
+                phi=classes,
+                num_objs=num_objs,
+                photons=photons,
+                modelpath=model,
+                batch_size=batch_size,
+                eval_sign=eval_sign,
+                savepath=savepath,
+                digital_rotations=361 if digital_rotations else None
+            )
+
+        df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
+
+        x, y = 'photons', 'aberration'
+        xstep, ystep = 5e4, .25
+
+        ybins = np.arange(0, df[y].max()+ystep, ystep)
+        df['ybins'] = pd.cut(df[y], ybins, labels=ybins[1:], include_lowest=True)
+
+        if x == 'photons':
+            df['xbins'] = df['photons']
+        else:
+            xbins = np.arange(0, df[x].max()+xstep, xstep)
+            df['xbins'] = pd.cut(df[x], xbins, labels=xbins[1:], include_lowest=True)
+
+        dataframe = pd.pivot_table(df, values='residuals', index='ybins', columns='xbins', aggfunc=agg)
         dataframe = dataframe.sort_index().interpolate()
 
         fig = plt.figure(figsize=(8, 8))
@@ -1491,20 +1531,7 @@ def evaluate_modes(
         ax_yz = fig.add_subplot(gs[0, 2])
         ax_wavevfront = fig.add_subplot(gs[0, -1])
 
-        #ax = fig.add_subplot(gs[1:, 0])
         axt = fig.add_subplot(gs[1:, :])
-
-        # contours = ax.contourf(
-        #     dataframe.columns,
-        #     dataframe.index.values,
-        #     dataframe.values,
-        #     cmap=cmap,
-        #     levels=levels,
-        #     extend='max',
-        #     linewidths=2,
-        #     linestyles='dashed',
-        # )
-        # ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
         contours = axt.contourf(
             dataframe.columns,
@@ -1537,22 +1564,15 @@ def evaluate_modes(
 
         axt.set_ylabel(rf'Initial aberration ({agg} peak-to-valley, $\lambda = {int(modelspecs.lam_detection*1000)}~nm$)')
         axt.set_yticks(np.arange(0, 6, .5), minor=True)
-        # ax.set_yticks(np.arange(0, 6, .5), minor=True)
         axt.set_yticks(np.arange(0, 6, 1))
-        # ax.set_yticks(np.arange(0, 6, 1))
-        axt.set_ylim(.25, 5)
-        # ax.set_ylim(.25, 5)
-        # axt.set_yticklabels([])
-        # ax.set_xscale('log')
-        # ax.set_xlim(1, 1e3)
-        axt.set_xscale('log')
-        axt.set_xlim(1e4, 1e6)
-        axt.set_xlabel(f'Integrated photons')
-        # ax.spines['right'].set_visible(False)
+        axt.set_ylim(ybins[0], ybins[-1])
+
+        # axt.set_xscale('log')
+        axt.set_xlim(xbins[0], xbins[-1])
+        axt.set_xlabel(f'{x}')
+
         axt.spines['right'].set_visible(False)
-        # ax.spines['left'].set_visible(False)
         axt.spines['left'].set_visible(False)
-        # ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
         axt.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         phi = np.zeros_like(classes[-1, :])

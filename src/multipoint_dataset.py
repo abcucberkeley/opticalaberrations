@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 import cli
-from utils import mean_min_distance, randuniform, add_noise, electrons2counts
+from utils import mean_min_distance, randuniform, add_noise, electrons2counts, photons2electrons
 from preprocessing import prep_sample, resize_with_crop_or_pad
 from utils import fftconvolution, multiprocess
 from synthetic import SyntheticPSF
@@ -199,7 +199,7 @@ def sim(
     else:
         avg_min_distance = 0.
 
-    if noise:
+    if noise:  # add shotnoise to photons, convert to electrons to add dark read noise, then convert to counts
         inputs = add_noise(
             img,
             mean_background_offset=mean_background_offset,
@@ -208,7 +208,8 @@ def sim(
             electrons_per_count=electrons_per_count,
         )
     else:  # convert image to counts
-        inputs = electrons2counts(img, electrons_per_count=electrons_per_count)
+        inputs = photons2electrons(img, quantum_efficiency=quantum_efficiency)
+        inputs = electrons2counts(inputs, electrons_per_count=electrons_per_count)
 
     counts = np.sum(inputs)
     counts_mode = int(st.mode(inputs, axis=None).mode[0])
