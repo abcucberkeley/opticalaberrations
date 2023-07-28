@@ -1516,7 +1516,8 @@ def evaluate_modes(
         df['ybins'] = pd.cut(df[y], ybins, labels=ybins[1:], include_lowest=True)
 
         if x == 'photons':
-            df['xbins'] = df['photons']
+            xbins = df['photons'].values
+            df['xbins'] = xbins
         else:
             xbins = np.arange(0, df[x].max()+xstep, xstep)
             df['xbins'] = pd.cut(df[x], xbins, labels=xbins[1:], include_lowest=True)
