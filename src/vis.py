@@ -289,7 +289,7 @@ def diagnostic_assessment(
         dz: float = .2,
         pltstyle: Any = None,
         transform_to_align_to_DM: bool = False,
-        display_otf: bool = False
+        display_otf: bool = False,
 ):
     if pltstyle is not None: plt.style.use(pltstyle)
 
@@ -369,6 +369,7 @@ def diagnostic_assessment(
     )
     cbar.ax.set_title(r'$\lambda$', pad=20)
     cbar.ax.yaxis.set_ticks_position('left')
+    cbar.ax.set_ylabel(rf'$\lambda$ = {y.lam_detection*1000:.0f}nm')
 
     ax_cxy.set_xlabel(r'XY ($\mu$m)')
     ax_cxz.set_xlabel(r'XZ ($\mu$m)')

@@ -148,21 +148,20 @@ class PsfGenerator3D:
         return self.kmask2 * phi.phase(self.krho, self.kphi, normed=normed, outside=None)
 
     @profile
-    def coherent_psf(self, phi, lam_excitation=None):
+    def coherent_psf(self, phi):
         """
         Returns the coherent psf for a given wavefront phi
 
         Args:
             phi: Zernike/ZernikeWavefront object
         """
-        lam = self.lam_detection if lam_excitation is None else lam_excitation
         phi = self.masked_phase_array(phi)
-        ku = self.kbase * np.exp(2.j * np.pi * phi / lam)
+        ku = self.kbase * np.exp(2.j * np.pi * phi / self.lam_detection)
         res = np.fft.ifftn(ku, axes=(1, 2))
         return np.fft.fftshift(res, axes=(0,))
 
-    def widefield_psf(self, phi, lam_excitation=None):
-        psf = np.abs(self.coherent_psf(phi, lam_excitation=lam_excitation)) ** 2
+    def widefield_psf(self, phi):
+        psf = np.abs(self.coherent_psf(phi)) ** 2
         psf = np.array([p / np.sum(p) for p in psf])
         psf = np.fft.fftshift(psf)
         psf /= np.max(psf)
@@ -180,7 +179,7 @@ class PsfGenerator3D:
             lls_defocus_offset: the offset between the excitation and detection focal plan (microns)
         """
         ideal_phi = deepcopy(phi)
-        ideal_phi.zernikes = {k: 0. for k, v in ideal_phi.zernikes.items()} # set aberration to zero for ideal_psf
+        ideal_phi.zernikes = {k: 0. for k, v in ideal_phi.zernikes.items()}  # set aberration to zero for ideal_psf
 
         # initalize the total PSF with (aberrated) widefield detection PSF
         _psf = self.widefield_psf(phi)
@@ -204,7 +203,7 @@ class PsfGenerator3D:
             pass
 
         elif self.psf_type == '2photon':
-            exc_psf = self.widefield_psf(phi, lam_excitation=.920)
+            exc_psf = self.widefield_psf(phi)
             _psf = exc_psf ** 2
 
         elif self.psf_type == 'confocal':
@@ -212,7 +211,7 @@ class PsfGenerator3D:
             lam_excitation = .488
             f = 1  # number of AUs
 
-            exc_psf = self.widefield_psf(ideal_phi, lam_excitation=lam_excitation)
+            exc_psf = self.widefield_psf(phi)
 
             eff_pixel_size = lam_excitation / self.n * lls_profile_dz       # microns per pixel
             au = 0.61 * (self.lam_detection / self.n) / self.na_detection   # airy radius in microns

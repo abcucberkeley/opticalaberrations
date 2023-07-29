@@ -133,6 +133,7 @@ def load_metadata(
         psf_type=None,
         n_modes=None,
         z_voxel_size=None,
+        lam_detection=None,
         **kwargs
 ):
     """ The model .h5, HDF5 file, is also used to store metadata parameters (wavelength, x_voxel_size, etc) that
@@ -168,7 +169,7 @@ def load_metadata(
             lls_excitation_profile=np.array(file.get('lls_excitation_profile')[:]) if psf_type is None else None,
             psf_shape=psf_shape,
             n_modes=int(file.get('n_modes')[()]) if n_modes is None else n_modes,
-            lam_detection=float(file.get('wavelength')[()]),
+            lam_detection=float(file.get('wavelength')[()]) if lam_detection is None else lam_detection,
             x_voxel_size=float(file.get('x_voxel_size')[()]),
             y_voxel_size=float(file.get('y_voxel_size')[()]),
             z_voxel_size=float(file.get('z_voxel_size')[()]) if z_voxel_size is None else z_voxel_size,

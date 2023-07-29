@@ -1605,6 +1605,7 @@ def evaluate_modes(
 def eval_modalities(
     model: Path,
     photons: int = 3e5,
+    lam_detection: float = .510,
     batch_size: int = 512,
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
@@ -1620,8 +1621,8 @@ def eval_modalities(
         '../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat',
         '../lattice/v2HexRect_NAexc0p50_NAsigma0p15_annulus0p60-0p40_FWHM_56p0.mat',
         'widefield',
-        # 'confocal',
-        # '2photon',
+        'confocal',
+        '2photon',
     )
 ):
     m = backend.load(model)
@@ -1643,29 +1644,36 @@ def eval_modalities(
             rotate=True,
             mode_weights='pyramid',
             psf_shape=psf_shape,
-            psf_type=psf_type
+            psf_type=psf_type,
+            lam_detection=.920 if psf_type == '2photon' else lam_detection
         )
         for psf_type in modalities
     ]
 
-    for dist in ['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet']:
-        for amplitude_range in [(0, 0), (.1, .2), (.2, .3)]:
-            for s in range(10):
-
-                if amplitude_range == (0, 0) and s > 0:
+    for dist in ['single', 'bimodal', 'powerlaw', 'dirichlet']:
+        for amp in [0, .05, .1, .2, .3]:
+            for z in range(3, 15):
+                if z == 4:
                     continue
 
-                phi = Wavefront(
-                    amplitude_range,
-                    modes=modalities_generators[0].n_modes,
-                    distribution=dist,
-                    signed=False if eval_sign == 'positive_only' else True,
-                    rotate=True,
-                    mode_weights='pyramid',
-                    lam_detection=modalities_generators[0].lam_detection,
-                )
+                if amp == 0 and z > 3:
+                    continue
+
+                amplitudes = np.zeros(15)
+                amplitudes[z] = amp
 
                 for i, gen in enumerate(modalities_generators):
+
+                    phi = Wavefront(
+                        .920/lam_detection * amplitudes if modalities_generators[i].psf_type == '2photon' else amplitudes,
+                        modes=modalities_generators[i].n_modes,
+                        distribution=dist,
+                        signed=False if eval_sign == 'positive_only' else True,
+                        rotate=True,
+                        mode_weights='pyramid',
+                        lam_detection=modalities_generators[i].lam_detection,
+                    )
+
                     # aberrated PSF without noise
                     psf, y, y_lls_defocus = gen.single_psf(
                         phi=phi,
@@ -1684,7 +1692,7 @@ def eval_modalities(
                         f"{eval_sign}/"
                         f"eval_modalities/"
                         f"{dist}/"
-                        f"um-{amplitude_range[-1]}/"
+                        f"um-{amp}/"
                         f"mode-{modalities[i].replace('../lattice/', '').split('_')[0]}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
@@ -1695,20 +1703,20 @@ def eval_modalities(
                         digital_rotations=361 if digital_rotations else None,
                         remove_background=False,
                         normalize=True,
-                        plot=save_path / f'{s}',
+                        plot=save_path / f'{z}',
                     )
-                    imwrite(save_path / f'{s}_embeddings.tif', embeddings.astype(np.float32))
+                    imwrite(save_path / f'{z}_embeddings.tif', embeddings.astype(np.float32))
 
                     if digital_rotations:
                         res = backend.predict_rotation(
                             m,
                             embeddings,
-                            save_path=save_path / f'{s}',
+                            save_path=save_path / f'{z}',
                             psfgen=gen,
                             no_phase=no_phase,
                             batch_size=batch_size,
-                            plot=save_path / f'{s}',
-                            plot_rotations=save_path / f'{s}',
+                            plot=save_path / f'{z}',
+                            plot_rotations=save_path / f'{z}',
                         )
                     else:
                         res = backend.bootstrap_predict(
@@ -1717,7 +1725,7 @@ def eval_modalities(
                             psfgen=gen,
                             no_phase=no_phase,
                             batch_size=batch_size,
-                            plot=save_path / f'{s}',
+                            plot=save_path / f'{z}',
                         )
 
                     try:
@@ -1751,16 +1759,16 @@ def eval_modalities(
                     corrected_noisy_img = simulate_beads(corrected_psf, beads=reference, noise=True)
                     corrected_noisy_img /= np.max(corrected_noisy_img)
 
-                    imwrite(save_path / f'{s}_input.tif', noisy_img.astype(np.float32))
+                    imwrite(save_path / f'{z}_input.tif', noisy_img.astype(np.float32))
 
-                    imwrite(save_path / f'{s}_pred_psf.tif', p_psf.astype(np.float32))
-                    imwrite(save_path / f'{s}_pred_wavefront.tif', p_wave.wave().astype(np.float32))
+                    imwrite(save_path / f'{z}_pred_psf.tif', p_psf.astype(np.float32))
+                    imwrite(save_path / f'{z}_pred_wavefront.tif', p_wave.wave().astype(np.float32))
 
-                    imwrite(save_path / f'{s}_gt_psf.tif', gt_psf.astype(np.float32))
-                    imwrite(save_path / f'{s}_gt_wavefront.tif', y_wave.wave().astype(np.float32))
+                    imwrite(save_path / f'{z}_gt_psf.tif', gt_psf.astype(np.float32))
+                    imwrite(save_path / f'{z}_gt_wavefront.tif', y_wave.wave().astype(np.float32))
 
-                    imwrite(save_path / f'{s}_corrected_psf.tif', corrected_psf.astype(np.float32))
-                    imwrite(save_path / f'{s}_corrected_wavefront.tif', residuals.wave().astype(np.float32))
+                    imwrite(save_path / f'{z}_corrected_psf.tif', corrected_psf.astype(np.float32))
+                    imwrite(save_path / f'{z}_corrected_wavefront.tif', residuals.wave().astype(np.float32))
 
                     processed_input = backend.prep_sample(
                         noisy_img,
@@ -1789,7 +1797,7 @@ def eval_modalities(
                         pred=p_wave,
                         y_lls_defocus=y_lls_defocus,
                         p_lls_defocus=p_lls_defocus,
-                        save_path=save_path / f'{s}_psf',
+                        save_path=save_path / f'{z}_psf',
                         display=False,
                         pltstyle='default'
                     )
@@ -1806,7 +1814,7 @@ def eval_modalities(
                         y_lls_defocus=y_lls_defocus,
                         p_lls_defocus=p_lls_defocus,
                         display_otf=True,
-                        save_path=save_path / f'{s}_otf',
+                        save_path=save_path / f'{z}_otf',
                         display=False,
                         pltstyle='default'
                     )
