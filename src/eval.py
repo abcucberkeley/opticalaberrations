@@ -1610,17 +1610,17 @@ def eval_modalities(
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
     num_objs: int = 1,
-    psf_shape: tuple = (64, 64, 64),
+    psf_shape: tuple = (64, 96, 96),
     modalities: tuple = (
-        '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-        '../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat',
-        '../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat',
-        '../lattice/MBHex_NAexc0p43_annulus0p47_0p40_crop0p08_FWHM48p0.mat',
-        '../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat',
-        '../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat',
-        '../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat',
-        '../lattice/v2HexRect_NAexc0p50_NAsigma0p15_annulus0p60-0p40_FWHM_56p0.mat',
-        'widefield',
+        # '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+        # '../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat',
+        # '../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat',
+        # '../lattice/MBHex_NAexc0p43_annulus0p47_0p40_crop0p08_FWHM48p0.mat',
+        # '../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat',
+        # '../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat',
+        # '../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat',
+        # '../lattice/v2HexRect_NAexc0p50_NAsigma0p15_annulus0p60-0p40_FWHM_56p0.mat',
+        # 'widefield',
         'confocal',
         '2photon',
     )
@@ -1645,26 +1645,26 @@ def eval_modalities(
             signed=False if eval_sign == 'positive_only' else True,
             rotate=True,
             mode_weights='pyramid',
-            psf_shape=psf_shape,
             psf_type=psf_type,
             lam_detection=lam_2photon if psf_type == '2photon' else lam_detection
         )
         for psf_type in modalities
     ]
 
-    for dist in ['single', 'bimodal', 'powerlaw', 'dirichlet']:
-        for amp in [0, .05, .1, .2, .3]:
+    for dist in ['single']: #, 'bimodal', 'powerlaw', 'dirichlet']:
+        for amp in [0, .1]: #, .05, .1, .2, .3]:
             for z in range(3, 15):
                 if z == 4:
                     continue
 
                 if amp == 0 and z > 3:
-                    continue
+                    break
 
                 amplitudes = np.zeros(15)
                 amplitudes[z] = amp
 
                 for i, gen in enumerate(modalities_generators):
+                    mode = modalities[i].replace('../lattice/', '').split('_')[0]
 
                     phi = Wavefront(
                         # boost um RMS aberration amplitudes for '2photon', so we create equivalent p2v aberrations
@@ -1696,7 +1696,7 @@ def eval_modalities(
                         f"eval_modalities/"
                         f"{dist}/"
                         f"um-{amp}/"
-                        f"mode-{modalities[i].replace('../lattice/', '').split('_')[0]}"
+                        f"mode-{mode}"
                     )
                     save_path.mkdir(exist_ok=True, parents=True)
 

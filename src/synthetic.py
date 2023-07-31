@@ -95,14 +95,26 @@ class SyntheticPSF:
         self.embedding_option = embedding_option
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
         self.amplitude_ranges = amplitude_ranges
-        self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size))
 
         self.psf_type = psf_type
         self.lls_excitation_profile = lls_excitation_profile
 
+        if self.psf_type == '2photon':
+            r = (.4 * .920) / (.6 * .510)
+            self.fov_scaler = (1, r, r)
+
+        elif self.psf_type == 'confocal':
+            r = .8 #(.4 * .488) / (.6 * .510)
+            self.fov_scaler = (1, r, r)
+
+        else:
+            self.fov_scaler = (1, 1, 1)
+
+        self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size) * np.array(self.fov_scaler))
+
         self.psfgen = PsfGenerator3D(
             psf_shape=self.psf_shape,
-            units=self.voxel_size,
+            units=np.array(self.voxel_size) * np.array(self.fov_scaler),
             lam_detection=self.lam_detection,
             n=self.refractive_index,
             na_detection=self.na_detection,
