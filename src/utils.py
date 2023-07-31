@@ -126,7 +126,7 @@ def add_noise(
     """
 
     Args:
-        image: noise-free image in photons
+        image: noise-free image in incident photons
         mean_background_offset: camera background offset
         sigma_background_noise: read noise from the camera
         quantum_efficiency: quantum efficiency of the camera
@@ -135,11 +135,11 @@ def add_noise(
     Returns:
         noisy image in counts
     """
+    image = photons2electrons(image, quantum_efficiency=quantum_efficiency)
     sigma_background_noise *= electrons_per_count  # electrons;  40 counts = 40 * .22 electrons per count
     dark_read_noise = normal_noise(mean=0, sigma=sigma_background_noise, size=image.shape)  # dark image in electrons
-    shot_noise = photons2electrons(poisson_noise(image=image), quantum_efficiency=quantum_efficiency)
+    shot_noise = poisson_noise(image)   # shot noise in electrons
 
-    image = photons2electrons(image, quantum_efficiency=quantum_efficiency)
     image += shot_noise + dark_read_noise
     image = electrons2counts(image, electrons_per_count=electrons_per_count)
 
