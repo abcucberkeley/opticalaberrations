@@ -1637,6 +1637,8 @@ def eval_modalities(
         fill_radius=.3 if num_objs > 1 else 0
     )
 
+    lam_2photon = .920
+
     modalities_generators = [
         backend.load_metadata(
             model,
@@ -1645,7 +1647,7 @@ def eval_modalities(
             mode_weights='pyramid',
             psf_shape=psf_shape,
             psf_type=psf_type,
-            lam_detection=.920 if psf_type == '2photon' else lam_detection
+            lam_detection=lam_2photon if psf_type == '2photon' else lam_detection
         )
         for psf_type in modalities
     ]
@@ -1665,7 +1667,8 @@ def eval_modalities(
                 for i, gen in enumerate(modalities_generators):
 
                     phi = Wavefront(
-                        .920/lam_detection * amplitudes if modalities_generators[i].psf_type == '2photon' else amplitudes,
+                        # boost um RMS aberration amplitudes for '2photon', so we create equivalent p2v aberrations
+                        lam_2photon/lam_detection * amplitudes if modalities_generators[i].psf_type == '2photon' else amplitudes,
                         modes=modalities_generators[i].n_modes,
                         distribution=dist,
                         signed=False if eval_sign == 'positive_only' else True,

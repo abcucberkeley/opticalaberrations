@@ -203,11 +203,12 @@ class PsfGenerator3D:
             pass
 
         elif self.psf_type == '2photon':
+            # we only have one lamda defined in this class: self.lam_detection. That should already be set with .920
             exc_psf = self.widefield_psf(phi)
             _psf = exc_psf ** 2
 
         elif self.psf_type == 'confocal':
-            lls_profile_dz = 0.1
+            lls_profile_dz = 0.1    # (0.1 media wavelengths)
             lam_excitation = .488
             f = 1  # number of AUs
 
@@ -224,9 +225,9 @@ class PsfGenerator3D:
                 circ_func.astype(np.float32),
                 (eff_pixel_size/self.dz, eff_pixel_size/self.dy, eff_pixel_size/self.dx),
                 order=0,
-            )   # downscale number of voxels to go from ~36nm to 100nm voxel size. Might not work if circ_func has even number of pixels.
+            )   # downscale voxels to go from ~36nm to 100nm voxel size. Fails if circ_func has even number of pixels.
 
-            # clip to the number of voxels we want (e.g. _psf.shape)
+            # clip to the number of voxels we want (e.g. _psf.shape), won't work if _psf.shape is odd.
             w = _psf.shape[0]//2
             focal_plane = np.array(circ_func.shape)//2
             circ_func = circ_func[
