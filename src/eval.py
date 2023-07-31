@@ -1610,9 +1610,9 @@ def eval_modalities(
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
     num_objs: int = 1,
-    psf_shape: tuple = (64, 96, 96),
+    psf_shape: tuple = (96, 96, 96), # needs to be large enough for 2photon
     modalities: tuple = (
-        # '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+         '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         # '../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat',
         # '../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat',
         # '../lattice/MBHex_NAexc0p43_annulus0p47_0p40_crop0p08_FWHM48p0.mat',

@@ -505,6 +505,7 @@ def compute_emb(
         otf: np.ndarray,
         iotf: np.ndarray,
         val: str,
+        na_mask: Optional[np.ndarray] = None,
         ratio: bool = False,
         norm: bool = True,
         log10: bool = False,
@@ -530,15 +531,25 @@ def compute_emb(
             (`spatial_quadrants`, 'sq'): return four different spatial planes in each quadrant
              or just return the full stack if nothing is passed
     """
-    na_mask = np.abs(iotf)
-    threshold = np.nanpercentile(na_mask.flatten(), 65)
-    na_mask = np.where(na_mask < threshold, na_mask, 1.)
-    na_mask = np.where(na_mask >= threshold, na_mask, 0.).astype(bool)
+    if na_mask is None:
+        na_mask = np.abs(iotf)
+        threshold = np.nanpercentile(na_mask.flatten(), 65)
+        na_mask = np.where(na_mask < threshold, na_mask, 1.)
+        na_mask = np.where(na_mask >= threshold, na_mask, 0.).astype(bool)
+    else:
+        na_mask = na_mask.astype(bool)
 
-    if otf.shape != iotf.shape:
-        real = resize_with_crop_or_pad(np.real(otf), crop_shape=iotf.shape)  # only center crop
-        imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=iotf.shape)  # only center crop
+    model_shape = (64,64,64)
+    if otf.shape != model_shape:
+        real = resize_with_crop_or_pad(np.real(otf), crop_shape=model_shape, mode='constant')  # only center crop
+        imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=model_shape, mode='constant')  # only center crop
         otf = real + 1j * imag
+
+    if iotf.shape != model_shape:
+        iotf = resize_with_crop_or_pad(iotf, crop_shape=model_shape, mode='constant')  # only center crop
+
+    if na_mask.shape != model_shape:
+        na_mask = (resize_with_crop_or_pad(na_mask.astype(float), crop_shape=model_shape, mode='constant')).astype(bool)  # o
 
     if val == 'real':
         emb = np.real(otf)
@@ -699,6 +710,7 @@ def rotate_embeddings(
 def fourier_embeddings(
         inputs: Union[np.array, tuple],
         iotf: np.array,
+        na_mask: Optional[np.ndarray] = None,
         ratio: bool = True,
         norm: bool = True,
         padsize: Any = None,
@@ -764,6 +776,7 @@ def fourier_embeddings(
             emb = compute_emb(
                 otf,
                 iotf,
+                na_mask=na_mask,
                 val=alpha_val,
                 ratio=ratio,
                 norm=norm,
@@ -775,6 +788,7 @@ def fourier_embeddings(
             alpha = compute_emb(
                 otf,
                 iotf,
+                na_mask=na_mask,
                 val=alpha_val,
                 ratio=ratio,
                 norm=norm,
@@ -795,6 +809,7 @@ def fourier_embeddings(
             phi = compute_emb(
                 otf,
                 iotf,
+                na_mask=na_mask,
                 val=phi_val,
                 ratio=False,
                 norm=False,

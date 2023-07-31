@@ -18,7 +18,7 @@ from tifffile import TiffFile
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
-from preprocessing import prep_sample
+from preprocessing import prep_sample, round_to_even
 from utils import randuniform
 
 logging.basicConfig(
@@ -101,7 +101,7 @@ class SyntheticPSF:
 
         if self.psf_type == '2photon':
             r = (.4 * .920) / (.6 * .510)
-            self.fov_scaler = (1, r, r)
+            self.fov_scaler = (r+0.3, r, r)
 
         elif self.psf_type == 'confocal':
             r = .8 #(.4 * .488) / (.6 * .510)
@@ -112,9 +112,14 @@ class SyntheticPSF:
 
         self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size) * np.array(self.fov_scaler))
 
+        adjusted_psf_shape = np.array(self.psf_shape) * np.array(self.fov_scaler)
+        adjusted_psf_shape[0] = round_to_even(adjusted_psf_shape[0])
+        adjusted_psf_shape[1] = round_to_even(adjusted_psf_shape[1])
+        adjusted_psf_shape[2] = round_to_even(adjusted_psf_shape[2])
+
         self.psfgen = PsfGenerator3D(
-            psf_shape=self.psf_shape,
-            units=np.array(self.voxel_size) * np.array(self.fov_scaler),
+            psf_shape=adjusted_psf_shape.astype(int),
+            units=np.array(self.voxel_size),
             lam_detection=self.lam_detection,
             n=self.refractive_index,
             na_detection=self.na_detection,
@@ -197,13 +202,22 @@ class SyntheticPSF:
         """
         OTF Mask is going to be binary thresholded ideal theoretical OTF
         """
-        ipsf = self.theoretical_psf(normed=True)
-        mask = np.abs(self.fft(ipsf, padsize=None))
+        resolution_limit = np.repeat(.510 / 2 / self.na_detection, 3) # resolution for widefield in um (tuple)
+        resolution_limit *= self.fov_scaler
 
-        threshold = np.nanpercentile(mask.flatten(), 65)
-        mask = np.where(mask < threshold, mask, 1.)
-        mask = np.where(mask >= threshold, mask, 0.)
-        return mask
+        k_limit = 1 / resolution_limit # max freq in 1/um
+
+        kx = np.fft.fftshift(np.fft.fftfreq(self.psfgen.Nx, self.psfgen.dx))
+        ky = np.fft.fftshift(np.fft.fftfreq(self.psfgen.Ny, self.psfgen.dy))
+        kz = np.fft.fftshift(np.fft.fftfreq(self.psfgen.Nz, self.psfgen.dz))
+
+        Z, Y, X = np.meshgrid(kz, ky, kx, indexing='ij') # pix pitch=eff_pixel_size (0.1 media wavelengths)
+
+
+
+        mask = (Z/k_limit[0])**2 + (Y/k_limit[1]) ** 2 + (X/k_limit[2]) ** 2 < 1
+
+        return mask.astype(np.float32)
 
     @profile
     def fft(self, inputs, padsize=None):

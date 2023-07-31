@@ -292,6 +292,7 @@ def preprocess(
         return fourier_embeddings(
             sample,
             iotf=modelpsfgen.iotf,
+            na_mask=modelpsfgen.na_mask(),
             plot=plot if plot else None,
             no_phase=no_phase,
             remove_interference=True,
