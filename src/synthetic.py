@@ -15,6 +15,8 @@ import multiprocessing as mp
 from typing import Iterable
 from line_profiler_pycharm import profile
 from tifffile import TiffFile
+from skimage.draw import line
+from typing import Optional
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
@@ -99,16 +101,22 @@ class SyntheticPSF:
         self.psf_type = psf_type
         self.lls_excitation_profile = lls_excitation_profile
 
-        if self.psf_type == '2photon':
-            r = (.4 * .920) / (.6 * .510)
-            self.fov_scaler = (r+0.3, r, r)
+        yumb_axial_support_index, yumb_lateral_support_index = self.calc_max_support_index(
+            psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+            wavelength=.510,
+            threshold=4e-3
+        )
 
-        elif self.psf_type == 'confocal':
-            r = .8 #(.4 * .488) / (.6 * .510)
-            self.fov_scaler = (1, r, r)
+        axial_support_index, lateral_support_index = self.calc_max_support_index(
+            psf_type=self.psf_type,
+            wavelength=self.lam_detection,
+            threshold=4e-3
+        )
 
-        else:
-            self.fov_scaler = (1, 1, 1)
+        self.axial_scalar = 1 if self.psf_type == 'widefield' else yumb_axial_support_index / axial_support_index
+        self.lateral_scalar = yumb_lateral_support_index / lateral_support_index
+        self.fov_scaler = (self.axial_scalar, self.lateral_scalar, self.lateral_scalar)
+        logger.info(f"FOV scalar: {self.psf_type} => (axial: {self.axial_scalar:.2f}), (lateral: {self.lateral_scalar:.2f})")
 
         self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size) * np.array(self.fov_scaler))
         self.adjusted_psf_shape = tuple(round_to_even(i) for i in np.array(self.psf_shape) * np.array(self.fov_scaler))
@@ -127,6 +135,50 @@ class SyntheticPSF:
         self.ipsf = self.theoretical_psf(normed=True)
         self.iotf = np.abs(self.fft(self.ipsf, padsize=None))
         self.iotf = self._normalize(self.iotf, self.iotf)
+
+    @profile
+    def calc_max_support_index(
+        self,
+        psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+        wavelength: float = .510,
+        threshold: float = 4e-3,
+    ):
+        zm, ym, xm = ((i // 2) - 1 for i in self.psf_shape)
+        vxz = line(r0=zm, c0=xm, r1=0, c1=self.psf_shape[0] - 1)
+        vxy = line(r0=ym, c0=xm, r1=0, c1=self.psf_shape[2] - 1)
+
+        phi = Wavefront(
+            amplitudes=np.zeros(self.n_modes),
+            order=self.order,
+            distribution=self.distribution,
+            mode_weights=self.mode_weights,
+            modes=self.n_modes,
+            gamma=self.gamma,
+            lam_detection=wavelength
+        )
+
+        gen = PsfGenerator3D(
+            psf_shape=self.psf_shape,
+            units=self.voxel_size,
+            lam_detection=wavelength,
+            n=self.refractive_index,
+            na_detection=self.na_detection,
+            psf_type=psf_type,
+            lls_excitation_profile=self.lls_excitation_profile,
+        )
+
+        ipsf = gen.incoherent_psf(phi)
+        ipsf /= np.nanmax(ipsf)
+
+        iotf = np.abs(self.fft(ipsf, padsize=None))
+        iotf /= np.nanmax(iotf)
+
+        iotf = np.where(iotf < threshold, iotf, 1.)
+        iotf = np.where(iotf >= threshold, iotf, 0.)
+
+        axial_support_index = next((i for i, z in enumerate(iotf[vxz[0], vxz[1], xm]) if z == 0), None)
+        lateral_support_index = next((i for i, x in enumerate(iotf[zm, vxy[0], vxy[1]]) if x == 0), None)
+        return axial_support_index, lateral_support_index
 
     @profile
     def update_ideal_psf_with_empirical(
@@ -194,31 +246,20 @@ class SyntheticPSF:
         return psf
 
     @profile
-    def na_mask(self):
+    def na_mask(self, threshold: Optional[float] = 4e-3):
         """
         OTF Mask is going to be binary thresholded ideal theoretical OTF
         """
-        resolution_limit = np.repeat(.510 / 2 / self.na_detection, 3) # resolution for widefield in um (tuple)
-        resolution_limit *= self.fov_scaler
-
-        k_limit = 1 / resolution_limit # max freq in 1/um
-
-        kx = np.fft.fftshift(np.fft.fftfreq(self.psfgen.Nx, self.psfgen.dx))
-        ky = np.fft.fftshift(np.fft.fftfreq(self.psfgen.Ny, self.psfgen.dy))
-        kz = np.fft.fftshift(np.fft.fftfreq(self.psfgen.Nz, self.psfgen.dz))
-
-        Z, Y, X = np.meshgrid(kz, ky, kx, indexing='ij') # pix pitch=eff_pixel_size (0.1 media wavelengths)
-
-        mask = (Z/k_limit[0])**2 + (Y/k_limit[1]) ** 2 + (X/k_limit[2]) ** 2 < 1
 
         ipsf = self.theoretical_psf(normed=True)
         mask = np.abs(self.fft(ipsf, padsize=None))
-        threshold = np.nanpercentile(mask.flatten(), 65)
+        mask /= np.nanmax(mask)
+
+        if threshold is None:
+            threshold = np.nanpercentile(mask.flatten(), 65)
+
         mask = np.where(mask < threshold, mask, 1.)
         mask = np.where(mask >= threshold, mask, 0.)
-        mask[(Z/k_limit[0])**2 + (Y/k_limit[1]) ** 2 + (X/k_limit[2]) ** 2 > 1] = 0
-
-
         return mask.astype(np.float32)
 
     @profile
