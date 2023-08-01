@@ -1610,17 +1610,17 @@ def eval_modalities(
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
     num_objs: int = 1,
-    psf_shape: tuple = (96, 96, 96), # needs to be large enough for 2photon
+    psf_shape: tuple = (96, 96, 96),  # needs to be large enough for 2photon
     modalities: tuple = (
          '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-        # '../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat',
-        # '../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat',
-        # '../lattice/MBHex_NAexc0p43_annulus0p47_0p40_crop0p08_FWHM48p0.mat',
-        # '../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat',
-        # '../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat',
-        # '../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat',
-        # '../lattice/v2HexRect_NAexc0p50_NAsigma0p15_annulus0p60-0p40_FWHM_56p0.mat',
-        # 'widefield',
+        '../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat',
+        '../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat',
+        '../lattice/MBHex_NAexc0p43_annulus0p47_0p40_crop0p08_FWHM48p0.mat',
+        '../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat',
+        '../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat',
+        '../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat',
+        '../lattice/v2HexRect_NAexc0p50_NAsigma0p15_annulus0p60-0p40_FWHM_56p0.mat',
+        'widefield',
         'confocal',
         '2photon',
     )
@@ -1651,8 +1651,8 @@ def eval_modalities(
         for psf_type in modalities
     ]
 
-    for dist in ['single']: #, 'bimodal', 'powerlaw', 'dirichlet']:
-        for amp in [0, .1]: #, .05, .1, .2, .3]:
+    for dist in ['single', 'bimodal', 'powerlaw', 'dirichlet']:
+        for amp in [0, .1, .05, .1, .2, .3]:
             for z in range(3, 15):
                 if z == 4:
                     continue
