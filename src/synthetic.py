@@ -209,9 +209,15 @@ class SyntheticPSF:
 
         Z, Y, X = np.meshgrid(kz, ky, kx, indexing='ij') # pix pitch=eff_pixel_size (0.1 media wavelengths)
 
-
-
         mask = (Z/k_limit[0])**2 + (Y/k_limit[1]) ** 2 + (X/k_limit[2]) ** 2 < 1
+
+        ipsf = self.theoretical_psf(normed=True)
+        mask = np.abs(self.fft(ipsf, padsize=None))
+        threshold = np.nanpercentile(mask.flatten(), 65)
+        mask = np.where(mask < threshold, mask, 1.)
+        mask = np.where(mask >= threshold, mask, 0.)
+        mask[(Z/k_limit[0])**2 + (Y/k_limit[1]) ** 2 + (X/k_limit[2]) ** 2 > 1] = 0
+
 
         return mask.astype(np.float32)
 
