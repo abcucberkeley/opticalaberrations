@@ -1708,7 +1708,7 @@ def eval_modalities(
                         normalize=True,
                         plot=save_path / f'{z}',
                     )
-                    imwrite(save_path / f'{z}_embeddings.tif', embeddings.astype(np.float32))
+                    imwrite(save_path / f'{z}_embeddings.tif', embeddings.astype(np.float32), imagej=True)
 
                     if digital_rotations:
                         res = backend.predict_rotation(
