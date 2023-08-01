@@ -231,7 +231,7 @@ def run_task(iter_num, args):
                 modelpath=str(args.model),
                 datadir=str(args.datadir),
                 distribution=str(args.dist),
-                samplelimit=int(args.n_samples),
+                samplelimit=int(args.n_samples) if args.n_samples is not None else None,
                 na=float(args.na),
                 batch_size=int(args.batch_size),
                 eval_sign=bool(args.eval_sign),
