@@ -278,7 +278,7 @@ def preprocess(
 
     sample = load_sample(file)
 
-    if fov_is_small: # only going to center crop and predict on that single FOV (fourier_embeddings)
+    if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
         sample = prep_sample(
             sample,
             model_fov=modelpsfgen.psf_fov,              # this is what we will crop to
@@ -299,9 +299,9 @@ def preprocess(
             embedding_option=modelpsfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
-            poi_shape=modelpsfgen.psf_shape[1:]
+            model_psf_shape=modelpsfgen.psf_shape
         )
-    else: # at least one tile fov dimension is larger than model fov
+    else:  # at least one tile fov dimension is larger than model fov
         model_window_size = (
             round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
             round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
@@ -352,13 +352,14 @@ def preprocess(
         return rolling_fourier_embeddings(  # aka "large_fov"
             rois,
             iotf=modelpsfgen.iotf,
+            na_mask=modelpsfgen.na_mask(),
             plot=plot,
             no_phase=no_phase,
             remove_interference=True,
             embedding_option=modelpsfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
-            poi_shape=modelpsfgen.psf_shape[1:],
+            model_psf_shape=modelpsfgen.psf_shape,
             nrows=nrows,
             ncols=ncols,
             ztiles=ztiles

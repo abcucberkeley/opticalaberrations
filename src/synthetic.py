@@ -111,15 +111,11 @@ class SyntheticPSF:
             self.fov_scaler = (1, 1, 1)
 
         self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size) * np.array(self.fov_scaler))
-
-        adjusted_psf_shape = np.array(self.psf_shape) * np.array(self.fov_scaler)
-        adjusted_psf_shape[0] = round_to_even(adjusted_psf_shape[0])
-        adjusted_psf_shape[1] = round_to_even(adjusted_psf_shape[1])
-        adjusted_psf_shape[2] = round_to_even(adjusted_psf_shape[2])
+        self.adjusted_psf_shape = tuple(round_to_even(i) for i in np.array(self.psf_shape) * np.array(self.fov_scaler))
 
         self.psfgen = PsfGenerator3D(
-            psf_shape=adjusted_psf_shape.astype(int),
-            units=np.array(self.voxel_size),
+            psf_shape=self.adjusted_psf_shape,
+            units=self.voxel_size,
             lam_detection=self.lam_detection,
             n=self.refractive_index,
             na_detection=self.na_detection,

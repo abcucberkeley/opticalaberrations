@@ -500,6 +500,7 @@ def pix_shift_to_phase_ramp(pix_shift, array_shape):
     ramp3d -= np.mean(ramp3d)  # make ramp centered about zero.
     return np.exp(1j*ramp3d)
 
+
 @profile
 def compute_emb(
         otf: np.ndarray,
@@ -511,6 +512,7 @@ def compute_emb(
         log10: bool = False,
         embedding_option: Any = 'spatial_planes',
         freq_strength_threshold: float = 0.,
+        model_psf_shape: tuple = (64, 64, 64)
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -518,11 +520,13 @@ def compute_emb(
     Args:
         otf: fft of the input data. Must have the same frequency spacing as iotf (which means the same real-space FOV in microns)
         iotf: ideal theoretical or empirical OTF
+        na_mask: theoretical NA support mask
         val: what to compute (either 'real', 'imag' imaginary, or phase 'angle' from the complex OTF)
         ratio: optional toggle to return ratio of data to ideal OTF
         norm: optional toggle to normalize the data [0, 1]
         log10: optional toggle to take log10 of the FFT
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
+        model_psf_shape: shape for the planes of interests that the model was trained on (POIs)
         embedding_option: type of embedding to use
             (`principle_planes`,  'pp'): return principle planes only (middle planes)
             (`spatial_planes`,    'sp'): return
@@ -539,17 +543,18 @@ def compute_emb(
     else:
         na_mask = na_mask.astype(bool)
 
-    model_shape = (64,64,64)
-    if otf.shape != model_shape:
-        real = resize_with_crop_or_pad(np.real(otf), crop_shape=model_shape, mode='constant')  # only center crop
-        imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=model_shape, mode='constant')  # only center crop
+    if otf.shape != model_psf_shape:
+        real = resize_with_crop_or_pad(np.real(otf), crop_shape=model_psf_shape, mode='constant')  # only center crop
+        imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=model_psf_shape, mode='constant')  # only center crop
         otf = real + 1j * imag
 
-    if iotf.shape != model_shape:
-        iotf = resize_with_crop_or_pad(iotf, crop_shape=model_shape, mode='constant')  # only center crop
+    if iotf.shape != model_psf_shape:
+        iotf = resize_with_crop_or_pad(iotf, crop_shape=model_psf_shape, mode='constant')  # only center crop
 
-    if na_mask.shape != model_shape:
-        na_mask = (resize_with_crop_or_pad(na_mask.astype(float), crop_shape=model_shape, mode='constant')).astype(bool)  # o
+    if na_mask.shape != model_psf_shape:
+        na_mask = resize_with_crop_or_pad(
+            na_mask.astype(float), crop_shape=model_psf_shape, mode='constant'
+        ).astype(bool)
 
     if val == 'real':
         emb = np.real(otf)
@@ -725,7 +730,7 @@ def fourier_embeddings(
         remove_interference: bool = True,
         embedding_option: str = 'spatial_planes',
         digital_rotations: Optional[int] = None,
-        poi_shape: tuple = (64, 64),
+        model_psf_shape: tuple = (64, 64, 64),
         debug_rotations: bool = False
 ):
     """
@@ -734,6 +739,7 @@ def fourier_embeddings(
     Args:
         inputs: 3D array.
         iotf: ideal theoretical or empirical OTF
+        na_mask: theoretical NA support mask
         ratio: Returns ratio of data to ideal PSF,
             which helps put all the FFT voxels on a similar scale. Otherwise, straight values.
         norm: optional toggle to normalize the data [0, 1]
@@ -748,7 +754,7 @@ def fourier_embeddings(
         log10: optional toggle to take log10 of the FFT
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
         digital_rotations: optional digital rotations to the embeddings
-        poi_shape: shape for the planes of interests (POIs)
+        model_psf_shape: shape for the planes of interests that the model was trained on (POIs)
         embedding_option: type of embedding to use.
             Capitalizing on the radial symmetry of the FFT,
             we have a few options to minimize the size of the embedding.
@@ -770,7 +776,7 @@ def fourier_embeddings(
         psf = resize_with_crop_or_pad(psf, crop_shape=[int(s * input_coverage) for s in psf.shape])
 
     if np.all(psf == 0):
-        emb = np.zeros((3, *poi_shape)) if no_phase else np.zeros((6, *poi_shape))
+        emb = np.zeros((3, *model_psf_shape[1:])) if no_phase else np.zeros((6, *model_psf_shape[1:]))
     else:
         if no_phase:
             emb = compute_emb(
@@ -783,6 +789,7 @@ def fourier_embeddings(
                 log10=log10,
                 embedding_option=embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
+                model_psf_shape=model_psf_shape
             )
         else:
             alpha = compute_emb(
@@ -795,6 +802,7 @@ def fourier_embeddings(
                 log10=log10,
                 embedding_option=embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
+                model_psf_shape=model_psf_shape
             )
 
             if remove_interference:
@@ -816,13 +824,14 @@ def fourier_embeddings(
                 log10=False,
                 embedding_option='spatial_planes',
                 freq_strength_threshold=freq_strength_threshold,
+                model_psf_shape=model_psf_shape
             )
 
             emb = np.concatenate([alpha, phi], axis=0)
 
-    if emb.shape[1:] != poi_shape:
-        emb = resize(emb, output_shape=(3 if no_phase else 6, *poi_shape))
-        # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *poi_shape))
+    if emb.shape[1:] != model_psf_shape[1:]:
+        emb = resize(emb, output_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
+        # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
 
     if plot is not None:
         plt.style.use("default")
@@ -850,6 +859,7 @@ def fourier_embeddings(
 def rolling_fourier_embeddings(
         rois: np.array,
         iotf: np.array,
+        na_mask: Optional[np.ndarray] = None,
         ratio: bool = True,
         norm: bool = True,
         no_phase: bool = False,
@@ -860,7 +870,7 @@ def rolling_fourier_embeddings(
         freq_strength_threshold: float = 0.01,
         embedding_option: str = 'spatial_planes',
         digital_rotations: Optional[int] = None,
-        poi_shape: tuple = (64, 64),
+        model_psf_shape: tuple = (64, 64, 64),
         debug_rotations: bool = False,
         remove_interference: bool = True,
         cpu_workers: int = -1,
@@ -874,6 +884,7 @@ def rolling_fourier_embeddings(
     Args:
         rois: an array of 3D tiles to generate an average embedding
         iotf: ideal theoretical or empirical OTF
+        na_mask: theoretical NA support mask
         ratio: Returns ratio of data to ideal PSF,
             which helps put all the FFT voxels on a similar scale. Otherwise, straight values.
         norm: optional toggle to normalize the data [0, 1]
@@ -885,7 +896,7 @@ def rolling_fourier_embeddings(
         log10: optional toggle to take log10 of the FFT
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
         digital_rotations: optional digital rotations to the embeddings
-        poi_shape: shape for the planes of interests (POIs)
+        model_psf_shape: shape for the planes of interests (POIs)
         embedding_option: type of embedding to use.
             Capitalizing on the radial symmetry of the FFT,
             we have a few options to minimize the size of the embedding.
@@ -1011,9 +1022,9 @@ def rolling_fourier_embeddings(
 
         emb = np.concatenate([alpha, phi], axis=0)
 
-    if emb.shape[1:] != poi_shape:
-        emb = resize(emb, output_shape=(3 if no_phase else 6, *poi_shape))
-        # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *poi_shape))
+    if emb.shape[1:] != model_psf_shape[1:]:
+        emb = resize(emb, output_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
+        # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
 
     if plot is not None:
         plt.style.use("default")
