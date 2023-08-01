@@ -721,13 +721,14 @@ def rotate_embeddings(
         emb = map_coordinates(emb, coordinates=coordinates, output=np.float32, order=1, prefilter=False)
 
     if debug_rotations and plot:
-        rotations = np.linspace(0, 360, digital_rotations)
+        rotation_labels = np.linspace(0, 360, digital_rotations)
+        emb_to_plot = 5         # which of the six emb to plot 0, 1, 2, 3, 4, or 5
         for i, angle in enumerate(tqdm(
-                rotations,
+                rotation_labels,
                 desc=f"Generating digital rotations [{plot.name}]"
         )):
             for plane in range(emb.shape[1]):
-                imwrite(f'{plot}_rot{angle:05}.tif', emb[i, 0, :, :].astype(np.float32), compression='deflate', dtype=np.float32)
+                imwrite(f'{plot}_rot{angle:05}.tif', emb[i, emb_to_plot, :, :].astype(np.float32), compression='deflate', dtype=np.float32)
 
     return emb
 
