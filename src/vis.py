@@ -1169,20 +1169,25 @@ def plot_embeddings(
         cax.yaxis.set_label_position("right")
         cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
     else:
-        m = axes[0, 0].imshow(np.max(inputs, axis=0) ** gamma, cmap='hot', vmin=0, vmax=1)
-        axes[0, 1].imshow(np.max(inputs, axis=1) ** gamma, cmap='hot', vmin=0, vmax=1)
-        axes[0, 2].imshow(np.max(inputs, axis=2) ** gamma, cmap='hot', vmin=0, vmax=1)
-        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+        m = plot_mip(
+            vol=inputs,
+            xy=axes[0, 0],
+            xz=axes[0, 1],
+            yz=axes[0, 2],
+            colorbar=False,
+        )
+
+        cax = inset_axes(axes[0, 0], width="10%", height="100%", loc='center left', borderpad=-5)
         cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_label_position("right")
+        cax.yaxis.set_label_position("left")
         cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
 
     m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
     axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
     axes[1, 2].imshow(emb[2], cmap=cmap, vmin=vmin, vmax=vmax)
-    cax = inset_axes(axes[1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+    cax = inset_axes(axes[1, 0], width="10%", height="100%", loc='center left', borderpad=-5)
     cb = plt.colorbar(m, cax=cax)
-    cax.yaxis.set_label_position("right")
+    cax.yaxis.set_label_position("left")
     cax.set_ylabel(r'Embedding ($\alpha$)')
 
     if emb.shape[0] > 3:
@@ -1206,12 +1211,12 @@ def plot_embeddings(
         m = axes[-1, 0].imshow(emb[3], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
         axes[-1, 1].imshow(emb[4], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
         axes[-1, 2].imshow(emb[5], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
-        cax = inset_axes(axes[-1, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+        cax = inset_axes(axes[-1, 0], width="10%", height="100%", loc='center left', borderpad=-5)
         cb = plt.colorbar(m, cax=cax, format=lambda x, _: f"{x:.1f}")
-        cax.yaxis.set_label_position("right")
+        cax.yaxis.set_label_position("left")
         cax.set_ylabel(r'Embedding ($\varphi$, radians)')
 
-    for ax in axes.flatten():
+    for ax in axes[1:].flatten():
         ax.axis('off')
 
     if save_path == True:
