@@ -4,8 +4,8 @@ HANDLER=slurm
 ENV=~/anaconda3/envs/ml/bin/python
 NODES='abc'
 
-xVOXEL=.108
-yVOXEL=.108
+xVOXEL=.097
+yVOXEL=.097
 zVOXEL=.200
 LAMBDA=.510
 NA=1.0
@@ -19,8 +19,8 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='new_embeddings'
-DATASET='test'
+TITLE='new_modalities'
+DATASET='train'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -30,8 +30,8 @@ mkdir -p $LOGS
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
-  SAMPLES_PER_JOB=200
-  SAMPLES_PER_BIN=800
+  SAMPLES_PER_JOB=100
+  SAMPLES_PER_BIN=200
   OBJS=(1 2 3 4 5)
   mPH=($(seq 1 50000 460000))
   xPH=($(seq 50000 50000 500000))
@@ -40,7 +40,6 @@ if [ "$DATASET" = "train" ];then
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
   FILL_RADIUS=0.3
-  PSF_TYPE="../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
 else
   TYPE=''
   SAMPLES_PER_JOB=25
@@ -53,7 +52,6 @@ else
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(mixed)
   FILL_RADIUS=0.3
-  PSF_TYPE='widefield'
 fi
 
 
@@ -74,7 +72,6 @@ do
 
             j="${ENV} multipoint_dataset.py ${TYPE}"
             j="${j} --npoints ${OBJS[$N-1]}"
-            j="${j} --psf_type ${PSF_TYPE}"
             j="${j} --alpha_val ${ALPHA}"
             j="${j} --phi_val ${PHI}"
             j="${j} --dist ${DISTRIBUTIONS[$DIST-1]}"
@@ -106,14 +103,19 @@ do
               j="${j} --randomize_voxel_size"
             fi
 
-            for e in spatial_planes spatial_planes1020
+            for e in spatial_planes
             do
               j="${j} --embedding_option ${e}"
             done
 
-            #if [ "$DATASET" = "train" ];then
-            #  j="${j} --random_crop ${RCROP}"
-            #fi
+            if [ "$DATASET" = "train" ];then
+              for psf in "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat" widefield confocal 2photon
+              do
+                j="${j} --psf_type ${psf}"
+              done
+            else
+              j="${j} --psf_type widefield"
+            fi
 
             task="/usr/bin/sbatch"
             task="${task} --qos=abc_normal --nice=1111111111"

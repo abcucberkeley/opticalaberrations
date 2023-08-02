@@ -176,8 +176,8 @@ class SyntheticPSF:
         iotf = np.where(iotf < threshold, iotf, 1.)
         iotf = np.where(iotf >= threshold, iotf, 0.)
 
-        axial_support_index = next((i for i, z in enumerate(iotf[vxz[0], vxz[1], xm]) if z == 0), None)
-        lateral_support_index = next((i for i, x in enumerate(iotf[zm, vxy[0], vxy[1]]) if x == 0), None)
+        axial_support_index = next((i for i, z in enumerate(iotf[vxz[0], vxz[1], xm]) if z == 0), 0)
+        lateral_support_index = next((i for i, x in enumerate(iotf[zm, vxy[0], vxy[1]]) if x == 0), 0)
         return axial_support_index, lateral_support_index
 
     @profile

@@ -17,6 +17,7 @@ from tifffile import imwrite
 import numpy as np
 import raster_geometry as rg
 from scipy import stats as st
+from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -290,10 +291,10 @@ def sim(
 def create_synthetic_sample(
     filename: str,
     npoints: int,
-    outdir: Path,
+    savedir: Path,
     input_shape: int,
     modes: int,
-    psf_type: str,
+    psf_type: list,
     distribution: str,
     mode_dist: str,
     gamma: float,
@@ -323,64 +324,95 @@ def create_synthetic_sample(
     max_lls_defocus_offset: float = 0.,
     fill_radius: float = 0.,
 ):
-    if randomize_voxel_size:
-        x_voxel_size = np.random.uniform(low=x_voxel_size-.025, high=x_voxel_size+.025)
-        y_voxel_size = np.random.uniform(low=y_voxel_size - .025, high=y_voxel_size + .025)
-        z_voxel_size = np.random.uniform(low=z_voxel_size - .05, high=z_voxel_size + .05)
 
-    gen = SyntheticPSF(
+    phi = Wavefront(
+        amplitudes=(min_amplitude, max_amplitude),
         order='ansi',
-        cpu_workers=cpu_workers,
-        n_modes=modes,
-        psf_type=psf_type,
         distribution=distribution,
         mode_weights=mode_dist,
+        modes=modes,
         gamma=gamma,
         signed=signed,
         rotate=rotate,
-        amplitude_ranges=(min_amplitude, max_amplitude),
         lam_detection=lam_detection,
-        psf_shape=3*[input_shape],
-        x_voxel_size=x_voxel_size,
-        y_voxel_size=y_voxel_size,
-        z_voxel_size=z_voxel_size,
-        refractive_index=refractive_index,
-        na_detection=na_detection,
     )
 
-    if not randomize_voxel_size:
-        outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
-    outdir = outdir / f"i{input_shape}"
-    outdir = outdir / f"z{modes}"
+    for psf in tqdm(set(psf_type)):
+        if psf == '2photon':
+            wavelength = .920
+            r = wavelength / lam_detection
 
-    if distribution == 'powerlaw':
-        outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
-    else:
-        outdir = outdir / f"{distribution}"
+            # boost um RMS aberration amplitudes for '2photon', so we create equivalent p2v aberrations
+            phi = Wavefront(
+                amplitudes=[r * z for z in phi.amplitudes],
+                order='ansi',
+                distribution=distribution,
+                mode_weights=mode_dist,
+                modes=modes,
+                gamma=gamma,
+                signed=signed,
+                rotate=rotate,
+                lam_detection=wavelength,
+            )
+        else:
+            wavelength = lam_detection
 
-    outdir = outdir / f"photons_{min_photons}-{max_photons}"
-    outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-                      f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+        gen = SyntheticPSF(
+            amplitude_ranges=phi,
+            order='ansi',
+            cpu_workers=cpu_workers,
+            n_modes=modes,
+            distribution=distribution,
+            mode_weights=mode_dist,
+            gamma=gamma,
+            signed=signed,
+            rotate=rotate,
+            psf_type=psf,
+            lam_detection=wavelength,
+            psf_shape=3 * [input_shape],
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            refractive_index=refractive_index,
+            na_detection=na_detection,
+        )
 
-    outdir = outdir / f"npoints_{npoints}"
-    outdir.mkdir(exist_ok=True, parents=True)
+        outdir = savedir / rf"{gen.psf_type.replace('../lattice/', '').split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
 
-    sim(
-        filename=filename,
-        outdir=outdir,
-        gen=gen,
-        npoints=npoints,
-        photons=(min_photons, max_photons),
-        emb=emb,
-        embedding_option=embedding_option,
-        random_crop=random_crop,
-        noise=noise,
-        normalize=normalize,
-        alpha_val=alpha_val,
-        phi_val=phi_val,
-        lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset),
-        fill_radius=fill_radius,
-    )
+        if not randomize_voxel_size:
+            outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
+
+        outdir = outdir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
+        outdir = outdir / f"z{modes}"
+
+        if gen.distribution == 'powerlaw':
+            outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
+        else:
+            outdir = outdir / f"{gen.distribution}"
+
+        outdir = outdir / f"photons_{min_photons}-{max_photons}"
+        outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                          f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
+        outdir = outdir / f"npoints_{npoints}"
+        outdir.mkdir(exist_ok=True, parents=True)
+
+        sim(
+            filename=filename,
+            outdir=outdir,
+            gen=gen,
+            npoints=npoints,
+            photons=(min_photons, max_photons),
+            emb=emb,
+            embedding_option=embedding_option,
+            random_crop=random_crop,
+            noise=noise,
+            normalize=normalize,
+            alpha_val=alpha_val,
+            phi_val=phi_val,
+            lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset),
+            fill_radius=fill_radius,
+        )
 
 
 def parse_args(args):
@@ -465,8 +497,8 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--psf_type", default='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat', type=str,
-        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
+        "--psf_type", action='append', default=['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'],
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile'
     )
 
     parser.add_argument(
@@ -569,7 +601,7 @@ def main(args=None):
         alpha_val=args.alpha_val,
         phi_val=args.phi_val,
         npoints=args.npoints,
-        outdir=args.outdir,
+        savedir=args.outdir,
         noise=args.noise,
         normalize=args.normalize,
         fog=args.fog,
