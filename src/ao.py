@@ -36,6 +36,8 @@ def parse_args(args):
     subparsers.required = True
 
     cluster_nodes_idle = subparsers.add_parser("cluster_nodes_idle")
+    cluster_nodes_wait_for_idle = subparsers.add_parser("cluster_nodes_wait_for_idle")
+    cluster_nodes_wait_for_idle.add_argument("idle_minimum", type=int, default=4, help='Minimum number of idle nodes to wait for')
 
     deskew = subparsers.add_parser("deskew")
     deskew.add_argument("input", type=Path, help="path to input .tif file")
@@ -782,6 +784,16 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                                )
         number_of_idle_nodes = int(str(table.stdout).split("NODES")[1].split(r"\n")[1])
         print(f'Number of idle nodes is {number_of_idle_nodes} on {partition}.')
+        return number_of_idle_nodes
+
+    if args.func == 'cluster_nodes_wait_for_idle':
+        number_of_idle_nodes = 0
+        while number_of_idle_nodes < args.idle_minimum:
+            table = subprocess.run(f"ssh {username}@{hostname} \"sinfo -p {partition} --states idle -O NODES\"",
+                               stdout=subprocess.PIPE,
+                               )
+            number_of_idle_nodes = int(str(table.stdout).split("NODES")[1].split(r"\n")[1])
+            print(f'Number of idle nodes is {number_of_idle_nodes} on {partition}. Need {args.idle_minimum}')
         return number_of_idle_nodes
 
     if args.cluster:
