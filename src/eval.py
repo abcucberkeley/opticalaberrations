@@ -1660,8 +1660,11 @@ def eval_modalities(
                 if amp == 0 and z > 3:
                     break
 
-                amplitudes = np.zeros(15)
-                amplitudes[z] = amp
+                if dist == 'single':
+                    amplitudes = np.zeros(15)
+                    amplitudes[z] = amp
+                else:
+                    amplitudes = np.repeat(amp, 2)
 
                 for i, gen in enumerate(modalities_generators):
                     mode = modalities[i].replace('../lattice/', '').split('_')[0]
