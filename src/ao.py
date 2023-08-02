@@ -1130,6 +1130,9 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
 
         logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
+        logger.info(f"Updating file permissions to {args.input.parent}")
+        subprocess.run(f"setfacl -PRdm u::rwx,g::rwx,o::rwwx {str(Path(args.input).parent.resolve())}", shell=True)
+
 
 if __name__ == "__main__":
     main()
