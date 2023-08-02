@@ -447,22 +447,23 @@ def get_tile_confidence(
     zero_confident_tiles = zero_confident_tiles * ~unconfident_tiles  # don't mark zero_confident if tile is unconfident
 
     if verbose:
-        logger.info(
-            f'Number of confident zero tiles {zero_confident_tiles.sum():4}'
-            f' out of {zero_confident_tiles.count()}'
-        )
-        logger.info(
-            f'Number of unconfident tiles    {unconfident_tiles.sum():4}'
-            f' out of {unconfident_tiles.count()}'
-        )
-        logger.info(
-            f'Number of all zeros tiles      {all_zeros_tiles.sum():4}'
-            f' out of {all_zeros_tiles.count()}'
-        )
-        logger.info(
-            f'Number of non-zero tiles       {(~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)).sum():4}'
-            f' out of {all_zeros_tiles.count()}'
-        )
+        for z in predictions.index.levels[0].values:
+            logger.info(
+                f'Number of confident zero tiles {zero_confident_tiles.loc[z].sum():4}'
+                f' out of {zero_confident_tiles.loc[z].count()} on z slab {z}'
+            )
+            logger.info(
+                f'Number of unconfident tiles    {unconfident_tiles.loc[z].sum():4}'
+                f' out of {unconfident_tiles.loc[z].count()} on z slab {z}'
+            )
+            logger.info(
+                f'Number of all zeros tiles      {all_zeros_tiles.loc[z].sum():4}'
+                f' out of {all_zeros_tiles.loc[z].count()} on z slab {z}'
+            )
+            logger.info(
+                f'Number of non-zero tiles       {(~(unconfident_tiles.loc[z] | zero_confident_tiles.loc[z] | all_zeros_tiles.loc[z])).sum():4}'
+                f' out of {all_zeros_tiles.loc[z].count()} on z slab {z}'
+            )
 
     return unconfident_tiles, zero_confident_tiles, all_zeros_tiles
 
