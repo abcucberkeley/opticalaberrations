@@ -1077,7 +1077,7 @@ def cluster_tiles(
             if k == 0:  # "before" volume
                 pred = np.zeros(features.shape[-1])  # "before" will not have a wavefront update here.
                 pred_std = np.zeros(features.shape[-1])
-            elif k >= n_clusters:  # if we didn't have enough tiles
+            elif k >= n_clusters or c not in ztile_preds['cluster'].unique():  # if we didn't have enough tiles
                 pred = np.zeros(features.shape[-1])  # these will not have a wavefront update here.
                 pred_std = np.zeros(features.shape[-1])
                 logger.warning(f'Not enough tiles to make another cluster.  '
