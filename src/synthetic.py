@@ -113,8 +113,16 @@ class SyntheticPSF:
             threshold=4e-3
         )
 
-        self.axial_scalar = 1 if self.psf_type == 'widefield' else yumb_axial_support_index / axial_support_index
-        self.lateral_scalar = yumb_lateral_support_index / lateral_support_index
+        if axial_support_index != 0:
+            self.axial_scalar = 1 if self.psf_type == 'widefield' else yumb_axial_support_index / axial_support_index
+        else:
+            self.axial_scalar = 1
+
+        if lateral_support_index != 0:
+            self.lateral_scalar = yumb_lateral_support_index / lateral_support_index
+        else:
+            self.lateral_scalar = 1
+
         self.fov_scaler = (self.axial_scalar, self.lateral_scalar, self.lateral_scalar)
         logger.info(f"FOV scalar: {self.psf_type} => (axial: {self.axial_scalar:.2f}), (lateral: {self.lateral_scalar:.2f})")
 
