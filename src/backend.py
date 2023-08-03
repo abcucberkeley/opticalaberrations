@@ -426,6 +426,7 @@ def bootstrap_predict(
         model_inputs = fourier_embeddings(
             inputs,
             iotf=psfgen.iotf,
+            na_mask=psfgen.na_mask(),
             plot=plot,
             padsize=padsize,
             no_phase=no_phase,
@@ -753,6 +754,7 @@ def predict_rotation(
         inputs = fourier_embeddings(
             inputs,
             iotf=psfgen.iotf,
+            na_mask=psfgen.na_mask(),
             plot=plot,
             padsize=padsize,
             no_phase=no_phase,

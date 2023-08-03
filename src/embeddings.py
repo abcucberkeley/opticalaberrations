@@ -942,6 +942,7 @@ def rolling_fourier_embeddings(
         emb = compute_emb(
             resize_with_crop_or_pad(np.nanmean(np.abs(otfs), axis=0), crop_shape=iotf.shape),
             iotf,
+            na_mask=na_mask,
             val=alpha_val,
             ratio=ratio,
             norm=norm,
@@ -953,6 +954,7 @@ def rolling_fourier_embeddings(
         alpha = compute_emb(
             resize_with_crop_or_pad(np.nanmean(np.abs(otfs), axis=0), crop_shape=iotf.shape),
             iotf,
+            na_mask=na_mask,
             val=alpha_val,
             ratio=ratio,
             norm=norm,
@@ -1034,6 +1036,7 @@ def rolling_fourier_embeddings(
         phi = compute_emb(
             avg_otf,
             iotf,
+            na_mask=na_mask,
             val=phi_val,
             ratio=False,
             norm=False,
