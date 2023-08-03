@@ -1126,6 +1126,10 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
 
         logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
+        if os.name != 'nt':
+            logger.info(f"Updating file permissions to {args.input.parent}")
+            subprocess.run(f"chmod a+wrx -R {str(Path(args.input).parent.resolve())}", shell=True)
+
 
 def get_number_of_idle_nodes(hostname, partition, username):
     logger = logging.getLogger('')
