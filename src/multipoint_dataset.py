@@ -18,7 +18,6 @@ from tifffile import imwrite
 import numpy as np
 import raster_geometry as rg
 from scipy import stats as st
-from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -157,6 +156,7 @@ def beads(
 def sim(
     filename: str,
     outdir: Path,
+    phi: Wavefront,
     gen: SyntheticPSF,
     npoints: int,
     photons: tuple,
@@ -165,7 +165,7 @@ def sim(
     normalize: bool = True,
     remove_background: bool = True,
     random_crop: Any = None,
-    embedding_option: Union[set, list] = (),
+    embedding_option: Union[set, list, tuple] = (),
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
     lls_defocus_offset: Any = 0.,
@@ -174,10 +174,11 @@ def sim(
     electrons_per_count: float = .22,
     quantum_efficiency: float = .82,
     fill_radius: float = 0.0,
+    reference_shape: Optional[Union[tuple, list]] = None
 ):
     photons = randuniform(photons)
     reference = beads(
-        image_shape=gen.psf_shape,
+        image_shape=gen.psf_shape if reference_shape is None else reference_shape,
         photons=photons,
         object_size=0,
         num_objs=npoints,
@@ -186,7 +187,7 @@ def sim(
 
     # aberrated PSF without noise
     kernel, amps, lls_defocus_offset = gen.single_psf(
-        phi=gen.amplitude_ranges,
+        phi=phi,
         lls_defocus_offset=lls_defocus_offset,
         normed=True,
         meta=True,
@@ -201,7 +202,7 @@ def sim(
     else:
         avg_min_distance = 0.
 
-    if noise:  # add shotnoise to photons, convert to electrons to add dark read noise, then convert to counts
+    if noise:  # convert to electrons to add shot noise and dark read noise, then convert to counts
         inputs = add_noise(
             img,
             mean_background_offset=mean_background_offset,
@@ -212,6 +213,10 @@ def sim(
     else:  # convert image to counts
         inputs = photons2electrons(img, quantum_efficiency=quantum_efficiency)
         inputs = electrons2counts(inputs, electrons_per_count=electrons_per_count)
+
+    # remove camera background offset
+    inputs -= mean_background_offset
+    inputs[mean_background_offset < 0] = 0
 
     counts = np.sum(inputs)
     counts_mode = int(st.mode(inputs, axis=None).mode[0])
@@ -239,6 +244,7 @@ def sim(
             embeddings = np.squeeze(fourier_embeddings(
                 inputs=embeddings,
                 iotf=gen.iotf,
+                na_mask=gen.na_mask(),
                 embedding_option=e,
                 alpha_val=alpha_val,
                 phi_val=phi_val,
@@ -291,11 +297,10 @@ def sim(
 
 def create_synthetic_sample(
     filename: str,
+    generators: dict,
     npoints: int,
     savedir: Path,
-    input_shape: int,
     modes: int,
-    psf_type: list,
     distribution: str,
     mode_dist: str,
     gamma: float,
@@ -304,21 +309,13 @@ def create_synthetic_sample(
     rotate: bool,
     min_amplitude: float,
     max_amplitude: float,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
     min_photons: int,
     max_photons: int,
-    lam_detection: float,
-    refractive_index: float,
-    na_detection: float,
-    cpu_workers: int,
     random_crop: Any,
     noise: bool,
     normalize: bool,
-    fog: bool,
     emb: bool,
-    embedding_option: list,
+    embedding_option: set,
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
     min_lls_defocus_offset: float = 0.,
@@ -335,48 +332,43 @@ def create_synthetic_sample(
         gamma=gamma,
         signed=signed,
         rotate=rotate,
-        lam_detection=lam_detection,
+        lam_detection=.510,
     )
 
-    for psf in tqdm(set(psf_type)):
-        if psf == '2photon':
-            wavelength = .920
-            r = wavelength / lam_detection
-
+    for gen in generators.values():
+        if gen.psf_type == '2photon':
             # boost um RMS aberration amplitudes for '2photon', so we create equivalent p2v aberrations
+            r = gen.lam_detection / .510
             phi = Wavefront(
                 amplitudes=[r * z for z in phi.amplitudes],
-                order='ansi',
-                distribution=distribution,
-                mode_weights=mode_dist,
-                modes=modes,
-                gamma=gamma,
-                signed=signed,
-                rotate=rotate,
-                lam_detection=wavelength,
+                order=gen.order,
+                distribution=gen.distribution,
+                mode_weights=gen.mode_weights,
+                modes=gen.n_modes,
+                gamma=gen.gamma,
+                signed=gen.signed,
+                rotate=gen.rotate,
+                lam_detection=gen.lam_detection,
             )
+            reference_shape = 96
         else:
-            wavelength = lam_detection
+            phi = Wavefront(
+                amplitudes=phi.amplitudes,
+                order=gen.order,
+                distribution=gen.distribution,
+                mode_weights=gen.mode_weights,
+                modes=gen.n_modes,
+                gamma=gen.gamma,
+                signed=gen.signed,
+                rotate=gen.rotate,
+                lam_detection=gen.lam_detection,
+            )
+            reference_shape = 64
 
-        gen = SyntheticPSF(
-            amplitude_ranges=phi,
-            order='ansi',
-            cpu_workers=cpu_workers,
-            n_modes=modes,
-            distribution=distribution,
-            mode_weights=mode_dist,
-            gamma=gamma,
-            signed=signed,
-            rotate=rotate,
-            psf_type=psf,
-            lam_detection=wavelength,
-            psf_shape=3 * [input_shape],
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            refractive_index=refractive_index,
-            na_detection=na_detection,
-        )
+        if gen.psf_type == 'widefield':
+            photon_range = (min_photons*5, max_photons*5)
+        else:
+            photon_range = (min_photons, max_photons)
 
         outdir = savedir / rf"{gen.psf_type.replace('../lattice/', '').split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
 
@@ -384,14 +376,14 @@ def create_synthetic_sample(
             outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
 
         outdir = outdir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
-        outdir = outdir / f"z{modes}"
+        outdir = outdir / f"z{gen.n_modes}"
 
         if gen.distribution == 'powerlaw':
             outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
         else:
             outdir = outdir / f"{gen.distribution}"
 
-        outdir = outdir / f"photons_{min_photons}-{max_photons}"
+        outdir = outdir / f"photons_{photon_range[0]}-{photon_range[1]}"
         outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
                           f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
@@ -411,9 +403,10 @@ def create_synthetic_sample(
             sim(
                 filename=filename,
                 outdir=outdir,
+                phi=phi,
                 gen=gen,
                 npoints=npoints,
-                photons=(min_photons, max_photons),
+                photons=photon_range,
                 emb=emb,
                 embedding_option=embedding_option,
                 random_crop=random_crop,
@@ -423,6 +416,7 @@ def create_synthetic_sample(
                 phi_val=phi_val,
                 lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset),
                 fill_radius=fill_radius,
+                reference_shape=3 * [reference_shape]
             )
 
 
@@ -605,8 +599,30 @@ def main(args=None):
     args = parse_args(args)
     logger.info(args)
 
+    generators = {}
+    for psf in set(args.psf_type):
+        generators[psf] = SyntheticPSF(
+            order='ansi',
+            cpu_workers=args.cpu_workers,
+            n_modes=args.modes,
+            distribution=args.dist,
+            mode_weights=args.mode_dist,
+            gamma=args.gamma,
+            signed=args.signed,
+            rotate=args.rotate,
+            psf_type=psf,
+            lam_detection=.920 if psf == '2photon' else args.lam_detection,
+            psf_shape=3 * [args.input_shape],
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
+            refractive_index=args.refractive_index,
+            na_detection=args.na_detection,
+        )
+
     sample = partial(
         create_synthetic_sample,
+        generators=generators,
         emb=args.emb,
         embedding_option=set(args.embedding_option),
         alpha_val=args.alpha_val,
@@ -615,10 +631,7 @@ def main(args=None):
         savedir=args.outdir,
         noise=args.noise,
         normalize=args.normalize,
-        fog=args.fog,
         modes=args.modes,
-        input_shape=args.input_shape,
-        psf_type=args.psf_type,
         distribution=args.dist,
         mode_dist=args.mode_dist,
         random_crop=args.random_crop,
@@ -630,15 +643,8 @@ def main(args=None):
         max_amplitude=args.max_amplitude,
         min_lls_defocus_offset=args.min_lls_defocus_offset,
         max_lls_defocus_offset=args.max_lls_defocus_offset,
-        x_voxel_size=args.x_voxel_size,
-        y_voxel_size=args.y_voxel_size,
-        z_voxel_size=args.z_voxel_size,
         min_photons=args.min_photons,
         max_photons=args.max_photons,
-        lam_detection=args.lam_detection,
-        refractive_index=args.refractive_index,
-        na_detection=args.na_detection,
-        cpu_workers=args.cpu_workers,
         fill_radius=args.fill_radius,
     )
 
