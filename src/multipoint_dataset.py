@@ -11,8 +11,9 @@ import os
 import time
 import ujson
 from functools import partial
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from pathlib import Path
+from tifffile import TiffFile
 from tifffile import imwrite
 import numpy as np
 import raster_geometry as rg
@@ -164,7 +165,7 @@ def sim(
     normalize: bool = True,
     remove_background: bool = True,
     random_crop: Any = None,
-    embedding_option: list = (),
+    embedding_option: Union[set, list] = (),
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
     lls_defocus_offset: Any = 0.,
@@ -397,22 +398,32 @@ def create_synthetic_sample(
         outdir = outdir / f"npoints_{npoints}"
         outdir.mkdir(exist_ok=True, parents=True)
 
-        sim(
-            filename=filename,
-            outdir=outdir,
-            gen=gen,
-            npoints=npoints,
-            photons=(min_photons, max_photons),
-            emb=emb,
-            embedding_option=embedding_option,
-            random_crop=random_crop,
-            noise=noise,
-            normalize=normalize,
-            alpha_val=alpha_val,
-            phi_val=phi_val,
-            lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset),
-            fill_radius=fill_radius,
-        )
+        try:  # check if file already exists and not corrupted
+            for e in embedding_option:
+                path = Path(f"{outdir/e}/{filename}")
+
+                with open(path.with_suffix('.json')) as f:
+                    ujson.load(f)
+
+                with TiffFile(path.with_suffix('.tif')) as tif:
+                    tif.asarray()
+        except Exception as e:
+            sim(
+                filename=filename,
+                outdir=outdir,
+                gen=gen,
+                npoints=npoints,
+                photons=(min_photons, max_photons),
+                emb=emb,
+                embedding_option=embedding_option,
+                random_crop=random_crop,
+                noise=noise,
+                normalize=normalize,
+                alpha_val=alpha_val,
+                phi_val=phi_val,
+                lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset),
+                fill_radius=fill_radius,
+            )
 
 
 def parse_args(args):
@@ -597,7 +608,7 @@ def main(args=None):
     sample = partial(
         create_synthetic_sample,
         emb=args.emb,
-        embedding_option=args.embedding_option,
+        embedding_option=set(args.embedding_option),
         alpha_val=args.alpha_val,
         phi_val=args.phi_val,
         npoints=args.npoints,
