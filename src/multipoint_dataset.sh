@@ -4,16 +4,16 @@ HANDLER=slurm
 ENV=~/anaconda3/envs/ml/bin/python
 NODES='abc'
 
-xVOXEL=.097
-yVOXEL=.097
+xVOXEL=.108
+yVOXEL=.108
 zVOXEL=.200
 LAMBDA=.510
 NA=1.0
 ALPHA='abs'
 PHI='angle'
-CPUS=1
-MEM='20G'
-TIMELIMIT='1:00:00'
+CPUS=2
+MEM='40G'
+TIMELIMIT='2:00:00'
 SHAPE=64
 MAX_LLS_OFFSET=0
 RAND_VSIZE=false
@@ -30,7 +30,7 @@ mkdir -p $LOGS
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
-  SAMPLES_PER_JOB=100
+  SAMPLES_PER_JOB=200
   SAMPLES_PER_BIN=200
   OBJS=(1 2 3 4 5)
   mPH=($(seq 1 50000 460000))
