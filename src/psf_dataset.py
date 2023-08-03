@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 import cli
-from utils import multiprocess, add_noise, randuniform, electrons2counts
+from utils import multiprocess, add_noise, randuniform, electrons2counts, photons2electrons
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 
@@ -121,7 +121,7 @@ def sim(
 
     p2v = Wavefront(amps, lam_detection=gen.lam_detection).peak2valley(na=1.0)
 
-    if noise:
+    if noise:  # convert to electrons to add shot noise and dark read noise, then convert to counts
         inputs = add_noise(
             kernel,
             mean_background_offset=mean_background_offset,
@@ -130,7 +130,8 @@ def sim(
             electrons_per_count=electrons_per_count,
         )
     else:  # convert image to counts
-        inputs = electrons2counts(kernel, electrons_per_count=electrons_per_count)
+        inputs = photons2electrons(kernel, quantum_efficiency=quantum_efficiency)
+        inputs = electrons2counts(inputs, electrons_per_count=electrons_per_count)
 
     counts = np.sum(inputs)
     counts_mode = int(st.mode(inputs, axis=None).mode[0])
@@ -160,59 +161,26 @@ def sim(
 
 def create_synthetic_sample(
     filename: str,
-    outdir: Path,
-    input_shape: int,
-    modes: int,
-    psf_type: str,
-    distribution: str,
-    mode_dist: str,
-    gamma: float,
-    signed: bool,
-    rotate: bool,
+    gen: SyntheticPSF,
+    savedir: Path,
     min_amplitude: float,
     max_amplitude: float,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
     min_photons: int,
     max_photons: int,
-    lam_detection: float,
-    refractive_index: float,
-    na_detection: float,
-    cpu_workers: int,
     noise: bool,
     normalize: bool,
     min_lls_defocus_offset: float = 0.,
     max_lls_defocus_offset: float = 0.,
 ):
-    gen = SyntheticPSF(
-        order='ansi',
-        cpu_workers=cpu_workers,
-        n_modes=modes,
-        psf_type=psf_type,
-        distribution=distribution,
-        mode_weights=mode_dist,
-        gamma=gamma,
-        signed=signed,
-        rotate=rotate,
-        amplitude_ranges=(min_amplitude, max_amplitude),
-        lam_detection=lam_detection,
-        psf_shape=3*[input_shape],
-        x_voxel_size=x_voxel_size,
-        y_voxel_size=y_voxel_size,
-        z_voxel_size=z_voxel_size,
-        refractive_index=refractive_index,
-        na_detection=na_detection,
-    )
+    outdir = savedir / rf"{gen.psf_type.replace('../lattice/', '').split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
+    outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
+    outdir = outdir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
+    outdir = outdir / f"z{gen.n_modes}"
 
-    outdir = outdir / f"x{round(x_voxel_size * 1000)}-y{round(y_voxel_size * 1000)}-z{round(z_voxel_size * 1000)}"
-    outdir = outdir / f"i{input_shape}"
-    outdir = outdir / f"z{modes}"
-
-    if distribution == 'powerlaw':
-        outdir = outdir / f"powerlaw_gamma_{str(round(gamma, 2)).replace('.', 'p')}"
+    if gen.distribution == 'powerlaw':
+        outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
     else:
-        outdir = outdir / f"{distribution}"
+        outdir = outdir / f"{gen.distribution}"
 
     outdir = outdir / f"photons_{min_photons}-{max_photons}"
     outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
@@ -370,32 +338,37 @@ def main(args=None):
     args = parse_args(args)
     logger.info(args)
 
-    sample = partial(
-        create_synthetic_sample,
-        outdir=args.outdir,
-        noise=args.noise,
-        normalize=args.normalize,
-        modes=args.modes,
-        input_shape=args.input_shape,
-        psf_type=args.psf_type,
+    gen = SyntheticPSF(
+        order='ansi',
+        cpu_workers=args.cpu_workers,
+        n_modes=args.modes,
         distribution=args.dist,
-        mode_dist=args.mode_dist,
+        mode_weights=args.mode_dist,
         gamma=args.gamma,
         signed=args.signed,
         rotate=args.rotate,
+        psf_type=args.psf_type,
+        lam_detection=.920 if args.psf_type == '2photon' else args.lam_detection,
+        psf_shape=3 * [args.input_shape],
+        x_voxel_size=args.x_voxel_size,
+        y_voxel_size=args.y_voxel_size,
+        z_voxel_size=args.z_voxel_size,
+        refractive_index=args.refractive_index,
+        na_detection=args.na_detection,
+    )
+
+    sample = partial(
+        create_synthetic_sample,
+        gen=gen,
+        savedir=args.outdir,
+        noise=args.noise,
+        normalize=args.normalize,
         min_amplitude=args.min_amplitude,
         max_amplitude=args.max_amplitude,
         min_lls_defocus_offset=args.min_lls_defocus_offset,
         max_lls_defocus_offset=args.max_lls_defocus_offset,
-        x_voxel_size=args.x_voxel_size,
-        y_voxel_size=args.y_voxel_size,
-        z_voxel_size=args.z_voxel_size,
         min_photons=args.min_photons,
         max_photons=args.max_photons,
-        lam_detection=args.lam_detection,
-        refractive_index=args.refractive_index,
-        na_detection=args.na_detection,
-        cpu_workers=args.cpu_workers,
     )
 
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]
