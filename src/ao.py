@@ -779,21 +779,17 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
     partition = "abc_a100"
 
     if args.func == 'cluster_nodes_idle':
-        table = subprocess.run(f"ssh {username}@{hostname} \"sinfo -p {partition} --states idle -O NODES\"",
-                               stdout=subprocess.PIPE,
-                               )
-        number_of_idle_nodes = int(str(table.stdout).split("NODES")[1].split(r"\n")[1])
-        print(f'Number of idle nodes is {number_of_idle_nodes} on {partition}.')
+        number_of_idle_nodes = get_number_of_idle_nodes(hostname, partition, username)
         return number_of_idle_nodes
 
     if args.func == 'cluster_nodes_wait_for_idle':
         number_of_idle_nodes = 0
         while number_of_idle_nodes < args.idle_minimum:
-            table = subprocess.run(f"ssh {username}@{hostname} \"sinfo -p {partition} --states idle -O NODES\"",
-                               stdout=subprocess.PIPE,
-                               )
-            number_of_idle_nodes = int(str(table.stdout).split("NODES")[1].split(r"\n")[1])
+            if number_of_idle_nodes < args.idle_minimum:
+                time.sleep(1)  # Sleep for 1 second
+            number_of_idle_nodes = get_number_of_idle_nodes(hostname, partition, username)
             print(f'Number of idle nodes is {number_of_idle_nodes} on {partition}. Need {args.idle_minimum}')
+
         return number_of_idle_nodes
 
     if args.cluster:
@@ -1129,6 +1125,33 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             atexit.register(strategy._extended._collective_ops._pool.close)
 
         logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+
+
+def get_number_of_idle_nodes(hostname, partition, username):
+    logger = logging.getLogger('')
+    retry = True
+    while retry:
+        table = subprocess.run(f"ssh {username}@{hostname} \"sinfo -p {partition} --states idle -O NODES\"",
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               )
+        response = str(table.stdout)
+        error_str = str(table.stderr)
+        if 'unbound variable' not in error_str:
+            retry = True
+            logger.error(f'Retrying because of : {error_str}')
+        else:
+            retry = False
+
+    try:
+        response = response.split("NODES")[1]
+        print(f'NODES {response=}')
+        number_of_idle_nodes = int(response.split(r"\n")[1])
+    except:
+        print(f'{response=}')
+        number_of_idle_nodes = 0
+
+    print(f'Number of idle nodes is {number_of_idle_nodes} on {partition}.')
+    return number_of_idle_nodes
 
 
 if __name__ == "__main__":
