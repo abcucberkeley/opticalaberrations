@@ -235,6 +235,7 @@ def plot_embedding_pyramid(
                             emb = fourier_embeddings(
                                 psf,
                                 iotf=gen.iotf,
+                                na_mask=gen.na_mask(),
                                 no_phase=False,
                                 remove_interference=False,
                                 embedding_option=embedding_option,
@@ -628,6 +629,7 @@ def plot_embeddings(
             emb = fourier_embeddings(
                 psf,
                 iotf=gen.iotf,
+                na_mask=gen.na_mask(),
                 no_phase=False,
                 remove_interference=False,
                 embedding_option=embedding_option,
@@ -746,6 +748,7 @@ def plot_rotations(
             emb = fourier_embeddings(
                 psf,
                 iotf=gen.iotf,
+                na_mask=gen.na_mask(),
                 no_phase=False,
                 remove_interference=False,
                 embedding_option=embedding_option,
@@ -892,6 +895,7 @@ def plot_shapes_embeddings(
                 emb = fourier_embeddings(
                     inputs,
                     iotf=gen.iotf,
+                    na_mask=gen.na_mask(),
                     no_phase=False,
                     remove_interference=False,
                     embedding_option=embedding_option,
@@ -1370,7 +1374,7 @@ def plot_dmodes(
     psf_slice(ax_xy, ax_xz, ax_yz, psf, label='PSF (MIP)')
     wavefront(ax_w, y_wave, label='Ground truth', levels=mticks)
 
-    otf = fourier_embeddings(psf, iotf=gen.iotf)
+    otf = fourier_embeddings(psf, iotf=gen.iotf, na_mask=gen.na_mask())
     ax_xy = fig.add_subplot(gs[2, 0])
     ax_xz = fig.add_subplot(gs[2, 1])
     ax_yz = fig.add_subplot(gs[2, 2])
@@ -1386,7 +1390,7 @@ def plot_dmodes(
         phi = Wavefront(phi, order='ansi')
 
         psf = gen.single_psf(phi)
-        otf = fourier_embeddings(psf, iotf=gen.iotf)
+        otf = fourier_embeddings(psf, iotf=gen.iotf, na_mask=gen.na_mask(),)
         ax_xy = fig.add_subplot(gs[2+k, 0])
         ax_xz = fig.add_subplot(gs[2+k, 1])
         ax_yz = fig.add_subplot(gs[2+k, 2])
