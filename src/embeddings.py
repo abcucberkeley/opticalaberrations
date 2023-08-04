@@ -24,7 +24,6 @@ from line_profiler_pycharm import profile
 from scipy import ndimage
 from astropy import convolution
 from skspatial.objects import Plane, Points
-from skimage.restoration import estimate_sigma
 
 try:
     import cupy as cp
@@ -725,7 +724,8 @@ def rotate_embeddings(
         emb_to_plot = 5         # which of the six emb to plot 0, 1, 2, 3, 4, or 5
         for i, angle in enumerate(tqdm(
                 rotation_labels,
-                desc=f"Generating digital rotations [{plot.name}]"
+                desc=f"Generating digital rotations [{plot.name}]",
+                file=sys.stdout,
         )):
             for plane in range(emb.shape[1]):
                 imwrite(f'{plot}_rot{angle:05}.tif', emb[i, emb_to_plot, :, :].astype(np.float32), compression='deflate', dtype=np.float32)

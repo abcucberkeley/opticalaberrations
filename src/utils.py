@@ -56,14 +56,35 @@ def multiprocess(
 
     if cores == 1 or len(jobs) == 1:
         logs = []
-        for j in tqdm(jobs, total=len(jobs), desc=desc, bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed', unit=unit):
+        for j in tqdm(
+                jobs,
+                total=len(jobs),
+                desc=desc,
+                bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
+                unit=unit,
+                file=sys.stdout,
+        ):
             logs.append(func(j))
     elif cores == -1 and len(jobs) > 0:
         with mp.Pool(min(mp.cpu_count(), len(jobs))) as p:
-            logs = list(tqdm(p.imap(func, jobs), total=len(jobs), desc=desc, bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed', unit=unit))
+            logs = list(tqdm(
+                p.imap(func, jobs),
+                total=len(jobs),
+                desc=desc,
+                bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
+                unit=unit,
+                file=sys.stdout,
+            ))
     elif cores > 1 and len(jobs) > 0:
         with mp.Pool(cores) as p:
-            logs = list(tqdm(p.imap(func, jobs), total=len(jobs), desc=desc, bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed', unit=unit))
+            logs = list(tqdm(
+                p.imap(func, jobs),
+                total=len(jobs),
+                desc=desc,
+                bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
+                unit=unit,
+                file=sys.stdout,
+            ))
     else:
         logging.error('Jobs must be a positive integer')
         return False

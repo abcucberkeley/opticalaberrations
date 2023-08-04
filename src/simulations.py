@@ -28,7 +28,6 @@ from wavefront import Wavefront
 from zernike import Zernike
 from synthetic import SyntheticPSF
 from embeddings import fourier_embeddings
-from vis import plot_wavefront
 
 
 logging.basicConfig(
@@ -75,7 +74,7 @@ def plot_zernike_pyramid(amp=.1, wavelength=.510, weighted=False):
             fig = plt.figure(figsize=(3*nth_order, 2*nth_order))
             gs = fig.add_gridspec(nth_order+1, 2*nth_order+1)
 
-            for n in trange(nth_order+1):
+            for n in trange(nth_order+1, file=sys.stdout):
                 for i, m in enumerate(range(-nth_order, nth_order+1)):
                     ax = fig.add_subplot(gs[n, i])
                     ax.axis('off')
@@ -215,7 +214,7 @@ def plot_embedding_pyramid(
     waves = np.arange(-.3, .35, step=.05).round(2)
 
     for nth_order in range(2, 11):
-        for amp in tqdm(waves):
+        for amp in tqdm(waves, file=sys.stdout):
             title = f"{int(np.sign(amp))}x0p{str(int(np.abs(amp*100).round(0)))}"
 
             embeddings = {}
@@ -436,7 +435,7 @@ def plot_fov(n_modes=55, wavelength=.605, psf_cmap='hot', x_voxel_size=.15, y_vo
         # from pprint import pprint
         # pprint(grid)
 
-        for j, amp in enumerate(tqdm(waves, desc=f'Mode [#{i}]')):
+        for j, amp in enumerate(tqdm(waves, desc=f'Mode [#{i}]', file=sys.stdout)):
             phi = np.zeros(n_modes)
             phi[i] = amp
             w = Wavefront(phi, order='ansi', lam_detection=wavelength)
@@ -1167,7 +1166,7 @@ def plot_signal(n_modes=55, wavelength=.605):
     for i in range(3, n_modes):
         signal[i] = {}
 
-        for j, a in enumerate(tqdm(waves, desc=f'Mode [#{i}]')):
+        for j, a in enumerate(tqdm(waves, desc=f'Mode [#{i}]', file=sys.stdout)):
             phi = np.zeros(n_modes)
             phi[i] = a
             w = Wavefront(phi, order='ansi', lam_detection=wavelength)
