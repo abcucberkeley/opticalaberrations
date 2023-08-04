@@ -615,8 +615,9 @@ def find_roi(
 
     for p, (z, y, x) in enumerate(itertools.product(
         range(ztiles), range(nrows), range(ncols),
-        desc=f"Locating tiles: {[pois.shape[0]]}")
-    ):
+        desc=f"Locating tiles: {[pois.shape[0]]}",
+        file=sys.stdout
+    )):
         start = [
             pois[p, s] - widths[s] if pois[p, s] >= widths[s] else 0
             for s in range(3)
@@ -677,6 +678,7 @@ def get_tiles(
         desc=f"Locating tiles: {[windows.shape[0]]}",
         bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
         unit=' tile',
+        file=sys.stdout
     )
     ):
         tile = f"z{z}-y{y}-x{x}"

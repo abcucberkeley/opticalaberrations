@@ -19,7 +19,6 @@ plt.set_loglevel('error')
 import swifter
 import numpy as np
 import pandas as pd
-import scipy.stats as st
 import tensorflow as tf
 from line_profiler_pycharm import profile
 from tqdm import tqdm
@@ -1146,7 +1145,7 @@ def random_samples(
                 psf_shape=(64, 64, 64),
             )
             for s in range(10):
-                for num_objs in tqdm([1, 2, 5, 25, 50, 100, 150]):
+                for num_objs in tqdm([1, 2, 5, 25, 50, 100, 150], file=sys.stdout):
                     reference = multipoint_dataset.beads(
                         photons=photons,
                         image_shape=gen.psf_shape,
@@ -1370,7 +1369,8 @@ def eval_object(
             for k, ph in tqdm(
                 itertools.product(range(len(kernels)), photons),
                 desc='Generating samples',
-                total=len(kernels) * len(photons)
+                total=len(kernels) * len(photons),
+                file=sys.stdout
             )
         ], axis=0)[..., np.newaxis]
         np.save(f"{savepath}_inputs", inputs)
@@ -1386,7 +1386,7 @@ def eval_object(
                 remove_background=True,
                 normalize=True,
             )
-            for i in tqdm(inputs, desc='Generating fourier embeddings', total=inputs.shape[0])
+            for i in tqdm(inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout)
         ], axis=0)
         np.save(f"{savepath}_embeddings", embeddings)
 
