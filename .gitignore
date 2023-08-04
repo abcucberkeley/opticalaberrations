@@ -156,3 +156,4 @@ src/pycharm.lnk
 src/LabVIEW_Shortcut.lnk
 src/LV_auto_batch.bat
 login.bat
+*.bat

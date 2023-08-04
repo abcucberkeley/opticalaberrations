@@ -1474,7 +1474,15 @@ def combine_tiles(
 
     dm_calibration = predictions_settings['dm_calibration']
     dm_calibration = re.sub(pattern="\\\\", repl='/', string=dm_calibration)  # regex needs four backslashes to indicate one
-    dm_calibration = Path(__file__).parent / dm_calibration  # for some reason we are not in the src folder already
+    if Path(dm_calibration).is_file():
+        pass
+    else:
+        dm_calibration = Path(__file__).parent / dm_calibration  # for some reason we are not in the src folder already
+        if Path(dm_calibration).is_file():
+            pass
+        else:
+            dm_calibration = Path(__file__).parent.parent / "calibration" / dm_calibration.parent.name / dm_calibration.name # for some reason we are not in the src folder already
+
 
     logger.info(f'dm_calibration file is {Path(dm_calibration).resolve()}')
 
