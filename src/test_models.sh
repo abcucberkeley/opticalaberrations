@@ -1,9 +1,8 @@
 #!/bin/bash
 
-DX=.108
-DY=.108
-DZ=.200
-LAMBDA=.510
+DX=108
+DY=108
+DZ=200
 SHAPE=64
 MODES=15
 ROTATIONS='--digital_rotations'
