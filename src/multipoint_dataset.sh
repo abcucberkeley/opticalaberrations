@@ -20,7 +20,7 @@ RAND_VSIZE=false
 
 MODES=15
 TITLE='new_modalities_2m'
-DATASET='train'
+DATASET='test'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -39,7 +39,7 @@ if [ "$DATASET" = "train" ];then
   amps2=($(seq .01 .01 .25))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
-  FILL_RADIUS=0.3
+  FILL_RADIUS=0.2
 else
   TYPE=''
   SAMPLES_PER_JOB=25
@@ -51,7 +51,7 @@ else
   amps2=($(seq .025 .025 .50))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(mixed)
-  FILL_RADIUS=0.3
+  FILL_RADIUS=0.2
 fi
 
 

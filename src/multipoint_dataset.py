@@ -216,7 +216,7 @@ def sim(
 
     # remove camera background offset
     inputs -= mean_background_offset
-    inputs[mean_background_offset < 0] = 0
+    inputs[inputs < 0] = 0
 
     counts = np.sum(inputs)
     counts_mode = int(st.mode(inputs, axis=None).mode[0])
