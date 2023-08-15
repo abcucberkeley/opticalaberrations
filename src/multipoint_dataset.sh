@@ -19,7 +19,7 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='new_modalities'
+TITLE='new_modalities_2m'
 DATASET='train'
 
 MODE_DIST='pyramid'
@@ -31,7 +31,7 @@ mkdir -p $LOGS
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
   SAMPLES_PER_JOB=200
-  SAMPLES_PER_BIN=200
+  SAMPLES_PER_BIN=400
   OBJS=(1 2 3 4 5)
   mPH=($(seq 1 50000 460000))
   xPH=($(seq 50000 50000 500000))
@@ -113,8 +113,6 @@ do
               do
                 j="${j} --psf_type ${psf}"
               done
-            else
-              j="${j} --psf_type widefield"
             fi
 
             task="/usr/bin/sbatch"

@@ -2,13 +2,8 @@ import logging
 import sys
 import time
 from pathlib import Path
-
-
 import tensorflow as tf
-
 import cli
-import backend
-import convert
 
 
 logging.basicConfig(
@@ -85,6 +80,8 @@ def main(args=None):
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
     if args.target == "metadata":
+
+        import backend
         backend.save_metadata(
             filepath=args.model,
             n_modes=args.n_modes,
@@ -96,6 +93,8 @@ def main(args=None):
             embedding_option=args.embedding_option
         )
     elif args.target == "optimize":
+
+        import convert
         convert.optimize_model(
             model_path=args.model,
             modelformat=args.modelformat
