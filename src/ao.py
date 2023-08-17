@@ -8,6 +8,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import logging
 import time
 import sys
+import pandas as pd
 import tensorflow as tf
 from pathlib import Path
 import re
@@ -21,6 +22,7 @@ import cli
 import experimental
 import experimental_llsm
 import experimental_eval
+import slurm_utils
 
 from backend import load_sample
 from preprocessing import prep_sample
@@ -766,6 +768,8 @@ def parse_args(args):
 def main(args=None, preloaded: Preloadedmodelclass = None):
     command_flags = sys.argv[1:] if args is None else args
     args, unknown = parse_args(args)
+    pd.options.display.width = 200
+    pd.options.display.max_columns = 20
 
     logging.basicConfig(
         level=logging.INFO,
@@ -779,7 +783,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
     partition = "abc_a100"
 
     if args.func == 'cluster_nodes_idle':
-        number_of_idle_nodes = get_number_of_idle_nodes(hostname, partition, username)
+        number_of_idle_nodes = slurm_utils.get_number_of_idle_nodes(hostname, partition, username)
         return number_of_idle_nodes
 
     if args.func == 'cluster_nodes_wait_for_idle':
@@ -787,7 +791,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         while number_of_idle_nodes < args.idle_minimum:
             if number_of_idle_nodes < args.idle_minimum:
                 time.sleep(1)  # Sleep for 1 second
-            number_of_idle_nodes = get_number_of_idle_nodes(hostname, partition, username)
+            number_of_idle_nodes = slurm_utils.get_number_of_idle_nodes(hostname, partition, username)
             print(f'Number of idle nodes is {number_of_idle_nodes} on {partition}. Need {args.idle_minimum}')
 
         return number_of_idle_nodes
@@ -807,18 +811,34 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
         flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
         flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
-        flags = re.sub(pattern='--batch_size \d+', repl='--batch_size 3500', string=flags)
-        taskname = f"{args.func}_{args.input.stem}"
+
+        available_nodes = slurm_utils.get_available_resources(
+            username=username,
+            hostname=hostname,
+            requested_partition='abc_a100'
+        ).sort_values('available_gpus', ascending=False)
+
+        print(available_nodes)
+        desired_node = available_nodes.iloc[0].to_dict()
+
+        flags = re.sub(
+            pattern='--batch_size \d+',  # replace w/ 896; max number of samples we can fit on A100 w/ 80G of vram
+            repl=f'--batch_size {896*desired_node["available_gpus"]}',
+            string=flags
+        )
 
         sjob = f"srun "
-        sjob += f"--exclusive  "
         sjob += f"-p {partition} "
         sjob += f" --nodes=1 "
-        sjob += f" --mem=500GB "  # request basically all memory
-        sjob += f"--job-name={taskname} "
-        sjob += f"--pty {cluster_env} {script} {flags}"
-
+        sjob += f' --gres=gpu:{desired_node["available_gpus"]} '
+        sjob += f' --cpus-per-task={desired_node["available_cpus"]} '
+        sjob += f" --mem='{desired_node['available_mem']}' "
+        sjob += f" --nodelist='{available_nodes.index[0]}' "
+        sjob += f"--job-name={args.func}_{args.input.stem} "
+        sjob += f"{cluster_env} {script} {flags}"
+        logger.info(sjob)
         subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
+
     else:
         if os.environ.get('SLURM_JOB_ID') is not None:
             logger.info(f"SLURM_JOB_ID = {os.environ.get('SLURM_JOB_ID')}")
@@ -1129,33 +1149,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         if os.name != 'nt':
             logger.info(f"Updating file permissions to {args.input.parent}")
             subprocess.run(f"chmod a+wrx -R {str(Path(args.input).parent.resolve())}", shell=True)
-
-
-def get_number_of_idle_nodes(hostname, partition, username):
-    logger = logging.getLogger('')
-    retry = True
-    while retry:
-        table = subprocess.run(f"ssh {username}@{hostname} \"sinfo -p {partition} --states idle -O NODES\"",
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               )
-        response = str(table.stdout)
-        error_str = str(table.stderr)
-        if 'unbound variable' not in error_str:
-            retry = True
-            logger.error(f'Retrying because of : {error_str}')
-        else:
-            retry = False
-
-    try:
-        response = response.split("NODES")[1]
-        print(f'NODES {response=}')
-        number_of_idle_nodes = int(response.split(r"\n")[1])
-    except:
-        print(f'{response=}')
-        number_of_idle_nodes = 0
-
-    print(f'Number of idle nodes is {number_of_idle_nodes} on {partition}.')
-    return number_of_idle_nodes
 
 
 if __name__ == "__main__":

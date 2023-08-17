@@ -1,4 +1,4 @@
-name: test
+name: ml
 channels:
   - esri
   - nvidia/label/cuda-11.6.0
