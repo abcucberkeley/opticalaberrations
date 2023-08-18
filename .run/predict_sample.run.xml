@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="predict_sample" type="PythonConfigurationType" factoryName="Python" folderName="ao">
+  <configuration default="false" name="predict_sample" type="PythonConfigurationType" factoryName="Python" folderName="ao" singleton="false">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="predict_sample ../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5 V:\thayer\dan_dataset\eval_dataset\test\x108-y108-z200\i64\z15\powerlaw_gamma_0p75\photons_500001-550000\amp_p225-p25\npoints_1\132.tif ../calibration/aang/15_mode_calibration.csv --current_dm None --dm_damping_scalar 1.0 --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --prediction_threshold 0. --freq_strength_threshold 0.01 --sign_threshold 0.9 --num_predictions 1 --batch_size 512 --prev None --plot --plot_rotations" />
+    <option name="PARAMETERS" value="predict_sample ../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5 V:\thayer\dan_dataset\eval_dataset\test\x108-y108-z200\i64\z15\powerlaw_gamma_0p75\photons_500001-550000\amp_p225-p25\npoints_1\132.tif ../calibration/aang/15_mode_calibration.csv --current_dm None --dm_damping_scalar 1.0 --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --prediction_threshold 0. --freq_strength_threshold 0.01 --sign_threshold 0.9 --num_predictions 1 --batch_size 512 --prev None --plot --plot_rotations --cluster" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
