@@ -442,7 +442,7 @@ def get_tile_confidence(
     stdevs: pd.DataFrame,
     prediction_threshold: float = 0.25,
     ignore_tile: Optional[list] = None,
-    ignore_modes: Optional[list] = None,
+    ignore_modes: Optional[list] = [0, 1, 2, 4],
     verbose: bool = False,
 ):
 
