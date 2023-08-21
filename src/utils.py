@@ -356,7 +356,7 @@ def fftconvolution(kernel, sample):
 
 @profile
 def load_dm(dm_state: Any) -> np.ndarray:
-    if isinstance(dm_state, np.ndarray):
+    if isinstance(dm_state, np.ndarray) or isinstance(dm_state, list):
         assert len(dm_state) == 69
     elif dm_state is None or str(dm_state) == 'None':
         dm_state = np.zeros(69)
