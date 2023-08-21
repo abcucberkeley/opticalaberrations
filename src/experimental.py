@@ -17,6 +17,7 @@ import pandas as pd
 import seaborn as sns
 from tifffile import imread, imwrite
 from line_profiler_pycharm import profile
+from tqdm import tqdm
 
 import multiprocessing as mp
 from sklearn.cluster import KMeans
@@ -847,6 +848,7 @@ def predict_tiles(
     shifting: tuple = (0, 0, 0),
     psf_type: Optional[Union[str, Path]] = None,
 ):
+    dm_state = utils.load_dm(dm_state)
 
     preloadedmodel, preloadedpsfgen = reloadmodel_if_needed(
         modelpath=model,
@@ -904,6 +906,7 @@ def predict_tiles(
             window_size=list(window_size),
             wavelength=float(wavelength),
             prediction_threshold=float(0),
+            dm_state=list(dm_state),
             freq_strength_threshold=float(freq_strength_threshold),
             prev=str(prev),
             ignore_modes=list(ignore_modes),
@@ -1025,7 +1028,7 @@ def cluster_tiles(
             max_isoplanatic_clusters = max_silhouette
 
         # weight zernike coefficients by their mth order for clustering
-        features = ztile_preds.copy()
+        features = ztile_preds.copy().fillna(0)
         for mode, twin in Wavefront(np.zeros(features.shape[1])).twins.items():
             if twin is not None:
                 features[mode.index_ansi] /= abs(mode.m - 1)
@@ -1068,7 +1071,7 @@ def cluster_tiles(
 
         # remove the first (null) cluster from the dataframe
         # we'll the original DM for this cluster
-        ztile_preds = ztile_preds[ztile_preds['cluster'] != 0]
+        ztile_preds = ztile_preds[ztile_preds['cluster'] != z * (max_isoplanatic_clusters + 1)]
 
         clusters = ztile_preds.groupby('cluster')
         for k in range(max_isoplanatic_clusters + 1):
@@ -1149,7 +1152,6 @@ def color_clusters(
     yw,
     colormap,
 ):
-
     scaled_heatmap = (heatmap - np.nanpercentile(heatmap, 1)) / \
                      (np.nanpercentile(heatmap, 99) - np.nanpercentile(heatmap, 1))
     scaled_heatmap = np.clip(scaled_heatmap, a_min=0, a_max=1)
@@ -1161,6 +1163,7 @@ def color_clusters(
         imagej=True,
         resolution=(xw, yw),
     )
+
 
 @profile
 def aggregate_predictions(
@@ -1182,7 +1185,10 @@ def aggregate_predictions(
     unconfident_color: tuple = (255, 255, 255),
     preloaded: Preloadedmodelclass = None,
     psf_type: Optional[Union[str, Path]] = None,
+    postfix: str = 'aggregated'
 ):
+    dm_state = utils.load_dm(dm_state)
+
     pd.options.display.width = 200
     pd.options.display.max_columns = 20
 
@@ -1213,14 +1219,19 @@ def aggregate_predictions(
         z_voxel_size=axial_voxel_size
     )
 
-    predict_snr_map(
-        Path(str(model_pred).replace('_tiles_predictions.csv', '.tif')),
-        window_size=window_size
-    )
+    # predict_snr_map(
+    #     Path(str(model_pred).replace('_tiles_predictions.csv', '.tif')),
+    #     window_size=window_size
+    # )
 
     # tile id is the column header, rows are the predictions
     predictions, wavefronts = utils.create_multiindex_tile_dataframe(model_pred, return_wavefronts=True, describe=True)
     stdevs = utils.create_multiindex_tile_dataframe(str(model_pred).replace('_predictions.csv', '_stdevs.csv'))
+
+    try:
+        assert predictions_settings['ignore_modes']
+    except KeyError:
+        predictions_settings['ignore_modes'] = [0, 1, 2, 4]
 
     unconfident_tiles, zero_confident_tiles, all_zeros_tiles = utils.get_tile_confidence(
         predictions=predictions,
@@ -1250,7 +1261,7 @@ def aggregate_predictions(
     errormap = resize(errormap, (ztiles, vol.shape[1], vol.shape[2]),  order=1, mode='edge')  # linear interp XY
     errormap = resize(errormap, vol.shape,  order=0, mode='edge')   # nearest neighbor for z
     # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
-    imwrite(Path(f"{model_pred.with_suffix('')}_aggregated_p2v_error.tif"), errormap.astype(np.float32))
+    imwrite(Path(f"{model_pred.with_suffix('')}_{postfix}_p2v_error.tif"), errormap.astype(np.float32))
 
     cluster_colors = np.split(
         np.array(sns.color_palette(clusters3d_colormap, n_colors=(max_isoplanatic_clusters * ztiles)))*255,
@@ -1278,16 +1289,21 @@ def aggregate_predictions(
         plot=plot,
     )
 
-    predictions.loc[all_zeros_tiles, 'cluster'] = 0  # z * (max_isoplanatic_clusters + 1)
-    stdevs.loc[all_zeros_tiles, 'cluster'] = 0  # z * (max_isoplanatic_clusters + 1)
+    for z in range(ztiles):
+        # create a mask to get the indices for each z tile and set the mask for the rest of the tiles to False
+        zmask = all_zeros_tiles.mask(all_zeros_tiles.index.get_level_values(0) != z).fillna(False)
 
-    predictions.loc[zero_confident_tiles, 'cluster'] = 0  # z * (max_isoplanatic_clusters + 1)
-    stdevs.loc[zero_confident_tiles, 'cluster'] = 0  # z * (max_isoplanatic_clusters + 1)
+        predictions.loc[zmask, 'cluster'] = z * (max_isoplanatic_clusters + 1)
+        stdevs.loc[zmask, 'cluster'] = z * (max_isoplanatic_clusters + 1)
 
-    predictions.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1 # assign unconfident cluster id to last one
+        predictions.loc[zmask, 'cluster'] = z * (max_isoplanatic_clusters + 1)
+        stdevs.loc[zmask, 'cluster'] = z * (max_isoplanatic_clusters + 1)
+
+    # assign unconfident cluster id to last one
+    predictions.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
     stdevs.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
 
-    predictions.to_csv(f"{model_pred.with_suffix('')}_aggregated_clusters.csv") # e.g. clusterids: [0,1,2,3, 4,5,6,7, 8] 8 is unconfident
+    predictions.to_csv(f"{model_pred.with_suffix('')}_{postfix}_clusters.csv") # e.g. clusterids: [0,1,2,3, 4,5,6,7, 8] 8 is unconfident
 
     clusters_rgb = np.full((ztiles, *vol.shape[1:]), len(clusters3d_colormap)-1, dtype=np.float32)
     clusters3d_heatmap = np.full_like(vol, len(clusters3d_colormap)-1, dtype=np.float32)
@@ -1341,19 +1357,17 @@ def aggregate_predictions(
 
             clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((zw, yw, xw), int(c)) # filled with cluster id 0,1,2,3, 4,5,6,7, 8] 8 is unconfident, color gets assigned later
 
-    imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts.tif", wavefront_heatmap.astype(np.float32))
-    imwrite(f"{model_pred.with_suffix('')}_aggregated_wavefronts_expected.tif", expected_wavefront_heatmap.astype(np.float32))
-    imwrite(f"{model_pred.with_suffix('')}_aggregated_psfs.tif", psf_heatmap.astype(np.float32))
-    imwrite(f"{model_pred.with_suffix('')}_aggregated_psfs_expected.tif", expected_psf_heatmap.astype(np.float32))
+    imwrite(f"{model_pred.with_suffix('')}_{postfix}_wavefronts.tif", wavefront_heatmap.astype(np.float32))
+    imwrite(f"{model_pred.with_suffix('')}_{postfix}_wavefronts_expected.tif", expected_wavefront_heatmap.astype(np.float32))
+    imwrite(f"{model_pred.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32))
+    imwrite(f"{model_pred.with_suffix('')}_{postfix}_psfs_expected.tif", expected_psf_heatmap.astype(np.float32))
 
     color_clusters(
         vol,
         clusters3d_heatmap,
-        savepath="{model_pred.with_suffix('')}_aggregated_clusters.tif",
+        savepath=f"{model_pred.with_suffix('')}_{postfix}_clusters.tif",
         xw=xw,
         yw=yw,
-        max_isoplanatic_clusters=max_isoplanatic_clusters,
-        ztiles=ztiles,
         colormap=clusters3d_colormap,
     )
 
@@ -1364,11 +1378,9 @@ def aggregate_predictions(
         color_clusters(
             heatmap,
             clusters_rgb,
-            savepath="{model_pred.with_suffix('')}_aggregated_clusters_{name}.tif",
+            savepath=f"{model_pred.with_suffix('')}_{postfix}_clusters_{name}.tif",
             xw=xw,
             yw=yw,
-            max_isoplanatic_clusters=max_isoplanatic_clusters,
-            ztiles=ztiles,
             colormap=clusters3d_colormap,
         )
 
@@ -1378,7 +1390,7 @@ def aggregate_predictions(
         ytiles=ytiles,
         ztiles=ztiles,
         image=vol,
-        save_path=Path(f"{model_pred.with_suffix('')}_aggregated_error_landscape.tif"),
+        save_path=Path(f"{model_pred.with_suffix('')}_{postfix}_error_landscape.tif"),
         window_size=predictions_settings['window_size'],
         lateral_voxel_size=lateral_voxel_size,
         axial_voxel_size=axial_voxel_size,
@@ -1393,13 +1405,13 @@ def aggregate_predictions(
     #     window_size=predictions_settings['window_size'],
     #     dxy=lateral_voxel_size,
     #     dz=axial_voxel_size,
-    #     save_path=f"{model_pred.with_suffix('')}_aggregated_projections.svg",
+    #     save_path=f"{model_pred.with_suffix('')}_{postfix}_projections.svg",
     # )
 
     # vis.plot_isoplanatic_patchs(
     #     results=isoplanatic_patchs,
     #     clusters=clusters,
-    #     save_path=f"{model_pred.with_suffix('')}_aggregated_isoplanatic_patchs.svg"
+    #     save_path=f"{model_pred.with_suffix('')}_{postfix}_isoplanatic_patchs.svg"
     # )
 
     logger.info(f'Done. Waiting for plots to write for {model_pred.with_suffix("")}')
@@ -1407,11 +1419,12 @@ def aggregate_predictions(
     pool.join()     # wait for all tasks to complete
 
     non_zero_tiles = ~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)
-    with Path(f"{model_pred.with_suffix('')}_aggregate_settings.json").open('w') as f:
+    with Path(f"{model_pred.with_suffix('')}_{postfix}_settings.json").open('w') as f:
         json = dict(
+            model=predictions_settings['model'],
             model_pred=str(model_pred),
             dm_calibration=str(dm_calibration),
-            dm_state=str(dm_state),
+            dm_state=list(dm_state),
             majority_threshold=float(majority_threshold),
             min_percentile=int(min_percentile),
             max_percentile=int(max_percentile),
@@ -1421,26 +1434,22 @@ def aggregate_predictions(
             max_isoplanatic_clusters=int(max_isoplanatic_clusters),
             optimize_max_isoplanatic_clusters=bool(optimize_max_isoplanatic_clusters),
             ignore_tile=list(ignore_tile) if ignore_tile is not None else None,
-
             window_size=list(window_size),
             wavelength=float(wavelength),
-            axial_voxel_size=float(axial_voxel_size),
-            lateral_voxel_size=float(lateral_voxel_size),
+            psf_type=samplepsfgen.psf_type,
+            sample_voxel_size=[axial_voxel_size, lateral_voxel_size, lateral_voxel_size],
             ztiles=int(ztiles),
             ytiles=int(ytiles),
             xtiles=int(xtiles),
-            volume_size=list(vol.shape),
-
+            input_shape=list(vol.shape),
             total_confident_zero_tiles=int(zero_confident_tiles.sum()),
             total_unconfident_tiles=int(unconfident_tiles.sum()),
             total_all_zeros_tiles=int(all_zeros_tiles.sum()),
             total_non_zero_tiles=int(non_zero_tiles.sum()),
-
             confident_zero_tiles=zero_confident_tiles.loc[zero_confident_tiles].index.to_list(),
             unconfident_tiles=unconfident_tiles.loc[unconfident_tiles].index.to_list(),
             all_zeros_tiles=all_zeros_tiles.loc[all_zeros_tiles].index.to_list(),
             non_zero_tiles=non_zero_tiles.loc[non_zero_tiles].index.to_list(),
-
         )
         ujson.dump(
             json,
@@ -1455,11 +1464,114 @@ def aggregate_predictions(
 
 
 @profile
+def create_consensus_map(
+    org_cluster_map: pd.DataFrame,
+    corrections: list[Path],
+    stack_preds: list[pd.DataFrame],
+    stack_stdevs: list[pd.DataFrame],
+    zernikes_on_mirror: pd.DataFrame,
+    zernike_indices: np.ndarray,
+    ztiles: int,
+    ytiles: int,
+    xtiles: int,
+    new_zernikes_path: Path,
+    new_stdevs_path: Path,
+    consensus_stacks_path: Path,
+):
+    """
+        1. Build a consensus isoplanatic map of the wavefront aberrations for each tile.
+        2. each tile's consensus is built from the predictions from the 4 stacks.
+        3. arguments are won by the stack that was optimized for that tile. previous consensus map gives the cluster
+        tile masks aka the location of the optimized tiles
+        (e.g. the yellow mask for first, brown mask for next, dark green for next, light green for last)
+
+            3b. if the optimized stack did not have an answer, use before image,
+            if that doesn't have an answer, leave gray.
+            3c. if the tile was gray in the before image, only let the other three vote on that tile
+            if that tile neighbors one their "optimized" tiles.
+            Then remaining argument winners are based on std dev, then snr.
+            For the "gray in before image case" only, take each cluster tile mask
+            (e.g. light green), dilate by one tile, then mask the predictions of that stack (e.g. "after_three"),
+            before letting everyone vote.
+            This will prevent a scan that was optimal from the upper left corner
+            from voting on something in the bottom right corner.
+
+            3d. If the tile is gray in all stacks, it stays gray in the consensus map
+    """
+
+    # for loop on every tile
+    # make data frame with 15 rows, will add column for each tile as we go
+    consensus_predictions = pd.DataFrame([], index=zernike_indices)
+    consensus_stdevs = pd.DataFrame([], index=zernike_indices)
+    consensus_stacks = pd.DataFrame([], index=[0])
+
+    unconfident_cluster_id = ztiles * len(corrections)
+    for i, (z, y, x) in tqdm(
+        enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))),
+        total=ztiles * ytiles * xtiles,
+        desc=f"Building consensus map"
+    ):
+        optimized_cluster_id = int(org_cluster_map.loc[(z, y, x), 'cluster'])    # cluster group id
+
+        # get result from "first" stack latest "before" stack
+        cluster_result_from_first_stack = stack_preds[0].loc[(z, y, x)][zernike_indices].values
+        zernikes_on_mirror_for_first_stack = zernikes_on_mirror[f'z{z}_c{z*len(corrections)}'].values
+
+        # last code (e.g. 8) = unconfident gray. was gray in the "before" stack
+        if optimized_cluster_id == unconfident_cluster_id:
+            # the optimized stack was expected to have a prediction here.
+            # It doesn't. So use result from the first stack (which is most similar to our previous time point which made the prediction).
+            consensus_tile = cluster_result_from_first_stack + zernikes_on_mirror_for_first_stack # arbitrarily using first stack
+            consensus_stdev = stack_stdevs[0].loc[(z, y, x)][zernike_indices]  # arbitrarily using first stack
+            consensus_stack = 0
+            # TODO: write this later
+
+        else:   # before has a color, we took an optimized stack for this tile
+            optimized_stack_id = optimized_cluster_id - (z * len(corrections))
+            cluster_result_from_optimized_stack = stack_preds[optimized_stack_id].loc[(z, y, x), 'cluster']
+
+            if cluster_result_from_optimized_stack == unconfident_cluster_id:  # optimized stack was gray
+                # the optimized stack was expected to have a prediction here.
+                # It doesn't.  So use result from the first stack (which is most similar to our previous time point which made the prediction).
+                consensus_tile = cluster_result_from_first_stack + zernikes_on_mirror_for_first_stack  # arbitrarily using first stack
+                consensus_stdev = stack_stdevs[0].loc[(z, y, x)][zernike_indices]  # arbitrarily using first stack
+                consensus_stack = 0
+
+            else:  # optimized stack has a confident prediction
+                current_zernikes = zernikes_on_mirror[f'z{z}_c{optimized_cluster_id}']
+                consensus_tile = stack_preds[optimized_stack_id].loc[(z, y, x)][zernike_indices] + current_zernikes
+                consensus_stdev = stack_stdevs[optimized_stack_id].loc[(z, y, x)][zernike_indices]
+                consensus_stack = optimized_stack_id
+
+        # assign predicted modes to the consensus row (building a new column there at the same time)
+        consensus_predictions[f'z{z}-y{y}-x{x}'] = consensus_tile
+        consensus_stdevs[f'z{z}-y{y}-x{x}'] = consensus_stdev
+        consensus_stacks[f'z{z}-y{y}-x{x}'] = consensus_stack
+
+    tile_names = consensus_predictions.columns.values
+    consensus_predictions['mean'] = consensus_predictions[tile_names].mean(axis=1)
+    consensus_predictions['median'] = consensus_predictions[tile_names].median(axis=1)
+    consensus_predictions['min'] = consensus_predictions[tile_names].min(axis=1)
+    consensus_predictions['max'] = consensus_predictions[tile_names].max(axis=1)
+    consensus_predictions['std'] = consensus_predictions[tile_names].std(axis=1)
+    consensus_predictions.index.name = 'ansi'
+    consensus_predictions.to_csv(new_zernikes_path)
+
+    consensus_stdevs['mean'] = consensus_stdevs[tile_names].mean(axis=1)
+    consensus_stdevs['median'] = consensus_stdevs[tile_names].median(axis=1)
+    consensus_stdevs['min'] = consensus_stdevs[tile_names].min(axis=1)
+    consensus_stdevs['max'] = consensus_stdevs[tile_names].max(axis=1)
+    consensus_stdevs['std'] = consensus_stdevs[tile_names].std(axis=1)
+    consensus_stdevs.index.name = 'ansi'
+    consensus_stdevs.to_csv(new_stdevs_path)
+
+    consensus_stacks.to_csv(consensus_stacks_path)
+
+
+@profile
 def combine_tiles(
     corrected_actuators_csv: Path,
     corrections: list,
-    prediction_threshold: float = 0.25,
-    aggregation_rule: str = 'median',
 ):
     """
     Combine tiles from several DM patterns based on cluster IDs
@@ -1470,58 +1582,51 @@ def combine_tiles(
         corrections: a list of tuples (clusterid, path to _tiles_predictions_aggregated_p2v_error.tif for each scan taken with the given DM pattern)
 
 
-1. Build a consensus isoplanatic map of the wavefront aberrations for each tile.
-2. each tile's consensus is built from the predictions from the 4 stacks.
-3. arguments are won by the stack that was optimized for that tile. previous consensus map gives the cluster tile masks aka the location of the optimized tiles (e.g. the yellow mask for first, brown mask for next, dark green for next, light green for last)
+        Build a consensus isoplanatic map of the wavefront aberrations for each tile.
+        we need to be able to deduce native wavefront from a scan that had a DM applied
+        (for now assume the DM was perfect and gave us the wavefront we asked for,
+            if the clusters stay spatially the same, then this should successfully iterate the individual scans even
+            if the DM isn't perfect).
 
-3b. if the optimized stack did not have an answer, use before image, if that doesn't have an answer, leave gray.
-3c. if the tile was gray in the before image, only let the other three vote on that tile if that tile neighbors one their "optimized" tiles. Then remaining argument winners are based on std dev, then snr.
-For the "gray in before image case" only, take each cluster tile mask (e.g. light green), dilate by one tile, then mask the predictions of that stack (e.g. "after_three"), before letting everyone vote.  This will prevent a scan that was optimal from the upper left corner from voting on something in the bottom right corner.
-
-3d. If the tile is gray in all stacks, it stays gray in the consensus map
-
-we need to be able to deduce native wavefront from a scan that had a DM applied (for now assume the DM was perfect and gave us the wavefront we asked for, if the clusters stay spatially the same, then this should successfully iterate the individual scans even if the DM isn't perfect.).
-
-        we select the best scan of each tile (based upon '_aggregated_p2v_error.tif'), assign that to 'indices' and (dealing with z_slabs, aka convert to cluster id) assign to 'tile_indices'
-
+        we select the best scan of each tile (based upon '_aggregated_p2v_error.tif'),
+        assign that to 'indices' and (dealing with z_slabs, aka convert to cluster id) assign to 'tile_indices'
     """
-    acts_suffix = "_combined_corrected_actuators.csv"
-    base_path = str(corrected_actuators_csv).replace('_tiles_predictions_aggregated_corrected_actuators.csv', '')
-    base_path = base_path.replace(acts_suffix, '') # remove this if it exists
-    base_path = Path(base_path.replace('_corrected_cluster_actuators.csv', '')) # also remove this if it exists
-    org_cluster_map = Path(f'{base_path}_tiles_predictions_aggregated_clusters.csv')
-    org_cluster_map = pd.read_csv(
-        org_cluster_map,
-        index_col=['z','y','x'], # z, y, x are going to be the MultiIndex
-        header=0
-    )   # cluster ids, e.g. 0,1,2,3, 4,5,6,7, 8 is unconfident
-    original_acts = pd.read_csv(
+
+    acts_on_mirror = pd.read_csv(
         corrected_actuators_csv,
         index_col=0,
         header=0
     )  # 'z0_c0 z0_c1	z0_c2	z0_c3	z1_c4	z1_c5	z1_c6	z1_c7
-    logger.info(f'Original actuators from _corrected_actuators.csv = {original_acts.columns.tolist()}')
 
-    abberation_on_mirror = pd.read_csv(
-        Path(f'{base_path}_combined_zernike_coefficients.csv'),
+    zernikes_on_mirror = pd.read_csv(
+        str(corrected_actuators_csv).replace('corrected_actuators.csv', 'zernike_coefficients.csv'),
         index_col=0,
         header=0
     )  # 'z0_c0     z0_c1	z0_c2	z0_c3	z1_c4	z1_c5	z1_c6	z1_c7
 
+    org_cluster_map = pd.read_csv(
+        str(corrected_actuators_csv).replace('corrected_actuators.csv', 'clusters.csv'),
+        index_col=['z', 'y', 'x'],  # z, y, x are going to be the MultiIndex
+        header=0
+    )   # cluster ids, e.g. 0,1,2,3, 4,5,6,7, 8 is unconfident
 
     output_base_path = str(corrections[0]).replace('_tiles_predictions_aggregated_p2v_error.tif', '')
 
-    with open(f"{base_path}_tiles_predictions_settings.json") as f:
+    with open(str(corrected_actuators_csv).replace('corrected_actuators.csv', 'settings.json')) as f:
         predictions_settings = ujson.load(f)
 
     ztiles = predictions_settings['ztiles']
     ytiles = predictions_settings['ytiles']
     xtiles = predictions_settings['xtiles']
     dm_calibration = predictions_settings['dm_calibration']
-    psfgen = backend.load_metadata(predictions_settings['model'])
+    psfgen = backend.load_metadata(
+        Path(re.sub(r".*/opticalaberrations/", '../', predictions_settings['model']))
+    )
     n_modes = psfgen.n_modes
+    zernike_indices = np.arange(n_modes)
 
-    dm_calibration = re.sub(pattern="\\\\", repl='/', string=dm_calibration)  # regex needs four backslashes to indicate one
+    # regex needs four backslashes to indicate one
+    dm_calibration = re.sub(pattern="\\\\", repl='/', string=dm_calibration)
     if Path(dm_calibration).is_file():
         pass
     else:
@@ -1531,166 +1636,117 @@ we need to be able to deduce native wavefront from a scan that had a DM applied 
         else:
             dm_calibration = Path(__file__).parent.parent / "calibration" / dm_calibration.parent.name / dm_calibration.name # for some reason we are not in the src folder already
 
-
     logger.info(f'dm_calibration file is {Path(dm_calibration).resolve()}')
 
-    image_shape = tuple(predictions_settings['input_shape'])
+    stack_preds = []  # build a list of prediction dataframes for each stack.
+    stack_stdevs = []  # build a list of standard deviations dataframes for each stack.
+    correction_scans = []
+    # error_maps = np.zeros((len(corrections), *image_shape))           # series of 3d p2v maps aka a 4d array
+    # snr_scans = np.zeros((len(corrections), *image_shape))            # series of 3d p2v maps aka a 4d array
 
-    correction_scans = np.zeros((len(corrections), *image_shape))
-    error_maps = np.zeros((len(corrections), *image_shape))           # series of 3d p2v maps aka a 4d array
-    snr_scans = np.zeros((len(corrections), *image_shape))            # series of 3d p2v maps aka a 4d array
-    stack_preds = [] # build a list of prediction dataframes for each stack.
-    stack_stdevs = [] # build a list of standard deviations dataframes for each stack.
-
-
-    for t, path in enumerate(corrections):
+    for t, path in tqdm(enumerate(corrections), desc='Loading corrections'):
         correction_base_path = str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '')
-        error_maps[t] = backend.load_sample(path)
-        correction_scans[t] = backend.load_sample(f'{correction_base_path}.tif')
-        snr_scans[t] = backend.load_sample(f'{correction_base_path}_snrs.tif')
-        stack_preds.append(pd.read_csv(
-            f'{correction_base_path}_tiles_predictions_aggregated_clusters.csv'),
-            index_col=['z','y','x'], # z, y, x are going to be the MultiIndex
-            header=0,
+        # error_maps[t] = backend.load_sample(path)
+        # snr_scans[t] = backend.load_sample(f'{correction_base_path}_snrs.tif')
+
+        correction_scans.append(backend.load_sample(f'{correction_base_path}.tif'))
+        stack_preds.append(
+            pd.read_csv(
+                f'{correction_base_path}_tiles_predictions_aggregated_clusters.csv',
+                index_col=['z', 'y', 'x'],  # z, y, x are going to be the MultiIndex
+                header=0,
+            )
         )   # cluster ids, e.g. 0,1,2,3, 4,5,6,7, 8 is unconfident
         stack_stdevs.append(utils.create_multiindex_tile_dataframe(f'{correction_base_path}_tiles_stdevs.csv'))
 
-
     # indices = np.argmin(error_maps, axis=0)  # locate the correction with the lowest error for every voxel (3D array)
-    indices = np.argmax(snr_scans, axis=0)  # locate the correction with the highest snr for every voxel (3D array)
-    z, y, x = np.indices(indices.shape)
-    combined_errormap = error_maps[indices, z, y, x]    # retrieve the best p2v
-    combined_snrmap = snr_scans[indices, z, y, x]       # retrieve the best snr
-    combined = correction_scans[indices, z, y, x]       # retrieve the best data
+    # indices = np.argmax(snr_scans, axis=0)  # locate the correction with the highest snr for every voxel (3D array)
+    # z, y, x = np.indices(indices.shape)
+    # combined_errormap = error_maps[indices, z, y, x]    # retrieve the best p2v
+    # combined_snrmap = snr_scans[indices, z, y, x]       # retrieve the best snr
+    # combined = correction_scans[indices, z, y, x]       # retrieve the best data
 
-    imwrite(f"{output_base_path}_volume_used.tif", indices.astype(np.uint16))
-    imwrite(f"{output_base_path}_consensus_combined.tif", combined.astype(np.float32))
-    imwrite(f"{output_base_path}_consensus_combined_error.tif", combined_errormap.astype(np.float32))
-    imwrite(f"{output_base_path}_consensus_combined_snr.tif", combined_snrmap.astype(np.float32))
+    # imwrite(f"{output_base_path}_combined_volume_used.tif", indices.astype(np.uint16))
+    # imwrite(f"{output_base_path}_combined.tif", combined.astype(np.float32))
+    # imwrite(f"{output_base_path}_combined_error.tif", combined_errormap.astype(np.float32))
+    # imwrite(f"{output_base_path}_combined_snr.tif", combined_snrmap.astype(np.float32))
 
+    # tile_ids = resize(
+    #     indices,
+    #     (
+    #         ztiles,
+    #         ytiles,
+    #         xtiles,
+    #     ),
+    #     order=0,
+    #     mode='edge',
+    #     anti_aliasing=False,
+    #     preserve_range=True,
+    # ).astype(np.float)
+    # z_indices, y_indices, x_indices = np.indices(tile_ids.shape)
+    # tile_ids += np.nanmax(tile_ids) * z_indices
 
-    tile_ids = resize(
-        indices,
-        (
-            ztiles,
-            ytiles,
-            xtiles,
-        ),
-        order=0,
-        mode='edge',
-        anti_aliasing=False,
-        preserve_range=True,
-    ).astype(np.float)
-    z_indices, y_indices, x_indices = np.indices(tile_ids.shape)
-    tile_ids += np.nanmax(tile_ids) * z_indices
-
-    coefficients, actuators = {}, {}
-
-    # for loop on every tile
-    zernike_indices = np.arange(n_modes)
-    consensus_predictions = pd.DataFrame([], index=zernike_indices) # make data frame with 15 rows, will add column for each tile as we go
-    consensus_stdevs = pd.DataFrame([], index=zernike_indices) # make data frame with 15 rows, will add column for each tile as we go
-
-    unconfident_cluster_id = ztiles * (len(corrections)-1) + 1  # corrections - before, then end
-    for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
-        optimized_cluster_id = org_cluster_map.loc[(z, y, x), 'cluster']     # cluster group id
-
-        if optimized_cluster_id == unconfident_cluster_id:     # last code (e.g. 8) = unconfident gray. was gray in the "before" stack
-            cluster_result_from_before_stack = stack_preds[0][(z, y, x), 'cluster']  # take result from latest "before" stack
-            consensus_tile = stack_preds[0][(z, y, x), zernike_indices] + abberation_on_mirror[f'z{z}_c{optimized_cluster_id}']  # just the 15 modes from "before"
-            consensus_stdev = stack_stdevs[optimized_cluster_id][(z, y, x), zernike_indices]
-            # write this later
-
-        else:   # before has a color, we took an optimized stack for this tile
-            cluster_result_from_optimized_stack = stack_preds[optimized_cluster_id][(z, y, x), 'cluster']
-
-            if cluster_result_from_optimized_stack == unconfident_cluster_id: # optimized stack was gray
-                cluster_result_from_before_stack = stack_preds[0][(z, y, x), 'cluster']  # take result from latest "before" stack
-                consensus_tile = stack_preds[0][(z, y, x), zernike_indices] + abberation_on_mirror[f'z{z}_c{optimized_cluster_id}']# just the 15 modes from "before"
-                consensus_stdev = stack_stdevs[optimized_cluster_id][(z, y, x), zernike_indices]
-
-            else: # optimized stack has a confident prediction
-                consensus_tile = stack_preds[optimized_cluster_id][(z, y, x), zernike_indices] + abberation_on_mirror[f'z{z}_c{optimized_cluster_id}'] # just the 15 modes from "optimized" plus the abberation we already compensated for on the mirror
-                consensus_stdev = stack_stdevs[optimized_cluster_id][(z, y, x), zernike_indices]
-
-
-        consensus_predictions[f'z{z}-y{y}-x{x}'] = consensus_tile # assign predicted modes to the consensus row (building a new column there at the same time)
-        consensus_stdevs[f'z{z}-y{y}-x{x}'] = consensus_stdev # assign predicted modes to the consensus row (building a new column there at the same time)
-
-
-    tile_names = consensus_predictions.columns.values
-    consensus_predictions['mean'] = consensus_predictions[tile_names].mean(axis=1)
-    consensus_predictions['median'] = consensus_predictions[tile_names].median(axis=1)
-    consensus_predictions['min'] = consensus_predictions[tile_names].min(axis=1)
-    consensus_predictions['max'] = consensus_predictions[tile_names].max(axis=1)
-    consensus_predictions['std'] = consensus_predictions[tile_names].std(axis=1)
-    consensus_predictions.index.name = 'ansi'
-    consensus_predictions.to_csv(f"{output_base_path}_consensus_predictions.csv")
-
-    consensus_stdevs['mean'] = consensus_stdevs[tile_names].mean(axis=1)
-    consensus_stdevs['median'] = consensus_stdevs[tile_names].median(axis=1)
-    consensus_stdevs['min'] = consensus_stdevs[tile_names].min(axis=1)
-    consensus_stdevs['max'] = consensus_stdevs[tile_names].max(axis=1)
-    consensus_stdevs['std'] = consensus_stdevs[tile_names].std(axis=1)
-    consensus_stdevs.index.name = 'ansi'
-    consensus_stdevs.to_csv(f"{output_base_path}_consensus_stdevs.csv")
-
-    #call aggregate.  need to pass in file suffix to strip. need to change file stem so it doesn't overwrite existing files. for loop goes away.
-
-    for i, path in enumerate(corrections):  # skip the before
-        model_pred = str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '_tiles_predictions.csv')
-
-        predictions = utils.create_multiindex_tile_dataframe(model_pred)
-        stdevs = utils.create_multiindex_tile_dataframe(model_pred.replace('_predictions.csv', '_stdevs.csv'))
-
-        unconfident_tiles, zero_confident_tiles, all_zeros_tiles = utils.get_tile_confidence(
-            predictions=predictions,
-            stdevs=stdevs,
-            prediction_threshold=prediction_threshold,
-            ignore_modes=predictions_settings['ignore_modes'],
-            verbose=False
+    # reverse corrections to get the base DM for the before stack
+    if isinstance(predictions_settings['dm_state'], str):
+        dm_state = utils.zernikies_to_actuators(
+            -1 * zernikes_on_mirror[f'z0_c0'].values,
+            dm_calibration=dm_calibration,
+            dm_state=acts_on_mirror[f'z0_c0'].values,
         )
-        for z_tile_index in range(predictions_settings['ztiles']):
-            clusterid = i + (len(corrections) * z_tile_index)
-            dm_state = original_acts[f'z{z_tile_index}_c{clusterid}'].values
+    else:
+        dm_state = predictions_settings['dm_state']
 
-            winners = pd.MultiIndex.from_arrays(np.where(tile_ids == clusterid), names=('z', 'y', 'x'))
-            pred = predictions.loc[winners].loc[~unconfident_tiles]
-            pred_shape = pred.shape
-            pred = pred.drop(columns='p2v').agg(aggregation_rule, axis=0)
+    imwrite(f"{output_base_path}_combined.tif", correction_scans[0].astype(np.float32))
 
-            pred = Wavefront(
-                np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
-                order='ansi',
-                lam_detection=predictions_settings['wavelength']
-            )
+    with Path(f"{output_base_path}_combined_tiles_predictions_settings.json").open('w') as f:
+        ujson.dump(
+            predictions_settings,
+            f,
+            indent=4,
+            sort_keys=False,
+            ensure_ascii=False,
+            escape_forward_slashes=False
+        )
 
-            coefficients[f'z{z_tile_index}_c{clusterid}'] = pred.amplitudes
-            logger.info(f'z{z_tile_index}_c{clusterid} wavefront change (p2V) = {pred.peak2valley(na=0.9):4.3f} waves.'
-                        f' Using {pred_shape[0]:3d} tiles from {Path(model_pred).name}')
+    consensus_stacks_path = Path(f"{output_base_path}_combined_tiles_predictions_stacks.csv")
+    new_zernikes_path = Path(f"{output_base_path}_combined_tiles_predictions.csv")
+    new_acts_path = Path(f"{output_base_path}_combined_tiles_predictions_corrected_actuators.csv")
+    new_stdevs_path = Path(f"{output_base_path}_combined_tiles_stdevs.csv")
 
-            actuators[f'z{z_tile_index}_c{clusterid}'] = utils.zernikies_to_actuators(
-                pred.amplitudes,
-                dm_calibration=dm_calibration,
-                dm_state=dm_state,
-            )
+    create_consensus_map(
+        org_cluster_map=org_cluster_map,
+        corrections=corrections,
+        stack_preds=stack_preds,
+        stack_stdevs=stack_stdevs,
+        zernikes_on_mirror=zernikes_on_mirror,
+        zernike_indices=zernike_indices,
+        ztiles=ztiles,
+        ytiles=ytiles,
+        xtiles=xtiles,
+        new_zernikes_path=new_zernikes_path,
+        new_stdevs_path=new_stdevs_path,
+        consensus_stacks_path=consensus_stacks_path,
+    )
 
-    coefficients = pd.DataFrame.from_dict(coefficients)
-    coefficients.index.name = 'ansi'
-    coefficients.sort_index(axis=1, inplace=True)
-    new_zcoeff_path = f"{output_base_path}_combined_zernike_coefficients.csv"
-    coefficients.to_csv(new_zcoeff_path)
+    aggregate_predictions(
+            model_pred=Path(f"{output_base_path}_combined_tiles_predictions.csv"),
+            dm_calibration=dm_calibration,
+            dm_state=dm_state,
+            majority_threshold=predictions_settings['majority_threshold'],
+            min_percentile=predictions_settings['min_percentile'],
+            max_percentile=predictions_settings['max_percentile'],
+            prediction_threshold=predictions_settings['prediction_threshold'],
+            aggregation_rule=predictions_settings['aggregation_rule'],
+            max_isoplanatic_clusters=predictions_settings['max_isoplanatic_clusters'],
+            ignore_tile=predictions_settings['ignore_tile'],
+            postfix='combined'
+    )
 
-    actuators = pd.DataFrame.from_dict(actuators)
-    actuators.index.name = 'actuators'
-    actuators.sort_index(axis=1, inplace=True)
-
-    acts_path = f"{output_base_path}{acts_suffix}"  # used in LabVIEW
-    actuators.to_csv(acts_path)
+    # used in LabVIEW
     logger.info(f"Org actuators: {corrected_actuators_csv}")
-    logger.info(f"New actuators: {acts_path}")
-    logger.info(f"New predictions: {new_zcoeff_path}")
-    logger.info(f"Columns: {actuators.columns.values}")
+    logger.info(f"New actuators: {new_acts_path}")
+    logger.info(f"New predictions: {new_zernikes_path}")
+    logger.info(f"Columns: {acts_on_mirror.columns.values}")
 
 
 @profile
