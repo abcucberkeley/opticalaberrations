@@ -1519,20 +1519,16 @@ def create_consensus_map(
     ):
         optimized_cluster_id = org_cluster_map.loc[(z, y, x), 'cluster'].astype(int)    # cluster group id
 
-        # get result from "first" stack latest "before" stack
-        cluster_result_from_first_stack = stack_preds[0].loc[(z, y, x)][zernike_indices].values
-
         # last code (e.g. 8) = unconfident gray. was gray in the "before" stack
         if optimized_cluster_id == unconfident_cluster_id:
             # the optimized stack was expected to have a prediction here.
-            # It doesn't. So use result from the first stack (which is most similar to our previous time point which made the prediction).
+            # It doesn't.  So use result from the first stack (which is most similar to our previous time point which made the prediction).
+
+            current_zernikes = zernikes_on_mirror[f'z{z}_c{z * len(correction_scans)}'].values
 
             # arbitrarily using first stack
-            optimized_zernikes = zernikes_on_mirror[f'z{z}_c{z * len(correction_scans)}'].values
-
-            consensus_tile = optimized_zernikes + cluster_result_from_first_stack
-            consensus_stdev = stack_stdevs[0].loc[(z, y, x)][zernike_indices].values  # arbitrarily using first stack
-            consensus_stack = 0
+            optimized_zernikes = stack_preds[0].loc[(z, y, x)][zernike_indices].values
+            optimized_stack_id = 0
             # TODO: expand this later
 
         else:   # before has a color, we took an optimized stack for this tile
@@ -1543,25 +1539,24 @@ def create_consensus_map(
                 # the optimized stack was expected to have a prediction here.
                 # It doesn't.  So use result from the first stack (which is most similar to our previous time point which made the prediction).
 
-                # arbitrarily using first stack
-                optimized_zernikes = zernikes_on_mirror[f'z{z}_c{z * len(correction_scans)}'].values
+                current_zernikes = zernikes_on_mirror[f'z{z}_c{z * len(correction_scans)}'].values
 
-                consensus_tile = optimized_zernikes + cluster_result_from_first_stack
-                consensus_stdev = stack_stdevs[0].loc[(z, y, x)][zernike_indices].values # arbitrarily using first stack
-                consensus_stack = 0
+                # arbitrarily using first stack
+                optimized_zernikes = stack_preds[0].loc[(z, y, x)][zernike_indices].values
+                optimized_stack_id = 0
 
             else:  # optimized stack has a confident prediction
-                optimized_zernikes = stack_preds[optimized_stack_id].loc[(z, y, x)][zernike_indices].values
                 current_zernikes = zernikes_on_mirror[f'z{z}_c{optimized_cluster_id}']
-                consensus_tile = optimized_zernikes + current_zernikes.values
-                consensus_stdev = stack_stdevs[optimized_stack_id].loc[(z, y, x)][zernike_indices].values
-                consensus_stack = optimized_stack_id
+                optimized_zernikes = stack_preds[optimized_stack_id].loc[(z, y, x)][zernike_indices].values
+
+        consensus_tile = optimized_zernikes + current_zernikes
+        consensus_stdev = stack_stdevs[optimized_stack_id].loc[(z, y, x)][zernike_indices].values
 
         optimized_volume[
             z*wz:(z*wz)+wz,
             y*wy:(y*wy)+wy,
             x*wx:(x*wx)+wx
-        ] = correction_scans[consensus_stack][
+        ] = correction_scans[optimized_stack_id][
             z*wz:(z*wz)+wz,
             y*wy:(y*wy)+wy,
             x*wx:(x*wx)+wx
@@ -1570,7 +1565,7 @@ def create_consensus_map(
         # assign predicted modes to the consensus row (building a new column there at the same time)
         consensus_predictions[f'z{z}-y{y}-x{x}'] = consensus_tile
         consensus_stdevs[f'z{z}-y{y}-x{x}'] = consensus_stdev
-        consensus_stacks[f'z{z}-y{y}-x{x}'] = consensus_stack
+        consensus_stacks[f'z{z}-y{y}-x{x}'] = optimized_stack_id
         optimized_wavefronts[f'z{z}-y{y}-x{x}'] = optimized_zernikes
 
     tile_names = consensus_predictions.columns.values
