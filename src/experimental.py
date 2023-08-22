@@ -1572,6 +1572,7 @@ def create_consensus_map(
 def combine_tiles(
     corrected_actuators_csv: Path,
     corrections: list,
+    postfix: str = 'combined'
 ):
     """
     Combine tiles from several DM patterns based on cluster IDs
@@ -1666,10 +1667,10 @@ def combine_tiles(
     # combined_snrmap = snr_scans[indices, z, y, x]       # retrieve the best snr
     # combined = correction_scans[indices, z, y, x]       # retrieve the best data
 
-    # imwrite(f"{output_base_path}_combined_volume_used.tif", indices.astype(np.uint16))
-    # imwrite(f"{output_base_path}_combined.tif", combined.astype(np.float32))
-    # imwrite(f"{output_base_path}_combined_error.tif", combined_errormap.astype(np.float32))
-    # imwrite(f"{output_base_path}_combined_snr.tif", combined_snrmap.astype(np.float32))
+    # imwrite(f"{output_base_path}_{postfix}_volume_used.tif", indices.astype(np.uint16))
+    # imwrite(f"{output_base_path}_{postfix}.tif", combined.astype(np.float32))
+    # imwrite(f"{output_base_path}_{postfix}_error.tif", combined_errormap.astype(np.float32))
+    # imwrite(f"{output_base_path}_{postfix}_snr.tif", combined_snrmap.astype(np.float32))
 
     # tile_ids = resize(
     #     indices,
@@ -1696,9 +1697,9 @@ def combine_tiles(
     else:
         dm_state = predictions_settings['dm_state']
 
-    imwrite(f"{output_base_path}_combined.tif", correction_scans[0].astype(np.float32))
+    imwrite(f"{output_base_path}_{postfix}.tif", correction_scans[0].astype(np.float32))
 
-    with Path(f"{output_base_path}_combined_tiles_predictions_settings.json").open('w') as f:
+    with Path(f"{output_base_path}_{postfix}_tiles_predictions_settings.json").open('w') as f:
         ujson.dump(
             predictions_settings,
             f,
@@ -1708,10 +1709,10 @@ def combine_tiles(
             escape_forward_slashes=False
         )
 
-    consensus_stacks_path = Path(f"{output_base_path}_combined_tiles_predictions_stacks.csv")
-    new_zernikes_path = Path(f"{output_base_path}_combined_tiles_predictions.csv")
-    new_acts_path = Path(f"{output_base_path}_combined_tiles_predictions_corrected_actuators.csv")
-    new_stdevs_path = Path(f"{output_base_path}_combined_tiles_stdevs.csv")
+    consensus_stacks_path = Path(f"{output_base_path}_{postfix}_tiles_predictions_stacks.csv")
+    new_zernikes_path = Path(f"{output_base_path}_{postfix}_tiles_predictions.csv")
+    new_acts_path = Path(f"{output_base_path}_{postfix}_tiles_predictions_corrected_actuators.csv")
+    new_stdevs_path = Path(f"{output_base_path}_{postfix}_tiles_stdevs.csv")
 
     create_consensus_map(
         org_cluster_map=org_cluster_map,
@@ -1729,7 +1730,7 @@ def combine_tiles(
     )
 
     aggregate_predictions(
-            model_pred=Path(f"{output_base_path}_combined_tiles_predictions.csv"),
+            model_pred=Path(f"{output_base_path}_{postfix}_tiles_predictions.csv"),
             dm_calibration=dm_calibration,
             dm_state=dm_state,
             majority_threshold=predictions_settings['majority_threshold'],
@@ -1739,7 +1740,7 @@ def combine_tiles(
             aggregation_rule=predictions_settings['aggregation_rule'],
             max_isoplanatic_clusters=predictions_settings['max_isoplanatic_clusters'],
             ignore_tile=predictions_settings['ignore_tile'],
-            postfix='combined'
+            postfix='consensus'
     )
 
     # used in LabVIEW
