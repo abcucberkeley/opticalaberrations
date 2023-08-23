@@ -85,7 +85,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--max_photons", default=1000000, type=int, help="maximum photons for training samples"
+        "--max_photons", default=10000000, type=int, help="maximum photons for training samples"
     )
 
     train_parser.add_argument(
