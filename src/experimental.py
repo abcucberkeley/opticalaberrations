@@ -1501,7 +1501,7 @@ def create_consensus_map(
 
             3d. If the tile is gray in all stacks, it stays gray in the consensus map
     """
-    wz, wy, wx = window_size
+    zw, yw, xw = window_size
 
     # for loop on every tile
     # make data frame with 15 rows, will add column for each tile as we go
@@ -1509,7 +1509,8 @@ def create_consensus_map(
     consensus_predictions = pd.DataFrame([], index=zernike_indices)
     consensus_stdevs = pd.DataFrame([], index=zernike_indices)
     consensus_stacks = pd.DataFrame([], index=[0])
-    optimized_volume = np.zeros((ztiles * wz, ytiles * wy, xtiles * wx))
+    optimized_volume = np.zeros_like(correction_scans[0])
+    volume_used = np.zeros((ztiles, *optimized_volume.shape[1:]))
 
     unconfident_cluster_id = ztiles * len(correction_scans)
     for i, (z, y, x) in tqdm(
@@ -1553,14 +1554,15 @@ def create_consensus_map(
         consensus_stdev = stack_stdevs[optimized_stack_id].loc[(z, y, x)][zernike_indices].values
 
         optimized_volume[
-            z*wz:(z*wz)+wz,
-            y*wy:(y*wy)+wy,
-            x*wx:(x*wx)+wx
+            z*zw:(z*zw)+zw,
+            y*yw:(y*yw)+yw,
+            x*xw:(x*xw)+xw
         ] = correction_scans[optimized_stack_id][
-            z*wz:(z*wz)+wz,
-            y*wy:(y*wy)+wy,
-            x*wx:(x*wx)+wx
+            z*zw:(z*zw)+zw,
+            y*yw:(y*yw)+yw,
+            x*xw:(x*xw)+xw
         ]
+        volume_used[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((yw, xw), optimized_stack_id)
 
         # assign predicted modes to the consensus row (building a new column there at the same time)
         consensus_predictions[f'z{z}-y{y}-x{x}'] = consensus_tile
@@ -1596,7 +1598,7 @@ def create_consensus_map(
     consensus_stdevs.to_csv(str(new_stdevs_path).replace('combined', 'optimized'))
 
     consensus_stacks.to_csv(consensus_stacks_path)
-    return optimized_volume
+    return optimized_volume, volume_used
 
 
 @profile
@@ -1728,14 +1730,12 @@ def combine_tiles(
     else:
         dm_state = predictions_settings['dm_state']
 
-
-
     consensus_stacks_path = Path(f"{output_base_path}_{postfix}_tiles_predictions_stacks.csv")
     new_zernikes_path = Path(f"{output_base_path}_{postfix}_tiles_predictions.csv")
     new_stdevs_path = Path(f"{output_base_path}_{postfix}_tiles_stdevs.csv")
     new_acts_path = Path(f"{output_base_path}_{postfix}_tiles_predictions_corrected_actuators.csv")
 
-    optimized_volume = create_consensus_map(
+    optimized_volume, volume_used = create_consensus_map(
         org_cluster_map=org_cluster_map,
         correction_scans=correction_scans,
         stack_preds=stack_preds,
@@ -1751,19 +1751,9 @@ def combine_tiles(
         consensus_stacks_path=consensus_stacks_path,
     )
 
+    # aggregate consensus maps
     imwrite(f"{output_base_path}_{postfix}.tif", correction_scans[0].astype(np.float32))
     with Path(f"{output_base_path}_{postfix}_tiles_predictions_settings.json").open('w') as f:
-        ujson.dump(
-            predictions_settings,
-            f,
-            indent=4,
-            sort_keys=False,
-            ensure_ascii=False,
-            escape_forward_slashes=False
-        )
-
-    imwrite(f"{output_base_path}_optimized.tif", optimized_volume.astype(np.float32))
-    with Path(f"{output_base_path}_optimized_tiles_predictions_settings.json").open('w') as f:
         ujson.dump(
             predictions_settings,
             f,
@@ -1786,6 +1776,20 @@ def combine_tiles(
             ignore_tile=predictions_settings['ignore_tile'],
             postfix='consensus'
     )
+
+    # aggregate optimized maps
+
+    imwrite(f"{output_base_path}_{postfix}_volume_used.tif", volume_used.astype(np.uint16))
+    imwrite(f"{output_base_path}_optimized.tif", optimized_volume.astype(np.float32))
+    with Path(f"{output_base_path}_optimized_tiles_predictions_settings.json").open('w') as f:
+        ujson.dump(
+            predictions_settings,
+            f,
+            indent=4,
+            sort_keys=False,
+            ensure_ascii=False,
+            escape_forward_slashes=False
+        )
 
     aggregate_predictions(
             model_pred=Path(f"{output_base_path}_optimized_tiles_predictions.csv"),
