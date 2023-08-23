@@ -1468,9 +1468,9 @@ def aggregate_predictions(
 @profile
 def create_consensus_map(
     org_cluster_map: pd.DataFrame,
-    correction_scans: list[Path],
-    stack_preds: list[pd.DataFrame],
-    stack_stdevs: list[pd.DataFrame],
+    correction_scans: Union[list, np.ndarray],
+    stack_preds: Union[list, np.ndarray],
+    stack_stdevs: Union[list, np.ndarray],
     zernikes_on_mirror: pd.DataFrame,
     zernike_indices: np.ndarray,
     window_size: tuple,
