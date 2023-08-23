@@ -25,7 +25,7 @@ from skimage.transform import resize
 from sklearn.metrics import silhouette_samples, silhouette_score
 from joblib import Parallel, delayed
 from scipy.interpolate import NearestNDInterpolator
-from scipy.ndimage import shift
+from scipy.ndimage import shift, generate_binary_structure, binary_dilation
 
 import utils
 import vis
@@ -1513,42 +1513,70 @@ def create_consensus_map(
     volume_used = np.zeros((ztiles, *optimized_volume.shape[1:]))
 
     unconfident_cluster_id = ztiles * len(correction_scans)
-    for i, (z, y, x) in tqdm(
-        enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))),
-        total=ztiles * ytiles * xtiles,
-        desc=f"Building consensus map"
-    ):
-        optimized_cluster_id = org_cluster_map.loc[(z, y, x), 'cluster'].astype(int)    # cluster group id
+    org_cluster_array = np.reshape((org_cluster_map['cluster']).to_numpy(),
+                                   [ztiles, ytiles, xtiles])  # 3D np array of cluster ids
+    num_of_stacks = len(correction_scans)
+
+    # get max estimated std per stack for each tile
+    error = pd.concat([df[zernike_indices].max(axis=1) for df in stack_stdevs], axis=1)
+
+    # becomes a binary mask of what tiles in the stacks can be used to argue for tiles that were gray before.
+    org_cluster_arrays = np.array([org_cluster_array] * num_of_stacks)
+
+    # 3x3 structuring element with connectivity 2
+    struct2 = generate_binary_structure(2, 2)
+    for stack in range(num_of_stacks):
+        for z in range(ztiles):
+            org_cluster_arrays[stack, z] = binary_dilation(
+                (org_cluster_arrays[stack, z] - (z * num_of_stacks)) == stack,
+                structure=struct2)  # does cluster id belong to this stack? Dilate in 2D z slab
+        error[stack] = error[stack].mask(~np.reshape(org_cluster_arrays[stack], error.shape[0]).astype(bool))
+
+    # pick best stack id based on the lowest std, and assign nan to tiles with no std predictions
+    votes = error.replace(0, np.nan).idxmin(skipna=True, axis=1)
+
+    # replace nans with -1 and covert to integers
+    votes = votes.fillna(-1).astype(int)
+
+    for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
+        optimized_cluster_id = org_cluster_map.loc[(z, y, x), 'cluster'].astype(int)  # cluster group id
 
         # last code (e.g. 8) = unconfident gray. was gray in the "before" stack
         if optimized_cluster_id == unconfident_cluster_id:
-            # the optimized stack was expected to have a prediction here.
-            # It doesn't.  So use result from the first stack (which is most similar to our previous time point which made the prediction).
 
-            current_zernikes = zernikes_on_mirror[f'z{z}_c{z * len(correction_scans)}'].values
+            optimized_stack_id = votes.loc[z, y, x]
 
-            # arbitrarily using first stack
-            optimized_zernikes = stack_preds[0].loc[(z, y, x)][zernike_indices].values
-            optimized_stack_id = 0
-            # TODO: expand this later
+            # nobody has an optimized tile nor neighboring an optimized tile to this one. Leave unconfident gray.
+            if optimized_stack_id == -1:
+                # arbitrarily using first stack
+                optimized_stack_id = 0
+                current_zernikes = zernikes_on_mirror[f'z{z}_c{z * len(correction_scans)}'].values
 
-        else:   # before has a color, we took an optimized stack for this tile
+            else:
+                # figure out the cluster_id from stack_id
+                optimized_cluster_id = optimized_stack_id + (z * len(correction_scans))
+                current_zernikes = zernikes_on_mirror[f'z{z}_c{optimized_cluster_id}']
+                newtile = Wavefront(stack_preds[optimized_stack_id].loc[(z, y, x)][zernike_indices].values)
+                logger.info(
+                    f'Got a new wavefront {z}, {y}, {x} with a p2v of {newtile.peak2valley()}, '
+                    f'using stack {optimized_stack_id}'
+                )
+
+        else:  # before has a color, we took an optimized stack for this tile
             optimized_stack_id = optimized_cluster_id - (z * len(correction_scans))
             cluster_result_from_optimized_stack = stack_preds[optimized_stack_id].loc[(z, y, x), 'cluster'].astype(int)
 
             if cluster_result_from_optimized_stack == unconfident_cluster_id:  # optimized stack was gray
                 # the optimized stack was expected to have a prediction here.
-                # It doesn't.  So use result from the first stack (which is most similar to our previous time point which made the prediction).
-
-                current_zernikes = zernikes_on_mirror[f'z{z}_c{z * len(correction_scans)}'].values
-
+                # It doesn't.  So use result from the first stack
+                # (which is most similar to our previous time point which made the prediction).
                 # arbitrarily using first stack
-                optimized_zernikes = stack_preds[0].loc[(z, y, x)][zernike_indices].values
                 optimized_stack_id = 0
-
+                current_zernikes = zernikes_on_mirror[f'z{z}_c{z * len(correction_scans)}'].values
             else:  # optimized stack has a confident prediction
                 current_zernikes = zernikes_on_mirror[f'z{z}_c{optimized_cluster_id}']
-                optimized_zernikes = stack_preds[optimized_stack_id].loc[(z, y, x)][zernike_indices].values
+
+        optimized_zernikes = stack_preds[optimized_stack_id].loc[(z, y, x)][zernike_indices].values
 
         consensus_tile = optimized_zernikes + current_zernikes
         consensus_stdev = stack_stdevs[optimized_stack_id].loc[(z, y, x)][zernike_indices].values
