@@ -143,11 +143,11 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--warmup", default=20, type=int, help='number of epochs for the initial linear warmup'
+        "--warmup", default=25, type=int, help='number of epochs for the initial linear warmup'
     )
 
     train_parser.add_argument(
-        "--decay_period", default=500, type=int, help='number of epochs to decay over before restarting LR'
+        "--decay_period", default=None, type=int, help='number of epochs to decay over before restarting LR'
     )
 
     train_parser.add_argument(
@@ -214,7 +214,6 @@ def main(args=None):
 
     with strategy.scope():
         backend.train(
-            epochs=args.epochs,
             dataset=args.dataset,
             embedding=args.embedding,
             outdir=args.outdir,
@@ -236,6 +235,7 @@ def main(args=None):
             wd=args.wd,
             fixedlr=args.fixedlr,
             warmup=args.warmup,
+            epochs=args.epochs,
             decay_period=args.decay_period,
             pmodes=args.modes if args.pmodes is None else args.pmodes,
             min_photons=args.min_photons,

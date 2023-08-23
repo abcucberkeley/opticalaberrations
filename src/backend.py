@@ -105,25 +105,20 @@ def load(model_path: Path, mosaic=False) -> tf.keras.Model:
 
     else:
         try:
-            try:
-                '''.pb format'''
-                if model_path.is_file() and model_path.suffix == '.pb':
-                    return load_model(str(model_path.parent))
-                else:
-                    return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
+            '''.pb format'''
+            if model_path.is_file() and model_path.suffix == '.pb':
+                return load_model(str(model_path.parent))
+            else:
+                return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
 
-            except IndexError or FileNotFoundError or OSError:
-                '''.h5/hdf5 format'''
-                if model_path.is_file() and model_path.suffix == '.h5':
-                    model_path = str(model_path)
-                else:
-                    model_path = str(list(model_path.rglob('*.h5'))[0])
+        except IndexError or FileNotFoundError or OSError:
+            '''.h5/hdf5 format'''
+            if model_path.is_file() and model_path.suffix == '.h5':
+                model_path = str(model_path)
+            else:
+                model_path = str(list(model_path.rglob('*.h5'))[0])
 
-                return load_model(model_path, custom_objects=custom_objects)
-
-        except Exception as e:
-            logger.exception(e)
-            exit()
+            return load_model(model_path, custom_objects=custom_objects)
 
 
 @profile
@@ -1276,6 +1271,45 @@ def train(
     elif lls_defocus:
         pmodes += + 1
 
+    loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
+
+    """
+        Adam: A Method for Stochastic Optimization: https://arxiv.org/pdf/1412.6980
+        SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
+        Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
+    """
+    if opt.lower() == 'adam':
+        opt = Adam(learning_rate=lr)
+    elif opt == 'sgd':
+        opt = SGD(learning_rate=lr, momentum=0.9)
+    elif opt.lower() == 'adamw':
+        opt = AdamW(learning_rate=lr, weight_decay=wd)
+    elif opt == 'sgdw':
+        opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
+    else:
+        raise ValueError(f'Unknown optimizer `{opt}`')
+
+    try:  # check if model already exists
+        model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent  # sort models to get the latest checkpoint
+
+        if model_path.exists():
+            model = load_model(model_path)
+            opt = model.optimizer
+
+            checkpoint = tf.train.Checkpoint(model=model, optimizer=opt)
+            status = checkpoint.restore(str(model_path)).expect_partial()
+
+            if status:
+                logger.info(f"Model restored from {model_path}")
+                restored = True
+                network = str(model_path)
+                training_history = pd.read_csv(model_path/'logbook.csv', header=0, index_col=0)
+            else:
+                logger.info("Initializing from scratch")
+
+    except Exception as e:
+        logger.warning(f"No model found in {outdir}; Creating a new model.")
+
     if network == 'opticalnet':
         model = opticalnet.OpticalTransformer(
             name='OpticalNet',
@@ -1323,39 +1357,10 @@ def train(
             modes=pmodes
         )
 
-    else:
-        model = load(Path(network))
-        checkpoint = tf.train.Checkpoint(model)
-        status = checkpoint.restore(network)
-
-        if status:
-            logger.info(f"Restored from {network}")
-            restored = True
-        else:
-            logger.info("Initializing from scratch")
-
     if network == 'baseline':
         inputs = (input_shape, input_shape, input_shape, 1)
     else:
         inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
-
-    loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
-
-    """
-        Adam: A Method for Stochastic Optimization: httpsz://arxiv.org/pdf/1412.6980
-        SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
-        Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
-    """
-    if opt.lower() == 'adam':
-        opt = Adam(learning_rate=lr)
-    elif opt == 'sgd':
-        opt = SGD(learning_rate=lr, momentum=0.9)
-    elif opt.lower() == 'adamw':
-        opt = AdamW(learning_rate=lr, weight_decay=wd)
-    elif opt == 'sgdw':
-        opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
-    else:
-        raise ValueError(f'Unknown optimizer `{opt}`')
 
     if not restored:
         model = model.build(input_shape=inputs)
@@ -1381,13 +1386,6 @@ def train(
         verbose=1,
     )
 
-    h5_checkpoints = ModelCheckpoint(
-        filepath=f"{outdir}.h5",
-        monitor="loss",
-        save_best_only=True,
-        verbose=1,
-    )
-
     earlystopping = EarlyStopping(
         monitor='loss',
         min_delta=0,
@@ -1399,7 +1397,7 @@ def train(
 
     defibrillator = Defibrillator(
         monitor='loss',
-        patience=20,
+        patience=25,
         verbose=1,
     )
 
@@ -1417,10 +1415,10 @@ def train(
         )
     else:
         lrscheduler = LearningRateScheduler(
-            initial_learning_rate=lr,
-            weight_decay=wd,
+            initial_learning_rate=opt.learning_rate,
+            weight_decay=opt.weight_decay,
             decay_period=epochs if decay_period is None else decay_period,
-            warmup_epochs=0 if warmup is None else warmup,
+            warmup_epochs=0 if warmup is None or warmup >= epochs else warmup,
             alpha=.01,
             decay_multiplier=2.,
             decay=.9,
@@ -1567,7 +1565,6 @@ def train(
                 tblogger,
                 tensorboard,
                 pb_checkpoints,
-                h5_checkpoints,
                 earlystopping,
                 defibrillator,
                 lrscheduler,
