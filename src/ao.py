@@ -833,7 +833,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         sjob += f' --gres=gpu:{desired_node["available_gpus"]} '
         sjob += f' --cpus-per-task={desired_node["available_cpus"]} '
         sjob += f" --mem='{desired_node['available_mem']}' "
-        sjob += f" --nodelist='{available_nodes.index[0]}' "
+        # sjob += f" --nodelist='{available_nodes.index[0]}' "
         sjob += f"--job-name={args.func}_{args.input.stem} "
         sjob += f"{cluster_env} {script} {flags}"
         logger.info(sjob)
