@@ -1,6 +1,7 @@
 import matplotlib
 matplotlib.use('Agg')
 import re
+import sys
 
 from functools import partial
 import ujson
@@ -1707,7 +1708,7 @@ def combine_tiles(
     # error_maps = np.zeros((len(corrections), *image_shape))           # series of 3d p2v maps aka a 4d array
     # snr_scans = np.zeros((len(corrections), *image_shape))            # series of 3d p2v maps aka a 4d array
 
-    for t, path in tqdm(enumerate(corrections), desc='Loading corrections'):
+    for t, path in tqdm(enumerate(corrections), desc='Loading corrections', file=sys.stdout):
         correction_base_path = str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '')
         # error_maps[t] = backend.load_sample(path)
         # snr_scans[t] = backend.load_sample(f'{correction_base_path}_snrs.tif')
