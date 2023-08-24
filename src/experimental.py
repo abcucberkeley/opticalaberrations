@@ -1633,7 +1633,8 @@ def create_consensus_map(
 def combine_tiles(
     corrected_actuators_csv: Path,
     corrections: list,
-    postfix: str = 'combined'
+    postfix: str = 'combined',
+    consensus_postfix: str = 'consensus'
 ):
     """
     Combine tiles from several DM patterns based on cluster IDs
@@ -1761,7 +1762,6 @@ def combine_tiles(
     consensus_stacks_path = Path(f"{output_base_path}_{postfix}_tiles_predictions_stacks.csv")
     new_zernikes_path = Path(f"{output_base_path}_{postfix}_tiles_predictions.csv")
     new_stdevs_path = Path(f"{output_base_path}_{postfix}_tiles_stdevs.csv")
-    new_acts_path = Path(f"{output_base_path}_{postfix}_tiles_predictions_corrected_actuators.csv")
 
     optimized_volume, volume_used = create_consensus_map(
         org_cluster_map=org_cluster_map,
@@ -1802,7 +1802,7 @@ def combine_tiles(
             aggregation_rule=predictions_settings['aggregation_rule'],
             max_isoplanatic_clusters=predictions_settings['max_isoplanatic_clusters'],
             ignore_tile=predictions_settings['ignore_tile'],
-            postfix='consensus'
+            postfix=consensus_postfix
     )
 
     # aggregate optimized maps
@@ -1830,10 +1830,15 @@ def combine_tiles(
             aggregation_rule=predictions_settings['aggregation_rule'],
             max_isoplanatic_clusters=predictions_settings['max_isoplanatic_clusters'],
             ignore_tile=predictions_settings['ignore_tile'],
-            postfix='consensus'
+            postfix=consensus_postfix
     )
 
     # used in LabVIEW
+    new_acts_path = Path(f"{output_base_path}_{postfix}_tiles_predictions_{consensus_postfix}_corrected_actuators.csv")
+
+    if not new_acts_path.exists():
+        raise Exception(f'New actuators were not written to {new_acts_path}')
+
     logger.info(f"Org actuators: {corrected_actuators_csv}")
     logger.info(f"New actuators: {new_acts_path}")
     logger.info(f"New predictions: {new_zernikes_path}")
