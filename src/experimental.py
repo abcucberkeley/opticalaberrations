@@ -1682,7 +1682,7 @@ def combine_tiles(
     xtiles = predictions_settings['xtiles']
     dm_calibration = predictions_settings['dm_calibration']
     psfgen = backend.load_metadata(
-        Path(re.sub(r".*/opticalaberrations/", str(Path(__file__).parent.parent), predictions_settings['model']))
+        Path(re.sub(r".*/opticalaberrations", str(Path(__file__).parent.parent), predictions_settings['model']))
     )
     n_modes = psfgen.n_modes
     zernike_indices = np.arange(n_modes)
