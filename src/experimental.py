@@ -978,7 +978,8 @@ def cluster_tiles(
     max_isoplanatic_clusters: int = 3,
     optimize_max_isoplanatic_clusters: bool = False,
     dm_damping_scalar: float = 1,
-    postfix: str = 'aggregated'
+    postfix: str = 'aggregated',
+    minimum_number_of_tiles_per_cluster: int = 3,
 ):
     """
         Group tiles with similar wavefronts together,
@@ -1039,21 +1040,26 @@ def cluster_tiles(
                 features[mode.index_ansi] /= mode.m + 1
 
         n_clusters = min(max_isoplanatic_clusters, len(features)) + 1
-        clustering = KMeans(n_clusters=n_clusters, max_iter=1000, random_state=0)
-        clustering.fit(features)
 
-        ztile_preds['cluster'] = clustering.predict(features)
+        clusters_not_found = True
+        while clusters_not_found:
+            clustering = KMeans(n_clusters=n_clusters, max_iter=1000, random_state=0)
+            clustering.fit(features)
 
-        """" 
-        Testing kmedians using pyclustering
-        # from pyclustering.cluster.kmedians import kmedians
-        # from pyclustering.cluster.center_initializer import kmeans_plusplus_initializer
-        # initial_centers = kmeans_plusplus_initializer(features.values, n_clusters).initialize()
-        # clustering = kmedians(features.values, initial_medians=initial_centers, tolerance=1e-6)
-        # clustering.process()
-        # medians = np.array(clustering.get_medians())
-        # ztile_preds['cluster'] = clustering.predict(features.values)
-        """
+            ztile_preds['cluster'] = clustering.predict(features)
+            tile_counts = ztile_preds['cluster'].value_counts()
+
+            for cluster_id in ztile_preds['cluster'].unique():
+                if tile_counts[cluster_id] < minimum_number_of_tiles_per_cluster:
+                    outliers = ztile_preds[ztile_preds['cluster'] == cluster_id].index
+                    features.loc[outliers] = 0
+                    clusters_not_found = True
+                    break
+                else:
+                    clusters_not_found = False
+
+            logger.info("Number of tiles per cluster")
+            logger.info(tile_counts)
 
         # sort clusters by p2v
         centers_mag = [
@@ -1064,7 +1070,6 @@ def cluster_tiles(
         ]
         centers_mag = np.array([Wavefront(np.nan_to_num(c, nan=0)).peak2valley() for c in centers_mag])
         ztile_preds['cluster'] = ztile_preds['cluster'].replace(dict(zip(np.argsort(centers_mag), range(n_clusters))))
-
         ztile_preds['cluster'] += z * (max_isoplanatic_clusters + 1)
 
         # assign KMeans cluster ids to full dataframes (untouched ones, remain NaN)
