@@ -1039,7 +1039,7 @@ def cluster_tiles(
                 features[mode.index_ansi] /= mode.m + 1
 
         n_clusters = min(max_isoplanatic_clusters, len(features)) + 1
-        clustering = KMeans(init='random', n_clusters=n_clusters, max_iter=1000)
+        clustering = KMeans(n_clusters=n_clusters, max_iter=1000, random_state=0)
         clustering.fit(features)
 
         ztile_preds['cluster'] = clustering.predict(features)
