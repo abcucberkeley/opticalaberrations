@@ -979,7 +979,7 @@ def cluster_tiles(
     optimize_max_isoplanatic_clusters: bool = False,
     dm_damping_scalar: float = 1,
     postfix: str = 'aggregated',
-    minimum_number_of_tiles_per_cluster: int = 3,
+    minimum_number_of_tiles_per_cluster: np.ndarray = np.array([3]),
 ):
     """
         Group tiles with similar wavefronts together,
@@ -998,6 +998,8 @@ def cluster_tiles(
         optimize_max_isoplanatic_clusters: a toggle to find the optimal number of clusters automatically
         dm_damping_scalar: optional scalar to apply for the DM of each cluster
         plot: a toggle to plot the wavefront for each cluster
+        minimum_number_of_tiles_per_cluster: if a cluster has less than this, those tiles in that clusters will be
+            excluded as outliers, and the set will be reclustered.
 
     Returns:
         Updated prediction, stdevs dataframes
@@ -1041,25 +1043,30 @@ def cluster_tiles(
 
         n_clusters = min(max_isoplanatic_clusters, len(features)) + 1
 
-        clusters_not_found = True
-        while clusters_not_found:
+        compute_clustering = True
+        while compute_clustering:
             clustering = KMeans(n_clusters=n_clusters, max_iter=1000, random_state=0)
-            clustering.fit(features)
+            clustering.fit(features)    # Cluster calculation
 
-            ztile_preds['cluster'] = clustering.predict(features)
-            tile_counts = ztile_preds['cluster'].value_counts()
+            ztile_preds['cluster'] = clustering.predict(features)   # Predict the closest cluster each tile belongs to
 
-            for cluster_id in ztile_preds['cluster'].unique():
-                if tile_counts[cluster_id] < minimum_number_of_tiles_per_cluster:
-                    outliers = ztile_preds[ztile_preds['cluster'] == cluster_id].index
-                    features.loc[outliers] = 0
-                    clusters_not_found = True
-                    break
-                else:
-                    clusters_not_found = False
-
-            logger.info("Number of tiles per cluster")
-            logger.info(tile_counts)
+            if ztile_preds['cluster'].unique().size < max_isoplanatic_clusters:
+                # We didn't have enough tiles to make all requested clusters. We're done.
+                compute_clustering = False
+            else:
+                # Check if each cluster has enough tiles.
+                tile_counts = ztile_preds['cluster'].value_counts()
+                for cluster_id in ztile_preds['cluster'].unique():
+                    if tile_counts[cluster_id] < minimum_number_of_tiles_per_cluster[z]:
+                        outliers = ztile_preds[ztile_preds['cluster'] == cluster_id].index
+                        features.loc[outliers] = 0  # Set outliers to yellow group, then recluster.
+                        logger.info(f"Removed from clustering were {outliers.size} outliers from z slab {z}. "
+                                    f"Min # of tiles per cluster = {minimum_number_of_tiles_per_cluster[z]}. "
+                                    f"Outlier tiles={outliers.to_list()}")
+                        compute_clustering = True
+                        break
+                    else:
+                        compute_clustering = False
 
         # sort clusters by p2v
         centers_mag = [
@@ -1080,6 +1087,9 @@ def cluster_tiles(
         # we'll the original DM for this cluster
         ztile_preds = ztile_preds[ztile_preds['cluster'] != z * (max_isoplanatic_clusters + 1)]
 
+        print(f"\nNumber of tiles in each cluster of {postfix} map, z={z}")
+        print("c    count")
+        print(ztile_preds['cluster'].value_counts().sort_index().to_string())
         clusters = ztile_preds.groupby('cluster')
         for k in range(max_isoplanatic_clusters + 1):
             c = k + z * (max_isoplanatic_clusters + 1)
@@ -1110,9 +1120,7 @@ def cluster_tiles(
                 order='ansi',
                 lam_detection=wavelength
             )
-            imwrite(
-                Path(f"{savepath}_{postfix}_{cluster}_wavefront.tif"), pred.wave().astype(np.float32)
-            )
+            imwrite(Path(f"{savepath}_{postfix}_{cluster}_wavefront.tif"), pred.wave().astype(np.float32))
 
             pred_std = Wavefront(
                 np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0),
@@ -1167,9 +1175,11 @@ def color_clusters(
         savepath,
         rgb_map.astype(np.ubyte),
         photometric='rgb',
-        imagej=True,
         resolution=(xw, yw),
+        metadata={'axes': 'ZYXS'},
     )
+    logger.info(f'Saved {savepath}')
+
 
 
 @profile
@@ -1248,12 +1258,15 @@ def aggregate_predictions(
         ignore_modes=predictions_settings['ignore_modes'],
         verbose=True
     )
+
     where_unconfident = stdevs == 0
     where_unconfident[predictions_settings['ignore_modes']] = False
 
     ztiles = predictions.index.get_level_values('z').unique().shape[0]
     ytiles = predictions.index.get_level_values('y').unique().shape[0]
     xtiles = predictions.index.get_level_values('x').unique().shape[0]
+
+    number_of_nonzero_tiles = np.array([(~(unconfident_tiles.loc[z] | zero_confident_tiles.loc[z] | all_zeros_tiles.loc[z])).sum() for z in range(ztiles)])
 
     errormapdf = predictions['p2v'].copy()
     nn_coords = np.array(errormapdf[~unconfident_tiles].index.to_list())
@@ -1294,7 +1307,8 @@ def aggregate_predictions(
         max_isoplanatic_clusters=max_isoplanatic_clusters,
         optimize_max_isoplanatic_clusters=optimize_max_isoplanatic_clusters,
         plot=plot,
-        postfix=postfix
+        postfix=postfix,
+        minimum_number_of_tiles_per_cluster=np.maximum(np.minimum(number_of_nonzero_tiles * 0.09, 3).astype(int), 1), # 3 or less tiles
     )
 
     for z in range(ztiles):
@@ -1564,8 +1578,7 @@ def create_consensus_map(
                 current_zernikes = zernikes_on_mirror[f'z{z}_c{optimized_cluster_id}']
                 newtile = Wavefront(stack_preds[optimized_stack_id].loc[(z, y, x)][zernike_indices].values)
                 logger.info(
-                    f'Got a new wavefront {z}, {y}, {x} with a p2v of {newtile.peak2valley()}, '
-                    f'using stack {optimized_stack_id}'
+                    f'Before tile ({z:2}, {y:2}, {x:2}) was gray color now assigned wavefront from stack index {optimized_stack_id} ({newtile.peak2valley():.2f} p2v)'
                 )
 
         else:  # before has a color, we took an optimized stack for this tile
@@ -1719,14 +1732,9 @@ def combine_tiles(
     stack_preds = []  # build a list of prediction dataframes for each stack.
     stack_stdevs = []  # build a list of standard deviations dataframes for each stack.
     correction_scans = []
-    # error_maps = np.zeros((len(corrections), *image_shape))           # series of 3d p2v maps aka a 4d array
-    # snr_scans = np.zeros((len(corrections), *image_shape))            # series of 3d p2v maps aka a 4d array
 
-    for t, path in tqdm(enumerate(corrections), desc='Loading corrections', file=sys.stdout):
+    for t, path in tqdm(enumerate(corrections), desc='Loading corrections', file=sys.stdout, unit=' image files'):
         correction_base_path = str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '')
-        # error_maps[t] = backend.load_sample(path)
-        # snr_scans[t] = backend.load_sample(f'{correction_base_path}_snrs.tif')
-
         correction_scans.append(backend.load_sample(f'{correction_base_path}.tif'))
         stack_preds.append(
             pd.read_csv(
@@ -1736,33 +1744,6 @@ def combine_tiles(
             )
         )   # cluster ids, e.g. 0,1,2,3, 4,5,6,7, 8 is unconfident
         stack_stdevs.append(utils.create_multiindex_tile_dataframe(f'{correction_base_path}_tiles_stdevs.csv'))
-
-    # indices = np.argmin(error_maps, axis=0)  # locate the correction with the lowest error for every voxel (3D array)
-    # indices = np.argmax(snr_scans, axis=0)  # locate the correction with the highest snr for every voxel (3D array)
-    # z, y, x = np.indices(indices.shape)
-    # combined_errormap = error_maps[indices, z, y, x]    # retrieve the best p2v
-    # combined_snrmap = snr_scans[indices, z, y, x]       # retrieve the best snr
-    # combined = correction_scans[indices, z, y, x]       # retrieve the best data
-
-    # imwrite(f"{output_base_path}_{postfix}_volume_used.tif", indices.astype(np.uint16))
-    # imwrite(f"{output_base_path}_{postfix}.tif", combined.astype(np.float32))
-    # imwrite(f"{output_base_path}_{postfix}_error.tif", combined_errormap.astype(np.float32))
-    # imwrite(f"{output_base_path}_{postfix}_snr.tif", combined_snrmap.astype(np.float32))
-
-    # tile_ids = resize(
-    #     indices,
-    #     (
-    #         ztiles,
-    #         ytiles,
-    #         xtiles,
-    #     ),
-    #     order=0,
-    #     mode='edge',
-    #     anti_aliasing=False,
-    #     preserve_range=True,
-    # ).astype(np.float)
-    # z_indices, y_indices, x_indices = np.indices(tile_ids.shape)
-    # tile_ids += np.nanmax(tile_ids) * z_indices
 
     # reverse corrections to get the base DM for the before stack
     if isinstance(predictions_settings['dm_state'], str):
@@ -1806,6 +1787,7 @@ def combine_tiles(
             escape_forward_slashes=False
         )
 
+    print(f"\nAggregating {postfix} maps...\n")
     aggregate_predictions(
             model_pred=Path(f"{output_base_path}_{postfix}_tiles_predictions.csv"),
             dm_calibration=dm_calibration,
@@ -1834,6 +1816,7 @@ def combine_tiles(
             escape_forward_slashes=False
         )
 
+    print("\nAggregating optimized maps...\n")
     aggregate_predictions(
             model_pred=Path(f"{output_base_path}_optimized_tiles_predictions.csv"),
             dm_calibration=dm_calibration,
