@@ -1688,9 +1688,18 @@ def combine_tiles(
     ytiles = predictions_settings['ytiles']
     xtiles = predictions_settings['xtiles']
     dm_calibration = predictions_settings['dm_calibration']
-    psfgen = backend.load_metadata(
-        Path(re.sub(r".*/opticalaberrations", str(Path(__file__).parent.parent), predictions_settings['model']))
-    )
+    model_path = Path(predictions_settings['model'])
+    if not model_path.exists():
+        # if cluster wrote this path, and windows is now running it.
+        opticalaberrations_path = Path(__file__).parent.parent
+        model_relative_path = model_path.parts[model_path.parts.index("opticalaberrations")+1:]
+        model_path = opticalaberrations_path.joinpath(*model_relative_path)
+        if not model_path.exists():
+            # if windows wrote this path, and cluster is now running it.
+            model_path = Path(re.sub(r".*/opticalaberrations", str(Path(__file__).parent.parent), predictions_settings['model']))
+
+    psfgen = backend.load_metadata(model_path)
+
     n_modes = psfgen.n_modes
     zernike_indices = np.arange(n_modes)
 
