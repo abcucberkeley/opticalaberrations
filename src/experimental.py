@@ -1016,7 +1016,8 @@ def cluster_tiles(
     # valid_stdevs = stdevs.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_stdevs = stdevs.groupby('z')
 
-    coefficients, actuators = {}, {}
+    wavefronts, coefficients, actuators = {}, {}, {}
+    wavefronts_montage = np.zeros((len(valid_predictions.groups.keys())*64, (max_isoplanatic_clusters+1)*64))
     for z in valid_predictions.groups.keys():  # basically loop through all ztiles, unless no valid predictions exist
         ztile_preds = valid_predictions.get_group(z)
         ztile_preds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
@@ -1118,12 +1119,17 @@ def cluster_tiles(
 
             cluster = f'z{z}_c{c}'
 
-            pred = Wavefront(
+            wavefronts[cluster] = Wavefront(
                 np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
                 order='ansi',
                 lam_detection=wavelength
             )
-            imwrite(Path(f"{savepath}_{postfix}_{cluster}_wavefront.tif"), pred.wave().astype(np.float32))
+            wavefronts_montage[
+                z*64:(z+1)*64,
+                k*64:(k+1)*64,
+            ] = wavefronts[cluster].wave(64).astype(np.float32)
+
+            imwrite(Path(f"{savepath}_{postfix}_{cluster}_wavefront.tif"), wavefronts_montage[z*64:(z+1)*64, k*64:(k+1)*64])
 
             pred_std = Wavefront(
                 np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0),
@@ -1134,20 +1140,22 @@ def cluster_tiles(
             if plot:
                 task = partial(
                     vis.diagnosis,
-                    pred=pred,
+                    pred=wavefronts[cluster],
                     pred_std=pred_std,
                     save_path=Path(f"{savepath}_{postfix}_{cluster}_diagnosis"),
                 )
                 pool.apply_async(task)
 
-            coefficients[cluster] = pred.amplitudes
+            coefficients[cluster] = wavefronts[cluster].amplitudes
 
             actuators[cluster] = utils.zernikies_to_actuators(
-                pred.amplitudes,
+                wavefronts[cluster].amplitudes,
                 dm_calibration=dm_calibration,
                 dm_state=dm_state,
                 scalar=dm_damping_scalar
             )
+
+    imwrite(Path(f"{savepath}_{postfix}_wavefronts_montage.tif"), wavefronts_montage)
 
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
