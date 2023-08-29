@@ -1017,7 +1017,7 @@ def cluster_tiles(
     valid_stdevs = stdevs.groupby('z')
 
     wavefronts, coefficients, actuators = {}, {}, {}
-    wavefronts_montage = np.zeros((len(valid_predictions.groups.keys())*64, (max_isoplanatic_clusters+1)*64))
+    wavefronts_montage = np.zeros((len(valid_predictions.groups.keys())*64, (max_isoplanatic_clusters+1)*64)).astype(np.float32)
     for z in valid_predictions.groups.keys():  # basically loop through all ztiles, unless no valid predictions exist
         ztile_preds = valid_predictions.get_group(z)
         ztile_preds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
