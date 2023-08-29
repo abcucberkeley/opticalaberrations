@@ -316,6 +316,7 @@ dependencies:
   - zlib=1.2.11
   - zstd=1.4.9
   - pip:
+    - --extra-index-url https://pypi.ngc.nvidia.com
     - appdirs==1.4.4
     - blessed==1.19.1
     - colored==2.2.3
