@@ -1554,22 +1554,18 @@ def train(
 
                     plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-    try:
-        model.fit(
-            train_data,
-            steps_per_epoch=training_steps,
-            epochs=epochs,
-            verbose=2,
-            shuffle=True,
-            callbacks=[
-                tblogger,
-                tensorboard,
-                pb_checkpoints,
-                earlystopping,
-                defibrillator,
-                lrscheduler,
-            ],
-        )
-    except tf.errors.ResourceExhaustedError as e:
-        logger.error(e)
-        sys.exit(1)
+    model.fit(
+        train_data,
+        steps_per_epoch=training_steps,
+        epochs=epochs,
+        verbose=2,
+        shuffle=True,
+        callbacks=[
+            tblogger,
+            tensorboard,
+            pb_checkpoints,
+            earlystopping,
+            defibrillator,
+            lrscheduler,
+        ],
+    )
