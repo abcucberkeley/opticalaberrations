@@ -316,7 +316,6 @@ dependencies:
   - zlib=1.2.11
   - zstd=1.4.9
   - pip:
-    - --no-cache-dir
     - --extra-index-url https://pypi.ngc.nvidia.com
     - --extra-index-url https://pypi.nvidia.com
     - appdirs==1.4.4
