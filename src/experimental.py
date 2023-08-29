@@ -1129,7 +1129,7 @@ def cluster_tiles(
                 k*64:(k+1)*64,
             ] = wavefronts[cluster].wave(64).astype(np.float32)
 
-            imwrite(Path(f"{savepath}_{postfix}_{cluster}_wavefront.tif"), wavefronts_montage[z*64:(z+1)*64, k*64:(k+1)*64])
+            imwrite(Path(f"{savepath}_{postfix}_{cluster}_wavefront.tif"),
                     wavefronts_montage[z*64:(z+1)*64, k*64:(k+1)*64],
                     dtype=np.float32,
                     )
