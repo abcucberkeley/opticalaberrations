@@ -1111,6 +1111,9 @@ def cluster_tiles(
                     pred_std = ztile_stds.loc[g].mask(where_unconfident).agg('mean', axis=0)
                 else:
                     pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').fillna(0).agg(aggregation_rule, axis=0)
+                    if np.all(pred == 0):   # if 'aggregation_rule' fails (e.g. median on 3 tiles), fallback to 'mean'
+                        pred = ztile_preds.loc[g].mask(where_unconfident).drop(columns='cluster').fillna(0).agg('mean', axis=0)
+                        logger.info(f"Using 'mean' aggregation rule, because was getting all zeros from {aggregation_rule} on {ztile_preds.loc[g].shape[0]} tiles in cluster.")
                     pred_std = ztile_stds.loc[g].mask(where_unconfident).fillna(0).agg(aggregation_rule, axis=0)
 
             cluster = f'z{z}_c{c}'
@@ -1154,7 +1157,7 @@ def cluster_tiles(
     actuators.index.name = 'actuators'
     actuators.to_csv(f"{savepath}_{postfix}_corrected_actuators.csv")
     logger.info(f"Saved {savepath}_{postfix}_corrected_actuators.csv")
-    logger.info(f"with _corrected_actuators for : {actuators.columns.tolist()}")
+    logger.info(f"with _corrected_actuators for :\ncluster  um_rms sum\n{coefficients.sum().round(3).to_string()}")
 
     return predictions, stdevs, coefficients
 
@@ -1167,9 +1170,12 @@ def color_clusters(
     yw,
     colormap,
 ):
-    scaled_heatmap = (heatmap - np.nanpercentile(heatmap, 1)) / \
-                     (np.nanpercentile(heatmap, 99) - np.nanpercentile(heatmap, 1))
-    scaled_heatmap = np.clip(scaled_heatmap, a_min=0, a_max=1)
+    scaled_heatmap = (heatmap - np.nanpercentile(heatmap[heatmap > 0], 1)) / \
+                     (np.nanpercentile(heatmap[heatmap > 0], 99) - np.nanpercentile(heatmap[heatmap > 0], 1))
+    scaled_heatmap = np.clip(scaled_heatmap, a_min=0, a_max=1)  # this helps see the volume data in _clusters.tif
+
+    # scaled_heatmap = heatmap-np.min(heatmap) / (np.max(heatmap)-np.min(heatmap))
+
     rgb_map = colormap[labels.astype(np.ubyte)] * scaled_heatmap[..., np.newaxis]
     imwrite(
         savepath,
@@ -1361,6 +1367,12 @@ def aggregate_predictions(
                 else:
                     expected_w = w
 
+
+                abberated_psf = samplepsfgen.single_psf(w)
+                abberated_psf *= np.sum(samplepsfgen.ipsf)/np.sum(abberated_psf)
+                expected_psf = samplepsfgen.single_psf(expected_w)
+                expected_psf *= np.sum(samplepsfgen.ipsf)/np.sum(abberated_psf)
+
                 wavefront_heatmap[
                     z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw
                 ] = np.nan_to_num(w.wave(xw), nan=0)
@@ -1371,11 +1383,11 @@ def aggregate_predictions(
 
                 psf_heatmap[
                     z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw
-                ] = np.max(samplepsfgen.single_psf(w), axis=0)
+                ] = np.max(abberated_psf, axis=0)
 
                 expected_psf_heatmap[
                     z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw
-                ] = np.max(samplepsfgen.single_psf(expected_w), axis=0)
+                ] = np.max(expected_psf, axis=0)
 
             clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((zw, yw, xw), int(c)) # filled with cluster id 0,1,2,3, 4,5,6,7, 8] 8 is unconfident, color gets assigned later
 
