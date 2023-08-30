@@ -192,6 +192,20 @@ def sim(
         normed=True,
         meta=True,
     )
+
+    if gen.psf_type == 'widefield':  # normalize PSF by the total energy in the focal plane
+        focal_plane_index = [(w // 2) - 1 for w in kernel.shape]
+        kernel /= np.sum(kernel[focal_plane_index[0], focal_plane_index[1], focal_plane_index[2]])
+
+        # num_planes = 3
+        # kernel /= np.sum(kernel[
+        #      focal_plane_index[0] - num_planes:focal_plane_index[0] + num_planes + 1,
+        #      focal_plane_index[1] - num_planes:focal_plane_index[1] + num_planes + 1,
+        #      focal_plane_index[2] - num_planes:focal_plane_index[2] + num_planes + 1,
+        # ])
+    else:
+        kernel /= np.sum(kernel)
+
     kernel /= np.sum(kernel)
 
     img = fftconvolution(sample=reference, kernel=kernel)  # image in photons
