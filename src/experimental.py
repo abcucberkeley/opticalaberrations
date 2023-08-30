@@ -1017,7 +1017,7 @@ def cluster_tiles(
     valid_stdevs = stdevs.groupby('z')
 
     wavefronts, coefficients, actuators = {}, {}, {}
-    wavefronts_montage = np.zeros((len(valid_predictions.groups.keys())*64, (max_isoplanatic_clusters+1)*64))
+    wavefronts_montage = np.zeros((len(valid_predictions.groups.keys())*64, (max_isoplanatic_clusters+1)*64)).astype(np.float32)
     for z in valid_predictions.groups.keys():  # basically loop through all ztiles, unless no valid predictions exist
         ztile_preds = valid_predictions.get_group(z)
         ztile_preds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
@@ -1129,7 +1129,11 @@ def cluster_tiles(
                 k*64:(k+1)*64,
             ] = wavefronts[cluster].wave(64).astype(np.float32)
 
-            imwrite(Path(f"{savepath}_{postfix}_{cluster}_wavefront.tif"), wavefronts_montage[z*64:(z+1)*64, k*64:(k+1)*64])
+            imwrite(Path(f"{savepath}_{postfix}_{cluster}_wavefront.tif"),
+                    wavefronts_montage[z*64:(z+1)*64, k*64:(k+1)*64],
+                    dtype=np.float32,
+                    )
+
 
             pred_std = Wavefront(
                 np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0),
@@ -1155,7 +1159,11 @@ def cluster_tiles(
                 scalar=dm_damping_scalar
             )
 
-    imwrite(Path(f"{savepath}_{postfix}_wavefronts_montage.tif"), wavefronts_montage)
+    imwrite(Path(f"{savepath}_{postfix}_wavefronts_montage.tif"),
+            wavefronts_montage,
+            resolution=(64, 64),
+            dtype=np.float32,
+            )
 
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
