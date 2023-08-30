@@ -130,6 +130,11 @@ def parse_args(args):
              '(Default: None; to keep default mode used during training)'
     )
 
+    parser.add_argument(
+        "--wavelength", default=None, type=float,
+        help='detection wavelength in microns'
+    )
+
     return parser.parse_args(args)
 
 
@@ -190,7 +195,8 @@ def run_task(iter_num, args):
                 digital_rotations=args.digital_rotations,
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
-                psf_type=args.psf_type
+                psf_type=args.psf_type,
+                wavelength=args.wavelength
             )
         elif args.target == 'densityheatmap':
             savepath = eval.densityheatmap(
@@ -206,7 +212,8 @@ def run_task(iter_num, args):
                 photons_range=(args.photons_min, args.photons_max),
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
-                psf_type=args.psf_type
+                psf_type=args.psf_type,
+                wavelength=args.wavelength
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
@@ -222,7 +229,8 @@ def run_task(iter_num, args):
                 photons_range=(args.photons_min, args.photons_max),
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
-                psf_type=args.psf_type
+                psf_type=args.psf_type,
+                wavelength=args.wavelength
             )
 
         with Path(f"{savepath.with_suffix('')}_eval_settings.json").open('w') as f:
@@ -238,7 +246,8 @@ def run_task(iter_num, args):
                 digital_rotations=bool(args.digital_rotations),
                 photons_min=float(args.photons_min),
                 photons_max=float(args.photons_max),
-                psf_type=str(args.psf_type)
+                psf_type=args.psf_type,
+                wavelength=args.wavelength,
             )
 
             ujson.dump(

@@ -170,6 +170,9 @@ def collect_data(
     no_phase: bool = False,
     photons_range: Optional[tuple] = None,
     npoints_range: Optional[tuple] = None,
+    psf_type: Optional[str] = None,
+    lam_detection: Optional[float] = None,
+    default_wavelength: Optional[float] = .510,
 ):
 
     predicted_modes = model.output_shape[-1]
@@ -207,12 +210,17 @@ def collect_data(
         'file': np.empty(metadata.shape[0], dtype=Path),             # path to realspace images
         'file_windows': np.empty(metadata.shape[0], dtype=Path),     # stupid windows path
         'beads': np.zeros(metadata.shape[0], dtype=Path),
+        'psf_type': np.full(metadata.shape[0], dtype=str, fill_value=psf_type),
+        'wavelength': np.full(metadata.shape[0], dtype=float, fill_value=lam_detection),
         # path to binary image file filled with zeros except at location of beads
     }
 
     # see `data_utils.get_sample` to check order of objects returned
     for i in range(metadata.shape[0]):
-        ys[i] = metadata[i, 0].numpy()[:predicted_modes]
+
+        # rescale zernike amplitudes to maintain the same peak2valley for different PSFs
+        ys[i] = lam_detection / default_wavelength * metadata[i, 0].numpy()[:predicted_modes]
+        results['residuals_umRMS'][i] = np.linalg.norm(ys[i])
 
         results['photons'][i] = metadata[i, 1].numpy()
         results['counts'][i] = metadata[i, 2].numpy()
@@ -223,8 +231,6 @@ def collect_data(
         results['aberration'][i] = metadata[i, 5].numpy()
         results['residuals'][i] = results['aberration'][i]
 
-        results['residuals_umRMS'][i] = metadata[i, 6].numpy()
-
         results['neighbors'][i] = metadata[i, 7].numpy()
         results['distance'][i] = metadata[i, 8].numpy()
 
@@ -232,7 +238,6 @@ def collect_data(
         results['file'][i] = f
         results['file_windows'][i] = utils.convert_to_windows_file_string(f)
         results['beads'][i] = f.with_name(f'{f.stem}_gt' + f.suffix)
-
 
     # 'results' is a df to be written out as the _predictions.csv.
     # 'results' holds the information from every iteration.
@@ -269,7 +274,8 @@ def iter_evaluate(
     savepath: Any = None,
     plot: Any = None,
     plot_rotations: bool = False,
-    psf_type: Optional[str] = None
+    psf_type: Optional[str] = None,
+    lam_detection: Optional[float] = .510
 ):
     """
     Gathers the set of .tif files that meet the input criteria.
@@ -288,8 +294,9 @@ def iter_evaluate(
         signed=True,
         rotate=False,
         batch_size=batch_size,
+        psf_shape=3 * [model.input_shape[2]],
         psf_type=psf_type,
-        psf_shape=3 * [model.input_shape[2]]
+        lam_detection=lam_detection,
     )
 
     if iter_num == 1:
@@ -302,6 +309,8 @@ def iter_evaluate(
             no_phase=no_phase,
             photons_range=photons_range,
             npoints_range=npoints_range,
+            psf_type=gen.psf_type,
+            lam_detection=gen.lam_detection
         )
     else:
         # read previous results, ignoring criteria
@@ -866,7 +875,8 @@ def snrheatmap(
     plot: Any = None,
     plot_rotations: bool = False,
     agg: str = 'median',
-    psf_type: Optional[str] = None
+    psf_type: Optional[str] = None,
+    lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / eval_sign / f'snrheatmaps'
@@ -898,7 +908,8 @@ def snrheatmap(
             digital_rotations=digital_rotations,
             plot=plot,
             plot_rotations=plot_rotations,
-            psf_type=psf_type
+            psf_type=psf_type,
+            lam_detection=lam_detection
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -952,8 +963,9 @@ def densityheatmap(
     plot: Any = None,
     plot_rotations: bool = False,
     agg: str = 'median',
-    psf_type: Optional[str] = None,
     photons_range: Optional[tuple] = None,
+    psf_type: Optional[str] = None,
+    lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -987,7 +999,8 @@ def densityheatmap(
             digital_rotations=digital_rotations,
             plot=plot,
             plot_rotations=plot_rotations,
-            psf_type=psf_type
+            psf_type=psf_type,
+            lam_detection=lam_detection
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -1039,7 +1052,8 @@ def iterheatmap(
     plot: Any = None,
     plot_rotations: bool = False,
     agg: str = 'median',
-    psf_type: Optional[str] = None
+    psf_type: Optional[str] = None,
+    lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = modelpath.with_suffix('') / eval_sign / f'iterheatmaps'
@@ -1076,7 +1090,8 @@ def iterheatmap(
             digital_rotations=digital_rotations,
             plot=plot,
             plot_rotations=plot_rotations,
-            psf_type=psf_type
+            psf_type=psf_type,
+            lam_detection=lam_detection
         )
 
     max_iter = df['iter_num'].max()
@@ -1612,7 +1627,7 @@ def eval_modalities(
     num_objs: int = 1,
     psf_shape: tuple = (96, 96, 96),  # needs to be large enough for 2photon
     modalities: tuple = (
-         '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+        '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         '../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat',
         '../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat',
         '../lattice/MBHex_NAexc0p43_annulus0p47_0p40_crop0p08_FWHM48p0.mat',
