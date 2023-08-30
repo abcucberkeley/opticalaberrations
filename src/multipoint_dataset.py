@@ -155,6 +155,7 @@ def beads(
 
 def sim(
     filename: str,
+    reference: np.ndarray,
     outdir: Path,
     phi: Wavefront,
     gen: SyntheticPSF,
@@ -173,17 +174,7 @@ def sim(
     mean_background_offset=100,
     electrons_per_count: float = .22,
     quantum_efficiency: float = .82,
-    fill_radius: float = 0.0,
-    reference_shape: Optional[Union[tuple, list]] = None
 ):
-    photons = randuniform(photons)
-    reference = beads(
-        image_shape=gen.psf_shape if reference_shape is None else reference_shape,
-        photons=photons,
-        object_size=0,
-        num_objs=npoints,
-        fill_radius=fill_radius,
-    )
 
     # aberrated PSF without noise
     kernel, amps, lls_defocus_offset = gen.single_psf(
@@ -197,7 +188,7 @@ def sim(
         focal_plane_index = [(w // 2) - 1 for w in kernel.shape]
         kernel /= np.sum(kernel[focal_plane_index[0], focal_plane_index[1], focal_plane_index[2]])
 
-        # num_planes = 3
+        # num_planes = 5
         # kernel /= np.sum(kernel[
         #      focal_plane_index[0] - num_planes:focal_plane_index[0] + num_planes + 1,
         #      focal_plane_index[1] - num_planes:focal_plane_index[1] + num_planes + 1,
@@ -205,8 +196,6 @@ def sim(
         # ])
     else:
         kernel /= np.sum(kernel)
-
-    kernel /= np.sum(kernel)
 
     img = fftconvolution(sample=reference, kernel=kernel)  # image in photons
 
@@ -335,9 +324,10 @@ def create_synthetic_sample(
     min_lls_defocus_offset: float = 0.,
     max_lls_defocus_offset: float = 0.,
     fill_radius: float = 0.,
+    default_wavelength: float = .510,
 ):
 
-    phi = Wavefront(
+    aberration = Wavefront(
         amplitudes=(min_amplitude, max_amplitude),
         order='ansi',
         distribution=distribution,
@@ -349,12 +339,23 @@ def create_synthetic_sample(
         lam_detection=.510,
     )
 
+    photon_range = (min_photons, max_photons)
+    photons = randuniform(photon_range)
+
+    reference = beads(
+        image_shape=(64, 64, 64),
+        photons=photons,
+        object_size=0,
+        num_objs=npoints,
+        fill_radius=fill_radius,
+    )
+
     for gen in generators.values():
         if gen.psf_type == '2photon':
             # boost um RMS aberration amplitudes for '2photon', so we create equivalent p2v aberrations
-            r = gen.lam_detection / .510
+            r = gen.lam_detection / default_wavelength
             phi = Wavefront(
-                amplitudes=[r * z for z in phi.amplitudes],
+                amplitudes=[r * z for z in aberration.amplitudes],
                 order=gen.order,
                 distribution=gen.distribution,
                 mode_weights=gen.mode_weights,
@@ -364,10 +365,9 @@ def create_synthetic_sample(
                 rotate=gen.rotate,
                 lam_detection=gen.lam_detection,
             )
-            reference_shape = 96
         else:
             phi = Wavefront(
-                amplitudes=phi.amplitudes,
+                amplitudes=aberration.amplitudes,
                 order=gen.order,
                 distribution=gen.distribution,
                 mode_weights=gen.mode_weights,
@@ -377,12 +377,6 @@ def create_synthetic_sample(
                 rotate=gen.rotate,
                 lam_detection=gen.lam_detection,
             )
-            reference_shape = 64
-
-        if gen.psf_type == 'widefield':
-            photon_range = (min_photons*5, max_photons*5)
-        else:
-            photon_range = (min_photons, max_photons)
 
         outdir = savedir / rf"{gen.psf_type.replace('../lattice/', '').split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
 
@@ -416,11 +410,12 @@ def create_synthetic_sample(
         except Exception as e:
             sim(
                 filename=filename,
+                reference=reference,
                 outdir=outdir,
                 phi=phi,
                 gen=gen,
                 npoints=npoints,
-                photons=photon_range,
+                photons=photons,
                 emb=emb,
                 embedding_option=embedding_option,
                 random_crop=random_crop,
@@ -429,8 +424,6 @@ def create_synthetic_sample(
                 alpha_val=alpha_val,
                 phi_val=phi_val,
                 lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset),
-                fill_radius=fill_radius,
-                reference_shape=3 * [reference_shape]
             )
 
 
