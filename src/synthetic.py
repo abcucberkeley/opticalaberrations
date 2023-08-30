@@ -97,9 +97,7 @@ class SyntheticPSF:
         self.embedding_option = embedding_option
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
         self.amplitude_ranges = amplitude_ranges
-
         self.psf_type = psf_type
-        self.lls_excitation_profile = lls_excitation_profile
 
         yumb_axial_support_index, yumb_lateral_support_index = self.calc_max_support_index(
             psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
@@ -136,8 +134,9 @@ class SyntheticPSF:
             n=self.refractive_index,
             na_detection=self.na_detection,
             psf_type=self.psf_type,
-            lls_excitation_profile=self.lls_excitation_profile,
+            lls_excitation_profile=lls_excitation_profile,
         )
+        self.lls_excitation_profile = self.psfgen.lls_excitation_profile
 
         # ideal psf (theoretical, no noise)
         self.ipsf = self.theoretical_psf(normed=True)
@@ -172,7 +171,6 @@ class SyntheticPSF:
             n=self.refractive_index,
             na_detection=self.na_detection,
             psf_type=psf_type,
-            lls_excitation_profile=self.lls_excitation_profile,
         )
 
         ipsf = gen.incoherent_psf(phi)

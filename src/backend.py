@@ -161,7 +161,6 @@ def load_metadata(
 
         psfgen = SyntheticPSF(
             psf_type=str(file.get('psf_type')[()]).strip("b'").strip("\'").strip('\"') if psf_type is None else psf_type,
-            lls_excitation_profile=np.array(file.get('lls_excitation_profile')[:]) if psf_type is None else None,
             psf_shape=psf_shape,
             n_modes=int(file.get('n_modes')[()]) if n_modes is None else n_modes,
             lam_detection=float(file.get('wavelength')[()]) if lam_detection is None else lam_detection,
