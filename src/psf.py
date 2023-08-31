@@ -216,7 +216,14 @@ class PsfGenerator3D:
 
             eff_pixel_size = lam_excitation / self.n * lls_profile_dz       # microns per pixel
             au = 0.61 * (self.lam_detection / self.n) / self.na_detection   # airy radius in microns
-            Z, Y, X = np.ogrid[-200:201, -200:201, -200:201]  # pix pitch=eff_pixel_size (0.1 media wavelengths)
+
+            # pix pitch=eff_pixel_size (0.1 media wavelengths)
+            if self.Nx <= 64:
+                Z, Y, X = np.ogrid[-200:201, -200:201, -200:201]
+            elif self.Nx <= 128:
+                Z, Y, X = np.ogrid[-400:401, -400:401, -400:401]
+            else:
+                Z, Y, X = np.ogrid[-1000:1001, -1000:501, -1000:1001]
 
             circ_func = Y ** 2 + X ** 2 <= (f * au / eff_pixel_size) ** 2
             circ_func = circ_func & (Z == 0)

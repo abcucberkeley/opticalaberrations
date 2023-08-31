@@ -207,17 +207,20 @@ def dog(
             mask[mask < .9] = np.nan
             mask[mask >= .9] = 1
 
-            if cp.nanstd(im2*mask) < 3:  # if blurred shows little deviation: this is sparse, will want to more aggressively subtract
+            # if blurred shows little deviation: this is sparse, will want to more aggressively subtract
+            if cp.nanstd(im2*mask) < 3:
                 snr = measure_snr(image*mask)       
                 if snr > snr_threshold:             # sparse, yet SNR of original image is good
                     noise = cp.std(image - im2)     # increase the background subtraction by the noise
                     return im1 - (im2 + noise)
                 else:                               # sparse, and SNR of original image is poor
+                    logger.warning("Dropping image for poor SNR")
                     return np.zeros_like(image)     # return zeros
                 
             else:                                               # This is a dense image
                 filtered_img = im1 - im2
                 if measure_snr(filtered_img) < snr_threshold:   # SNR poor
+                    logger.warning("Dropping image for poor SNR")
                     return np.zeros_like(image)                 # return zeros
                 else:
                     return filtered_img                         # SNR good. Return filtered image.
