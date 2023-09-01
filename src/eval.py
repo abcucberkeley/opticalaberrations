@@ -946,7 +946,7 @@ def snrheatmap(
         dataframe,
         histograms=df,
         wavelength=modelspecs.lam_detection,
-        savepath=savepath,
+        savepath=Path(f"{savepath}_iter_{iter_num}"),
         label=f'Integrated photons per object',
         lims=(0, 10 ** 6),
         agg=agg
@@ -1033,7 +1033,7 @@ def densityheatmap(
         plot_heatmap_p2v(
             dataframe,
             wavelength=modelspecs.lam_detection,
-            savepath=Path(f'{savepath}_{col}'),
+            savepath=Path(f'{savepath}_iter_{iter_num}_{col}'),
             label=label,
             lims=lims,
             agg=agg

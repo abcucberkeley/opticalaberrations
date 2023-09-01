@@ -196,7 +196,7 @@ def run_task(iter_num, args):
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
-                wavelength=args.wavelength
+                lam_detection=args.wavelength
             )
         elif args.target == 'densityheatmap':
             savepath = eval.densityheatmap(
@@ -213,7 +213,7 @@ def run_task(iter_num, args):
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
-                wavelength=args.wavelength
+                lam_detection=args.wavelength
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
@@ -230,7 +230,7 @@ def run_task(iter_num, args):
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
-                wavelength=args.wavelength
+                lam_detection=args.wavelength
             )
 
         with Path(f"{savepath.with_suffix('')}_eval_settings.json").open('w') as f:
@@ -247,7 +247,7 @@ def run_task(iter_num, args):
                 photons_min=float(args.photons_min),
                 photons_max=float(args.photons_max),
                 psf_type=args.psf_type,
-                wavelength=args.wavelength,
+                lam_detection=args.wavelength,
             )
 
             ujson.dump(
