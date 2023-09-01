@@ -67,7 +67,7 @@ def save_synthetic_sample(
         imwrite(f"{savepath}_realspace.tif", realspace.astype(np.float32), compression='deflate')
 
     imwrite(f"{savepath}.tif", inputs.astype(np.float32), compression='deflate')
-    logger.info(f"Saved: {savepath.resolve()}.tif")
+    # logger.info(f"Saved: {savepath.resolve()}.tif")
 
     with Path(f"{savepath}.json").open('w') as f:
         json = dict(
@@ -159,6 +159,7 @@ def sim(
     outdir: Path,
     phi: Wavefront,
     gen: SyntheticPSF,
+    upsampled_gen: SyntheticPSF,
     npoints: int,
     photons: tuple,
     emb: bool = True,
@@ -174,14 +175,14 @@ def sim(
     mean_background_offset=100,
     electrons_per_count: float = .22,
     quantum_efficiency: float = .82,
+    model_psf_shape: tuple = (64, 64, 64)
 ):
 
     # aberrated PSF without noise
-    kernel, amps, lls_defocus_offset = gen.single_psf(
+    kernel = upsampled_gen.single_psf(
         phi=phi,
         lls_defocus_offset=lls_defocus_offset,
         normed=True,
-        meta=True,
     )
 
     if gen.psf_type == 'widefield':  # normalize PSF by the total energy in the focal plane
@@ -198,8 +199,9 @@ def sim(
         kernel /= np.sum(kernel)
 
     img = fftconvolution(sample=reference, kernel=kernel)  # image in photons
+    img = resize_with_crop_or_pad(img, crop_shape=model_psf_shape, mode='constant')  # only center crop
 
-    p2v = Wavefront(amps, lam_detection=gen.lam_detection).peak2valley(na=1.0)
+    p2v = phi.peak2valley(na=1.0)
     if npoints > 1:
         avg_min_distance = np.nan_to_num(mean_min_distance(reference, voxel_size=gen.voxel_size), nan=0)
     else:
@@ -257,7 +259,7 @@ def sim(
             save_synthetic_sample(
                 odir/filename,
                 embeddings,
-                amps=amps,
+                amps=phi.amplitudes,
                 photons=photons,
                 counts=counts,
                 counts_mode=counts_mode,
@@ -280,7 +282,7 @@ def sim(
             outdir/filename,
             inputs,
             gt=reference,
-            amps=amps,
+            amps=phi.amplitudes,
             photons=photons,
             counts=counts,
             counts_mode=counts_mode,
@@ -301,6 +303,7 @@ def sim(
 def create_synthetic_sample(
     filename: str,
     generators: dict,
+    upsampled_generators: dict,
     npoints: int,
     savedir: Path,
     modes: int,
@@ -341,6 +344,7 @@ def create_synthetic_sample(
 
     photon_range = (min_photons, max_photons)
     photons = randuniform(photon_range)
+    lls_defocus_offset = randuniform((min_lls_defocus_offset, max_lls_defocus_offset))
 
     reference = beads(
         image_shape=(64, 64, 64),
@@ -350,7 +354,7 @@ def create_synthetic_sample(
         fill_radius=fill_radius,
     )
 
-    for gen in generators.values():
+    for gen, upsampled_gen in zip(generators.values(), upsampled_generators.values()):
         if gen.psf_type == '2photon':
             # boost um RMS aberration amplitudes for '2photon', so we create equivalent p2v aberrations
             r = gen.lam_detection / default_wavelength
@@ -414,6 +418,7 @@ def create_synthetic_sample(
                 outdir=outdir,
                 phi=phi,
                 gen=gen,
+                upsampled_gen=upsampled_gen,
                 npoints=npoints,
                 photons=photons,
                 emb=emb,
@@ -423,7 +428,7 @@ def create_synthetic_sample(
                 normalize=normalize,
                 alpha_val=alpha_val,
                 phi_val=phi_val,
-                lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset),
+                lls_defocus_offset=lls_defocus_offset,
             )
 
 
@@ -606,7 +611,7 @@ def main(args=None):
     args = parse_args(args)
     logger.info(args)
 
-    generators = {}
+    generators, upsampled_generators = {}, {}
     for psf in set(args.psf_type):
         generators[psf] = SyntheticPSF(
             order='ansi',
@@ -627,9 +632,29 @@ def main(args=None):
             na_detection=args.na_detection,
         )
 
+        upsampled_generators[psf] = SyntheticPSF(
+            order='ansi',
+            cpu_workers=args.cpu_workers,
+            n_modes=args.modes,
+            distribution=args.dist,
+            mode_weights=args.mode_dist,
+            gamma=args.gamma,
+            signed=args.signed,
+            rotate=args.rotate,
+            psf_type=psf,
+            lam_detection=.920 if psf == '2photon' else args.lam_detection,
+            psf_shape=3 * [2 * args.input_shape],
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
+            refractive_index=args.refractive_index,
+            na_detection=args.na_detection,
+        )
+
     sample = partial(
         create_synthetic_sample,
         generators=generators,
+        upsampled_generators=upsampled_generators,
         emb=args.emb,
         embedding_option=set(args.embedding_option),
         alpha_val=args.alpha_val,
