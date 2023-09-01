@@ -45,6 +45,7 @@ tf.get_logger().setLevel(logging.ERROR)
 @profile
 def simulate_beads(
     psf,
+    psf_type,
     beads=None,
     photons=100000,
     maxcounts=None,
@@ -68,7 +69,11 @@ def simulate_beads(
         psf /= psf.max()
         psf *= maxcounts
     else:
-        psf /= np.sum(psf)
+        if psf_type == 'widefield':  # normalize PSF by the total energy in the focal plane
+            focal_plane_index = [(w // 2) - 1 for w in psf.shape]
+            psf /= np.sum(psf[focal_plane_index[0], focal_plane_index[1], focal_plane_index[2]])
+        else:
+            psf /= np.sum(psf)
 
     if fast:
         original_shape = beads.shape
@@ -142,6 +147,7 @@ def generate_sample(
 
         noisy_img = simulate_beads(
             psf=psf,
+            psf_type=psfgen.psf_type,
             beads=ref,
             photons=hashtable['photons']
         )
@@ -396,7 +402,7 @@ def plot_heatmap_p2v(
     dataframe,
     wavelength,
     savepath: Path,
-    label='Integrated photons',
+    label='Integrated photons per object',
     lims=(0, 100),
     ax=None,
     cax=None,
@@ -456,7 +462,7 @@ def plot_heatmap_p2v(
     ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
     if histograms is not None:
-        if label == 'Integrated photons':
+        if label == 'Integrated photons per object':
             x = histograms[
                 (histograms.pbins <= 1e5) &
                 (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
@@ -734,7 +740,7 @@ def plot_heatmap_p2v(
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
-    if label == 'Integrated photons':
+    if label == 'Integrated photons per object':
         ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
         ax.set_xticks(np.arange(0, 1e6+10e4, 5e4), minor=True)
     elif label == 'Number of iterations':
@@ -767,7 +773,7 @@ def plot_heatmap_umRMS(
     dataframe,
     wavelength,
     savepath:Path,
-    label='Integrated photons',
+    label='Integrated photons per object',
     lims=(0, 100),
     ax=None,
     cax=None,
@@ -833,7 +839,7 @@ def plot_heatmap_umRMS(
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
 
-    if label == 'Integrated photons':
+    if label == 'Integrated photons per object':
         ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
         ax.set_xticks(np.arange(0, 1e6+10e4, 5e4), minor=True)
     elif label == 'Number of iterations':
@@ -941,7 +947,7 @@ def snrheatmap(
         histograms=df,
         wavelength=modelspecs.lam_detection,
         savepath=savepath,
-        label=f'Integrated photons',
+        label=f'Integrated photons per object',
         lims=(0, 10 ** 6),
         agg=agg
     )
@@ -1187,7 +1193,7 @@ def random_samples(
                         lls_defocus_offset=(0, 0)
                     )
 
-                    noisy_img = simulate_beads(psf, beads=reference, noise=True)
+                    noisy_img = simulate_beads(psf, psf_type=gen.psf_type, beads=reference, noise=True)
                     maxcounts = np.max(noisy_img)
                     noisy_img /= maxcounts
 
@@ -1254,7 +1260,7 @@ def random_samples(
                     gt_psf = gen.single_psf(y_wave, normed=True)
 
                     corrected_psf = gen.single_psf(residuals)
-                    corrected_noisy_img = simulate_beads(corrected_psf, beads=reference, noise=True)
+                    corrected_noisy_img = simulate_beads(corrected_psf, psf_type=gen.psf_type, beads=reference, noise=True)
                     corrected_noisy_img /= np.max(corrected_noisy_img)
 
                     imwrite(save_path / f'psf_{s}.tif', noisy_img)
@@ -1327,6 +1333,7 @@ def plot_templates(model: Path, num_objs: Optional[int] = 1):
 
                 img = simulate_beads(
                     psf=kernel,
+                    psf_type=gen.psf_type,
                     object_size=0,
                     photons=ph,
                     # maxcounts=ph,
@@ -1374,6 +1381,7 @@ def eval_object(
         inputs = np.stack([
                 simulate_beads(
                     psf=kernels[k],
+                    psf_type=gen.psf_type,
                     object_size=0,
                     num_objs=num_objs,
                     photons=ph,
@@ -1625,7 +1633,7 @@ def eval_modalities(
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
     num_objs: int = 1,
-    psf_shape: tuple = (96, 96, 96),  # needs to be large enough for 2photon
+    psf_shape: tuple = (128, 128, 128),  # needs to be large enough for 2photon
     modalities: tuple = (
         '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         '../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat',
@@ -1703,7 +1711,7 @@ def eval_modalities(
                         lls_defocus_offset=None
                     )
 
-                    noisy_img = simulate_beads(psf, beads=reference, noise=True)
+                    noisy_img = simulate_beads(psf, psf_type=gen.psf_type, beads=reference, noise=True)
                     noisy_img -= 100
                     maxcounts = np.max(noisy_img)
                     noisy_img /= maxcounts
@@ -1777,7 +1785,7 @@ def eval_modalities(
                     gt_psf = gen.single_psf(y_wave, normed=True)
 
                     corrected_psf = gen.single_psf(residuals)
-                    corrected_noisy_img = simulate_beads(corrected_psf, beads=reference, noise=True)
+                    corrected_noisy_img = simulate_beads(corrected_psf, psf_type=gen.psf_type, beads=reference, noise=True)
                     corrected_noisy_img /= np.max(corrected_noisy_img)
 
                     imwrite(save_path / f'{z}_input.tif', noisy_img.astype(np.float32))
