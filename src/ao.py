@@ -61,21 +61,6 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
 
-    decon = subparsers.add_parser("decon")
-    decon.add_argument("input", type=Path, help="path to input .tif file")
-    decon.add_argument("psf", type=Path, help="path to PSF .tif file")
-    decon.add_argument(
-        "--iters", default=10, type=int,
-        help="number of iterations for Richardson-Lucy deconvolution")
-    decon.add_argument(
-        "--plot", action='store_true',
-        help='a toggle for plotting predictions'
-    )
-    decon.add_argument(
-        "--cluster", action='store_true',
-        help='a toggle to run predictions on our cluster'
-    )
-
     psnr = subparsers.add_parser("psnr")
     psnr.add_argument("input", type=Path, help="path to input .tif file")
     psnr.add_argument(
@@ -601,6 +586,31 @@ def parse_args(args):
              '(Default: None; to keep default mode used during training)'
     )
 
+    decon = subparsers.add_parser("decon")
+    decon.add_argument("input", type=Path, help="path to csv file")
+    decon.add_argument(
+        "--iters", default=10, type=int,
+        help="number of iterations for Richardson-Lucy deconvolution")
+    decon.add_argument(
+        "--prediction_threshold", default=.25, type=float,
+        help='set predictions below threshold to zero (p2v waves)'
+    )
+    decon.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
+    decon.add_argument(
+        "--ignore_tile", action='append', default=None,
+        help='IDs [e.g., "z0-y0-x0"] for tiles you wish to ignore'
+    )
+    decon.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+    decon.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
+
     combine_tiles = subparsers.add_parser("combine_tiles")
     combine_tiles.add_argument("input", type=Path, help="path to csv file")
     combine_tiles.add_argument(
@@ -882,14 +892,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     skew_angle=args.skew_angle,
                 )
 
-            elif args.func == 'decon':
-                experimental_llsm.decon(
-                    img=args.input,
-                    psf=args.psf,
-                    iters=args.iters,
-                    plot=args.plot,
-                )
-
             elif args.func == 'detect_rois':
                 experimental_llsm.detect_rois(
                     img=args.input,
@@ -1073,6 +1075,14 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     plot=args.plot,
                     preloaded=preloaded,
                     psf_type=args.psf_type
+                )
+            elif args.func == 'decon':
+                experimental.decon(
+                    model_pred=args.input,
+                    iters=args.iters,
+                    ignore_tile=args.ignore_tile,
+                    preloaded=preloaded,
+                    plot=args.plot,
                 )
             elif args.func == 'combine_tiles':
                 experimental.combine_tiles(

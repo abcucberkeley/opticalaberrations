@@ -15,7 +15,12 @@ from astropy import convolution
 import multiprocessing as mp
 from line_profiler_pycharm import profile
 from typing import Any, List, Union, Optional, Generator
-from scipy import constants
+
+try:
+    import cupy as cp
+    from cupyx.scipy.ndimage import gaussian_filter
+except ImportError as e:
+    logging.warning(f"Cupy not supported on your system: {e}")
 
 from preprocessing import resize_with_crop_or_pad
 from wavefront import Wavefront
@@ -352,6 +357,25 @@ def fftconvolution(kernel, sample):
     ).astype(sample.dtype)   # otherwise returns as float64
     conv[conv < 0] = 0  # clip negative small values
     return conv
+
+
+def fft_decon(kernel, sample, iters):
+
+    for k in range(kernel.ndim):
+        kernel = np.roll(kernel, kernel.shape[k] // 2, axis=k)
+
+    kernel = cp.array(kernel)
+    sample = cp.array(sample)
+    deconv = cp.array(sample)
+
+    kernel = cp.fft.rfftn(kernel)
+
+    for _ in range(iters):
+        conv = cp.fft.irfftn(cp.fft.rfftn(deconv) * kernel)
+        relative_blur = sample / conv
+        deconv *= cp.fft.irfftn((cp.fft.rfftn(relative_blur).conj() * kernel).conj())
+
+    return cp.asnumpy(deconv)
 
 
 @profile
