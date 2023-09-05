@@ -35,21 +35,21 @@ do
   --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
 
   python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 $ROTATIONS --batch_size $BATCH modes" \
-  --taskname eval_modalities \
-  --name $MODEL/$EVALSIGN/eval_modalities
+  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modalities" \
+  --taskname modalities \
+  --name $MODEL/$EVALSIGN/modalities
 
 
   BATCH=2048
   python manager.py slurm test.py --partition abc_a100 --mem '250GB' --cpus 16 --gpus 4 \
   --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --n_samples $MAX --niter $ITERS --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
   --taskname $NA \
-  --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PSF
+  --name $MODEL/$EVALSIGN/snrheatmaps
 
   python manager.py slurm test.py --partition abc_a100 --mem '250GB' --cpus 16 --gpus 4 \
   --task "$MODEL.h5 --datadir $DATA --na $NA --batch_size $BATCH --n_samples $MAX --niter 1 --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
   --taskname $NA \
-  --name $MODEL/$EVALSIGN/densityheatmaps/mode-$PSF
+  --name $MODEL/$EVALSIGN/densityheatmaps
 done
 
 

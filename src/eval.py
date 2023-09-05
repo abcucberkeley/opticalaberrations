@@ -1719,7 +1719,7 @@ def eval_modalities(
                     save_path = Path(
                         f"{model.with_suffix('')}/"
                         f"{eval_sign}/"
-                        f"eval_modalities/"
+                        f"modalities/"
                         f"{dist}/"
                         f"um-{amp}/"
                         f"mode-{mode}"
