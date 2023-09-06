@@ -1017,6 +1017,102 @@ def dual_stage_prediction(
 
 
 @profile
+def predict_dataset(
+        model: Union[tf.keras.Model, Path],
+        inputs: tf.data.Dataset,
+        psfgen: SyntheticPSF,
+        save_path: list,
+        batch_size: int = 128,
+        ignore_modes: list = (0, 1, 2, 4),
+        threshold: float = 0.,
+        confidence_threshold: float = .02,
+        verbose: bool = True,
+        desc: str = 'MiniBatch-probabilistic-predictions',
+        digital_rotations: Optional[int] = None,
+        plot_rotations: Any = None,
+):
+    """
+    Average predictions and compute stdev
+
+    Args:
+        model: pre-trained keras model
+        inputs: encoded tokens to be processed
+        psfgen: Synthetic PSF object
+        ignore_modes: list of modes to ignore
+        batch_size: number of samples per batch
+        threshold: set predictions below threshold to zero (wavelength)
+        desc: test to display for the progressbar
+        verbose: a toggle for progress bar
+        digital_rotations: an array of digital rotations to apply to evaluate model's confidence
+        plot_rotations: optional toggle to plot digital rotations
+
+    Returns:
+        average prediction, stdev
+    """
+
+    if isinstance(model, Path):
+        model = load(model)
+
+    no_phase = True if model.input_shape[1] == 3 else False
+    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
+    ignore_modes = list(map(int, ignore_modes))
+    logger.info(f"Ignoring modes: {ignore_modes}")
+    logger.info(f"[Batch size={batch_size}] {desc}")
+    inputs = inputs.batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
+
+    # for i in inputs.take(1):
+    #     logger.info(i.numpy().shape)
+
+    if digital_rotations is not None:
+        inputs = inputs.map(lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:])))
+        inputs = inputs.unbatch().batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
+
+        # for i in inputs.take(1):
+        #     logger.info(i.numpy().shape)
+
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+    inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE) # prefetch will fill GPU RAM
+
+    # operations mapped and batched gets executed here (emb=>rotations=>predictions).
+    preds = model.predict(inputs, verbose=verbose)
+
+    preds[:, ignore_modes] = 0.
+    preds[np.abs(preds) <= threshold] = 0.
+
+    if digital_rotations is not None:
+        tile_predictions = np.array(np.split(preds, len(save_path)))
+        with mp.Pool(processes=mp.cpu_count()) as p:
+            jobs = list(tqdm(
+                p.starmap(
+                    eval_rotation,  # order matters future thayer
+                    zip(
+                        tile_predictions,                               # init_preds
+                        repeat(digital_rotations),                      # rotations
+                        repeat(psfgen),                                 # psfgen
+                        save_path,                                      # save_path
+                        save_path if plot_rotations else repeat(None),  # plot
+                        repeat(threshold),                              # threshold
+                        repeat(no_phase),                               # no_phase
+                        repeat(confidence_threshold),                   # confidence_threshold
+                    ),
+                ),
+                total=len(save_path),
+                desc="Evaluate predictions",
+                unit=' evals',
+                bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
+                file=sys.stdout,
+            ))
+
+        jobs = np.array([list(zip(*j)) for j in jobs])
+        preds, std = jobs[..., 0], jobs[..., -1]
+        return preds, std
+
+    else:
+        return preds, np.zeros_like(preds)
+
+
+@profile
 def predict_files(
     paths: np.ndarray,
     outdir: Path,
@@ -1120,102 +1216,6 @@ def predict_files(
         actuators.to_csv(f"{outdir}_predictions_corrected_actuators.csv")
 
     return predictions
-
-
-@profile
-def predict_dataset(
-        model: Union[tf.keras.Model, Path],
-        inputs: tf.data.Dataset,
-        psfgen: SyntheticPSF,
-        save_path: list,
-        batch_size: int = 128,
-        ignore_modes: list = (0, 1, 2, 4),
-        threshold: float = 0.,
-        confidence_threshold: float = .02,
-        verbose: bool = True,
-        desc: str = 'MiniBatch-probabilistic-predictions',
-        digital_rotations: Optional[int] = None,
-        plot_rotations: Any = None,
-):
-    """
-    Average predictions and compute stdev
-
-    Args:
-        model: pre-trained keras model
-        inputs: encoded tokens to be processed
-        psfgen: Synthetic PSF object
-        ignore_modes: list of modes to ignore
-        batch_size: number of samples per batch
-        threshold: set predictions below threshold to zero (wavelength)
-        desc: test to display for the progressbar
-        verbose: a toggle for progress bar
-        digital_rotations: an array of digital rotations to apply to evaluate model's confidence
-        plot_rotations: optional toggle to plot digital rotations
-
-    Returns:
-        average prediction, stdev
-    """
-
-    if isinstance(model, Path):
-        model = load(model)
-
-    no_phase = True if model.input_shape[1] == 3 else False
-    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
-    ignore_modes = list(map(int, ignore_modes))
-    logger.info(f"Ignoring modes: {ignore_modes}")
-    logger.info(f"[Batch size={batch_size}] {desc}")
-    inputs = inputs.batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
-
-    # for i in inputs.take(1):
-    #     logger.info(i.numpy().shape)
-
-    if digital_rotations is not None:
-        inputs = inputs.map(lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:])))
-        inputs = inputs.unbatch().batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
-
-        # for i in inputs.take(1):
-        #     logger.info(i.numpy().shape)
-
-    options = tf.data.Options()
-    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-    inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE) # prefetch will fill GPU RAM
-
-    # operations mapped and batched gets executed here (emb=>rotations=>predictions).
-    preds = model.predict(inputs, verbose=verbose)
-
-    preds[:, ignore_modes] = 0.
-    preds[np.abs(preds) <= threshold] = 0.
-
-    if digital_rotations is not None:
-        tile_predictions = np.array(np.split(preds, len(save_path)))
-        with mp.Pool(processes=mp.cpu_count()) as p:
-            jobs = list(tqdm(
-                p.starmap(
-                    eval_rotation,  # order matters future thayer
-                    zip(
-                        tile_predictions,                               # init_preds
-                        repeat(digital_rotations),                      # rotations
-                        repeat(psfgen),                                 # psfgen
-                        save_path,                                      # save_path
-                        save_path if plot_rotations else repeat(None),  # plot
-                        repeat(threshold),                              # threshold
-                        repeat(no_phase),                               # no_phase
-                        repeat(confidence_threshold),                   # confidence_threshold
-                    ),
-                ),
-                total=len(save_path),
-                desc="Evaluate predictions",
-                unit=' evals',
-                bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
-                file=sys.stdout,
-            ))
-
-        jobs = np.array([list(zip(*j)) for j in jobs])
-        preds, std = jobs[..., 0], jobs[..., -1]
-        return preds, std
-
-    else:
-        return preds, np.zeros_like(preds)
 
 
 def train(

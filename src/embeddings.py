@@ -798,7 +798,13 @@ def fourier_embeddings(
         psf = resize_with_crop_or_pad(psf, crop_shape=[int(s * input_coverage) for s in psf.shape])
 
     if np.all(psf == 0):
-        emb = np.zeros((3, *model_psf_shape[1:])) if no_phase else np.zeros((6, *model_psf_shape[1:]))
+        if digital_rotations is not None:
+            emb = np.zeros((digital_rotations, 3, *model_psf_shape[1:])) \
+                if no_phase else np.zeros((digital_rotations, 6, *model_psf_shape[1:]))
+        else:
+            emb = np.zeros((3, *model_psf_shape[1:])) \
+                if no_phase else np.zeros((6, *model_psf_shape[1:]))
+
     else:
         if no_phase:
             emb = compute_emb(
@@ -851,25 +857,25 @@ def fourier_embeddings(
 
             emb = np.concatenate([alpha, phi], axis=0)
 
-    if emb.shape[1:] != model_psf_shape[1:]:
-        emb = resize(emb, output_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
-        # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
+        if emb.shape[1:] != model_psf_shape[1:]:
+            emb = resize(emb, output_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
+            # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
 
-    if plot is not None:
-        plt.style.use("default")
-        plot_embeddings(
-            inputs=psf,
-            emb=emb,
-            save_path=plot
-        )
+        if plot is not None:
+            plt.style.use("default")
+            plot_embeddings(
+                inputs=psf,
+                emb=emb,
+                save_path=plot
+            )
 
-    if digital_rotations is not None:
-        emb = rotate_embeddings(
-            emb=emb,
-            digital_rotations=digital_rotations,
-            plot=plot,
-            debug_rotations=debug_rotations
-        )
+        if digital_rotations is not None:
+            emb = rotate_embeddings(
+                emb=emb,
+                digital_rotations=digital_rotations,
+                plot=plot,
+                debug_rotations=debug_rotations
+            )
 
     if emb.shape[-1] != 1:
         emb = np.expand_dims(emb, axis=-1)
@@ -925,87 +931,107 @@ def rolling_fourier_embeddings(
     """
 
     iotf = iotf.astype(np.float32)
+    rois = rois.astype(np.float32)
 
-    if np.all(rois != 0):  # filter out blank images
+    if np.all(rois == 0):
+        if digital_rotations is not None:
+            emb = np.zeros((digital_rotations, 3, *model_psf_shape[1:])) \
+                if no_phase else np.zeros((digital_rotations, 6, *model_psf_shape[1:]))
+        else:
+            emb = np.zeros((3, *model_psf_shape[1:])) \
+                if no_phase else np.zeros((6, *model_psf_shape[1:]))
+
+    else:  # filter out blank images
         rois = rois[[~np.all(r == 0) for r in rois]].astype(np.float32)
-    else:
-        rois = rois.astype(np.float32)
 
-    otfs = multiprocess(
-        func=fft,
-        jobs=rois,
-        cores=cpu_workers,
-        desc='Compute FFTs'
-    )
-
-    if no_phase:
-        emb = compute_emb(
-            resize_with_crop_or_pad(np.nanmean(np.abs(otfs), axis=0), crop_shape=iotf.shape),
-            iotf,
-            na_mask=na_mask,
-            val=alpha_val,
-            ratio=ratio,
-            norm=norm,
-            log10=log10,
-            embedding_option=embedding_option,
-            freq_strength_threshold=freq_strength_threshold,
-        )
-    else:
-        alpha = compute_emb(
-            resize_with_crop_or_pad(np.nanmean(np.abs(otfs), axis=0), crop_shape=iotf.shape),
-            iotf,
-            na_mask=na_mask,
-            val=alpha_val,
-            ratio=ratio,
-            norm=norm,
-            log10=log10,
-            embedding_option=embedding_option,
-            freq_strength_threshold=freq_strength_threshold,
+        otfs = multiprocess(
+            func=fft,
+            jobs=rois,
+            cores=cpu_workers,
+            desc='Compute FFTs'
         )
 
-        if remove_interference:
-            window_size = (21, 21, 21)
-            interference = partial(
-                remove_interference_pattern,
-                plot=None,
-                windowing=True,
-                window_size=window_size,
+        if no_phase:
+            emb = compute_emb(
+                resize_with_crop_or_pad(np.nanmean(np.abs(otfs), axis=0), crop_shape=iotf.shape),
+                iotf,
+                na_mask=na_mask,
+                val=alpha_val,
+                ratio=ratio,
+                norm=norm,
+                log10=log10,
+                embedding_option=embedding_option,
+                freq_strength_threshold=freq_strength_threshold,
             )
-            phi_otfs = multiprocess(
-                func=interference,
-                jobs=rois,          # remove interference using original real space data
-                cores=cpu_workers,
-                desc='Remove interference patterns'
+        else:
+            alpha = compute_emb(
+                resize_with_crop_or_pad(np.nanmean(np.abs(otfs), axis=0), crop_shape=iotf.shape),
+                iotf,
+                na_mask=na_mask,
+                val=alpha_val,
+                ratio=ratio,
+                norm=norm,
+                log10=log10,
+                embedding_option=embedding_option,
+                freq_strength_threshold=freq_strength_threshold,
             )
 
-            # could also filter "No objects were detected" cases if remove_interference_pattern returned a flag for that.
-            found_spots_in_tile = np.zeros(phi_otfs.shape[0], dtype=bool)
-            for m in range(phi_otfs.shape[0]):
-                found_spots_in_tile[m] = not np.array_equal(phi_otfs[m], otfs[m], equal_nan=True)
-
-            phi_otfs = phi_otfs[found_spots_in_tile]
-            avg_otf = np.nanmean(phi_otfs, axis=0)
-            avg_otf = resize_with_crop_or_pad(avg_otf, crop_shape=iotf.shape)
-
-            if plot:
-                gamma = 0.5
-                avg_psf = resize_with_crop_or_pad(ifft(avg_otf), crop_shape=window_size)
-
-                fig, axes = plt.subplots(
-                    nrows=4,
-                    ncols=3,
-                    figsize=(8, 11),
-                    sharey=False,
-                    sharex=False
+            if remove_interference:
+                window_size = (21, 21, 21)
+                interference = partial(
+                    remove_interference_pattern,
+                    plot=None,
+                    windowing=True,
+                    window_size=window_size,
                 )
-                for row in range(min(3, phi_otfs.shape[0])):
-                    phi_psf = resize_with_crop_or_pad(ifft(phi_otfs[row]), crop_shape=window_size)
+                phi_otfs = multiprocess(
+                    func=interference,
+                    jobs=rois,          # remove interference using original real space data
+                    cores=cpu_workers,
+                    desc='Remove interference patterns'
+                )
+
+                # could also filter "No objects were detected" cases if remove_interference_pattern returned a flag for that.
+                found_spots_in_tile = np.zeros(phi_otfs.shape[0], dtype=bool)
+                for m in range(phi_otfs.shape[0]):
+                    found_spots_in_tile[m] = not np.array_equal(phi_otfs[m], otfs[m], equal_nan=True)
+
+                phi_otfs = phi_otfs[found_spots_in_tile]
+                avg_otf = np.nanmean(phi_otfs, axis=0)
+                avg_otf = resize_with_crop_or_pad(avg_otf, crop_shape=iotf.shape)
+
+                if plot:
+                    gamma = 0.5
+                    avg_psf = resize_with_crop_or_pad(ifft(avg_otf), crop_shape=window_size)
+
+                    fig, axes = plt.subplots(
+                        nrows=4,
+                        ncols=3,
+                        figsize=(8, 11),
+                        sharey=False,
+                        sharex=False
+                    )
+                    for row in range(min(3, phi_otfs.shape[0])):
+                        phi_psf = resize_with_crop_or_pad(ifft(phi_otfs[row]), crop_shape=window_size)
+                        for ax in range(3):
+                            m5 = axes[row, ax].imshow(np.nanmax(phi_psf, axis=ax)**gamma, cmap='magma')
+
+                        label = f'Reconstructed\nTile {row} of {phi_otfs.shape[0]}. $\gamma$={gamma}'
+
+                        cax = inset_axes(axes[row, -1], width="10%", height="90%", loc='center right', borderpad=-2)
+                        cb = plt.colorbar(m5, cax=cax)
+                        cax.yaxis.set_label_position("right")
+                        cax.set_ylabel(label)
+
+                        for ax in axes.flatten():
+                            ax.axis('off')
+
                     for ax in range(3):
-                        m5 = axes[row, ax].imshow(np.nanmax(phi_psf, axis=ax)**gamma, cmap='magma')
+                        m5 = axes[3, ax].imshow(np.nanmax(avg_psf, axis=ax)**gamma, cmap='magma')
 
-                    label = f'Reconstructed\nTile {row} of {phi_otfs.shape[0]}. $\gamma$={gamma}'
+                    label = f'Reconstructed\navg $\gamma$={gamma}'
 
-                    cax = inset_axes(axes[row, -1], width="10%", height="90%", loc='center right', borderpad=-2)
+                    cax = inset_axes(axes[-1,-1], width="10%", height="90%", loc='center right', borderpad=-2)
                     cb = plt.colorbar(m5, cax=cax)
                     cax.yaxis.set_label_position("right")
                     cax.set_ylabel(label)
@@ -1013,62 +1039,49 @@ def rolling_fourier_embeddings(
                     for ax in axes.flatten():
                         ax.axis('off')
 
-                for ax in range(3):
-                    m5 = axes[3, ax].imshow(np.nanmax(avg_psf, axis=ax)**gamma, cmap='magma')
+                    axes[0, 0].set_title('XY')
+                    axes[0, 1].set_title('XZ')
+                    axes[0, 2].set_title('YZ')
+                    savesvg(fig, f'{plot}_avg_interference_pattern.svg')
+            else:
+                avg_otf = resize_with_crop_or_pad(np.nanmean(otfs, axis=0), crop_shape=iotf.shape)
 
-                label = f'Reconstructed\navg $\gamma$={gamma}'
+            phi = compute_emb(
+                avg_otf,
+                iotf,
+                na_mask=na_mask,
+                val=phi_val,
+                ratio=False,
+                norm=False,
+                log10=False,
+                embedding_option='spatial_planes',
+                freq_strength_threshold=freq_strength_threshold,
+            )
 
-                cax = inset_axes(axes[-1,-1], width="10%", height="90%", loc='center right', borderpad=-2)
-                cb = plt.colorbar(m5, cax=cax)
-                cax.yaxis.set_label_position("right")
-                cax.set_ylabel(label)
+            emb = np.concatenate([alpha, phi], axis=0)
 
-                for ax in axes.flatten():
-                    ax.axis('off')
+        if emb.shape[1:] != model_psf_shape[1:]:
+            emb = resize(emb, output_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
+            # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
 
-                axes[0, 0].set_title('XY')
-                axes[0, 1].set_title('XZ')
-                axes[0, 2].set_title('YZ')
-                savesvg(fig, f'{plot}_avg_interference_pattern.svg')
-        else:
-            avg_otf = resize_with_crop_or_pad(np.nanmean(otfs, axis=0), crop_shape=iotf.shape)
+        if plot is not None:
+            plt.style.use("default")
+            plot_embeddings(
+                inputs=rois,
+                emb=emb,
+                save_path=plot,
+                nrows=nrows,
+                ncols=ncols,
+                ztiles=ztiles
+            )
 
-        phi = compute_emb(
-            avg_otf,
-            iotf,
-            na_mask=na_mask,
-            val=phi_val,
-            ratio=False,
-            norm=False,
-            log10=False,
-            embedding_option='spatial_planes',
-            freq_strength_threshold=freq_strength_threshold,
-        )
-
-        emb = np.concatenate([alpha, phi], axis=0)
-
-    if emb.shape[1:] != model_psf_shape[1:]:
-        emb = resize(emb, output_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
-        # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
-
-    if plot is not None:
-        plt.style.use("default")
-        plot_embeddings(
-            inputs=rois,
-            emb=emb,
-            save_path=plot,
-            nrows=nrows,
-            ncols=ncols,
-            ztiles=ztiles
-        )
-
-    if digital_rotations is not None:
-        emb = rotate_embeddings(
-            emb=emb,
-            digital_rotations=digital_rotations,
-            plot=plot,
-            debug_rotations=debug_rotations
-        )
+        if digital_rotations is not None:
+            emb = rotate_embeddings(
+                emb=emb,
+                digital_rotations=digital_rotations,
+                plot=plot,
+                debug_rotations=debug_rotations
+            )
 
     if emb.shape[-1] != 1:
         emb = np.expand_dims(emb, axis=-1)

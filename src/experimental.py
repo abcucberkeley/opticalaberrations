@@ -767,7 +767,7 @@ def predict_rois(
             escape_forward_slashes=False
         )
 
-    backend.predict_files(
+    predictions = backend.predict_files(
         paths=rois,
         outdir=outdir,
         model=preloadedmodel,
@@ -788,6 +788,7 @@ def predict_rois(
         digital_rotations=digital_rotations,
         cpu_workers=cpu_workers
     )
+    return predictions
 
 
 def predict_snr_map(
