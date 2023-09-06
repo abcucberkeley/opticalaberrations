@@ -1674,8 +1674,8 @@ def eval_modalities(
         for psf_type in modalities
     ]
 
-    for dist in ['single', 'bimodal', 'powerlaw', 'dirichlet']:
-        for amp in [0, .05, .1, .2, .3]:
+    for dist in ['single']:
+        for amp in [0, .1]:
             for z in range(3, 15):
                 if z == 4:
                     continue
@@ -1787,6 +1787,9 @@ def eval_modalities(
                     corrected_psf = gen.single_psf(residuals)
                     corrected_noisy_img = simulate_beads(corrected_psf, psf_type=gen.psf_type, beads=reference, noise=True)
                     corrected_noisy_img /= np.max(corrected_noisy_img)
+
+                    if amp == 0:
+                        imwrite(save_path / f'{z}_na_mask.tif', gen.na_mask().astype(np.float32))
 
                     imwrite(save_path / f'{z}_input.tif', noisy_img.astype(np.float32))
 
