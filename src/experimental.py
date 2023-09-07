@@ -808,13 +808,14 @@ def predict_snr_map(
     outdir.mkdir(exist_ok=True, parents=True)
 
     # obtain each tile filename. Skip saving to .tif if we have them already.
-    rois, ztiles, nrows, ncols = get_tiles(
+    tiles, ztiles, nrows, ncols = get_tiles(
         sample,
         savepath=outdir,
         strides=window_size,
         window_size=window_size,
         save_files=save_files,
     )
+    rois = tiles['path'].values
 
     prep = partial(prep_sample, return_psnr=True)
     snrs = utils.multiprocess(func=prep, jobs=rois, desc=f'Calc PNSRs.', unit="tiles")
@@ -879,14 +880,6 @@ def predict_tiles(
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
 
-    # obtain each tile and save to .tif.
-    rois, ztiles, nrows, ncols = get_tiles(
-        sample,
-        savepath=outdir,
-        strides=window_size,
-        window_size=window_size,
-    )
-
     samplepsfgen = SyntheticPSF(
         psf_type=preloadedpsfgen.psf_type,
         psf_shape=window_size,
@@ -896,6 +889,36 @@ def predict_tiles(
         y_voxel_size=lateral_voxel_size,
         z_voxel_size=axial_voxel_size
     )
+
+    fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
+
+    if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
+        prep = partial(
+            prep_sample,
+            model_fov=preloadedpsfgen.psf_fov,              # this is what we will crop to
+            sample_voxel_size=samplepsfgen.voxel_size,
+            remove_background=True,
+            normalize=True,
+        )
+    else:
+        prep = partial(
+            prep_sample,
+            sample_voxel_size=samplepsfgen.voxel_size,
+            remove_background=True,
+            normalize=True,
+        )
+
+    # obtain each tile and save to .tif.
+    tiles, ztiles, nrows, ncols = get_tiles(
+        sample,
+        savepath=outdir,
+        strides=window_size,
+        window_size=window_size,
+        prep=prep
+    )
+    rois = tiles[tiles['ignored'] == False]['path'].values  # skip tiles with low snr or no signal
+    logger.info(f" {rois.shape[0]} valid tiles found with sufficient SNR out of {tiles.shape[0]}")
+    template = pd.DataFrame(columns=tiles.index.values)
 
     with Path(f"{img.with_suffix('')}_tiles_predictions_settings.json").open('w') as f:
         json = dict(
@@ -945,12 +968,14 @@ def predict_tiles(
         wavelength=wavelength,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
-        fov_is_small=True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False,
+        fov_is_small=fov_is_small,
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
         rolling_strides=optimal_rolling_strides(preloadedpsfgen.psf_fov, samplepsfgen.voxel_size, window_size),
         cpu_workers=cpu_workers,
+        skip_prep_sample=True,
+        template=template
     )
 
     return predictions

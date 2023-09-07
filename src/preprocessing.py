@@ -7,6 +7,7 @@ plt.set_loglevel('error')
 import logging
 import sys
 from pathlib import Path
+from functools import partial
 from typing import Any, Sequence, Union, Optional
 import numpy as np
 from scipy import stats as st
@@ -646,6 +647,7 @@ def get_tiles(
     window_size: tuple = (64, 64, 64),
     strides: Optional[tuple] = None,
     save_files: bool = True,
+    prep: Optional[partial] = None,
 ):
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -675,21 +677,36 @@ def get_tiles(
     ztiles, nrows, ncols = windows.shape[:3]
     windows = np.reshape(windows, (-1, *window_size))
 
-    rois = []
+    if prep is not None:
+        from utils import multiprocess
+        windows = multiprocess(jobs=windows, func=prep, desc="Preprocessing tiles")
+
+    tiles = {}
     for i, (z, y, x) in enumerate(itertools.product(
         range(ztiles), range(nrows), range(ncols),
         desc=f"Locating tiles: {[windows.shape[0]]}",
         bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
         unit=' tile',
         file=sys.stdout
-    )
-    ):
-        tile = f"z{z}-y{y}-x{x}"
-        if save_files:
-            imwrite(savepath / f"{tile}.tif", windows[i])
-        rois.append(savepath / f"{tile}.tif")
+    )):
+        name = f"z{z}-y{y}-x{x}"
 
-    return np.array(rois), ztiles, nrows, ncols
+        if np.all(windows[i] == 0):
+            tiles[name] = dict(
+                path=savepath / f"{name}.tif",
+                ignored=True,
+            )
+        else:
+            if save_files:
+                imwrite(savepath / f"{name}.tif", windows[i])
+
+            tiles[name] = dict(
+                path=savepath / f"{name}.tif",
+                ignored=False,
+            )
+
+    tiles = pd.DataFrame.from_dict(tiles, orient='index')
+    return tiles, ztiles, nrows, ncols
 
 
 def optimal_rolling_strides(model_psf_fov, sample_voxel_size, sample_shape):

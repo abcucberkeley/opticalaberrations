@@ -259,7 +259,8 @@ def preprocess(
     plot: Any = None,
     no_phase: bool = False,
     fov_is_small: bool = True,
-    rolling_strides: Optional[tuple] = None
+    rolling_strides: Optional[tuple] = None,
+    skip_prep_sample: bool = False
 ):
     if samplepsfgen is None:
         samplepsfgen = modelpsfgen
@@ -273,15 +274,17 @@ def preprocess(
     sample = load_sample(file)
 
     if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
-        sample = prep_sample(
-            sample,
-            model_fov=modelpsfgen.psf_fov,              # this is what we will crop to
-            sample_voxel_size=samplepsfgen.voxel_size,
-            remove_background=remove_background,
-            normalize=normalize,
-            read_noise_bias=read_noise_bias,
-            plot=plot if plot else None
-        )
+
+        if not skip_prep_sample:
+            sample = prep_sample(
+                sample,
+                model_fov=modelpsfgen.psf_fov,              # this is what we will crop to
+                sample_voxel_size=samplepsfgen.voxel_size,
+                remove_background=remove_background,
+                normalize=normalize,
+                read_noise_bias=read_noise_bias,
+                plot=plot if plot else None
+            )
 
         return fourier_embeddings(
             sample,
@@ -330,18 +333,19 @@ def preprocess(
         ztiles, nrows, ncols = rois.shape[:3]
         rois = np.reshape(rois, (-1, *model_window_size))
 
-        prep = partial(
-            prep_sample,
-            sample_voxel_size=samplepsfgen.voxel_size,
-            remove_background=remove_background,
-            normalize=normalize,
-            read_noise_bias=read_noise_bias,
-        )
+        if not skip_prep_sample:
+            prep = partial(
+                prep_sample,
+                sample_voxel_size=samplepsfgen.voxel_size,
+                remove_background=remove_background,
+                normalize=normalize,
+                read_noise_bias=read_noise_bias,
+            )
 
-        rois = utils.multiprocess(func=prep, jobs=rois,
-                                  desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
-                                       f'stride length {strides}, '
-                                       f'throwing away {throwaway} voxels')
+            rois = utils.multiprocess(func=prep, jobs=rois,
+                                      desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
+                                           f'stride length {strides}, '
+                                           f'throwing away {throwaway} voxels')
 
         return rolling_fourier_embeddings(  # aka "large_fov"
             rois,
@@ -1072,7 +1076,7 @@ def predict_dataset(
 
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-    inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE) # prefetch will fill GPU RAM
+    inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE)  # prefetch will fill GPU RAM
 
     # operations mapped and batched gets executed here (emb=>rotations=>predictions).
     preds = model.predict(inputs, verbose=verbose)
@@ -1132,7 +1136,9 @@ def predict_files(
     fov_is_small: bool = True,
     plot: bool = True,
     plot_rotations: bool = False,
+    skip_prep_sample: bool = False,
     cpu_workers: int = -1,
+    template: Optional[pd.DataFrame] = None
 ):
     no_phase = True if model.input_shape[1] == 3 else False
 
@@ -1150,6 +1156,7 @@ def predict_files(
             normalize=True,
             fov_is_small=fov_is_small,
             rolling_strides=rolling_strides,
+            skip_prep_sample=skip_prep_sample
         ),
         desc='Generate Fourier embeddings',
         unit=' file',
@@ -1182,8 +1189,26 @@ def predict_files(
              f"emb={6*64*64 * batch_size * 32 / 8 / 1e6:.2f} MB/batch. ",
     )
 
-    tile_names = [f.with_suffix('').name for f in paths]
-    predictions = pd.DataFrame(preds.T, columns=tile_names)
+    if template is not None:
+        tile_names = [f.with_suffix('').name for f in paths]
+        predictions = pd.DataFrame(np.zeros((preds.shape[1], template.shape[1])), columns=template.columns)
+        predictions[tile_names] = preds.T
+
+        stdevs = pd.DataFrame(np.zeros((std.shape[1], template.shape[1])), columns=template.columns)
+        stdevs[tile_names] = std.T
+
+    else:
+        tile_names = [f.with_suffix('').name for f in paths]
+        predictions = pd.DataFrame(preds.T, columns=tile_names)
+        stdevs = pd.DataFrame(std.T, columns=tile_names)
+
+    if dm_calibration is not None:
+        zernikies_to_actuators = partial(utils.zernikies_to_actuators, dm_calibration=dm_calibration, dm_state=dm_state)
+        actuators = predictions.apply(lambda x: zernikies_to_actuators(x), axis=0)
+
+        actuators.index.name = 'actuators'
+        actuators.to_csv(f"{outdir}_predictions_corrected_actuators.csv")
+
     predictions['mean'] = predictions[tile_names].mean(axis=1)
     predictions['median'] = predictions[tile_names].median(axis=1)
     predictions['min'] = predictions[tile_names].min(axis=1)
@@ -1192,7 +1217,6 @@ def predict_files(
     predictions.index.name = 'ansi'
     predictions.to_csv(f"{outdir}_predictions.csv")
 
-    stdevs = pd.DataFrame(std.T, columns=tile_names)
     stdevs['mean'] = stdevs[tile_names].mean(axis=1)
     stdevs['median'] = stdevs[tile_names].median(axis=1)
     stdevs['min'] = stdevs[tile_names].min(axis=1)
@@ -1200,20 +1224,6 @@ def predict_files(
     stdevs['std'] = stdevs[tile_names].std(axis=1)
     stdevs.index.name = 'ansi'
     stdevs.to_csv(f"{outdir}_stdevs.csv")
-
-    if dm_calibration is not None:
-        actuators = {}
-
-        for t in tile_names:
-            actuators[t] = utils.zernikies_to_actuators(
-                predictions[t].values,
-                dm_calibration=dm_calibration,
-                dm_state=dm_state,
-            )
-
-        actuators = pd.DataFrame.from_dict(actuators)
-        actuators.index.name = 'actuators'
-        actuators.to_csv(f"{outdir}_predictions_corrected_actuators.csv")
 
     return predictions
 
