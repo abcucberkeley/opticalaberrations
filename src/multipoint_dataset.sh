@@ -19,8 +19,8 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='new_modalities_2m'
-DATASET='test'
+TITLE='new_modalities'
+DATASET='train'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
@@ -109,7 +109,7 @@ do
             done
 
             if [ "$DATASET" = "train" ];then
-              for psf in "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat" widefield confocal 2photon
+              for psf in "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat" "../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat" widefield confocal 2photon
               do
                 j="${j} --psf_type ${psf}"
               done
