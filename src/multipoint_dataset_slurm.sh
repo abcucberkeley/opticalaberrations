@@ -1,6 +1,5 @@
 #!/bin/bash
 
-HANDLER=slurm
 ENV=~/anaconda3/envs/ml/bin/python
 NODES='abc'
 
