@@ -50,7 +50,7 @@ try:
 except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
-from pycudadecon import decon as cuda_decon
+# from pycudadecon import decon as cuda_decon
 
 
 @profile
@@ -2040,167 +2040,168 @@ def decon(
     use_skimage: bool = True,
     preloaded: Preloadedmodelclass = None,
 ):
-    pd.options.display.width = 200
-    pd.options.display.max_columns = 20
-
-    with open(str(model_pred).replace('.csv', '_settings.json')) as f:
-        predictions_settings = ujson.load(f)
-
-    wavelength = predictions_settings['wavelength']
-    axial_voxel_size = predictions_settings['sample_voxel_size'][0]
-    lateral_voxel_size = predictions_settings['sample_voxel_size'][2]
-    window_size = predictions_settings['window_size']
-
-    samplepsfgen = SyntheticPSF(
-        psf_type=predictions_settings['psf_type'],
-        psf_shape=(64, 64, 64),
-        lam_detection=wavelength,
-        x_voxel_size=lateral_voxel_size,
-        y_voxel_size=lateral_voxel_size,
-        z_voxel_size=axial_voxel_size
-    )
-
-    # tile id is the column header, rows are the predictions
-    predictions, wavefronts = utils.create_multiindex_tile_dataframe(model_pred, return_wavefronts=True, describe=True)
-    stdevs = utils.create_multiindex_tile_dataframe(str(model_pred).replace('_predictions.csv', '_stdevs.csv'))
-
-    try:
-        assert predictions_settings['ignore_modes']
-    except KeyError:
-        predictions_settings['ignore_modes'] = [0, 1, 2, 4]
-
-    unconfident_tiles, zero_confident_tiles, all_zeros_tiles = utils.get_tile_confidence(
-        predictions=predictions,
-        stdevs=stdevs,
-        prediction_threshold=prediction_threshold,
-        ignore_tile=ignore_tile,
-        ignore_modes=predictions_settings['ignore_modes'],
-        verbose=True
-    )
-
-    where_unconfident = stdevs == 0
-    where_unconfident[predictions_settings['ignore_modes']] = False
-
-    ztiles = predictions.index.get_level_values('z').unique().shape[0]
-    ytiles = predictions.index.get_level_values('y').unique().shape[0]
-    xtiles = predictions.index.get_level_values('x').unique().shape[0]
-
-    vol = backend.load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
-
-    if vol.shape != tuple(predictions_settings['input_shape']):
-        logger.error(f"vol.shape {vol.shape} != json's input_shape {tuple(predictions_settings['input_shape'])}")
-
-    decon_vol = np.zeros_like(vol)
-    psfs = np.zeros(
-        (ztiles, ytiles*samplepsfgen.psf_shape[1], xtiles*samplepsfgen.psf_shape[2]),
-        dtype=np.float32
-    )
-
-    zw, yw, xw = window_size
-    kyw, kxw = samplepsfgen.psf_shape[1:]
-
-    logger.info(f"volume_size = {vol.shape}")
-    logger.info(f"window_size = {zw, yw, xw}")
-    logger.info(f"      tiles = {ztiles, ytiles, xtiles}")
-
-    tukey = window(('tukey', .5), window_size)
-
-    for i, (z, y, x) in tqdm(
-        enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))),
-        total=ztiles*ytiles*xtiles,
-        desc='Deconvolve tiles'
-    ):
-        w = Wavefront(predictions.loc[z, y, x].values, lam_detection=wavelength)
-        kernel = samplepsfgen.single_psf(w, normed=True)
-        kernel /= np.sum(kernel)
-
-        tile = vol[
-            z*zw:(z*zw)+zw,
-            y*yw:(y*yw)+yw,
-            x*xw:(x*xw)+xw
-        ]
-
-        psfs[z, y*kyw:(y*kyw)+kyw, x*kxw:(x*kxw)+kxw] = np.max(kernel, axis=0)
-
-        with sp.fft.set_workers(-1):
-            if use_skimage:
-                if decon_tile:
-                    # decon the tiles independently
-                    decon_vol[
-                        z * zw:(z * zw) + zw,
-                        y * yw:(y * yw) + yw,
-                        x * xw:(x * xw) + xw
-                    ] = cuda_decon(
-                        tile,
-                        kernel,
-                        dzdata = axial_voxel_size,
-                        dxdata = lateral_voxel_size,
-                        dzpsf = samplepsfgen.z_voxel_size,
-                        dxpsf = samplepsfgen.x_voxel_size,
-                        n_iters = iters,
-                        skewed_decon=True,
-                        deskew=0,
-                    )
-                else:
-                    # decon entire volume, then pull out the tiles we want.
-                    deconv = cuda_decon(
-                        vol,
-                        kernel,
-                        dzdata = axial_voxel_size,
-                        dxdata = lateral_voxel_size,
-                        dzpsf = samplepsfgen.z_voxel_size,
-                        dxpsf = samplepsfgen.x_voxel_size,
-                        n_iters = iters,
-                        skewed_decon=True,
-                        deskew=0,
-                    )
-                    decon_vol[
-                        z * zw:(z * zw) + zw,
-                        y * yw:(y * yw) + yw,
-                        x * xw:(x * xw) + xw
-                    ] = deconv[
-                        z * zw:(z * zw) + zw,
-                        y * yw:(y * yw) + yw,
-                        x * xw:(x * xw) + xw
-                    ]
-            else:
-                decon_vol[
-                    z * zw:(z * zw) + zw,
-                    y * yw:(y * yw) + yw,
-                    x * xw:(x * xw) + xw
-                ] = utils.fft_decon(kernel=kernel, sample=tile, iters=iters)
-
-    imwrite(f"{model_pred.with_suffix('')}_decon.tif", decon_vol.astype(np.float32))
-    imwrite(f"{model_pred.with_suffix('')}_decon_psfs.tif", psfs.astype(np.float32))
-
-    with Path(f"{model_pred.with_suffix('')}_decon_settings.json").open('w') as f:
-        json = dict(
-            model=predictions_settings['model'],
-            model_pred=str(model_pred),
-            iters=int(iters),
-            prediction_threshold=float(prediction_threshold),
-            ignore_tile=list(ignore_tile) if ignore_tile is not None else None,
-            window_size=list(window_size),
-            wavelength=float(wavelength),
-            psf_type=samplepsfgen.psf_type,
-            sample_voxel_size=[axial_voxel_size, lateral_voxel_size, lateral_voxel_size],
-            ztiles=int(ztiles),
-            ytiles=int(ytiles),
-            xtiles=int(xtiles),
-            input_shape=list(vol.shape),
-            total_confident_zero_tiles=int(zero_confident_tiles.sum()),
-            total_unconfident_tiles=int(unconfident_tiles.sum()),
-            total_all_zeros_tiles=int(all_zeros_tiles.sum()),
-            confident_zero_tiles=zero_confident_tiles.loc[zero_confident_tiles].index.to_list(),
-            unconfident_tiles=unconfident_tiles.loc[unconfident_tiles].index.to_list(),
-            all_zeros_tiles=all_zeros_tiles.loc[all_zeros_tiles].index.to_list(),
-        )
-        ujson.dump(
-            json,
-            f,
-            indent=4,
-            sort_keys=False,
-            ensure_ascii=False,
-            escape_forward_slashes=False
-        )
+    pass
+    # pd.options.display.width = 200
+    # pd.options.display.max_columns = 20
+    #
+    # with open(str(model_pred).replace('.csv', '_settings.json')) as f:
+    #     predictions_settings = ujson.load(f)
+    #
+    # wavelength = predictions_settings['wavelength']
+    # axial_voxel_size = predictions_settings['sample_voxel_size'][0]
+    # lateral_voxel_size = predictions_settings['sample_voxel_size'][2]
+    # window_size = predictions_settings['window_size']
+    #
+    # samplepsfgen = SyntheticPSF(
+    #     psf_type=predictions_settings['psf_type'],
+    #     psf_shape=(64, 64, 64),
+    #     lam_detection=wavelength,
+    #     x_voxel_size=lateral_voxel_size,
+    #     y_voxel_size=lateral_voxel_size,
+    #     z_voxel_size=axial_voxel_size
+    # )
+    #
+    # # tile id is the column header, rows are the predictions
+    # predictions, wavefronts = utils.create_multiindex_tile_dataframe(model_pred, return_wavefronts=True, describe=True)
+    # stdevs = utils.create_multiindex_tile_dataframe(str(model_pred).replace('_predictions.csv', '_stdevs.csv'))
+    #
+    # try:
+    #     assert predictions_settings['ignore_modes']
+    # except KeyError:
+    #     predictions_settings['ignore_modes'] = [0, 1, 2, 4]
+    #
+    # unconfident_tiles, zero_confident_tiles, all_zeros_tiles = utils.get_tile_confidence(
+    #     predictions=predictions,
+    #     stdevs=stdevs,
+    #     prediction_threshold=prediction_threshold,
+    #     ignore_tile=ignore_tile,
+    #     ignore_modes=predictions_settings['ignore_modes'],
+    #     verbose=True
+    # )
+    #
+    # where_unconfident = stdevs == 0
+    # where_unconfident[predictions_settings['ignore_modes']] = False
+    #
+    # ztiles = predictions.index.get_level_values('z').unique().shape[0]
+    # ytiles = predictions.index.get_level_values('y').unique().shape[0]
+    # xtiles = predictions.index.get_level_values('x').unique().shape[0]
+    #
+    # vol = backend.load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
+    #
+    # if vol.shape != tuple(predictions_settings['input_shape']):
+    #     logger.error(f"vol.shape {vol.shape} != json's input_shape {tuple(predictions_settings['input_shape'])}")
+    #
+    # decon_vol = np.zeros_like(vol)
+    # psfs = np.zeros(
+    #     (ztiles, ytiles*samplepsfgen.psf_shape[1], xtiles*samplepsfgen.psf_shape[2]),
+    #     dtype=np.float32
+    # )
+    #
+    # zw, yw, xw = window_size
+    # kyw, kxw = samplepsfgen.psf_shape[1:]
+    #
+    # logger.info(f"volume_size = {vol.shape}")
+    # logger.info(f"window_size = {zw, yw, xw}")
+    # logger.info(f"      tiles = {ztiles, ytiles, xtiles}")
+    #
+    # tukey = window(('tukey', .5), window_size)
+    #
+    # for i, (z, y, x) in tqdm(
+    #     enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))),
+    #     total=ztiles*ytiles*xtiles,
+    #     desc='Deconvolve tiles'
+    # ):
+    #     w = Wavefront(predictions.loc[z, y, x].values, lam_detection=wavelength)
+    #     kernel = samplepsfgen.single_psf(w, normed=True)
+    #     kernel /= np.sum(kernel)
+    #
+    #     tile = vol[
+    #         z*zw:(z*zw)+zw,
+    #         y*yw:(y*yw)+yw,
+    #         x*xw:(x*xw)+xw
+    #     ]
+    #
+    #     psfs[z, y*kyw:(y*kyw)+kyw, x*kxw:(x*kxw)+kxw] = np.max(kernel, axis=0)
+    #
+    #     with sp.fft.set_workers(-1):
+    #         if use_skimage:
+    #             if decon_tile:
+    #                 # decon the tiles independently
+    #                 decon_vol[
+    #                     z * zw:(z * zw) + zw,
+    #                     y * yw:(y * yw) + yw,
+    #                     x * xw:(x * xw) + xw
+    #                 ] = cuda_decon(
+    #                     tile,
+    #                     kernel,
+    #                     dzdata = axial_voxel_size,
+    #                     dxdata = lateral_voxel_size,
+    #                     dzpsf = samplepsfgen.z_voxel_size,
+    #                     dxpsf = samplepsfgen.x_voxel_size,
+    #                     n_iters = iters,
+    #                     skewed_decon=True,
+    #                     deskew=0,
+    #                 )
+    #             else:
+    #                 # decon entire volume, then pull out the tiles we want.
+    #                 deconv = cuda_decon(
+    #                     vol,
+    #                     kernel,
+    #                     dzdata = axial_voxel_size,
+    #                     dxdata = lateral_voxel_size,
+    #                     dzpsf = samplepsfgen.z_voxel_size,
+    #                     dxpsf = samplepsfgen.x_voxel_size,
+    #                     n_iters = iters,
+    #                     skewed_decon=True,
+    #                     deskew=0,
+    #                 )
+    #                 decon_vol[
+    #                     z * zw:(z * zw) + zw,
+    #                     y * yw:(y * yw) + yw,
+    #                     x * xw:(x * xw) + xw
+    #                 ] = deconv[
+    #                     z * zw:(z * zw) + zw,
+    #                     y * yw:(y * yw) + yw,
+    #                     x * xw:(x * xw) + xw
+    #                 ]
+    #         else:
+    #             decon_vol[
+    #                 z * zw:(z * zw) + zw,
+    #                 y * yw:(y * yw) + yw,
+    #                 x * xw:(x * xw) + xw
+    #             ] = utils.fft_decon(kernel=kernel, sample=tile, iters=iters)
+    #
+    # imwrite(f"{model_pred.with_suffix('')}_decon.tif", decon_vol.astype(np.float32))
+    # imwrite(f"{model_pred.with_suffix('')}_decon_psfs.tif", psfs.astype(np.float32))
+    #
+    # with Path(f"{model_pred.with_suffix('')}_decon_settings.json").open('w') as f:
+    #     json = dict(
+    #         model=predictions_settings['model'],
+    #         model_pred=str(model_pred),
+    #         iters=int(iters),
+    #         prediction_threshold=float(prediction_threshold),
+    #         ignore_tile=list(ignore_tile) if ignore_tile is not None else None,
+    #         window_size=list(window_size),
+    #         wavelength=float(wavelength),
+    #         psf_type=samplepsfgen.psf_type,
+    #         sample_voxel_size=[axial_voxel_size, lateral_voxel_size, lateral_voxel_size],
+    #         ztiles=int(ztiles),
+    #         ytiles=int(ytiles),
+    #         xtiles=int(xtiles),
+    #         input_shape=list(vol.shape),
+    #         total_confident_zero_tiles=int(zero_confident_tiles.sum()),
+    #         total_unconfident_tiles=int(unconfident_tiles.sum()),
+    #         total_all_zeros_tiles=int(all_zeros_tiles.sum()),
+    #         confident_zero_tiles=zero_confident_tiles.loc[zero_confident_tiles].index.to_list(),
+    #         unconfident_tiles=unconfident_tiles.loc[unconfident_tiles].index.to_list(),
+    #         all_zeros_tiles=all_zeros_tiles.loc[all_zeros_tiles].index.to_list(),
+    #     )
+    #     ujson.dump(
+    #         json,
+    #         f,
+    #         indent=4,
+    #         sort_keys=False,
+    #         ensure_ascii=False,
+    #         escape_forward_slashes=False
+    #     )
 
