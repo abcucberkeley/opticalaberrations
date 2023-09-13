@@ -50,6 +50,8 @@ try:
 except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
+from pycudadecon import decon as cuda_decon
+
 
 @profile
 def reloadmodel_if_needed(
@@ -2035,7 +2037,7 @@ def decon(
     plot: bool = False,
     ignore_tile: Any = None,
     decon_tile: bool = True,
-    use_skimage: bool = False,
+    use_skimage: bool = True,
     preloaded: Preloadedmodelclass = None,
 ):
     pd.options.display.width = 200
@@ -2123,14 +2125,35 @@ def decon(
         with sp.fft.set_workers(-1):
             if use_skimage:
                 if decon_tile:
+                    # decon the tiles independently
                     decon_vol[
                         z * zw:(z * zw) + zw,
                         y * yw:(y * yw) + yw,
                         x * xw:(x * xw) + xw
-                    ] = richardson_lucy(tile, kernel, num_iter=iters, clip=False)
+                    ] = cuda_decon(
+                        tile,
+                        kernel,
+                        dzdata = axial_voxel_size,
+                        dxdata = lateral_voxel_size,
+                        dzpsf = samplepsfgen.z_voxel_size,
+                        dxpsf = samplepsfgen.x_voxel_size,
+                        n_iters = iters,
+                        skewed_decon=True,
+                        deskew=0,
+                    )
                 else:
-                    deconv = richardson_lucy(vol, kernel, num_iter=iters, clip=False)
-
+                    # decon entire volume, then pull out the tiles we want.
+                    deconv = cuda_decon(
+                        vol,
+                        kernel,
+                        dzdata = axial_voxel_size,
+                        dxdata = lateral_voxel_size,
+                        dzpsf = samplepsfgen.z_voxel_size,
+                        dxpsf = samplepsfgen.x_voxel_size,
+                        n_iters = iters,
+                        skewed_decon=True,
+                        deskew=0,
+                    )
                     decon_vol[
                         z * zw:(z * zw) + zw,
                         y * yw:(y * yw) + yw,
