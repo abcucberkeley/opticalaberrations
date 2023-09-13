@@ -243,7 +243,7 @@ def sim(
                 remove_background=remove_background,
                 normalize=normalize,
                 read_noise_bias=5,
-                plot=odir/filename,
+                # plot=odir/filename,
             )
 
             embeddings = np.squeeze(fourier_embeddings(
@@ -253,7 +253,7 @@ def sim(
                 embedding_option=e,
                 alpha_val=alpha_val,
                 phi_val=phi_val,
-                plot=odir/filename
+                # plot=odir/filename
             ))
 
             save_synthetic_sample(
