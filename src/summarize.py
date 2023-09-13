@@ -24,8 +24,6 @@ def concat_U16_tiffs(source_files=list([]), destination:Path=None, next_channel_
     else:
         c_size = 1
 
-    axes_string = 'TZCYX'
-    data_type = np.uint16
     t_size = len(source_files)
     if t_size == 0:
         print(f'Warning: Did not find any source files to make {destination}\n')
@@ -34,8 +32,10 @@ def concat_U16_tiffs(source_files=list([]), destination:Path=None, next_channel_
     z_size = len(sample.pages)  # number of pages in the file
     page = sample.pages[0]  # get shape and dtype of image in first page
     y_size, x_size = page.shape
-
+    data_type = np.uint16
+    axes_string = 'TZCYX'
     hyperstack = np.zeros([t_size, z_size, c_size, y_size, x_size]).astype(data_type)
+
     for i in range(len(source_files)):
         with TiffFile(source_files[i]) as tif:
             hyperstack[i, :, 0] = tif.asarray().astype(data_type)
@@ -52,7 +52,7 @@ def concat_U16_tiffs(source_files=list([]), destination:Path=None, next_channel_
     image_labels = list(np.repeat(image_labels, z_size))  # every slice needs a label
 
     imwrite(destination,
-            hyperstack, # squeeze will remove c if it is only single channel
+            hyperstack,
             dtype=data_type,
             imagej=True,
             metadata={
