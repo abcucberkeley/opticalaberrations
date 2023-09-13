@@ -167,14 +167,14 @@ def main(args=None):
     outdir.mkdir(exist_ok=True, parents=True)
     profiler = f"/usr/bin/time -v -o {outdir}/{args.script.split('.')[0]}_profile.log "
 
-    if args.cmd == 'default':
+    if args.cmd.lower() == 'default':
         sjob = profiler
         sjob += f"{args.python} "
         sjob += f"{args.script} "
         sjob += f" --outdir {outdir} {args.flags} 2>&1 | tee {outdir}/{args.script.split('.')[0]}.log"
         call([sjob], shell=True)
 
-    elif args.cmd == 'slurm':
+    elif args.cmd.lower() == 'slurm':
         sjob = '/usr/bin/sbatch '
         sjob += f' --qos={args.qos} '
         sjob += f' --partition={args.partition} '
@@ -202,16 +202,17 @@ def main(args=None):
         sjob += args.job
         call([sjob], shell=True)
 
-    elif args.cmd == 'lsf':
-        sjob = '/usr/bin/bsub '
+    elif args.cmd.lower() == 'lsf':
+        sjob = 'bsub '
         sjob += f' -q={args.partition} '
 
         if args.gpus > 0:
             sjob += f' -gpu "num={args.gpus}:nvlink=yes" '
 
-        sjob += f' -n={args.cpus} '
-        sjob += f" -J={args.name} "
-        sjob += f" -o={outdir}/{args.script.split('.')[0]}.log gpu_binary -option 1,"
+        sjob += f' -n {args.cpus} '
+        sjob += f" -J {args.name} "
+        sjob += f" -o {outdir}/{args.script.split('.')[0]}.log "
+        sjob += f" gpu_binary -option 1,"
         sjob += f"PROFILER='{profiler}',"
         sjob += f"SCRIPT='{args.script}',"
         sjob += f"PYTHON='{args.python}',"

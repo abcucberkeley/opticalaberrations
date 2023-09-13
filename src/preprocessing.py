@@ -358,9 +358,9 @@ def prep_sample(
         )
 
         axes[0, 0].set_title(
-            f'${int(sample_voxel_size[2]*1000)}^X$, '
+            f'${int(sample_voxel_size[0]*1000)}^Z$, '
             f'${int(sample_voxel_size[1]*1000)}^Y$, '
-            f'${int(sample_voxel_size[0]*1000)}^Z$ (nm)'
+            f'${int(sample_voxel_size[2]*1000)}^X$ (nm)'
         )
         axes[0, 1].set_title(f"PSNR: {measure_snr(sample)}")
 
