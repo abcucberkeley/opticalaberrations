@@ -1161,7 +1161,13 @@ def plot_embeddings(
 
             for idx, (i, j) in enumerate(itertools.product(range(nrows), range(ncols))):
                 ax = fig.add_subplot(grid[i, j])
-                m = ax.imshow(np.max(inputs[idx], axis=proj) ** gamma, cmap='hot', vmin=0, vmax=1)
+
+                try:
+                    m = ax.imshow(np.max(inputs[idx], axis=proj) ** gamma, cmap='hot', vmin=0, vmax=1)
+
+                except IndexError: # if we dropped a tile due to poor SNR
+                    m = ax.imshow(np.zeros_like(np.max(inputs[0], axis=proj)), cmap='hot', vmin=0, vmax=1)
+
                 ax.axis('off')
 
         cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
