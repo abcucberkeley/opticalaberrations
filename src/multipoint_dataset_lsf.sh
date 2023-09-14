@@ -9,9 +9,9 @@ LAMBDA=.510
 NA=1.0
 ALPHA='abs'
 PHI='angle'
+MODE_DIST='pyramid'
 CPUS=2
-MEM='30G'
-TIMELIMIT='2:00'
+TIMELIMIT='1:15'
 SHAPE=64
 MAX_LLS_OFFSET=0
 RAND_VSIZE=false
@@ -63,11 +63,6 @@ do
       do
         for S in `seq 1 ${#SAMPLES[@]}`
         do
-            while [ $(bjobs -u $USER | wc -l) -gt 500 ]
-            do
-              sleep 10s
-            done
-
             j="${ENV} multipoint_dataset.py ${TYPE}"
             j="${j} --npoints ${OBJS[$N-1]}"
             j="${j} --alpha_val ${ALPHA}"
@@ -95,7 +90,6 @@ do
             j="${j} --na_detection ${NA}"
             j="${j} --fill_radius ${FILL_RADIUS}"
             j="${j} --lam_detection ${LAMBDA}"
-            j="${j} --cpu_workers ${CPUS}"
 
             if $RAND_VSIZE; then
               j="${j} --randomize_voxel_size"
@@ -113,14 +107,15 @@ do
               done
             fi
 
-            task="/usr/bin/bsub"
-            task="${task} --n=${CPUS}"
+            task="bsub"
+            #task="${task} -q local "
+            task="${task} -n ${CPUS}"
 
             JOB="${TITLE}-${DATASET}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-photons${xPH[$PH-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
-            task="${task} -J=${JOB}"
+            task="${task} -J ${JOB}"
 
-            task="${task} -We=${TIMELIMIT}"
-            task="${task} -o=${LOGS}/${JOB}.log"
+            task="${task} -We ${TIMELIMIT}"
+            task="${task} -o ${LOGS}/${JOB}.log"
             task="${task} \"${j}\""
             echo $task | bash
 

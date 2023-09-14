@@ -96,7 +96,6 @@ do
             j="${j} --na_detection ${NA}"
             j="${j} --fill_radius ${FILL_RADIUS}"
             j="${j} --lam_detection ${LAMBDA}"
-            j="${j} --cpu_workers ${CPUS}"
 
             if $RAND_VSIZE; then
               j="${j} --randomize_voxel_size"
