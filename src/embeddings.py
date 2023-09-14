@@ -542,7 +542,7 @@ def compute_emb(
     else:
         na_mask = na_mask.astype(bool)
 
-    if otf.shape != model_psf_shape:
+    if otf.shape != model_psf_shape: #the psf should be the same FOV size in um, then we crop the otf to the iotf shape
         real = resize_with_crop_or_pad(np.real(otf), crop_shape=model_psf_shape, mode='constant')  # only center crop
         imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=model_psf_shape, mode='constant')  # only center crop
         otf = real + 1j * imag
@@ -965,7 +965,7 @@ def rolling_fourier_embeddings(
             )
         else:
             alpha = compute_emb(
-                resize_with_crop_or_pad(np.nanmean(np.abs(otfs), axis=0), crop_shape=iotf.shape),
+                np.nanmean(np.abs(otfs), axis=0),
                 iotf,
                 na_mask=na_mask,
                 val=alpha_val,
@@ -1002,7 +1002,7 @@ def rolling_fourier_embeddings(
 
                 if plot:
                     gamma = 0.5
-                    avg_psf = resize_with_crop_or_pad(ifft(avg_otf), crop_shape=window_size)
+                    avg_psf = ifft(avg_otf) # this will have ipsf voxel size (a different voxel size than sample).
 
                     fig, axes = plt.subplots(
                         nrows=4,
@@ -1012,7 +1012,7 @@ def rolling_fourier_embeddings(
                         sharex=False
                     )
                     for row in range(min(3, phi_otfs.shape[0])):
-                        phi_psf = resize_with_crop_or_pad(ifft(phi_otfs[row]), crop_shape=window_size)
+                        phi_psf = ifft(resize_with_crop_or_pad(phi_otfs[row], crop_shape=window_size)) # this will have ipsf voxel size (a different voxel size than sample).
                         for ax in range(3):
                             m5 = axes[row, ax].imshow(np.nanmax(phi_psf, axis=ax)**gamma, cmap='magma')
 

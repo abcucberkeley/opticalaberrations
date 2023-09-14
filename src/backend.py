@@ -344,6 +344,7 @@ def preprocess(
 
             rois = utils.multiprocess(func=prep, jobs=rois,
                                       desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
+                                           f'roi size, {rois.shape[-3:]}, '
                                            f'stride length {strides}, '
                                            f'throwing away {throwaway} voxels')
 
