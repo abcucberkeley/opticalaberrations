@@ -21,11 +21,14 @@ def concat_U16_tiffs(source_files=list([]), dst: Path = None, ch_two=None, drop_
     if ch_two is not None:
         ch_two = [x for x in ch_two if all(y not in str(x) for y in drop_patterns)]
         ch_two.sort(key=lambda x: os.path.getmtime(x))  # sort by modified time
-        c_size = 2
-        if len(ch_two) != len(source_files):
-            print(f'Warning: Lengths of Source file list ({len(source_files)}) '
-                  f'and second tiff channel ({len(ch_two)}) do not match.\n')
-            return
+        if len(ch_two) > 0:
+            c_size = 2
+            if len(ch_two) != len(source_files):
+                print(f'Warning: Lengths of Source file list ({len(source_files)}) '
+                      f'and second tiff channel ({len(ch_two)}) do not match.\n')
+                return
+        else:
+            c_size =1
 
     else:
         c_size = 1
@@ -72,18 +75,19 @@ def concat_U16_tiffs(source_files=list([]), dst: Path = None, ch_two=None, drop_
     print(f"Saved:\n{dst.resolve()}\n")
 
 
-folder = Path(r'U:\Data\TestsForThayer\20230908_fish\exp8-5_noto_nearTail\rotated')
-cam = 'CamA'
+folder = Path(r'U:\Data\TestsForThayer\20230915_fish\exp1_moving\rotated')
+cam_A = 'CamA'
+cam_B = 'CamB'
 
-before_files = folder.glob(f'*{cam}*stack0000_*00??t.tif')
-optimized_files = folder.glob(f'*{cam}*stack0000_*00??*optimized.tif')
-vol_used_files = folder.glob(f'*{cam}*stack0000_*00??*volume_used.tif')
+before_files = folder.glob(f'*{cam_A}*stack0000_*00??t.tif')
+optimized_files = folder.glob(f'*{cam_A}*stack0000_*00??*optimized.tif')
+vol_used_files = folder.glob(f'*{cam_A}*stack0000_*00??*volume_used.tif')
 patterns_to_drop = list(['after_three'])
 
 dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_before_hyperstack.tif")
 concat_U16_tiffs(source_files=before_files, dst=dst, drop_patterns=patterns_to_drop)
 
-before_files = folder.glob(f'*{cam}*stack0000_*00??t.tif')
+before_files = folder.glob(f'*{cam_A}*stack0000_*00??t.tif')
 dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_before_vs_optimized_hyperstack.tif")
 concat_U16_tiffs(source_files=before_files, dst=dst, drop_patterns=patterns_to_drop, ch_two=optimized_files)
 
@@ -102,8 +106,7 @@ dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_consensus_map.tif")
 consensus_clusters = [x for x in consensus_clusters if all(y not in str(x) for y in patterns_to_drop)]
 consensus_clusters.sort(key=lambda x: os.path.getmtime(x))
 
-consensus_clusters_wavefronts = [x for x in consensus_clusters_wavefronts if
-                                 all(y not in str(x) for y in patterns_to_drop)]
+consensus_clusters_wavefronts = [x for x in consensus_clusters_wavefronts if all(y not in str(x) for y in patterns_to_drop)]
 consensus_clusters_wavefronts.sort(key=lambda x: os.path.getmtime(x))
 
 consensus_clusters_psfs = [x for x in consensus_clusters_psfs if all(y not in str(x) for y in patterns_to_drop)]
@@ -115,24 +118,24 @@ z_size = len(sample.pages)  # number of pages in the file
 page = sample.pages[0]  # get shape and dtype of image in first page
 (y_size, x_size, c_size) = page.shape  # c_size = 3 for color image
 
-hyperstack = np.zeros([t_size, z_size, y_size * 2, x_size, c_size]).astype(
-    np.ubyte)  # vertically combine these two stacks.
+hyperstack = np.zeros(shape=[t_size, z_size, y_size * 2, x_size, c_size], dtype=np.ubyte) # vertically combine these two stacks.
 hyperstack = np.squeeze(hyperstack)
 
 for i in range(len(consensus_clusters)):
     with TiffFile(consensus_clusters[i]) as tif:
+        print(
+            f"Concatenating {i + 1} out of {t_size} ({len(sample.pages)} x {sample.pages[0].shape[0]} x {sample.pages[0].shape[1]}) {tif.filename}")
         hyperstack[i, :, :y_size] = tif.asarray()
-        print(
-            f"Concatenating {i + 1} out of {t_size} ({len(sample.pages)} x {sample.pages[0].shape[0]} x {sample.pages[0].shape[1]}) {tif.filename}")
 
-    with TiffFile(consensus_clusters_wavefronts[i]) as tif:
-        hyperstack[i, :, y_size:] = tif.asarray()
-        print(
-            f"Concatenating {i + 1} out of {t_size} ({len(sample.pages)} x {sample.pages[0].shape[0]} x {sample.pages[0].shape[1]}) {tif.filename}")
+    # with TiffFile(consensus_clusters_wavefronts[i]) as tif:
+    #     print(
+    #         f"Concatenating {i + 1} out of {t_size} ({len(sample.pages)} x {sample.pages[0].shape[0]} x {sample.pages[0].shape[1]}) {tif.filename}")
+    #     hyperstack[i, :, y_size:] = tif.asarray()
 
-    # with TiffFile(consensus_clusters_psfs[i]) as tif:
-    #     hyperstack[i,:,y_size*2:] = np.repeat(tif.asarray(), z_size/2, axis=0) # since this stack only has 1 slice per z slab, we repeat to fill out.
-    #     print(f"Concatenating {i+1} out of {t_size} ({len(sample.pages)} x {sample.pages[0].shape[0]} x {sample.pages[0].shape[1]}) {tif.filename}")
+
+    with TiffFile(consensus_clusters_psfs[i]) as tif:
+        hyperstack[i, :, y_size:] = np.repeat(tif.asarray(), z_size/2, axis=0) # since this stack only has 1 slice per z slab, we repeat to fill out.
+        print(f"Concatenating {i+1} out of {t_size} ({len(sample.pages)} x {sample.pages[0].shape[0]} x {sample.pages[0].shape[1]}) {tif.filename}")
 
 dst.parent.mkdir(parents=True, exist_ok=True)
 image_labels = [x.stem[:40] + '...' + x.stem[-20:] for x in consensus_clusters]
