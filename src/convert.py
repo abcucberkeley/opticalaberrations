@@ -3,9 +3,6 @@ from functools import partial
 import matplotlib
 matplotlib.use('Agg')
 
-import numexpr
-numexpr.set_num_threads(numexpr.detect_number_of_cores())
-
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
