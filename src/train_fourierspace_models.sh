@@ -14,13 +14,13 @@ DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
 EMB="spatial_planes"
 SUBSET='new_modalities'
-BATCH=1024
+BATCH=2048
 NETWORK=opticalnet
 MODES=15
 WARMUP=25
 EPOCHS=500
 NODES=1
-CLUSTER=LSF
+CLUSTER=lsf
 
 if [ $CLUSTER = 'ABC' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"

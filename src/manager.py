@@ -78,7 +78,7 @@ def parse_args(args):
         help='select a specific node type eg. titan'
     )
 
-    lsf = subparsers.add_parser("slurm", help='use LSF to submit jobs')
+    lsf = subparsers.add_parser("lsf", help='use LSF to submit jobs')
 
     lsf.add_argument(
         "script", type=str,
@@ -124,11 +124,6 @@ def parse_args(args):
         help='allies name for this job'
     )
 
-    lsf.add_argument(
-        "--job", default='job.slm', type=str,
-        help='path to slurm job template'
-    )
-
     default = subparsers.add_parser("default", help='run a job using default python')
 
     default.add_argument(
@@ -165,16 +160,19 @@ def main(args=None):
 
     outdir = Path(f"{args.outdir}/{args.name}").resolve()
     outdir.mkdir(exist_ok=True, parents=True)
+
     profiler = f"/usr/bin/time -v -o {outdir}/{args.script.split('.')[0]}_profile.log "
 
-    if args.cmd.lower() == 'default':
+    if args.cmd == 'default':
         sjob = profiler
         sjob += f"{args.python} "
         sjob += f"{args.script} "
         sjob += f" --outdir {outdir} {args.flags} 2>&1 | tee {outdir}/{args.script.split('.')[0]}.log"
+
+        logging.info(sjob)
         call([sjob], shell=True)
 
-    elif args.cmd.lower() == 'slurm':
+    elif args.cmd == 'slurm':
         sjob = '/usr/bin/sbatch '
         sjob += f' --qos={args.qos} '
         sjob += f' --partition={args.partition} '
@@ -200,29 +198,27 @@ def main(args=None):
             sjob += ',' if i < len(args.task)-1 else ' '
 
         sjob += args.job
+        logging.info(sjob)
         call([sjob], shell=True)
 
-    elif args.cmd.lower() == 'lsf':
-        sjob = 'bsub '
-        sjob += f' -q={args.partition} '
+    elif args.cmd == 'lsf':
+        sjob = 'bsub'
+        sjob += f' -q {args.partition}'
 
         if args.gpus > 0:
-            sjob += f' -gpu "num={args.gpus}:nvlink=yes" '
+            sjob += f' -gpu "num={args.gpus}:nvlink=yes"'
 
-        sjob += f' -n {args.cpus} '
-        sjob += f" -J {args.name} "
-        sjob += f" -o {outdir}/{args.script.split('.')[0]}.log "
-        sjob += f" gpu_binary -option 1,"
-        sjob += f"PROFILER='{profiler}',"
-        sjob += f"SCRIPT='{args.script}',"
-        sjob += f"PYTHON='{args.python}',"
-        sjob += f"JOBS='{len(args.task)}',"
+        sjob += f' -n {args.cpus}'
+        sjob += f" -J {args.name}"
+        sjob += f" -o {outdir}/{args.script.split('.')[0]}.log"
 
+        tasks = ""
         for i, (t, n) in enumerate(zip(args.task, args.taskname)):
-            sjob += f"TASK_{i + 1}='{profiler} {args.python} {args.script} {t} --cpu_workers -1 --gpu_workers -1 --outdir {outdir/n}'"
-            sjob += ',' if i < len(args.task)-1 else ' '
+            tasks += f"{args.python} {args.script} {t} --cpu_workers -1 --gpu_workers -1 --outdir {outdir/n}"
+            tasks += ' ; ' if i < len(args.task)-1 else ''
 
-        sjob += args.job
+        sjob = f'{sjob} "{tasks}"'
+        logging.info(sjob)
         call([sjob], shell=True)
 
     else:
