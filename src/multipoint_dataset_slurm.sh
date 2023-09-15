@@ -10,8 +10,8 @@ LAMBDA=.510
 NA=1.0
 ALPHA='abs'
 PHI='angle'
-CPUS=2
-MEM='40G'
+CPUS=1
+MEM='20G'
 TIMELIMIT='2:00:00'
 SHAPE=64
 MAX_LLS_OFFSET=0
@@ -64,7 +64,7 @@ do
       do
         for S in `seq 1 ${#SAMPLES[@]}`
         do
-            while [ $(squeue -u $USER -h -t pending -r | wc -l) -gt 300 ]
+            while [ $(squeue -u $USER -h -t pending -r | wc -l) -gt 500 ]
             do
               sleep 10s
             done

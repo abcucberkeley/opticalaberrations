@@ -10,8 +10,8 @@ NA=1.0
 ALPHA='abs'
 PHI='angle'
 MODE_DIST='pyramid'
-CPUS=2
-TIMELIMIT='1:15'
+CPUS=1
+TIMELIMIT='2:00'
 SHAPE=64
 MAX_LLS_OFFSET=0
 RAND_VSIZE=false
@@ -63,6 +63,11 @@ do
       do
         for S in `seq 1 ${#SAMPLES[@]}`
         do
+            while [ $(bjobs -u $USER | wc -l) -gt 5000 ]
+            do
+              sleep 10s
+            done
+
             j="${ENV} multipoint_dataset.py ${TYPE}"
             j="${j} --npoints ${OBJS[$N-1]}"
             j="${j} --alpha_val ${ALPHA}"
