@@ -1269,10 +1269,6 @@ def train(
     opt = opt.lower()
     restored = False
 
-    if isinstance(psf_type, str) or isinstance(psf_type, Path):
-        with h5py.File(psf_type, 'r') as file:
-            psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
-
     if defocus_only:
         pmodes = 1
     elif lls_defocus:
