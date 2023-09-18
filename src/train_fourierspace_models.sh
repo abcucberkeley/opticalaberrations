@@ -14,7 +14,7 @@ DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
 EMB="spatial_planes"
 SUBSET='new_modalities'
-BATCH=2048
+BATCH=1024
 NETWORK=opticalnet
 MODES=15
 WARMUP=25
@@ -55,7 +55,7 @@ do
     LAM=.510
   fi
 
-  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 16 \
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
   --task "--psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR
