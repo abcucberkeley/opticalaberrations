@@ -9,6 +9,7 @@ MAXAMP=1
 DZ=200
 DY=108
 DX=108
+RADIAL_ENCODING='--radial_encoding'
 NO_PHASE='--no_phase'
 DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'

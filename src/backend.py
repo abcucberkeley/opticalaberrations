@@ -1264,6 +1264,7 @@ def train(
         plot_patches: bool = True,
         lls_defocus: bool = False,
         defocus_only: bool = False,
+        radial_encoding: bool = False,
 ):
     network = network.lower()
     opt = opt.lower()
@@ -1323,7 +1324,8 @@ def train(
             width_scalar=width_scalar,
             activation=activation,
             mul=mul,
-            no_phase=no_phase
+            no_phase=no_phase,
+            radial_encoding=radial_encoding
         )
 
     elif network == 'opticalresnet':
