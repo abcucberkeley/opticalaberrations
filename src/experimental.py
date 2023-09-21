@@ -942,7 +942,7 @@ def predict_tiles(
             ztiles=int(ztiles),
             ytiles=int(nrows),
             xtiles=int(ncols),
-            psnr=psnr,
+            psnr=float(psnr),
             dm_calibration=str(dm_calibration),
             psf_type=str(preloadedpsfgen.psf_type),
         )
