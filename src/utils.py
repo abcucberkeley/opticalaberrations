@@ -43,6 +43,7 @@ def multiprocess(
     desc: str = 'Processing',
     cores: int = -1,
     unit: str = 'it',
+    pool: Optional[mp.Pool] = None,
 ):
     """ Multiprocess a generic function
     Args:
@@ -71,7 +72,7 @@ def multiprocess(
         ):
             logs.append(func(j))
     elif cores == -1 and len(jobs) > 0:
-        with mp.Pool(min(mp.cpu_count(), len(jobs))) as p:
+        with pool if pool is not None else mp.Pool(min(mp.cpu_count(), len(jobs))) as p:
             logs = list(tqdm(
                 p.imap(func, jobs),
                 total=len(jobs),
@@ -81,7 +82,7 @@ def multiprocess(
                 file=sys.stdout,
             ))
     elif cores > 1 and len(jobs) > 0:
-        with mp.Pool(cores) as p:
+        with pool if pool is not None else mp.Pool(cores) as p:
             logs = list(tqdm(
                 p.imap(func, jobs),
                 total=len(jobs),
@@ -383,9 +384,9 @@ def load_dm(dm_state: Any) -> np.ndarray:
     if isinstance(dm_state, np.ndarray) or isinstance(dm_state, list):
         assert len(dm_state) == 69
     elif dm_state is None or str(dm_state) == 'None':
-        dm_state = np.zeros(69)
+        dm_state = np.zeros(69, dtype=np.float64)
     else:
-        dm_state = pd.read_csv(dm_state, header=None).values[:, 0]
+        dm_state = pd.read_csv(dm_state, header=None, dtype=np.float64).values[:, 0]
     return dm_state
 
 

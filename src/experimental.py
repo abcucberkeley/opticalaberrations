@@ -1,3 +1,5 @@
+import platform
+
 import matplotlib
 matplotlib.use('Agg')
 import re
@@ -481,7 +483,7 @@ def predict_sample(
             ideal_empirical_psf=str(ideal_empirical_psf),
             lls_defocus=float(lls_defocus),
             zernikes=list(coefficients),
-            psnr=psnr,
+            psnr=float(psnr),
             psf_type=str(preloadedpsfgen.psf_type),
         )
 
@@ -644,7 +646,7 @@ def predict_large_fov(
             ideal_empirical_psf=str(ideal_empirical_psf),
             lls_defocus=float(lls_defocus),
             zernikes=list(coefficients),
-            psnr=psnr,
+            psnr=float(psnr),
             psf_type=str(preloadedpsfgen.psf_type),
         )
 
@@ -854,6 +856,18 @@ def predict_tiles(
     shifting: tuple = (0, 0, 0),
     psf_type: Optional[Union[str, Path]] = None,
 ):
+    # Begin spawning workers for Generate Fourier Embeddings (windows only). Must die to release their GPU memory.
+    if platform.system() == "Windows":
+        if cpu_workers == 1:
+            pool = None
+        elif cpu_workers == -1:
+            pool = mp.Pool(mp.cpu_count())
+        else:
+            pool = mp.Pool(processes=cpu_workers)
+    else:
+        pool = None     #
+
+
     dm_state = utils.load_dm(dm_state)
 
     preloadedmodel, preloadedpsfgen = reloadmodel_if_needed(
@@ -977,7 +991,8 @@ def predict_tiles(
         rolling_strides=optimal_rolling_strides(preloadedpsfgen.psf_fov, samplepsfgen.voxel_size, window_size),
         cpu_workers=cpu_workers,
         skip_prep_sample=True,
-        template=template
+        template=template,
+        pool=pool
     )
 
     return predictions
@@ -1014,6 +1029,7 @@ def cluster_tiles(
         adding a new column to the `predictions` dataframe to indicate the predicted cluster ID for each tile
 
     Args:
+        postfix: suffix to file names.  Used to designate 'aggregated' and 'consensus'
         predictions: dataframe of all predictions indexed by tile IDs
         stdevs: dataframe of all standard deviations of the predictions indexed by tile IDs
         where_unconfident: dataframe mask for unconfident tiles

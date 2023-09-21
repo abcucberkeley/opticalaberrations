@@ -1,6 +1,6 @@
 import matplotlib
 matplotlib.use('Agg')
-
+import time
 import logging
 import sys
 from typing import Any, Union, Optional
@@ -632,74 +632,92 @@ def rotate_coords(
     axes: tuple = (-2, -1),
 ):
     """
-    Calculates the coordinates to interpolate at, to achieve a range of rotations between 0 and 360,
-     inclusive of zero and 360.  This set of coordinates can be fed into a map_coordinates function to do the interpolation.
+        Calculates the coordinates to interpolate at, to achieve a range of rotations between 0 and 360,
+         inclusive of zero and 360.  This set of coordinates can be fed into a map_coordinates function to do the interpolation.
 
-     Done on GPU if cupy is available.
+         Done on GPU if cupy is available.
 
-    Args:
-        shape: (number of emb, height of emb, width of emb)
-        digital_rotations: number of rotations
-        axes: which axes are in the plane in which to perform the rotation. (-2, -1) will be clockwise rotations in XY plane.
+        Args:
+            shape: (number of emb, height of emb, width of emb)
+            digital_rotations: number of rotations
+            axes: which axes are in the plane in which to perform the rotation. (-2, -1) will be clockwise rotations in XY plane.
 
-    Returns:
-        cp.array of 3 coords (z,y,x), 361 angles, 6 emb, height of emb, width of emb
+        Returns:
+            cp.array of 3 coords (z,y,x), 361 angles, 6 emb, height of emb, width of emb
 
-    """
+        """
+    t = time.time()
     gpu_support = 'cupy' in sys.modules
     dtype = np.float16
-    rotations = np.linspace(0, 360, digital_rotations)
+    all_coords_cache_path = Path(__file__).parent / f'all_coords_cache_3x{digital_rotations}x{shape[0]}x{shape[1]}x{shape[2]}_{dtype.__name__}.npy'
 
-    if gpu_support:  # rotated coordinates don't need many decimals
-        coords = cp.array(
-            cp.meshgrid(
-                cp.arange(shape[0]),
-                cp.arange(shape[1]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
-                cp.arange(shape[2]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
-                indexing='ij'
-            )
-        )
-        all_coords = cp.zeros((3, digital_rotations, *shape), dtype=dtype)
-
-        for i, angle in enumerate(rotations):
-            all_coords[:, i] = rotate(
-                coords,
-                angle=angle,
-                reshape=False,
-                axes=axes,
-                output=dtype,  # output will be floats
-                prefilter=False,
-                order=1,
-            ) if angle % 360 != 0 else coords # rotation by zero degrees doesn't give coords directly because sin(0) !=0
-
+    if digital_rotations == 361 and axes == (-2, -1) and shape == (6, 64, 64) and all_coords_cache_path.exists():
+        if gpu_support:
+            all_coords = cp.load(all_coords_cache_path)
+        else:
+            all_coords = np.load(all_coords_cache_path)
+        # elapsed_time = time.time() - t
+        # print(f'----load rotate_coords---- {elapsed_time:0.2f} seconds')   # between 80ms and 550ms
     else:
-        coords = np.array(
-            np.meshgrid(
-                np.arange(shape[0]),
-                np.arange(shape[1]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
-                np.arange(shape[2]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
-                indexing='ij'
+        rotations = np.linspace(0, 360, digital_rotations)
+        print(f'need to ----generating rotate_coords---- {all_coords_cache_path}')
+
+        if gpu_support:  # rotated coordinates don't need many decimals
+            coords = cp.array(
+                cp.meshgrid(
+                    cp.arange(shape[0]),
+                    cp.arange(shape[1]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
+                    cp.arange(shape[2]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
+                    indexing='ij'
+                )
             )
-        )
-        all_coords = np.zeros((3, digital_rotations, *shape), dtype=dtype)
+            all_coords = cp.zeros((3, digital_rotations, *shape), dtype=dtype)
 
-        for i, angle in enumerate(rotations):
-            all_coords[:, i] = rotate(
-                coords,
-                angle=angle,
-                reshape=False,
-                axes=axes,
-                output=dtype,  # output will be floats
-                prefilter=False,
-                order=1,
+            for i, angle in enumerate(rotations):
+                all_coords[:, i] = rotate(
+                    coords,
+                    angle=angle,
+                    reshape=False,
+                    axes=axes,
+                    output=dtype,  # output will be floats
+                    prefilter=False,
+                    order=1,
+                ) if angle % 360 != 0 else coords # rot(zero degrees) != original coordinates because sin(0) !=0
+
+        else:
+            coords = np.array(
+                np.meshgrid(
+                    np.arange(shape[0]),
+                    np.arange(shape[1]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
+                    np.arange(shape[2]) + .5, # when size is even: FFT is offcenter by 1, and we rotate about pixel seam.
+                    indexing='ij'
+                )
             )
+            all_coords = np.zeros((3, digital_rotations, *shape), dtype=dtype)
 
-    # Again, rotation by zero degrees doesn't always become a "no operation". We need to enforce that between emb
-    # dimension otherwise, we will mix between the six embeddings.
-    for emb in range(shape[0]):
-        all_coords[0, :, emb, :, :] = emb
+            for i, angle in enumerate(rotations):
+                all_coords[:, i] = rotate(
+                    coords,
+                    angle=angle,
+                    reshape=False,
+                    axes=axes,
+                    output=dtype,  # output will be floats
+                    prefilter=False,
+                    order=1,
+                )
 
-    return all_coords   # 3 coords (z,y,x), 361 angles, 6 emb, height of emb, width of emb
+        # Again, rotation by zero degrees doesn't always become a "no operation". We need to enforce that between emb
+        # dimension otherwise, we will mix between the six embeddings.
+        for emb in range(shape[0]):
+            all_coords[0, :, emb, :, :] = emb
+
+        elapsed_time = time.time() - t
+        print(f'----generating rotate_coords---- {elapsed_time:0.2f} seconds')  # ~1-4 seconds
+
+        if not all_coords_cache_path.exists():
+            np.save(all_coords_cache_path, all_coords)
+
+    return all_coords   # 3 coords (z,y,x), 361 angles, 6 emb, height of emb, width of emb.  ~53 MB
 
 
 @profile

@@ -33,11 +33,14 @@ def get_image(path):
     else:
         path = Path(str(path))
 
-    with TiffFile(path) as tif:
-        img = tif.asarray()
+    if path.suffix == '.npy':
+        img = np.load(path)
+    else:
+        with TiffFile(path) as tif:
+            img = tif.asarray()
 
-        if np.isnan(np.sum(img)):
-            logger.error("NaN!")
+    if np.isnan(np.sum(img)):
+        logger.error("NaN!")
 
     img = np.expand_dims(img, axis=-1)
     return img

@@ -125,6 +125,8 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 're
         # window_y = window(('tukey', pad_width[1]), padded.shape[1])
         # window_x = window(('tukey', pad_width[2]), padded.shape[2])
         # zv, yv, xv = np.meshgrid(window_z, window_y, window_x, indexing='ij', copy=True)
+        if isinstance(padded, cp.ndarray):
+            window_z = cp.array(window_z)
         padded *= window_z[..., np.newaxis, np.newaxis]
         return padded
 
@@ -183,11 +185,12 @@ def dog(
         try:    # try on GPU
             spatial_dims = image.ndim
 
-            low_sigma = cp.array(low_sigma, dtype='float', ndmin=1)
+            cp_dtype = cp.float32
+            low_sigma = cp.array(low_sigma, dtype=cp_dtype, ndmin=1)
             if high_sigma is None:
                 high_sigma = low_sigma * 1.6
             else:
-                high_sigma = cp.array(high_sigma, dtype='float', ndmin=1)
+                high_sigma = cp.array(high_sigma, dtype=cp_dtype, ndmin=1)
 
             if len(low_sigma) != 1 and len(low_sigma) != spatial_dims:
                 raise ValueError('low_sigma must have length equal to number of spatial dimensions of input')
@@ -195,33 +198,35 @@ def dog(
             if len(high_sigma) != 1 and len(high_sigma) != spatial_dims:
                 raise ValueError('high_sigma must have length equal to number of spatial dimensions of input')
 
-            low_sigma = low_sigma * cp.ones(spatial_dims)
-            high_sigma = high_sigma * cp.ones(spatial_dims)
+            low_sigma = low_sigma * cp.ones(spatial_dims, dtype=cp_dtype)
+            high_sigma = high_sigma * cp.ones(spatial_dims, dtype=cp_dtype)
 
             if any(high_sigma < low_sigma):
                 raise ValueError('high_sigma must be equal to or larger than low_sigma for all axes')
 
-            im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)    # sharper
-            im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=cp.floating)   # more blurred
+            im1 = cp.empty_like(image, dtype=cp_dtype)  # need to supply gauss filter output with the data type we want
+            im2 = cp.empty_like(image, dtype=cp_dtype)  # need to supply gauss filter output with the data type we want
+            im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=im1)   # sharper
+            im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
 
-            mask = cp.array(tukey_window(np.ones(image.shape)))
-            mask[mask < .9] = np.nan
+            mask = tukey_window(cp.ones_like(image, dtype=cp_dtype))
+            mask[mask < .9] = cp.nan
             mask[mask >= .9] = 1
 
-            # if blurred shows little deviation: this is sparse, will want to more aggressively subtract
-            if cp.nanstd(im2*mask) < 3:
+            # if blurred shows little std deviation: this is sparse, will want to more aggressively subtract
+            if cp.std(im2[mask == 1]) < 3:
                 snr = measure_snr(image*mask)       
                 if snr > snr_threshold:             # sparse, yet SNR of original image is good
                     noise = cp.std(image - im2)     # increase the background subtraction by the noise
                     return im1 - (im2 + noise)
                 else:                               # sparse, and SNR of original image is poor
-                    logger.warning("Dropping image for poor SNR")
+                    logger.warning("Dropping sparse image for poor SNR")
                     return np.zeros_like(image)     # return zeros
                 
             else:                                               # This is a dense image
                 filtered_img = im1 - im2
                 if measure_snr(filtered_img) < snr_threshold:   # SNR poor
-                    logger.warning("Dropping image for poor SNR")
+                    logger.warning("Dropping  dense image for poor SNR")
                     return np.zeros_like(image)                 # return zeros
                 else:
                     return filtered_img                         # SNR good. Return filtered image.
@@ -243,7 +248,7 @@ def remove_background_noise(
         on GPU. DoG filter also checks if sparse, returns zeros if image doesn't have signal.
 
     Args:
-        image (np.array): 3D image volume
+        image (np.ndarray or cp.ndarray): 3D image volume
         read_noise_bias (float, optional): When method="mode", empty pixels will still be non-zero due to read noise of camera.
             This value increases the amount subtracted to put empty pixels at zero. Defaults to 5.
         method (str, optional): method for background subtraction. Defaults to 'difference_of_gaussians'.
@@ -253,7 +258,8 @@ def remove_background_noise(
     """
 
     try:
-        image = cp.array(image)
+        if not isinstance(image, cp.ndarray):
+            image = cp.array(image)
     except Exception:
         logger.warning("No CUDA-capable device is detected")
 
@@ -264,10 +270,7 @@ def remove_background_noise(
         image = dog(image, low_sigma=0.7, high_sigma=1.5)
     image[image < 0] = 0
 
-    if isinstance(image, cp.ndarray):
-        return cp.asnumpy(image)
-    else:
-        return image
+    return image
 
 
 def tukey_window(image: np.ndarray, alpha: float = .5):
@@ -282,8 +285,10 @@ def tukey_window(image: np.ndarray, alpha: float = .5):
     # Nominally we would use a 3D window, but that would create a spherical mask inscribing the volume bounds.
     # That will cut a lot of data, we can do better by using cylindrical mask, because we don't use
     # an XZ or YZ projection of the FFT.
-    w = window(('tukey', alpha), image.shape[1:]) # 2D window (basically an inscribed circle in X, Y)
-    image *= w[np.newaxis, ...] # apply 2D window over 3D volume as a cylinder
+    w = window(('tukey', alpha), image.shape[1:])  # 2D window (basically an inscribed circle in X, Y)
+    if isinstance(image, cp.ndarray):
+        w = cp.array(w)
+    image *= w[np.newaxis, ...]   # apply 2D window over 3D volume as a cylinder
     return image
 
 
@@ -301,14 +306,14 @@ def prep_sample(
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
         
-        (Convert to 32bit float)
+        (Converts to 32bit cupy float)
         
         -Background subtraction (via Difference of gaussians)
         -Crop (or mirror pad) to iPSF FOV's size in microns (if model FOV is given)
         -Tukey window
         -Normalization to 0-1
         
-        Return 32bit float  
+        Return 32bit numpy float
 
     Args:
         sample: Input 3D array (or series of 3D arrays)
@@ -331,8 +336,9 @@ def prep_sample(
 
         sample = np.expand_dims(sample, axis=-1)
 
-    # convert to 32bit
-    sample = sample.astype(np.float32)
+    # convert to 32bit cupy
+    if not isinstance(sample, cp.ndarray):
+        sample = cp.array(sample, dtype=cp.float32)
 
     if plot is not None:
         plt.rcParams.update({
@@ -348,7 +354,7 @@ def prep_sample(
         fig, axes = plt.subplots(3, ncols=3, figsize=(10, 10))
 
         plot_mip(
-            vol=sample,
+            vol=cp.asnumpy(sample),
             xy=axes[0, 0],
             xz=axes[0, 1],
             yz=axes[0, 2],
@@ -374,7 +380,7 @@ def prep_sample(
         axes[1, 1].set_title(f"PSNR: {psnr}")
 
         plot_mip(
-            vol=sample,
+            vol=cp.asnumpy(sample),
             xy=axes[1, 0],
             xz=axes[1, 1],
             yz=axes[1, 2],
@@ -401,11 +407,13 @@ def prep_sample(
         sample = tukey_window(sample)
 
     if normalize:  # safe division to not get nans for blank images
-        sample = np.where(sample == 0, 0, sample/np.nanmax(sample))
+        denominator = np.max(sample)
+        if denominator != 0:
+            sample /= denominator
 
     if plot is not None:
         plot_mip(
-            vol=sample,
+            vol=cp.asnumpy(sample),
             xy=axes[-1, 0],
             xz=axes[-1, 1],
             yz=axes[-1, 2],
@@ -419,7 +427,10 @@ def prep_sample(
         logger.info(f"PSNR: {psnr:4}   {sample_path}")
         return psnr
     else:
-        return sample.astype(np.float32)
+        if isinstance(sample, cp.ndarray):
+            return cp.asnumpy(sample).astype(np.float32)
+        else:
+            return sample.astype(np.float32)
 
 
 @profile
@@ -647,6 +658,7 @@ def get_tiles(
     window_size: tuple = (64, 64, 64),
     strides: Optional[tuple] = None,
     save_files: bool = True,
+    save_file_type: str = '.tif',
     prep: Optional[partial] = None,
 ):
     savepath.mkdir(parents=True, exist_ok=True)
@@ -679,7 +691,13 @@ def get_tiles(
 
     if prep is not None:
         from utils import multiprocess
-        windows = multiprocess(jobs=windows, func=prep, desc="Preprocessing tiles")
+        windows = multiprocess(
+            jobs=windows,  # [cp.array(x.copy()) for x in windows]  # make copies not views into "dataset"
+            func=prep,
+            desc="Preprocessing tiles",
+            cores=1,  # =1 because "windows" are views in "dataset", so multiprocess would make N copies of "dataset"
+            unit='tiles',
+        )
 
     tiles = {}
     for i, (z, y, x) in enumerate(itertools.product(
@@ -698,10 +716,14 @@ def get_tiles(
             )
         else:
             if save_files:
-                imwrite(savepath / f"{name}.tif", windows[i])
+                if save_file_type == '.npy':
+                    np.save(savepath / f"{name}.npy", windows[i])
+                else:
+                    imwrite(savepath / f"{name}.tif", windows[i])
+
 
             tiles[name] = dict(
-                path=savepath / f"{name}.tif",
+                path=savepath / f"{name}{save_file_type}",
                 ignored=False,
             )
 

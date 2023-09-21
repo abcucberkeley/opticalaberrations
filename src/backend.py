@@ -1032,6 +1032,8 @@ def predict_dataset(
         desc: str = 'MiniBatch-probabilistic-predictions',
         digital_rotations: Optional[int] = None,
         plot_rotations: Any = None,
+        pool: Optional[mp.Pool] = None,
+        cpu_workers: int = -1,
 ):
     """
     Average predictions and compute stdev
@@ -1060,14 +1062,16 @@ def predict_dataset(
     ignore_modes = list(map(int, ignore_modes))
     logger.info(f"Ignoring modes: {ignore_modes}")
     logger.info(f"[Batch size={batch_size}] {desc}")
-    inputs = inputs.batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
+
 
     # for i in inputs.take(1):
     #     logger.info(i.numpy().shape)
 
     if digital_rotations is not None:
         inputs = inputs.map(lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:])))
-        inputs = inputs.unbatch().batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
+        inputs = inputs.unbatch().batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE) # batch_size is on predictions
+    else:
+        inputs = inputs.batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE) # this batch_size is on files.
 
         # for i in inputs.take(1):
         #     logger.info(i.numpy().shape)
@@ -1076,15 +1080,16 @@ def predict_dataset(
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
     inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE)  # prefetch will fill GPU RAM
 
-    # operations mapped and batched gets executed here (emb=>rotations=>predictions).
-    preds = model.predict(inputs, verbose=verbose)
-
-    preds[:, ignore_modes] = 0.
-    preds[np.abs(preds) <= threshold] = 0.
-
     if digital_rotations is not None:
-        tile_predictions = np.array(np.split(preds, len(save_path)))
-        with mp.Pool(processes=mp.cpu_count()) as p:
+
+        with pool if pool is not None else mp.Pool(processes=cpu_workers if cpu_workers > 0 else mp.cpu_count()) as p:
+            # operations mapped and batched gets executed here (emb=>rotations=>predictions).
+            preds = model.predict(inputs, verbose=verbose)
+
+            preds[:, ignore_modes] = 0.
+            preds[np.abs(preds) <= threshold] = 0.
+            tile_predictions = np.array(np.split(preds, len(save_path)))
+
             jobs = list(tqdm(
                 p.starmap(
                     eval_rotation,  # order matters future thayer
@@ -1111,6 +1116,12 @@ def predict_dataset(
         return preds, std
 
     else:
+        # operations mapped and batched gets executed here (emb=>rotations=>predictions).
+        preds = model.predict(inputs, verbose=verbose)
+
+        preds[:, ignore_modes] = 0.
+        preds[np.abs(preds) <= threshold] = 0.
+
         return preds, np.zeros_like(preds)
 
 
@@ -1136,7 +1147,8 @@ def predict_files(
     plot_rotations: bool = False,
     skip_prep_sample: bool = False,
     cpu_workers: int = -1,
-    template: Optional[pd.DataFrame] = None
+    template: Optional[pd.DataFrame] = None,
+    pool: Optional[mp.Pool] = None,
 ):
     no_phase = True if model.input_shape[1] == 3 else False
 
@@ -1158,11 +1170,12 @@ def predict_files(
         ),
         desc='Generate Fourier embeddings',
         unit=' file',
-        cores=cpu_workers
+        cores=cpu_workers,
+        pool=pool,
     )
 
     inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
-    inputs = inputs.batch(batch_size).map(
+    inputs = inputs.batch(len(paths)).map( # batch is on input files. this is now fast, because of skip_prep_sample, so do all at once.
         lambda x: tf.py_function(
             generate_fourier_embeddings,
             inp=[x],
@@ -1183,8 +1196,10 @@ def predict_files(
         confidence_threshold=confidence_threshold,
         desc=f"[{paths.shape[0]} ROIs] x [{digital_rotations} Rotations] = "
              f"{paths.shape[0] * digital_rotations} predictions, requires "
-             f"{int(np.ceil(paths.shape[0] * digital_rotations / batch_size))} batches. "
-             f"emb={6*64*64 * batch_size * 32 / 8 / 1e6:.2f} MB/batch. ",
+             f"{int(np.ceil(paths.shape[0] * digital_rotations / batch_size))} inference batches. "
+             f"emb={6*64*64 * batch_size * digital_rotations * 32 / 8 / 1e6:.2f} MB/batch. ",
+        cpu_workers=cpu_workers,
+        pool=None, # let the "eval_tiles" pool spawn just before predict is called
     )
 
     if template is not None:

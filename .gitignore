@@ -157,3 +157,5 @@ src/LabVIEW_Shortcut.lnk
 src/LV_auto_batch.bat
 login.bat
 *.bat
+/examples/largefov/before_tiles/
+src/all_coords_cache_3x361x6x64x64_float16.npy
