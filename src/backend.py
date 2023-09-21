@@ -1264,14 +1264,11 @@ def train(
         plot_patches: bool = True,
         lls_defocus: bool = False,
         defocus_only: bool = False,
+        radial_encoding: bool = False,
 ):
     network = network.lower()
     opt = opt.lower()
     restored = False
-
-    if isinstance(psf_type, str) or isinstance(psf_type, Path):
-        with h5py.File(psf_type, 'r') as file:
-            psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
 
     if defocus_only:
         pmodes = 1
@@ -1327,7 +1324,8 @@ def train(
             width_scalar=width_scalar,
             activation=activation,
             mul=mul,
-            no_phase=no_phase
+            no_phase=no_phase,
+            radial_encoding=radial_encoding
         )
 
     elif network == 'opticalresnet':

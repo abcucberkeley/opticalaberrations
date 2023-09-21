@@ -9,6 +9,7 @@ MAXAMP=1
 DZ=200
 DY=108
 DX=108
+RADIAL_ENCODING='--radial_encoding'
 NO_PHASE='--no_phase'
 DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
@@ -20,7 +21,7 @@ MODES=15
 WARMUP=25
 EPOCHS=500
 NODES=1
-CLUSTER=LSF
+CLUSTER=lsf
 
 if [ $CLUSTER = 'ABC' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"
@@ -55,7 +56,7 @@ do
     LAM=.510
   fi
 
-  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 16 \
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
   --task "--psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR
