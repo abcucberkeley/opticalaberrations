@@ -402,7 +402,7 @@ def plot_heatmap_p2v(
     dataframe,
     wavelength,
     savepath: Path,
-    label='Integrated photons per object',
+    label='Integrated photoelectrons',
     lims=(0, 100),
     ax=None,
     cax=None,
@@ -462,7 +462,7 @@ def plot_heatmap_p2v(
     ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
     if histograms is not None:
-        if label == 'Integrated photons per object':
+        if label == 'Integrated photoelectrons':
             x = histograms[
                 (histograms.pbins <= 1e5) &
                 (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
@@ -920,37 +920,54 @@ def snrheatmap(
 
     df = df[df['iter_num'] == iter_num]
 
-    pbins = np.arange(0, 1e6+10e4, 5e4)
-    df['pbins'] = pd.cut(df['photons'], pbins, labels=pbins[1:], include_lowest=True)
+    for x in ['photons', 'counts', 'counts_p100', 'counts_p99']:
 
-    bins = np.arange(0, 10.25, .25).round(2)
-    df['ibins'] = pd.cut(
-        df['aberration'],
-        bins,
-        labels=bins[1:],
-        include_lowest=True
-    )
+        if x == 'photons':
+            label = f'Integrated photoelectrons'
+            lims = (0, 10**6)
+            pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
+        elif x == 'counts':
+            label = f'Integrated counts'
+            lims = (4e6, 7.5e6)
+            pbins = np.arange(lims[0], lims[-1]+2e5, 1e5)
+        elif x == 'counts_p100':
+            label = f'Max counts'
+            lims = (0, 5000)
+            pbins = np.arange(lims[0], lims[-1]+400, 200)
+        else:
+            label = f'99th percentile of counts'
+            lims = (0, 300)
+            pbins = np.arange(lims[0], lims[-1]+50, 25)
 
-    dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
-    dataframe.insert(0, 0, dataframe.index.values)
+        df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
+        bins = np.arange(0, 10.25, .25).round(2)
+        df['ibins'] = pd.cut(
+            df['aberration'],
+            bins,
+            labels=bins[1:],
+            include_lowest=True
+        )
 
-    try:
-        dataframe = dataframe.sort_index().interpolate()
-    except ValueError:
-        pass
+        dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
+        dataframe.insert(0, 0, dataframe.index.values)
 
-    dataframe.to_csv(f'{savepath}.csv')
-    logger.info(f'Saved: {savepath.resolve()}.csv')
+        try:
+            dataframe = dataframe.sort_index().interpolate()
+        except ValueError:
+            pass
 
-    plot_heatmap_p2v(
-        dataframe,
-        histograms=df,
-        wavelength=modelspecs.lam_detection,
-        savepath=Path(f"{savepath}_iter_{iter_num}"),
-        label=f'Integrated photons per object',
-        lims=(0, 10 ** 6),
-        agg=agg
-    )
+        dataframe.to_csv(f'{savepath}_{x}.csv')
+        logger.info(f'Saved: {savepath.resolve()}_{x}.csv')
+
+        plot_heatmap_p2v(
+            dataframe,
+            histograms=df if x == 'photons' else None,
+            wavelength=modelspecs.lam_detection,
+            savepath=Path(f"{savepath}_iter_{iter_num}_{x}"),
+            label=label,
+            lims=lims,
+            agg=agg
+        )
 
     return savepath
 
