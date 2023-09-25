@@ -43,17 +43,23 @@ jobs:
           docker-images: true
           swap-storage: true
           
-      - name: Setup miniconda base without environment file
+      - name: Create miniconda ml without environment file
         uses: conda-incubator/setup-miniconda@v2
         with:
           miniconda-version: "latest"
           activate-environment: ml
           auto-activate-base: false
 
+      - name: List environment A
+        run: |
+          conda info --envs
+          conda info
+          conda list
+
       - name: Download and or upload cache of Conda env
         # GitHub will remove entries that have not been accessed in >7 days.Size of all caches in a repository is limited to 10 GB.
-        uses: actions/cache@v2
-        id: conda_cache_of_ml_env
+        uses: actions/cache@v3
+        id: cache
         env:
           # Increase this value to reset cache if .yml has not changed but packages have
           CACHE_NUMBER: 0
@@ -65,13 +71,11 @@ jobs:
         run: conda env update -n ml -f ubuntu.yml
         if: steps.cache.outputs.cache-hit != 'true'
 
-      - name: Activate environment
-        with: 
-           activate-environment: ml
-        run: |
-          conda info
-          conda list
-          printenv
+#      - name: List environment B        
+#        run: |
+#          conda info --envs
+#          conda info
+#          conda list
 
 #      - name: Test IO modules
 #        run: python -m pytest -vvv tests/test_io.py
