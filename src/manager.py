@@ -206,7 +206,10 @@ def main(args=None):
         sjob += f' -q {args.partition}'
 
         if args.gpus > 0:
-            sjob += f' -gpu "num={args.gpus}:nvlink=yes"'
+            if args.partition == 'gpu_a100':
+                sjob += f' -gpu "num={args.gpus}:nvlink=yes"'
+            else:
+                sjob += f' -gpu "num={args.gpus}"'
 
         sjob += f' -n {args.cpus}'
         sjob += f" -J {args.name}"
