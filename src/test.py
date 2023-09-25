@@ -165,14 +165,6 @@ def run_task(iter_num, args):
                 batch_size=args.batch_size,
                 digital_rotations=args.digital_rotations,
             )
-        elif args.target == 'phasenet':
-            savepath = eval.evaluate_phasenet(
-                model=args.model,
-                eval_sign=args.eval_sign,
-                num_objs=args.num_objs,
-                batch_size=args.batch_size,
-                digital_rotations=args.digital_rotations,
-            )
         elif args.target == "random":
             savepath = eval.random_samples(
                 model=args.model,
