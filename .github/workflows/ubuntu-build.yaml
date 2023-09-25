@@ -22,7 +22,10 @@ jobs:
       run:
         shell: bash -el {0}
     steps:
-      - uses: actions/checkout@v3
+      - name: git clone step
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -40,26 +43,25 @@ jobs:
           docker-images: true
           swap-storage: true
           
-      - name: Setup miniconda
+      - name: Setup miniconda base without environment file
         uses: conda-incubator/setup-miniconda@v2
         with:
-          environment-file: ubuntu.yml
+          miniconda-version: "latest"
           activate-environment: ml
           auto-activate-base: false
 
-      - name: Set cache date
-        id: set-date
-        run: echo "today=$(date +'%Y%m%d')" >> $GITHUB_ENV
-
-      - uses: actions/cache@v2
-        id: cache
+      - name: Download and or upload cache of Conda env
+        # GitHub will remove entries that have not been accessed in >7 days.Size of all caches in a repository is limited to 10 GB.
+        uses: actions/cache@v2
+        id: conda_cache_of_ml_env
         env:
+          # Increase this value to reset cache if .yml has not changed but packages have
           CACHE_NUMBER: 0
         with:
           path: ${{ env.CONDA }}/envs
-          key: ubuntu-build-${{ hashFiles('ubuntu.yml') }}-${{ env.DATE }}
+          key: ubuntu-build-${{ hashFiles('ubuntu.yml') }}
 
-      - name: Update environment
+      - name: Update environment based on the environment file if the cache does not exist.
         run: conda env update -n ml -f ubuntu.yml
         if: steps.cache.outputs.cache-hit != 'true'
 
