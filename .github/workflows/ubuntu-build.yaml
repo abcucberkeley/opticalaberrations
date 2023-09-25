@@ -50,9 +50,15 @@ jobs:
           activate-environment: ml
           auto-activate-base: false
 
+      - name: List environment A
+        run: |
+          conda info --envs
+          conda info -n ml
+          conda list
+
       - name: Download and or upload cache of Conda env
         # GitHub will remove entries that have not been accessed in >7 days.Size of all caches in a repository is limited to 10 GB.
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         id: conda_cache_of_ml_env
         env:
           # Increase this value to reset cache if .yml has not changed but packages have
@@ -65,11 +71,11 @@ jobs:
         run: conda env update -n ml -f ubuntu.yml
         if: steps.cache.outputs.cache-hit != 'true'
 
-      - name: List environment
+      - name: List environment B        
         run: |
-          conda info
+          conda info --envs
+          conda info -n ml
           conda list
-          printenv
 
 #      - name: Test IO modules
 #        run: python -m pytest -vvv tests/test_io.py
