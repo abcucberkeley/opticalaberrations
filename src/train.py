@@ -188,6 +188,11 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
+        '--radial_encoding_period', default=1, type=int,
+        help='toggle to add more periods for each sin/cos layer in the radial encodings'
+    )
+
+    train_parser.add_argument(
         '--stem', action='store_true',
         help='toggle to use a stem block'
     )
@@ -256,6 +261,7 @@ def main(args=None):
             lls_defocus=args.lls_defocus,
             defocus_only=args.defocus_only,
             radial_encoding=args.radial_encoding,
+            radial_encoding_period=args.radial_encoding_period,
             stem=args.stem,
         )
 

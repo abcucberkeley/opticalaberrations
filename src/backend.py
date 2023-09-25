@@ -1280,6 +1280,7 @@ def train(
         lls_defocus: bool = False,
         defocus_only: bool = False,
         radial_encoding: bool = False,
+        radial_encoding_period: int = 1,
         stem: bool = False,
 ):
     network = network.lower()
@@ -1342,7 +1343,8 @@ def train(
             activation=activation,
             mul=mul,
             no_phase=no_phase,
-            radial_encoding=radial_encoding
+            radial_encoding=radial_encoding,
+            radial_encoding_period=radial_encoding_period,
         )
 
     elif network == 'opticalresnet':

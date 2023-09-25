@@ -172,16 +172,17 @@ class PatchEncoder(layers.Layer):
 
         return tf.stack(emb, axis=0)
 
-    def _radial_positional_encoding(self, inputs):
+    def _radial_positional_encoding(self, inputs, periods: int = 1):
         r, theta = self._calc_radius()
-
         r = tf.constant(r, dtype=tf.float32)
         theta = tf.constant(theta, dtype=tf.float32)
 
-        sin = tf.sin(theta)
-        cos = tf.cos(theta)
+        encodings = [r]
+        for p in range(1, periods+1):
+            encodings.append(tf.sin(p * theta))
+            encodings.append(tf.cos(p * theta))
 
-        pos = tf.stack([r, sin, cos], axis=-1)
+        pos = tf.stack(encodings, axis=-1)
 
         emb = []
         for i in range(inputs.shape[1]):
@@ -189,10 +190,10 @@ class PatchEncoder(layers.Layer):
 
         return tf.stack(emb, axis=0)
 
-    def call(self, inputs, training=True, radial_encoding=False, **kwargs):
+    def call(self, inputs, training=True, radial_encoding=False, periods=1, **kwargs):
 
         if radial_encoding:
-            return self.project(inputs) + self._radial_positional_encoding(inputs)
+            return self.project(inputs) + self._radial_positional_encoding(inputs, periods=periods)
         else:
             return self.project(inputs) + self._positional_encoding(inputs)
 
@@ -299,6 +300,7 @@ class OpticalTransformer(Base, ABC):
             mul=False,
             no_phase=False,
             radial_encoding=False,
+            radial_encoding_period=1,
             stem=False,
             **kwargs
     ):
@@ -317,6 +319,7 @@ class OpticalTransformer(Base, ABC):
         self.mul = mul
         self.no_phase = no_phase
         self.radial_encoding = radial_encoding
+        self.radial_encoding_period = radial_encoding_period
 
     def _calc_channels(self, channels, width_scalar):
         return int(tf.math.ceil(width_scalar * channels))
@@ -376,7 +379,7 @@ class OpticalTransformer(Base, ABC):
         m = PatchEncoder(
             num_patches=(img_shape//patch_size) ** 2,
             embedding_size=self._calc_channels(patch_size**2, width_scalar=self.width_scalar),
-        )(m, radial_encoding=self.radial_encoding)
+        )(m, radial_encoding=self.radial_encoding, periods=self.radial_encoding_period)
         return m
 
     def call(self, inputs, training=True, **kwargs):
