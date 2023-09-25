@@ -22,15 +22,16 @@ dependencies:
   - blas=1.0=mkl
   - blinker=1.5=pyhd8ed1ab_0
   - blosc=1.21.1=hcbbf2c4_0
+  - boost-cpp=1.74.0=h54f0996_3
   - bottleneck=1.3.5=py38hbaf524b_1
   - brotli=1.0.9=hcfcfb64_8
   - brotli-bin=1.0.9=hcfcfb64_8
   - brotlipy=0.7.0=py38h91455d4_1005
   - bzip2=1.0.8=h8ffe710_4
   - c-ares=1.18.1=h8ffe710_0
-  - ca-certificates=2023.01.10=haa95532_0
+  - ca-certificates=2023.7.22=h56e8100_0
   - cachetools=5.2.0=pyhd8ed1ab_0
-  - certifi=2022.12.7=py38haa95532_0
+  - certifi=2023.7.22=pyhd8ed1ab_0
   - cffi=1.15.1=py38h57701bc_2
   - cfitsio=3.470=h2bbff1b_7
   - charls=2.2.0=h6c2663c_0
@@ -40,7 +41,8 @@ dependencies:
   - colorama=0.4.6=pyhd8ed1ab_0
   - contourpy=1.0.6=py38hb1fd069_0
   - cryptography=38.0.3=py38h086c683_0
-  - cudatoolkit=11.3.1=hf2f0253_11
+  - cudadecon=0.5.0=ha357265_1
+  - cudatoolkit=11.3.1=hf2f0253_12
   - cudnn=8.1.0.77=h3e0f4f4_0
   - cycler=0.11.0=pyhd8ed1ab_0
   - cytoolz=0.12.0=py38h91455d4_1
@@ -51,6 +53,7 @@ dependencies:
   - exceptiongroup=1.0.4=pyhd8ed1ab_0
   - executing=1.2.0=pyhd8ed1ab_0
   - fasteners=0.17.3=pyhd8ed1ab_0
+  - fftw=3.3.10=nompi_h38027f0_108
   - fonttools=4.38.0=py38h91455d4_1
   - freetype=2.12.1=h546665d_0
   - frozenlist=1.3.3=py38h91455d4_0
@@ -128,7 +131,7 @@ dependencies:
   - numpy=1.23.4=py38h90ce339_1
   - oauthlib=3.2.2=pyhd8ed1ab_0
   - openjpeg=2.5.0=hb211442_0
-  - openssl=1.1.1t=h2bbff1b_0
+  - openssl=1.1.1w=hcfcfb64_0
   - opt_einsum=3.3.0=pyhd8ed1ab_1
   - packaging=21.3=pyhd8ed1ab_0
   - pandas=1.4.2=py38hd77b12b_0
@@ -147,6 +150,7 @@ dependencies:
   - pyasn1=0.4.8=py_0
   - pyasn1-modules=0.2.7=py_0
   - pycparser=2.21=pyhd8ed1ab_0
+  - pycudadecon=0.4.1=pyhd8ed1ab_0
   - pyerfa=2.0.0.1=py38hbaf524b_3
   - pygments=2.13.0=pyhd8ed1ab_0
   - pyjwt=2.6.0=pyhd8ed1ab_0
@@ -189,7 +193,7 @@ dependencies:
   - tensorflow-gpu=2.5.1=py38_cuda11.1_cudnn8.1_0
   - termcolor=2.1.0=pyhd8ed1ab_0
   - threadpoolctl=3.1.0=pyh8a188c0_0
-  - tifffile=2021.7.2
+  - tifffile=2021.7.2=pyhd3eb1b0_2
   - tk=8.6.12=h8ffe710_0
   - tomli=2.0.1=pyhd8ed1ab_0
   - toolz=0.12.0=pyhd8ed1ab_0
@@ -203,6 +207,7 @@ dependencies:
   - unicodedata2=15.0.0=py38h91455d4_0
   - urllib3=1.26.11=pyhd8ed1ab_0
   - vc=14.3=h3d8a991_9
+  - vc14_runtime=14.32.31332=h6669f8e_13
   - vs2015_runtime=14.32.31332=h1d6e394_9
   - wcwidth=0.2.5=pyh9f0ad1d_2
   - werkzeug=2.2.2=pyhd8ed1ab_0
@@ -223,10 +228,10 @@ dependencies:
       - appdirs==1.4.4
       - bleach==6.0.0
       - blessed==1.19.1
-      - cupy-cuda11x==11.5.0
+      - cupy-cuda11x==12.2.0
       - defusedxml==0.7.1
       - dphtools==0.0.3
-      - fastrlock==0.8.1
+      - fastrlock==0.8.2
       - flyingcircus==0.1.4.0
       - flyingcircus-numeric==0.1.1.2
       - glances==3.3.1.1
@@ -247,3 +252,4 @@ dependencies:
       - ujson==5.7.0
       - webencodings==0.5.1
       - widgetsnbextension==4.0.5
+prefix: C:\Users\Mosaic\miniconda3\envs\ml
