@@ -1280,6 +1280,7 @@ def train(
         lls_defocus: bool = False,
         defocus_only: bool = False,
         radial_encoding: bool = False,
+        stem: bool = False,
 ):
     network = network.lower()
     opt = opt.lower()
@@ -1333,6 +1334,7 @@ def train(
         model = opticalnet.OpticalTransformer(
             name='OpticalNet',
             roi=roi,
+            stem=stem,
             patches=patch_size,
             modes=pmodes,
             depth_scalar=depth_scalar,

@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/train.py" />
-    <option name="PARAMETERS" value="--batch_size 64 --modes 15 --network opticalnet --epochs 5 --outdir ../models/opticalnet --dataset ../dataset/test/x108-y108-z200/i64/z15 --embedding spatial_planes --lls_defocus" />
+    <option name="PARAMETERS" value="--batch_size 64 --modes 15 --network opticalnet --epochs 5 --outdir ../models/opticalnet --dataset ../dataset/train/YuMB_lambda510/z200-y108-x108/z64-y64-x64/z15/ --embedding spatial_planes --radial_encoding" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

@@ -299,10 +299,12 @@ class OpticalTransformer(Base, ABC):
             mul=False,
             no_phase=False,
             radial_encoding=False,
+            stem=False,
             **kwargs
     ):
         super().__init__(**kwargs)
         self.roi = roi
+        self.stem = stem
         self.patches = patches
         self.heads = heads
         self.repeats = repeats
@@ -379,12 +381,15 @@ class OpticalTransformer(Base, ABC):
 
     def call(self, inputs, training=True, **kwargs):
 
-        m = Stem(
-            kernel_size=7,
-            activation=self.activation,
-            no_phase=self.no_phase,
-            mul=self.mul,
-        )(inputs)
+        if self.stem:
+            m = Stem(
+                kernel_size=7,
+                activation=self.activation,
+                no_phase=self.no_phase,
+                mul=self.mul,
+            )(inputs)
+        else:
+            m = inputs
 
         if self.roi is not None:
             m = ROI(crop_shape=self.roi)(m)

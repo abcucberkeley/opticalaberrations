@@ -174,17 +174,22 @@ def parse_args(args):
 
     train_parser.add_argument(
         '--lls_defocus', action='store_true',
-        help='toggle to also predict the offset between the excitation and detection focal plan '
+        help='toggle to also predict the offset between the excitation and detection focal plan'
     )
 
     train_parser.add_argument(
         '--defocus_only', action='store_true',
-        help='toggle to only predict the offset between the excitation and detection focal plan '
+        help='toggle to only predict the offset between the excitation and detection focal plan'
     )
 
     train_parser.add_argument(
         '--radial_encoding', action='store_true',
-        help='toggle to use radial positional encoding for the PatchEncoder layer '
+        help='toggle to use radial positional encoding for the PatchEncoder layer'
+    )
+
+    train_parser.add_argument(
+        '--stem', action='store_true',
+        help='toggle to use a stem block'
     )
 
     return train_parser.parse_known_args(args)[0]
@@ -251,6 +256,7 @@ def main(args=None):
             lls_defocus=args.lls_defocus,
             defocus_only=args.defocus_only,
             radial_encoding=args.radial_encoding,
+            stem=args.stem,
         )
 
         atexit.register(strategy._extended._collective_ops._pool.close)
