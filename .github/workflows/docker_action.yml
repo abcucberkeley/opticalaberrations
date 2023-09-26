@@ -20,7 +20,7 @@ env:
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}  
-  do_signing: false
+  do_signing: ${{ false }}
 
 jobs:
   build:
