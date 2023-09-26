@@ -60,7 +60,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--dist", default='mixed', type=str, help='distribution to evaluate'
+        "--dist", default='/', type=str, help='distribution to evaluate'
+    )
+
+    parser.add_argument(
+        "--n_samples", default=None, type=int, help='number of samples to evaluate'
     )
 
     parser.add_argument(
@@ -68,14 +72,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--psf_type", default=None, type=str,
-        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
-             '(Default: None; to keep default mode used during training)'
-    )
-
-    parser.add_argument(
-        "--wavelength", default=None, type=float,
-        help='detection wavelength in microns'
+        "--no_beads", action='store_true', help='evaluate on PSFs only'
     )
 
     return parser.parse_args(args)
@@ -103,14 +100,25 @@ def run_task(iter_num, args):
     logging.info(f'Number of active GPUs: {gpu_workers}')
 
     with strategy.scope():
-        if args.target == 'phasenet':
-            savepath = experimental_benchmarks.evaluate_phasenet(
+        if args.target == 'random_phasenet':
+            savepath = experimental_benchmarks.random_samples_phasenet(
                 model=args.model,
                 na=args.na,
                 dist=args.dist,
                 eval_sign=args.eval_sign,
                 batch_size=args.batch_size,
                 digital_rotations=args.digital_rotations,
+            )
+        if args.target == 'phasenet':
+            savepath = experimental_benchmarks.phasenet_heatmap(
+                iter_num=iter_num,
+                datadir=args.datadir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=args.batch_size,
+                eval_sign=args.eval_sign,
+                no_beads=args.no_beads,
             )
 
         with Path(f"{savepath.with_suffix('')}_eval_settings.json").open('w') as f:

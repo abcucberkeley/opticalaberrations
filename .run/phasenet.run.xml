@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="metadata" type="PythonConfigurationType" factoryName="Python" folderName="utils">
+  <configuration default="false" name="phasenet" type="PythonConfigurationType" factoryName="Python" folderName="eval">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -12,8 +12,8 @@
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/config.py" />
-    <option name="PARAMETERS" value="$PROJECT_DIR$/models/new/new_modalities/opticalnet-15-v2Hex_lambda510 --psf_type ../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat --n_modes 15 --wavelength .510 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --embedding_option spatial_planes metadata" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/benchmark.py" />
+    <option name="PARAMETERS" value="../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5 --datadir ../dataset/test/YuMB_lambda510/z200-y108-x108/z64-y64-x64/z15/ --na 1.0 --batch_size 128 --eval_sign signed phasenet" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

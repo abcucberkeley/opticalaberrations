@@ -18,9 +18,8 @@ import swifter
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from functools import partial
 from line_profiler_pycharm import profile
-from tqdm import tqdm
-from tifffile import imwrite
 
 import utils
 import backend
@@ -39,7 +38,7 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 @profile
-def evaluate_phasenet(
+def random_samples_phasenet(
     model: Path,
     eval_sign: str = 'signed',
     dist: str = 'mixed',
@@ -149,7 +148,8 @@ def evaluate_phasenet(
             batch_size=batch_size,
             eval_sign=eval_sign,
             savepath=savepath,
-            digital_rotations=361 if digital_rotations else None
+            digital_rotations=361 if digital_rotations else None,
+            psf_type='widefield'
         )
 
     phasenet_inputs = eval.create_samples(
@@ -262,5 +262,206 @@ def evaluate_phasenet(
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    return savepath
+
+
+@profile
+def phasenet_heatmap(
+    datadir: Path,
+    iter_num: int = 1,
+    distribution: str = '/',
+    batch_size: int = 128,
+    samplelimit: Any = None,
+    na: float = 1.0,
+    eval_sign: str = 'signed',
+    agg: str = 'median',
+    modes: int = 15,
+    no_beads: bool = True,
+    phasenet_path: Path = Path('phasenetrepo')
+):
+
+    if not phasenet_path.exists():
+        subprocess.run(f"git clone https://github.com/mpicbg-csbd/phasenet.git phasenetrepo", shell=True)
+
+    from phasenetrepo.phasenet.model import PhaseNet
+    from csbdeep.utils import normalize, download_and_extract_zip_file
+
+    download_and_extract_zip_file(
+        url='https://github.com/mpicbg-csbd/phasenet/releases/download/0.1.0/model.zip',
+        targetdir=f'{phasenet_path}/models/',
+        verbose=1,
+    )
+
+    if no_beads:
+        savepath = phasenet_path.with_suffix('') / eval_sign / 'psf'
+    else:
+        savepath = phasenet_path.with_suffix('') / eval_sign / 'bead'
+
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    if distribution != '/':
+        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+    else:
+        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    phasenet = PhaseNet(None, name='16_05_2020_11_48_14_berkeley_50planes', basedir=f'{phasenet_path}/models/')
+
+    phasenetgen = SyntheticPSF(
+        psf_type='widefield',
+        lls_excitation_profile=None,
+        psf_shape=(64, 64, 64),
+        n_modes=modes,
+        lam_detection=.510,
+        x_voxel_size=.086,
+        y_voxel_size=.086,
+        z_voxel_size=.1,
+        na_detection=1.1,
+        refractive_index=1.33,
+        order='ansi',
+        distribution='mixed',
+        mode_weights='pyramid',
+    )
+
+    def predict(path):
+        psf = backend.load_sample(path)
+        psf = utils.resize_with_crop_or_pad(psf, crop_shape=(50, 50, 50))
+        psf = np.expand_dims(normalize(psf), axis=-1)
+        p = list(phasenet.predict(psf))
+        wavefront = Wavefront(
+            amplitudes=[0, 0, 0, 0] + p,
+            lam_detection=phasenetgen.lam_detection,
+            modes=modes,
+            order='ansi',
+            rotate=False,
+        )
+        return wavefront.amplitudes_ansi
+
+    if iter_num == 1:
+        # on first call, setup the dataframe with the 0th iteration stuff
+        results = eval.collect_data(
+            datapath=datadir,
+            model=15,
+            samplelimit=samplelimit,
+            distribution=distribution,
+            photons_range=None,
+            npoints_range=(1, 1),
+            psf_type=phasenetgen.psf_type,
+            lam_detection=phasenetgen.lam_detection
+        )
+    else:
+        # read previous results, ignoring criteria
+        results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
+
+    prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
+    ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
+    residual_cols = [col for col in results.columns if col.endswith('_residual')]
+    previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
+
+    # create realspace images for the current iteration
+    paths = utils.multiprocess(
+        func=partial(
+            eval.generate_sample,
+            iter_number=iter_num,
+            savedir=savepath.resolve(),
+            data=previous,
+            psfgen=phasenetgen,
+            no_phase=False,
+            digital_rotations=None,
+            no_beads=True
+        ),
+        jobs=previous['id'].values,
+        desc=f'Generate samples ({savepath.resolve()})',
+        unit=' sample',
+        cores=-1
+    )
+
+    current = previous.copy()
+    current['iter_num'] = iter_num
+    current['file'] = paths
+    current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
+
+    current[ground_truth_cols] = previous[residual_cols]
+    current[prediction_cols] = np.array([predict(p) for p in paths])
+
+    if eval_sign == 'positive_only':
+        current[ground_truth_cols] = current[ground_truth_cols].abs()
+        current[prediction_cols] = current[prediction_cols].abs()
+
+    current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
+
+    # compute residuals for each sample
+    current['residuals'] = current.apply(
+        lambda row: Wavefront(row[residual_cols].values, lam_detection=phasenetgen.lam_detection).peak2valley(na=na),
+        axis=1
+    )
+
+    current['residuals_umRMS'] = current.apply(
+        lambda row: np.linalg.norm(row[residual_cols].values),
+        axis=1
+    )
+
+    results = results.append(current, ignore_index=True)
+
+    if savepath is not None:
+        try:
+            results.to_csv(f'{savepath}_predictions.csv')
+        except PermissionError:
+            savepath = f'{savepath}_x'
+            results.to_csv(f'{savepath}_predictions.csv')
+        logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
+
+
+    df = results[results['iter_num'] == iter_num]
+    df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
+
+    for x in ['photons', 'photoelectrons', 'counts', 'counts_p100', 'counts_p99']:
+
+        if x == 'photons' or x == 'photoelectrons':
+            label = f'Integrated photoelectrons'
+            lims = (0, 10**6)
+            pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
+        elif x == 'counts':
+            label = f'Integrated counts'
+            lims = (4e6, 7.5e6)
+            pbins = np.arange(lims[0], lims[-1]+2e5, 1e5)
+        elif x == 'counts_p100':
+            label = f'Max counts'
+            lims = (0, 5000)
+            pbins = np.arange(lims[0], lims[-1]+400, 200)
+        else:
+            label = f'99th percentile of counts'
+            lims = (0, 300)
+            pbins = np.arange(lims[0], lims[-1]+50, 25)
+
+        df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
+        bins = np.arange(0, 10.25, .25).round(2)
+        df['ibins'] = pd.cut(
+            df['aberration'],
+            bins,
+            labels=bins[1:],
+            include_lowest=True
+        )
+
+        dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
+        dataframe.insert(0, 0, dataframe.index.values)
+
+        try:
+            dataframe = dataframe.sort_index().interpolate()
+        except ValueError:
+            pass
+
+        dataframe.to_csv(f'{savepath}_{x}.csv')
+        logger.info(f'Saved: {savepath.resolve()}_{x}.csv')
+
+        eval.plot_heatmap_p2v(
+            dataframe,
+            histograms=df if x == 'photons' else None,
+            wavelength=phasenetgen.lam_detection,
+            savepath=Path(f"{savepath}_iter_{iter_num}_{x}"),
+            label=label,
+            lims=lims,
+            agg=agg
+        )
 
     return savepath

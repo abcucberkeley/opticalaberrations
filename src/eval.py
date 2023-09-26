@@ -118,6 +118,7 @@ def generate_sample(
     savedir: Optional[Path] = None,
     no_phase: bool = False,
     digital_rotations: Optional[int] = None,
+    no_beads: bool = False
 ):
     hashtable = data[data['id'] == image_id].iloc[0].to_dict()
     f = Path(str(hashtable['file']))
@@ -146,12 +147,22 @@ def generate_sample(
             meta=False,
         )
 
-        noisy_img = simulate_beads(
-            psf=psf,
-            psf_type=psfgen.psf_type,
-            beads=ref,
-            photons=hashtable['photons']
-        )
+        if no_beads:
+            noisy_img = simulate_beads(
+                psf=psf,
+                psf_type=psfgen.psf_type,
+                beads=None,
+                fill_radius=0,
+                object_size=0,
+                photons=hashtable['photons']
+            )
+        else:
+            noisy_img = simulate_beads(
+                psf=psf,
+                psf_type=psfgen.psf_type,
+                beads=ref,
+                photons=hashtable['photons']
+            )
 
         if savedir is not None:
             imwrite(savepath, noisy_img.astype(np.float32), dtype=np.float32)
@@ -182,7 +193,10 @@ def collect_data(
     default_wavelength: Optional[float] = .510,
 ):
 
-    predicted_modes = model.output_shape[-1]
+    if isinstance(model, tf.keras.Model):
+        predicted_modes = model.output_shape[-1]
+    elif isinstance(model, int):
+        predicted_modes = model
 
     metadata = data_utils.collect_dataset(
         datapath,
@@ -272,7 +286,7 @@ def iter_evaluate(
     distribution: str = '/',
     threshold: float = 0.,
     no_phase: bool = False,
-    batch_size: int = 100,
+    batch_size: int = 128,
     photons_range: Optional[tuple] = None,
     npoints_range: Optional[tuple] = None,
     eval_sign: str = 'signed',
@@ -920,10 +934,11 @@ def snrheatmap(
         )
 
     df = df[df['iter_num'] == iter_num]
+    df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
 
-    for x in ['photons', 'counts', 'counts_p100', 'counts_p99']:
+    for x in ['photons', 'photoelectrons', 'counts', 'counts_p100', 'counts_p99']:
 
-        if x == 'photons':
+        if x == 'photons' or x == 'photoelectrons':
             label = f'Integrated photoelectrons'
             lims = (0, 10**6)
             pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
@@ -1418,10 +1433,16 @@ def eval_object(
     num_objs: int = 1,
     eval_sign: str = 'signed',
     savepath: Any = None,
+    psf_type: Any = None,
     digital_rotations: Optional[int] = 361
 ):
     model = backend.load(modelpath)
-    gen = backend.load_metadata(modelpath, psf_shape=3*[model.input_shape[2]], rotate=False)
+    gen = backend.load_metadata(
+        modelpath,
+        psf_type=psf_type,
+        psf_shape=3*[model.input_shape[2]],
+        rotate=False
+    )
 
     if not isinstance(wavefronts[0], Wavefront):
         wavefronts = [Wavefront(w, lam_detection=gen.lam_detection, rotate=False) for w in wavefronts]
