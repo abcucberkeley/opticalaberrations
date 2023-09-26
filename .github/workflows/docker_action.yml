@@ -1,16 +1,34 @@
 # docker_action.yml
-name: 'Build Docker image and container'
-description: 'description'
-inputs:
-  test-to-run:  # id of input
-    description: 'tests to run'
-    required: true
-    default: 'python -m pytest tests\test_ao.py'
-outputs:
-  test_results: # id of output
-    description: 'did we pass'
-runs:
-  using: 'docker'
-  image: /.github/Dockerfile
-  args:
-    - ${{ inputs.test-to-run }}
+name: Docker-ubuntu-build
+description: 'Build Docker image and container'
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'develop'
+      - 'releases/**'
+    tags:
+      - '*'
+  pull_request:
+    branches:
+      - 'main'
+      - 'develop'
+      - 'releases/**'
+
+jobs:
+  build: 
+    name: 
+      inputs:
+        test-to-run:  # id of input
+          description: 'tests to run'
+          required: true
+          default: 'python -m pytest tests\test_ao.py'
+      outputs:
+        test_results: # id of output
+          description: 'did we pass'
+      runs:
+        using: 'docker'
+        image: /.github/Dockerfile
+        args:
+          - ${{ inputs.test-to-run }}
