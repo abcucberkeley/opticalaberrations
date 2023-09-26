@@ -93,7 +93,7 @@ jobs:
 
       - name: Test
         run: |
-          docker run --rm ${{ steps.meta.outputs.tags }} conda run -n ml python -m pytest tests/test_ao.py
+          docker run --rm -it --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"
           
       - name: Build and push Docker image
         id: build-and-push
