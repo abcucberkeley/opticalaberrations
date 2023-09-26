@@ -41,4 +41,8 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
 SHELL ["conda", "run", "-n", "venv", "/bin/bash", "-c"]
 
 ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
-CMD git pull; conda env update --file ubuntu.yml 
+CMD git pull; conda env update --file ubuntu.yml
+
+LABEL org.opencontainers.image.source=https://github.com/abcucberkeley/opticalaberrations.git
+LABEL org.opencontainers.image.description="Docker image for sensorless detection of aberrations in adaptive optics"
+LABEL org.opencontainers.image.licenses=BSD-2-Clause
