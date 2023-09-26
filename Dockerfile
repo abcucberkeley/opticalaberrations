@@ -7,8 +7,9 @@
 #   then (optionally) run tests from within the container:
 # conda activate ml
 # python -m pytest tests/test_ao.py
+
 #   or as a one-liner:
-# conda run -n ml python -m pytest tests/test_ao.py
+# docker run --rm -it --gpus all ml  "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"      
 
 # FROM nvidia/cuda:11.3.1-cudnn8-runtime-ubuntu20.04  # looks like conda is able to download everything we need. so don't need this.
 FROM ubuntu:22.04
@@ -47,10 +48,10 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
     conda activate ml && \
     conda clean --all --yes
   
-SHELL ["conda", "run", "-n", "venv", "/bin/bash", "-c"]
+SHELL ["conda", "run", "-n", "venv", "/bin/bash", "-l", "-c"]
 
 ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
-CMD git pull; conda env update --file ubuntu.yml
+CMD git pull; conda env update --file ubuntu.yml --prune
 
 LABEL org.opencontainers.image.source=https://github.com/abcucberkeley/opticalaberrations.git
 LABEL org.opencontainers.image.description="Docker image for sensorless detection of aberrations in adaptive optics"

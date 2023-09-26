@@ -91,9 +91,10 @@ jobs:
           cache-to: type=gha,mode=max
           load: true
 
-      - name: Test
-        run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"
+      # - name: Test
+      #   run: |
+      #     docker run --rm ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"
+        # can't have gpus on github actions
           
       - name: Build and push Docker image
         id: build-and-push
