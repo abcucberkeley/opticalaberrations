@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="phasenet" type="PythonConfigurationType" factoryName="Python" folderName="benchmark">
+  <configuration default="false" name="cocoa" type="PythonConfigurationType" factoryName="Python" folderName="benchmark">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/benchmark.py" />
-    <option name="PARAMETERS" value="phasenet ../examples/single/single.tif --plot" />
+    <option name="PARAMETERS" value="cocoa ../examples/single/single.tif --plot" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

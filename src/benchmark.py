@@ -1,6 +1,5 @@
 import atexit
 import os
-import re
 import subprocess
 import multiprocessing as mp
 
@@ -18,7 +17,6 @@ except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
 import cli
-import ujson
 import experimental_benchmarks
 
 logging.basicConfig(
@@ -32,15 +30,9 @@ logger = logging.getLogger(__name__)
 def parse_args(args):
     parser = cli.argparser()
 
-    parser.add_argument("model", type=Path, help="path of the model to evaluate")
     parser.add_argument("target", type=str, help="target of interest to evaluate")
-
     parser.add_argument(
-        "--datadir", help='path to eval dataset. Can be a folder or a .csv', type=Path
-    )
-
-    parser.add_argument(
-        "--outdir", default="../models", type=Path, help='path to save eval'
+        "inputs", help='path to eval dataset. Can be a folder or a .csv', type=Path
     )
 
     parser.add_argument(
@@ -75,6 +67,10 @@ def parse_args(args):
         "--no_beads", action='store_true', help='evaluate on PSFs only'
     )
 
+    parser.add_argument(
+        "--plot", action='store_true', help='evaluate on PSFs only'
+    )
+
     return parser.parse_args(args)
 
 
@@ -100,19 +96,21 @@ def run_task(iter_num, args):
     logging.info(f'Number of active GPUs: {gpu_workers}')
 
     with strategy.scope():
-        if args.target == 'random_phasenet':
-            savepath = experimental_benchmarks.random_samples_phasenet(
-                model=args.model,
-                na=args.na,
-                dist=args.dist,
-                eval_sign=args.eval_sign,
-                batch_size=args.batch_size,
-                digital_rotations=args.digital_rotations,
-            )
         if args.target == 'phasenet':
+            savepath = experimental_benchmarks.predict_phasenet(
+                inputs=args.inputs,
+                plot=args.plot,
+            )
+        elif args.target == 'cocoa':
+            savepath = experimental_benchmarks.predict_cocoa(
+                inputs=args.inputs,
+                iter_num=iter_num,
+                plot=args.plot,
+            )
+        elif args.target == 'phasenet_heatmap':
             savepath = experimental_benchmarks.phasenet_heatmap(
                 iter_num=iter_num,
-                datadir=args.datadir,
+                inputs=args.inputs,
                 distribution=args.dist,
                 samplelimit=args.n_samples,
                 na=args.na,
@@ -120,33 +118,6 @@ def run_task(iter_num, args):
                 eval_sign=args.eval_sign,
                 no_beads=args.no_beads,
             )
-
-        with Path(f"{savepath.with_suffix('')}_eval_settings.json").open('w') as f:
-            json = dict(
-                iter_num=int(iter_num),
-                modelpath=str(args.model),
-                datadir=str(args.datadir),
-                distribution=str(args.dist),
-                samplelimit=int(args.n_samples) if args.n_samples is not None else None,
-                na=float(args.na),
-                batch_size=int(args.batch_size),
-                eval_sign=bool(args.eval_sign),
-                digital_rotations=bool(args.digital_rotations),
-                photons_min=float(args.photons_min),
-                photons_max=float(args.photons_max),
-                psf_type=args.psf_type,
-                lam_detection=args.wavelength,
-            )
-
-            ujson.dump(
-                json,
-                f,
-                indent=4,
-                sort_keys=False,
-                ensure_ascii=False,
-                escape_forward_slashes=False
-            )
-            logging.info(f"Saved: {f.name}")
 
         atexit.register(strategy._extended._collective_ops._pool.close)
 
