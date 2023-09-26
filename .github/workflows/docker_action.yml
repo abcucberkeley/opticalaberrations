@@ -1,6 +1,5 @@
 # docker_action.yml
 name: Docker-ubuntu-build
-description: 'Build Docker image and container'
 
 on:
   push:
