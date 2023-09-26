@@ -6,10 +6,11 @@
 [![issues](https://img.shields.io/github/issues/abcucberkeley/opticalaberrations.svg?style=flat&logo=github)](https://github.com/abcucberkeley/opticalaberrations/issues)
 [![pr](https://img.shields.io/github/issues-pr/abcucberkeley/opticalaberrations.svg?style=flat&logo=github)](https://github.com/abcucberkeley/opticalaberrations/pulls)
 
-|  | [![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)](https://ubuntu.com/)                                         | [![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/en-us/windows)                                        | [![MacOS](https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white)](https://www.apple.com/macos)                                       |
-|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
-| `main`    | [![Ubuntu-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu-build.yaml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu-build.yaml)                | [![Windows-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows-build.yaml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows-build.yaml)                | [![MacOS-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos-build.yaml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos-build.yaml)                     |
-| `develop` | [![Ubuntu-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu-build.yaml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu-build.yaml) | [![Windows-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows-build.yaml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows-build.yaml) | [![MacOS-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos-build.yaml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos-build.yaml) |
+|  | [![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)](https://ubuntu.com/)                                                                                                             | [![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/en-us/windows)                                        | [![MacOS](https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=apple&logoColor=white)](https://www.apple.com/macos)                                       | ![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white) |
+|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `main`    | [![Ubuntu-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu-build.yaml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu-build.yaml)                 | [![Windows-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows-build.yaml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows-build.yaml)                | [![MacOS-master](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos-build.yaml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos-build.yaml)                     | [![Docker-ubuntu-build](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/docker_action.yml/badge.svg?event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/docker_action.yml) |
+| `develop` | [![Ubuntu-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu-build.yaml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/ubuntu-build.yaml) | [![Windows-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows-build.yaml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/windows-build.yaml) | [![MacOS-develop](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos-build.yaml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/macos-build.yaml) | [![Docker-ubuntu-build](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/docker_action.yml/badge.svg?branch=develop&event=push)](https://github.com/abcucberkeley/opticalaberrations/actions/workflows/docker_action.yml) |
+
 
 # Table of Contents
 
@@ -18,12 +19,9 @@
   * [For MOSAIC Microscope](#for-mosaic-microscope)
 * [Utilities](#utilities)
   * [Simple predictions](#simple-predictions)
-  * [ROI-based predictions](#roi-based-predictions)
   * [Tile-based predictions](#tile-based-predictions)
   * [Aggregate predictions](#aggregate-predictions)
   * [Deconvolution](#deconvolution)
-  * [Point detection](#point-detection)
-  * [Deskew](#deskew)
 
 ![zernike_pyramid](examples/zernikes/10th_zernike_pyramid.png)
 
@@ -133,49 +131,6 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                                     |
 | `ignore_mode`              | ANSI index for mode you wish to ignore  (Default: [0, 1, 2, 4])                                                                  |
 
-### ROI-based predictions
-
-For each successful run, the script will output the following files:
-* `*_rois_predictions_stats.csv`: a statistical summary of the selected candidate ROIs
-* `*_rois_predictions.csv`: a statistical summary of the predictions for each ROI
-
-#### Example Usage (ROI-based)
-
-```shell
-python ao.py predict_rois [--optional_flags] model input peaks
-```
-
-The script takes 3 positional arguments and a few optional ones described below.
-
-#### Positional arguments
-
-|         | Description                                 |
-|---------|---------------------------------------------|
-| `model` | path to pretrained TensorFlow model         |
-| `input` | path to input (.tif file)                   |
-| `pois`  | path to point detection results (.mat file) |
-
-#### Optional arguments
-
-|                            | Description                                                                                                                      |
-|----------------------------|----------------------------------------------------------------------------------------------------------------------------------|
-| `help`                     | show this help message and exit                                                                                                  |
-| `window_size`              | size of the window to crop around each point of interest (Default: `64`)                                                         |
-| `num_rois`                 | max number of detected points to use for estimating aberrations (Default: `10`)                                                  |
-| `min_intensity`            | minimum intensity desired for detecting peaks of interest (Default: `200`)                                                       |
-| `minimum_distance`         | minimum distance to the nearest neighbor (microns) (Default: `1.0`)                                                              |
-| `prev`                     | previous predictions .csv file (Default: `None`)                                                                                 |
-| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                                           |
-| `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                               |
-| `wavelength`               | wavelength in microns (Default: `0.51`)                                                                                          |
-| `freq_strength_threshold`  | minimum frequency threshold in fourier space [fractional values below that will be set to the desired minimum] (Default: `0.01`) |
-| `prediction_threshold`     | set predictions below threshold to zero (waves) (Default: `0.`)                                                                  |
-| `sign_threshold`           | flip sign of modes above given threshold <br/> [fractional value relative to previous prediction] (Default: `.9`)                |
-| `num_predictions`          | number of predictions per sample to estimate model's confidence (Default: `10`)                                                  |
-| `batch_size`               | maximum batch size for the model (Default: `100`)                                                                                |
-| `plot`                     | a toggle for plotting predictions                                                                                                |
-| `estimate_sign_with_decon` | a toggle for estimating signs of each Zernike mode via decon                                                                     |
-| `ignore_mode`              | ANSI index for mode you wish to ignore  (Default: [0, 1, 2, 4])                                                                  |
 
 ### Tile-based predictions
 
@@ -293,60 +248,3 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `help`  | show this help message and exit                                        |
 | `iters` | number of iterations for Richardson-Lucy deconvolution (Default: `10`) |
 | `plot`  | a toggle for plotting results                                          |
-
-### Point detection
-
-For each successful run, the script will output the following files:
-* `/results/Detection3D.mat`: predicted points
-
-#### Example Usage (Detect ROIs)
-
-```shell
-python ao.py detect_rois [--optional_flags] input
-```
-
-The script takes 1 positional argument and a few optional ones described below.
-
-#### Positional arguments
-
-|         | Description               |
-|---------|---------------------------|
-| `input` | path to input (.tif file) |
-
-#### Optional arguments
-
-|                      | Description                                            |
-|----------------------|--------------------------------------------------------|
-| `help`               | show this help message and exit                        |
-| `psf`                | path to the experimental PSF (.tif file)               |
-| `lateral_voxel_size` | lateral voxel size in microns for X (Default: `0.108`) |
-| `axial_voxel_size`   | axial voxel size in microns for Z (Default: `0.1`)     |
-
-### Deskew
-
-For each successful run, the script will output the following files:
-* `/DS/*.tif`: de-skewed image with the desired skew angle
-
-#### Example Usage (Deskew)
-
-```shell
-python ao.py deskew [--optional_flags] input
-```
-
-The script takes 1 positional argument and a few optional ones described below.
-
-#### Positional arguments
-
-|         | Description               |
-|---------|---------------------------|
-| `input` | path to input (.tif file) |
-
-#### Optional arguments
-
-|                      | Description                                            |
-|----------------------|--------------------------------------------------------|
-| `help`               | show this help message and exit                        |
-| `lateral_voxel_size` | lateral voxel size in microns for X (Default: `0.108`) |
-| `axial_voxel_size`   | axial voxel size in microns for Z (Default: `0.1`)     |
-| `skew_angle`         | skew angle (Default: `32.45`)                          |
-| `flipz`              | a toggle to flip Z axis                                |
