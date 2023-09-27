@@ -25,7 +25,7 @@ env:
 jobs:
   build:
     name: docker_image_build
-    runs-on: self-hosted      # ubuntu-latest  to use GitHub runner
+    runs-on: self-hosted
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
