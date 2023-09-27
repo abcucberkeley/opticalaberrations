@@ -25,7 +25,7 @@ env:
 jobs:
   build:
     name: docker_image_build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted      # ubuntu-latest  to use GitHub runner
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -91,9 +91,9 @@ jobs:
           cache-to: type=gha,mode=max
           load: true
 
-      # - name: Test
-      #   run: |
-      #     docker run --rm ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"
+       - name: Test
+         run: |
+           docker run --rm ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"
         # can't have gpus on github actions
           
       - name: Build and push Docker image
