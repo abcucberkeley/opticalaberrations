@@ -56,7 +56,7 @@ def savesvg(
 
     if Path(savepath).suffix == '.svg':
         # Read in the file
-        with open(savepath, 'r') as f:
+        with open(savepath, 'r', encoding="utf-8") as f:
             filedata = f.read()
 
         # Replace the target string
@@ -64,7 +64,7 @@ def savesvg(
         filedata = re.sub('width="[0-9]+(\.[0-9]+)pt"', '', filedata)
 
         # Write the file out again
-        with open(savepath, 'w') as f:
+        with open(savepath, 'w', encoding="utf-8") as f:
             f.write(filedata)
 
 
