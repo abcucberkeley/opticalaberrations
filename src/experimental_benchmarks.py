@@ -454,6 +454,7 @@ def predict_cocoa(
         # torch.save(net_obj.state_dict(), net_obj_save_path_pretrained)
         print('Pre-trained model saved.')
 
+
     ## kernel with simple coefficients
     net_ker = cocoa_models.optimal_kernel(
         max_val=args.kernel_max_val,
@@ -529,16 +530,33 @@ def predict_cocoa(
     print('Training - Elapsed time: ' + str(t_end - t_start) + ' seconds.')
 
     out_k_m = cocoa_utils.torch_to_np(out_k_m)
+    out_x_m = cocoa_utils.torch_to_np(out_x_m)
     out_y = cocoa_utils.torch_to_np(out_y)
-    wf = cocoa_utils.torch_to_np(wf)
+    zernikes = cocoa_utils.torch_to_np(wf)
+
+    predicted_wavefront = np.fft.fftshift(k_vis.detach().cpu().numpy())
 
     wavefront = Wavefront(
-        amplitudes=[0, 0, 0] + list(wf),
+        amplitudes=[0, 0, 0] + list(zernikes),
         lam_detection=lam_detection,
         modes=15,
         order='ansi',
         rotate=False,
     )
+
+    lightsheetgen = SyntheticPSF(
+        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+        psf_shape=out_k_m.shape,
+        n_modes=15,
+        lam_detection=lam_detection,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
+
+    ls_psf = lightsheetgen.single_psf(phi=wavefront, normed=True)
+    ls_psf /= ls_psf.sum()
+    out_decon = utils.fft_decon(kernel=ls_psf, sample=img, iters=1)
 
     coefficients = [
         {'n': z.n, 'm': z.m, 'amplitude': a}
@@ -548,11 +566,73 @@ def predict_cocoa(
     df.index.name = 'ansi'
     df.to_csv(f"{inputs.with_suffix('')}_cocoa_zernike_coefficients.csv")
 
-    imwrite(f"{inputs.with_suffix('')}_cocoa_psf.tif", out_k_m, dtype=np.float32)
+
+    imwrite(f"{inputs.with_suffix('')}_cocoa_psf.tif", ls_psf, dtype=np.float32)
+    imwrite(f"{inputs.with_suffix('')}_cocoa_predicted_psf.tif", out_k_m, dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_wavefront.tif", wavefront.wave(), dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_sample.tif", out_y, dtype=np.float32)
+    imwrite(f"{inputs.with_suffix('')}_cocoa_predicted_wavefront.tif", predicted_wavefront, dtype=np.float32)
+    imwrite(f"{inputs.with_suffix('')}_cocoa_estimated.tif", out_y, dtype=np.float32)
+    imwrite(f"{inputs.with_suffix('')}_cocoa_reconstructed.tif", out_x_m, dtype=np.float32)
+    imwrite(f"{inputs.with_suffix('')}_cocoa_deconvolved.tif", out_decon, dtype=np.float32)
 
     if plot:
+        plt.rcParams.update({
+            'font.size': 10,
+            'axes.titlesize': 12,
+            'axes.labelsize': 12,
+            'xtick.labelsize': 10,
+            'ytick.labelsize': 10,
+            'axes.autolimit_mode': 'round_numbers'
+        })
+
+        fig = plt.figure()
+        plt.imshow(predicted_wavefront)
+        vis.savesvg(fig, Path(f"{inputs.with_suffix('')}_cocoa_predicted_wavefront.svg"))
+
+        fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(12, 16))
+
+        vis.plot_mip(
+            vol=img/img.max(),
+            xy=axes[0, 0],
+            xz=axes[0, 1],
+            yz=axes[0, 2],
+            dxy=lateral_voxel_size,
+            dz=axial_voxel_size,
+            label='Input (MIP) [$\gamma$=.5]'
+        )
+
+        vis.plot_mip(
+            vol=out_y/out_y.max(),
+            xy=axes[1, 0],
+            xz=axes[1, 1],
+            yz=axes[1, 2],
+            dxy=lateral_voxel_size,
+            dz=axial_voxel_size,
+            label='Estimated (MIP) [$\gamma$=.5]'
+        )
+
+        vis.plot_mip(
+            vol=out_x_m/out_x_m.max(),
+            xy=axes[2, 0],
+            xz=axes[2, 1],
+            yz=axes[2, 2],
+            dxy=lateral_voxel_size,
+            dz=axial_voxel_size,
+            label='Reconstructed (MIP) [$\gamma$=.5]'
+        )
+
+        vis.plot_mip(
+            vol=out_decon/out_decon.max(),
+            xy=axes[-1, 0],
+            xz=axes[-1, 1],
+            yz=axes[-1, 2],
+            dxy=lateral_voxel_size,
+            dz=axial_voxel_size,
+            label='Deconvolved (MIP) [$\gamma$=.5]'
+        )
+
+        vis.savesvg(fig, Path(f"{inputs.with_suffix('')}_cocoa_mips.svg"))
+
         vis.diagnosis(
             pred=wavefront,
             pred_std=Wavefront(np.zeros_like(wavefront.amplitudes_ansi)),
