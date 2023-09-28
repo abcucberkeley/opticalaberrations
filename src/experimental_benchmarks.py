@@ -11,7 +11,6 @@ from typing import Any, Optional
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
-import swifter
 import numpy as np
 import pandas as pd
 import tensorflow as tf

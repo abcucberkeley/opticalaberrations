@@ -97,18 +97,18 @@ def run_task(iter_num, args):
 
     with strategy.scope():
         if args.target == 'phasenet':
-            savepath = experimental_benchmarks.predict_phasenet(
+            experimental_benchmarks.predict_phasenet(
                 inputs=args.inputs,
                 plot=args.plot,
             )
         elif args.target == 'cocoa':
-            savepath = experimental_benchmarks.predict_cocoa(
+            experimental_benchmarks.predict_cocoa(
                 inputs=args.inputs,
                 iter_num=iter_num,
                 plot=args.plot,
             )
         elif args.target == 'phasenet_heatmap':
-            savepath = experimental_benchmarks.phasenet_heatmap(
+            experimental_benchmarks.phasenet_heatmap(
                 iter_num=iter_num,
                 inputs=args.inputs,
                 distribution=args.dist,

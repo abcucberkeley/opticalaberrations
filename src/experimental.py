@@ -16,7 +16,6 @@ from pathlib import Path
 import tensorflow as tf
 from typing import Any, Union, Optional
 import numpy as np
-import scipy as sp
 import pandas as pd
 import seaborn as sns
 from tifffile import imread, imwrite
@@ -26,13 +25,10 @@ from tqdm import tqdm
 import multiprocessing as mp
 from sklearn.cluster import KMeans
 from skimage.transform import resize
-from sklearn.metrics import silhouette_samples, silhouette_score
+from sklearn.metrics import silhouette_score
 from joblib import Parallel, delayed
 from scipy.interpolate import NearestNDInterpolator
 from scipy.ndimage import shift, generate_binary_structure, binary_dilation
-from skimage.restoration import richardson_lucy
-from skimage.filters import window
-
 
 import utils
 import vis
