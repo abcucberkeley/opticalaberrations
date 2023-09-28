@@ -16,6 +16,7 @@ from pathlib import Path
 import tensorflow as tf
 from typing import Any, Union, Optional
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 
 import pandas as pd
 import seaborn as sns
@@ -2051,7 +2052,7 @@ def decon(
     prediction_threshold: float = 0.25,  # peak to valley in waves. you already have this diffraction limited data
     plot: bool = False,
     ignore_tile: Any = None,
-    decon_tile: bool = True,
+    decon_tile: bool = False,
     preloaded: Preloadedmodelclass = None,
 ):
     pass
@@ -2120,66 +2121,86 @@ def decon(
 
     tukey = window(('tukey', .5), window_size)
 
-    for i, (z, y, x) in tqdm(
-        enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))),
-        total=ztiles*ytiles*xtiles,
-        desc='Deconvolve tiles'
-    ):
-        w = Wavefront(predictions.loc[z, y, x].values, lam_detection=wavelength)
-        kernel = samplepsfgen.single_psf(w, normed=True)
-        kernel /= np.sum(kernel)
+    if decon_tile:
+    # decon the tiles independently
+        for i, (z, y, x) in tqdm(
+            enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))),
+            total=ztiles*ytiles*xtiles,
+            desc='Deconvolve tiles'
+        ):
+            w = Wavefront(predictions.loc[z, y, x].values, lam_detection=wavelength)
+            kernel = samplepsfgen.single_psf(w, normed=False)
+            kernel /= np.max(kernel)
 
-        tile = vol[
-            z*zw:(z*zw)+zw,
-            y*yw:(y*yw)+yw,
-            x*xw:(x*xw)+xw
-        ]
+            tile = vol[
+                z*zw:(z*zw)+zw,
+                y*yw:(y*yw)+yw,
+                x*xw:(x*xw)+xw
+            ]
 
-        psfs[z, y*kyw:(y*kyw)+kyw, x*kxw:(x*kxw)+kxw] = np.max(kernel, axis=0)
+            psfs[z, y*kyw:(y*kyw)+kyw, x*kxw:(x*kxw)+kxw] = np.max(kernel, axis=0) # mip view for later.
 
-        stdout = os.dup(1)
-        silent = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(silent, 1)
-        if decon_tile:
-            # decon the tiles independently
+            stdout = os.dup(1)
+            silent = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(silent, 1)
             decon_vol[
                 z * zw:(z * zw) + zw,
                 y * yw:(y * yw) + yw,
                 x * xw:(x * xw) + xw
             ] = cuda_decon(
                 tile,
-                kernel,
-                dzdata = axial_voxel_size,
-                dxdata = lateral_voxel_size,
-                dzpsf = samplepsfgen.z_voxel_size,
-                dxpsf = samplepsfgen.x_voxel_size,
-                n_iters = iters,
+                psf=kernel,
+                dzdata=axial_voxel_size,
+                dxdata=lateral_voxel_size,
+                dzpsf=samplepsfgen.z_voxel_size,
+                dxpsf=samplepsfgen.x_voxel_size,
+                n_iters=iters,
                 skewed_decon=True,
                 deskew=0,
             )
-        else:
-            # decon entire volume, then pull out the tiles we want.
-            deconv = cuda_decon(
+    else:
+        # decon entire volume, then pull out the tiles we want.
+        pred_to_decon = predictions.drop_duplicates()
+        deconv = np.zeros((len(pred_to_decon), vol.shape[0], vol.shape[1], vol.shape[2]), dtype=np.float32)
+        for i, ind in tqdm(enumerate(pred_to_decon.index.values), total=len(pred_to_decon), desc='Deconvolve entire vol with each psf'):
+            w = Wavefront(pred_to_decon.loc[ind].values, lam_detection=wavelength)
+            kernel = samplepsfgen.single_psf(w, normed=False)
+            kernel /= np.max(kernel)
+
+            stdout = os.dup(1)
+            silent = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(silent, 1)
+            deconv[i] = cuda_decon(
                 vol,
-                kernel,
-                dzdata = axial_voxel_size,
-                dxdata = lateral_voxel_size,
-                dzpsf = samplepsfgen.z_voxel_size,
-                dxpsf = samplepsfgen.x_voxel_size,
-                n_iters = iters,
+                psf=kernel,
+                dzdata=axial_voxel_size,
+                dxdata=lateral_voxel_size,
+                dzpsf=samplepsfgen.z_voxel_size,
+                dxpsf=samplepsfgen.x_voxel_size,
+                n_iters=iters,
                 skewed_decon=True,
                 deskew=0,
             )
+            os.dup2(stdout, 1)
+
+        for i, (z, y, x) in tqdm(
+                enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))),
+                total=ztiles * ytiles * xtiles,
+                desc='Copy tiles'
+        ):
+            # find which decon index this tile belongs to.
+            decon_index = np.argmax((pred_to_decon == predictions.loc[z,y,x]).all(axis=1))
+
             decon_vol[
                 z * zw:(z * zw) + zw,
                 y * yw:(y * yw) + yw,
                 x * xw:(x * xw) + xw
-            ] = deconv[
+            ] = deconv[ decon_index,
                 z * zw:(z * zw) + zw,
                 y * yw:(y * yw) + yw,
                 x * xw:(x * xw) + xw
             ]
-        os.dup2(stdout, 1)
+
 
     savepath = Path(f"{model_pred.with_suffix('')}_decon.tif")
     imwrite(savepath, decon_vol.astype(np.float32))
