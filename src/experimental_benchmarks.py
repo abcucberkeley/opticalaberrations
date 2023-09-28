@@ -11,6 +11,10 @@ from typing import Any, Optional
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
+import time
+import argparse
+from tqdm import tqdm
+from tifffile import imwrite
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -125,8 +129,8 @@ def predict_phasenet(
     if plot:
         vis.diagnosis(
             pred=wavefront,
-            pred_std=wavefront,
-            save_path=Path(f"{inputs.with_suffix('')}_phasenet_predictions_diagnosis"),
+            pred_std=Wavefront(np.zeros_like(wavefront.amplitudes_ansi)),
+            save_path=Path(f"{inputs.with_suffix('')}_phasenet_diagnosis"),
         )
 
     return wavefront.amplitudes_ansi
@@ -315,7 +319,244 @@ def phasenet_heatmap(
 def predict_cocoa(
     inputs: Path,
     plot: bool = False,
-    iter_num: int = 1,
+    axial_voxel_size: float = .097,
+    lateral_voxel_size: float = .2,
+    na_detection: float = 1.0,
+    lam_detection: float = .510,
+    refractive_index: float = 1.33,
     cocoa_path: Path = Path('cocoa_repo')
 ):
     download_cocoa(cocoa_path)
+
+    import os
+    os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
+
+    import torch
+    import torch.nn as nn
+    from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR
+
+    dtype = torch.cuda.FloatTensor
+    torch.backends.cudnn.benchmark = True
+
+    from cocoa_repo.misc import models as cocoa_models
+    from cocoa_repo.misc import utils as cocoa_utils
+    from cocoa_repo.misc import losses as cocoa_losses
+    from cocoa_repo.misc import psf_torch as cocoa_psf
+
+    parser = argparse.ArgumentParser(description="CoCoA")
+    parser.add_argument('--padding', type=int, default=24)
+    parser.add_argument('--normalized', type=bool, default=False)
+    parser.add_argument('--n_detection', type=float, default=1.1)
+    parser.add_argument('--emission_wavelength', type=float, default=0.515)
+    parser.add_argument('--n_obj', type=float, default=1.333)
+    parser.add_argument('--encoding_option', type=str, default='radial')  # 'cartesian', 'radial'
+    parser.add_argument('--radial_encoding_angle', type=float, default=3,
+                        help='Typically, 3 ~ 7.5. Smaller values indicates the ability to represent fine features.')
+    parser.add_argument('--radial_encoding_depth', type=int, default=7,
+                        help='If too large, stripe artifacts. If too small, oversmoothened features. Typically, 6 or 7.')  # 7, 8 (jiggling artifacts)
+    parser.add_argument('--nerf_num_layers', type=int, default=6)
+    parser.add_argument('--nerf_num_filters', type=int,
+                        default=128)  # 32 (not enough), 64, 128 / at least y_.shape[0]/2? Helps to reduce artifacts fitted to aberrated features and noise.
+    parser.add_argument('--nerf_skips', type=list,
+                        default=[2, 4, 6])  # [2,4,6], [2,4,6,8]: good, [2,4], [4], [4, 8]: insufficient.
+    parser.add_argument('--nerf_beta', type=float, default=1.0)  # 1.0 or None (sigmoid)
+    parser.add_argument('--nerf_max_val', type=float, default=40.0)
+    parser.add_argument('--pretraining', type=bool, default=True)  # True, False
+    parser.add_argument('--pretraining_num_iter', type=int, default=500)  # 2500
+    parser.add_argument('--pretraining_lr', type=float, default=1e-2)
+    parser.add_argument('--pretraining_measurement_scalar', type=float, default=3.5)  # 3.5
+    parser.add_argument('--training_num_iter', type=int, default=1000)
+    parser.add_argument('--training_lr_obj', type=float, default=5e-3)
+    parser.add_argument('--training_lr_ker', type=float, default=1e-2)  # 1e-2
+    parser.add_argument('--kernel_max_val', type=float, default=1e-2)
+    parser.add_argument('--kernel_order_up_to', type=int, default=4)  # True, False
+    parser.add_argument('--ssim_weight', type=float, default=1.0)
+    parser.add_argument('--tv_z', type=float, default=1e-9,
+                        help='larger tv_z helps for denser samples.')
+    parser.add_argument('--tv_z_normalize', type=bool, default=False)
+    parser.add_argument('--rsd_reg_weight', type=float, default=5e-4,  # 5e-4 ~ 2.5e-3 with radial.
+                        help='Helps to retrieve aberrations correctly. Too large, skeletionize the image.')
+    parser.add_argument('--lr_schedule', type=str, default='cosine')  # 'multi_step', 'cosine'
+
+    args = parser.parse_args(args=[])
+
+    img = backend.load_sample(inputs)
+    # img = utils.resize_with_crop_or_pad(img, crop_shape=(50, 50, 50))
+
+    y = torch.from_numpy(img.copy()).type(dtype).cuda(0).view(img.shape[0], img.shape[1], img.shape[2])
+    INPUT_HEIGHT = img.shape[1]
+    INPUT_WIDTH = img.shape[2]
+    INPUT_DEPTH = img.shape[0]
+
+    psf = cocoa_psf.PsfGenerator3D(
+        psf_shape=(img.shape[0], img.shape[1], img.shape[2]),
+        units=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        na_detection=na_detection,
+        lam_detection=lam_detection,
+        n=refractive_index
+    )
+
+    coordinates = cocoa_models.input_coord_2d(INPUT_WIDTH, INPUT_HEIGHT).cuda(0)
+    coordinates = cocoa_models.radial_encoding(
+        coordinates,
+        args.radial_encoding_angle,
+        args.radial_encoding_depth
+    ).cuda(0)
+
+    net_obj = cocoa_models.NeRF(
+        D=args.nerf_num_layers,
+        W=args.nerf_num_filters,
+        skips=args.nerf_skips,
+        in_channels=coordinates.shape[-1],
+        out_channels=INPUT_DEPTH
+    ).cuda(0)
+
+    if args.pretraining:
+        t_start = time.time()
+
+        optimizer = torch.optim.Adam([{'params': net_obj.parameters(), 'lr': args.pretraining_lr}],
+                                     betas=(0.9, 0.999), eps=1e-8)
+        if args.lr_schedule == 'multi_step':
+            scheduler = MultiStepLR(optimizer, milestones=[1000, 1500, 2000], gamma=0.5)
+        elif args.lr_schedule == 'cosine':
+            scheduler = CosineAnnealingLR(optimizer, args.pretraining_num_iter, args.pretraining_lr / 25)
+
+        loss_list = np.empty(shape=(1 + args.pretraining_num_iter,))
+        loss_list[:] = np.NaN
+
+        for step in tqdm(range(args.pretraining_num_iter)):
+            out_x = net_obj(coordinates)
+
+            if args.nerf_beta is None:
+                out_x = args.nerf_max_val * nn.Sigmoid()(out_x)
+            else:
+                out_x = nn.Softplus(beta=args.nerf_beta)(out_x)
+
+            out_x_m = out_x.view(img.shape[1], img.shape[2], img.shape[0]).permute(2, 0, 1)
+
+            # relative_l1_error = torch.abs(out_x_m - 3.0 * y) / (torch.abs(out_x_m.detach()) + 1e-2)
+            # relative_l2_error = (out_x_m - y)**2 / (out_x_m.detach()**2 + 0.01)
+            # loss = relative_l1_error.mean() + 1e0 * ssim_loss(out_x_m, 3.0 * y)
+
+            loss = cocoa_losses.ssim_loss(out_x_m, args.pretraining_measurement_scalar * y)
+            # loss += torch.mean(torch.abs(out_x_m - args.pretraining_measurement_scalar * y) / (torch.abs(out_x_m.detach()) + 1e-2))
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+
+            loss_list[step] = loss.item()
+
+        t_end = time.time()
+        print('Initialization - Elapsed time: ' + str(t_end - t_start) + ' seconds.')
+
+        # torch.save(net_obj.state_dict(), net_obj_save_path_pretrained)
+        print('Pre-trained model saved.')
+
+    ## kernel with simple coefficients
+    net_ker = cocoa_models.optimal_kernel(
+        max_val=args.kernel_max_val,
+        order_up_to=args.kernel_order_up_to,
+        piston_tip_tilt=False
+    )  # 5e-2
+
+    optimizer = torch.optim.Adam([{'params': net_obj.parameters(), 'lr': args.training_lr_obj},  # 1e-3
+                                  {'params': net_ker.parameters(), 'lr': args.training_lr_ker}],  # 4e-3
+                                 betas=(0.9, 0.999), eps=1e-8)
+
+    scheduler = CosineAnnealingLR(optimizer, args.training_num_iter, args.training_lr_ker / 25)
+
+    loss_list = np.empty(shape=(1 + args.training_num_iter,))
+    loss_list[:] = np.NaN
+
+    wfe_list = np.empty(shape=(1 + args.training_num_iter,))
+    wfe_list[:] = np.NaN
+
+    lr_obj_list = np.empty(shape=(1 + args.training_num_iter,))
+    lr_obj_list[:] = np.NaN
+
+    lr_ker_list = np.empty(shape=(1 + args.training_num_iter,))
+    lr_ker_list[:] = np.NaN
+
+    t_start = time.time()
+
+    for step in tqdm(range(args.training_num_iter)):
+        out_x = net_obj(coordinates)
+
+        if args.nerf_beta is None:
+            out_x = args.nerf_max_val * nn.Sigmoid()(out_x)
+        else:
+            out_x = nn.Softplus(beta=args.nerf_beta)(out_x)
+            out_x = torch.minimum(torch.full_like(out_x, args.nerf_max_val), out_x)  # 30.0
+
+        out_x_m = out_x.view(img.shape[1], img.shape[2], img.shape[0]).permute(2, 0, 1)
+
+        wf = net_ker.k
+
+        out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / img.shape[0]
+        k_vis = psf.masked_phase_array(wf, normalized=args.normalized)
+        out_y = cocoa_utils.fft_convolve(out_x_m, out_k_m, mode='fftn')
+
+        loss = args.ssim_weight * cocoa_losses.ssim_loss(out_y, y)
+
+        loss += cocoa_utils.single_mode_control(wf, 1, -0.0, 0.0)  # quite crucial for suppressing unwanted defocus.
+        loss += args.tv_z * cocoa_losses.tv_1d(out_x_m, axis='z', normalize=args.tv_z_normalize)
+        loss += args.rsd_reg_weight * torch.reciprocal(torch.std(out_x_m) / torch.mean(out_x_m))  # 4e-3
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        if args.lr_schedule == 'cosine':
+            scheduler.step()
+
+        elif args.lr_schedule == 'multi_step':
+            if step == 500 - 1:
+                optimizer.param_groups[0]['lr'] = args.training_lr_obj / 10
+
+            if step == 750 - 1:
+                optimizer.param_groups[1]['lr'] = args.training_lr_ker / 10
+                optimizer.param_groups[0]['lr'] = args.training_lr_obj / 100
+
+        loss_list[step] = loss.item()
+        wfe_list[step] = cocoa_utils.torch_to_np(
+            args.emission_wavelength * 1e3 * torch.sqrt(torch.sum(torch.square(wf))))  # wave -> nm RMS
+        lr_obj_list[step] = optimizer.param_groups[0]['lr']
+        lr_ker_list[step] = optimizer.param_groups[1]['lr']
+
+    t_end = time.time()
+    print('Training - Elapsed time: ' + str(t_end - t_start) + ' seconds.')
+
+    out_k_m = cocoa_utils.torch_to_np(out_k_m)
+    out_y = cocoa_utils.torch_to_np(out_y)
+    wf = cocoa_utils.torch_to_np(wf)
+
+    wavefront = Wavefront(
+        amplitudes=[0, 0, 0] + list(wf),
+        lam_detection=lam_detection,
+        modes=15,
+        order='ansi',
+        rotate=False,
+    )
+
+    coefficients = [
+        {'n': z.n, 'm': z.m, 'amplitude': a}
+        for z, a in wavefront.zernikes.items()
+    ]
+    df = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
+    df.index.name = 'ansi'
+    df.to_csv(f"{inputs.with_suffix('')}_cocoa_zernike_coefficients.csv")
+
+    imwrite(f"{inputs.with_suffix('')}_cocoa_psf.tif", out_k_m, dtype=np.float32)
+    imwrite(f"{inputs.with_suffix('')}_cocoa_wavefront.tif", wavefront.wave(), dtype=np.float32)
+    imwrite(f"{inputs.with_suffix('')}_cocoa_sample.tif", out_y, dtype=np.float32)
+
+    if plot:
+        vis.diagnosis(
+            pred=wavefront,
+            pred_std=Wavefront(np.zeros_like(wavefront.amplitudes_ansi)),
+            save_path=Path(f"{inputs.with_suffix('')}_cocoa_diagnosis"),
+        )
+
+    return wavefront.amplitudes_ansi

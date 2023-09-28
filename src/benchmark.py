@@ -36,10 +36,6 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--niter", default=1, type=int, help='number of iterations'
-    )
-
-    parser.add_argument(
         "--digital_rotations", action='store_true', help='use digital rotations to estimate prediction confidence'
     )
 
@@ -71,55 +67,14 @@ def parse_args(args):
         "--plot", action='store_true', help='evaluate on PSFs only'
     )
 
-    return parser.parse_args(args)
-
-
-def run_task(iter_num, args):
-    tf.keras.backend.set_floatx('float32')
-    physical_devices = tf.config.list_physical_devices('GPU')
-    for gpu_instance in physical_devices:
-        tf.config.experimental.set_memory_growth(gpu_instance, True)
-
-    try:
-        if len(physical_devices) > 1:
-            cp.fft.config.use_multi_gpus = True
-            cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
-
-    except ImportError as e:
-        logging.warning(f"Cupy not supported on your system: {e}")
-
-    strategy = tf.distribute.MirroredStrategy(
-        devices=[f"{physical_devices[i].device_type}:{i}" for i in range(len(physical_devices))]
+    parser.add_argument(
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
+    )
+    parser.add_argument(
+        "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
     )
 
-    gpu_workers = strategy.num_replicas_in_sync
-    logging.info(f'Number of active GPUs: {gpu_workers}')
-
-    with strategy.scope():
-        if args.target == 'phasenet':
-            experimental_benchmarks.predict_phasenet(
-                inputs=args.inputs,
-                plot=args.plot,
-            )
-        elif args.target == 'cocoa':
-            experimental_benchmarks.predict_cocoa(
-                inputs=args.inputs,
-                iter_num=iter_num,
-                plot=args.plot,
-            )
-        elif args.target == 'phasenet_heatmap':
-            experimental_benchmarks.phasenet_heatmap(
-                iter_num=iter_num,
-                inputs=args.inputs,
-                distribution=args.dist,
-                samplelimit=args.n_samples,
-                na=args.na,
-                batch_size=args.batch_size,
-                eval_sign=args.eval_sign,
-                no_beads=args.no_beads,
-            )
-
-        atexit.register(strategy._extended._collective_ops._pool.close)
+    return parser.parse_args(args)
 
 
 def main(args=None):
@@ -130,22 +85,31 @@ def main(args=None):
         mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
 
     timeit = time.time()
-    mp.set_start_method('spawn', force=True)
 
-    for k in range(1, args.niter + 1):
-        t = time.time()
-        # Need to shut down the process after each iteration to clear its context and vram 'safely'
-        p = mp.Process(target=partial(run_task, iter_num=k, args=args), name=args.target)
-        p.start()
-        p.join()
-        p.close()
-
-        logging.info(
-            f'Iteration #{k} took {(time.time() - t) / 60:.1f} minutes to run. '
-            f'{(time.time() - t) / 60 * (args.niter - k):.1f} minutes left to go.'
+    if args.target == 'phasenet':
+        experimental_benchmarks.predict_phasenet(
+            inputs=args.inputs,
+            plot=args.plot,
+        )
+    elif args.target == 'cocoa':
+        experimental_benchmarks.predict_cocoa(
+            inputs=args.inputs,
+            axial_voxel_size=args.axial_voxel_size,
+            lateral_voxel_size=args.lateral_voxel_size,
+            plot=args.plot,
+        )
+    elif args.target == 'phasenet_heatmap':
+        experimental_benchmarks.phasenet_heatmap(
+            inputs=args.inputs,
+            distribution=args.dist,
+            samplelimit=args.n_samples,
+            na=args.na,
+            batch_size=args.batch_size,
+            eval_sign=args.eval_sign,
+            no_beads=args.no_beads,
         )
 
-        logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+    logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 
 if __name__ == "__main__":
