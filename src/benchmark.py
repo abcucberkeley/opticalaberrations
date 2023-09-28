@@ -96,6 +96,7 @@ def main(args=None):
             inputs=args.inputs,
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
+            na_detection=args.na,
             plot=args.plot,
         )
     elif args.target == 'phasenet_heatmap':

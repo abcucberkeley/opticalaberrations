@@ -319,9 +319,9 @@ def phasenet_heatmap(
 def predict_cocoa(
     inputs: Path,
     plot: bool = False,
-    axial_voxel_size: float = .097,
+    axial_voxel_size: float = .086,
     lateral_voxel_size: float = .2,
-    na_detection: float = 1.0,
+    na_detection: float = 1.1,
     lam_detection: float = .510,
     refractive_index: float = 1.33,
     cocoa_path: Path = Path('cocoa_repo')
@@ -381,7 +381,6 @@ def predict_cocoa(
     args = parser.parse_args(args=[])
 
     img = backend.load_sample(inputs)
-    # img = utils.resize_with_crop_or_pad(img, crop_shape=(50, 50, 50))
 
     y = torch.from_numpy(img.copy()).type(dtype).cuda(0).view(img.shape[0], img.shape[1], img.shape[2])
     INPUT_HEIGHT = img.shape[1]
@@ -411,7 +410,7 @@ def predict_cocoa(
         out_channels=INPUT_DEPTH
     ).cuda(0)
 
-    if args.pretraining:
+    if args.pretraining:  # (aka just training because there's no self-supervision here)
         t_start = time.time()
 
         optimizer = torch.optim.Adam([{'params': net_obj.parameters(), 'lr': args.pretraining_lr}],
@@ -434,12 +433,7 @@ def predict_cocoa(
 
             out_x_m = out_x.view(img.shape[1], img.shape[2], img.shape[0]).permute(2, 0, 1)
 
-            # relative_l1_error = torch.abs(out_x_m - 3.0 * y) / (torch.abs(out_x_m.detach()) + 1e-2)
-            # relative_l2_error = (out_x_m - y)**2 / (out_x_m.detach()**2 + 0.01)
-            # loss = relative_l1_error.mean() + 1e0 * ssim_loss(out_x_m, 3.0 * y)
-
             loss = cocoa_losses.ssim_loss(out_x_m, args.pretraining_measurement_scalar * y)
-            # loss += torch.mean(torch.abs(out_x_m - args.pretraining_measurement_scalar * y) / (torch.abs(out_x_m.detach()) + 1e-2))
 
             optimizer.zero_grad()
             loss.backward()
@@ -453,7 +447,6 @@ def predict_cocoa(
 
         # torch.save(net_obj.state_dict(), net_obj_save_path_pretrained)
         print('Pre-trained model saved.')
-
 
     ## kernel with simple coefficients
     net_ker = cocoa_models.optimal_kernel(
@@ -544,20 +537,6 @@ def predict_cocoa(
         rotate=False,
     )
 
-    lightsheetgen = SyntheticPSF(
-        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-        psf_shape=out_k_m.shape,
-        n_modes=15,
-        lam_detection=lam_detection,
-        x_voxel_size=lateral_voxel_size,
-        y_voxel_size=lateral_voxel_size,
-        z_voxel_size=axial_voxel_size
-    )
-
-    ls_psf = lightsheetgen.single_psf(phi=wavefront, normed=True)
-    ls_psf /= ls_psf.sum()
-    out_decon = utils.fft_decon(kernel=ls_psf, sample=img, iters=1)
-
     coefficients = [
         {'n': z.n, 'm': z.m, 'amplitude': a}
         for z, a in wavefront.zernikes.items()
@@ -567,13 +546,29 @@ def predict_cocoa(
     df.to_csv(f"{inputs.with_suffix('')}_cocoa_zernike_coefficients.csv")
 
 
-    imwrite(f"{inputs.with_suffix('')}_cocoa_psf.tif", ls_psf, dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_predicted_psf.tif", out_k_m, dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_wavefront.tif", wavefront.wave(), dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_predicted_wavefront.tif", predicted_wavefront, dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_estimated.tif", out_y, dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_reconstructed.tif", out_x_m, dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_deconvolved.tif", out_decon, dtype=np.float32)
+
+    # lightsheetgen = SyntheticPSF(
+    #     psf_type='widefield',
+    #     # psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+    #     psf_shape=img.shape,
+    #     n_modes=15,
+    #     lam_detection=lam_detection,
+    #     x_voxel_size=lateral_voxel_size,
+    #     y_voxel_size=lateral_voxel_size,
+    #     z_voxel_size=axial_voxel_size
+    # )
+    #
+    # ls_psf = lightsheetgen.single_psf(phi=wavefront, normed=True)
+    # ls_psf /= ls_psf.sum()
+    # out_decon = utils.fft_decon(kernel=ls_psf, sample=img, iters=1)
+
+    # imwrite(f"{inputs.with_suffix('')}_cocoa_psf.tif", ls_psf, dtype=np.float32)
+    # imwrite(f"{inputs.with_suffix('')}_cocoa_deconvolved.tif", out_decon, dtype=np.float32)
 
     if plot:
         plt.rcParams.update({
@@ -589,7 +584,7 @@ def predict_cocoa(
         plt.imshow(predicted_wavefront)
         vis.savesvg(fig, Path(f"{inputs.with_suffix('')}_cocoa_predicted_wavefront.svg"))
 
-        fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(12, 16))
+        fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(12, 16))
 
         vis.plot_mip(
             vol=img/img.max(),
@@ -619,16 +614,6 @@ def predict_cocoa(
             dxy=lateral_voxel_size,
             dz=axial_voxel_size,
             label='Reconstructed (MIP) [$\gamma$=.5]'
-        )
-
-        vis.plot_mip(
-            vol=out_decon/out_decon.max(),
-            xy=axes[-1, 0],
-            xz=axes[-1, 1],
-            yz=axes[-1, 2],
-            dxy=lateral_voxel_size,
-            dz=axial_voxel_size,
-            label='Deconvolved (MIP) [$\gamma$=.5]'
         )
 
         vis.savesvg(fig, Path(f"{inputs.with_suffix('')}_cocoa_mips.svg"))
