@@ -4,17 +4,17 @@ matplotlib.use('Agg')
 
 import logging
 import sys
-import itertools
 import subprocess
 from pathlib import Path
 from typing import Any, Optional
-from matplotlib.ticker import FormatStrFormatter
-import matplotlib.colors as mcolors
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
-import swifter
+import time
+import argparse
+from tqdm import tqdm
+from tifffile import imwrite
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -24,6 +24,7 @@ from line_profiler_pycharm import profile
 import utils
 import backend
 import eval
+import vis
 
 from wavefront import Wavefront
 from synthetic import SyntheticPSF
@@ -38,48 +39,11 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 @profile
-def random_samples_phasenet(
-    model: Path,
-    eval_sign: str = 'signed',
-    dist: str = 'mixed',
-    batch_size: int = 512,
-    num_objs: Optional[int] = 1,
-    digital_rotations: bool = True,
-    agg: str = 'median',
-    na: float = 1.0,
-    samples_per_bin: int = 1,
-    phasenet_path: Path = Path('phasenetrepo')
-):
-    levels = [
-        0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
-        .5, .6, .7, .8, .9,
-        1, 1.25, 1.5, 1.75, 2., 2.5,
-        3., 4., 5.,
-    ]
-
-    vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
-    highcmap = plt.get_cmap('magma_r', 256)
-    lowcmap = plt.get_cmap('GnBu_r', 256)
-    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-    cmap = mcolors.ListedColormap(cmap)
-
-    plt.rcParams.update({
-        'font.size': 12,
-        'axes.titlesize': 14,
-        'axes.labelsize': 14,
-        'xtick.labelsize': 12,
-        'ytick.labelsize': 12,
-        'legend.fontsize': 12,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-
+def download_phasenet(phasenet_path: Path = Path('phasenet_repo')):
     if not phasenet_path.exists():
-        subprocess.run(f"git clone https://github.com/mpicbg-csbd/phasenet.git phasenetrepo", shell=True)
+        subprocess.run(f"git clone https://github.com/mpicbg-csbd/phasenet.git phasenet_repo", shell=True)
 
-    from phasenetrepo.phasenet.model import PhaseNet
-    from csbdeep.utils import normalize, download_and_extract_zip_file
+    from csbdeep.utils import download_and_extract_zip_file
 
     download_and_extract_zip_file(
         url='https://github.com/mpicbg-csbd/phasenet/releases/download/0.1.0/model.zip',
@@ -87,188 +51,94 @@ def random_samples_phasenet(
         verbose=1,
     )
 
-    num_objs = 1 if num_objs is None else num_objs
+    try:
+        from phasenet_repo.phasenet.model import PhaseNet
+    except ImportError as e:
+        raise e
 
-    outdir = model.with_suffix('') / eval_sign / 'benchmark' / 'phasenet'
-    outdir.mkdir(parents=True, exist_ok=True)
-    savepath = Path(f'{outdir}/predictions_num_objs_{num_objs}.csv')
-    modelspecs = backend.load_metadata(model)
 
-    phasenet = PhaseNet(None, name='16_05_2020_11_48_14_berkeley_50planes', basedir=f'{phasenet_path}/models/')
+@profile
+def download_cocoa(cocoa_path: Path = Path('cocoa_repo')):
 
-    phasenetgen = SyntheticPSF(
-        psf_type='widefield',
-        lls_excitation_profile=None,
-        psf_shape=(50, 50, 50),
-        n_modes=modelspecs.n_modes,
-        lam_detection=.510,
-        x_voxel_size=.086,
-        y_voxel_size=.086,
-        z_voxel_size=.1,
-        na_detection=1.1,
-        refractive_index=1.33,
-        order='ansi',
-        distribution=dist,
-        mode_weights='pyramid',
-    )
+    if not cocoa_path.exists():
+        subprocess.run(f"git clone https://github.com/iksungk/CoCoA.git cocoa_repo", shell=True)
 
-    aberrations = [
-        r for r in [
-           (0, .05), (.05, .1), (.1, .15), (.15, .2), (.2, .25),
-        ]
-        for _ in range(samples_per_bin)
-    ]
+    try:
+        from cocoa_repo.misc.models import LinearNet
+    except ImportError as e:
+        raise e
 
-    if Path(f"{savepath}_predictions.npy").exists():
-        wavefronts = np.load(f"{savepath}_wavefronts.npy", allow_pickle=True)
-    else:
-        wavefronts = [Wavefront(
-            amplitudes=w,
-            lam_detection=modelspecs.lam_detection,
-            modes=modelspecs.n_modes,
-            order='ansi',
-            distribution=dist,
-            mode_weights='pyramid',
-            signed=True,
-            rotate=True,
-        ) for w in aberrations]
-        np.save(f"{savepath}_wavefronts", wavefronts, allow_pickle=True)
 
-    photons = np.arange(0, 1e6+1e5, 1e5)
-    photons[0] = 1e5
+@profile
+def predict_phasenet(
+    inputs: Path,
+    plot: bool = False,
+    phasenet: Any = None,
+    phasenetgen: Optional[SyntheticPSF] = None,
+    phasenet_path: Path = Path('phasenet_repo')
+):
+    download_phasenet(phasenet_path)
+    from csbdeep.utils import normalize
 
-    if savepath.exists():
-        df = pd.read_csv(savepath, index_col=0, header=0)
-    else:
-        df = eval.eval_object(
-            wavefronts=wavefronts,
-            num_objs=num_objs,
-            photons=photons,
-            modelpath=model,
-            batch_size=batch_size,
-            eval_sign=eval_sign,
-            savepath=savepath,
-            digital_rotations=361 if digital_rotations else None,
-            psf_type='widefield'
+    if phasenet is None:
+        from phasenet_repo.phasenet.model import PhaseNet
+
+        phasenet = PhaseNet(
+            config=None,
+            name='16_05_2020_11_48_14_berkeley_50planes',
+            basedir=f'{phasenet_path}/models/'
         )
 
-    phasenet_inputs = eval.create_samples(
-        wavefronts=wavefronts,
-        photons=photons,
-        gen=phasenetgen,
-        savepath=Path(f"{savepath}_phasenet"),
-        num_objs=num_objs,
-    ).squeeze()
-    phasenet_inputs = np.expand_dims([normalize(i) for i in phasenet_inputs], axis=-1)
+    if phasenetgen is None:
+        phasenetgen = SyntheticPSF(
+            psf_type='widefield',
+            lls_excitation_profile=None,
+            psf_shape=(64, 64, 64),
+            n_modes=15,
+            lam_detection=.510,
+            x_voxel_size=.086,
+            y_voxel_size=.086,
+            z_voxel_size=.1,
+            na_detection=1.1,
+            refractive_index=1.33,
+            order='ansi',
+            distribution='mixed',
+            mode_weights='pyramid',
+        )
 
-    phasenet_wavefronts = [Wavefront(
-        amplitudes=[0, 0, 0, 0] + list(phasenet.predict(i)),
-        lam_detection=modelspecs.lam_detection,
-        modes=modelspecs.n_modes,
+    psf = backend.load_sample(inputs)
+    psf = utils.resize_with_crop_or_pad(psf, crop_shape=(50, 50, 50))
+    psf = np.expand_dims(normalize(psf), axis=-1)
+    p = list(phasenet.predict(psf))
+    wavefront = Wavefront(
+        amplitudes=[0, 0, 0, 0] + p,
+        lam_detection=phasenetgen.lam_detection,
+        modes=phasenetgen.n_modes,
         order='ansi',
         rotate=False,
-    ) for i in phasenet_inputs]
-    phasenet_predictions = np.array([w.amplitudes_ansi for w in phasenet_wavefronts])
-
-    if Path(f"{savepath}_predictions_phasenet.npy").exists():
-        phasenet_predictions = np.load(f"{savepath}_predictions_phasenet.npy")
-    else:
-        np.save(f"{savepath}_predictions_phasenet", phasenet_predictions)
-
-    ys = np.stack([w.amplitudes for w, ph in itertools.product(wavefronts, photons)])
-    residuals = ys - phasenet_predictions
-    df['phasenet_residuals'] = [Wavefront(i, lam_detection=phasenetgen.lam_detection).peak2valley(na=na) for i in residuals]
-
-    df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
-
-    x, y = 'photons', 'aberration'
-    xstep, ystep = 5e4, .25
-
-    ybins = np.arange(0, df[y].max()+ystep, ystep)
-    df['ybins'] = pd.cut(df[y], ybins, labels=ybins[1:], include_lowest=True)
-
-    if x == 'photons':
-        xbins = df['photons'].values
-        df['xbins'] = xbins
-    else:
-        xbins = np.arange(0, df[x].max()+xstep, xstep)
-        df['xbins'] = pd.cut(df[x], xbins, labels=xbins[1:], include_lowest=True)
-
-    fig, (axt, axp) = plt.subplots(nrows=1, ncols=2, figsize=(16, 8), sharey=True)
-
-    dataframe = pd.pivot_table(df, values='residuals', index='ybins', columns='xbins', aggfunc=agg)
-    dataframe = dataframe.sort_index()#.interpolate()
-
-    phasenet_dataframe = pd.pivot_table(df, values='phasenet_residuals', index='ybins', columns='xbins', aggfunc=agg)
-    phasenet_dataframe = phasenet_dataframe.sort_index()#.interpolate()
-
-    contours = axt.contourf(
-        dataframe.columns,
-        dataframe.index.values,
-        dataframe.values,
-        cmap=cmap,
-        levels=levels,
-        extend='max',
-        linewidths=2,
-        linestyles='dashed',
-    )
-    axt.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
-
-    axp.contourf(
-        phasenet_dataframe.columns,
-        phasenet_dataframe.index.values,
-        phasenet_dataframe.values,
-        cmap=cmap,
-        levels=levels,
-        extend='max',
-        linewidths=2,
-        linestyles='dashed',
-    )
-    axp.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
-
-    cax = fig.add_axes([1.01, 0.08, 0.03, .9])
-    cbar = plt.colorbar(
-        contours,
-        cax=cax,
-        fraction=0.046,
-        pad=0.04,
-        extend='both',
-        spacing='proportional',
-        format=FormatStrFormatter("%.2f"),
-        ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
     )
 
-    cbar.ax.set_ylabel(rf'Residuals ({agg} peak-to-valley, $\lambda = {int(modelspecs.lam_detection*1000)}~nm$)')
-    cbar.ax.set_title(r'$\lambda$')
-    cbar.ax.yaxis.set_ticks_position('right')
-    cbar.ax.yaxis.set_label_position('left')
+    coefficients = [
+        {'n': z.n, 'm': z.m, 'amplitude': a}
+        for z, a in wavefront.zernikes.items()
+    ]
+    df = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
+    df.index.name = 'ansi'
+    df.to_csv(f"{inputs.with_suffix('')}_phasenet_zernike_coefficients.csv")
 
-    axt.set_ylabel(rf'Initial aberration ({agg} peak-to-valley, $\lambda = {int(modelspecs.lam_detection*1000)}~nm$)')
-    axt.set_yticks(np.arange(0, 6, .5), minor=True)
-    axt.set_yticks(np.arange(0, 6, 1))
-    axt.set_ylim(ybins[0], ybins[-1])
+    if plot:
+        vis.diagnosis(
+            pred=wavefront,
+            pred_std=Wavefront(np.zeros_like(wavefront.amplitudes_ansi)),
+            save_path=Path(f"{inputs.with_suffix('')}_phasenet_diagnosis"),
+        )
 
-    axt.set_xlim(xbins[0], xbins[-1])
-    axt.set_xlabel(f'{x}')
-
-    axt.spines['right'].set_visible(False)
-    axp.spines['right'].set_visible(False)
-    axt.spines['left'].set_visible(False)
-    axp.spines['left'].set_visible(False)
-    axt.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-    axp.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-    plt.tight_layout()
-    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-    return savepath
+    return wavefront.amplitudes_ansi
 
 
 @profile
 def phasenet_heatmap(
-    datadir: Path,
+    inputs: Path,
     iter_num: int = 1,
     distribution: str = '/',
     batch_size: int = 128,
@@ -278,20 +148,10 @@ def phasenet_heatmap(
     agg: str = 'median',
     modes: int = 15,
     no_beads: bool = True,
-    phasenet_path: Path = Path('phasenetrepo')
+    phasenet_path: Path = Path('phasenet_repo')
 ):
-
-    if not phasenet_path.exists():
-        subprocess.run(f"git clone https://github.com/mpicbg-csbd/phasenet.git phasenetrepo", shell=True)
-
-    from phasenetrepo.phasenet.model import PhaseNet
-    from csbdeep.utils import normalize, download_and_extract_zip_file
-
-    download_and_extract_zip_file(
-        url='https://github.com/mpicbg-csbd/phasenet/releases/download/0.1.0/model.zip',
-        targetdir=f'{phasenet_path}/models/',
-        verbose=1,
-    )
+    download_phasenet(phasenet_path)
+    from phasenet_repo.phasenet.model import PhaseNet
 
     if no_beads:
         savepath = phasenet_path.with_suffix('') / eval_sign / 'psf'
@@ -323,24 +183,10 @@ def phasenet_heatmap(
         mode_weights='pyramid',
     )
 
-    def predict(path):
-        psf = backend.load_sample(path)
-        psf = utils.resize_with_crop_or_pad(psf, crop_shape=(50, 50, 50))
-        psf = np.expand_dims(normalize(psf), axis=-1)
-        p = list(phasenet.predict(psf))
-        wavefront = Wavefront(
-            amplitudes=[0, 0, 0, 0] + p,
-            lam_detection=phasenetgen.lam_detection,
-            modes=modes,
-            order='ansi',
-            rotate=False,
-        )
-        return wavefront.amplitudes_ansi
-
     if iter_num == 1:
         # on first call, setup the dataframe with the 0th iteration stuff
         results = eval.collect_data(
-            datapath=datadir,
+            datapath=inputs,
             model=15,
             samplelimit=samplelimit,
             distribution=distribution,
@@ -368,7 +214,7 @@ def phasenet_heatmap(
             psfgen=phasenetgen,
             no_phase=False,
             digital_rotations=None,
-            no_beads=True
+            no_beads=no_beads
         ),
         jobs=previous['id'].values,
         desc=f'Generate samples ({savepath.resolve()})',
@@ -382,7 +228,10 @@ def phasenet_heatmap(
     current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
 
     current[ground_truth_cols] = previous[residual_cols]
-    current[prediction_cols] = np.array([predict(p) for p in paths])
+    current[prediction_cols] = np.array([
+        predict_phasenet(p, phasenet=phasenet, phasenetgen=phasenetgen)
+        for p in paths
+    ])
 
     if eval_sign == 'positive_only':
         current[ground_truth_cols] = current[ground_truth_cols].abs()
@@ -410,7 +259,6 @@ def phasenet_heatmap(
             savepath = f'{savepath}_x'
             results.to_csv(f'{savepath}_predictions.csv')
         logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
-
 
     df = results[results['iter_num'] == iter_num]
     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
@@ -465,3 +313,250 @@ def phasenet_heatmap(
         )
 
     return savepath
+
+
+@profile
+def predict_cocoa(
+    inputs: Path,
+    plot: bool = False,
+    axial_voxel_size: float = .097,
+    lateral_voxel_size: float = .2,
+    na_detection: float = 1.0,
+    lam_detection: float = .510,
+    refractive_index: float = 1.33,
+    cocoa_path: Path = Path('cocoa_repo')
+):
+    download_cocoa(cocoa_path)
+
+    import os
+    os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
+
+    import torch
+    import torch.nn as nn
+    from torch.optim.lr_scheduler import CosineAnnealingLR, MultiStepLR
+
+    dtype = torch.cuda.FloatTensor
+    torch.backends.cudnn.benchmark = True
+
+    from cocoa_repo.misc import models as cocoa_models
+    from cocoa_repo.misc import utils as cocoa_utils
+    from cocoa_repo.misc import losses as cocoa_losses
+    from cocoa_repo.misc import psf_torch as cocoa_psf
+
+    parser = argparse.ArgumentParser(description="CoCoA")
+    parser.add_argument('--padding', type=int, default=24)
+    parser.add_argument('--normalized', type=bool, default=False)
+    parser.add_argument('--n_detection', type=float, default=1.1)
+    parser.add_argument('--emission_wavelength', type=float, default=0.515)
+    parser.add_argument('--n_obj', type=float, default=1.333)
+    parser.add_argument('--encoding_option', type=str, default='radial')  # 'cartesian', 'radial'
+    parser.add_argument('--radial_encoding_angle', type=float, default=3,
+                        help='Typically, 3 ~ 7.5. Smaller values indicates the ability to represent fine features.')
+    parser.add_argument('--radial_encoding_depth', type=int, default=7,
+                        help='If too large, stripe artifacts. If too small, oversmoothened features. Typically, 6 or 7.')  # 7, 8 (jiggling artifacts)
+    parser.add_argument('--nerf_num_layers', type=int, default=6)
+    parser.add_argument('--nerf_num_filters', type=int,
+                        default=128)  # 32 (not enough), 64, 128 / at least y_.shape[0]/2? Helps to reduce artifacts fitted to aberrated features and noise.
+    parser.add_argument('--nerf_skips', type=list,
+                        default=[2, 4, 6])  # [2,4,6], [2,4,6,8]: good, [2,4], [4], [4, 8]: insufficient.
+    parser.add_argument('--nerf_beta', type=float, default=1.0)  # 1.0 or None (sigmoid)
+    parser.add_argument('--nerf_max_val', type=float, default=40.0)
+    parser.add_argument('--pretraining', type=bool, default=True)  # True, False
+    parser.add_argument('--pretraining_num_iter', type=int, default=500)  # 2500
+    parser.add_argument('--pretraining_lr', type=float, default=1e-2)
+    parser.add_argument('--pretraining_measurement_scalar', type=float, default=3.5)  # 3.5
+    parser.add_argument('--training_num_iter', type=int, default=1000)
+    parser.add_argument('--training_lr_obj', type=float, default=5e-3)
+    parser.add_argument('--training_lr_ker', type=float, default=1e-2)  # 1e-2
+    parser.add_argument('--kernel_max_val', type=float, default=1e-2)
+    parser.add_argument('--kernel_order_up_to', type=int, default=4)  # True, False
+    parser.add_argument('--ssim_weight', type=float, default=1.0)
+    parser.add_argument('--tv_z', type=float, default=1e-9,
+                        help='larger tv_z helps for denser samples.')
+    parser.add_argument('--tv_z_normalize', type=bool, default=False)
+    parser.add_argument('--rsd_reg_weight', type=float, default=5e-4,  # 5e-4 ~ 2.5e-3 with radial.
+                        help='Helps to retrieve aberrations correctly. Too large, skeletionize the image.')
+    parser.add_argument('--lr_schedule', type=str, default='cosine')  # 'multi_step', 'cosine'
+
+    args = parser.parse_args(args=[])
+
+    img = backend.load_sample(inputs)
+    # img = utils.resize_with_crop_or_pad(img, crop_shape=(50, 50, 50))
+
+    y = torch.from_numpy(img.copy()).type(dtype).cuda(0).view(img.shape[0], img.shape[1], img.shape[2])
+    INPUT_HEIGHT = img.shape[1]
+    INPUT_WIDTH = img.shape[2]
+    INPUT_DEPTH = img.shape[0]
+
+    psf = cocoa_psf.PsfGenerator3D(
+        psf_shape=(img.shape[0], img.shape[1], img.shape[2]),
+        units=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        na_detection=na_detection,
+        lam_detection=lam_detection,
+        n=refractive_index
+    )
+
+    coordinates = cocoa_models.input_coord_2d(INPUT_WIDTH, INPUT_HEIGHT).cuda(0)
+    coordinates = cocoa_models.radial_encoding(
+        coordinates,
+        args.radial_encoding_angle,
+        args.radial_encoding_depth
+    ).cuda(0)
+
+    net_obj = cocoa_models.NeRF(
+        D=args.nerf_num_layers,
+        W=args.nerf_num_filters,
+        skips=args.nerf_skips,
+        in_channels=coordinates.shape[-1],
+        out_channels=INPUT_DEPTH
+    ).cuda(0)
+
+    if args.pretraining:
+        t_start = time.time()
+
+        optimizer = torch.optim.Adam([{'params': net_obj.parameters(), 'lr': args.pretraining_lr}],
+                                     betas=(0.9, 0.999), eps=1e-8)
+        if args.lr_schedule == 'multi_step':
+            scheduler = MultiStepLR(optimizer, milestones=[1000, 1500, 2000], gamma=0.5)
+        elif args.lr_schedule == 'cosine':
+            scheduler = CosineAnnealingLR(optimizer, args.pretraining_num_iter, args.pretraining_lr / 25)
+
+        loss_list = np.empty(shape=(1 + args.pretraining_num_iter,))
+        loss_list[:] = np.NaN
+
+        for step in tqdm(range(args.pretraining_num_iter)):
+            out_x = net_obj(coordinates)
+
+            if args.nerf_beta is None:
+                out_x = args.nerf_max_val * nn.Sigmoid()(out_x)
+            else:
+                out_x = nn.Softplus(beta=args.nerf_beta)(out_x)
+
+            out_x_m = out_x.view(img.shape[1], img.shape[2], img.shape[0]).permute(2, 0, 1)
+
+            # relative_l1_error = torch.abs(out_x_m - 3.0 * y) / (torch.abs(out_x_m.detach()) + 1e-2)
+            # relative_l2_error = (out_x_m - y)**2 / (out_x_m.detach()**2 + 0.01)
+            # loss = relative_l1_error.mean() + 1e0 * ssim_loss(out_x_m, 3.0 * y)
+
+            loss = cocoa_losses.ssim_loss(out_x_m, args.pretraining_measurement_scalar * y)
+            # loss += torch.mean(torch.abs(out_x_m - args.pretraining_measurement_scalar * y) / (torch.abs(out_x_m.detach()) + 1e-2))
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+
+            loss_list[step] = loss.item()
+
+        t_end = time.time()
+        print('Initialization - Elapsed time: ' + str(t_end - t_start) + ' seconds.')
+
+        # torch.save(net_obj.state_dict(), net_obj_save_path_pretrained)
+        print('Pre-trained model saved.')
+
+    ## kernel with simple coefficients
+    net_ker = cocoa_models.optimal_kernel(
+        max_val=args.kernel_max_val,
+        order_up_to=args.kernel_order_up_to,
+        piston_tip_tilt=False
+    )  # 5e-2
+
+    optimizer = torch.optim.Adam([{'params': net_obj.parameters(), 'lr': args.training_lr_obj},  # 1e-3
+                                  {'params': net_ker.parameters(), 'lr': args.training_lr_ker}],  # 4e-3
+                                 betas=(0.9, 0.999), eps=1e-8)
+
+    scheduler = CosineAnnealingLR(optimizer, args.training_num_iter, args.training_lr_ker / 25)
+
+    loss_list = np.empty(shape=(1 + args.training_num_iter,))
+    loss_list[:] = np.NaN
+
+    wfe_list = np.empty(shape=(1 + args.training_num_iter,))
+    wfe_list[:] = np.NaN
+
+    lr_obj_list = np.empty(shape=(1 + args.training_num_iter,))
+    lr_obj_list[:] = np.NaN
+
+    lr_ker_list = np.empty(shape=(1 + args.training_num_iter,))
+    lr_ker_list[:] = np.NaN
+
+    t_start = time.time()
+
+    for step in tqdm(range(args.training_num_iter)):
+        out_x = net_obj(coordinates)
+
+        if args.nerf_beta is None:
+            out_x = args.nerf_max_val * nn.Sigmoid()(out_x)
+        else:
+            out_x = nn.Softplus(beta=args.nerf_beta)(out_x)
+            out_x = torch.minimum(torch.full_like(out_x, args.nerf_max_val), out_x)  # 30.0
+
+        out_x_m = out_x.view(img.shape[1], img.shape[2], img.shape[0]).permute(2, 0, 1)
+
+        wf = net_ker.k
+
+        out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / img.shape[0]
+        k_vis = psf.masked_phase_array(wf, normalized=args.normalized)
+        out_y = cocoa_utils.fft_convolve(out_x_m, out_k_m, mode='fftn')
+
+        loss = args.ssim_weight * cocoa_losses.ssim_loss(out_y, y)
+
+        loss += cocoa_utils.single_mode_control(wf, 1, -0.0, 0.0)  # quite crucial for suppressing unwanted defocus.
+        loss += args.tv_z * cocoa_losses.tv_1d(out_x_m, axis='z', normalize=args.tv_z_normalize)
+        loss += args.rsd_reg_weight * torch.reciprocal(torch.std(out_x_m) / torch.mean(out_x_m))  # 4e-3
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        if args.lr_schedule == 'cosine':
+            scheduler.step()
+
+        elif args.lr_schedule == 'multi_step':
+            if step == 500 - 1:
+                optimizer.param_groups[0]['lr'] = args.training_lr_obj / 10
+
+            if step == 750 - 1:
+                optimizer.param_groups[1]['lr'] = args.training_lr_ker / 10
+                optimizer.param_groups[0]['lr'] = args.training_lr_obj / 100
+
+        loss_list[step] = loss.item()
+        wfe_list[step] = cocoa_utils.torch_to_np(
+            args.emission_wavelength * 1e3 * torch.sqrt(torch.sum(torch.square(wf))))  # wave -> nm RMS
+        lr_obj_list[step] = optimizer.param_groups[0]['lr']
+        lr_ker_list[step] = optimizer.param_groups[1]['lr']
+
+    t_end = time.time()
+    print('Training - Elapsed time: ' + str(t_end - t_start) + ' seconds.')
+
+    out_k_m = cocoa_utils.torch_to_np(out_k_m)
+    out_y = cocoa_utils.torch_to_np(out_y)
+    wf = cocoa_utils.torch_to_np(wf)
+
+    wavefront = Wavefront(
+        amplitudes=[0, 0, 0] + list(wf),
+        lam_detection=lam_detection,
+        modes=15,
+        order='ansi',
+        rotate=False,
+    )
+
+    coefficients = [
+        {'n': z.n, 'm': z.m, 'amplitude': a}
+        for z, a in wavefront.zernikes.items()
+    ]
+    df = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
+    df.index.name = 'ansi'
+    df.to_csv(f"{inputs.with_suffix('')}_cocoa_zernike_coefficients.csv")
+
+    imwrite(f"{inputs.with_suffix('')}_cocoa_psf.tif", out_k_m, dtype=np.float32)
+    imwrite(f"{inputs.with_suffix('')}_cocoa_wavefront.tif", wavefront.wave(), dtype=np.float32)
+    imwrite(f"{inputs.with_suffix('')}_cocoa_sample.tif", out_y, dtype=np.float32)
+
+    if plot:
+        vis.diagnosis(
+            pred=wavefront,
+            pred_std=Wavefront(np.zeros_like(wavefront.amplitudes_ansi)),
+            save_path=Path(f"{inputs.with_suffix('')}_cocoa_diagnosis"),
+        )
+
+    return wavefront.amplitudes_ansi

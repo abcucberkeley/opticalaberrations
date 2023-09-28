@@ -84,13 +84,13 @@ do
 done
 
 
-python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
---task "$PRETRAINED/opticalnet-$MODES-$M.h5 --no_beads --datadir $DATA --n_samples $MAX --niter $ITERS --eval_sign $EVALSIGN phasenet" \
+python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+--task "phasenet_heatmap $DATA --no_beads --n_samples $MAX --niter $ITERS --eval_sign $EVALSIGN" \
 --taskname $NA \
 --name phasenetrepo/$EVALSIGN/psf
 
 
-python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
---task "$PRETRAINED/opticalnet-$MODES-$M.h5 --datadir $DATA --n_samples $MAX --niter $ITERS --eval_sign $EVALSIGN phasenet" \
+python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+--task "phasenet_heatmap $DATA --n_samples $MAX --niter $ITERS --eval_sign $EVALSIGN" \
 --taskname $NA \
 --name phasenetrepo/$EVALSIGN/bead

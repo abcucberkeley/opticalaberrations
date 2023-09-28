@@ -7,8 +7,15 @@
 #   then (optionally) run tests from within the container:
 # conda activate ml
 # python -m pytest tests/test_ao.py
+
 #   or as a one-liner:
-# conda run -n ml python -m pytest tests/test_ao.py
+# docker run --rm -it --gpus all ml  "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"
+# docker run --rm -it --gpus all ghcr.io/abcucberkeley/opticalaberrations:develop "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"
+
+# to run on a ubuntu system:
+# install docker: https://docs.docker.com/engine/install/ubuntu/
+# set docker permissions for non-root: https://docs.docker.com/engine/install/linux-postinstall/ 
+# install nvidia container toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 
 # FROM nvidia/cuda:11.3.1-cudnn8-runtime-ubuntu20.04  # looks like conda is able to download everything we need. so don't need this.
 FROM ubuntu:22.04
@@ -47,11 +54,14 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
     conda activate ml && \
     conda clean --all --yes
   
-SHELL ["conda", "run", "-n", "venv", "/bin/bash", "-c"]
+# Download the current github commit page to invalidate cache for later layers when the commit version changes.
+ADD "https://github.com/abcucberkeley/opticalaberrations/commits/develop/" dummy_location
+RUN git pull && \
+    conda env update --file ubuntu.yml --prune
 
+LABEL org.opencontainers.image.source=https://github.com/abcucberkeley/opticalaberrations.git \
+      org.opencontainers.image.description="Docker image for a transformer network to perform sensorless detection of aberrations in adaptive optics. https://github.com/abcucberkeley/opticalaberrations" \
+      org.opencontainers.image.licenses=BSD-2-Clause 
+
+SHELL ["conda", "run", "-n", "venv", "/bin/bash", "-l", "-c"]
 ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
-CMD git pull; conda env update --file ubuntu.yml
-
-LABEL org.opencontainers.image.source=https://github.com/abcucberkeley/opticalaberrations.git
-LABEL org.opencontainers.image.description="Docker image for sensorless detection of aberrations in adaptive optics"
-LABEL org.opencontainers.image.licenses=BSD-2-Clause

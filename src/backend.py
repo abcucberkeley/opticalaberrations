@@ -38,7 +38,6 @@ from callbacks import Defibrillator
 from callbacks import LearningRateScheduler
 from callbacks import TensorBoardCallback
 
-
 import utils
 import vis
 import data_utils

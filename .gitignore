@@ -159,5 +159,7 @@ login.bat
 *.bat
 /examples/largefov/before_tiles/
 src/all_coords_cache_3x361x6x64x64_float16.npy
-/src/phasenetrepo/
-/src/phasenetrepo/**/*.*
+/src/phasenet_repo/
+/src/phasenet_repo/**/*.*
+/src/cocoa_repo/
+/src/cocoa_repo/**/*.*

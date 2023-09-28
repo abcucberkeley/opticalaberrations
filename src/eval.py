@@ -6,7 +6,6 @@ from multiprocessing import Pool
 
 import logging
 import sys
-import subprocess
 from functools import partial
 from pathlib import Path
 from typing import Any, Optional
@@ -17,7 +16,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
-import swifter
 import numpy as np
 import pandas as pd
 import tensorflow as tf

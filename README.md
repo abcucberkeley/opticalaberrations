@@ -69,17 +69,6 @@ git lfs fetch --all
 git lfs pull 
 ```
 
-### Other prerequisites
-
-Clone the LLSM3D tools repository for additional functions such as `decon`, `deskew` and `point detection`
-
-```shell
-git clone --branch dev https://github.com/abcucberkeley/LLSM3DTools.git
-```
-
-* `MATLAB 2020b` or higher is required (for these additional functions).
-* NVIDIA GPU with driver >= 512.15
-
 ## Utilities
 
 The [`src/python ao.py`](src/python ao.py) script provides a CLI
