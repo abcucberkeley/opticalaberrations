@@ -59,19 +59,20 @@ jobs:
           echo "The GitHub Actor's username is: $GITHUB_ACTOR"
           echo "GitHub SHA: $GITHUB_SHA"
           
-      # - name: Free Disk Space (Ubuntu)
-      #   uses: jlumbroso/free-disk-space@main
-      #   with:
-      #     # this might remove needed tools if set to "true" but frees about 6 GB
-      #     tool-cache: false
+      - name: Free Disk Space (Ubuntu)
+        if: runner.environment != 'self-hosted' 
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove needed tools if set to "true" but frees about 6 GB
+          tool-cache: false
           
-      #     # all of these default to true
-      #     android: true
-      #     dotnet: true
-      #     haskell: true
-      #     large-packages: false
-      #     docker-images: false
-      #     swap-storage: true
+          # all of these default to true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: true
 
       - name: Checkout just Dockerfile
         uses: actions/checkout@v4
@@ -122,7 +123,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           load: true
-
+            
       - name: Test
         run: |
           docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"
