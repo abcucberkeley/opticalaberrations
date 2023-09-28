@@ -436,9 +436,9 @@ def create_multiindex_tile_dataframe(
     # processes "z0-y0-x0" to z, y, x multindex (strip -, then letter, convert to int)
     predictions.index = pd.MultiIndex.from_tuples(predictions.index.str.split('-').to_list())
     predictions.index = pd.MultiIndex.from_arrays([
-        predictions.index.get_level_values(0).str.lstrip('z').astype(np.int),
-        predictions.index.get_level_values(1).str.lstrip('y').astype(np.int),
-        predictions.index.get_level_values(2).str.lstrip('x').astype(np.int),
+        predictions.index.get_level_values(0).str.lstrip('z').astype(np.int32),
+        predictions.index.get_level_values(1).str.lstrip('y').astype(np.int32),
+        predictions.index.get_level_values(2).str.lstrip('x').astype(np.int32),
     ], names=('z', 'y', 'x'))
 
     wavefronts = {}

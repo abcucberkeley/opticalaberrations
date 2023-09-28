@@ -745,11 +745,11 @@ def optimal_rolling_strides(model_psf_fov, sample_voxel_size, sample_shape):
     strides[idx] = model_window_size[idx]
     strides = strides.astype(int)
 
-    min_strides = np.ceil(model_window_size * 0.66).astype(np.int)
+    min_strides = np.ceil(model_window_size * 0.66).astype(np.int32)
     # throwaway = sample_shape - ((np.array(number_of_rois) - 1) * strides + model_window_size)
 
     if any(strides < min_strides): # if strides overlap too much with model window
-        number_of_rois -= (strides < min_strides).astype(np.int)    # choose one less roi and recompute
+        number_of_rois -= (strides < min_strides).astype(np.int32)    # choose one less roi and recompute
         strides = np.floor((sample_shape - model_window_size) / (number_of_rois - 1))
         idx = np.where(np.isnan(strides))[0]
         strides[idx] = model_window_size[idx]
