@@ -53,15 +53,18 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
     conda env create -f ubuntu.yml && \
     conda activate ml && \
     conda clean --all --yes
-  
-# Download the current github commit page to invalidate cache for later layers when the commit version changes.
-ADD "https://github.com/abcucberkeley/opticalaberrations/commits/develop/" dummy_location
-RUN git pull && \
-    conda env update --file ubuntu.yml --prune
 
-LABEL org.opencontainers.image.source=https://github.com/abcucberkeley/opticalaberrations.git \
-      org.opencontainers.image.description="Docker image for a transformer network to perform sensorless detection of aberrations in adaptive optics. https://github.com/abcucberkeley/opticalaberrations" \
-      org.opencontainers.image.licenses=BSD-2-Clause 
+# Download the current github commit page for the .yml that will invalidate the cache for later layers when the commit version changes.
+# "git pull" to get the latest, then update conda.
+ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=develop&path=ubuntu.yml" dummy_location_one
+RUN git pull && \
+    conda env update --file ubuntu.yml --prune && \
+    conda list -n ml
+
+# Download the current github commit page to invalidate cache for later layers when the commit version changes.
+# "git pull" to get the latest.
+ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits/develop" dummy_location_two
+RUN git pull
 
 SHELL ["conda", "run", "-n", "venv", "/bin/bash", "-l", "-c"]
 ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
