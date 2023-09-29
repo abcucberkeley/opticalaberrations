@@ -2159,18 +2159,22 @@ def decon(
                 deskew=0,
             )
     else:
-        # decon entire volume, then pull out the tiles we want.
-        pred_to_decon = predictions.drop_duplicates()
-        deconv = np.zeros((len(pred_to_decon), vol.shape[0], vol.shape[1], vol.shape[2]), dtype=np.float32)
-        for i, ind in tqdm(enumerate(pred_to_decon.index.values), total=len(pred_to_decon), desc='Deconvolve entire vol with each psf'):
-            w = Wavefront(pred_to_decon.loc[ind].values, lam_detection=wavelength)
+        # get all unique PSFs that we need to convolve with
+        predictions['psf_id'] = predictions.groupby(predictions.columns.values.tolist()).grouper.group_info[0]
+        groups = predictions.groupby('psf_id')
+
+        for psf_id in tqdm(predictions['psf_id'].unique(), desc='Deconvolve entire vol with each psf'):
+            df = groups.get_group(psf_id).drop(columns=['p2v', 'psf_id'])
+
+            zernikes = df.values[0]
+            w = Wavefront(zernikes, lam_detection=wavelength)
             kernel = samplepsfgen.single_psf(w, normed=False)
             kernel /= np.max(kernel)
 
             stdout = os.dup(1)
             silent = os.open(os.devnull, os.O_WRONLY)
             os.dup2(silent, 1)
-            deconv[i] = cuda_decon(
+            deconv = cuda_decon(
                 vol,
                 psf=kernel,
                 dzdata=axial_voxel_size,
@@ -2183,24 +2187,17 @@ def decon(
             )
             os.dup2(stdout, 1)
 
-        for i, (z, y, x) in tqdm(
-                enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))),
-                total=ztiles * ytiles * xtiles,
-                desc='Copy tiles'
-        ):
-            # find which decon index this tile belongs to.
-            decon_index = np.argmax((pred_to_decon == predictions.loc[z,y,x]).all(axis=1))
-
-            decon_vol[
-                z * zw:(z * zw) + zw,
-                y * yw:(y * yw) + yw,
-                x * xw:(x * xw) + xw
-            ] = deconv[ decon_index,
-                z * zw:(z * zw) + zw,
-                y * yw:(y * yw) + yw,
-                x * xw:(x * xw) + xw
-            ]
-
+            for index, zernikes in tqdm(df.iterrows(), desc='Copy deconvolved tiles', total=df.shape[0], leave=False):
+                z, y, x = index
+                decon_vol[
+                    z * zw:(z * zw) + zw,
+                    y * yw:(y * yw) + yw,
+                    x * xw:(x * xw) + xw
+                ] = deconv[
+                    z * zw:(z * zw) + zw,
+                    y * yw:(y * yw) + yw,
+                    x * xw:(x * xw) + xw
+                ]
 
     savepath = Path(f"{model_pred.with_suffix('')}_decon.tif")
     imwrite(savepath, decon_vol.astype(np.float32))
