@@ -324,10 +324,11 @@ def predict_cocoa(
     na_detection: float = 1.1,
     lam_detection: float = .510,
     refractive_index: float = 1.33,
-    decon_iters: int = 1,
+    decon_iters: int = 30,
     psf_type: str = 'widefield',
     cocoa_path: Path = Path('cocoa_repo')
 ):
+
     download_cocoa(cocoa_path)
 
     import os
@@ -347,7 +348,7 @@ def predict_cocoa(
 
     parser = argparse.ArgumentParser(description="CoCoA")
     parser.add_argument('--padding', type=int, default=24)
-    parser.add_argument('--normalized', type=bool, default=False)
+    parser.add_argument('--normalized', type=bool, default=True)
 
     parser.add_argument('--encoding_option', type=str, default='radial')  # 'cartesian', 'radial'
     parser.add_argument('--radial_encoding_angle', type=float, default=3,
@@ -385,6 +386,22 @@ def predict_cocoa(
     args = parser.parse_args(args=[])
 
     img = backend.load_sample(inputs)
+
+    psfgen = PsfGenerator3D(
+        psf_shape=img.shape,
+        units=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        lam_detection=lam_detection,
+        n=refractive_index,
+        na_detection=na_detection,
+        psf_type=psf_type,
+    )
+
+    lls_excitation_profile = torch.from_numpy(psfgen.lls_excitation_profile.copy()).type(dtype).cuda(0).view(
+        psfgen.lls_excitation_profile.shape[0],
+        psfgen.lls_excitation_profile.shape[1],
+        psfgen.lls_excitation_profile.shape[2]
+    )
+
     y_max = np.max(img)
     y_min = np.min(img)
     y_ = (img - y_min) / (y_max - y_min)
@@ -508,6 +525,10 @@ def predict_cocoa(
         wf = net_ker.k
 
         out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / y_.shape[0]
+
+        if psf_type != 'widefield':
+            out_k_m *= lls_excitation_profile
+
         k_vis = psf.masked_phase_array(wf, normalized=args.normalized)
         out_y = cocoa_utils.fft_convolve(out_x_m, out_k_m, mode='fftn')
 
@@ -567,15 +588,6 @@ def predict_cocoa(
     imwrite(f"{inputs.with_suffix('')}_cocoa_predicted_wavefront.tif", predicted_wavefront, dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_estimated.tif", out_y, dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_reconstructed.tif", out_x_m, dtype=np.float32)
-
-    psfgen = PsfGenerator3D(
-        psf_shape=img.shape,
-        units=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-        lam_detection=lam_detection,
-        n=refractive_index,
-        na_detection=na_detection,
-        psf_type=psf_type,
-    )
 
     predicted_psf = psfgen.incoherent_psf(phi=wavefront)
     predicted_psf /= predicted_psf.sum()
