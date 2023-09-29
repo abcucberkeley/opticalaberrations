@@ -68,8 +68,14 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--psf_type", default='widefield', type=str,
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
+    )
+
+    parser.add_argument(
         "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
+
     parser.add_argument(
         "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
     )
@@ -97,6 +103,7 @@ def main(args=None):
             axial_voxel_size=args.axial_voxel_size,
             lateral_voxel_size=args.lateral_voxel_size,
             na_detection=args.na,
+            psf_type=args.psf_type,
             plot=args.plot,
         )
     elif args.target == 'phasenet_heatmap':

@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/benchmark.py" />
-    <option name="PARAMETERS" value="cocoa cocoa_repo/source/3A-Mode678_rms_75nm_20230319_145837/combined.tif --plot --lateral_voxel_size .086 --axial_voxel_size .2 --na 1.1" />
+    <option name="PARAMETERS" value="cocoa cocoa_repo/source/3A-Mode678_rms_75nm_20230319_145837/1.tif --plot --lateral_voxel_size .086 --axial_voxel_size .2 --na 1.1 --psf_type widefield" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

@@ -27,7 +27,7 @@ import eval
 import vis
 
 from wavefront import Wavefront
-from synthetic import SyntheticPSF
+from synthetic import SyntheticPSF, PsfGenerator3D
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -324,6 +324,8 @@ def predict_cocoa(
     na_detection: float = 1.1,
     lam_detection: float = .510,
     refractive_index: float = 1.33,
+    decon_iters: int = 1,
+    psf_type: str = 'widefield',
     cocoa_path: Path = Path('cocoa_repo')
 ):
     download_cocoa(cocoa_path)
@@ -346,14 +348,13 @@ def predict_cocoa(
     parser = argparse.ArgumentParser(description="CoCoA")
     parser.add_argument('--padding', type=int, default=24)
     parser.add_argument('--normalized', type=bool, default=False)
-    parser.add_argument('--n_detection', type=float, default=1.1)
-    parser.add_argument('--emission_wavelength', type=float, default=0.515)
-    parser.add_argument('--n_obj', type=float, default=1.333)
+
     parser.add_argument('--encoding_option', type=str, default='radial')  # 'cartesian', 'radial'
     parser.add_argument('--radial_encoding_angle', type=float, default=3,
                         help='Typically, 3 ~ 7.5. Smaller values indicates the ability to represent fine features.')
     parser.add_argument('--radial_encoding_depth', type=int, default=7,
                         help='If too large, stripe artifacts. If too small, oversmoothened features. Typically, 6 or 7.')  # 7, 8 (jiggling artifacts)
+
     parser.add_argument('--nerf_num_layers', type=int, default=6)
     parser.add_argument('--nerf_num_filters', type=int,
                         default=128)  # 32 (not enough), 64, 128 / at least y_.shape[0]/2? Helps to reduce artifacts fitted to aberrated features and noise.
@@ -361,6 +362,7 @@ def predict_cocoa(
                         default=[2, 4, 6])  # [2,4,6], [2,4,6,8]: good, [2,4], [4], [4, 8]: insufficient.
     parser.add_argument('--nerf_beta', type=float, default=1.0)  # 1.0 or None (sigmoid)
     parser.add_argument('--nerf_max_val', type=float, default=40.0)
+
     parser.add_argument('--pretraining', type=bool, default=True)  # True, False
     parser.add_argument('--pretraining_num_iter', type=int, default=500)  # 2500
     parser.add_argument('--pretraining_lr', type=float, default=1e-2)
@@ -370,25 +372,31 @@ def predict_cocoa(
     parser.add_argument('--training_lr_ker', type=float, default=1e-2)  # 1e-2
     parser.add_argument('--kernel_max_val', type=float, default=1e-2)
     parser.add_argument('--kernel_order_up_to', type=int, default=4)  # True, False
+
     parser.add_argument('--ssim_weight', type=float, default=1.0)
     parser.add_argument('--tv_z', type=float, default=1e-9,
                         help='larger tv_z helps for denser samples.')
     parser.add_argument('--tv_z_normalize', type=bool, default=False)
     parser.add_argument('--rsd_reg_weight', type=float, default=5e-4,  # 5e-4 ~ 2.5e-3 with radial.
                         help='Helps to retrieve aberrations correctly. Too large, skeletionize the image.')
+
     parser.add_argument('--lr_schedule', type=str, default='cosine')  # 'multi_step', 'cosine'
 
     args = parser.parse_args(args=[])
 
     img = backend.load_sample(inputs)
+    y_max = np.max(img)
+    y_min = np.min(img)
+    y_ = (img - y_min) / (y_max - y_min)
 
-    y = torch.from_numpy(img.copy()).type(dtype).cuda(0).view(img.shape[0], img.shape[1], img.shape[2])
-    INPUT_HEIGHT = img.shape[1]
-    INPUT_WIDTH = img.shape[2]
-    INPUT_DEPTH = img.shape[0]
+    y = torch.from_numpy(y_.copy()).type(dtype).cuda(0).view(y_.shape[0], y_.shape[1], y_.shape[2])
+
+    INPUT_HEIGHT = y_.shape[1]
+    INPUT_WIDTH = y_.shape[2]
+    INPUT_DEPTH = y_.shape[0]
 
     psf = cocoa_psf.PsfGenerator3D(
-        psf_shape=(img.shape[0], img.shape[1], img.shape[2]),
+        psf_shape=(y_.shape[0], y_.shape[1], y_.shape[2]),
         units=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
         na_detection=na_detection,
         lam_detection=lam_detection,
@@ -396,11 +404,23 @@ def predict_cocoa(
     )
 
     coordinates = cocoa_models.input_coord_2d(INPUT_WIDTH, INPUT_HEIGHT).cuda(0)
-    coordinates = cocoa_models.radial_encoding(
-        coordinates,
-        args.radial_encoding_angle,
-        args.radial_encoding_depth
-    ).cuda(0)
+
+    if args.encoding_option == 'cartesian':
+        print('Cartesian encoding')
+        embed_func = cocoa_models.Embedding(
+            args.cartesian_encoding_dim,
+            args.cartesian_encoding_depth
+        ).cuda(0)
+        coordinates = embed_func(coordinates).cuda(0)
+
+    elif args.encoding_option == 'radial':
+        print('Radial encoding')
+        # sometime causes unwanted astigmatism, but works better with dense samples.
+        coordinates = cocoa_models.radial_encoding(
+            coordinates,
+            args.radial_encoding_angle,
+            args.radial_encoding_depth
+        ).cuda(0)
 
     net_obj = cocoa_models.NeRF(
         D=args.nerf_num_layers,
@@ -431,8 +451,7 @@ def predict_cocoa(
             else:
                 out_x = nn.Softplus(beta=args.nerf_beta)(out_x)
 
-            out_x_m = out_x.view(img.shape[1], img.shape[2], img.shape[0]).permute(2, 0, 1)
-
+            out_x_m = out_x.view(y_.shape[1], y_.shape[2], y_.shape[0]).permute(2, 0, 1)
             loss = cocoa_losses.ssim_loss(out_x_m, args.pretraining_measurement_scalar * y)
 
             optimizer.zero_grad()
@@ -484,16 +503,15 @@ def predict_cocoa(
             out_x = nn.Softplus(beta=args.nerf_beta)(out_x)
             out_x = torch.minimum(torch.full_like(out_x, args.nerf_max_val), out_x)  # 30.0
 
-        out_x_m = out_x.view(img.shape[1], img.shape[2], img.shape[0]).permute(2, 0, 1)
+        out_x_m = out_x.view(y_.shape[1], y_.shape[2], y_.shape[0]).permute(2, 0, 1)
 
         wf = net_ker.k
 
-        out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / img.shape[0]
+        out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / y_.shape[0]
         k_vis = psf.masked_phase_array(wf, normalized=args.normalized)
         out_y = cocoa_utils.fft_convolve(out_x_m, out_k_m, mode='fftn')
 
         loss = args.ssim_weight * cocoa_losses.ssim_loss(out_y, y)
-
         loss += cocoa_utils.single_mode_control(wf, 1, -0.0, 0.0)  # quite crucial for suppressing unwanted defocus.
         loss += args.tv_z * cocoa_losses.tv_1d(out_x_m, axis='z', normalize=args.tv_z_normalize)
         loss += args.rsd_reg_weight * torch.reciprocal(torch.std(out_x_m) / torch.mean(out_x_m))  # 4e-3
@@ -514,19 +532,18 @@ def predict_cocoa(
                 optimizer.param_groups[0]['lr'] = args.training_lr_obj / 100
 
         loss_list[step] = loss.item()
-        wfe_list[step] = cocoa_utils.torch_to_np(
-            args.emission_wavelength * 1e3 * torch.sqrt(torch.sum(torch.square(wf))))  # wave -> nm RMS
+        wfe_list[step] = cocoa_utils.torch_to_np(lam_detection * 1e3 * torch.sqrt(torch.sum(torch.square(wf))))  # wave -> nm RMS
         lr_obj_list[step] = optimizer.param_groups[0]['lr']
         lr_ker_list[step] = optimizer.param_groups[1]['lr']
 
     t_end = time.time()
     print('Training - Elapsed time: ' + str(t_end - t_start) + ' seconds.')
 
+    y = cocoa_utils.torch_to_np(y)
     out_k_m = cocoa_utils.torch_to_np(out_k_m)
     out_x_m = cocoa_utils.torch_to_np(out_x_m)
     out_y = cocoa_utils.torch_to_np(out_y)
     zernikes = cocoa_utils.torch_to_np(wf)
-
     predicted_wavefront = np.fft.fftshift(k_vis.detach().cpu().numpy())
 
     wavefront = Wavefront(
@@ -545,30 +562,27 @@ def predict_cocoa(
     df.index.name = 'ansi'
     df.to_csv(f"{inputs.with_suffix('')}_cocoa_zernike_coefficients.csv")
 
-
     imwrite(f"{inputs.with_suffix('')}_cocoa_predicted_psf.tif", out_k_m, dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_wavefront.tif", wavefront.wave(), dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_predicted_wavefront.tif", predicted_wavefront, dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_estimated.tif", out_y, dtype=np.float32)
     imwrite(f"{inputs.with_suffix('')}_cocoa_reconstructed.tif", out_x_m, dtype=np.float32)
 
-    # lightsheetgen = SyntheticPSF(
-    #     psf_type='widefield',
-    #     # psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-    #     psf_shape=img.shape,
-    #     n_modes=15,
-    #     lam_detection=lam_detection,
-    #     x_voxel_size=lateral_voxel_size,
-    #     y_voxel_size=lateral_voxel_size,
-    #     z_voxel_size=axial_voxel_size
-    # )
-    #
-    # ls_psf = lightsheetgen.single_psf(phi=wavefront, normed=True)
-    # ls_psf /= ls_psf.sum()
-    # out_decon = utils.fft_decon(kernel=ls_psf, sample=img, iters=1)
+    psfgen = PsfGenerator3D(
+        psf_shape=img.shape,
+        units=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
+        lam_detection=lam_detection,
+        n=refractive_index,
+        na_detection=na_detection,
+        psf_type=psf_type,
+    )
 
-    # imwrite(f"{inputs.with_suffix('')}_cocoa_psf.tif", ls_psf, dtype=np.float32)
-    # imwrite(f"{inputs.with_suffix('')}_cocoa_deconvolved.tif", out_decon, dtype=np.float32)
+    predicted_psf = psfgen.incoherent_psf(phi=wavefront)
+    predicted_psf /= predicted_psf.sum()
+    out_decon = utils.fft_decon(kernel=predicted_psf, sample=img, iters=decon_iters)
+
+    imwrite(f"{inputs.with_suffix('')}_cocoa_psf.tif", predicted_psf, dtype=np.float32)
+    imwrite(f"{inputs.with_suffix('')}_cocoa_deconvolved.tif", out_decon, dtype=np.float32)
 
     if plot:
         plt.rcParams.update({
@@ -581,10 +595,11 @@ def predict_cocoa(
         })
 
         fig = plt.figure()
-        plt.imshow(predicted_wavefront)
+        mat = plt.imshow(predicted_wavefront)
+        cbar = plt.colorbar(mat)
         vis.savesvg(fig, Path(f"{inputs.with_suffix('')}_cocoa_predicted_wavefront.svg"))
 
-        fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(12, 16))
+        fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(12, 16))
 
         vis.plot_mip(
             vol=img/img.max(),
@@ -614,6 +629,16 @@ def predict_cocoa(
             dxy=lateral_voxel_size,
             dz=axial_voxel_size,
             label='Reconstructed (MIP) [$\gamma$=.5]'
+        )
+
+        vis.plot_mip(
+            vol=out_decon/out_decon.max(),
+            xy=axes[-1, 0],
+            xz=axes[-1, 1],
+            yz=axes[-1, 2],
+            dxy=lateral_voxel_size,
+            dz=axial_voxel_size,
+            label='Deconvolved (MIP) [$\gamma$=.5]'
         )
 
         vis.savesvg(fig, Path(f"{inputs.with_suffix('')}_cocoa_mips.svg"))
