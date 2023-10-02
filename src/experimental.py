@@ -2044,6 +2044,14 @@ def phase_retrieval(
 
     return coefficients
 
+def silence(enabled, stdout=None):
+    if enabled:
+        stdout = os.dup(1)  # silence
+        silent = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(silent, 1)
+    else:
+        os.dup2(stdout, 1)
+    return stdout
 
 @profile
 def decon(
@@ -2052,8 +2060,9 @@ def decon(
     prediction_threshold: float = 0.25,  # peak to valley in waves. you already have this diffraction limited data
     plot: bool = False,
     ignore_tile: Any = None,
-    decon_tile: bool = False,
+    decon_tile: bool = False,   # Decon each tile individually if True, otherwise decon whole volume and extract tiles.
     preloaded: Preloadedmodelclass = None,
+    only_use_ideal_psf: bool = False,    # Don't use psf from predictions.
 ):
     pass
     pd.options.display.width = 200
@@ -2079,6 +2088,9 @@ def decon(
     # tile id is the column header, rows are the predictions
     predictions, wavefronts = utils.create_multiindex_tile_dataframe(model_pred, return_wavefronts=True, describe=True)
     stdevs = utils.create_multiindex_tile_dataframe(str(model_pred).replace('_predictions.csv', '_stdevs.csv'))
+    if only_use_ideal_psf:
+        predictions *= 0
+        stdevs *= 0
 
     try:
         assert predictions_settings['ignore_modes']
@@ -2140,9 +2152,7 @@ def decon(
 
             psfs[z, y*kyw:(y*kyw)+kyw, x*kxw:(x*kxw)+kxw] = np.max(kernel, axis=0) # mip view for later.
 
-            stdout = os.dup(1)
-            silent = os.open(os.devnull, os.O_WRONLY)
-            os.dup2(silent, 1)
+            stdout = silence(True)
             decon_vol[
                 z * zw:(z * zw) + zw,
                 y * yw:(y * yw) + yw,
@@ -2158,22 +2168,22 @@ def decon(
                 skewed_decon=True,
                 deskew=0,
             )
+            silence(False, stdout=stdout)
     else:
-        # get all unique PSFs that we need to convolve with
-        predictions['psf_id'] = predictions.groupby(predictions.columns.values.tolist()).grouper.group_info[0]
+        # identify all the unique PSFs that we need to decconvolve with
+        predictions['psf_id'] = predictions.groupby(predictions.columns.values.tolist(), sort=False).grouper.group_info[0]
         groups = predictions.groupby('psf_id')
 
-        for psf_id in tqdm(predictions['psf_id'].unique(), desc='Deconvolve entire vol with each psf'):
+        # for each psf_id, deconvolve the volume
+        for psf_id in tqdm(predictions['psf_id'].unique(), desc=f'Deconvolve vol with each psf, {iters} RL iterations', unit='vols',   ):
             df = groups.get_group(psf_id).drop(columns=['p2v', 'psf_id'])
 
-            zernikes = df.values[0]
+            zernikes = df.values[0]  # all rows in this group should be equal. Take the first one as the wavefront.
             w = Wavefront(zernikes, lam_detection=wavelength)
             kernel = samplepsfgen.single_psf(w, normed=False)
             kernel /= np.max(kernel)
 
-            stdout = os.dup(1)
-            silent = os.open(os.devnull, os.O_WRONLY)
-            os.dup2(silent, 1)
+            stdout = silence(True)
             deconv = cuda_decon(
                 vol,
                 psf=kernel,
@@ -2185,9 +2195,9 @@ def decon(
                 skewed_decon=True,
                 deskew=0,
             )
-            os.dup2(stdout, 1)
+            silence(False, stdout=stdout)
 
-            for index, zernikes in tqdm(df.iterrows(), desc='Copy deconvolved tiles', total=df.shape[0], leave=False):
+            for index, zernikes in df.iterrows():
                 z, y, x = index
                 decon_vol[
                     z * zw:(z * zw) + zw,
@@ -2199,7 +2209,11 @@ def decon(
                     x * xw:(x * xw) + xw
                 ]
 
-    savepath = Path(f"{model_pred.with_suffix('')}_decon.tif")
+    if only_use_ideal_psf:
+        savepath = Path(f"{model_pred.with_suffix('')}_ideal_decon.tif")
+    else:
+        savepath = Path(f"{model_pred.with_suffix('')}_decon.tif")
+
     imwrite(savepath, decon_vol.astype(np.float32))
     logger.info(f"Decon image saved to : \n{savepath.resolve()}")
 
@@ -2235,4 +2249,5 @@ def decon(
             ensure_ascii=False,
             escape_forward_slashes=False
         )
+    return savepath
 

@@ -610,6 +610,10 @@ def parse_args(args):
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
+    decon.add_argument(
+        "--only_use_ideal_psf", action='store_true',
+        help='a toggle to run only decon with the ideal psf'
+    )
 
     combine_tiles = subparsers.add_parser("combine_tiles")
     combine_tiles.add_argument("input", type=Path, help="path to csv file")
@@ -1083,6 +1087,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     ignore_tile=args.ignore_tile,
                     preloaded=preloaded,
                     plot=args.plot,
+                    only_use_ideal_psf=args.only_use_ideal_psf,
                 )
             elif args.func == 'combine_tiles':
                 experimental.combine_tiles(
