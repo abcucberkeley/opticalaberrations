@@ -33,6 +33,10 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--outdir", default="../benchmark", type=Path, help='path to save eval'
+    )
+
+    parser.add_argument(
         "--digital_rotations", action='store_true', help='use digital rotations to estimate prediction confidence'
     )
 
