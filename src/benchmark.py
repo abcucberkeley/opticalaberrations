@@ -81,6 +81,14 @@ def parse_args(args):
         "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
     )
 
+    parser.add_argument(
+        "--gpu_workers", default=1, type=int, help='number of GPUs to use'
+    )
+
+    parser.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+
     return parser.parse_args(args)
 
 

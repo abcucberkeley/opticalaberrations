@@ -87,10 +87,10 @@ done
 python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '500GB' --cpus 20 --gpus 4 \
 --task "phasenet_heatmap $DATA --no_beads --n_samples $MAX --eval_sign $EVALSIGN" \
 --taskname $NA \
---name phasenetrepo/$EVALSIGN/psf
+--name ../src/phasenet_repo/$EVALSIGN/psf
 
 
 python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '500GB' --cpus 20 --gpus 4 \
 --task "phasenet_heatmap $DATA --n_samples $MAX --eval_sign $EVALSIGN" \
 --taskname $NA \
---name phasenetrepo/$EVALSIGN/bead
+--name ../src/phasenet_repo/$EVALSIGN/bead
