@@ -9,7 +9,7 @@ ROTATIONS='--digital_rotations'
 ITERS=5
 MAX=10000
 PRETRAINED="../pretrained_models/"
-DATASET="new_modalities"
+DATASET="new_modalities_2m"
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
 EVALSIGN="signed"
 NA=1.0
@@ -85,12 +85,12 @@ done
 
 
 python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
---task "phasenet_heatmap $DATA --no_beads --n_samples $MAX --niter $ITERS --eval_sign $EVALSIGN" \
+--task "phasenet_heatmap $DATA --no_beads --n_samples $MAX --eval_sign $EVALSIGN" \
 --taskname $NA \
 --name phasenetrepo/$EVALSIGN/psf
 
 
 python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
---task "phasenet_heatmap $DATA --n_samples $MAX --niter $ITERS --eval_sign $EVALSIGN" \
+--task "phasenet_heatmap $DATA --n_samples $MAX --eval_sign $EVALSIGN" \
 --taskname $NA \
 --name phasenetrepo/$EVALSIGN/bead

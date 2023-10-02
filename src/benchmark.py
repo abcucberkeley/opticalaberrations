@@ -1,4 +1,3 @@
-import atexit
 import os
 import subprocess
 import multiprocessing as mp
@@ -7,8 +6,6 @@ import logging
 import sys
 import time
 from pathlib import Path
-import tensorflow as tf
-from functools import partial
 
 
 try:
@@ -52,7 +49,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--n_samples", default=None, type=int, help='number of samples to evaluate'
+        "--n_samples", default=10000, type=int, help='number of samples to evaluate'
+    )
+
+    parser.add_argument(
+        "--niter", default=1, type=int, help='number of iterations'
     )
 
     parser.add_argument(
