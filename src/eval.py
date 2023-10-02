@@ -397,7 +397,7 @@ def iter_evaluate(
         axis=1
     )
 
-    results = results.append(current, ignore_index=True)
+    results = pd.concat([results, current], ignore_index=True, sort=False)
 
     if savepath is not None:
         try:
