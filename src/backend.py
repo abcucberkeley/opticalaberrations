@@ -293,7 +293,8 @@ def preprocess(
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
             model_psf_shape=modelpsfgen.psf_shape
-        )
+        ).astype(np.float32)
+
     else:  # at least one tile fov dimension is larger than model fov
         model_window_size = (
             round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
@@ -358,7 +359,7 @@ def preprocess(
             nrows=nrows,
             ncols=ncols,
             ztiles=ztiles
-        )
+        ).astype(np.float32)
 
 
 @profile
@@ -1174,7 +1175,11 @@ def predict_files(
     )
 
     inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
-    inputs = inputs.batch(len(paths)).map( # batch is on input files. this is now fast, because of skip_prep_sample, so do all at once.
+
+    # Process 100 files at a time -> for a total of (100 files x 360 rotations) predictions
+    num_files_to_process_per_batch = paths.shape[0] if paths.shape[0] <= 100 else 100
+
+    inputs = inputs.batch(num_files_to_process_per_batch).map(
         lambda x: tf.py_function(
             generate_fourier_embeddings,
             inp=[x],
