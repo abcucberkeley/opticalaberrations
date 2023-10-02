@@ -183,6 +183,10 @@ def create_synthetic_sample(
     outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
                       f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
+    if min_lls_defocus_offset != 0 or max_lls_defocus_offset != 0:
+        outdir = outdir / f"defocus_{str(round(min_lls_defocus_offset, 3)).replace('.', 'p').replace('-', 'neg')}" \
+                          f"-{str(round(max_lls_defocus_offset, 3)).replace('.', 'p').replace('-', 'neg')}"
+
     outdir.mkdir(exist_ok=True, parents=True)
 
     sim(

@@ -76,44 +76,76 @@ class PsfGenerator3D:
         self.psf_type = psf_type
 
         if isinstance(lls_excitation_profile, np.ndarray) and lls_excitation_profile.size != 0:
+            self.excitation_profile = lls_excitation_profile
             self.lls_excitation_profile = lls_excitation_profile
         else:
-            # load from file and populate lls_excitation_profile, otherwise self.psf_type is a codeword.
-            if isinstance(self.psf_type, Path) or isinstance(self.psf_type, str):
-                path = Path(self.psf_type)
+            lls_excitation_profile = self.load_excitation_profile()
+            if lls_excitation_profile is not None and lls_excitation_profile.shape[0] != psf_shape[0]:
 
-                # check if given file exists
-                if path.exists():
-                    with h5py.File(path, 'r') as file:
-                        self.lls_excitation_profile = file.get('DitheredxzPSFCrossSection')[:, 0]
+                # High resolution excitation profile
+                self.excitation_profile = self.rescale_excitation_profile_voxel_size(
+                    lls_excitation_profile=lls_excitation_profile,
+                )
+                w = psf_shape[0] // 2
+                focal_plane_index = self.excitation_profile.shape[0] // 2
+                self.lls_excitation_profile = self.excitation_profile[
+                    focal_plane_index - w:focal_plane_index + w,
+                    np.newaxis,
+                    np.newaxis
+                ]
+            else:
+                self.excitation_profile = lls_excitation_profile
+                self.lls_excitation_profile = lls_excitation_profile
 
-                # check if given filename exists in the lattice dir and try to load it from there instead
-                elif Path(f"{Path(__file__).parent.parent.resolve()}/lattice/{path.name}").exists():
+    @profile
+    def load_excitation_profile(self):
+        # load from file and populate lls_excitation_profile, otherwise self.psf_type is a codeword.
+        if isinstance(self.psf_type, Path) or isinstance(self.psf_type, str):
+            path = Path(self.psf_type)
 
-                    with h5py.File(f"{Path(__file__).parent.parent.resolve()}/lattice/{path.name}", 'r') as file:
-                        self.lls_excitation_profile = file.get('DitheredxzPSFCrossSection')[:, 0]
+            # check if given file exists
+            if path.exists():
+                with h5py.File(path, 'r') as file:
+                    lls_excitation_profile = file.get('DitheredxzPSFCrossSection')[:, 0]
 
-                else:
-                    self.lls_excitation_profile = None
+            # check if given filename exists in the lattice dir and try to load it from there instead
+            elif Path(f"{Path(__file__).parent.parent.resolve()}/lattice/{path.name}").exists():
 
-        if self.lls_excitation_profile is not None and self.lls_excitation_profile.shape[0] != psf_shape[0]:
-            lls_profile_dz = 0.1        # media wavelengths per pix, used when generating the .mat LLS file.
-            lam_excitation = .488       # microns per wavelength, used when generating the .mat LLS file.
-            eff_pixel_size = lam_excitation / self.n * lls_profile_dz   # microns per pix in the .mat LLS file
+                with h5py.File(f"{Path(__file__).parent.parent.resolve()}/lattice/{path.name}", 'r') as file:
+                    lls_excitation_profile = file.get('DitheredxzPSFCrossSection')[:, 0]
 
-            self.lls_excitation_profile = rescale(
-                self.lls_excitation_profile,
-                (eff_pixel_size / self.dz),
-                order=3,
-            )
+            else:
+                lls_excitation_profile = None
 
-            w = psf_shape[0] // 2
-            focal_plane_index = self.lls_excitation_profile.shape[0] // 2
-            self.lls_excitation_profile = self.lls_excitation_profile[
-                focal_plane_index - w:focal_plane_index + w,
+        return lls_excitation_profile
+
+    @profile
+    def rescale_excitation_profile_voxel_size(self, lls_excitation_profile):
+        lls_profile_dz = 0.1        # media wavelengths per pix, used when generating the .mat LLS file.
+        lam_excitation = .488       # microns per wavelength, used when generating the .mat LLS file.
+        eff_pixel_size = lam_excitation / self.n * lls_profile_dz   # microns per pix in the .mat LLS file
+
+        return rescale(
+            lls_excitation_profile,
+            (eff_pixel_size / self.dz),
+            order=3,
+        )
+
+    @profile
+    def defocus_excitation_profile(self, desired_shape: int, offset=None):
+
+        if np.isscalar(offset):
+            w = desired_shape // 2
+            focal_plane_index = (self.excitation_profile.shape[0] // 2) + np.round(offset / self.dz).astype(int)
+
+            defocused_lls_excitation_profile = self.excitation_profile[
+                max(0, focal_plane_index - w):min(focal_plane_index + w, self.excitation_profile.shape[0]),
                 np.newaxis,
                 np.newaxis
             ]
+            return defocused_lls_excitation_profile
+        else:
+            raise Exception(f"Unknown format for `lls_defocus_offset`: {offset}")
 
     @profile
     def theoretical_psf(self, kx, ky, kz):
@@ -187,15 +219,7 @@ class PsfGenerator3D:
         if self.lls_excitation_profile is not None:
 
             if lls_defocus_offset is not None:
-                if np.isscalar(lls_defocus_offset):
-                    w = self.lls_excitation_profile.shape[0] // 2
-                    focal_plane_index = w + np.round(lls_defocus_offset / self.dz).astype(int)
-                    defocused_lls_excitation_profile = self.lls_excitation_profile[
-                        max(0, focal_plane_index - w):min(focal_plane_index + w, self.lls_excitation_profile.shape[0])
-                    ]
-                    _psf *= defocused_lls_excitation_profile
-                else:
-                    raise Exception(f"Unknown format for `lls_defocus_offset`: {lls_defocus_offset}")
+                _psf *= self.defocus_excitation_profile(offset=lls_defocus_offset, desired_shape=_psf.shape[0])
             else:
                 _psf *= self.lls_excitation_profile
 

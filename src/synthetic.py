@@ -331,10 +331,12 @@ class SyntheticPSF:
             )
 
         if isinstance(lls_defocus_offset, tuple):
-            if phi.peak2valley(na=1.0) <= 1.:
-                lls_defocus_offset = randuniform(lls_defocus_offset)
-            else:
-                lls_defocus_offset = 0.
+            lls_defocus_offset = randuniform(lls_defocus_offset)
+
+            # if phi.peak2valley(na=1.0) <= 1.:
+            #     lls_defocus_offset = randuniform(lls_defocus_offset)
+            # else:
+            #     lls_defocus_offset = 0.
 
         psf = self.psfgen.incoherent_psf(phi, lls_defocus_offset=lls_defocus_offset)
 
