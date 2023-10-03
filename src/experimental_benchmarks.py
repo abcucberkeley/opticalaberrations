@@ -183,7 +183,14 @@ def phasenet_heatmap(
         mode_weights='pyramid',
     )
 
-    if iter_num == 1:
+    if Path(f'{savepath}_predictions.csv').exists():
+        # continue from previous results, ignoring criteria
+        results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
+
+        if iter_num == results['iter_num'].values.max():
+            return results  # already computed
+
+    else:
         # on first call, setup the dataframe with the 0th iteration stuff
         results = eval.collect_data(
             datapath=inputs,
@@ -195,9 +202,6 @@ def phasenet_heatmap(
             psf_type=phasenetgen.psf_type,
             lam_detection=phasenetgen.lam_detection
         )
-    else:
-        # read previous results, ignoring criteria
-        results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
 
     prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
     ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
@@ -265,7 +269,11 @@ def phasenet_heatmap(
 
     for x in ['photons', 'photoelectrons', 'counts', 'counts_p100', 'counts_p99']:
 
-        if x == 'photons' or x == 'photoelectrons':
+        if x == 'photons':
+            label = f'Integrated photons'
+            lims = (0, 10**6)
+            pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
+        elif x == 'photoelectrons':
             label = f'Integrated photoelectrons'
             lims = (0, 10**6)
             pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)

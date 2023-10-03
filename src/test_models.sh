@@ -39,7 +39,7 @@ do
   --taskname modalities \
   --name $MODEL/$EVALSIGN/modalities
 
-  BATCH=2048
+  BATCH=1024
   if [ $M = 'YuMB_lambda510' ];then
     declare -a PSFS=( "YuMB" "Gaussian" "MBSq" "Sinc" "widefield" )
     declare -a PATHS=(
