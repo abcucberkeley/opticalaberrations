@@ -2044,14 +2044,17 @@ def phase_retrieval(
 
     return coefficients
 
+
 def silence(enabled, stdout=None):
     if enabled:
         stdout = os.dup(1)  # silence
         silent = os.open(os.devnull, os.O_WRONLY)
         os.dup2(silent, 1)
-    else:
+    elif stdout is not None:
         os.dup2(stdout, 1)
+
     return stdout
+
 
 @profile
 def decon(
@@ -2063,8 +2066,8 @@ def decon(
     decon_tile: bool = False,   # Decon each tile individually if True, otherwise decon whole volume and extract tiles.
     preloaded: Preloadedmodelclass = None,
     only_use_ideal_psf: bool = False,    # Don't use psf from predictions.
+    task: str = 'decon',    # 'decon' or 'cocoa'
 ):
-    pass
     pd.options.display.width = 200
     pd.options.display.max_columns = 20
 
@@ -2131,14 +2134,42 @@ def decon(
     logger.info(f"window_size = {zw, yw, xw}")
     logger.info(f"      tiles = {ztiles, ytiles, xtiles}")
 
-    tukey = window(('tukey', .5), window_size)
+    if task == 'decon':
+        reconstruct = partial(
+            cuda_decon,
+            dzdata=axial_voxel_size,
+            dxdata=lateral_voxel_size,
+            dzpsf=samplepsfgen.z_voxel_size,
+            dxpsf=samplepsfgen.x_voxel_size,
+            n_iters=iters,
+            skewed_decon=True,
+            deskew=0,
+            )
+    elif task == 'cocoa':
+        from experimental_benchmarks import predict_cocoa
+        reconstruct = partial(
+            predict_cocoa,
+            plot=False,
+            axial_voxel_size=axial_voxel_size,
+            lateral_voxel_size=lateral_voxel_size,
+            na_detection=samplepsfgen.na_detection,
+            lam_detection=samplepsfgen.lam_detection,
+            refractive_index=samplepsfgen.refractive_index,
+            psf_type=samplepsfgen.psf_type,
+            decon=False,
+        )
+    else:
+        logger.error(f'Invalid task given: {task=}')
+        reconstruct = None
 
     if decon_tile:
-    # decon the tiles independently
+        # decon the tiles independently
         for i, (z, y, x) in tqdm(
             enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))),
             total=ztiles*ytiles*xtiles,
-            desc='Deconvolve tiles'
+            desc=f'{task} tiles',
+            unit=f'tiles',
+            position=0
         ):
             w = Wavefront(predictions.loc[z, y, x].values, lam_detection=wavelength)
             kernel = samplepsfgen.single_psf(w, normed=False)
@@ -2152,22 +2183,12 @@ def decon(
 
             psfs[z, y*kyw:(y*kyw)+kyw, x*kxw:(x*kxw)+kxw] = np.max(kernel, axis=0) # mip view for later.
 
-            stdout = silence(True)
+            stdout = silence(task == 'decon')
             decon_vol[
                 z * zw:(z * zw) + zw,
                 y * yw:(y * yw) + yw,
                 x * xw:(x * xw) + xw
-            ] = cuda_decon(
-                tile,
-                psf=kernel,
-                dzdata=axial_voxel_size,
-                dxdata=lateral_voxel_size,
-                dzpsf=samplepsfgen.z_voxel_size,
-                dxpsf=samplepsfgen.x_voxel_size,
-                n_iters=iters,
-                skewed_decon=True,
-                deskew=0,
-            )
+            ] = reconstruct(tile, psf=kernel)
             silence(False, stdout=stdout)
     else:
         # identify all the unique PSFs that we need to decconvolve with
@@ -2175,7 +2196,7 @@ def decon(
         groups = predictions.groupby('psf_id')
 
         # for each psf_id, deconvolve the volume
-        for psf_id in tqdm(predictions['psf_id'].unique(), desc=f'Deconvolve vol with each psf, {iters} RL iterations', unit='vols',   ):
+        for psf_id in tqdm(predictions['psf_id'].unique(), desc=f'Do {task} entire vol with each psf, {iters} RL iterations', unit='vols to decon', position=0):
             df = groups.get_group(psf_id).drop(columns=['p2v', 'psf_id'])
 
             zernikes = df.values[0]  # all rows in this group should be equal. Take the first one as the wavefront.
@@ -2183,18 +2204,8 @@ def decon(
             kernel = samplepsfgen.single_psf(w, normed=False)
             kernel /= np.max(kernel)
 
-            stdout = silence(True)
-            deconv = cuda_decon(
-                vol,
-                psf=kernel,
-                dzdata=axial_voxel_size,
-                dxdata=lateral_voxel_size,
-                dzpsf=samplepsfgen.z_voxel_size,
-                dxpsf=samplepsfgen.x_voxel_size,
-                n_iters=iters,
-                skewed_decon=True,
-                deskew=0,
-            )
+            stdout = silence(task == 'decon')
+            deconv = reconstruct(vol, psf=kernel)
             silence(False, stdout=stdout)
 
             for index, zernikes in df.iterrows():
@@ -2210,16 +2221,16 @@ def decon(
                 ]
 
     if only_use_ideal_psf:
-        savepath = Path(f"{model_pred.with_suffix('')}_ideal_decon.tif")
+        savepath = Path(f"{model_pred.with_suffix('')}_ideal_{task}.tif")
     else:
-        savepath = Path(f"{model_pred.with_suffix('')}_decon.tif")
+        savepath = Path(f"{model_pred.with_suffix('')}_{task}.tif")
 
     imwrite(savepath, decon_vol.astype(np.float32))
     logger.info(f"Decon image saved to : \n{savepath.resolve()}")
 
-    imwrite(f"{model_pred.with_suffix('')}_decon_psfs.tif", psfs.astype(np.float32))
+    imwrite(f"{model_pred.with_suffix('')}_{task}_psfs.tif", psfs.astype(np.float32))
 
-    with Path(f"{model_pred.with_suffix('')}_decon_settings.json").open('w') as f:
+    with Path(f"{model_pred.with_suffix('')}_{task}_settings.json").open('w') as f:
         json = dict(
             model=predictions_settings['model'],
             model_pred=str(model_pred),

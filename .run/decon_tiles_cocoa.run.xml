@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="decon" type="PythonConfigurationType" factoryName="Python" folderName="ao">
+  <configuration default="false" name="decon_tiles_cocoa" type="PythonConfigurationType" factoryName="Python" folderName="ao">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -13,9 +13,9 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="decon $USER_HOME$/nvme2/Data/TestsForThayer/decon_test/exp5_newfish_before_cropped_tiles_predictions.csv --iters 50 --plot" />
+    <option name="PARAMETERS" value="decon &quot;C:\Users\milkied10\Desktop\20230831_fish_exp7_notocord\rotated\before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0070238886msecAbs_-01x_-01y_-01z_0000t_tiles_predictions.csv&quot; --iters 30 --task cocoa --decon_tile" />
     <option name="SHOW_COMMAND_LINE" value="false" />
-    <option name="EMULATE_TERMINAL" value="false" />
+    <option name="EMULATE_TERMINAL" value="true" />
     <option name="MODULE_MODE" value="false" />
     <option name="REDIRECT_INPUT" value="false" />
     <option name="INPUT_FILE" value="" />
