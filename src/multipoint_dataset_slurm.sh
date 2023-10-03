@@ -19,7 +19,7 @@ RAND_VSIZE=false
 
 MODES=15
 TITLE='new_modalities'
-DATASET='train'
+DATASET='test'
 
 MODE_DIST='pyramid'
 OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
