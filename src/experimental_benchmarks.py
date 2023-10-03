@@ -335,9 +335,10 @@ def predict_cocoa(
     refractive_index: float = 1.33,
     decon_iters: int = 30,
     psf_type: str = 'widefield',
-    cocoa_path: Path = Path('cocoa_repo')
+    cocoa_path: Path = Path('cocoa_repo'),
+    decon: bool = True,
 ):
-
+    savepath = inputs.with_suffix('')
     download_cocoa(cocoa_path)
 
     import os
@@ -405,11 +406,13 @@ def predict_cocoa(
         psf_type=psf_type,
     )
 
-    lls_excitation_profile = torch.from_numpy(psfgen.lls_excitation_profile.copy()).type(dtype).cuda(0).view(
-        psfgen.lls_excitation_profile.shape[0],
-        psfgen.lls_excitation_profile.shape[1],
-        psfgen.lls_excitation_profile.shape[2]
-    )
+    if psfgen.lls_excitation_profile is not None:
+        # if psf_type is not 'widefield' or 'confocal'
+        lls_excitation_profile = torch.from_numpy(psfgen.lls_excitation_profile.copy()).type(dtype).cuda(0).view(
+            psfgen.lls_excitation_profile.shape[0],
+            psfgen.lls_excitation_profile.shape[1],
+            psfgen.lls_excitation_profile.shape[2]
+        )
 
     y_max = np.max(img)
     y_min = np.min(img)
@@ -469,7 +472,7 @@ def predict_cocoa(
         loss_list = np.empty(shape=(1 + args.pretraining_num_iter,))
         loss_list[:] = np.NaN
 
-        for step in tqdm(range(args.pretraining_num_iter)):
+        for step in tqdm(range(args.pretraining_num_iter), desc=f"Pretraining (without PSF), {args.pretraining_num_iter} steps", unit='steps'):
             out_x = net_obj(coordinates)
 
             if args.nerf_beta is None:
@@ -488,12 +491,12 @@ def predict_cocoa(
             loss_list[step] = loss.item()
 
         t_end = time.time()
-        print('Initialization - Elapsed time: ' + str(t_end - t_start) + ' seconds.')
+        logger.info(f'Initialization: {(t_end - t_start):.2f} elapsed seconds.')
 
         # torch.save(net_obj.state_dict(), net_obj_save_path_pretrained)
-        print('Pre-trained model saved.')
+        # print('Pre-trained model saved.')
 
-    ## kernel with simple coefficients
+    # kernel with simple coefficients
     net_ker = cocoa_models.optimal_kernel(
         max_val=args.kernel_max_val,
         order_up_to=args.kernel_order_up_to,
@@ -520,7 +523,7 @@ def predict_cocoa(
 
     t_start = time.time()
 
-    for step in tqdm(range(args.training_num_iter)):
+    for step in tqdm(range(args.training_num_iter), desc=f"Training (with PSF), {args.training_num_iter} steps", unit='steps'):
         out_x = net_obj(coordinates)
 
         if args.nerf_beta is None:
@@ -535,7 +538,7 @@ def predict_cocoa(
 
         out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / y_.shape[0]
 
-        if psf_type != 'widefield':
+        if psf_type != 'widefield' :
             out_k_m *= lls_excitation_profile
 
         k_vis = psf.masked_phase_array(wf, normalized=args.normalized)
@@ -567,7 +570,7 @@ def predict_cocoa(
         lr_ker_list[step] = optimizer.param_groups[1]['lr']
 
     t_end = time.time()
-    print('Training - Elapsed time: ' + str(t_end - t_start) + ' seconds.')
+    logger.info(f'Training: {(t_end - t_start):.2f} elapsed seconds.')
 
     y = cocoa_utils.torch_to_np(y)
     out_k_m = cocoa_utils.torch_to_np(out_k_m)
@@ -590,21 +593,23 @@ def predict_cocoa(
     ]
     df = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
     df.index.name = 'ansi'
-    df.to_csv(f"{inputs.with_suffix('')}_cocoa_zernike_coefficients.csv")
 
-    imwrite(f"{inputs.with_suffix('')}_cocoa_predicted_psf.tif", out_k_m, dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_wavefront.tif", wavefront.wave(), dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_predicted_wavefront.tif", predicted_wavefront, dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_estimated.tif", out_y, dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_reconstructed.tif", out_x_m, dtype=np.float32)
+    df.to_csv(f"{savepath}_cocoa_zernike_coefficients.csv")
+
+    imwrite(f"{savepath}_cocoa_predicted_psf.tif", out_k_m, dtype=np.float32)
+    imwrite(f"{savepath}_cocoa_wavefront.tif", wavefront.wave(), dtype=np.float32)
+    imwrite(f"{savepath}_cocoa_predicted_wavefront.tif", predicted_wavefront, dtype=np.float32)
+    imwrite(f"{savepath}_cocoa_estimated.tif", out_y, dtype=np.float32)
+    imwrite(f"{savepath}_cocoa_reconstructed.tif", out_x_m, dtype=np.float32)
 
     predicted_psf = psfgen.incoherent_psf(phi=wavefront)
     predicted_psf /= predicted_psf.sum()
-    out_decon = utils.fft_decon(kernel=predicted_psf, sample=img, iters=decon_iters)
+    if decon:
+        out_decon = utils.fft_decon(kernel=predicted_psf, sample=img, iters=decon_iters)
+        imwrite(f"{savepath}_cocoa_deconvolved.tif", out_decon, dtype=np.float32)
 
-    imwrite(f"{inputs.with_suffix('')}_cocoa_psf.tif", predicted_psf, dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_deconvolved.tif", out_decon, dtype=np.float32)
-
+    imwrite(f"{savepath}_cocoa_psf.tif", predicted_psf, dtype=np.float32)
+    
     if plot:
         plt.rcParams.update({
             'font.size': 10,
@@ -618,7 +623,7 @@ def predict_cocoa(
         fig = plt.figure()
         mat = plt.imshow(predicted_wavefront)
         cbar = plt.colorbar(mat)
-        vis.savesvg(fig, Path(f"{inputs.with_suffix('')}_cocoa_predicted_wavefront.svg"))
+        vis.savesvg(fig, Path(f"{savepath}_cocoa_predicted_wavefront.svg"))
 
         fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(12, 16))
 
@@ -662,12 +667,18 @@ def predict_cocoa(
             label='Deconvolved (MIP) [$\gamma$=.5]'
         )
 
-        vis.savesvg(fig, Path(f"{inputs.with_suffix('')}_cocoa_mips.svg"))
+        vis.savesvg(fig, Path(f"{savepath}_cocoa_mips.svg"))
 
         vis.diagnosis(
             pred=wavefront,
             pred_std=Wavefront(np.zeros_like(wavefront.amplitudes_ansi)),
-            save_path=Path(f"{inputs.with_suffix('')}_cocoa_diagnosis"),
+            save_path=Path(f"{savepath}_cocoa_diagnosis"),
         )
+        logger.info(f'Figure: \t{Path(f"{savepath}_cocoa_mips.svg").resolve()}')
 
+    logger.info(f"Raw data: \t{Path(f'{savepath}.tif').resolve()}")
+    logger.info(f"Saved prediction of the raw data to: \t{Path(f'{savepath}_cocoa_estimated.tif').resolve()}")
+    logger.info(f"Saved prediction of the object to:   \t{Path(f'{savepath}_cocoa_reconstructed.tif').resolve()}")
+    if decon:
+        logger.info(f"Saved deconvolved (w/ cocoa PSF) to: \t{Path(f'{savepath}_cocoa_deconvolved.tif').resolve()}")
     return wavefront.amplitudes_ansi
