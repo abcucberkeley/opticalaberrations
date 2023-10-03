@@ -545,10 +545,12 @@ def predict_cocoa(
 
         wf = net_ker.k
 
-        out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / y_.shape[0]
+        if psf_type == 'widefield':
+            out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / y_.shape[0]
 
-        if psf_type != 'widefield' :
-            out_k_m *= lls_excitation_profile
+        else:
+            out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) * lls_excitation_profile
+            out_k_m /= sum(out_k_m)
 
         k_vis = psf.masked_phase_array(wf, normalized=args.normalized)
         out_y = cocoa_utils.fft_convolve(out_x_m, out_k_m, mode='fftn')
