@@ -183,12 +183,12 @@ def phasenet_heatmap(
         mode_weights='pyramid',
     )
 
-    if Path(f'{savepath}_predictions.csv').exists():
+    if inputs.suffix == '.csv':
+        results = pd.read_csv(inputs, header=0, index_col=0)
+
+    elif Path(f'{savepath}_predictions.csv').exists():
         # continue from previous results, ignoring criteria
         results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
-
-        if iter_num == results['iter_num'].values.max():
-            return results  # already computed
 
     else:
         # on first call, setup the dataframe with the 0th iteration stuff
@@ -203,66 +203,67 @@ def phasenet_heatmap(
             lam_detection=phasenetgen.lam_detection
         )
 
-    prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
-    ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
-    residual_cols = [col for col in results.columns if col.endswith('_residual')]
-    previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
+    if iter_num != results['iter_num'].values.max():
+        prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
+        ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
+        residual_cols = [col for col in results.columns if col.endswith('_residual')]
+        previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
 
-    # create realspace images for the current iteration
-    paths = utils.multiprocess(
-        func=partial(
-            eval.generate_sample,
-            iter_number=iter_num,
-            savedir=savepath.resolve(),
-            data=previous,
-            psfgen=phasenetgen,
-            no_phase=False,
-            digital_rotations=None,
-            no_beads=no_beads
-        ),
-        jobs=previous['id'].values,
-        desc=f'Generate samples ({savepath.resolve()})',
-        unit=' sample',
-        cores=-1
-    )
+        # create realspace images for the current iteration
+        paths = utils.multiprocess(
+            func=partial(
+                eval.generate_sample,
+                iter_number=iter_num,
+                savedir=savepath.resolve(),
+                data=previous,
+                psfgen=phasenetgen,
+                no_phase=False,
+                digital_rotations=None,
+                no_beads=no_beads
+            ),
+            jobs=previous['id'].values,
+            desc=f'Generate samples ({savepath.resolve()})',
+            unit=' sample',
+            cores=-1
+        )
 
-    current = previous.copy()
-    current['iter_num'] = iter_num
-    current['file'] = paths
-    current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
+        current = previous.copy()
+        current['iter_num'] = iter_num
+        current['file'] = paths
+        current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
 
-    current[ground_truth_cols] = previous[residual_cols]
-    current[prediction_cols] = np.array([
-        predict_phasenet(p, phasenet=phasenet, phasenetgen=phasenetgen)
-        for p in paths
-    ])
+        current[ground_truth_cols] = previous[residual_cols]
+        current[prediction_cols] = np.array([
+            predict_phasenet(p, phasenet=phasenet, phasenetgen=phasenetgen)
+            for p in paths
+        ])
 
-    if eval_sign == 'positive_only':
-        current[ground_truth_cols] = current[ground_truth_cols].abs()
-        current[prediction_cols] = current[prediction_cols].abs()
+        if eval_sign == 'positive_only':
+            current[ground_truth_cols] = current[ground_truth_cols].abs()
+            current[prediction_cols] = current[prediction_cols].abs()
 
-    current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
+        current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
 
-    # compute residuals for each sample
-    current['residuals'] = current.apply(
-        lambda row: Wavefront(row[residual_cols].values, lam_detection=phasenetgen.lam_detection).peak2valley(na=na),
-        axis=1
-    )
+        # compute residuals for each sample
+        current['residuals'] = current.apply(
+            lambda row: Wavefront(row[residual_cols].values, lam_detection=phasenetgen.lam_detection).peak2valley(na=na),
+            axis=1
+        )
 
-    current['residuals_umRMS'] = current.apply(
-        lambda row: np.linalg.norm(row[residual_cols].values),
-        axis=1
-    )
+        current['residuals_umRMS'] = current.apply(
+            lambda row: np.linalg.norm(row[residual_cols].values),
+            axis=1
+        )
 
-    results = pd.concat([results, current], ignore_index=True, sort=False)
+        results = pd.concat([results, current], ignore_index=True, sort=False)
 
-    if savepath is not None:
-        try:
-            results.to_csv(f'{savepath}_predictions.csv')
-        except PermissionError:
-            savepath = f'{savepath}_x'
-            results.to_csv(f'{savepath}_predictions.csv')
-        logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
+        if savepath is not None:
+            try:
+                results.to_csv(f'{savepath}_predictions.csv')
+            except PermissionError:
+                savepath = f'{savepath}_x'
+                results.to_csv(f'{savepath}_predictions.csv')
+            logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
 
     df = results[results['iter_num'] == iter_num]
     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
