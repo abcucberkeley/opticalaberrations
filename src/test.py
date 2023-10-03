@@ -1,4 +1,5 @@
 import atexit
+import gc
 import os
 import re
 import subprocess
@@ -10,7 +11,6 @@ import time
 from pathlib import Path
 import tensorflow as tf
 from functools import partial
-
 
 try:
     import cupy as cp
@@ -319,6 +319,8 @@ def main(args=None):
             p.start()
             p.join()
             p.close()
+            gc.collect()
+            tf.keras.backend.clear_session()
 
             logging.info(
                 f'Iteration #{k} took {(time.time() - t) / 60:.1f} minutes to run. '
