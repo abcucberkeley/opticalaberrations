@@ -2068,6 +2068,13 @@ def decon(
     only_use_ideal_psf: bool = False,    # Don't use psf from predictions.
     task: str = 'decon',    # 'decon' or 'cocoa'
 ):
+    if only_use_ideal_psf:
+        savepath = Path(f"{model_pred.with_suffix('')}_ideal_{task}.tif")
+    else:
+        savepath = Path(f"{model_pred.with_suffix('')}_{task}.tif")
+
+    logger.info(f"Decon image will be saved to : \n{savepath.resolve()}")
+
     pd.options.display.width = 200
     pd.options.display.max_columns = 20
 
@@ -2121,7 +2128,10 @@ def decon(
     if vol.shape != tuple(predictions_settings['input_shape']):
         logger.error(f"vol.shape {vol.shape} != json's input_shape {tuple(predictions_settings['input_shape'])}")
 
-    decon_vol = np.zeros_like(vol)
+    decon_vol = vol.copy()
+    est_vol   = vol.copy()
+    imwrite(savepath, decon_vol.astype(np.float32))
+
     psfs = np.zeros(
         (ztiles, ytiles*samplepsfgen.psf_shape[1], xtiles*samplepsfgen.psf_shape[2]),
         dtype=np.float32
@@ -2162,6 +2172,8 @@ def decon(
         logger.error(f'Invalid task given: {task=}')
         reconstruct = None
 
+    border = 0
+
     if decon_tile:
         # decon the tiles independently
         for i, (z, y, x) in tqdm(
@@ -2176,20 +2188,26 @@ def decon(
             kernel /= np.max(kernel)
 
             tile = vol[
-                z*zw:(z*zw)+zw,
-                y*yw:(y*yw)+yw,
-                x*xw:(x*xw)+xw
+                max(z*zw-border, 0):min((z*zw)+zw+border, vol.shape[0]),
+                max(y*yw-border, 0):min((y*yw)+yw+border, vol.shape[1]),
+                max(x*xw-border, 0):min((x*xw)+xw+border, vol.shape[2]),
             ]
 
             psfs[z, y*kyw:(y*kyw)+kyw, x*kxw:(x*kxw)+kxw] = np.max(kernel, axis=0) # mip view for later.
 
             stdout = silence(task == 'decon')
-            decon_vol[
-                z * zw:(z * zw) + zw,
-                y * yw:(y * yw) + yw,
-                x * xw:(x * xw) + xw
-            ] = reconstruct(tile, psf=kernel)
+            (est_vol[
+                max(z * zw - border, 0):min((z * zw) + zw + border, vol.shape[0]),
+                max(y * yw - border, 0):min((y * yw) + yw + border, vol.shape[1]),
+                max(x * xw - border, 0):min((x * xw) + xw + border, vol.shape[2]),
+            ], decon_vol[
+                max(z * zw - border, 0):min((z * zw) + zw + border, vol.shape[0]),
+                max(y * yw - border, 0):min((y * yw) + yw + border, vol.shape[1]),
+                max(x * xw - border, 0):min((x * xw) + xw + border, vol.shape[2]),
+            ]) = reconstruct(tile, psf=kernel)
             silence(False, stdout=stdout)
+            imwrite(savepath, decon_vol)
+            imwrite(f"{savepath.with_suffix('')}_estimated.tif", est_vol)
     else:
         # identify all the unique PSFs that we need to decconvolve with
         predictions['psf_id'] = predictions.groupby(predictions.columns.values.tolist(), sort=False).grouper.group_info[0]
@@ -2211,19 +2229,17 @@ def decon(
             for index, zernikes in df.iterrows():
                 z, y, x = index
                 decon_vol[
-                    z * zw:(z * zw) + zw,
-                    y * yw:(y * yw) + yw,
-                    x * xw:(x * xw) + xw
+                    max(z * zw - border, 0):min((z * zw) + zw + border, vol.shape[0]),
+                    max(y * yw - border, 0):min((y * yw) + yw + border, vol.shape[1]),
+                    max(x * xw - border, 0):min((x * xw) + xw + border, vol.shape[2]),
                 ] = deconv[
-                    z * zw:(z * zw) + zw,
-                    y * yw:(y * yw) + yw,
-                    x * xw:(x * xw) + xw
+                    max(z * zw - border, 0):min((z * zw) + zw + border, vol.shape[0]),
+                    max(y * yw - border, 0):min((y * yw) + yw + border, vol.shape[1]),
+                    max(x * xw - border, 0):min((x * xw) + xw + border, vol.shape[2]),
                 ]
 
-    if only_use_ideal_psf:
-        savepath = Path(f"{model_pred.with_suffix('')}_ideal_{task}.tif")
-    else:
-        savepath = Path(f"{model_pred.with_suffix('')}_{task}.tif")
+            imwrite(savepath, decon_vol.astype(np.float32))
+
 
     imwrite(savepath, decon_vol.astype(np.float32))
     logger.info(f"Decon image saved to : \n{savepath.resolve()}")

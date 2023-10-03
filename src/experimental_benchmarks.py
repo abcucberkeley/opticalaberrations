@@ -411,8 +411,10 @@ def predict_cocoa(
     )
 
     if psfgen.lls_excitation_profile is not None:
+        lls_excitation_profile = psfgen.lls_excitation_profile.copy()
+        lls_excitation_profile /= np.max(lls_excitation_profile)
         # if psf_type is not 'widefield' or 'confocal'
-        lls_excitation_profile = torch.from_numpy(psfgen.lls_excitation_profile.copy()).type(dtype).cuda(0).view(
+        lls_excitation_profile = torch.from_numpy(lls_excitation_profile).type(dtype).cuda(0).view(
             psfgen.lls_excitation_profile.shape[0],
             psfgen.lls_excitation_profile.shape[1],
             psfgen.lls_excitation_profile.shape[2]
@@ -476,7 +478,7 @@ def predict_cocoa(
         loss_list = np.empty(shape=(1 + args.pretraining_num_iter,))
         loss_list[:] = np.NaN
 
-        for step in tqdm(range(args.pretraining_num_iter), desc=f"Pretraining (without PSF), {args.pretraining_num_iter} steps", unit='steps', leave=False):
+        for step in tqdm(range(args.pretraining_num_iter), desc=f"Pretraining (without PSF), {args.pretraining_num_iter} steps", unit='steps', leave=False, delay=5, mininterval=2):
             out_x = net_obj(coordinates)
 
             if args.nerf_beta is None:
@@ -532,7 +534,7 @@ def predict_cocoa(
 
     t_start = time.time()
 
-    for step in tqdm(range(args.training_num_iter), desc=f"Training (with PSF), {args.training_num_iter} steps", unit='steps', leave=False):
+    for step in tqdm(range(args.training_num_iter), desc=f"Training (with PSF), {args.training_num_iter} steps", unit='steps', leave=False, delay=5, mininterval=2):
         out_x = net_obj(coordinates)
 
         if args.nerf_beta is None:
@@ -549,8 +551,7 @@ def predict_cocoa(
             out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / y_.shape[0]
 
         else:
-            out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) * lls_excitation_profile
-            out_k_m /= sum(out_k_m)
+            out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / y_.shape[0] * lls_excitation_profile
 
         k_vis = psf.masked_phase_array(wf, normalized=args.normalized)
         out_y = cocoa_utils.fft_convolve(out_x_m, out_k_m, mode='fftn')
@@ -585,7 +586,7 @@ def predict_cocoa(
 
     y = cocoa_utils.torch_to_np(y)
     out_k_m = cocoa_utils.torch_to_np(out_k_m)
-    out_x_m = cocoa_utils.torch_to_np(out_x_m) * (y_max - y_min) + y_min  # undo normalization: (img - y_min) / (y_max - y_min)
+    reconstructed = cocoa_utils.torch_to_np(out_x_m) * np.sum(out_k_m) * (y_max - y_min) + y_min  # undo normalization: (img - y_min) / (y_max - y_min) = out_x_m
     out_y = cocoa_utils.torch_to_np(out_y) * (y_max - y_min) + y_min   # undo normalization: (img - y_min) / (y_max - y_min) = out_y
     zernikes = cocoa_utils.torch_to_np(wf)
     predicted_wavefront = np.fft.fftshift(k_vis.detach().cpu().numpy())
@@ -612,7 +613,7 @@ def predict_cocoa(
         imwrite(f"{savepath}_cocoa_wavefront.tif", wavefront.wave(), dtype=np.float32)
         imwrite(f"{savepath}_cocoa_predicted_wavefront.tif", predicted_wavefront, dtype=np.float32)
         imwrite(f"{savepath}_cocoa_estimated.tif", out_y, dtype=np.float32)
-        imwrite(f"{savepath}_cocoa_reconstructed.tif", out_x_m, dtype=np.float32)
+        imwrite(f"{savepath}_cocoa_reconstructed.tif", reconstructed, dtype=np.float32)
 
         logger.info(f"Raw data: \t{Path(f'{savepath}.tif').resolve()}")
         logger.info(f"Saved prediction of the raw data to: \t{Path(f'{savepath}_cocoa_estimated.tif').resolve()}")
@@ -664,7 +665,7 @@ def predict_cocoa(
             )
 
             vis.plot_mip(
-                vol=out_x_m/out_x_m.max(),
+                vol=reconstructed/reconstructed.max(),
                 xy=axes[2, 0],
                 xz=axes[2, 1],
                 yz=axes[2, 2],
@@ -692,4 +693,4 @@ def predict_cocoa(
             )
             logger.info(f'Figure: \t{Path(f"{savepath}_cocoa_mips.svg").resolve()}')
 
-    return out_x_m
+    return out_y, reconstructed
