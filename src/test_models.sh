@@ -9,10 +9,11 @@ ROTATIONS='--digital_rotations'
 ITERS=5
 MAX=10000
 PRETRAINED="../pretrained_models/"
-DATASET="new_modalities_2m"
+DATASET="new_modalities"
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
 EVALSIGN="signed"
 NA=1.0
+A100_NODES=( "g0004.abc0" "g0005.abc0" "g0006.abc0" )
 
 for M in YuMB_lambda510 v2Hex_lambda510
 do
@@ -39,7 +40,7 @@ do
   --taskname modalities \
   --name $MODEL/$EVALSIGN/modalities
 
-  BATCH=1024
+  BATCH=2048
   if [ $M = 'YuMB_lambda510' ];then
     declare -a PSFS=( "YuMB" "Gaussian" "MBSq" "Sinc" "widefield" )
     declare -a PATHS=(
@@ -62,6 +63,7 @@ do
 
   for S in `seq 1 ${#PSFS[@]}`
   do
+    NODE="${A100_NODES[$(( $S % ${#A100_NODES[@]} ))]}"
     PTYPE="${PSFS[$S-1]}"
     PSF_TYPE="${PATHS[$S-1]}"
 
@@ -71,12 +73,12 @@ do
       LAM=.510
     fi
 
-    python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
+    python manager.py slurm test.py --nodelist $NODE --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
     --task "$MODEL.h5 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --n_samples $MAX --niter $ITERS --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
     --taskname $NA \
     --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE
 
-    python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
+    python manager.py slurm test.py --nodelist $NODE --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
     --task "$MODEL.h5 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --n_samples $MAX --niter 1 --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
     --taskname $NA \
     --name $MODEL/$EVALSIGN/densityheatmaps/mode-$PTYPE

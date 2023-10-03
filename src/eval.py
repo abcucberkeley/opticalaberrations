@@ -53,6 +53,7 @@ def simulate_beads(
     noise=True,
     fill_radius=.4,
     fast=False,
+    scale_by_maxcounts=None
 ):
 
     if beads is None:
@@ -68,9 +69,8 @@ def simulate_beads(
         psf /= psf.max()
         psf *= maxcounts
     else:
-        if psf_type == 'widefield':  # normalize PSF by the total energy in the focal plane
-            focal_plane_index = [(w // 2) - 1 for w in psf.shape]
-            psf /= np.sum(psf[focal_plane_index[0], focal_plane_index[1], focal_plane_index[2]])
+        if psf_type == 'widefield':
+            psf /= psf.max()
         else:
             psf /= np.sum(psf)
 
@@ -98,6 +98,10 @@ def simulate_beads(
 
     else:
         inputs = utils.fftconvolution(sample=beads, kernel=psf)  # takes 1 second.
+
+    if psf_type == 'widefield':  # scale widefield PSF by maxcounts of the GT PSF
+        inputs /= np.max(inputs)
+        inputs *= utils.electrons2photons(utils.counts2electrons(scale_by_maxcounts))
 
     if noise:
         inputs = utils.add_noise(inputs)
@@ -152,14 +156,16 @@ def generate_sample(
                 beads=None,
                 fill_radius=0,
                 object_size=0,
-                photons=hashtable['photons']
+                photons=hashtable['photons'],
+                scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
             )
         else:
             noisy_img = simulate_beads(
                 psf=psf,
                 psf_type=psfgen.psf_type,
                 beads=ref,
-                photons=hashtable['photons']
+                photons=hashtable['photons'],
+                scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
             )
 
         if savedir is not None:
