@@ -507,6 +507,11 @@ def predict_cocoa(
         piston_tip_tilt=False
     )  # 5e-2
 
+    # Dan thinks: The net_ker.parameters are given to Adam to optimize (along with the weights of the model) to
+    # minimize loss. The net_ker.parameters() gets the named parameters (which is just _k which is a list of zernikes).
+    # This list then gets made into a wavefront to generate an aberrated PSF which is convolved with the object (out_x),
+    # to calculate the loss.
+
     optimizer = torch.optim.Adam([{'params': net_obj.parameters(), 'lr': args.training_lr_obj},  # 1e-3
                                   {'params': net_ker.parameters(), 'lr': args.training_lr_ker}],  # 4e-3
                                  betas=(0.9, 0.999), eps=1e-8)
@@ -578,8 +583,8 @@ def predict_cocoa(
 
     y = cocoa_utils.torch_to_np(y)
     out_k_m = cocoa_utils.torch_to_np(out_k_m)
-    out_x_m = cocoa_utils.torch_to_np(out_x_m)
-    out_y = cocoa_utils.torch_to_np(out_y)
+    out_x_m = cocoa_utils.torch_to_np(out_x_m) * (y_max - y_min) + y_min  # undo normalization: (img - y_min) / (y_max - y_min)
+    out_y = cocoa_utils.torch_to_np(out_y) * (y_max - y_min) + y_min   # undo normalization: (img - y_min) / (y_max - y_min) = out_y
     zernikes = cocoa_utils.torch_to_np(wf)
     predicted_wavefront = np.fft.fftshift(k_vis.detach().cpu().numpy())
 
