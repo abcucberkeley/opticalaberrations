@@ -195,6 +195,29 @@ def run_task(iter_num, args):
                 psf_type=args.psf_type,
                 lam_detection=args.wavelength
             )
+        elif args.target == "confidence":
+            savepath = eval.eval_confidence(
+                model=args.model,
+                eval_sign=args.eval_sign,
+                batch_size=args.batch_size,
+                digital_rotations=args.digital_rotations,
+            )
+        elif args.target == 'confidence_heatmap':
+            savepath = eval.confidence_heatmap(
+                iter_num=iter_num,
+                modelpath=args.model,
+                datadir=args.datadir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=args.batch_size,
+                eval_sign=args.eval_sign,
+                digital_rotations=args.digital_rotations,
+                plot=args.plot,
+                plot_rotations=args.plot_rotations,
+                psf_type=args.psf_type,
+                lam_detection=args.wavelength
+            )
         elif args.target == 'densityheatmap':
             savepath = eval.densityheatmap(
                 iter_num=iter_num,
