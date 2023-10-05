@@ -1064,12 +1064,12 @@ def predict_dataset(
     ignore_modes = list(map(int, ignore_modes))
     logger.info(f"Ignoring modes: {ignore_modes}")
     logger.info(f"[Batch size={batch_size}] {desc}")
-    inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE).batch(batch_size)
+    inputs = inputs.with_options(options).prefetch(tf.data.AUTOTUNE).batch(batch_size)
     # prefetch will fill GPU RAM
 
     if digital_rotations is not None:
         inputs = inputs.map(lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:])))
-        inputs = inputs.unbatch().batch(batch_size).with_options(options).cache().prefetch(tf.data.AUTOTUNE)
+        inputs = inputs.unbatch().batch(batch_size).with_options(options).prefetch(tf.data.AUTOTUNE)
 
         # for i in inputs.take(1):
         #     logger.info(i.numpy().shape)
