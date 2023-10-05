@@ -72,7 +72,8 @@ do
       LAM=.510
     fi
 
-    for i in {1..$ITERS}; do
+    for (( i=1; i<=$ITERS; i++ ))
+    do
       python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
       --task "$MODEL.h5 --niter $i --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
       --taskname $NA \
