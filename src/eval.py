@@ -387,7 +387,7 @@ def iter_evaluate(
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=rotations if digital_rotations else None,
-        cpu_workers=-1,
+        cpu_workers=8,
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
