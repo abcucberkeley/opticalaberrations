@@ -413,7 +413,7 @@ def iter_evaluate(
     primary_modes = current[prediction_cols].idxmax(axis=1).replace(r'_prediction', r'_confidence', regex=True)
     current['confidence'] = [
         utils.microns2waves(current.loc[i, primary_modes[i]], wavelength=gen.lam_detection)
-        for i in range(current.shape[0])
+        for i in primary_modes.index.values
     ]
 
     current['confidence_sum'] = current.apply(
