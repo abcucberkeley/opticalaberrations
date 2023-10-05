@@ -14,6 +14,8 @@ DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX
 EVALSIGN="signed"
 NA=1.0
 A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
+GPUS=4
+CPUS=16
 
 for M in v2Hex_lambda510 YuMB_lambda510-nostem YuMB_lambda510-nostem-radial-encoding-p16 YuMB_lambda510-nostem-radial-encoding-p4 YuMB_lambda510-nostem-radial-encoding-p1-round2
 do
@@ -40,7 +42,7 @@ do
 #  --taskname modalities \
 #  --name $MODEL/$EVALSIGN/modalities
 
-  BATCH=2048
+  BATCH=$(( 896 * $GPUS ))
   if [ $M = 'v2Hex_lambda510' ];then
     declare -a PSFS=( "v2Hex" "ACHex" "MBHex" "v2HexRect")
     declare -a PATHS=(
@@ -74,13 +76,13 @@ do
 
     for (( i=1; i<=$ITERS; i++ ))
     do
-      python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
+      python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
       --task "$MODEL.h5 --niter $i --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
       --taskname $NA \
       --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE
     done
 
-    #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
+    #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
     #--task "$MODEL.h5 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --n_samples $MAX --niter 1 --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
     #--taskname $NA \
     #--name $MODEL/$EVALSIGN/densityheatmaps/mode-$PTYPE
@@ -88,13 +90,13 @@ do
 done
 
 
-#python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '500GB' --cpus 20 --gpus 4 \
+#python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '500GB' --cpus 20 --gpus $GPUS \
 #--task "phasenet_heatmap $DATA --no_beads --n_samples $MAX --eval_sign $EVALSIGN" \
 #--taskname $NA \
 #--name ../src/phasenet_repo/$EVALSIGN/psf
 #
 #
-#python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '500GB' --cpus 20 --gpus 4 \
+#python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '500GB' --cpus 20 --gpus $GPUS \
 #--task "phasenet_heatmap $DATA --n_samples $MAX --eval_sign $EVALSIGN" \
 #--taskname $NA \
 #--name ../src/phasenet_repo/$EVALSIGN/bead
