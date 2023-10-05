@@ -17,7 +17,7 @@ A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
 GPUS=4
 CPUS=16
 
-for M in v2Hex_lambda510 YuMB_lambda510-nostem YuMB_lambda510-nostem-radial-encoding-p16 YuMB_lambda510-nostem-radial-encoding-p4 YuMB_lambda510-nostem-radial-encoding-p1-round2
+for M in YuMB_lambda510 YuMB_lambda510-nostem YuMB_lambda510-nostem-radial-encoding-p16 YuMB_lambda510-nostem-radial-encoding-p4 YuMB_lambda510-nostem-radial-encoding-p1-round2
 do
   MODEL="$PRETRAINED/opticalnet-$MODES-$M"
 

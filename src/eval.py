@@ -184,6 +184,32 @@ def generate_sample(
             return emb
 
 
+@profile
+def eval_template(shape, psf_type, lam_detection):
+    return {
+        # image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
+        'id': np.arange(shape[0], dtype=int),
+        'iter_num': np.zeros(shape[0], dtype=int),          # iteration index.
+        'aberration': np.zeros(shape[0], dtype=float),      # initial p2v aberration. Constant over iterations.
+        'residuals': np.zeros(shape[0], dtype=float),       # remaining p2v aberration after ML correction.
+        'residuals_umRMS': np.zeros(shape[0], dtype=float), # remaining umRMS aberration after ML correction.
+        'confidence': np.zeros(shape[0], dtype=float),      # model's confidence for the primary mode (waves)
+        'confidence_sum': np.zeros(shape[0], dtype=float),  # model's confidence for the all modes (waves)
+        'confidence_umRMS': np.zeros(shape[0], dtype=float),# model's confidence for the all modes (umRMS)
+        'photons': np.zeros(shape[0], dtype=int),           # integrated photons
+        'counts': np.zeros(shape[0], dtype=int),            # integrated counts
+        'counts_mode': np.zeros(shape[0], dtype=int),       # counts mode
+        'distance': np.zeros(shape[0], dtype=float),        # average distance to nearst bead
+        'neighbors': np.zeros(shape[0], dtype=int),         # number of beads
+        'file': np.empty(shape[0], dtype=Path),             # path to realspace images
+        'file_windows': np.empty(shape[0], dtype=Path),     # stupid windows path
+        'beads': np.zeros(shape[0], dtype=Path),
+        'psf_type': np.full(shape[0], dtype=str, fill_value=psf_type),
+        'wavelength': np.full(shape[0], dtype=float, fill_value=lam_detection),
+        # path to binary image file filled with zeros except at location of beads
+    }
+
+
 def collect_data(
     datapath,
     model,
@@ -219,26 +245,7 @@ def collect_data(
     metadata = np.array(list(metadata.take(-1)))
     ys = np.zeros((metadata.shape[0], predicted_modes))
     counts_percentiles = np.zeros((metadata.shape[0], 100))
-
-    results = {
-        # image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
-        'id': np.arange(metadata.shape[0], dtype=int),
-        'iter_num': np.zeros(metadata.shape[0], dtype=int),          # iteration index.
-        'aberration': np.zeros(metadata.shape[0], dtype=float),      # initial p2v aberration. Constant over iterations.
-        'residuals': np.zeros(metadata.shape[0], dtype=float),       # remaining p2v aberration after ML correction.
-        'residuals_umRMS': np.zeros(metadata.shape[0], dtype=float), # remaining umRMS aberration after ML correction.
-        'photons': np.zeros(metadata.shape[0], dtype=int),           # integrated photons
-        'counts': np.zeros(metadata.shape[0], dtype=int),            # integrated counts
-        'counts_mode': np.zeros(metadata.shape[0], dtype=int),       # counts mode
-        'distance': np.zeros(metadata.shape[0], dtype=float),        # average distance to nearst bead
-        'neighbors': np.zeros(metadata.shape[0], dtype=int),         # number of beads
-        'file': np.empty(metadata.shape[0], dtype=Path),             # path to realspace images
-        'file_windows': np.empty(metadata.shape[0], dtype=Path),     # stupid windows path
-        'beads': np.zeros(metadata.shape[0], dtype=Path),
-        'psf_type': np.full(metadata.shape[0], dtype=str, fill_value=psf_type),
-        'wavelength': np.full(metadata.shape[0], dtype=float, fill_value=lam_detection),
-        # path to binary image file filled with zeros except at location of beads
-    }
+    results = eval_template(shape=metadata.shape, psf_type=psf_type, lam_detection=lam_detection)
 
     # see `data_utils.get_sample` to check order of objects returned
     for i in range(metadata.shape[0]):
@@ -446,6 +453,7 @@ def plot_heatmap_p2v(
     savepath: Path,
     label='Integrated photoelectrons',
     color_label='Residuals',
+    hist_col='confidence',
     lims=(0, 100),
     ax=None,
     cax=None,
@@ -547,19 +555,21 @@ def plot_heatmap_p2v(
                 (histograms.pbins <= 1e5) &
                 (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
             ]
+            xmax = np.round(np.max(x[hist_col]), 1)
+
             ax1 = sns.histplot(
                 ax=ax1,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
-            ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
-            ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2, label='Median')
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2, label='Mean')
             ax1.set_ylim(0, 30)
-            ax1.set_xlim(0, 3)
+            ax1.set_xlim(0, xmax)
             ax1.set_xlabel(color_label)
             ax1.set_ylabel('')
             ax1.text(
@@ -590,16 +600,16 @@ def plot_heatmap_p2v(
             ax2 = sns.histplot(
                 ax=ax2,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
-            ax2.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
-            ax2.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+            ax2.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax2.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
             ax2.set_ylim(0, 30)
-            ax2.set_xlim(0, 3)
+            ax2.set_xlim(0, xmax)
             ax2.set_xlabel(color_label)
             ax2.set_ylabel('')
             ax2.text(
@@ -630,16 +640,16 @@ def plot_heatmap_p2v(
             ax3 = sns.histplot(
                 ax=ax3,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
-            ax3.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
-            ax3.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+            ax3.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax3.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
             ax3.set_ylim(0, 30)
-            ax3.set_xlim(0, 3)
+            ax3.set_xlim(0, xmax)
             ax3.set_xlabel(color_label)
             ax3.set_ylabel('')
             ax3.text(
@@ -681,17 +691,17 @@ def plot_heatmap_p2v(
             ax1 = sns.histplot(
                 ax=ax1,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
 
-            ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
-            ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
-            ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
-            ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2, label='Median')
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2, label='Mean')
             ax1.set_ylim(0, 80)
             ax1.set_xlim(0, 5)
             ax1.set_xlabel(color_label)
@@ -724,14 +734,14 @@ def plot_heatmap_p2v(
             ax2 = sns.histplot(
                 ax=ax2,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
-            ax2.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
-            ax2.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+            ax2.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax2.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
             ax2.set_ylim(0, 80)
             ax2.set_xlim(0, 5)
             ax2.set_xlabel(color_label)
@@ -764,14 +774,14 @@ def plot_heatmap_p2v(
             ax3 = sns.histplot(
                 ax=ax3,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
-            ax3.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
-            ax3.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
+            ax3.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2, label='Median')
+            ax3.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2, label='Mean')
             ax3.set_ylim(0, 80)
             ax3.set_xlim(0, 5)
             ax3.set_xlabel(color_label)
@@ -1002,7 +1012,7 @@ def snrheatmap(
             pbins = np.arange(lims[0], lims[-1]+2e5, 1e5)
         elif x == 'counts_p100':
             label = f'Max counts (camera background offset = 100)'
-            lims = (100, 5000)
+            lims = (100, 2000)
             pbins = np.arange(lims[0], lims[-1]+400, 200)
         else:
             label = f'99th percentile of counts (camera background offset = 100)'
@@ -1035,31 +1045,37 @@ def snrheatmap(
             wavelength=modelspecs.lam_detection,
             savepath=Path(f"{savepath}_iter_{iter_num}_{x}"),
             label=label,
+            hist_col='residuals',
             lims=lims,
             agg=agg
         )
-
-        dataframe = pd.pivot_table(df, values='confidence', index='ibins', columns='pbins', aggfunc=agg)
-        dataframe.insert(0, 0, dataframe.index.values)
 
         try:
-            dataframe = dataframe.sort_index().interpolate()
-        except ValueError:
+            for c in ['confidence', 'confidence_sum']:
+                dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
+                dataframe.insert(0, 0, dataframe.index.values)
+
+                try:
+                    dataframe = dataframe.sort_index().interpolate()
+                except ValueError:
+                    pass
+
+                dataframe.to_csv(f'{savepath}_{x}_{c}.csv')
+                logger.info(f'Saved: {savepath.resolve()}_{x}_{c}.csv')
+
+                plot_heatmap_p2v(
+                    dataframe,
+                    histograms=df if x == 'photons' else None,
+                    wavelength=modelspecs.lam_detection,
+                    savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}"),
+                    label=label,
+                    color_label='Confidence',
+                    hist_col=c,
+                    lims=lims,
+                    agg='mean'
+                )
+        except Exception:
             pass
-
-        dataframe.to_csv(f'{savepath}_{x}_confidence.csv')
-        logger.info(f'Saved: {savepath.resolve()}_{x}_confidence.csv')
-
-        plot_heatmap_p2v(
-            dataframe,
-            histograms=df if x == 'photons' else None,
-            wavelength=modelspecs.lam_detection,
-            savepath=Path(f"{savepath}_iter_{iter_num}_{x}_confidence"),
-            label=label,
-            color_label='Confidence',
-            lims=lims,
-            agg=agg
-        )
 
     return savepath
 
@@ -2228,27 +2244,29 @@ def confidence_heatmap(
             include_lowest=True
         )
 
-        dataframe = pd.pivot_table(df, values='confidence', index='ibins', columns='pbins', aggfunc=agg)
-        dataframe.insert(0, 0, dataframe.index.values)
+        for c in ['confidence', 'confidence_sum']:
+            dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
+            dataframe.insert(0, 0, dataframe.index.values)
 
-        try:
-            dataframe = dataframe.sort_index().interpolate()
-        except ValueError:
-            pass
+            try:
+                dataframe = dataframe.sort_index().interpolate()
+            except ValueError:
+                pass
 
-        dataframe.to_csv(f'{savepath}_{x}.csv')
-        logger.info(f'Saved: {savepath.resolve()}_{x}.csv')
+            dataframe.to_csv(f'{savepath}_{x}_{c}.csv')
+            logger.info(f'Saved: {savepath.resolve()}_{x}_{c}.csv')
 
-        plot_heatmap_p2v(
-            dataframe,
-            histograms=df if x == 'photons' else None,
-            wavelength=modelspecs.lam_detection,
-            savepath=Path(f"{savepath}_iter_{iter_num}_{x}"),
-            label=label,
-            color_label='Confidence',
-            lims=lims,
-            agg=agg
-        )
+            plot_heatmap_p2v(
+                dataframe,
+                histograms=df if x == 'photons' else None,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}"),
+                label=label,
+                color_label='Confidence',
+                hist_col=c,
+                lims=lims,
+                agg='mean'
+            )
 
     return savepath
 
