@@ -19,26 +19,26 @@ for M in v2Hex_lambda510 YuMB_lambda510-nostem YuMB_lambda510-nostem-radial-enco
 do
   MODEL="$PRETRAINED/opticalnet-$MODES-$M"
 
-  BATCH=128
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH random" \
-  --taskname random \
-  --name $MODEL/$EVALSIGN/samples
-
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modes" \
-  --taskname evalmodes \
-  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_1'
-
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 $ROTATIONS --batch_size $BATCH modes" \
-  --taskname evalmodes \
-  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
-
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modalities" \
-  --taskname modalities \
-  --name $MODEL/$EVALSIGN/modalities
+#  BATCH=128
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH random" \
+#  --taskname random \
+#  --name $MODEL/$EVALSIGN/samples
+#
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modes" \
+#  --taskname evalmodes \
+#  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_1'
+#
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 $ROTATIONS --batch_size $BATCH modes" \
+#  --taskname evalmodes \
+#  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
+#
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modalities" \
+#  --taskname modalities \
+#  --name $MODEL/$EVALSIGN/modalities
 
   BATCH=2048
   if [ $M = 'v2Hex_lambda510' ];then
@@ -72,10 +72,12 @@ do
       LAM=.510
     fi
 
-    python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
-    --task "$MODEL.h5 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --n_samples $MAX --niter $ITERS --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
-    --taskname $NA \
-    --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE
+    for i in {1..$ITERS}; do
+      python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
+      --task "$MODEL.h5 --niter $i --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
+      --taskname $NA \
+      --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE
+    done
 
     #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus 16 --gpus 4 \
     #--task "$MODEL.h5 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --n_samples $MAX --niter 1 --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
@@ -85,13 +87,13 @@ do
 done
 
 
-python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '500GB' --cpus 20 --gpus 4 \
---task "phasenet_heatmap $DATA --no_beads --n_samples $MAX --eval_sign $EVALSIGN" \
---taskname $NA \
---name ../src/phasenet_repo/$EVALSIGN/psf
-
-
-python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '500GB' --cpus 20 --gpus 4 \
---task "phasenet_heatmap $DATA --n_samples $MAX --eval_sign $EVALSIGN" \
---taskname $NA \
---name ../src/phasenet_repo/$EVALSIGN/bead
+#python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '500GB' --cpus 20 --gpus 4 \
+#--task "phasenet_heatmap $DATA --no_beads --n_samples $MAX --eval_sign $EVALSIGN" \
+#--taskname $NA \
+#--name ../src/phasenet_repo/$EVALSIGN/psf
+#
+#
+#python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem '500GB' --cpus 20 --gpus 4 \
+#--task "phasenet_heatmap $DATA --n_samples $MAX --eval_sign $EVALSIGN" \
+#--taskname $NA \
+#--name ../src/phasenet_repo/$EVALSIGN/bead
