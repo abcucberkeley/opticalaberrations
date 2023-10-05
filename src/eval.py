@@ -520,7 +520,7 @@ def plot_heatmap_p2v(
             dataframe.index.values,
             dataframe.values,
             cmap='nipy_spectral',
-            levels=np.arange(0, .26, step=.01),
+            levels=np.arange(0, .11, step=.01),
             extend='max',
             linewidths=2,
             linestyles='dashed',
@@ -533,9 +533,9 @@ def plot_heatmap_p2v(
             extend='both',
             spacing='proportional',
             format=FormatStrFormatter("%.2f"),
-            ticks=np.arange(0, .3, step=.05),
+            ticks=np.arange(0, .11, step=.01),
         )
-        cbar.ax.set_ylabel(rf'Confidence: {agg} $\sum_{{i=0}}^z{{\theta_i}}$ ($\lambda = {int(wavelength * 1000)}~nm$)')
+        cbar.ax.set_ylabel(rf'Confidence: ({agg} $\lambda = {int(wavelength * 1000)}~nm$)')
 
     ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
     cbar.ax.yaxis.set_ticks_position('right')
@@ -998,15 +998,15 @@ def snrheatmap(
             pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
         elif x == 'counts':
             label = f'Integrated counts'
-            lims = (4e6, 7.5e6)
+            lims = (2.6e7, 3e7)
             pbins = np.arange(lims[0], lims[-1]+2e5, 1e5)
         elif x == 'counts_p100':
-            label = f'Max counts'
-            lims = (0, 5000)
+            label = f'Max counts (camera background offset = 100)'
+            lims = (100, 5000)
             pbins = np.arange(lims[0], lims[-1]+400, 200)
         else:
-            label = f'99th percentile of counts'
-            lims = (0, 300)
+            label = f'99th percentile of counts (camera background offset = 100)'
+            lims = (100, 300)
             pbins = np.arange(lims[0], lims[-1]+50, 25)
 
         df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
