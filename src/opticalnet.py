@@ -241,6 +241,7 @@ class Transformer(layers.Layer):
         dims,
         activation,
         dropout_rate,
+        expand_rate=4,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -248,16 +249,17 @@ class Transformer(layers.Layer):
         self.dims = dims
         self.activation = activation
         self.dropout_rate = dropout_rate
+        self.expand_rate = expand_rate
 
         self.drop_path = tfa.layers.StochasticDepth(survival_probability=1-dropout_rate)
         self.ln = layers.LayerNormalization(axis=-1, epsilon=1e-6)
-        self.mha = layers.MultiHeadAttention(
+        self.msa = layers.MultiHeadAttention(
             num_heads=self.heads,
             key_dim=self.dims,
             dropout=self.dropout_rate
         )
         self.mlp = MLP(
-            expand_rate=4,
+            expand_rate=self.expand_rate,
             dropout_rate=self.dropout_rate,
             activation=self.activation
         )
@@ -271,13 +273,14 @@ class Transformer(layers.Layer):
             "heads": self.heads,
             "dims": self.dims,
             "dropout_rate": self.dropout_rate,
+            "expand_rate": self.expand_rate,
             "activation": self.activation,
         })
         return config
 
     def call(self, inputs, training=True, **kwargs):
         ln1 = self.ln(inputs)
-        att = self.mha(ln1, ln1)
+        att = self.msa(ln1, ln1)
         s1 = self.drop_path([att, inputs])
 
         ln2 = self.ln(s1)
@@ -296,6 +299,7 @@ class OpticalTransformer(Base, ABC):
             width_scalar=1.0,
             activation='gelu',
             dropout_rate=0.05,
+            expand_rate=4,
             rho=.05,
             mul=False,
             no_phase=False,
@@ -314,6 +318,7 @@ class OpticalTransformer(Base, ABC):
         self.width_scalar = width_scalar
         self.activation = activation
         self.dropout_rate = dropout_rate
+        self.expand_rate = expand_rate
         self.avg = layers.GlobalAvgPool2D()
         self.rho = rho
         self.mul = mul
@@ -412,6 +417,7 @@ class OpticalTransformer(Base, ABC):
                     dims=64,
                     activation=self.activation,
                     dropout_rate=self.dropout_rate/(i+1),
+                    expand_rate=self.expand_rate,
                 )(m)
             m = layers.add([res, m])
 
