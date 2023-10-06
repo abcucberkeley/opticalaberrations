@@ -2056,6 +2056,60 @@ def silence(enabled, stdout=None):
     return stdout
 
 
+def overlap_tile(volume_shape, tile_shape, border, target, tile_index):
+    """
+    Used to process tiles, where each tile is processed using an extra border.
+
+    This function returns either:
+     - The slice into the source array, which to pass to processing,
+     - The slice to extract from the processed array, which can be copied into the dst.
+     - The slice in the dst to write the data to.
+
+    Args:
+        volume_shape: tuple of the volume shape
+        tile_shape: tuple of the tile (aka the window) shape
+        border: int for extra voxels to pass to processing
+        target: either 'src', 'extract', or 'dst'
+        tile_index: the tuple of indices
+
+    Returns:
+        slice object that can get the view from the np.array.
+
+    """
+    tile_shape = np.array(tile_shape)
+    n_dims = len(volume_shape)
+    # zw, yw, xw = tile_shape
+    # z, y, x = tile_index
+    # ranges = (
+    #         slice(max(z * zw - border, 0), min((z * zw) + zw + border, volume_shape[0])),
+    #         slice(max(y * yw - border, 0), min((y * yw) + yw + border, volume_shape[1])),
+    #         slice(max(x * xw - border, 0), min((x * xw) + xw + border, volume_shape[2])),
+    #       )
+
+    dst_beg = np.multiply(tile_shape, tile_index)
+    dst_end = np.multiply(tile_shape, tile_index) + tile_shape
+    dst_end = np.minimum(dst_end, volume_shape)     # don't go past the end of the volume
+    tile_length = dst_end - dst_beg     # nominally this is "tile_size" if we didn't run past the end of volume
+
+    src_beg = np.maximum(dst_beg - border, 0)
+    src_end = np.minimum(dst_end + border, volume_shape)
+
+    ext_beg = dst_beg - src_beg         # nominally this is 'border' if the overlap didn't run out of bounds
+    ext_end = ext_beg + tile_length
+
+    if target == 'src':
+        ranges = tuple([slice(src_beg[d], src_end[d]) for d in range(n_dims)])
+
+    elif target == 'extract':
+        ranges = tuple([slice(ext_beg[d], ext_end[d]) for d in range(n_dims)])
+
+    else: # target == 'dst'
+        ranges = tuple([slice(dst_beg[d], dst_end[d]) for d in range(n_dims)])
+
+    return ranges
+
+
+
 @profile
 def decon(
     model_pred: Path,       # predictions  _tiles_predictions.csv
@@ -2144,8 +2198,17 @@ def decon(
     logger.info(f"window_size = {zw, yw, xw}")
     logger.info(f"      tiles = {ztiles, ytiles, xtiles}")
 
+    border = 32     # cudadecon likes sizes to be powers of 2, otherwise it may return a different size than input.
+
+    tile_slice = partial(
+        overlap_tile,
+        volume_shape=vol.shape,
+        tile_shape=window_size,
+        border=border
+    )
+
     if task == 'decon':
-        reconstruct = partial(
+        reconstruct_decon = partial(
             cuda_decon,
             dzdata=axial_voxel_size,
             dxdata=lateral_voxel_size,
@@ -2157,7 +2220,7 @@ def decon(
             )
     elif task == 'cocoa':
         from experimental_benchmarks import predict_cocoa
-        reconstruct = partial(
+        reconstruct_cocoa = partial(
             predict_cocoa,
             plot=False,
             axial_voxel_size=axial_voxel_size,
@@ -2172,8 +2235,6 @@ def decon(
         logger.error(f'Invalid task given: {task=}')
         reconstruct = None
 
-    border = 0
-
     if decon_tile:
         # decon the tiles independently
         for i, (z, y, x) in tqdm(
@@ -2187,27 +2248,31 @@ def decon(
             kernel = samplepsfgen.single_psf(w, normed=False)
             kernel /= np.max(kernel)
 
-            tile = vol[
-                max(z*zw-border, 0):min((z*zw)+zw+border, vol.shape[0]),
-                max(y*yw-border, 0):min((y*yw)+yw+border, vol.shape[1]),
-                max(x*xw-border, 0):min((x*xw)+xw+border, vol.shape[2]),
-            ]
+            tile = vol[tile_slice(target='src', tile_index=(z, y, x))]
 
-            psfs[z, y*kyw:(y*kyw)+kyw, x*kxw:(x*kxw)+kxw] = np.max(kernel, axis=0) # mip view for later.
+            if task == 'cocoa':
+                out_y, reconstructed, out_k_m = reconstruct_cocoa(tile)
 
-            stdout = silence(task == 'decon')
-            (est_vol[
-                max(z * zw - border, 0):min((z * zw) + zw + border, vol.shape[0]),
-                max(y * yw - border, 0):min((y * yw) + yw + border, vol.shape[1]),
-                max(x * xw - border, 0):min((x * xw) + xw + border, vol.shape[2]),
-            ], decon_vol[
-                max(z * zw - border, 0):min((z * zw) + zw + border, vol.shape[0]),
-                max(y * yw - border, 0):min((y * yw) + yw + border, vol.shape[1]),
-                max(x * xw - border, 0):min((x * xw) + xw + border, vol.shape[2]),
-            ]) = reconstruct(tile, psf=kernel)
-            silence(False, stdout=stdout)
+                est_vol[tile_slice(target='dst', tile_index=(z, y, x))
+                ] = out_y[tile_slice(target='extract', tile_index=(z, y, x))]
+                imwrite(f"{savepath.with_suffix('')}_estimated.tif", est_vol)
+
+                kernel = out_k_m
+            elif task == 'decon':
+                stdout = silence(task == 'decon')
+                reconstructed = reconstruct_decon(tile, psf=kernel)
+                silence(False, stdout=stdout)
+            else:
+                logger.error(f"Task of '{task}' is unknown")
+                return
+
+            decon_vol[tile_slice(target='dst', tile_index=(z, y, x))
+            ] = reconstructed[tile_slice(target='extract', tile_index=(z, y, x))]
+
+            psfs[z, y * kyw:(y * kyw) + kyw, x * kxw:(x * kxw) + kxw] = np.max(kernel[:, 0:kyw, 0:kxw], axis=0)  # mip view for later.
+
+            imwrite(f"{model_pred.with_suffix('')}_{task}_psfs.tif", psfs.astype(np.float32))
             imwrite(savepath, decon_vol)
-            imwrite(f"{savepath.with_suffix('')}_estimated.tif", est_vol)
     else:
         # identify all the unique PSFs that we need to decconvolve with
         predictions['psf_id'] = predictions.groupby(predictions.columns.values.tolist(), sort=False).grouper.group_info[0]
@@ -2222,20 +2287,27 @@ def decon(
             kernel = samplepsfgen.single_psf(w, normed=False)
             kernel /= np.max(kernel)
 
-            stdout = silence(task == 'decon')
-            deconv = reconstruct(vol, psf=kernel)
-            silence(False, stdout=stdout)
+            if task == 'cocoa':
+                deconv = reconstruct_cocoa(vol)
+
+            elif task == 'decon':
+                stdout = silence(task == 'decon')
+                deconv = reconstruct_decon(vol, psf=kernel)
+                silence(False, stdout=stdout)
+            else:
+                logger.error(f"Task of '{task}' is unknown")
+                return
 
             for index, zernikes in df.iterrows():
                 z, y, x = index
                 decon_vol[
-                    max(z * zw - border, 0):min((z * zw) + zw + border, vol.shape[0]),
-                    max(y * yw - border, 0):min((y * yw) + yw + border, vol.shape[1]),
-                    max(x * xw - border, 0):min((x * xw) + xw + border, vol.shape[2]),
+                    z * zw :(z * zw) + zw,
+                    y * yw :(y * yw) + yw,
+                    x * xw :(x * xw) + xw,
                 ] = deconv[
-                    max(z * zw - border, 0):min((z * zw) + zw + border, vol.shape[0]),
-                    max(y * yw - border, 0):min((y * yw) + yw + border, vol.shape[1]),
-                    max(x * xw - border, 0):min((x * xw) + xw + border, vol.shape[2]),
+                    z * zw :(z * zw) + zw,
+                    y * yw :(y * yw) + yw,
+                    x * xw :(x * xw) + xw,
                 ]
 
             imwrite(savepath, decon_vol.astype(np.float32))
@@ -2244,7 +2316,7 @@ def decon(
     imwrite(savepath, decon_vol.astype(np.float32))
     logger.info(f"Decon image saved to : \n{savepath.resolve()}")
 
-    imwrite(f"{model_pred.with_suffix('')}_{task}_psfs.tif", psfs.astype(np.float32))
+
 
     with Path(f"{model_pred.with_suffix('')}_{task}_settings.json").open('w') as f:
         json = dict(
