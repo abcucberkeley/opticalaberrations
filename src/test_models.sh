@@ -17,7 +17,19 @@ A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
 GPUS=4
 CPUS=16
 
-for M in YuMB_lambda510 YuMB_lambda510-nostem YuMB_lambda510-nostem-radial-encoding-p16 YuMB_lambda510-nostem-radial-encoding-p4 YuMB_lambda510-nostem-radial-encoding-p1-round2
+TRAINED_MODELS=(
+  "YuMB_lambda510"
+  "v2Hex_lambda510"
+  "2photon_lambda920"
+  "confocal_lambda510"
+#  "widefield_lambda510"
+#  "YuMB_lambda510-nostem"
+#  "YuMB_lambda510-nostem-radial-encoding-p16"
+#  "YuMB_lambda510-nostem-radial-encoding-p4"
+#  "YuMB_lambda510-nostem-radial-encoding-p1-round2"
+)
+
+for M in $TRAINED_MODELS
 do
   MODEL="$PRETRAINED/opticalnet-$MODES-$M"
 
@@ -43,15 +55,8 @@ do
 #  --name $MODEL/$EVALSIGN/modalities
 
   BATCH=$(( 896 * $GPUS ))
-  if [ $M = 'v2Hex_lambda510' ];then
-    declare -a PSFS=( "v2Hex" "ACHex" "MBHex" "v2HexRect")
-    declare -a PATHS=(
-      "../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat"
-      "../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat"
-      "../lattice/MBHex_NAexc0p43_annulus0p47_0p40_crop0p08_FWHM48p0.mat"
-      "../lattice/v2HexRect_NAexc0p50_NAsigma0p15_annulus0p60-0p40_FWHM_56p0.mat"
-    )
-  else
+
+  if [ "${M:0:4}" = YuMB ];then
     declare -a PSFS=( "YuMB" "Gaussian" "MBSq" "Sinc" "widefield" )
     declare -a PATHS=(
       "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
@@ -60,6 +65,20 @@ do
       "../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat"
       "widefield"
     )
+  elif [ "${M:0:5}" == v2Hex ];then
+    declare -a PSFS=( "v2Hex" "ACHex" "MBHex" "v2HexRect")
+    declare -a PATHS=(
+      "../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat"
+      "../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat"
+      "../lattice/MBHex_NAexc0p43_annulus0p47_0p40_crop0p08_FWHM48p0.mat"
+      "../lattice/v2HexRect_NAexc0p50_NAsigma0p15_annulus0p60-0p40_FWHM_56p0.mat"
+    )
+  elif [ $M = "widefield" ];then
+    declare -a PSFS=( "widefield" )
+    declare -a PATHS=( "widefield" )
+  else
+    declare -a PSFS=( "confocal" "2photon" )
+    declare -a PATHS=( "confocal" "2photon" )
   fi
 
   for S in `seq 1 ${#PSFS[@]}`
@@ -77,9 +96,14 @@ do
     for (( i=1; i<=$ITERS; i++ ))
     do
       python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
+      --task "$MODEL.h5 --niter $i --num_beads 1 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
+      --taskname $NA \
+      --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
+
+      python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
       --task "$MODEL.h5 --niter $i --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --n_samples $MAX --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
       --taskname $NA \
-      --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE
+      --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
     done
 
     #python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \

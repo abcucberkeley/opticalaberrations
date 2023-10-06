@@ -81,7 +81,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--num_neighbor", default=None, type=int, help='number of neighbors in the fov'
+        "--num_beads", default=None, type=int, help='number of beads in the fov'
     )
 
     parser.add_argument(
@@ -193,7 +193,8 @@ def main(args=None):
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
-                lam_detection=args.wavelength
+                lam_detection=args.wavelength,
+                num_beads=args.num_beads
             )
         elif args.target == "confidence":
             savepath = eval.eval_confidence(
@@ -233,7 +234,8 @@ def main(args=None):
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
-                lam_detection=args.wavelength
+                lam_detection=args.wavelength,
+                num_beads=args.num_beads
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(

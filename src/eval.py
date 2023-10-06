@@ -957,6 +957,7 @@ def snrheatmap(
     plot_rotations: bool = False,
     agg: str = 'median',
     psf_type: Optional[str] = None,
+    num_beads: Optional[int] = None,
     lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
@@ -964,6 +965,11 @@ def snrheatmap(
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
+    if num_beads is not None:
+        savepath = savepath / f'beads-{num_beads}'
+    else:
+        savepath = savepath / 'beads'
 
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -984,7 +990,7 @@ def snrheatmap(
             na=na,
             batch_size=batch_size,
             photons_range=None,
-            npoints_range=(1, 1),
+            npoints_range=(1, num_beads) if num_beads is not None else None,
             eval_sign=eval_sign,
             digital_rotations=digital_rotations,
             plot=plot,
@@ -1094,6 +1100,7 @@ def densityheatmap(
     plot: Any = None,
     plot_rotations: bool = False,
     agg: str = 'median',
+    num_beads: Optional[int] = None,
     photons_range: Optional[tuple] = None,
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
@@ -1104,6 +1111,9 @@ def densityheatmap(
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
+    if num_beads is not None:
+        savepath = savepath / f'beads-{num_beads}'
 
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -1124,7 +1134,7 @@ def densityheatmap(
             distribution=distribution,
             na=na,
             photons_range=photons_range,
-            npoints_range=None,
+            npoints_range=(1, num_beads) if num_beads is not None else None,
             batch_size=batch_size,
             eval_sign=eval_sign,
             digital_rotations=digital_rotations,
