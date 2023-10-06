@@ -1053,6 +1053,8 @@ def predict_dataset(
     Returns:
         average prediction, stdev
     """
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
 
     if isinstance(model, Path):
         model = load(model)
@@ -1062,23 +1064,15 @@ def predict_dataset(
     ignore_modes = list(map(int, ignore_modes))
     logger.info(f"Ignoring modes: {ignore_modes}")
     logger.info(f"[Batch size={batch_size}] {desc}")
-
-
-    # for i in inputs.take(1):
-    #     logger.info(i.numpy().shape)
+    inputs = inputs.with_options(options).prefetch(tf.data.AUTOTUNE).batch(batch_size)
+    # prefetch will fill GPU RAM
 
     if digital_rotations is not None:
         inputs = inputs.map(lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:])))
-        inputs = inputs.unbatch().batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE) # batch_size is on predictions
-    else:
-        inputs = inputs.batch(batch_size).prefetch(buffer_size=tf.data.AUTOTUNE) # this batch_size is on files.
+        inputs = inputs.unbatch().batch(batch_size).with_options(options).prefetch(tf.data.AUTOTUNE)
 
         # for i in inputs.take(1):
         #     logger.info(i.numpy().shape)
-
-    options = tf.data.Options()
-    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-    inputs = inputs.with_options(options).cache().prefetch(tf.data.AUTOTUNE)  # prefetch will fill GPU RAM
 
     if digital_rotations is not None:
 
@@ -1176,16 +1170,14 @@ def predict_files(
 
     inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
 
-    # Process 100 files at a time -> for a total of (100 files x 360 rotations) predictions
-    num_files_to_process_per_batch = paths.shape[0] if paths.shape[0] <= 100 else 100
-
-    inputs = inputs.batch(num_files_to_process_per_batch).map(
+    # unroll because each input generates 360 embs to predict here, and we must rebatch on the whole set
+    inputs = inputs.batch(batch_size).map(
         lambda x: tf.py_function(
             generate_fourier_embeddings,
             inp=[x],
             Tout=tf.float32,
         ),
-    ).unbatch()  # unroll because each input generates 360 embs to predict here, and we must rebatch on the whole set
+    ).unbatch().prefetch(tf.data.AUTOTUNE)
 
     preds, std = predict_dataset(
         model,
@@ -1242,7 +1234,7 @@ def predict_files(
     stdevs.index.name = 'ansi'
     stdevs.to_csv(f"{outdir}_stdevs.csv")
 
-    return predictions
+    return predictions, stdevs
 
 
 def train(

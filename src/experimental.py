@@ -771,7 +771,7 @@ def predict_rois(
             escape_forward_slashes=False
         )
 
-    predictions = backend.predict_files(
+    predictions, stdevs = backend.predict_files(
         paths=rois,
         outdir=outdir,
         model=preloadedmodel,
@@ -970,7 +970,7 @@ def predict_tiles(
             escape_forward_slashes=False
         )
 
-    predictions = backend.predict_files(
+    predictions, stdevs = backend.predict_files(
         paths=rois,
         outdir=outdir,
         model=preloadedmodel,

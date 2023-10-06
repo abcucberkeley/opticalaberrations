@@ -75,7 +75,7 @@ def concat_U16_tiffs(source_files=list([]), dst: Path = None, ch_two=None, drop_
     print(f"Saved:\n{dst.resolve()}\n")
 
 
-folder = Path(r'U:\Data\TestsForThayer\20230915_fish\exp1_moving\rotated')
+folder = Path(r'U:\Data\TestsForThayer\20231006_fish_arp_mNG\exp1_tailend\rotated')
 cam_A = 'CamA'
 cam_B = 'CamB'
 
@@ -118,7 +118,8 @@ z_size = len(sample.pages)  # number of pages in the file
 page = sample.pages[0]  # get shape and dtype of image in first page
 (y_size, x_size, c_size) = page.shape  # c_size = 3 for color image
 
-hyperstack = np.zeros(shape=[t_size, z_size, y_size * 2, x_size, c_size], dtype=np.ubyte) # vertically combine these two stacks.
+# vertically combine these two stacks.
+hyperstack = np.zeros(shape=[t_size, z_size, y_size * 2, x_size, c_size], dtype=np.ubyte)
 hyperstack = np.squeeze(hyperstack)
 
 for i in range(len(consensus_clusters)):
@@ -127,14 +128,9 @@ for i in range(len(consensus_clusters)):
             f"Concatenating {i + 1} out of {t_size} ({len(sample.pages)} x {sample.pages[0].shape[0]} x {sample.pages[0].shape[1]}) {tif.filename}")
         hyperstack[i, :, :y_size] = tif.asarray()
 
-    # with TiffFile(consensus_clusters_wavefronts[i]) as tif:
-    #     print(
-    #         f"Concatenating {i + 1} out of {t_size} ({len(sample.pages)} x {sample.pages[0].shape[0]} x {sample.pages[0].shape[1]}) {tif.filename}")
-    #     hyperstack[i, :, y_size:] = tif.asarray()
-
-
     with TiffFile(consensus_clusters_psfs[i]) as tif:
-        hyperstack[i, :, y_size:] = np.repeat(tif.asarray(), z_size/2, axis=0) # since this stack only has 1 slice per z slab, we repeat to fill out.
+        # since this stack only has 1 slice per z slab, we repeat to fill out.
+        hyperstack[i, :, y_size:] = np.repeat(tif.asarray(), z_size//len(tif.pages), axis=0)
         print(f"Concatenating {i+1} out of {t_size} ({len(sample.pages)} x {sample.pages[0].shape[0]} x {sample.pages[0].shape[1]}) {tif.filename}")
 
 dst.parent.mkdir(parents=True, exist_ok=True)
