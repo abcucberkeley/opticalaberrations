@@ -523,12 +523,17 @@ def plot_heatmap_p2v(
         )
         cbar.ax.set_ylabel(rf'Residuals ({agg} peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)')
     else:
+        if hist_col == 'confidence':
+            ticks = np.arange(0, .11, step=.01)
+        else:
+            ticks = np.arange(0, .26, step=.01)
+
         contours = ax.contourf(
             dataframe.columns.values,
             dataframe.index.values,
             dataframe.values,
             cmap='nipy_spectral',
-            levels=np.arange(0, .11, step=.01),
+            levels=ticks,
             extend='max',
             linewidths=2,
             linestyles='dashed',
@@ -541,9 +546,13 @@ def plot_heatmap_p2v(
             extend='both',
             spacing='proportional',
             format=FormatStrFormatter("%.2f"),
-            ticks=np.arange(0, .11, step=.01),
+            ticks=ticks,
         )
-        cbar.ax.set_ylabel(rf'Confidence: ({agg} $\lambda = {int(wavelength * 1000)}~nm$)')
+
+        if hist_col == 'confidence':
+            cbar.ax.set_ylabel(rf'Standard deviation: ({agg} $\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)')
+        else:
+            cbar.ax.set_ylabel(rf'Standard deviation: ({agg} $\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)')
 
     ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
     cbar.ax.yaxis.set_ticks_position('right')
@@ -555,7 +564,14 @@ def plot_heatmap_p2v(
                 (histograms.pbins <= 1e5) &
                 (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
             ]
-            xmax = np.round(np.max(x[hist_col]), 1)
+
+            if color_label == 'Residuals':
+                xmax = 3
+            else:
+                if hist_col == 'confidence':
+                    xmax = .15
+                else:
+                    xmax = .3
 
             ax1 = sns.histplot(
                 ax=ax1,
@@ -1034,54 +1050,55 @@ def snrheatmap(
             include_lowest=True
         )
 
-        dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
-        dataframe.insert(0, 0, dataframe.index.values)
+        for agg in ['mean', 'median']:
+            dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
+            dataframe.insert(0, 0, dataframe.index.values)
 
-        try:
-            dataframe = dataframe.sort_index().interpolate()
-        except ValueError:
-            pass
+            try:
+                dataframe = dataframe.sort_index().interpolate()
+            except ValueError:
+                pass
 
-        dataframe.to_csv(f'{savepath}_{x}.csv')
-        logger.info(f'Saved: {savepath.resolve()}_{x}.csv')
+            dataframe.to_csv(f'{savepath}_{x}_{agg}.csv')
+            logger.info(f'Saved: {savepath.resolve()}_{x}_{agg}.csv')
 
-        plot_heatmap_p2v(
-            dataframe,
-            histograms=df if x == 'photons' else None,
-            wavelength=modelspecs.lam_detection,
-            savepath=Path(f"{savepath}_iter_{iter_num}_{x}"),
-            label=label,
-            hist_col='residuals',
-            lims=lims,
-            agg=agg
-        )
+            plot_heatmap_p2v(
+                dataframe,
+                histograms=df if x == 'photons' else None,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{agg}"),
+                label=label,
+                hist_col='residuals',
+                lims=lims,
+                agg=agg
+            )
 
-        try:
-            for c in ['confidence', 'confidence_sum']:
-                dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
-                dataframe.insert(0, 0, dataframe.index.values)
+            try:
+                for c in ['confidence', 'confidence_sum']:
+                    dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
+                    dataframe.insert(0, 0, dataframe.index.values)
 
-                try:
-                    dataframe = dataframe.sort_index().interpolate()
-                except ValueError:
-                    pass
+                    try:
+                        dataframe = dataframe.sort_index().interpolate()
+                    except ValueError:
+                        pass
 
-                dataframe.to_csv(f'{savepath}_{x}_{c}.csv')
-                logger.info(f'Saved: {savepath.resolve()}_{x}_{c}.csv')
+                    dataframe.to_csv(f'{savepath}_{x}_{c}_{agg}.csv')
+                    logger.info(f'Saved: {savepath.resolve()}_{x}_{c}_{agg}.csv')
 
-                plot_heatmap_p2v(
-                    dataframe,
-                    histograms=df if x == 'photons' else None,
-                    wavelength=modelspecs.lam_detection,
-                    savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}"),
-                    label=label,
-                    color_label='Confidence',
-                    hist_col=c,
-                    lims=lims,
-                    agg='mean'
-                )
-        except Exception:
-            pass
+                    plot_heatmap_p2v(
+                        dataframe,
+                        histograms=df if x == 'photons' else None,
+                        wavelength=modelspecs.lam_detection,
+                        savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}_{agg}"),
+                        label=label,
+                        color_label='Standard deviation',
+                        hist_col=c,
+                        lims=lims,
+                        agg=agg
+                    )
+            except Exception:
+                pass
 
     return savepath
 
