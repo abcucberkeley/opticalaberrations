@@ -75,7 +75,7 @@ def concat_U16_tiffs(source_files=list([]), dst: Path = None, ch_two=None, drop_
     print(f"Saved:\n{dst.resolve()}\n")
 
 
-folder = Path(r'U:\Data\TestsForThayer\20230915_fish\exp1_moving\rotated')
+folder = Path(r'U:\Data\TestsForThayer\20231006_fish_arp_mNG\exp1_tailend\rotated')
 cam_A = 'CamA'
 cam_B = 'CamB'
 
@@ -134,7 +134,7 @@ for i in range(len(consensus_clusters)):
 
 
     with TiffFile(consensus_clusters_psfs[i]) as tif:
-        hyperstack[i, :, y_size:] = np.repeat(tif.asarray(), z_size/2, axis=0) # since this stack only has 1 slice per z slab, we repeat to fill out.
+        hyperstack[i, :, y_size:] = np.repeat(tif.asarray(), z_size/len(tif.pages), axis=0) # since this stack only has 1 slice per z slab, we repeat to fill out.
         print(f"Concatenating {i+1} out of {t_size} ({len(sample.pages)} x {sample.pages[0].shape[0]} x {sample.pages[0].shape[1]}) {tif.filename}")
 
 dst.parent.mkdir(parents=True, exist_ok=True)
