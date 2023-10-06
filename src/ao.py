@@ -614,6 +614,11 @@ def parse_args(args):
         "--only_use_ideal_psf", action='store_true',
         help='a toggle to run only decon with the ideal psf'
     )
+    decon.add_argument(
+        "--decon_tile", action='store_true',
+        help='a toggle to decon each tile independently'
+    )
+    decon.add_argument("--task", type=str, help='algorithm : "decon", "cocoa"', default='decon')
 
     combine_tiles = subparsers.add_parser("combine_tiles")
     combine_tiles.add_argument("input", type=Path, help="path to csv file")
@@ -1088,6 +1093,9 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     preloaded=preloaded,
                     plot=args.plot,
                     only_use_ideal_psf=args.only_use_ideal_psf,
+                    task=args.task,
+                    decon_tile=args.decon_tile
+
                 )
             elif args.func == 'combine_tiles':
                 experimental.combine_tiles(

@@ -53,6 +53,7 @@ def simulate_beads(
     noise=True,
     fill_radius=.4,
     fast=False,
+    scale_by_maxcounts=None
 ):
 
     if beads is None:
@@ -68,9 +69,8 @@ def simulate_beads(
         psf /= psf.max()
         psf *= maxcounts
     else:
-        if psf_type == 'widefield':  # normalize PSF by the total energy in the focal plane
-            focal_plane_index = [(w // 2) - 1 for w in psf.shape]
-            psf /= np.sum(psf[focal_plane_index[0], focal_plane_index[1], focal_plane_index[2]])
+        if psf_type == 'widefield':
+            psf /= psf.max()
         else:
             psf /= np.sum(psf)
 
@@ -98,6 +98,10 @@ def simulate_beads(
 
     else:
         inputs = utils.fftconvolution(sample=beads, kernel=psf)  # takes 1 second.
+
+    if psf_type == 'widefield':  # scale widefield PSF by maxcounts of the GT PSF
+        inputs /= np.max(inputs)
+        inputs *= utils.electrons2photons(utils.counts2electrons(scale_by_maxcounts))
 
     if noise:
         inputs = utils.add_noise(inputs)
@@ -152,14 +156,16 @@ def generate_sample(
                 beads=None,
                 fill_radius=0,
                 object_size=0,
-                photons=hashtable['photons']
+                photons=hashtable['photons'],
+                scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
             )
         else:
             noisy_img = simulate_beads(
                 psf=psf,
                 psf_type=psfgen.psf_type,
                 beads=ref,
-                photons=hashtable['photons']
+                photons=hashtable['photons'],
+                scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
             )
 
         if savedir is not None:
@@ -176,6 +182,32 @@ def generate_sample(
                 # plot=True
             )
             return emb
+
+
+@profile
+def eval_template(shape, psf_type, lam_detection):
+    return {
+        # image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
+        'id': np.arange(shape[0], dtype=int),
+        'iter_num': np.zeros(shape[0], dtype=int),          # iteration index.
+        'aberration': np.zeros(shape[0], dtype=float),      # initial p2v aberration. Constant over iterations.
+        'residuals': np.zeros(shape[0], dtype=float),       # remaining p2v aberration after ML correction.
+        'residuals_umRMS': np.zeros(shape[0], dtype=float), # remaining umRMS aberration after ML correction.
+        'confidence': np.zeros(shape[0], dtype=float),      # model's confidence for the primary mode (waves)
+        'confidence_sum': np.zeros(shape[0], dtype=float),  # model's confidence for the all modes (waves)
+        'confidence_umRMS': np.zeros(shape[0], dtype=float),# model's confidence for the all modes (umRMS)
+        'photons': np.zeros(shape[0], dtype=int),           # integrated photons
+        'counts': np.zeros(shape[0], dtype=int),            # integrated counts
+        'counts_mode': np.zeros(shape[0], dtype=int),       # counts mode
+        'distance': np.zeros(shape[0], dtype=float),        # average distance to nearst bead
+        'neighbors': np.zeros(shape[0], dtype=int),         # number of beads
+        'file': np.empty(shape[0], dtype=Path),             # path to realspace images
+        'file_windows': np.empty(shape[0], dtype=Path),     # stupid windows path
+        'beads': np.zeros(shape[0], dtype=Path),
+        'psf_type': np.full(shape[0], dtype=str, fill_value=psf_type),
+        'wavelength': np.full(shape[0], dtype=float, fill_value=lam_detection),
+        # path to binary image file filled with zeros except at location of beads
+    }
 
 
 def collect_data(
@@ -213,26 +245,7 @@ def collect_data(
     metadata = np.array(list(metadata.take(-1)))
     ys = np.zeros((metadata.shape[0], predicted_modes))
     counts_percentiles = np.zeros((metadata.shape[0], 100))
-
-    results = {
-        # image number where the voxel locations of the beads are given in 'file'. Constant over iterations.
-        'id': np.arange(metadata.shape[0], dtype=int),
-        'iter_num': np.zeros(metadata.shape[0], dtype=int),          # iteration index.
-        'aberration': np.zeros(metadata.shape[0], dtype=float),      # initial p2v aberration. Constant over iterations.
-        'residuals': np.zeros(metadata.shape[0], dtype=float),       # remaining p2v aberration after ML correction.
-        'residuals_umRMS': np.zeros(metadata.shape[0], dtype=float), # remaining umRMS aberration after ML correction.
-        'photons': np.zeros(metadata.shape[0], dtype=int),           # integrated photons
-        'counts': np.zeros(metadata.shape[0], dtype=int),            # integrated counts
-        'counts_mode': np.zeros(metadata.shape[0], dtype=int),       # counts mode
-        'distance': np.zeros(metadata.shape[0], dtype=float),        # average distance to nearst bead
-        'neighbors': np.zeros(metadata.shape[0], dtype=int),         # number of beads
-        'file': np.empty(metadata.shape[0], dtype=Path),             # path to realspace images
-        'file_windows': np.empty(metadata.shape[0], dtype=Path),     # stupid windows path
-        'beads': np.zeros(metadata.shape[0], dtype=Path),
-        'psf_type': np.full(metadata.shape[0], dtype=str, fill_value=psf_type),
-        'wavelength': np.full(metadata.shape[0], dtype=float, fill_value=lam_detection),
-        # path to binary image file filled with zeros except at location of beads
-    }
+    results = eval_template(shape=metadata.shape, psf_type=psf_type, lam_detection=lam_detection)
 
     # see `data_utils.get_sample` to check order of objects returned
     for i in range(metadata.shape[0]):
@@ -266,6 +279,7 @@ def collect_data(
     for z in range(ys.shape[-1]):
         results[f'z{z}_ground_truth'] = ys[:, z]
         results[f'z{z}_prediction'] = np.zeros_like(ys[:, z])
+        results[f'z{z}_confidence'] = np.zeros_like(ys[:, z])
         results[f'z{z}_residual'] = ys[:, z]
 
     for p in range(100):
@@ -318,7 +332,14 @@ def iter_evaluate(
         lam_detection=lam_detection,
     )
 
-    if iter_num == 1:
+    if Path(f'{savepath}_predictions.csv').exists():
+        # continue from previous results, ignoring criteria
+        results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
+
+        if iter_num == results['iter_num'].values.max():
+            return results  # already computed
+
+    else:
         # on first call, setup the dataframe with the 0th iteration stuff
         results = collect_data(
             datapath=datapath,
@@ -331,11 +352,9 @@ def iter_evaluate(
             psf_type=gen.psf_type,
             lam_detection=gen.lam_detection
         )
-    else:
-        # read previous results, ignoring criteria
-        results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
 
     prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
+    confidence_cols = [col for col in results.columns if col.endswith('_confidence')]
     ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
     residual_cols = [col for col in results.columns if col.endswith('_residual')]
     previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
@@ -362,7 +381,7 @@ def iter_evaluate(
     current['file'] = paths
     current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
 
-    predictions = backend.predict_files(
+    predictions, stdevs = backend.predict_files(
         paths=paths,
         outdir=savepath/f'iter_{iter_num}',
         model=model,
@@ -375,9 +394,10 @@ def iter_evaluate(
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=rotations if digital_rotations else None,
-        cpu_workers=-1,
-    ).T
-    current[prediction_cols] = predictions.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
+        cpu_workers=8,
+    )
+    current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
+    current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[ground_truth_cols] = previous[residual_cols]
 
     if eval_sign == 'positive_only':
@@ -397,7 +417,23 @@ def iter_evaluate(
         axis=1
     )
 
-    results = results.append(current, ignore_index=True)
+    primary_modes = current[prediction_cols].idxmax(axis=1).replace(r'_prediction', r'_confidence', regex=True)
+    current['confidence'] = [
+        utils.microns2waves(current.loc[i, primary_modes[i]], wavelength=gen.lam_detection)
+        for i in primary_modes.index.values
+    ]
+
+    current['confidence_sum'] = current.apply(
+        lambda row: utils.microns2waves(np.sum(row[confidence_cols].values), wavelength=gen.lam_detection),
+        axis=1
+    )
+
+    current['confidence_umRMS'] = current.apply(
+        lambda row: np.linalg.norm(row[confidence_cols].values),
+        axis=1
+    )
+
+    results = pd.concat([results, current], ignore_index=True, sort=False)
 
     if savepath is not None:
         try:
@@ -416,6 +452,8 @@ def plot_heatmap_p2v(
     wavelength,
     savepath: Path,
     label='Integrated photoelectrons',
+    color_label='Residuals',
+    hist_col='confidence',
     lims=(0, 100),
     ax=None,
     cax=None,
@@ -462,38 +500,77 @@ def plot_heatmap_p2v(
     cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
     cmap = mcolors.ListedColormap(cmap)
 
-    contours = ax.contourf(
-        dataframe.columns.values,
-        dataframe.index.values,
-        dataframe.values,
-        cmap=cmap,
-        levels=levels,
-        extend='max',
-        linewidths=2,
-        linestyles='dashed',
-    )
+    if color_label == 'Residuals':
+        contours = ax.contourf(
+            dataframe.columns.values,
+            dataframe.index.values,
+            dataframe.values,
+            cmap=cmap,
+            levels=levels,
+            extend='max',
+            linewidths=2,
+            linestyles='dashed',
+        )
+        cbar = plt.colorbar(
+            contours,
+            cax=cax,
+            fraction=0.046,
+            pad=0.04,
+            extend='both',
+            spacing='proportional',
+            format=FormatStrFormatter("%.2f"),
+            ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
+        )
+        cbar.ax.set_ylabel(rf'Residuals ({agg} peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)')
+    else:
+        contours = ax.contourf(
+            dataframe.columns.values,
+            dataframe.index.values,
+            dataframe.values,
+            cmap='nipy_spectral',
+            levels=np.arange(0, .11, step=.01),
+            extend='max',
+            linewidths=2,
+            linestyles='dashed',
+        )
+        cbar = plt.colorbar(
+            contours,
+            cax=cax,
+            fraction=0.046,
+            pad=0.04,
+            extend='both',
+            spacing='proportional',
+            format=FormatStrFormatter("%.2f"),
+            ticks=np.arange(0, .11, step=.01),
+        )
+        cbar.ax.set_ylabel(rf'Confidence: ({agg} $\lambda = {int(wavelength * 1000)}~nm$)')
+
     ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+    cbar.ax.yaxis.set_ticks_position('right')
+    cbar.ax.yaxis.set_label_position('left')
 
     if histograms is not None:
-        if label == 'Integrated photoelectrons':
+        if label == 'Integrated photons' or label == 'Integrated photoelectrons':
             x = histograms[
                 (histograms.pbins <= 1e5) &
                 (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
             ]
+            xmax = np.round(np.max(x[hist_col]), 1)
+
             ax1 = sns.histplot(
                 ax=ax1,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
-            ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
-            ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2, label='Median')
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2, label='Mean')
             ax1.set_ylim(0, 30)
-            ax1.set_xlim(0, 3)
-            ax1.set_xlabel('Residuals')
+            ax1.set_xlim(0, xmax)
+            ax1.set_xlabel(color_label)
             ax1.set_ylabel('')
             ax1.text(
                 .9, .8, 'I',
@@ -523,17 +600,17 @@ def plot_heatmap_p2v(
             ax2 = sns.histplot(
                 ax=ax2,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
-            ax2.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
-            ax2.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+            ax2.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax2.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
             ax2.set_ylim(0, 30)
-            ax2.set_xlim(0, 3)
-            ax2.set_xlabel('Residuals')
+            ax2.set_xlim(0, xmax)
+            ax2.set_xlabel(color_label)
             ax2.set_ylabel('')
             ax2.text(
                 .9, .8, 'II',
@@ -563,17 +640,17 @@ def plot_heatmap_p2v(
             ax3 = sns.histplot(
                 ax=ax3,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
-            ax3.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
-            ax3.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+            ax3.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax3.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
             ax3.set_ylim(0, 30)
-            ax3.set_xlim(0, 3)
-            ax3.set_xlabel('Residuals')
+            ax3.set_xlim(0, xmax)
+            ax3.set_xlabel(color_label)
             ax3.set_ylabel('')
             ax3.text(
                 .9, .8, 'III',
@@ -614,20 +691,20 @@ def plot_heatmap_p2v(
             ax1 = sns.histplot(
                 ax=ax1,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
 
-            ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
-            ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
-            ax1.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
-            ax1.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2, label='Median')
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2, label='Mean')
             ax1.set_ylim(0, 80)
             ax1.set_xlim(0, 5)
-            ax1.set_xlabel('Residuals')
+            ax1.set_xlabel(color_label)
             ax1.set_ylabel('')
             ax1.text(
                 .9, .8, 'I',
@@ -657,17 +734,17 @@ def plot_heatmap_p2v(
             ax2 = sns.histplot(
                 ax=ax2,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
-            ax2.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2)
-            ax2.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2)
+            ax2.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax2.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
             ax2.set_ylim(0, 80)
             ax2.set_xlim(0, 5)
-            ax2.set_xlabel('Residuals')
+            ax2.set_xlabel(color_label)
             ax2.set_ylabel('')
             ax2.text(
                 .9, .8, 'II',
@@ -697,17 +774,17 @@ def plot_heatmap_p2v(
             ax3 = sns.histplot(
                 ax=ax3,
                 data=x,
-                x="residuals",
+                x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=25,
                 color='dimgrey'
             )
-            ax3.axvline(np.median(x['residuals']), c='C0', ls='-', lw=2, label='Median')
-            ax3.axvline(np.mean(x['residuals']), c='C1', ls='--', lw=2, label='Mean')
+            ax3.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2, label='Median')
+            ax3.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2, label='Mean')
             ax3.set_ylim(0, 80)
             ax3.set_xlim(0, 5)
-            ax3.set_xlabel('Residuals')
+            ax3.set_xlabel(color_label)
             ax3.set_ylabel('')
             ax3.text(
                 .9, .8, 'III',
@@ -738,22 +815,7 @@ def plot_heatmap_p2v(
             ax3.yaxis.set_major_formatter(PercentFormatter(decimals=0))
             ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-    cbar = plt.colorbar(
-        contours,
-        cax=cax,
-        fraction=0.046,
-        pad=0.04,
-        extend='both',
-        spacing='proportional',
-        format=FormatStrFormatter("%.2f"),
-        ticks=[0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5],
-    )
-
-    cbar.ax.set_ylabel(rf'Residuals ({agg} peak-to-valley, $\lambda = {int(wavelength*1000)}~nm$)')
-    cbar.ax.yaxis.set_ticks_position('right')
-    cbar.ax.yaxis.set_label_position('left')
-
-    if label == 'Integrated photons per object':
+    if label == 'Integrated photons' or label == 'Integrated photoelectrons':
         ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
         ax.set_xticks(np.arange(0, 1e6+10e4, 5e4), minor=True)
     elif label == 'Number of iterations':
@@ -895,6 +957,7 @@ def snrheatmap(
     plot_rotations: bool = False,
     agg: str = 'median',
     psf_type: Optional[str] = None,
+    num_beads: Optional[int] = None,
     lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
@@ -902,6 +965,11 @@ def snrheatmap(
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
+    if num_beads is not None:
+        savepath = savepath / f'beads-{num_beads}'
+    else:
+        savepath = savepath / 'beads'
 
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -922,7 +990,7 @@ def snrheatmap(
             na=na,
             batch_size=batch_size,
             photons_range=None,
-            npoints_range=(1, 1),
+            npoints_range=(1, num_beads) if num_beads is not None else None,
             eval_sign=eval_sign,
             digital_rotations=digital_rotations,
             plot=plot,
@@ -936,21 +1004,25 @@ def snrheatmap(
 
     for x in ['photons', 'photoelectrons', 'counts', 'counts_p100', 'counts_p99']:
 
-        if x == 'photons' or x == 'photoelectrons':
+        if x == 'photons':
+            label = f'Integrated photons'
+            lims = (0, 10**6)
+            pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
+        elif x == 'photoelectrons':
             label = f'Integrated photoelectrons'
             lims = (0, 10**6)
             pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
         elif x == 'counts':
             label = f'Integrated counts'
-            lims = (4e6, 7.5e6)
+            lims = (2.6e7, 3e7)
             pbins = np.arange(lims[0], lims[-1]+2e5, 1e5)
         elif x == 'counts_p100':
-            label = f'Max counts'
-            lims = (0, 5000)
+            label = f'Max counts (camera background offset = 100)'
+            lims = (100, 2000)
             pbins = np.arange(lims[0], lims[-1]+400, 200)
         else:
-            label = f'99th percentile of counts'
-            lims = (0, 300)
+            label = f'99th percentile of counts (camera background offset = 100)'
+            lims = (100, 300)
             pbins = np.arange(lims[0], lims[-1]+50, 25)
 
         df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
@@ -979,9 +1051,37 @@ def snrheatmap(
             wavelength=modelspecs.lam_detection,
             savepath=Path(f"{savepath}_iter_{iter_num}_{x}"),
             label=label,
+            hist_col='residuals',
             lims=lims,
             agg=agg
         )
+
+        try:
+            for c in ['confidence', 'confidence_sum']:
+                dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
+                dataframe.insert(0, 0, dataframe.index.values)
+
+                try:
+                    dataframe = dataframe.sort_index().interpolate()
+                except ValueError:
+                    pass
+
+                dataframe.to_csv(f'{savepath}_{x}_{c}.csv')
+                logger.info(f'Saved: {savepath.resolve()}_{x}_{c}.csv')
+
+                plot_heatmap_p2v(
+                    dataframe,
+                    histograms=df if x == 'photons' else None,
+                    wavelength=modelspecs.lam_detection,
+                    savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}"),
+                    label=label,
+                    color_label='Confidence',
+                    hist_col=c,
+                    lims=lims,
+                    agg='mean'
+                )
+        except Exception:
+            pass
 
     return savepath
 
@@ -1000,6 +1100,7 @@ def densityheatmap(
     plot: Any = None,
     plot_rotations: bool = False,
     agg: str = 'median',
+    num_beads: Optional[int] = None,
     photons_range: Optional[tuple] = None,
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
@@ -1010,6 +1111,9 @@ def densityheatmap(
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
+    if num_beads is not None:
+        savepath = savepath / f'beads-{num_beads}'
 
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -1030,7 +1134,7 @@ def densityheatmap(
             distribution=distribution,
             na=na,
             photons_range=photons_range,
-            npoints_range=None,
+            npoints_range=(1, num_beads) if num_beads is not None else None,
             batch_size=batch_size,
             eval_sign=eval_sign,
             digital_rotations=digital_rotations,
@@ -1909,3 +2013,270 @@ def eval_modalities(
                     )
 
     return save_path
+
+
+@profile
+def eval_confidence(
+    model: Path,
+    batch_size: int = 512,
+    eval_sign: str = 'signed',
+    dist: str = 'single',
+    digital_rotations: bool = False,
+):
+    pool = Pool(processes=4)  # plotting = 2*calculation time, so shouldn't need more than 2-4 processes to keep up.
+
+    models = list(model.glob('*.h5'))
+
+    for photons in [5e4, 1e5, 2e5]:
+        photons = int(photons)
+        for amplitude_range in [(.1, .11), (.2, .22)]:
+            gen = backend.load_metadata(
+                models[0],
+                amplitude_ranges=amplitude_range,
+                distribution=dist,
+                signed=False if eval_sign == 'positive_only' else True,
+                rotate=True,
+                mode_weights='pyramid',
+                psf_shape=(64, 64, 64),
+            )
+            for s in range(5):
+                for num_objs in [1, 3, 5]:
+                    reference = multipoint_dataset.beads(
+                        photons=photons,
+                        image_shape=gen.psf_shape,
+                        object_size=0,
+                        num_objs=num_objs,
+                        fill_radius=.3 if num_objs > 1 else 0
+                    )
+
+                    phi = Wavefront(
+                        amplitude_range,
+                        modes=gen.n_modes,
+                        distribution=dist,
+                        signed=False if eval_sign == 'positive_only' else True,
+                        rotate=True,
+                        mode_weights='pyramid',
+                        lam_detection=gen.lam_detection,
+                    )
+
+                    # aberrated PSF without noise
+                    psf, y, y_lls_defocus = gen.single_psf(
+                        phi=phi,
+                        normed=True,
+                        meta=True,
+                        lls_defocus_offset=(0, 0)
+                    )
+
+                    for trained_model in tqdm(models, file=sys.stdout):
+                        m = backend.load(trained_model)
+                        no_phase = True if m.input_shape[1] == 3 else False
+
+                        noisy_img = simulate_beads(psf, psf_type=gen.psf_type, beads=reference, noise=True)
+                        maxcounts = np.max(noisy_img)
+                        noisy_img /= maxcounts
+
+                        save_path = Path(
+                            f"{model.with_suffix('')}/{eval_sign}/confidence/ph-{photons}/um-{amplitude_range[-1]}/num_objs-{num_objs:02d}/{trained_model.name.strip('.h5')}"
+                        )
+                        save_path.mkdir(exist_ok=True, parents=True)
+
+                        embeddings = backend.preprocess(
+                            noisy_img,
+                            modelpsfgen=gen,
+                            digital_rotations=361 if digital_rotations else None,
+                            remove_background=True,
+                            normalize=True,
+                            plot=save_path / f'{s}',
+                        )
+
+                        if digital_rotations:
+                            res = backend.predict_rotation(
+                                m,
+                                embeddings,
+                                save_path=save_path / f'{s}',
+                                psfgen=gen,
+                                no_phase=no_phase,
+                                batch_size=batch_size,
+                                plot=save_path / f'{s}',
+                                plot_rotations=save_path / f'{s}',
+                            )
+                        else:
+                            res = backend.bootstrap_predict(
+                                m,
+                                embeddings,
+                                psfgen=gen,
+                                no_phase=no_phase,
+                                batch_size=batch_size,
+                                plot=save_path / f'{s}',
+                            )
+
+                        try:
+                            p, std = res
+                            p_lls_defocus = None
+                        except ValueError:
+                            p, std, p_lls_defocus = res
+
+                        if eval_sign == 'positive_only':
+                            y = np.abs(y)
+                            if len(p.shape) > 1:
+                                p = np.abs(p)[:, :y.shape[-1]]
+                            else:
+                                p = np.abs(p)[np.newaxis, :y.shape[-1]]
+                        else:
+                            if len(p.shape) > 1:
+                                p = p[:, :y.shape[-1]]
+                            else:
+                                p = p[np.newaxis, :y.shape[-1]]
+
+                        residuals = y - p
+
+                        p_wave = Wavefront(p, lam_detection=gen.lam_detection)
+                        y_wave = Wavefront(y, lam_detection=gen.lam_detection)
+                        residuals = Wavefront(residuals, lam_detection=gen.lam_detection)
+
+                        p_psf = gen.single_psf(p_wave, normed=True)
+                        gt_psf = gen.single_psf(y_wave, normed=True)
+
+                        corrected_psf = gen.single_psf(residuals)
+                        corrected_noisy_img = simulate_beads(corrected_psf, psf_type=gen.psf_type, beads=reference, noise=True)
+                        corrected_noisy_img /= np.max(corrected_noisy_img)
+
+                        imwrite(save_path / f'psf_{s}.tif', noisy_img)
+                        imwrite(save_path / f'corrected_psf_{s}.tif', corrected_psf)
+
+                        task = partial(
+                            vis.diagnostic_assessment,
+                            psf=noisy_img,
+                            gt_psf=gt_psf,
+                            predicted_psf=p_psf,
+                            corrected_psf=corrected_noisy_img,
+                            photons=photons,
+                            maxcounts=maxcounts,
+                            y=y_wave,
+                            pred=p_wave,
+                            y_lls_defocus=y_lls_defocus,
+                            p_lls_defocus=p_lls_defocus,
+                            save_path=save_path / f'{s}',
+                            display=False,
+                            pltstyle='default'
+                        )
+                        _ = pool.apply_async(task)  # issue task
+
+    pool.close()    # close the pool
+    pool.join()     # wait for all tasks to complete
+
+    return save_path
+
+
+@profile
+def confidence_heatmap(
+    modelpath: Path,
+    datadir: Path,
+    iter_num: int = 1,
+    distribution: str = '/',
+    samplelimit: Any = None,
+    na: float = 1.0,
+    batch_size: int = 100,
+    eval_sign: str = 'signed',
+    digital_rotations: bool = False,
+    plot: Any = None,
+    plot_rotations: bool = False,
+    agg: str = 'median',
+    psf_type: Optional[str] = None,
+    lam_detection: Optional[float] = .510,
+):
+    modelspecs = backend.load_metadata(modelpath)
+    savepath = modelpath.with_suffix('') / eval_sign / f'confidence'
+
+    if psf_type is not None:
+        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    if distribution != '/':
+        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+    else:
+        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    if datadir.suffix == '.csv':
+        df = pd.read_csv(datadir, header=0, index_col=0)
+    else:
+        df = iter_evaluate(
+            iter_num=iter_num,
+            modelpath=modelpath,
+            datapath=datadir,
+            savepath=savepath,
+            samplelimit=samplelimit,
+            na=na,
+            batch_size=batch_size,
+            photons_range=None,
+            npoints_range=(1, 1),
+            eval_sign=eval_sign,
+            digital_rotations=digital_rotations,
+            plot=plot,
+            plot_rotations=plot_rotations,
+            psf_type=psf_type,
+            lam_detection=lam_detection
+        )
+
+    df = df[df['iter_num'] == iter_num]
+    df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
+
+    for x in ['photons', 'photoelectrons', 'counts', 'counts_p100', 'counts_p99']:
+
+        if x == 'photons':
+            label = f'Integrated photons'
+            lims = (0, 10**6)
+            pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
+        elif x == 'photoelectrons':
+            label = f'Integrated photoelectrons'
+            lims = (0, 10**6)
+            pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
+        elif x == 'counts':
+            label = f'Integrated counts'
+            lims = (4e6, 7.5e6)
+            pbins = np.arange(lims[0], lims[-1]+2e5, 1e5)
+        elif x == 'counts_p100':
+            label = f'Max counts'
+            lims = (0, 5000)
+            pbins = np.arange(lims[0], lims[-1]+400, 200)
+        else:
+            label = f'99th percentile of counts'
+            lims = (0, 300)
+            pbins = np.arange(lims[0], lims[-1]+50, 25)
+
+        df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
+        bins = np.arange(0, 10.25, .25).round(2)
+        df['ibins'] = pd.cut(
+            df['aberration'],
+            bins,
+            labels=bins[1:],
+            include_lowest=True
+        )
+
+        for c in ['confidence', 'confidence_sum']:
+            dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
+            dataframe.insert(0, 0, dataframe.index.values)
+
+            try:
+                dataframe = dataframe.sort_index().interpolate()
+            except ValueError:
+                pass
+
+            dataframe.to_csv(f'{savepath}_{x}_{c}.csv')
+            logger.info(f'Saved: {savepath.resolve()}_{x}_{c}.csv')
+
+            plot_heatmap_p2v(
+                dataframe,
+                histograms=df if x == 'photons' else None,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}"),
+                label=label,
+                color_label='Confidence',
+                hist_col=c,
+                lims=lims,
+                agg='mean'
+            )
+
+    return savepath
+

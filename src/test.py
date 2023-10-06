@@ -1,6 +1,5 @@
 import atexit
 import os
-import re
 import subprocess
 import multiprocessing as mp
 
@@ -9,8 +8,6 @@ import sys
 import time
 from pathlib import Path
 import tensorflow as tf
-from functools import partial
-
 
 try:
     import cupy as cp
@@ -84,7 +81,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--num_neighbor", default=None, type=int, help='number of neighbors in the fov'
+        "--num_beads", default=None, type=int, help='number of beads in the fov'
     )
 
     parser.add_argument(
@@ -117,11 +114,6 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--cluster", action='store_true',
-        help='a toggle to run predictions on our cluster'
-    )
-
-    parser.add_argument(
         "--psf_type", default=None, type=str,
         help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
              '(Default: None; to keep default mode used during training)'
@@ -135,7 +127,15 @@ def parse_args(args):
     return parser.parse_args(args)
 
 
-def run_task(iter_num, args):
+def main(args=None):
+    args = parse_args(args)
+    logger.info(args)
+
+    if os.name == 'nt':
+        mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
+
+    timeit = time.time()
+
     tf.keras.backend.set_floatx('float32')
     physical_devices = tf.config.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
@@ -181,7 +181,31 @@ def run_task(iter_num, args):
             )
         elif args.target == 'snrheatmap':
             savepath = eval.snrheatmap(
-                iter_num=iter_num,
+                iter_num=args.niter,
+                modelpath=args.model,
+                datadir=args.datadir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=args.batch_size,
+                eval_sign=args.eval_sign,
+                digital_rotations=args.digital_rotations,
+                plot=args.plot,
+                plot_rotations=args.plot_rotations,
+                psf_type=args.psf_type,
+                lam_detection=args.wavelength,
+                num_beads=args.num_beads
+            )
+        elif args.target == "confidence":
+            savepath = eval.eval_confidence(
+                model=args.model,
+                eval_sign=args.eval_sign,
+                batch_size=args.batch_size,
+                digital_rotations=args.digital_rotations,
+            )
+        elif args.target == 'confidence_heatmap':
+            savepath = eval.confidence_heatmap(
+                iter_num=args.niter,
                 modelpath=args.model,
                 datadir=args.datadir,
                 distribution=args.dist,
@@ -197,7 +221,7 @@ def run_task(iter_num, args):
             )
         elif args.target == 'densityheatmap':
             savepath = eval.densityheatmap(
-                iter_num=iter_num,
+                iter_num=args.niter,
                 modelpath=args.model,
                 datadir=args.datadir,
                 distribution=args.dist,
@@ -210,11 +234,12 @@ def run_task(iter_num, args):
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
-                lam_detection=args.wavelength
+                lam_detection=args.wavelength,
+                num_beads=args.num_beads
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
-                iter_num=iter_num,
+                iter_num=args.niter,
                 modelpath=args.model,
                 datadir=args.datadir,
                 distribution=args.dist,
@@ -232,7 +257,7 @@ def run_task(iter_num, args):
 
         with Path(f"{savepath.with_suffix('')}_eval_settings.json").open('w') as f:
             json = dict(
-                iter_num=int(iter_num),
+                iter_num=int(args.niter),
                 modelpath=str(args.model),
                 datadir=str(args.datadir),
                 distribution=str(args.dist),
@@ -259,73 +284,7 @@ def run_task(iter_num, args):
 
         atexit.register(strategy._extended._collective_ops._pool.close)
 
-
-def main(args=None):
-    command_flags = sys.argv[1:] if args is None else args
-    args = parse_args(args)
-    logger.info(args)
-
-    if args.cluster:
-        hostname = "master.abc.berkeley.edu"
-        username = "thayeralshaabi"
-        partition = "abc_a100"
-
-        cluster_env = f"~/anaconda3/envs/ml/bin/python"
-        cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
-        script = f"{cluster_repo}/src/test.py"
-
-        flags = ' '.join(command_flags)
-        flags = re.sub(pattern='--cluster', repl='', string=flags)
-        flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
-        flags = flags.replace("..", cluster_repo)       # regex stinks at replacing ".."
-        flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
-        flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
-        # flags = re.sub(pattern='--batch_size \d+', repl='--batch_size 300', string=flags)
-        taskname = f"{args.target}_{Path(args.model).stem}"
-
-        sjob = f"srun "
-        sjob += f"--exclusive  "
-        sjob += f"-p {partition} "
-        sjob += f" --nodes=1 "
-        sjob += f" --mem=500GB " #request basically all memory
-        sjob += f"--job-name={taskname} "
-        sjob += f"--pty {cluster_env} {script} {flags}"
-
-        logger.info(f"ssh {username}@{hostname} \"{sjob}\"")
-        subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
-    else:
-        if os.environ.get('SLURM_JOB_ID') is not None:
-            logger.info(f"SLURM_JOB_ID = {os.environ.get('SLURM_JOB_ID')}")
-        if os.environ.get('SLURMD_NODENAME') is not None:
-            logger.info(f"SLURMD_NODENAME = {os.environ.get('SLURMD_NODENAME')}")
-        if os.environ.get('SLURM_JOB_PARTITION') is not None:
-            logger.info(f"SLURM_JOB_PARTITION = {os.environ.get('SLURM_JOB_PARTITION')}")
-
-        if os.name == 'nt':
-            mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
-
-        timeit = time.time()
-        mp.set_start_method('spawn', force=True)
-
-        for k in range(1, args.niter + 1):
-
-            t = time.time()
-            # Need to shut down the process after each iteration to clear its context and vram 'safely'
-            p = mp.Process(target=partial(run_task, iter_num=k, args=args), name=args.target)
-            p.start()
-            p.join()
-            p.close()
-
-            logging.info(
-                f'Iteration #{k} took {(time.time() - t) / 60:.1f} minutes to run. '
-                f'{(time.time() - t) / 60 * (args.niter - k):.1f} minutes left to go.'
-            )
-
-        logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+    logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 
 if __name__ == "__main__":

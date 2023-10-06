@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="decon" type="PythonConfigurationType" factoryName="Python" folderName="ao">
+  <configuration default="false" name="confidence" type="PythonConfigurationType" factoryName="Python" folderName="eval">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -12,8 +12,8 @@
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="decon $USER_HOME$/nvme2/Data/TestsForThayer/decon_test/exp5_newfish_before_cropped_tiles_predictions.csv --iters 50 --plot" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/test.py" />
+    <option name="PARAMETERS" value="../pretrained_models/rotations --eval_sign signed --digital_rotations confidence" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

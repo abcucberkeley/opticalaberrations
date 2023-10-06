@@ -6,7 +6,7 @@ import logging
 import sys
 import subprocess
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -183,7 +183,14 @@ def phasenet_heatmap(
         mode_weights='pyramid',
     )
 
-    if iter_num == 1:
+    if inputs.suffix == '.csv':
+        results = pd.read_csv(inputs, header=0, index_col=0)
+
+    elif Path(f'{savepath}_predictions.csv').exists():
+        # continue from previous results, ignoring criteria
+        results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
+
+    else:
         # on first call, setup the dataframe with the 0th iteration stuff
         results = eval.collect_data(
             datapath=inputs,
@@ -195,77 +202,79 @@ def phasenet_heatmap(
             psf_type=phasenetgen.psf_type,
             lam_detection=phasenetgen.lam_detection
         )
-    else:
-        # read previous results, ignoring criteria
-        results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
 
-    prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
-    ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
-    residual_cols = [col for col in results.columns if col.endswith('_residual')]
-    previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
+    if iter_num != results['iter_num'].values.max():
+        prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
+        ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
+        residual_cols = [col for col in results.columns if col.endswith('_residual')]
+        previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
 
-    # create realspace images for the current iteration
-    paths = utils.multiprocess(
-        func=partial(
-            eval.generate_sample,
-            iter_number=iter_num,
-            savedir=savepath.resolve(),
-            data=previous,
-            psfgen=phasenetgen,
-            no_phase=False,
-            digital_rotations=None,
-            no_beads=no_beads
-        ),
-        jobs=previous['id'].values,
-        desc=f'Generate samples ({savepath.resolve()})',
-        unit=' sample',
-        cores=-1
-    )
+        # create realspace images for the current iteration
+        paths = utils.multiprocess(
+            func=partial(
+                eval.generate_sample,
+                iter_number=iter_num,
+                savedir=savepath.resolve(),
+                data=previous,
+                psfgen=phasenetgen,
+                no_phase=False,
+                digital_rotations=None,
+                no_beads=no_beads
+            ),
+            jobs=previous['id'].values,
+            desc=f'Generate samples ({savepath.resolve()})',
+            unit=' sample',
+            cores=-1
+        )
 
-    current = previous.copy()
-    current['iter_num'] = iter_num
-    current['file'] = paths
-    current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
+        current = previous.copy()
+        current['iter_num'] = iter_num
+        current['file'] = paths
+        current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
 
-    current[ground_truth_cols] = previous[residual_cols]
-    current[prediction_cols] = np.array([
-        predict_phasenet(p, phasenet=phasenet, phasenetgen=phasenetgen)
-        for p in paths
-    ])
+        current[ground_truth_cols] = previous[residual_cols]
+        current[prediction_cols] = np.array([
+            predict_phasenet(p, phasenet=phasenet, phasenetgen=phasenetgen)
+            for p in paths
+        ])
 
-    if eval_sign == 'positive_only':
-        current[ground_truth_cols] = current[ground_truth_cols].abs()
-        current[prediction_cols] = current[prediction_cols].abs()
+        if eval_sign == 'positive_only':
+            current[ground_truth_cols] = current[ground_truth_cols].abs()
+            current[prediction_cols] = current[prediction_cols].abs()
 
-    current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
+        current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
 
-    # compute residuals for each sample
-    current['residuals'] = current.apply(
-        lambda row: Wavefront(row[residual_cols].values, lam_detection=phasenetgen.lam_detection).peak2valley(na=na),
-        axis=1
-    )
+        # compute residuals for each sample
+        current['residuals'] = current.apply(
+            lambda row: Wavefront(row[residual_cols].values, lam_detection=phasenetgen.lam_detection).peak2valley(na=na),
+            axis=1
+        )
 
-    current['residuals_umRMS'] = current.apply(
-        lambda row: np.linalg.norm(row[residual_cols].values),
-        axis=1
-    )
+        current['residuals_umRMS'] = current.apply(
+            lambda row: np.linalg.norm(row[residual_cols].values),
+            axis=1
+        )
 
-    results = results.append(current, ignore_index=True)
+        results = pd.concat([results, current], ignore_index=True, sort=False)
 
-    if savepath is not None:
-        try:
-            results.to_csv(f'{savepath}_predictions.csv')
-        except PermissionError:
-            savepath = f'{savepath}_x'
-            results.to_csv(f'{savepath}_predictions.csv')
-        logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
+        if savepath is not None:
+            try:
+                results.to_csv(f'{savepath}_predictions.csv')
+            except PermissionError:
+                savepath = f'{savepath}_x'
+                results.to_csv(f'{savepath}_predictions.csv')
+            logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
 
     df = results[results['iter_num'] == iter_num]
     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
 
     for x in ['photons', 'photoelectrons', 'counts', 'counts_p100', 'counts_p99']:
 
-        if x == 'photons' or x == 'photoelectrons':
+        if x == 'photons':
+            label = f'Integrated photons'
+            lims = (0, 10**6)
+            pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
+        elif x == 'photoelectrons':
             label = f'Integrated photoelectrons'
             lims = (0, 10**6)
             pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
@@ -317,7 +326,7 @@ def phasenet_heatmap(
 
 @profile
 def predict_cocoa(
-    inputs: Path,
+    inputs: Union[Path, str, np.array],
     plot: bool = False,
     axial_voxel_size: float = .086,
     lateral_voxel_size: float = .2,
@@ -326,9 +335,14 @@ def predict_cocoa(
     refractive_index: float = 1.33,
     decon_iters: int = 30,
     psf_type: str = 'widefield',
-    cocoa_path: Path = Path('cocoa_repo')
+    cocoa_path: Path = Path('cocoa_repo'),
+    decon: bool = True,
+    psf: np.array = None,   # dummy
 ):
-
+    if isinstance(inputs, np.ndarray):
+        savepath = None
+    else:
+        savepath = inputs.with_suffix('')
     download_cocoa(cocoa_path)
 
     import os
@@ -396,11 +410,15 @@ def predict_cocoa(
         psf_type=psf_type,
     )
 
-    lls_excitation_profile = torch.from_numpy(psfgen.lls_excitation_profile.copy()).type(dtype).cuda(0).view(
-        psfgen.lls_excitation_profile.shape[0],
-        psfgen.lls_excitation_profile.shape[1],
-        psfgen.lls_excitation_profile.shape[2]
-    )
+    if psfgen.lls_excitation_profile is not None:
+        lls_excitation_profile = psfgen.lls_excitation_profile.copy()
+        lls_excitation_profile /= np.max(lls_excitation_profile)
+        # if psf_type is not 'widefield' or 'confocal'
+        lls_excitation_profile = torch.from_numpy(lls_excitation_profile).type(dtype).cuda(0).view(
+            psfgen.lls_excitation_profile.shape[0],
+            psfgen.lls_excitation_profile.shape[1],
+            psfgen.lls_excitation_profile.shape[2]
+        )
 
     y_max = np.max(img)
     y_min = np.min(img)
@@ -423,7 +441,7 @@ def predict_cocoa(
     coordinates = cocoa_models.input_coord_2d(INPUT_WIDTH, INPUT_HEIGHT).cuda(0)
 
     if args.encoding_option == 'cartesian':
-        print('Cartesian encoding')
+        # print('Cartesian encoding')
         embed_func = cocoa_models.Embedding(
             args.cartesian_encoding_dim,
             args.cartesian_encoding_depth
@@ -431,7 +449,7 @@ def predict_cocoa(
         coordinates = embed_func(coordinates).cuda(0)
 
     elif args.encoding_option == 'radial':
-        print('Radial encoding')
+        # print('Radial encoding')
         # sometime causes unwanted astigmatism, but works better with dense samples.
         coordinates = cocoa_models.radial_encoding(
             coordinates,
@@ -460,7 +478,7 @@ def predict_cocoa(
         loss_list = np.empty(shape=(1 + args.pretraining_num_iter,))
         loss_list[:] = np.NaN
 
-        for step in tqdm(range(args.pretraining_num_iter)):
+        for step in tqdm(range(args.pretraining_num_iter), desc=f"Pretraining (without PSF), {args.pretraining_num_iter} steps", unit='steps', leave=False, delay=5, mininterval=2):
             out_x = net_obj(coordinates)
 
             if args.nerf_beta is None:
@@ -479,17 +497,22 @@ def predict_cocoa(
             loss_list[step] = loss.item()
 
         t_end = time.time()
-        print('Initialization - Elapsed time: ' + str(t_end - t_start) + ' seconds.')
+        # logger.info(f'Initialization: {(t_end - t_start):.2f} elapsed seconds.')
 
         # torch.save(net_obj.state_dict(), net_obj_save_path_pretrained)
-        print('Pre-trained model saved.')
+        # print('Pre-trained model saved.')
 
-    ## kernel with simple coefficients
+    # kernel with simple coefficients
     net_ker = cocoa_models.optimal_kernel(
         max_val=args.kernel_max_val,
         order_up_to=args.kernel_order_up_to,
         piston_tip_tilt=False
     )  # 5e-2
+
+    # Dan thinks: The net_ker.parameters are given to Adam to optimize (along with the weights of the model) to
+    # minimize loss. The net_ker.parameters() gets the named parameters (which is just _k which is a list of zernikes).
+    # This list then gets made into a wavefront to generate an aberrated PSF which is convolved with the object (out_x),
+    # to calculate the loss.
 
     optimizer = torch.optim.Adam([{'params': net_obj.parameters(), 'lr': args.training_lr_obj},  # 1e-3
                                   {'params': net_ker.parameters(), 'lr': args.training_lr_ker}],  # 4e-3
@@ -511,7 +534,7 @@ def predict_cocoa(
 
     t_start = time.time()
 
-    for step in tqdm(range(args.training_num_iter)):
+    for step in tqdm(range(args.training_num_iter), desc=f"Training (with PSF), {args.training_num_iter} steps", unit='steps', leave=False, delay=5, mininterval=2):
         out_x = net_obj(coordinates)
 
         if args.nerf_beta is None:
@@ -524,10 +547,11 @@ def predict_cocoa(
 
         wf = net_ker.k
 
-        out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / y_.shape[0]
+        if psf_type == 'widefield':
+            out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / y_.shape[0]
 
-        if psf_type != 'widefield':
-            out_k_m *= lls_excitation_profile
+        else:
+            out_k_m = psf.incoherent_psf(wf, normalized=args.normalized) / y_.shape[0] * lls_excitation_profile
 
         k_vis = psf.masked_phase_array(wf, normalized=args.normalized)
         out_y = cocoa_utils.fft_convolve(out_x_m, out_k_m, mode='fftn')
@@ -558,12 +582,12 @@ def predict_cocoa(
         lr_ker_list[step] = optimizer.param_groups[1]['lr']
 
     t_end = time.time()
-    print('Training - Elapsed time: ' + str(t_end - t_start) + ' seconds.')
+    # logger.info(f'Training: {(t_end - t_start):.2f} elapsed seconds.')
 
     y = cocoa_utils.torch_to_np(y)
     out_k_m = cocoa_utils.torch_to_np(out_k_m)
-    out_x_m = cocoa_utils.torch_to_np(out_x_m)
-    out_y = cocoa_utils.torch_to_np(out_y)
+    reconstructed = cocoa_utils.torch_to_np(out_x_m) * np.sum(out_k_m) * (y_max - y_min) + y_min  # undo normalization: (img - y_min) / (y_max - y_min) = out_x_m
+    out_y = cocoa_utils.torch_to_np(out_y) * (y_max - y_min) + y_min   # undo normalization: (img - y_min) / (y_max - y_min) = out_y
     zernikes = cocoa_utils.torch_to_np(wf)
     predicted_wavefront = np.fft.fftshift(k_vis.detach().cpu().numpy())
 
@@ -581,84 +605,92 @@ def predict_cocoa(
     ]
     df = pd.DataFrame(coefficients, columns=['n', 'm', 'amplitude'])
     df.index.name = 'ansi'
-    df.to_csv(f"{inputs.with_suffix('')}_cocoa_zernike_coefficients.csv")
 
-    imwrite(f"{inputs.with_suffix('')}_cocoa_predicted_psf.tif", out_k_m, dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_wavefront.tif", wavefront.wave(), dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_predicted_wavefront.tif", predicted_wavefront, dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_estimated.tif", out_y, dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_reconstructed.tif", out_x_m, dtype=np.float32)
+    if savepath is not None:
+        df.to_csv(f"{savepath}_cocoa_zernike_coefficients.csv")
 
-    predicted_psf = psfgen.incoherent_psf(phi=wavefront)
-    predicted_psf /= predicted_psf.sum()
-    out_decon = utils.fft_decon(kernel=predicted_psf, sample=img, iters=decon_iters)
+        imwrite(f"{savepath}_cocoa_predicted_psf.tif", out_k_m, dtype=np.float32)
+        imwrite(f"{savepath}_cocoa_wavefront.tif", wavefront.wave(), dtype=np.float32)
+        imwrite(f"{savepath}_cocoa_predicted_wavefront.tif", predicted_wavefront, dtype=np.float32)
+        imwrite(f"{savepath}_cocoa_estimated.tif", out_y, dtype=np.float32)
+        imwrite(f"{savepath}_cocoa_reconstructed.tif", reconstructed, dtype=np.float32)
 
-    imwrite(f"{inputs.with_suffix('')}_cocoa_psf.tif", predicted_psf, dtype=np.float32)
-    imwrite(f"{inputs.with_suffix('')}_cocoa_deconvolved.tif", out_decon, dtype=np.float32)
+        logger.info(f"Raw data: \t{Path(f'{savepath}.tif').resolve()}")
+        logger.info(f"Saved prediction of the raw data to: \t{Path(f'{savepath}_cocoa_estimated.tif').resolve()}")
+        logger.info(f"Saved prediction of the object to:   \t{Path(f'{savepath}_cocoa_reconstructed.tif').resolve()}")
 
-    if plot:
-        plt.rcParams.update({
-            'font.size': 10,
-            'axes.titlesize': 12,
-            'axes.labelsize': 12,
-            'xtick.labelsize': 10,
-            'ytick.labelsize': 10,
-            'axes.autolimit_mode': 'round_numbers'
-        })
+        predicted_psf = psfgen.incoherent_psf(phi=wavefront)
+        predicted_psf /= predicted_psf.sum()
+        imwrite(f"{savepath}_cocoa_psf.tif", predicted_psf, dtype=np.float32)
+        if decon:
+            out_decon = utils.fft_decon(kernel=predicted_psf, sample=img, iters=decon_iters)
+            imwrite(f"{savepath}_cocoa_deconvolved.tif", out_decon, dtype=np.float32)
+            logger.info(f"Saved deconvolved (w/ cocoa PSF) to: \t{Path(f'{savepath}_cocoa_deconvolved.tif').resolve()}")
+    
+        if plot:
+            plt.rcParams.update({
+                'font.size': 10,
+                'axes.titlesize': 12,
+                'axes.labelsize': 12,
+                'xtick.labelsize': 10,
+                'ytick.labelsize': 10,
+                'axes.autolimit_mode': 'round_numbers'
+            })
 
-        fig = plt.figure()
-        mat = plt.imshow(predicted_wavefront)
-        cbar = plt.colorbar(mat)
-        vis.savesvg(fig, Path(f"{inputs.with_suffix('')}_cocoa_predicted_wavefront.svg"))
+            fig = plt.figure()
+            mat = plt.imshow(predicted_wavefront)
+            cbar = plt.colorbar(mat)
+            vis.savesvg(fig, Path(f"{savepath}_cocoa_predicted_wavefront.svg"))
 
-        fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(12, 16))
+            fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(12, 16))
 
-        vis.plot_mip(
-            vol=img/img.max(),
-            xy=axes[0, 0],
-            xz=axes[0, 1],
-            yz=axes[0, 2],
-            dxy=lateral_voxel_size,
-            dz=axial_voxel_size,
-            label='Input (MIP) [$\gamma$=.5]'
-        )
+            vis.plot_mip(
+                vol=img/img.max(),
+                xy=axes[0, 0],
+                xz=axes[0, 1],
+                yz=axes[0, 2],
+                dxy=lateral_voxel_size,
+                dz=axial_voxel_size,
+                label='Input (MIP) [$\gamma$=.5]'
+            )
 
-        vis.plot_mip(
-            vol=out_y/out_y.max(),
-            xy=axes[1, 0],
-            xz=axes[1, 1],
-            yz=axes[1, 2],
-            dxy=lateral_voxel_size,
-            dz=axial_voxel_size,
-            label='Estimated (MIP) [$\gamma$=.5]'
-        )
+            vis.plot_mip(
+                vol=out_y/out_y.max(),
+                xy=axes[1, 0],
+                xz=axes[1, 1],
+                yz=axes[1, 2],
+                dxy=lateral_voxel_size,
+                dz=axial_voxel_size,
+                label='Estimated (MIP) [$\gamma$=.5]'
+            )
 
-        vis.plot_mip(
-            vol=out_x_m/out_x_m.max(),
-            xy=axes[2, 0],
-            xz=axes[2, 1],
-            yz=axes[2, 2],
-            dxy=lateral_voxel_size,
-            dz=axial_voxel_size,
-            label='Reconstructed (MIP) [$\gamma$=.5]'
-        )
+            vis.plot_mip(
+                vol=reconstructed/reconstructed.max(),
+                xy=axes[2, 0],
+                xz=axes[2, 1],
+                yz=axes[2, 2],
+                dxy=lateral_voxel_size,
+                dz=axial_voxel_size,
+                label='Reconstructed (MIP) [$\gamma$=.5]'
+            )
 
-        vis.plot_mip(
-            vol=out_decon/out_decon.max(),
-            xy=axes[-1, 0],
-            xz=axes[-1, 1],
-            yz=axes[-1, 2],
-            dxy=lateral_voxel_size,
-            dz=axial_voxel_size,
-            label='Deconvolved (MIP) [$\gamma$=.5]'
-        )
+            vis.plot_mip(
+                vol=out_decon/out_decon.max(),
+                xy=axes[-1, 0],
+                xz=axes[-1, 1],
+                yz=axes[-1, 2],
+                dxy=lateral_voxel_size,
+                dz=axial_voxel_size,
+                label='Deconvolved (MIP) [$\gamma$=.5]'
+            )
 
-        vis.savesvg(fig, Path(f"{inputs.with_suffix('')}_cocoa_mips.svg"))
+            vis.savesvg(fig, Path(f"{savepath}_cocoa_mips.svg"))
 
-        vis.diagnosis(
-            pred=wavefront,
-            pred_std=Wavefront(np.zeros_like(wavefront.amplitudes_ansi)),
-            save_path=Path(f"{inputs.with_suffix('')}_cocoa_diagnosis"),
-        )
+            vis.diagnosis(
+                pred=wavefront,
+                pred_std=Wavefront(np.zeros_like(wavefront.amplitudes_ansi)),
+                save_path=Path(f"{savepath}_cocoa_diagnosis"),
+            )
+            logger.info(f'Figure: \t{Path(f"{savepath}_cocoa_mips.svg").resolve()}')
 
-    return wavefront.amplitudes_ansi
+    return out_y, reconstructed

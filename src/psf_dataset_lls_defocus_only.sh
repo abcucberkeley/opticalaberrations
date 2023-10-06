@@ -26,8 +26,8 @@ mkdir -p $LOGS
 
 SAMPLES_PER_JOB=100
 SAMPLES_PER_BIN=200
-defocus1=($(seq -2 .2 1.8))
-defocus2=($(seq -1.8 .2 2))
+defocus1=($(seq -2 .1 1.9))
+defocus2=($(seq -1.9 .1 2))
 mPH=($(seq 1 50000 460000))
 xPH=($(seq 50000 50000 500000))
 SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))

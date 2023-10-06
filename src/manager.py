@@ -64,6 +64,16 @@ def parse_args(args):
     )
 
     slurm.add_argument(
+        "--nodelist", default=None, type=str,
+        help='submit job to a specific node'
+    )
+
+    slurm.add_argument(
+        "--dependency", default=None, type=str,
+        help='submit job with a specific dependency'
+    )
+
+    slurm.add_argument(
         "--name", default='train', type=str,
         help='allies name for this job'
     )
@@ -182,6 +192,12 @@ def main(args=None):
 
         if args.gpus > 0:
             sjob += f' --gres=gpu:{args.gpus} '
+
+        if args.nodelist is not None:
+            sjob += f" --nodelist='{args.nodelist}' "
+
+        if args.dependency is not None:
+            sjob += f" --dependency={args.dependency} "
 
         sjob += f' --cpus-per-task={args.cpus} '
         sjob += f" --mem='{args.mem}' "

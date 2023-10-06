@@ -216,12 +216,8 @@ def sim(
         inputs = photons2electrons(img, quantum_efficiency=quantum_efficiency)
         inputs = electrons2counts(inputs, electrons_per_count=electrons_per_count)
 
-    # remove camera background offset
-    inputs -= mean_background_offset
-    inputs[inputs < 0] = 0
-
     counts = np.sum(inputs)
-    counts_mode = int(st.mode(inputs, axis=None).mode[0])
+    counts_mode = int(st.mode(inputs.astype(int), axis=None).mode[0])
     counts_percentiles = np.array([np.percentile(inputs, p) for p in range(1, 101)], dtype=int)
 
     if random_crop is not None:
