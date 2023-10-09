@@ -63,7 +63,6 @@ do
       "../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat"
       "../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat"
       "../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat"
-      "widefield"
     )
   elif [ "${M:0:5}" == v2Hex ];then
     declare -a PSFS=( "v2Hex" "ACHex" "MBHex" "v2HexRect" )
