@@ -1700,10 +1700,10 @@ def evaluate_modes(
             df = pd.read_csv(path, index_col=0, header=0)
         else:
             df = eval_object(
-                phi=classes,
+                wavefronts=classes,
+                modelpath=model,
                 num_objs=num_objs,
                 photons=photons,
-                modelpath=model,
                 batch_size=batch_size,
                 eval_sign=eval_sign,
                 savepath=savepath,
