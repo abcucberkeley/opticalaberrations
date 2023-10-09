@@ -1277,6 +1277,8 @@ def train(
         defocus_only: bool = False,
         radial_encoding: bool = False,
         radial_encoding_period: int = 1,
+        radial_encoding_nth_order: int = 4,
+        radial_encoding_scheme: str = 'fourier_decomposition',
         stem: bool = False,
 ):
     network = network.lower()
@@ -1341,6 +1343,8 @@ def train(
             no_phase=no_phase,
             radial_encoding=radial_encoding,
             radial_encoding_period=radial_encoding_period,
+            radial_encoding_nth_order=radial_encoding_nth_order,
+            radial_encoding_scheme=radial_encoding_scheme,
         )
 
     elif network == 'opticalresnet':

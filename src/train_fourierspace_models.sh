@@ -11,6 +11,8 @@ DY=108
 DX=108
 RADIAL_ENCODING='--radial_encoding'
 RADIAL_ENCODING_PERIOD='--radial_encoding_period'
+RADIAL_ENCODING_SCHEME='--radial_encoding_scheme'
+RADIAL_ENCODING_ORDER='--radial_encoding_nth_order'
 NO_PHASE='--no_phase'
 DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
@@ -58,17 +60,40 @@ do
   fi
 
   python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  --task "--psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
+  --task "$RADIAL_ENCODING $RADIAL_ENCODING_SCHEME zernike_polynomials $RADIAL_ENCODING_ORDER 4 --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-nostem
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-zernike-polynomials-4
 
-  for P in 1 4 16
-  do
-      python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-      --task "$RADIAL_ENCODING $RADIAL_ENCODING_PERIOD $P --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
-      --taskname $NETWORK \
-      --name new/$SUBSET/$NETWORK-$MODES-$DIR-nostem-radial-encoding-p$P
-  done
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$RADIAL_ENCODING $RADIAL_ENCODING_SCHEME zernike_polynomials $RADIAL_ENCODING_ORDER 10 --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-zernike-polynomials-10
+
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$RADIAL_ENCODING $RADIAL_ENCODING_PERIOD 16 $RADIAL_ENCODING_SCHEME rot_sym --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-rot_sym-p16
+
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$RADIAL_ENCODING $RADIAL_ENCODING_PERIOD 16 $RADIAL_ENCODING_SCHEME fourier_decomposition --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-fourier-decomposition-p16
+
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$RADIAL_ENCODING $RADIAL_ENCODING_PERIOD 16 $RADIAL_ENCODING_SCHEME power_decomposition $RADIAL_ENCODING_ORDER 4 --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-power-decomposition-4p16
+
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$RADIAL_ENCODING $RADIAL_ENCODING_PERIOD 1 $RADIAL_ENCODING_SCHEME rot_sym --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-rot_sym-p1
+
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$RADIAL_ENCODING $RADIAL_ENCODING_PERIOD 4 $RADIAL_ENCODING_SCHEME rot_sym --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-rot_sym-p4
+
 done
 
 

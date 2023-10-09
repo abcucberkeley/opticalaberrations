@@ -2,10 +2,13 @@ import logging
 import sys
 from abc import ABC
 
+
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
 from tensorflow.keras import layers
+from scipy.special import binom
+
 from base import Base
 from roi import ROI
 
@@ -141,7 +144,8 @@ class PatchEncoder(layers.Layer):
         self.project = layers.Dense(self.embedding_size)
         self.radial_embedding = layers.Dense(self.embedding_size)
         self.positional_embedding = layers.Embedding(
-            input_dim=self.num_patches, output_dim=self.embedding_size
+            input_dim=self.num_patches,
+            output_dim=self.embedding_size
         )
 
     def build(self, input_shape):
@@ -157,11 +161,43 @@ class PatchEncoder(layers.Layer):
 
     def _calc_radius(self):
         grid_size = int(np.sqrt(self.num_patches))
-        d = np.linspace(-1, 1, grid_size)
+        d = np.linspace(-1+1/grid_size, 1-1/grid_size, grid_size, dtype=np.float32)
         ygrid, xgrid = np.meshgrid(d, d, indexing='ij')
         r = np.sqrt(ygrid.flatten()**2 + xgrid.flatten()**2)
-        theta = np.rad2deg(np.arctan2(ygrid.flatten(), xgrid.flatten()))
-        return r, theta
+        theta = np.arctan2(ygrid.flatten(), xgrid.flatten())
+        return r.astype(np.float32), theta.astype(np.float32)
+
+    def _nm_polynomial(self, n, m, rho, theta, normed=True):
+        def _nm_normalization(n, m):
+            """ return orthonormal zernike """
+            return np.sqrt((1. + (m == 0)) / (2. * n + 2))
+
+        if (n - m) % 2 == 1:
+            poly = 0 * rho + 0 * theta
+            return poly.astype(np.float32)
+
+        radial = 0
+        m0 = abs(m)
+
+        for k in range((n - m0) // 2 + 1):
+            a = binom(n - k, k)
+            b = binom(n - 2 * k, (n - m0) // 2 - k)
+            radial += (-1.) ** k * a * b * rho ** (n - 2 * k)
+
+        # no clipping needed here
+        # radial *= (rho <= 1.)
+
+        if normed:  # return orthonormal zernike
+            prefac = 1. / _nm_normalization(n, m)
+        else:
+            prefac = 1.
+
+        if m >= 0:
+            poly = prefac * radial * np.cos(m0 * theta)
+        else:
+            poly = prefac * radial * np.sin(m0 * theta)
+
+        return poly.astype(np.float32)
 
     def _positional_encoding(self, inputs):
         pos = tf.range(start=0, limit=self.num_patches, delta=1)
@@ -172,17 +208,53 @@ class PatchEncoder(layers.Layer):
 
         return tf.stack(emb, axis=0)
 
-    def _radial_positional_encoding(self, inputs, periods: int = 1):
+    def _radial_positional_encoding(
+        self,
+        inputs,
+        periods: int = 1,
+        zernike_nth_order: int = 4,
+        scheme: str = 'fourier_decomposition'
+    ):
         r, theta = self._calc_radius()
-        r = tf.constant(r, dtype=tf.float32)
-        theta = tf.constant(theta, dtype=tf.float32)
 
-        encodings = [r]
-        for p in range(1, periods+1):
-            encodings.append(tf.sin(p * theta))
-            encodings.append(tf.cos(p * theta))
+        if scheme == 'zernike_polynomials':
+            nm_pairs = set((n, m) for n in range(zernike_nth_order + 1) for m in range(-n, n + 1, 2))
+            polynomials = np.zeros((r.shape[0], len(nm_pairs)), dtype=np.float32)
 
-        pos = tf.stack(encodings, axis=-1)
+            for i, (pr, pt) in enumerate(zip(r, theta)):
+                for j, (n, m) in enumerate(nm_pairs):
+                    polynomials[i, j] = self._nm_polynomial(n=n, m=m, rho=pr, theta=pt, normed=True)
+
+            pos = tf.constant(polynomials)
+
+        else:
+            r = tf.constant(r, dtype=tf.float32)
+            theta = tf.constant(theta, dtype=tf.float32)
+
+            if scheme == 'fourier_decomposition':
+                encodings = [r]
+                for p in range(1, periods+1):
+                    encodings.append(tf.sin(p * r))
+                    encodings.append(tf.cos(p * r))
+                    encodings.append(tf.sin(p * theta))
+                    encodings.append(tf.cos(p * theta))
+
+            elif scheme == 'power_decomposition':
+                encodings = []
+                for n in range(1, zernike_nth_order+1):
+                    encodings.append(tf.pow(r, n))
+
+                for p in range(1, periods+1):
+                    encodings.append(tf.sin(p * theta))
+                    encodings.append(tf.cos(p * theta))
+
+            else:
+                encodings = [r]
+                for p in range(1, periods+1):
+                    encodings.append(tf.sin(p * theta))
+                    encodings.append(tf.cos(p * theta))
+
+            pos = tf.stack(encodings, axis=-1)
 
         emb = []
         for i in range(inputs.shape[1]):
@@ -190,10 +262,24 @@ class PatchEncoder(layers.Layer):
 
         return tf.stack(emb, axis=0)
 
-    def call(self, inputs, training=True, radial_encoding=False, periods=1, **kwargs):
+    def call(
+        self,
+        inputs,
+        training=True,
+        radial_encoding=False,
+        periods=1,
+        zernike_nth_order=4,
+        scheme='fourier_decomposition',
+        **kwargs
+    ):
 
         if radial_encoding:
-            return self.project(inputs) + self._radial_positional_encoding(inputs, periods=periods)
+            return self.project(inputs) + self._radial_positional_encoding(
+                inputs,
+                periods=periods,
+                scheme=scheme,
+                zernike_nth_order=zernike_nth_order,
+            )
         else:
             return self.project(inputs) + self._positional_encoding(inputs)
 
@@ -305,6 +391,8 @@ class OpticalTransformer(Base, ABC):
             no_phase=False,
             radial_encoding=False,
             radial_encoding_period=1,
+            radial_encoding_scheme='fourier_decomposition',
+            radial_encoding_nth_order=4,
             stem=False,
             **kwargs
     ):
@@ -325,6 +413,8 @@ class OpticalTransformer(Base, ABC):
         self.no_phase = no_phase
         self.radial_encoding = radial_encoding
         self.radial_encoding_period = radial_encoding_period
+        self.radial_encoding_scheme = radial_encoding_scheme
+        self.radial_encoding_nth_order = radial_encoding_nth_order
 
     def _calc_channels(self, channels, width_scalar):
         return int(tf.math.ceil(width_scalar * channels))
@@ -384,7 +474,13 @@ class OpticalTransformer(Base, ABC):
         m = PatchEncoder(
             num_patches=(img_shape//patch_size) ** 2,
             embedding_size=self._calc_channels(patch_size**2, width_scalar=self.width_scalar),
-        )(m, radial_encoding=self.radial_encoding, periods=self.radial_encoding_period)
+        )(
+            m,
+            radial_encoding=self.radial_encoding,
+            periods=self.radial_encoding_period,
+            scheme=self.radial_encoding_scheme,
+            zernike_nth_order=self.radial_encoding_nth_order
+        )
         return m
 
     def call(self, inputs, training=True, **kwargs):

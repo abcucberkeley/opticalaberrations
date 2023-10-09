@@ -7,7 +7,7 @@ SHAPE=64
 MODES=15
 ROTATIONS='--digital_rotations'
 ITERS=3
-MAX=10000
+MAX=50000
 PRETRAINED="../pretrained_models/"
 DATASET="new_modalities"
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
@@ -33,26 +33,26 @@ for M in ${TRAINED_MODELS[@]}
 do
   MODEL="$PRETRAINED/opticalnet-$MODES-$M"
 
-  BATCH=128
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH random" \
-  --taskname random \
-  --name $MODEL/$EVALSIGN/samples
-
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modes" \
-  --taskname evalmodes \
-  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_1'
-
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 $ROTATIONS --batch_size $BATCH modes" \
-  --taskname evalmodes \
-  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
-
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modalities" \
-  --taskname modalities \
-  --name $MODEL/$EVALSIGN/modalities
+#  BATCH=128
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH random" \
+#  --taskname random \
+#  --name $MODEL/$EVALSIGN/samples
+#
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modes" \
+#  --taskname evalmodes \
+#  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_1'
+#
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 $ROTATIONS --batch_size $BATCH modes" \
+#  --taskname evalmodes \
+#  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
+#
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modalities" \
+#  --taskname modalities \
+#  --name $MODEL/$EVALSIGN/modalities
 
   BATCH=$(( 896 * $GPUS ))
 
@@ -101,16 +101,16 @@ do
       --taskname $NA \
       --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
-      python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
-      --task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
-      --taskname $NA \
-      --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
+#      python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
+#      --task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
+#      --taskname $NA \
+#      --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
     done
 
-#    python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
-#    --task "$MODEL.h5 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --niter 1 --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
-#    --taskname $NA \
-#    --name $MODEL/$EVALSIGN/densityheatmaps/mode-$PTYPE
+    python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
+    --task "$MODEL.h5 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --niter 1 --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
+    --taskname $NA \
+    --name $MODEL/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
     echo '----------------'
   done
