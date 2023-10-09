@@ -97,12 +97,12 @@ do
 
     for (( i=1; i<=$ITERS; i++ ))
     do
-      echo manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
+      python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
       --task "$MODEL.h5 --niter $i --num_beads 1 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
       --taskname $NA \
       --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
-      echo manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
+      python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
       --task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
       --taskname $NA \
       --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
