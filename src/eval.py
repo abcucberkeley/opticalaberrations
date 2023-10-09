@@ -227,6 +227,8 @@ def collect_data(
         predicted_modes = model.output_shape[-1]
     elif isinstance(model, int):
         predicted_modes = model
+    else:
+        predicted_modes = 15
 
     metadata = data_utils.collect_dataset(
         datapath,
