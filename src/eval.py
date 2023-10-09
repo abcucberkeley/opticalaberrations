@@ -2086,13 +2086,13 @@ def eval_confidence(
                         lls_defocus_offset=(0, 0)
                     )
 
+                    noisy_img = simulate_beads(psf, psf_type=gen.psf_type, beads=reference, noise=True)
+                    maxcounts = np.max(noisy_img)
+                    noisy_img /= maxcounts
+
                     for trained_model in tqdm(models, file=sys.stdout):
                         m = backend.load(trained_model)
                         no_phase = True if m.input_shape[1] == 3 else False
-
-                        noisy_img = simulate_beads(psf, psf_type=gen.psf_type, beads=reference, noise=True)
-                        maxcounts = np.max(noisy_img)
-                        noisy_img /= maxcounts
 
                         save_path = Path(
                             f"{model.with_suffix('')}/{eval_sign}/confidence/ph-{photons}/um-{amplitude_range[-1]}/num_objs-{num_objs:02d}/{trained_model.name.strip('.h5')}"
