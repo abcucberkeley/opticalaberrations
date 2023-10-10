@@ -7,7 +7,7 @@ SHAPE=64
 MODES=15
 ROTATIONS='--digital_rotations'
 ITERS=3
-MAX=50000
+MAX=10000
 PRETRAINED="../pretrained_models/"
 DATASET="new_modalities"
 DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
@@ -20,13 +20,10 @@ CPUS=16
 TRAINED_MODELS=(
   "YuMB_lambda510-nostem"
   "YuMB_lambda510-nostem-radial-encoding-p16"
-  "YuMB_lambda510-nostem-radial-encoding-p4"
-  "YuMB_lambda510-nostem-radial-encoding-p1-round2"
-#  "YuMB_lambda510"
-#  "v2Hex_lambda510"
-#  "2photon_lambda920"
-#  "confocal_lambda510"
-#  "widefield_lambda510"
+  "v2Hex_lambda510"
+  "2photon_lambda920"
+  "confocal_lambda510"
+  "widefield_lambda510"
 )
 
 for M in ${TRAINED_MODELS[@]}
@@ -96,21 +93,21 @@ do
 
     for (( i=1; i<=$ITERS; i++ ))
     do
-      python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
+      python manager.py slurm test.py --dependency singleton --nodelist $NODE --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
       --task "$MODEL.h5 --niter $i --num_beads 1 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
       --taskname $NA \
       --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
+
+      python manager.py slurm test.py --dependency singleton --nodelist $NODE --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
+      --task "$MODEL.h5 --niter $i --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
+      --taskname $NA \
+      --name $MODEL/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
 #      python manager.py slurm test.py --dependency singleton --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
 #      --task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
 #      --taskname $NA \
 #      --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
     done
-
-    python manager.py slurm test.py --partition abc_a100 --mem '500GB' --cpus $CPUS --gpus $GPUS \
-    --task "$MODEL.h5 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --niter 1 --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
-    --taskname $NA \
-    --name $MODEL/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
     echo '----------------'
   done
