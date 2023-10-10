@@ -437,6 +437,7 @@ def remove_interference_pattern(
                     kernel=kernel,
                     interference_pattern=interference_pattern
                 )
+            imwrite( file=f'{plot}_corrected_psf.tif', data=corrected_psf.astype(np.float32), dtype=np.float32)
 
         return corrected_otf
     else:
@@ -798,6 +799,7 @@ def fourier_embeddings(
         embedding_option: type of embedding to use.
             Capitalizing on the radial symmetry of the FFT,
             we have a few options to minimize the size of the embedding.
+        debug_rotations: Print out the rotations if true
     """
     inputs = inputs.astype(np.float32)
     iotf = iotf.astype(np.float32)
