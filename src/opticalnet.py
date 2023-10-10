@@ -213,7 +213,7 @@ class PatchEncoder(layers.Layer):
         inputs,
         periods: int = 1,
         zernike_nth_order: int = 4,
-        scheme: str = 'fourier_decomposition'
+        scheme: str = 'rotational_symmetry'
     ):
         r, theta = self._calc_radius()
 
@@ -269,7 +269,7 @@ class PatchEncoder(layers.Layer):
         radial_encoding=False,
         periods=1,
         zernike_nth_order=4,
-        scheme='fourier_decomposition',
+        scheme='rotational_symmetry',
         **kwargs
     ):
 
@@ -391,7 +391,7 @@ class OpticalTransformer(Base, ABC):
             no_phase=False,
             radial_encoding=False,
             radial_encoding_period=1,
-            radial_encoding_scheme='fourier_decomposition',
+            radial_encoding_scheme='rotational_symmetry',
             radial_encoding_nth_order=4,
             stem=False,
             **kwargs

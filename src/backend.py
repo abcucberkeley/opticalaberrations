@@ -1278,7 +1278,7 @@ def train(
         radial_encoding: bool = False,
         radial_encoding_period: int = 1,
         radial_encoding_nth_order: int = 4,
-        radial_encoding_scheme: str = 'fourier_decomposition',
+        radial_encoding_scheme: str = 'rotational_symmetry',
         stem: bool = False,
 ):
     network = network.lower()

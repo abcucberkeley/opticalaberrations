@@ -198,7 +198,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        '--radial_encoding_scheme', default='fourier_decomposition', type=str,
+        '--radial_encoding_scheme', default='rotational_symmetry', type=str,
         help='toggle to use different radial encoding types/schemes'
     )
 
