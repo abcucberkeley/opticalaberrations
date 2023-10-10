@@ -141,7 +141,7 @@ def beads(
             if fill_radius > 0:
                 reference[
                     rng.integers(int(image_shape[0] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius))),
-                    rng.integers(int(image_shape[1] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius))),
+                    rng.integers(int(image_shape[1] * (.5 - fill_radius)), int(image_shape[1] * (.5 + fill_radius))),
                     rng.integers(int(image_shape[2] * (.5 - fill_radius)), int(image_shape[2] * (.5 + fill_radius))),
                 ] = photons
             else:
