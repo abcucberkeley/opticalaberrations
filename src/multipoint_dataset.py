@@ -340,7 +340,7 @@ def create_synthetic_sample(
     lls_defocus_offset = randuniform((min_lls_defocus_offset, max_lls_defocus_offset))
 
     reference = beads(
-        image_shape=(64, 64, 64),
+        image_shape=(64, 64, 64),    # Change this to change image size (e.g. 256,256,256).
         photons=photons,
         object_size=0,
         num_objs=npoints,
@@ -408,6 +408,7 @@ def create_synthetic_sample(
             sim(
                 filename=filename,
                 reference=reference,
+                model_psf_shape=reference.shape,
                 outdir=outdir,
                 phi=phi,
                 gen=gen,
@@ -672,7 +673,7 @@ def main(args=None):
         max_photons=args.max_photons,
         fill_radius=args.fill_radius,
     )
-
+    logger.info(f"Output folder: {Path(args.outdir).resolve()}")
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]
     multiprocess(func=sample, jobs=jobs, cores=args.cpu_workers)
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
