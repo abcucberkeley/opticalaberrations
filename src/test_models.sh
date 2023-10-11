@@ -56,6 +56,7 @@ do
       "../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat"
       "../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat"
     )
+
   elif [ "${M:0:5}" == v2Hex ];then
     declare -a PSFS=( "v2Hex" "ACHex" "MBHex" "v2HexRect" )
     declare -a PATHS=(
@@ -64,12 +65,23 @@ do
       "../lattice/MBHex_NAexc0p43_annulus0p47_0p40_crop0p08_FWHM48p0.mat"
       "../lattice/v2HexRect_NAexc0p50_NAsigma0p15_annulus0p60-0p40_FWHM_56p0.mat"
     )
+
   elif [ $M = "widefield_lambda510" ];then
     declare -a PSFS=( "widefield" )
     declare -a PATHS=( "widefield" )
+
+  elif [ $M = "2photon_lambda920" ];then
+    declare -a PSFS=( "2photon" )
+    declare -a PATHS=( "2photon" )
+
+  elif [ $M = "confocal_lambda510" ];then
+    declare -a PSFS=( "confocal" )
+    declare -a PATHS=( "confocal" )
+
   else
-    declare -a PSFS=( "confocal" "2photon" )
-    declare -a PATHS=( "confocal" "2photon" )
+    declare -a PSFS=( "YuMB" )
+    declare -a PATHS=( "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat" )
+
   fi
 
   for S in `seq 1 ${#PSFS[@]}`
