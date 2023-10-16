@@ -81,7 +81,7 @@ class SyntheticPSF:
         self.n_modes = n_modes
         self.order = order
         self.refractive_index = refractive_index
-        self.lam_detection = lam_detection
+        self.lam_detection = lam_detection  # wavelength in microns
         self.na_detection = na_detection
         self.batch_size = batch_size
         self.x_voxel_size = x_voxel_size  # desired voxel size
