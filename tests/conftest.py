@@ -14,6 +14,7 @@ def kargs():
     digital_rotations = 361
 
     kargs = dict(
+        repo=repo,
         inputs=repo / f'examples/single/single.tif',
         input_shape=input_shape,
         embeddings_shape=(6, 64, 64, 1),

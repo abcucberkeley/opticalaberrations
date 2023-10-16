@@ -155,6 +155,8 @@ def sim(
         psf_type=gen.psf_type,
     )
 
+    return inputs
+
 
 def create_synthetic_sample(
     filename: str,
@@ -189,7 +191,7 @@ def create_synthetic_sample(
 
     outdir.mkdir(exist_ok=True, parents=True)
 
-    sim(
+    return sim(
         filename=filename,
         outdir=outdir,
         gen=gen,

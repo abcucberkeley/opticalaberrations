@@ -2,7 +2,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 import io
-import sys
+import sys, re
 import logging
 import numpy as np
 import pandas as pd
@@ -516,3 +516,22 @@ def get_tile_confidence(
 
 def convert_to_windows_file_string(f):
     return str(f).replace('/', '\\').replace("\\clusterfs\\nvme\\", "V:\\")
+
+
+def convert_path_to_other_cam(src_path: Path, dst='B'):
+    """
+    Returns the Path that corresponds to the file with the other camera.
+
+    Args:
+        src_path: Path to existing file
+        dst: camera letter (e.g. "B" for CamB, "A" for CamA)
+
+    Returns:
+        Path to existing file.
+
+    """
+    filename = src_path.name                                     # 'before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0177969396msecAbs_-01x_-01y_-01z_0000t.tif'
+    prefix = re.findall(r"^.*Cam", filename)[0] + dst    # 'after_threestacks_Iter_0000_Cam' + 'B'
+    ending = re.findall(r"msec_.*", filename)[0]         # 'msec_0160433718msecAbs_-01x_-01y_-01z_0000t.tif'
+    cam_b = src_path.parent.glob(f"{prefix}*{ending}")
+    return list(cam_b)[0]

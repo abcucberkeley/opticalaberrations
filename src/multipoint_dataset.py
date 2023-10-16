@@ -112,14 +112,14 @@ def beads(
     photons: int = 1,
     object_size: Optional[int] = 0,
     num_objs: int = 1,
-    fill_radius: float = .35,
+    fill_radius: float = .75,           # .75 will be roughly a bit inside of the Tukey window
 ):
     """
     Args:
         image_shape: image size
         object_size: bead size (0 for diffraction-limited beads)
         num_objs: number of beads
-        fill_radius: (0 for a single bead at the center of the image)
+        fill_radius: Fractional (0 for a single bead at the center of the image)
     """
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
     reference = np.zeros(image_shape)
@@ -138,13 +138,20 @@ def beads(
                 ),
             ).astype(np.float32) * photons
         else:
+            # object_size = 0 diffraction-limited
             if fill_radius > 0:
+                # make uniform distribution in polar
+                r = np.sqrt(np.random.random(1)) * fill_radius * (image_shape[2] - 1) * 0.5
+                theta = np.random.random(1) * 2 * np.pi
+                x = r * np.cos(theta) + (image_shape[2] - 1) * 0.5
+                y = r * np.sin(theta) + (image_shape[1] - 1) * 0.5
                 reference[
-                    rng.integers(int(image_shape[0] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius))),
-                    rng.integers(int(image_shape[1] * (.5 - fill_radius)), int(image_shape[1] * (.5 + fill_radius))),
-                    rng.integers(int(image_shape[2] * (.5 - fill_radius)), int(image_shape[2] * (.5 + fill_radius))),
+                    rng.integers(5, int(image_shape[0] - 5)),
+                    np.round(y).astype(np.int32),
+                    np.round(x).astype(np.int32)
                 ] = photons
             else:
+                # bead at center
                 reference[image_shape[0] // 2, image_shape[1] // 2, image_shape[2] // 2] = photons
 
     return reference
@@ -292,6 +299,8 @@ def sim(
             psf_type=gen.psf_type,
         )
 
+    return inputs
+
 
 def create_synthetic_sample(
     filename: str,
@@ -395,16 +404,37 @@ def create_synthetic_sample(
         outdir = outdir / f"npoints_{npoints}"
         outdir.mkdir(exist_ok=True, parents=True)
 
-        try:  # check if file already exists and not corrupted
-            for e in embedding_option:
-                path = Path(f"{outdir/e}/{filename}")
+        if emb:
+            try:  # check if file already exists and not corrupted
+                for e in embedding_option:
+                    path = Path(f"{outdir/e}/{filename}")
 
-                with open(path.with_suffix('.json')) as f:
-                    ujson.load(f)
+                    with open(path.with_suffix('.json')) as f:
+                        ujson.load(f)
 
-                with TiffFile(path.with_suffix('.tif')) as tif:
-                    tif.asarray()
-        except Exception as e:
+                    with TiffFile(path.with_suffix('.tif')) as tif:
+                        tif.asarray()
+            except Exception as e:
+                sim(
+                    filename=filename,
+                    reference=reference,
+                    model_psf_shape=reference.shape,
+                    outdir=outdir,
+                    phi=phi,
+                    gen=gen,
+                    upsampled_gen=upsampled_gen,
+                    npoints=npoints,
+                    photons=photons,
+                    emb=emb,
+                    embedding_option=embedding_option,
+                    random_crop=random_crop,
+                    noise=noise,
+                    normalize=normalize,
+                    alpha_val=alpha_val,
+                    phi_val=phi_val,
+                    lls_defocus_offset=lls_defocus_offset,
+                )
+        else:
             sim(
                 filename=filename,
                 reference=reference,
@@ -424,6 +454,8 @@ def create_synthetic_sample(
                 phi_val=phi_val,
                 lls_defocus_offset=lls_defocus_offset,
             )
+
+    return reference
 
 
 def parse_args(args):
