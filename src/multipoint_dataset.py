@@ -356,7 +356,9 @@ def create_synthetic_sample(
         fill_radius=fill_radius,
     )
 
-    for gen, upsampled_gen in zip(generators.values(), upsampled_generators.values()):
+    inputs = np.zeros((len(generators), 64, 64, 64))
+
+    for k, (gen, upsampled_gen) in enumerate(zip(generators.values(), upsampled_generators.values())):
         if gen.psf_type == '2photon':
             # boost um RMS aberration amplitudes for '2photon', so we create equivalent p2v aberrations
             r = gen.lam_detection / default_wavelength
@@ -413,7 +415,7 @@ def create_synthetic_sample(
                         ujson.load(f)
 
                     with TiffFile(path.with_suffix('.tif')) as tif:
-                        tif.asarray()
+                        inputs[k] = tif.asarray()
             except Exception as e:
                 sim(
                     filename=filename,
@@ -435,7 +437,7 @@ def create_synthetic_sample(
                     lls_defocus_offset=lls_defocus_offset,
                 )
         else:
-            sim(
+            inputs[k] = sim(
                 filename=filename,
                 reference=reference,
                 model_psf_shape=reference.shape,
@@ -455,7 +457,7 @@ def create_synthetic_sample(
                 lls_defocus_offset=lls_defocus_offset,
             )
 
-    return reference
+    return inputs
 
 
 def parse_args(args):
@@ -606,7 +608,7 @@ def parse_args(args):
 
     parser.add_argument(
         "--fill_radius", default=0.0, type=float,
-        help="Fractional cube that defines where a bead may be placed in X Y Z."
+        help="Fractional sphere that defines where a bead may be placed in X Y Z."
     )
 
     parser.add_argument(
@@ -640,6 +642,7 @@ def main(args=None):
     generators, upsampled_generators = {}, {}
     for psf in set(args.psf_type):
         generators[psf] = SyntheticPSF(
+            psf_shape=3 * [args.input_shape],
             order='ansi',
             cpu_workers=args.cpu_workers,
             n_modes=args.modes,
@@ -650,7 +653,6 @@ def main(args=None):
             rotate=args.rotate,
             psf_type=psf,
             lam_detection=.920 if psf == '2photon' else args.lam_detection,
-            psf_shape=3 * [args.input_shape],
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
@@ -659,22 +661,22 @@ def main(args=None):
         )
 
         upsampled_generators[psf] = SyntheticPSF(
-            order='ansi',
-            cpu_workers=args.cpu_workers,
-            n_modes=args.modes,
-            distribution=args.dist,
-            mode_weights=args.mode_dist,
-            gamma=args.gamma,
-            signed=args.signed,
-            rotate=args.rotate,
-            psf_type=psf,
-            lam_detection=.920 if psf == '2photon' else args.lam_detection,
-            psf_shape=3 * [2 * args.input_shape],
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            refractive_index=args.refractive_index,
-            na_detection=args.na_detection,
+            psf_shape=3*[2 * args.input_shape],
+            order=generators[psf].order,
+            n_modes=generators[psf].n_modes,
+            distribution=generators[psf].distribution,
+            mode_weights=generators[psf].mode_weights,
+            signed=generators[psf].signed,
+            rotate=generators[psf].rotate,
+            psf_type=generators[psf].psf_type,
+            lam_detection=generators[psf].lam_detection,
+            x_voxel_size=generators[psf].x_voxel_size,
+            y_voxel_size=generators[psf].y_voxel_size,
+            z_voxel_size=generators[psf].z_voxel_size,
+            cpu_workers=generators[psf].cpu_workers,
+            gamma=generators[psf].gamma,
+            refractive_index=generators[psf].refractive_index,
+            na_detection=generators[psf].na_detection,
         )
 
     sample = partial(

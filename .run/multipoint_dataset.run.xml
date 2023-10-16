@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/multipoint_dataset.py" />
-    <option name="PARAMETERS" value="--input_shape 64 --dist single --npoints 1 --modes 15 --signed --norm --noise --rotate --iter 10 --min_lls_defocus_offset 0 --max_lls_defocus_offset 0 --min_amplitude 0.1 --max_amplitude 0.1 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --lam_detection .510 --min_photons 300000 --max_photons 300000 --fill_radius .2 --cpu_workers -1 --emb --embedding_option spatial_planes --psf_type confocal --psf_type widefield --psf_type 2photon" />
+    <option name="PARAMETERS" value="--input_shape 64 --dist single --npoints 1 --modes 15 --signed --norm --noise --rotate --iter 10 --min_lls_defocus_offset 0 --max_lls_defocus_offset 0 --min_amplitude 0.1 --max_amplitude 0.1 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --lam_detection .510 --min_photons 300000 --max_photons 300000 --fill_radius .75 --cpu_workers -1 --emb --embedding_option spatial_planes --psf_type confocal --psf_type widefield --psf_type 2photon" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

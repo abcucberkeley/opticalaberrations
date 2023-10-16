@@ -51,7 +51,7 @@ def simulate_beads(
     object_size=0,
     num_objs=1,
     noise=True,
-    fill_radius=.4,
+    fill_radius=.75,
     fast=False,
     scale_by_maxcounts=None
 ):
@@ -1326,7 +1326,7 @@ def random_samples(
                         image_shape=gen.psf_shape,
                         object_size=0,
                         num_objs=num_objs,
-                        fill_radius=.3 if num_objs > 1 else 0
+                        fill_radius=.75 if num_objs > 1 else 0
                     )
 
                     phi = Wavefront(
@@ -1531,7 +1531,7 @@ def create_samples(
                     photons=ph,
                     # maxcounts=ph,
                     noise=True,
-                    fill_radius=0 if num_objs == 1 else .35
+                    fill_radius=0 if num_objs == 1 else .75
                 )
             for k, ph in tqdm(
                 itertools.product(range(len(kernels)), photons),
@@ -1837,7 +1837,7 @@ def eval_modalities(
         image_shape=psf_shape,
         object_size=0,
         num_objs=num_objs,
-        fill_radius=.3 if num_objs > 1 else 0
+        fill_radius=.75 if num_objs > 1 else 0
     )
 
     lam_2photon = .920
@@ -2065,7 +2065,7 @@ def eval_confidence(
                         image_shape=gen.psf_shape,
                         object_size=0,
                         num_objs=num_objs,
-                        fill_radius=.3 if num_objs > 1 else 0
+                        fill_radius=.75 if num_objs > 1 else 0
                     )
 
                     phi = Wavefront(

@@ -17,7 +17,7 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='new_modalities'
+TITLE='fixed_density'
 DATASET='train'
 
 MODE_DIST='pyramid'
@@ -37,7 +37,7 @@ if [ "$DATASET" = "train" ];then
   amps2=($(seq .01 .01 .25))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
-  FILL_RADIUS=0.2
+  FILL_RADIUS=0.75
 else
   TYPE=''
   SAMPLES_PER_JOB=25
@@ -49,7 +49,7 @@ else
   amps2=($(seq .025 .025 .50))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(mixed)
-  FILL_RADIUS=0.2
+  FILL_RADIUS=0.75
 fi
 
 
