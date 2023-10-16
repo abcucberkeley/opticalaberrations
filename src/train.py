@@ -193,6 +193,16 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
+        '--radial_encoding_nth_order', default=1, type=int,
+        help='toggle to define the max nth zernike order in the radial encodings'
+    )
+
+    train_parser.add_argument(
+        '--radial_encoding_scheme', default='rotational_symmetry', type=str,
+        help='toggle to use different radial encoding types/schemes'
+    )
+
+    train_parser.add_argument(
         '--stem', action='store_true',
         help='toggle to use a stem block'
     )
@@ -262,6 +272,8 @@ def main(args=None):
             defocus_only=args.defocus_only,
             radial_encoding=args.radial_encoding,
             radial_encoding_period=args.radial_encoding_period,
+            radial_encoding_nth_order=args.radial_encoding_nth_order,
+            radial_encoding_scheme=args.radial_encoding_scheme,
             stem=args.stem,
         )
 

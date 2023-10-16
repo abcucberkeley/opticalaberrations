@@ -337,7 +337,6 @@ def predict_cocoa(
     psf_type: str = 'widefield',
     cocoa_path: Path = Path('cocoa_repo'),
     decon: bool = True,
-    psf: np.array = None,   # dummy
 ):
     if isinstance(inputs, np.ndarray):
         savepath = None
@@ -693,4 +692,4 @@ def predict_cocoa(
             )
             logger.info(f'Figure: \t{Path(f"{savepath}_cocoa_mips.svg").resolve()}')
 
-    return out_y, reconstructed
+    return out_y, reconstructed, out_k_m

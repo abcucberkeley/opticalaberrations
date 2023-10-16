@@ -141,7 +141,7 @@ def beads(
             if fill_radius > 0:
                 reference[
                     rng.integers(int(image_shape[0] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius))),
-                    rng.integers(int(image_shape[1] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius))),
+                    rng.integers(int(image_shape[1] * (.5 - fill_radius)), int(image_shape[1] * (.5 + fill_radius))),
                     rng.integers(int(image_shape[2] * (.5 - fill_radius)), int(image_shape[2] * (.5 + fill_radius))),
                 ] = photons
             else:
@@ -292,6 +292,8 @@ def sim(
             psf_type=gen.psf_type,
         )
 
+    return inputs
+
 
 def create_synthetic_sample(
     filename: str,
@@ -340,7 +342,7 @@ def create_synthetic_sample(
     lls_defocus_offset = randuniform((min_lls_defocus_offset, max_lls_defocus_offset))
 
     reference = beads(
-        image_shape=(64, 64, 64),
+        image_shape=(64, 64, 64),    # Change this to change image size (e.g. 256,256,256).
         photons=photons,
         object_size=0,
         num_objs=npoints,
@@ -395,19 +397,41 @@ def create_synthetic_sample(
         outdir = outdir / f"npoints_{npoints}"
         outdir.mkdir(exist_ok=True, parents=True)
 
-        try:  # check if file already exists and not corrupted
-            for e in embedding_option:
-                path = Path(f"{outdir/e}/{filename}")
+        if emb:
+            try:  # check if file already exists and not corrupted
+                for e in embedding_option:
+                    path = Path(f"{outdir/e}/{filename}")
 
-                with open(path.with_suffix('.json')) as f:
-                    ujson.load(f)
+                    with open(path.with_suffix('.json')) as f:
+                        ujson.load(f)
 
-                with TiffFile(path.with_suffix('.tif')) as tif:
-                    tif.asarray()
-        except Exception as e:
+                    with TiffFile(path.with_suffix('.tif')) as tif:
+                        tif.asarray()
+            except Exception as e:
+                sim(
+                    filename=filename,
+                    reference=reference,
+                    model_psf_shape=reference.shape,
+                    outdir=outdir,
+                    phi=phi,
+                    gen=gen,
+                    upsampled_gen=upsampled_gen,
+                    npoints=npoints,
+                    photons=photons,
+                    emb=emb,
+                    embedding_option=embedding_option,
+                    random_crop=random_crop,
+                    noise=noise,
+                    normalize=normalize,
+                    alpha_val=alpha_val,
+                    phi_val=phi_val,
+                    lls_defocus_offset=lls_defocus_offset,
+                )
+        else:
             sim(
                 filename=filename,
                 reference=reference,
+                model_psf_shape=reference.shape,
                 outdir=outdir,
                 phi=phi,
                 gen=gen,
@@ -423,6 +447,8 @@ def create_synthetic_sample(
                 phi_val=phi_val,
                 lls_defocus_offset=lls_defocus_offset,
             )
+
+    return reference
 
 
 def parse_args(args):
@@ -672,7 +698,7 @@ def main(args=None):
         max_photons=args.max_photons,
         fill_radius=args.fill_radius,
     )
-
+    logger.info(f"Output folder: {Path(args.outdir).resolve()}")
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]
     multiprocess(func=sample, jobs=jobs, cores=args.cpu_workers)
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")

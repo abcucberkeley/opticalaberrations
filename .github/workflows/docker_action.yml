@@ -128,10 +128,22 @@ jobs:
           cache-to: type=gha,mode=max
           load: true
             
-      - name: Test
+      - name: Test IO
+        run: |
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_io.py"
+
+      - name: Test embeddings
+        run: |
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_embeddings.py"
+
+      - name: Test AO
         run: |
           docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"
-          
+
+      - name: Test synthetic datasets
+        run: |
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_datasets.py"
+
       - name: Build and push Docker image
         id: build-and-push
         uses: docker/build-push-action@v5

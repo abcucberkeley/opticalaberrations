@@ -134,6 +134,16 @@ def parse_args(args):
         help='allies name for this job'
     )
 
+    lsf.add_argument(
+        "--mem", default='500GB', type=str,
+        help='requested RAM to use for this job'
+    )
+
+    lsf.add_argument(
+        "--dependency", default=None, type=str,
+        help='submit job with a specific dependency'
+    )
+
     default = subparsers.add_parser("default", help='run a job using default python')
 
     default.add_argument(
@@ -226,6 +236,9 @@ def main(args=None):
                 sjob += f' -gpu "num={args.gpus}:nvlink=yes"'
             else:
                 sjob += f' -gpu "num={args.gpus}"'
+
+        if args.dependency is not None:
+            sjob += f'-w "done({args.name})"'
 
         sjob += f' -n {args.cpus}'
         sjob += f" -J {args.name}"
