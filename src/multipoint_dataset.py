@@ -292,6 +292,8 @@ def sim(
             psf_type=gen.psf_type,
         )
 
+    return inputs
+
 
 def create_synthetic_sample(
     filename: str,
@@ -395,16 +397,37 @@ def create_synthetic_sample(
         outdir = outdir / f"npoints_{npoints}"
         outdir.mkdir(exist_ok=True, parents=True)
 
-        try:  # check if file already exists and not corrupted
-            for e in embedding_option:
-                path = Path(f"{outdir/e}/{filename}")
+        if emb:
+            try:  # check if file already exists and not corrupted
+                for e in embedding_option:
+                    path = Path(f"{outdir/e}/{filename}")
 
-                with open(path.with_suffix('.json')) as f:
-                    ujson.load(f)
+                    with open(path.with_suffix('.json')) as f:
+                        ujson.load(f)
 
-                with TiffFile(path.with_suffix('.tif')) as tif:
-                    tif.asarray()
-        except Exception as e:
+                    with TiffFile(path.with_suffix('.tif')) as tif:
+                        tif.asarray()
+            except Exception as e:
+                sim(
+                    filename=filename,
+                    reference=reference,
+                    model_psf_shape=reference.shape,
+                    outdir=outdir,
+                    phi=phi,
+                    gen=gen,
+                    upsampled_gen=upsampled_gen,
+                    npoints=npoints,
+                    photons=photons,
+                    emb=emb,
+                    embedding_option=embedding_option,
+                    random_crop=random_crop,
+                    noise=noise,
+                    normalize=normalize,
+                    alpha_val=alpha_val,
+                    phi_val=phi_val,
+                    lls_defocus_offset=lls_defocus_offset,
+                )
+        else:
             sim(
                 filename=filename,
                 reference=reference,
@@ -424,6 +447,8 @@ def create_synthetic_sample(
                 phi_val=phi_val,
                 lls_defocus_offset=lls_defocus_offset,
             )
+
+    return reference
 
 
 def parse_args(args):

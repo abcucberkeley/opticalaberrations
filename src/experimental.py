@@ -162,7 +162,6 @@ def generate_embeddings(
 
     samplepsfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
-        lls_excitation_profile=modelpsfgen.lls_excitation_profile,
         psf_shape=sample.shape,
         n_modes=model.output_shape[1],
         lam_detection=wavelength,
