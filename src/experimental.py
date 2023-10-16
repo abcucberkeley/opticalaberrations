@@ -1570,7 +1570,7 @@ def create_consensus_map(
     xtiles: int,
     new_zernikes_path: Path,
     new_stdevs_path: Path,
-    consensus_stacks_path: Path,
+    consensus_stacks_path: Path, # .csv of optimized_stack_id
 ):
     """
         1. Build a consensus isoplanatic map of the wavefront aberrations for each tile.
@@ -1718,7 +1718,6 @@ def create_consensus_map(
     consensus_stacks.to_csv(consensus_stacks_path)
     return optimized_volume, volume_used
 
-
 @profile
 def combine_tiles(
     corrected_actuators_csv: Path,
@@ -1803,10 +1802,17 @@ def combine_tiles(
     stack_preds = []  # build a list of prediction dataframes for each stack.
     stack_stdevs = []  # build a list of standard deviations dataframes for each stack.
     correction_scans = []
+    correction_scans_b = []
+    correction_scan_paths = []
 
     for t, path in tqdm(enumerate(corrections), desc='Loading corrections', file=sys.stdout, unit=' image files'):
         correction_base_path = str(path).replace('_tiles_predictions_aggregated_p2v_error.tif', '')
+        correction_scan_paths.append(Path(f'{correction_base_path}.tif'))
         correction_scans.append(backend.load_sample(f'{correction_base_path}.tif'))
+        try:
+            correction_scans_b.append(backend.load_sample(utils.convert_path_to_other_cam(Path(f'{correction_base_path}.tif'))))
+        except Exception:
+            pass
         stack_preds.append(
             pd.read_csv(
                 f'{correction_base_path}_tiles_predictions_aggregated_clusters.csv',
@@ -1830,6 +1836,28 @@ def combine_tiles(
     new_zernikes_path = Path(f"{output_base_path}_{postfix}_tiles_predictions.csv")
     new_stdevs_path = Path(f"{output_base_path}_{postfix}_tiles_stdevs.csv")
 
+    # optimized_volume for Cam B
+    if len(correction_scans_b) > 0:
+        optimized_volume_b, volume_used = create_consensus_map(
+            org_cluster_map=org_cluster_map,
+            correction_scans=correction_scans_b,
+            stack_preds=stack_preds,
+            stack_stdevs=stack_stdevs,
+            zernikes_on_mirror=zernikes_on_mirror,
+            zernike_indices=zernike_indices,
+            window_size=predictions_settings['window_size'],
+            ztiles=ztiles,
+            ytiles=ytiles,
+            xtiles=xtiles,
+            new_zernikes_path=new_zernikes_path,
+            new_stdevs_path=new_stdevs_path,
+            consensus_stacks_path=consensus_stacks_path,
+        )
+        output_base_path_b = utils.convert_path_to_other_cam(correction_scan_paths[0])
+        imwrite(f"{output_base_path_b.with_suffix('')}_optimized.tif", optimized_volume_b.astype(np.float32))
+        logger.info(f"{output_base_path_b.with_suffix('')}_optimized.tif")
+
+    # optimized_volume for Cam A
     optimized_volume, volume_used = create_consensus_map(
         org_cluster_map=org_cluster_map,
         correction_scans=correction_scans,
@@ -1845,9 +1873,13 @@ def combine_tiles(
         new_stdevs_path=new_stdevs_path,
         consensus_stacks_path=consensus_stacks_path,
     )
+    imwrite(f"{output_base_path}_{postfix}_volume_used.tif", volume_used.astype(np.uint16))
+    imwrite(f"{output_base_path}_optimized.tif", optimized_volume.astype(np.float32))
+    logger.info(f"{output_base_path}_optimized.tif")
 
     # aggregate consensus maps
     imwrite(f"{output_base_path}_{postfix}.tif", correction_scans[0].astype(np.float32))
+    logger.info(f"{output_base_path}_{postfix}.tif")
     with Path(f"{output_base_path}_{postfix}_tiles_predictions_settings.json").open('w') as f:
         ujson.dump(
             predictions_settings,
@@ -1874,9 +1906,6 @@ def combine_tiles(
     )
 
     # aggregate optimized maps
-
-    imwrite(f"{output_base_path}_{postfix}_volume_used.tif", volume_used.astype(np.uint16))
-    imwrite(f"{output_base_path}_optimized.tif", optimized_volume.astype(np.float32))
     with Path(f"{output_base_path}_optimized_tiles_predictions_settings.json").open('w') as f:
         ujson.dump(
             predictions_settings,
