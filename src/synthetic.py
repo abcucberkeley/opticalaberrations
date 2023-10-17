@@ -252,9 +252,16 @@ class SyntheticPSF:
         return psf
 
     @profile
-    def na_mask(self, threshold: Optional[float] = 4e-3):
+    def na_mask(self, threshold: Optional[float] = 4e-3) -> np.ndarray:
         """
-        OTF Mask is going to be binary thresholded ideal theoretical OTF
+        OTF Mask by binary thresholding ideal theoretical OTF
+
+        Args:
+            threshold: where to threshold after normalizing to the OTF max
+
+        Returns:
+            3D array where ==1 inside NA_Mask, ==0 outside NA mask
+
         """
 
         ipsf = self.theoretical_psf(normed=True)
