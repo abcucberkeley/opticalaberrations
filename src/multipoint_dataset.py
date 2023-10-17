@@ -608,7 +608,7 @@ def parse_args(args):
 
     parser.add_argument(
         "--fill_radius", default=0.0, type=float,
-        help="Fractional sphere that defines where a bead may be placed in X Y Z."
+        help="Fractional cylinder radius (0-1) that defines where a bead may be placed in X Y Z."
     )
 
     parser.add_argument(
