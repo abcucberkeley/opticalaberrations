@@ -5,6 +5,7 @@ dataset/
 lattice/simulations
 test/
 models/
+benchmark/
 archive/
 logs/
 profilers/

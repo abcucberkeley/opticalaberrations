@@ -2405,7 +2405,7 @@ def compare_models(
     predictions_paths: list,
     iter_num: int = 1,
     photon_range: tuple = (1e5, 2e5),
-    aberration_range: tuple = (1, 3),
+    aberration_range: tuple = (1, 2),
     outdir: Path = Path('benchmark'),
     wavelength: float = .510
 ):

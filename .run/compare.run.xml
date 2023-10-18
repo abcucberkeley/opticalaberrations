@@ -1,0 +1,24 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="compare" type="PythonConfigurationType" factoryName="Python" folderName="benchmark">
+    <module name="opticalaberrations" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+    </envs>
+    <option name="SDK_HOME" value="" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+    <option name="IS_MODULE_SDK" value="true" />
+    <option name="ADD_CONTENT_ROOTS" value="true" />
+    <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/benchmark.py" />
+    <option name="PARAMETERS" value="compare ../ --model_codename PatchID --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-nostem/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename RotationalSymmetryP1 --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-rotational-symmetry-p1/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename RotationalSymmetryP4 --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-rotational-symmetry-p4/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename RotationalSymmetryP16 --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-rotational-symmetry-p16/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename PowerDecomposition --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-power-decomposition-4p16/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename FourierDecomposition --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-fourier-decomposition-p16/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename ZernikePolynomials4 --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-zernike-polynomials-4/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename ZernikePolynomials10 --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-zernike-polynomials-10/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv" />
+    <option name="SHOW_COMMAND_LINE" value="false" />
+    <option name="EMULATE_TERMINAL" value="false" />
+    <option name="MODULE_MODE" value="false" />
+    <option name="REDIRECT_INPUT" value="false" />
+    <option name="INPUT_FILE" value="" />
+    <method v="2" />
+  </configuration>
+</component>
