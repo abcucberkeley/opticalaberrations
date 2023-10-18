@@ -117,6 +117,7 @@ jobs:
       # Load image for local test.
       - name: Build and load Docker image
         id: build-and-load
+        continue-on-error: true
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -125,6 +126,20 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
+          cache-to: type=gha,mode=max
+          load: true        
+
+      - name: Retry Build and load Docker image with no-cache
+        if: steps.build-and-load.outcome == 'failure'
+        id: retry-build-and-load        
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          no-cache: true
           cache-to: type=gha,mode=max
           load: true
             
