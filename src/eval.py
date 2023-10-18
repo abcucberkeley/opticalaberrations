@@ -584,6 +584,7 @@ def plot_heatmap_p2v(
                 bins=25,
                 color='dimgrey'
             )
+            ax1.tick_params(axis='y', labelcolor='grey', color='grey')
 
             ax1t = ax1.twinx()
             ax1t = sns.ecdfplot(
@@ -591,14 +592,14 @@ def plot_heatmap_p2v(
                 data=x,
                 x=hist_col,
                 stat='proportion',
-                color='C2',
-                linestyle=':',
+                color='k',
+                # linestyle=':',
             )
-            ax1t.tick_params(axis='y', labelcolor='C2', color='C2')
-            ax1t.set_ylabel('CDF', color='C2')
+            ax1t.tick_params(axis='y', labelcolor='k', color='k')
+            ax1t.set_ylabel('CDF', color='k')
 
-            ax1.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2, label='Median')
-            ax1.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2, label='Mean')
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, label='Median')
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, label='Mean')
             ax1.set_ylim(0, 30)
             ax1.set_xlim(0, xmax)
             ax1.set_xlabel(color_label)
@@ -637,20 +638,22 @@ def plot_heatmap_p2v(
                 bins=25,
                 color='dimgrey'
             )
+            ax2.tick_params(axis='y', labelcolor='grey', color='grey')
+
             ax2t = ax2.twinx()
             ax2t = sns.ecdfplot(
                 ax=ax2t,
                 data=x,
                 x=hist_col,
                 stat='proportion',
-                color='C2',
-                linestyle=':',
+                color='k',
+                # linestyle=':',
             )
-            ax2t.tick_params(axis='y', labelcolor='C2', color='C2')
-            ax2t.set_ylabel('CDF', color='C2')
+            ax2t.tick_params(axis='y', labelcolor='k', color='k')
+            ax2t.set_ylabel('CDF', color='k')
 
-            ax2.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
-            ax2.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
+            ax2.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2)
+            ax2.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2)
             ax2.set_ylim(0, 30)
             ax2.set_xlim(0, xmax)
             ax2.set_xlabel(color_label)
@@ -689,6 +692,7 @@ def plot_heatmap_p2v(
                 bins=25,
                 color='dimgrey'
             )
+            ax3.tick_params(axis='y', labelcolor='grey', color='grey')
 
             ax3t = ax3.twinx()
             ax3t = sns.ecdfplot(
@@ -696,14 +700,14 @@ def plot_heatmap_p2v(
                 data=x,
                 x=hist_col,
                 stat='proportion',
-                color='C2',
-                linestyle=':',
+                color='k',
+                # linestyle=':',
             )
-            ax3t.tick_params(axis='y', labelcolor='C2', color='C2')
-            ax3t.set_ylabel('CDF', color='C2')
+            ax3t.tick_params(axis='y', labelcolor='k', color='k')
+            ax3t.set_ylabel('CDF', color='k')
 
-            ax3.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
-            ax3.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
+            ax3.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2)
+            ax3.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2)
             ax3.set_ylim(0, 30)
             ax3.set_xlim(0, xmax)
             ax3.set_xlabel(color_label)
