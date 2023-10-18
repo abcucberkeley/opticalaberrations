@@ -734,7 +734,11 @@ def plot_heatmap_p2v(
                 transform=ax.transAxes
             )
 
-            ax1.legend(frameon=False, ncol=1, loc='upper left')
+            if color_label == 'Residuals':
+                ax1.legend(frameon=False, ncol=1, loc='upper left')
+            else:
+                ax1.legend(frameon=False, ncol=1, loc='center right')
+
             ax1.yaxis.set_major_formatter(PercentFormatter(decimals=0))
             ax1t.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
             ax2.yaxis.set_major_formatter(PercentFormatter(decimals=0))
