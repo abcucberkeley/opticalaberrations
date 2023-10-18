@@ -460,7 +460,10 @@ def plot_heatmap_p2v(
     ax=None,
     cax=None,
     agg='mean',
-    histograms: Optional[pd.DataFrame] = None
+    histograms: Optional[pd.DataFrame] = None,
+    kde_color='C2',
+    cdf_color='k',
+    hist_color='lightgrey',
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -528,7 +531,7 @@ def plot_heatmap_p2v(
         if hist_col == 'confidence':
             ticks = np.arange(0, .11, step=.01)
         else:
-            ticks = np.arange(0, .26, step=.01)
+            ticks = np.arange(0, .275, step=.025)
 
         contours = ax.contourf(
             dataframe.columns.values,
@@ -569,11 +572,17 @@ def plot_heatmap_p2v(
 
             if color_label == 'Residuals':
                 xmax = 3
+                binwidth = .25
+                bins = np.arange(0, xmax + binwidth, binwidth)
             else:
                 if hist_col == 'confidence':
                     xmax = .15
+                    binwidth = .01
+                    bins = np.arange(0, xmax + binwidth, binwidth)
                 else:
                     xmax = .3
+                    binwidth = .025
+                    bins = np.arange(0, xmax + binwidth, binwidth)
 
             ax1 = sns.histplot(
                 ax=ax1,
@@ -581,29 +590,34 @@ def plot_heatmap_p2v(
                 x=hist_col,
                 stat='percent',
                 kde=True,
-                bins=25,
-                color='dimgrey'
+                bins=bins,
+                color=hist_color,
             )
-            ax1.tick_params(axis='y', labelcolor='grey', color='grey')
+            ax1.lines[0].set_color(kde_color)
+            ax1.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+            ax1.set_ylabel('KDE', color=kde_color)
 
             ax1t = ax1.twinx()
-            ax1t = sns.ecdfplot(
+            ax1t = sns.histplot(
                 ax=ax1t,
                 data=x,
                 x=hist_col,
                 stat='proportion',
-                color='k',
-                # linestyle=':',
+                color=cdf_color,
+                bins=bins,
+                element="poly",
+                fill=False,
+                cumulative=True,
             )
-            ax1t.tick_params(axis='y', labelcolor='k', color='k')
-            ax1t.set_ylabel('CDF', color='k')
+
+            ax1t.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+            ax1t.set_ylabel('CDF', color=cdf_color)
 
             ax1.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, label='Median')
             ax1.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, label='Mean')
             ax1.set_ylim(0, 30)
             ax1.set_xlim(0, xmax)
             ax1.set_xlabel(color_label)
-            ax1.set_ylabel('')
             ax1.text(
                 .9, .8, 'I',
                 horizontalalignment='center',
@@ -635,29 +649,33 @@ def plot_heatmap_p2v(
                 x=hist_col,
                 stat='percent',
                 kde=True,
-                bins=25,
-                color='dimgrey'
+                bins=bins,
+                color=hist_color,
             )
-            ax2.tick_params(axis='y', labelcolor='grey', color='grey')
+            ax2.lines[0].set_color(kde_color)
+            ax2.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+            ax2.set_ylabel('KDE', color=kde_color)
 
             ax2t = ax2.twinx()
-            ax2t = sns.ecdfplot(
+            ax2t = sns.histplot(
                 ax=ax2t,
                 data=x,
                 x=hist_col,
                 stat='proportion',
-                color='k',
-                # linestyle=':',
+                color=cdf_color,
+                bins=bins,
+                element="poly",
+                fill=False,
+                cumulative=True,
             )
-            ax2t.tick_params(axis='y', labelcolor='k', color='k')
-            ax2t.set_ylabel('CDF', color='k')
+            ax2t.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+            ax2t.set_ylabel('CDF', color=cdf_color)
 
             ax2.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2)
             ax2.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2)
             ax2.set_ylim(0, 30)
             ax2.set_xlim(0, xmax)
             ax2.set_xlabel(color_label)
-            ax2.set_ylabel('')
             ax2.text(
                 .9, .8, 'II',
                 horizontalalignment='center',
@@ -689,29 +707,33 @@ def plot_heatmap_p2v(
                 x=hist_col,
                 stat='percent',
                 kde=True,
-                bins=25,
-                color='dimgrey'
+                bins=bins,
+                color=hist_color,
             )
-            ax3.tick_params(axis='y', labelcolor='grey', color='grey')
+            ax3.lines[0].set_color(kde_color)
+            ax3.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+            ax3.set_ylabel('KDE', color=kde_color)
 
             ax3t = ax3.twinx()
-            ax3t = sns.ecdfplot(
+            ax3t = sns.histplot(
                 ax=ax3t,
                 data=x,
                 x=hist_col,
                 stat='proportion',
                 color='k',
-                # linestyle=':',
+                bins=bins,
+                element="poly",
+                fill=False,
+                cumulative=True,
             )
-            ax3t.tick_params(axis='y', labelcolor='k', color='k')
-            ax3t.set_ylabel('CDF', color='k')
+            ax3t.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+            ax3t.set_ylabel('CDF', color=cdf_color)
 
             ax3.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2)
             ax3.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2)
             ax3.set_ylim(0, 30)
             ax3.set_xlim(0, xmax)
             ax3.set_xlabel(color_label)
-            ax3.set_ylabel('')
             ax3.text(
                 .9, .8, 'III',
                 horizontalalignment='center',
