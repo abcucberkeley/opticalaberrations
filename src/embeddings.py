@@ -60,9 +60,9 @@ def fft(inputs, padsize=None):
 
 @profile
 def ifft(otf):
-    psf = np.fft.fftshift(otf)
+    psf = np.fft.ifftshift(otf)
     psf = np.fft.ifftn(psf)
-    psf = np.abs(np.fft.ifftshift(psf))
+    psf = np.abs(np.fft.fftshift(psf))
     return psf
 
 
