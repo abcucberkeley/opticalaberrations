@@ -461,7 +461,7 @@ def plot_heatmap_p2v(
     cax=None,
     agg='mean',
     histograms: Optional[pd.DataFrame] = None,
-    kde_color='C2',
+    kde_color='grey',
     cdf_color='k',
     hist_color='lightgrey',
 ):
@@ -574,32 +574,37 @@ def plot_heatmap_p2v(
                 xmax = 3
                 binwidth = .25
                 bins = np.arange(0, xmax + binwidth, binwidth)
+                xticks = np.arange(0, xmax+.5, .5)
             else:
                 if hist_col == 'confidence':
                     xmax = .15
                     binwidth = .01
                     bins = np.arange(0, xmax + binwidth, binwidth)
+                    xticks = np.arange(0, xmax+.05, .05)
                 else:
                     xmax = .3
                     binwidth = .025
                     bins = np.arange(0, xmax + binwidth, binwidth)
+                    xticks = np.arange(0, xmax+.05, .05)
 
-            ax1 = sns.histplot(
-                ax=ax1,
+            ax1t = ax1.twinx()
+            ax1t = sns.histplot(
+                ax=ax1t,
                 data=x,
                 x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=bins,
                 color=hist_color,
+                element="step",
             )
-            ax1.lines[0].set_color(kde_color)
-            ax1.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
-            ax1.set_ylabel('KDE', color=kde_color)
+            ax1t.lines[0].set_color(kde_color)
+            ax1t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+            ax1t.set_ylabel('KDE', color=kde_color)
+            ax1t.set_ylim(0, 30)
 
-            ax1t = ax1.twinx()
-            ax1t = sns.histplot(
-                ax=ax1t,
+            ax1 = sns.histplot(
+                ax=ax1,
                 data=x,
                 x=hist_col,
                 stat='proportion',
@@ -610,13 +615,14 @@ def plot_heatmap_p2v(
                 cumulative=True,
             )
 
-            ax1t.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
-            ax1t.set_ylabel('CDF', color=cdf_color)
-
-            ax1.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, label='Median')
-            ax1.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, label='Mean')
-            ax1.set_ylim(0, 30)
+            ax1.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+            ax1.set_ylabel('CDF', color=cdf_color)
+            ax1.set_ylim(0, 1)
+            ax1.set_yticks(np.arange(0, 1.2, .2))
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, label='Median', zorder=3)
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, label='Mean', zorder=3)
             ax1.set_xlim(0, xmax)
+            ax1.set_xticks(xticks)
             ax1.set_xlabel(color_label)
             ax1.text(
                 .9, .8, 'I',
@@ -643,22 +649,26 @@ def plot_heatmap_p2v(
                 (histograms.pbins >= 2e5) & (histograms.pbins <= 3e5) &
                 (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
             ]
-            ax2 = sns.histplot(
-                ax=ax2,
+
+
+            ax2t = ax2.twinx()
+            ax2t = sns.histplot(
+                ax=ax2t,
                 data=x,
                 x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=bins,
                 color=hist_color,
+                element="step",
             )
-            ax2.lines[0].set_color(kde_color)
-            ax2.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
-            ax2.set_ylabel('KDE', color=kde_color)
+            ax2t.lines[0].set_color(kde_color)
+            ax2t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+            ax2t.set_ylabel('KDE', color=kde_color)
+            ax2t.set_ylim(0, 30)
 
-            ax2t = ax2.twinx()
-            ax2t = sns.histplot(
-                ax=ax2t,
+            ax2 = sns.histplot(
+                ax=ax2,
                 data=x,
                 x=hist_col,
                 stat='proportion',
@@ -668,13 +678,14 @@ def plot_heatmap_p2v(
                 fill=False,
                 cumulative=True,
             )
-            ax2t.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
-            ax2t.set_ylabel('CDF', color=cdf_color)
-
-            ax2.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2)
-            ax2.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2)
-            ax2.set_ylim(0, 30)
+            ax2.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+            ax2.set_ylabel('CDF', color=cdf_color)
+            ax2.set_ylim(0, 1)
+            ax2.set_yticks(np.arange(0, 1.2, .2))
+            ax2.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+            ax2.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
             ax2.set_xlim(0, xmax)
+            ax2.set_xticks(xticks)
             ax2.set_xlabel(color_label)
             ax2.text(
                 .9, .8, 'II',
@@ -701,22 +712,25 @@ def plot_heatmap_p2v(
                 (histograms.pbins >= 5e5) & (histograms.pbins <= 6e5) &
                 (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
             ]
-            ax3 = sns.histplot(
-                ax=ax3,
+
+            ax3t = ax3.twinx()
+            ax3t = sns.histplot(
+                ax=ax3t,
                 data=x,
                 x=hist_col,
                 stat='percent',
                 kde=True,
                 bins=bins,
                 color=hist_color,
+                element="step",
             )
-            ax3.lines[0].set_color(kde_color)
-            ax3.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
-            ax3.set_ylabel('KDE', color=kde_color)
+            ax3t.lines[0].set_color(kde_color)
+            ax3t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+            ax3t.set_ylabel('KDE', color=kde_color)
+            ax3t.set_ylim(0, 30)
 
-            ax3t = ax3.twinx()
-            ax3t = sns.histplot(
-                ax=ax3t,
+            ax3 = sns.histplot(
+                ax=ax3,
                 data=x,
                 x=hist_col,
                 stat='proportion',
@@ -725,14 +739,16 @@ def plot_heatmap_p2v(
                 element="poly",
                 fill=False,
                 cumulative=True,
+                zorder=3
             )
-            ax3t.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
-            ax3t.set_ylabel('CDF', color=cdf_color)
-
-            ax3.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2)
-            ax3.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2)
-            ax3.set_ylim(0, 30)
+            ax3.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+            ax3.set_ylabel('CDF', color=cdf_color)
+            ax3.set_ylim(0, 1)
+            ax3.set_yticks(np.arange(0, 1.2, .2))
+            ax3.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+            ax3.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
             ax3.set_xlim(0, xmax)
+            ax3.set_xticks(xticks)
             ax3.set_xlabel(color_label)
             ax3.text(
                 .9, .8, 'III',
@@ -761,12 +777,24 @@ def plot_heatmap_p2v(
             else:
                 ax1.legend(frameon=False, ncol=1, loc='center right')
 
-            ax1.yaxis.set_major_formatter(PercentFormatter(decimals=0))
-            ax1t.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-            ax2.yaxis.set_major_formatter(PercentFormatter(decimals=0))
-            ax2t.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-            ax3.yaxis.set_major_formatter(PercentFormatter(decimals=0))
-            ax3t.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax2.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+            ax1.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+            ax2.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+            ax3.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+
+            ax1t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax2t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax3t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+
+            ax1.set_zorder(ax1t.get_zorder()+1)
+            ax1.patch.set_visible(False)
+            ax2.set_zorder(ax2t.get_zorder()+1)
+            ax2.patch.set_visible(False)
+            ax3.set_zorder(ax3t.get_zorder()+1)
+            ax3.patch.set_visible(False)
 
         elif label == f'Number of iterations':
 
@@ -1154,6 +1182,8 @@ def snrheatmap(
                     except ValueError:
                         pass
 
+                    # replace unconfident predictions with max std
+                    dataframe.replace(0, dataframe.max(), inplace=True)
                     dataframe.to_csv(f'{savepath}_{x}_{c}_{agg}.csv')
                     logger.info(f'Saved: {savepath.resolve()}_{x}_{c}_{agg}.csv')
 
