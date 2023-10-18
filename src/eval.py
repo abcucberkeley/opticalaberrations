@@ -2398,3 +2398,109 @@ def confidence_heatmap(
 
     return savepath
 
+
+@profile
+def compare_models(
+    models_codenames: list,
+    predictions_paths: list,
+    iter_num: int = 1,
+    photon_range: tuple = (1e5, 2e5),
+    aberration_range: tuple = (1, 3),
+    outdir: Path = Path('benchmark'),
+    wavelength: float = .510
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    dataframes = []
+    for codename, file in zip(models_codenames, predictions_paths):
+        df = pd.read_csv(file, header=0, index_col=0)
+        df = df[df['iter_num'] == iter_num]
+        df['model'] = codename
+        dataframes.append(df)
+
+    df = pd.concat(dataframes)
+
+    for c in ['residuals', 'confidence', 'confidence_sum']:
+
+        test = df[
+            (df.photons >= photon_range[0]) &
+            (df.photons <= photon_range[1]) &
+            (df.aberration >= aberration_range[0]) &
+            (df.aberration <= aberration_range[1])
+        ]
+
+        if c == 'residuals':
+            xmax = aberration_range[1]
+            binwidth = .25
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            xticks = np.arange(0, xmax+.25, .25)
+            label = '\n'.join([
+                rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
+            ])
+        elif c == 'confidence':
+            xmax = .1
+            binwidth = .01
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            xticks = np.arange(0, xmax+.01, .01)
+            label = '\n'.join([
+                rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
+            ])
+            test[c].replace(0, test[c].max(), inplace=True)
+        else:
+            xmax = .3
+            binwidth = .025
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            xticks = np.arange(0, xmax+.025, .025)
+            label = '\n'.join([
+                rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
+            ])
+            test[c].replace(0, test[c].max(), inplace=True)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        g = sns.histplot(
+            ax=ax,
+            data=test,
+            x=c,
+            hue='model',
+            bins=bins,
+            common_norm=False,
+            common_bins=True,
+            element="poly",
+            stat='proportion',
+            fill=False,
+            cumulative=True,
+        )
+
+        ax.set_xlabel(label)
+        ax.set_ylabel('CDF')
+        ax.set_xlim(0, xmax)
+        ax.set_xticks(xticks)
+        ax.set_ylim(None, 1)
+        # ax.set_yticks(np.arange(0, 1.1, .1))
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+        sns.move_legend(g, title='Models', frameon=False, ncol=1, loc='lower right')
+        plt.tight_layout()
+
+        savepath = Path(f'{outdir}/compare_{c}')
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)

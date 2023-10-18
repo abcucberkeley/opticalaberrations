@@ -15,6 +15,7 @@ except ImportError as e:
 
 import cli
 import experimental_benchmarks
+from eval import compare_models
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -30,6 +31,13 @@ def parse_args(args):
     parser.add_argument("target", type=str, help="target of interest to evaluate")
     parser.add_argument(
         "inputs", help='path to eval dataset. Can be a folder or a .csv', type=Path
+    )
+
+    parser.add_argument(
+        "--model_codename", default=None, action='append', help='path to _predictions.csv'
+    )
+    parser.add_argument(
+        "--model_predictions", default=None, action='append', help='path to _predictions.csv'
     )
 
     parser.add_argument(
@@ -128,6 +136,23 @@ def main(args=None):
             batch_size=args.batch_size,
             eval_sign=args.eval_sign,
             no_beads=args.no_beads,
+        )
+    elif args.target == 'phasenet_heatmap':
+        experimental_benchmarks.phasenet_heatmap(
+            inputs=args.inputs,
+            distribution=args.dist,
+            samplelimit=args.n_samples,
+            na=args.na,
+            batch_size=args.batch_size,
+            eval_sign=args.eval_sign,
+            no_beads=args.no_beads,
+        )
+    else:
+        compare_models(
+            models_codenames=args.model_codename,
+            predictions_paths=args.model_predictions,
+            iter_num=args.niter,
+            outdir=args.outdir
         )
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
