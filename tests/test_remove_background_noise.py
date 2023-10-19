@@ -26,7 +26,7 @@ def test_filter(kargs):
     Will generate the filter response for removing background filters (dog and na_and_background_filter)
 
     """
-    high_sigma = 6  # sets the low frequency cutoff.
+    high_sigma = 1.5  # sets the low frequency cutoff.
 
     # Create lattice SyntheticPSF so we can get the NA Mask
     samplepsfgen = SyntheticPSF(
