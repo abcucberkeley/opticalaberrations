@@ -24,6 +24,7 @@ import matplotlib.patches as patches
 from line_profiler_pycharm import profile
 from skimage.filters import window, difference_of_gaussians
 from tifffile import TiffFile
+from utils import round_to_even
 
 try:
     import cupy as cp

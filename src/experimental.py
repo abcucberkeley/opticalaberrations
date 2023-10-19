@@ -856,15 +856,16 @@ def predict_tiles(
     psf_type: Optional[Union[str, Path]] = None,
 ):
     # Begin spawning workers for Generate Fourier Embeddings (windows only). Must die to release their GPU memory.
-    if platform.system() == "Windows":
-        if cpu_workers == 1:
-            pool = None
-        elif cpu_workers == -1:
-            pool = mp.Pool(mp.cpu_count())
-        else:
-            pool = mp.Pool(processes=cpu_workers)
-    else:
-        pool = None     #
+    # if platform.system() == "Windows":
+    #     if cpu_workers == 1:
+    #         pool = None
+    #     elif cpu_workers == -1:
+    #         pool = mp.Pool(mp.cpu_count())
+    #     else:
+    #         pool = mp.Pool(processes=cpu_workers)
+    # else:
+    #     pool = None     #
+    pool = None
 
 
     dm_state = utils.load_dm(dm_state)
