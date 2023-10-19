@@ -10,6 +10,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Optional
 from matplotlib.ticker import FormatStrFormatter, PercentFormatter
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import matplotlib.colors as mcolors
 import seaborn as sns
 
@@ -2430,8 +2431,7 @@ def compare_models(
 
     df = pd.concat(dataframes)
 
-    for c in ['residuals', 'confidence', 'confidence_sum']:
-
+    for c in ['residuals', 'confidence_sum', 'confidence', ]:
         test = df[
             (df.photons >= photon_range[0]) &
             (df.photons <= photon_range[1]) &
@@ -2440,7 +2440,7 @@ def compare_models(
         ]
 
         if c == 'residuals':
-            xmax = aberration_range[1]
+            xmax = .5  #aberration_range[1]
             binwidth = .25
             bins = np.arange(0, xmax + binwidth, binwidth)
             xticks = np.arange(0, xmax+.25, .25)
@@ -2448,6 +2448,9 @@ def compare_models(
                 rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
                 rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
             ])
+            outliers = test[test[c] >= xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
         elif c == 'confidence':
             xmax = .1
             binwidth = .01
@@ -2457,26 +2460,42 @@ def compare_models(
                 rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
                 rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
             ])
+            # outliers = test[test[c] == 0]
             test[c].replace(0, test[c].max(), inplace=True)
+            outliers = test[test[c] >= xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
         else:
-            xmax = .3
-            binwidth = .025
+            xmax = .1
+            binwidth = .01
             bins = np.arange(0, xmax + binwidth, binwidth)
             xticks = np.arange(0, xmax+.025, .025)
             label = '\n'.join([
                 rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
                 rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
             ])
+            # outliers = test[test[c] == 0]
             test[c].replace(0, test[c].max(), inplace=True)
+            outliers = test[test[c] >= xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
 
         fig, ax = plt.subplots(figsize=(8, 6))
+        histax = inset_axes(
+            ax,
+            width="100%",
+            height="100%",
+            bbox_to_anchor=(.3, .1, .3, .3),
+            bbox_transform=ax.transAxes,
+            loc='lower center'
+        )
 
         g = sns.histplot(
             ax=ax,
             data=test,
             x=c,
             hue='model',
-            bins=bins,
+            # bins=bins,
             common_norm=False,
             common_bins=True,
             element="poly",
@@ -2485,10 +2504,26 @@ def compare_models(
             cumulative=True,
         )
 
+        # sns.violinplot(
+        #     ax=histax,
+        #     data=outliers,
+        #     x='model',
+        #     y=c,
+        #     common_norm=False,
+        #     common_bins=True,
+        #     palette="tab10",
+        # )
+
+        sns.barplot(
+            x=unconfident[models_codenames].index,
+            y=unconfident[models_codenames].values,
+            ax=histax
+        )
+
         ax.set_xlabel(label)
         ax.set_ylabel('CDF')
-        ax.set_xlim(0, xticks[-1])
-        ax.set_xticks(xticks)
+        ax.set_xlim(0, None)
+        # ax.set_xticks(xticks)
         ax.set_ylim(None, 1)
         ax.set_yticks(np.arange(0, 1.1, .1))
         ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
@@ -2496,6 +2531,16 @@ def compare_models(
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
         ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+        histax.set_ylim(unconfident.min()-.05, unconfident.max())
+        histax.set_yticks(np.arange(unconfident.min()-.05, unconfident.max()+.05, .05).round(2))
+        histax.set_xlabel(f'$i$ >= {xmax}')
+        histax.set_ylabel('Proportion')
+        histax.set_xticks([])
+        histax.spines['top'].set_visible(False)
+        histax.spines['right'].set_visible(False)
+        histax.spines['left'].set_visible(False)
+        histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
         sns.move_legend(g, title='Models', frameon=False, ncol=1, loc='lower right')
         plt.tight_layout()
