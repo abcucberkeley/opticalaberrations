@@ -942,6 +942,9 @@ def predict_tiles(
     )
     rois = tiles[tiles['ignored'] == False]['path'].values  # skip tiles with low snr or no signal
     logger.info(f" {rois.shape[0]} valid tiles found with sufficient SNR out of {tiles.shape[0]}")
+    if rois.shape[0] == 0:
+        raise Exception(f'No valid tiles found with sufficient SNR. Please use a different region.')
+    
     template = pd.DataFrame(columns=tiles.index.values)
 
     with Path(f"{img.with_suffix('')}_tiles_predictions_settings.json").open('w') as f:
