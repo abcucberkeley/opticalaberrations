@@ -33,7 +33,8 @@ except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
 import preprocessing
-from utils import resize_with_crop_or_pad, multiprocess
+from preprocessing import resize_with_crop_or_pad
+from utils import multiprocess
 from vis import savesvg, plot_interference, plot_embeddings
 
 logging.basicConfig(

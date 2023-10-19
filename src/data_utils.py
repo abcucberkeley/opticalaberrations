@@ -15,7 +15,8 @@ import embeddings
 from wavefront import Wavefront
 from zernike import Zernike
 from synthetic import SyntheticPSF
-from utils import multiprocess, resize_with_crop_or_pad
+from utils import multiprocess
+from preprocessing import resize_with_crop_or_pad
 
 logging.basicConfig(
     stream=sys.stdout,

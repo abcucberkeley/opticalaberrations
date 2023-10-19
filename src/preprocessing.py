@@ -25,6 +25,7 @@ from line_profiler_pycharm import profile
 from skimage.filters import window, difference_of_gaussians
 from tifffile import TiffFile
 from utils import round_to_even
+from synthetic import SyntheticPSF
 
 try:
     import cupy as cp
@@ -40,27 +41,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-
-def round_to_even(n):
-    answer = round(n)
-    if not answer % 2:
-        return int(answer)
-    if abs(answer + 1 - n) < abs(answer - 1 - n):
-        return int(answer + 1)
-    else:
-        return int(answer - 1)
-
-
-def round_to_odd(n):
-    answer = round(n)
-    if answer % 2:
-        return int(answer)
-    if abs(answer + 1 - n) < abs(answer - 1 - n):
-        return int(answer + 1)
-    else:
-        return int(answer - 1)
-
 
 @profile
 def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float:

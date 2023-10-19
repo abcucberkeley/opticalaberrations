@@ -14,14 +14,12 @@ from functools import partial
 import multiprocessing as mp
 from typing import Iterable
 from line_profiler_pycharm import profile
-from tifffile import TiffFile
 from skimage.draw import line
 from typing import Optional
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
-from preprocessing import prep_sample, round_to_even
-from utils import randuniform
+from utils import randuniform, round_to_even
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -189,35 +187,12 @@ class SyntheticPSF:
     @profile
     def update_ideal_psf_with_empirical(
             self,
-            ideal_empirical_psf: Union[Path, np.ndarray],
-            voxel_size: tuple = (.2, .108, .108),
-            remove_background: bool = True,
-            normalize: bool = True
+            ideal_empirical_preprocessed_psf: np.ndarray,
     ):
-        """ 
-
-        Args:
-            ideal_empirical_psf (Union[Path, np.ndarray]): _description_
-            voxel_size (tuple, optional): voxel size of empirical data. Defaults to (.2, .108, .108).
-            remove_background (bool, optional): _description_. Defaults to True.
-            normalize (bool, optional): _description_. Defaults to True.
-        """
         logger.info(f"Updating ideal PSF with empirical PSF")
 
-        if isinstance(ideal_empirical_psf, np.ndarray):
-            # assume PSF has been pre-processed already
-            self.ipsf = ideal_empirical_psf
-        else:
-            with TiffFile(ideal_empirical_psf) as tif:
-                self.ipsf = tif.asarray()
-
-            self.ipsf = prep_sample(
-                np.squeeze(self.ipsf),
-                model_fov=self.psf_fov,
-                sample_voxel_size=voxel_size,
-                remove_background=remove_background,
-                normalize=normalize
-            )
+        # PSF has been pre-processed already
+        self.ipsf = ideal_empirical_preprocessed_psf
 
         self.iotf = np.abs(self.fft(self.ipsf, padsize=None))
         self.iotf = np.nan_to_num(self.iotf, nan=0)

@@ -45,7 +45,8 @@ import data_utils
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from embeddings import fourier_embeddings, rolling_fourier_embeddings
-from preprocessing import prep_sample, round_to_even
+from preprocessing import prep_sample
+from utils import round_to_even
 
 from stem import Stem
 from activation import MaskedActivation
@@ -1151,7 +1152,6 @@ def predict_files(
         func=partial(
             preprocess,
             modelpsfgen=modelpsfgen,
-            samplepsfgen=samplepsfgen,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
             plot=plot,

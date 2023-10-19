@@ -20,7 +20,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 
 import pandas as pd
 import seaborn as sns
-from tifffile import imread, imwrite
+from tifffile import imread, imwrite, TiffFile
 from line_profiler_pycharm import profile
 from tqdm import tqdm
 
@@ -37,12 +37,13 @@ from scipy.optimize import minimize_scalar, minimize
 import utils
 import vis
 import backend
+from utils import round_to_even
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern
-from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, round_to_even
+from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles
 
 import logging
 logger = logging.getLogger('')
@@ -89,12 +90,19 @@ def reloadmodel_if_needed(
             f"of type {type(preloaded.ideal_empirical_psf)} "
             f"has been changed to {chr(10)} {ideal_empirical_psf} of type {type(ideal_empirical_psf)}"
         )
-        preloaded.modelpsfgen.update_ideal_psf_with_empirical(
-            ideal_empirical_psf=ideal_empirical_psf,
-            voxel_size=ideal_empirical_psf_voxel_size,
-            remove_background=True,
-            normalize=True,
-        )
+        if isinstance(ideal_empirical_psf, np.ndarray):
+            # assume PSF has been pre-processed already
+            ideal_empirical_preprocessed_psf = ideal_empirical_psf
+        else:
+            with TiffFile(ideal_empirical_psf) as tif:
+                ideal_empirical_preprocessed_psf = prep_sample(
+                    np.squeeze(tif.asarray()),
+                    model_fov=preloaded.modelpsfgen.psf_fov,
+                    sample_voxel_size=ideal_empirical_psf_voxel_size,
+                    remove_background=True,
+                    normalize=True)
+
+        preloaded.modelpsfgen.update_ideal_psf_with_empirical(ideal_empirical_preprocessed_psf)
 
     if psf_type is not None and preloaded.modelpsfgen.psf_type != psf_type:
         logger.info(f"Loading new PSF type: {psf_type}")

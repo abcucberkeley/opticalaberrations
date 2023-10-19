@@ -22,7 +22,6 @@ try:
 except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
-from preprocessing import resize_with_crop_or_pad
 from wavefront import Wavefront
 
 import matplotlib.pyplot as plt
@@ -253,19 +252,6 @@ def peak2valley(w, wavelength: float = .510, na: float = 1.0) -> float:
     mask = dist_from_center <= (na * wavefront.shape[0]) / 2
     wavefront *= mask
     return abs(np.nanmax(wavefront) - np.nanmin(wavefront))
-
-
-def compute_signal_lost(phi, gen, res):
-    hashtbl = {}
-    w = Wavefront(phi, order='ansi')
-    psf = gen.single_psf(w, normed=True)
-    abr = 0 if np.count_nonzero(phi) == 0 else round(w.peak2valley())
-
-    for k, r in enumerate(res):
-        window = resize_with_crop_or_pad(psf, crop_shape=tuple(3*[r]))
-        hashtbl[abr][r] = np.sum(window)
-
-    return hashtbl
 
 
 def compute_error(y_true: pd.DataFrame, y_pred: pd.DataFrame, axis=None) -> pd.DataFrame:
@@ -535,3 +521,23 @@ def convert_path_to_other_cam(src_path: Path, dst='B'):
     ending = re.findall(r"msec_.*", filename)[0]         # 'msec_0160433718msecAbs_-01x_-01y_-01z_0000t.tif'
     cam_b = src_path.parent.glob(f"{prefix}*{ending}")
     return list(cam_b)[0]
+
+
+def round_to_even(n):
+    answer = round(n)
+    if not answer % 2:
+        return int(answer)
+    if abs(answer + 1 - n) < abs(answer - 1 - n):
+        return int(answer + 1)
+    else:
+        return int(answer - 1)
+
+
+def round_to_odd(n):
+    answer = round(n)
+    if answer % 2:
+        return int(answer)
+    if abs(answer + 1 - n) < abs(answer - 1 - n):
+        return int(answer + 1)
+    else:
+        return int(answer - 1)

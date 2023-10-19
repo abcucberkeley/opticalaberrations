@@ -3,6 +3,9 @@ from backend import load, load_metadata
 import numpy as np
 from typing import Optional, Union
 import tensorflow as tf
+from tifffile import TiffFile
+
+from src.preprocessing import prep_sample
 
 
 class Preloadedmodelclass:
@@ -41,9 +44,16 @@ class Preloadedmodelclass:
         self.model = load(self.modelpath, mosaic=True)
 
         if self.ideal_empirical_psf is not None:
-            self.modelpsfgen.update_ideal_psf_with_empirical(
-                ideal_empirical_psf=self.ideal_empirical_psf,
-                voxel_size=self.ideal_empirical_psf_voxel_size,
-                remove_background=True,
-                normalize=True,
-            )
+            if isinstance(ideal_empirical_psf, np.ndarray):
+                # assume PSF has been pre-processed already
+                ideal_empirical_preprocessed_psf = ideal_empirical_psf
+            else:
+                with TiffFile(ideal_empirical_psf) as tif:
+                    ideal_empirical_preprocessed_psf = prep_sample(
+                        np.squeeze(tif.asarray()),
+                        model_fov=self.modelpsfgen.psf_fov,
+                        sample_voxel_size=ideal_empirical_psf_voxel_size,
+                        remove_background=True,
+                        normalize=True)
+
+            self.modelpsfgen.update_ideal_psf_with_empirical(ideal_empirical_preprocessed_psf)
