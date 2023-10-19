@@ -284,7 +284,9 @@ def combine_filtered_imgs(original_image, im1_sharper, im2_low_freqs_to_subtract
 def remove_background_noise(
         image,
         read_noise_bias: float = 5,
-        method: str = 'difference_of_gaussians'  # 'difference_of_gaussians',  fourier_filter
+        method: str = 'difference_of_gaussians',  # 'difference_of_gaussians',  fourier_filter
+        high_sigma: float = 3.0,
+        low_sigma: float = 0.7,
 ):
     """ Remove background noise from a given image volume.
         Difference of gaussians (DoG) works best via bandpass (reject past nyquist, reject non-uniform DC/background/scattering). Runs
@@ -306,13 +308,12 @@ def remove_background_noise(
     except Exception:
         logger.warning("No CUDA-capable device is detected")
 
-    high_sigma = 1.5
 
     if method == 'mode':
         mode = int(st.mode(image, axis=None).mode[0])
         image -= mode + read_noise_bias
     elif method == 'difference_of_gaussians':
-        image = dog(image, low_sigma=0.7, high_sigma=high_sigma)
+        image = dog(image, low_sigma=low_sigma, high_sigma=high_sigma)
     elif method == 'fourier_filter':
         # Create lattice SyntheticPSF so we can get the NA Mask.
         logger.warning("Using hardcoded NA Mask for Fourier filter. Code should be updated to use actual NA Mask.")
@@ -321,7 +322,7 @@ def remove_background_noise(
             psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
             psf_shape=image.shape,
         )
-        image = na_and_background_filter(image, low_sigma=0.7, high_sigma=high_sigma, samplepsfgen=samplepsfgen)
+        image = na_and_background_filter(image, low_sigma=low_sigma, high_sigma=high_sigma, samplepsfgen=samplepsfgen)
     else:
         raise Exception(f"Unknown method '{method}' for remove_background_noise functions.")
 
