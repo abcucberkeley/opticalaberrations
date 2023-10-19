@@ -26,7 +26,8 @@ def test_filter(kargs):
     Will generate the filter response for removing background filters (dog and na_and_background_filter)
 
     """
-    high_sigma = 1.5  # sets the low frequency cutoff.
+    high_sigma = 3.0  # sets the low frequency cutoff.
+    low_sigma: float = 0.7
 
     # Create lattice SyntheticPSF so we can get the NA Mask
     samplepsfgen = SyntheticPSF(
@@ -72,10 +73,10 @@ def test_filter(kargs):
     """
 
     # filter the real space image. Remove DC.
-    FFTfiltered_realsp = na_and_background_filter(realsp, low_sigma=0.7, high_sigma=high_sigma, samplepsfgen=samplepsfgen)
+    FFTfiltered_realsp = na_and_background_filter(realsp, low_sigma=low_sigma, high_sigma=high_sigma, samplepsfgen=samplepsfgen)
     FFTfiltered_realsp -= np.mean(FFTfiltered_realsp)
 
-    dogfiltered_realsp = dog(realsp, low_sigma=0.7, high_sigma=high_sigma)
+    dogfiltered_realsp = dog(realsp, low_sigma=low_sigma, high_sigma=high_sigma)
     dogfiltered_realsp -= np.mean(dogfiltered_realsp)
 
     imwrite(f'{base_folder}/FFTfiltered_realsp.tif', np.abs(cp.asnumpy(FFTfiltered_realsp)).astype(np.float32))
