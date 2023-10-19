@@ -2360,52 +2360,54 @@ def decon(
 
             zernikes = df.values[0]  # all rows in this group should be equal. Take the first one as the wavefront.
             w = Wavefront(zernikes, lam_detection=wavelength)
-            defocus = 0
             z, y, x = df.index[0]
-            if np.count_nonzero(zernikes) > 0:
-                corrected_psf_path = Path(
-                    str(model_pred / f'z{z}-y{y}-x{x}_corrected_psf.tif').replace("_predictions.csv", ""))
-                corrected_psf = np.zeros_like(imread(corrected_psf_path))
-
-                for index, zernikes in df.iterrows():
-                    z, y, x = index
-                    corrected_psf_path = Path(str(model_pred / f'z{z}-y{y}-x{x}_corrected_psf.tif').replace("_predictions.csv", ""))
-                    corrected_psf += imread(corrected_psf_path)
-
-                corrected_psf /= np.max(corrected_psf)
-                res = minimize(
-                    f_to_minimize,
-                    x0=0,
-                    args=(w, corrected_psf, samplepsfgen),
-                    tol=samplepsfgen.z_voxel_size,
-                    bounds=[(-0.6, 0.6)],
-                    method='Nelder-Mead',
-                    options={
-                        'disp': False,
-                        'initial_simplex': [[-samplepsfgen.z_voxel_size], [samplepsfgen.z_voxel_size]],   # need 1st step > one z, overrides x0
-                        }
-                    )
-                defocus = res.x[0]
-                # defocus_steps = np.linspace(-2, 2, 41)
-                # correlations = np.zeros_like(defocus_steps)
-                #
-                # for i, defocus in enumerate(defocus_steps):
-                #     kernel = samplepsfgen.single_psf(w, normed=False, lls_defocus_offset=defocus)
-                #     kernel /= np.max(kernel)
-                #     correlations[i] = np.max(correlate(corrected_psf, kernel, mode='same'))
-                #
-                # defocus = defocus_steps[np.argmax(correlations)]
-            print(f'\t Defocus for ({z:2d}, {y:2d}, {x:2d}) is {defocus: 0.2f} um, p2V is {w.peak2valley(na=samplepsfgen.na_detection):0.02f}')
-            kernel = samplepsfgen.single_psf(w, normed=False, lls_defocus_offset=defocus)
-            kernel /= np.max(kernel)
 
             if task == 'cocoa':
                 deconv = reconstruct_cocoa(vol)
 
             elif task == 'decon':
+                defocus = 0
+                if np.count_nonzero(zernikes) > 0:
+                    corrected_psf_path = Path(
+                        str(model_pred / f'z{z}-y{y}-x{x}_corrected_psf.tif').replace("_predictions.csv", ""))
+                    corrected_psf = np.zeros_like(imread(corrected_psf_path))
+
+                    for index, zernikes in df.iterrows():
+                        z, y, x = index
+                        corrected_psf_path = Path(str(model_pred / f'z{z}-y{y}-x{x}_corrected_psf.tif').replace("_predictions.csv", ""))
+                        corrected_psf += imread(corrected_psf_path)
+
+                    corrected_psf /= np.max(corrected_psf)
+                    res = minimize(
+                        f_to_minimize,
+                        x0=0,
+                        args=(w, corrected_psf, samplepsfgen),
+                        tol=samplepsfgen.z_voxel_size,
+                        bounds=[(-0.6, 0.6)],
+                        method='Nelder-Mead',
+                        options={
+                            'disp': False,
+                            'initial_simplex': [[-samplepsfgen.z_voxel_size], [samplepsfgen.z_voxel_size]],   # need 1st step > one z, overrides x0
+                            }
+                        )
+                    defocus = res.x[0]
+                    # defocus_steps = np.linspace(-2, 2, 41)
+                    # correlations = np.zeros_like(defocus_steps)
+                    #
+                    # for i, defocus in enumerate(defocus_steps):
+                    #     kernel = samplepsfgen.single_psf(w, normed=False, lls_defocus_offset=defocus)
+                    #     kernel /= np.max(kernel)
+                    #     correlations[i] = np.max(correlate(corrected_psf, kernel, mode='same'))
+                    #
+                    # defocus = defocus_steps[np.argmax(correlations)]
+                print(f'\t Defocus for ({z:2d}, {y:2d}, {x:2d}) is {defocus: 0.2f} um, p2V is {w.peak2valley(na=samplepsfgen.na_detection):0.02f}')
+                kernel = samplepsfgen.single_psf(w, normed=False, lls_defocus_offset=defocus)
+                kernel /= np.max(kernel)
+
                 stdout = silence(task == 'decon')
                 deconv = reconstruct_decon(vol, psf=kernel)
                 silence(False, stdout=stdout)
+
             else:
                 logger.error(f"Task of '{task}' is unknown")
                 return
