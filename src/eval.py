@@ -2487,10 +2487,10 @@ def compare_models(
 
         ax.set_xlabel(label)
         ax.set_ylabel('CDF')
-        ax.set_xlim(0, xmax)
+        ax.set_xlim(0, xticks[-1])
         ax.set_xticks(xticks)
         ax.set_ylim(None, 1)
-        # ax.set_yticks(np.arange(0, 1.1, .1))
+        ax.set_yticks(np.arange(0, 1.1, .1))
         ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
