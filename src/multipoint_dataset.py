@@ -242,7 +242,7 @@ def sim(
                 model_fov=gen.psf_fov,
                 remove_background=remove_background,
                 normalize=normalize,
-                read_noise_bias=5,
+                min_psnr=0,
                 # plot=odir/filename,
             )
 
