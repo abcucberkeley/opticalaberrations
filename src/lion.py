@@ -26,7 +26,7 @@ class Lion(tf.keras.optimizers.Optimizer):
                  learning_rate=0.0001,
                  beta_1=0.9,
                  beta_2=0.99,
-                 wd=0,
+                 weight_decay=0,
                  name='lion',
                  **kwargs):
         """Construct a new Lion optimizer."""
@@ -35,7 +35,7 @@ class Lion(tf.keras.optimizers.Optimizer):
         self._set_hyper('learning_rate', kwargs.get('lr', learning_rate))
         self._set_hyper('beta_1', beta_1)
         self._set_hyper('beta_2', beta_2)
-        self._set_hyper('wd', wd)
+        self._set_hyper('weight_decay', weight_decay)
 
     def _create_slots(self, var_list):
         # Create slots for the first and second moments.
@@ -48,7 +48,7 @@ class Lion(tf.keras.optimizers.Optimizer):
 
         beta_1_t = tf.identity(self._get_hyper('beta_1', var_dtype))
         beta_2_t = tf.identity(self._get_hyper('beta_2', var_dtype))
-        wd_t = tf.identity(self._get_hyper('wd', var_dtype))
+        weight_decay_t = tf.identity(self._get_hyper('weight_decay', var_dtype))
         lr = apply_state[(var_device, var_dtype)]['lr_t']
         apply_state[(var_device, var_dtype)].update(
             dict(
@@ -57,7 +57,7 @@ class Lion(tf.keras.optimizers.Optimizer):
                 one_minus_beta_1_t=1 - beta_1_t,
                 beta_2_t=beta_2_t,
                 one_minus_beta_2_t=1 - beta_2_t,
-                wd_t=wd_t))
+                weight_decay_t=weight_decay_t))
 
     @tf.function(jit_compile=True)
     def _resource_apply_dense(self, grad, var, apply_state=None):
@@ -70,7 +70,7 @@ class Lion(tf.keras.optimizers.Optimizer):
             coefficients['lr_t'] *
             (tf.math.sign(m * coefficients['beta_1_t'] +
                           grad * coefficients['one_minus_beta_1_t']) +
-             var * coefficients['wd_t']))
+             var * coefficients['weight_decay_t']))
         with tf.control_dependencies([var_t]):
             m.assign(m * coefficients['beta_2_t'] +
                      grad * coefficients['one_minus_beta_2_t'])
@@ -86,7 +86,7 @@ class Lion(tf.keras.optimizers.Optimizer):
         m_scaled_g_values = grad * coefficients['one_minus_beta_1_t']
         m_t = m_t.scatter_add(tf.IndexedSlices(m_scaled_g_values, indices))
         var_t = var.assign_sub(coefficients['lr'] *
-                               (tf.math.sign(m_t) + var * coefficients['wd_t']))
+                               (tf.math.sign(m_t) + var * coefficients['weight_decay_t']))
 
         with tf.control_dependencies([var_t]):
             m_t = m_t.scatter_add(tf.IndexedSlices(-m_scaled_g_values, indices))
@@ -101,6 +101,6 @@ class Lion(tf.keras.optimizers.Optimizer):
             'learning_rate': self._serialize_hyperparameter('learning_rate'),
             'beta_1': self._serialize_hyperparameter('beta_1'),
             'beta_2': self._serialize_hyperparameter('beta_2'),
-            'wd': self._serialize_hyperparameter('wd'),
+            'weight_decay': self._serialize_hyperparameter('weight_decay'),
         })
         return config
