@@ -2,6 +2,7 @@ LabVIEW/
 LLSM3DTools/
 data/
 dataset/
+filter/
 lattice/simulations
 test/
 models/
