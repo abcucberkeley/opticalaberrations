@@ -26,14 +26,10 @@ from tqdm import tqdm
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.optimizers import SGD
-from tensorflow_addons.optimizers import AdamW
-from tensorflow_addons.optimizers import SGDW
+from tensorflow.keras.optimizers import Adam, SGD
+from tensorflow_addons.optimizers import AdamW, SGDW
 
-from tensorflow.keras.callbacks import CSVLogger
-from tensorflow.keras.callbacks import ModelCheckpoint
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping
 from callbacks import Defibrillator
 from callbacks import LearningRateScheduler
 from callbacks import TensorBoardCallback
@@ -57,6 +53,7 @@ import opticalnet
 import opticalresnet
 import baseline
 import otfnet
+from lion import Lion
 
 
 logging.basicConfig(
@@ -1260,6 +1257,7 @@ def train(
         opt: str,
         lr: float,
         wd: float,
+        dropout: float,
         warmup: int,
         decay_period: int,
         wavelength: float,
@@ -1282,8 +1280,11 @@ def train(
         radial_encoding: bool = False,
         radial_encoding_period: int = 1,
         radial_encoding_nth_order: int = 4,
-        radial_encoding_scheme: str = 'rotational_symmetry',
+        positional_encoding_scheme: str = 'default',
+        increase_dropout_depth: bool = False,
+        decrease_dropout_depth: bool = False,
         stem: bool = False,
+        sam: bool = True,
 ):
     network = network.lower()
     opt = opt.lower()
@@ -1297,11 +1298,15 @@ def train(
     loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
 
     """
-        Adam: A Method for Stochastic Optimization: https://arxiv.org/pdf/1412.6980
-        SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
-        Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
+        Adam - A Method for Stochastic Optimization: https://arxiv.org/pdf/1412.6980
+        SGDR - Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
+        AdamW - Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
+        SAM - Sharpness-Aware-Minimization (SAM): https://openreview.net/pdf?id=6Tm1mposlrM
+        Lion - Symbolic Discovery of Optimization Algorithms: https://arxiv.org/pdf/2302.06675
     """
-    if opt.lower() == 'adam':
+    if opt.lower() == 'lion':
+        opt = Lion(learning_rate=lr, weight_decay=wd)
+    elif opt.lower() == 'adam':
         opt = Adam(learning_rate=lr)
     elif opt == 'sgd':
         opt = SGD(learning_rate=lr, momentum=0.9)
@@ -1338,17 +1343,20 @@ def train(
             name='OpticalNet',
             roi=roi,
             stem=stem,
+            sam=sam,
             patches=patch_size,
             modes=pmodes,
             depth_scalar=depth_scalar,
             width_scalar=width_scalar,
+            dropout_rate=dropout,
             activation=activation,
             mul=mul,
             no_phase=no_phase,
-            radial_encoding=radial_encoding,
+            positional_encoding_scheme=positional_encoding_scheme,
             radial_encoding_period=radial_encoding_period,
             radial_encoding_nth_order=radial_encoding_nth_order,
-            radial_encoding_scheme=radial_encoding_scheme,
+            increase_dropout_depth=increase_dropout_depth,
+            decrease_dropout_depth=decrease_dropout_depth,
         )
 
     elif network == 'opticalresnet':

@@ -2198,6 +2198,7 @@ def eval_confidence(
                     noisy_img /= maxcounts
 
                     for trained_model in tqdm(models, file=sys.stdout):
+                        logger.info(trained_model)
                         m = backend.load(trained_model)
                         no_phase = True if m.input_shape[1] == 3 else False
 

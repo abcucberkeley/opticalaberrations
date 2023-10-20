@@ -131,7 +131,16 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
+        "--dropout", default=0.1, type=float, help='initial dropout rate for stochastic depth'
+    )
+
+    train_parser.add_argument(
         "--opt", default='AdamW', type=str, help='optimizer to use for training'
+    )
+
+    train_parser.add_argument(
+        '--sam', action='store_true',
+        help='toggle to use sharpness aware minimization'
     )
 
     train_parser.add_argument(
@@ -183,28 +192,33 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        '--radial_encoding', action='store_true',
-        help='toggle to use radial positional encoding for the PatchEncoder layer'
+        '--positional_encoding_scheme', default='default', type=str,
+        help='toggle to use different radial encoding types/schemes'
     )
 
     train_parser.add_argument(
-        '--radial_encoding_period', default=1, type=int,
+        '--radial_encoding_period', default=16, type=int,
         help='toggle to add more periods for each sin/cos layer in the radial encodings'
     )
 
     train_parser.add_argument(
-        '--radial_encoding_nth_order', default=1, type=int,
+        '--radial_encoding_nth_order', default=4, type=int,
         help='toggle to define the max nth zernike order in the radial encodings'
-    )
-
-    train_parser.add_argument(
-        '--radial_encoding_scheme', default='rotational_symmetry', type=str,
-        help='toggle to use different radial encoding types/schemes'
     )
 
     train_parser.add_argument(
         '--stem', action='store_true',
         help='toggle to use a stem block'
+    )
+
+    train_parser.add_argument(
+        '--increase_dropout_depth', action='store_true',
+        help='toggle to linearly increase dropout rate for deeper layers'
+    )
+
+    train_parser.add_argument(
+        '--decrease_dropout_depth', action='store_true',
+        help='toggle to linearly decrease dropout rate for deeper layers'
     )
 
     return train_parser.parse_known_args(args)[0]
@@ -254,6 +268,7 @@ def main(args=None):
             opt=args.opt,
             lr=args.lr,
             wd=args.wd,
+            dropout=args.dropout,
             fixedlr=args.fixedlr,
             warmup=args.warmup,
             epochs=args.epochs,
@@ -270,11 +285,13 @@ def main(args=None):
             no_phase=args.no_phase,
             lls_defocus=args.lls_defocus,
             defocus_only=args.defocus_only,
-            radial_encoding=args.radial_encoding,
             radial_encoding_period=args.radial_encoding_period,
             radial_encoding_nth_order=args.radial_encoding_nth_order,
-            radial_encoding_scheme=args.radial_encoding_scheme,
+            positional_encoding_scheme=args.positional_encoding_scheme,
             stem=args.stem,
+            sam=args.sam,
+            increase_dropout_depth=args.increase_dropout_depth,
+            decrease_dropout_depth=args.decrease_dropout_depth,
         )
 
         atexit.register(strategy._extended._collective_ops._pool.close)
