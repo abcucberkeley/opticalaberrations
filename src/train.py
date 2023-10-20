@@ -192,7 +192,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        '--positional_encoding_scheme', default='default', type=str,
+        '--positional_encoding_scheme', default='rotational_symmetry', type=str,
         help='toggle to use different radial encoding types/schemes'
     )
 
