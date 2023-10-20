@@ -63,7 +63,7 @@ class SyntheticPSF:
             signed: optional flag to generate a symmetric (pos/neg) semi-distributions for the given range of amplitudes,
                 otherwise just positive amplitudes only
             n_modes: number of zernike modes to describe the aberration
-            order: eg noll or ansi, default is ansi
+            order: 'noll' or 'ansi', default is ansi
             batch_size: number of samples per batch
             psf_shape: shape of input psf, eg (z, y, x)
             x_voxel_size: (x) lateral sampling rate in microns
