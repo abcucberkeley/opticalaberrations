@@ -27,7 +27,7 @@ def test_filter(kargs):
 
     """
     high_sigma = 3.0  # sets the low frequency cutoff.
-    low_sigma: float = 0.7
+    low_sigma  = 0.7
 
     # Create lattice SyntheticPSF so we can get the NA Mask
     samplepsfgen = SyntheticPSF(
@@ -45,37 +45,27 @@ def test_filter(kargs):
         z_voxel_size=kargs['axial_voxel_size'],
     )
 
-    # real space image = a single voxel at the center of a volume.  This will have a uniform otf.
+    # Setup test images: "realsp" and "fourier"
+    # real space image = a single voxel at the center of a volume.  This will create a uniform otf.
     realsp = cp.zeros(samplepsfgen.psf_shape)   # [64, 64, 64]
-    center = np.array(realsp.shape)//2
+    center = np.array(realsp.shape) // 2
     realsp[center[2], center[1], center[0]] = 1
     realsp -= np.mean(realsp)                   # set DC frequency to zero so it doesn't overload otf.
     fourier = samplepsfgen.fft(realsp)
 
     base_folder = Path("./filter")
     base_folder.mkdir(exist_ok=True)
-    print(f"\nUsing {high_sigma=}\n")
-    print(f"Outputing results to : {base_folder.resolve()}\n")
     imwrite(f'{base_folder}/fourier.tif', np.abs(cp.asnumpy(fourier)).astype(np.float32))
     imwrite(f'{base_folder}/realsp.tif', np.abs(cp.asnumpy(realsp)).astype(np.float32))
 
-    """
-    # checking this step by step 
-    fourier = samplepsfgen.fft(realsp)
-    fourier[samplepsfgen.na_mask() == 0] = 0
-    im1 = samplepsfgen.ifft(fourier)
-    FFTfiltered_realsp = im1
-    
-    fourier = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(realsp)))
-    fourier[samplepsfgen.na_mask() == 0] = 0
-    FFTfiltered_realsp = samplepsfgen.ifft(fourier) #
-    FFTfiltered_realsp = np.abs(np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(fourier))))
-    """
+    print(f"\n\nUsing {high_sigma=}, {low_sigma=}")
 
     # filter the real space image. Remove DC.
+    print(f'Testing "na_and_background_filter"...')
     FFTfiltered_realsp = na_and_background_filter(realsp, low_sigma=low_sigma, high_sigma=high_sigma, samplepsfgen=samplepsfgen)
     FFTfiltered_realsp -= np.mean(FFTfiltered_realsp)
 
+    print(f'Testing "dog"...\n')
     dogfiltered_realsp = dog(realsp, low_sigma=low_sigma, high_sigma=high_sigma)
     dogfiltered_realsp -= np.mean(dogfiltered_realsp)
 
@@ -90,9 +80,12 @@ def test_filter(kargs):
 
     imwrite(f'{base_folder}/FFTfiltered_otf.tif', FFTfiltered_otf)
     imwrite(f'{base_folder}/dogfiltered_otf.tif', dogfiltered_otf)
+    print(f'3D Frequency supports saved to:\n'
+            f'{Path(base_folder / "FFTfiltered_otf.tif").resolve()}\n'
+            f'{Path(base_folder / "dogfiltered_otf.tif").resolve()}\n')
 
     # Save principle planes
-    imageio.imsave(f'{base_folder}/FFTfiltered_otf_XY.png', FFTfiltered_otf[center[2],:,:])
+    imageio.imsave(f'{base_folder}FFTfiltered_otf_XY.png', FFTfiltered_otf[center[2],:,:])
     imageio.imsave(f'{base_folder}/dogfiltered_otf_XY.png', dogfiltered_otf[center[2],:,:])
     imageio.imsave(f'{base_folder}/FFTfiltered_otf_XZ.png', FFTfiltered_otf[:,center[1],:])
     imageio.imsave(f'{base_folder}/dogfiltered_otf_XZ.png', dogfiltered_otf[:,center[1],:])
