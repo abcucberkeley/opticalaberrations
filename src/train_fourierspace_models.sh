@@ -10,10 +10,9 @@ DZ=200
 DY=108
 DX=108
 SAM='--sam'
-RADIAL_ENCODING='--radial_encoding'
-RADIAL_ENCODING_PERIOD='--radial_encoding_period'
-RADIAL_ENCODING_ORDER='--radial_encoding_nth_order'
-POSITIONAL_ENCODING_SCHEME='--positional_encoding_scheme'
+RADIAL_ENCODING_PERIOD='--radial_encoding_period 16'
+RADIAL_ENCODING_ORDER='--radial_encoding_nth_order 4'
+POSITIONAL_ENCODING_SCHEME='--positional_encoding_scheme rotational_symmetry'
 NO_PHASE='--no_phase'
 DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
@@ -75,12 +74,12 @@ do
 
         if [ $OPT = 'sam' ];then
           python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-          --task "$DROPOUT $SAM --opt adamw --lr $LR --wd $WD $RADIAL_ENCODING $RADIAL_ENCODING_PERIOD 16 $POSITIONAL_ENCODING_SCHEME rotational_symmetry --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
+          --task "$DROPOUT $SAM --opt adamw --lr $LR --wd $WD $POSITIONAL_ENCODING_SCHEME $RADIAL_ENCODING_PERIOD --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
           --taskname $NETWORK \
           --name new/$SUBSET/$NETWORK-$MODES-$DIR-$OPT-$LR-$DROPOUT
         else
           python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-          --task "$DROPOUT --opt $OPT --lr $LR --wd $WD $RADIAL_ENCODING $RADIAL_ENCODING_PERIOD 16 $POSITIONAL_ENCODING_SCHEME rotational_symmetry --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
+          --task "$DROPOUT --opt $OPT --lr $LR --wd $WD $POSITIONAL_ENCODING_SCHEME $RADIAL_ENCODING_PERIOD --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
           --taskname $NETWORK \
           --name new/$SUBSET/$NETWORK-$MODES-$DIR-$OPT-$LR-$DROPOUT
         fi
