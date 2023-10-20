@@ -257,7 +257,8 @@ def preprocess(
     no_phase: bool = False,
     fov_is_small: bool = True,
     rolling_strides: Optional[tuple] = None,
-    skip_prep_sample: bool = False
+    skip_prep_sample: bool = False,
+    min_psnr: int = 10,
 ):
     if samplepsfgen is None:
         samplepsfgen = modelpsfgen
@@ -280,7 +281,8 @@ def preprocess(
                 remove_background=remove_background,
                 normalize=normalize,
                 read_noise_bias=read_noise_bias,
-                plot=plot if plot else None
+                min_psnr=min_psnr,
+                plot=plot if plot else None,
             )
 
         return fourier_embeddings(
@@ -1144,6 +1146,7 @@ def predict_files(
     cpu_workers: int = -1,
     template: Optional[pd.DataFrame] = None,
     pool: Optional[mp.Pool] = None,
+    min_psnr: int = 5
 ):
     no_phase = True if model.input_shape[1] == 3 else False
 
@@ -1160,7 +1163,8 @@ def predict_files(
             normalize=True,
             fov_is_small=fov_is_small,
             rolling_strides=rolling_strides,
-            skip_prep_sample=skip_prep_sample
+            skip_prep_sample=skip_prep_sample,
+            min_psnr=min_psnr
         ),
         desc='Generate Fourier embeddings',
         unit=' file',

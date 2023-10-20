@@ -54,6 +54,7 @@ def kargs():
         num_rois=10,
         min_intensity=200,
         minimum_distance=.5,
+        min_psnr=5,
     )
 
     return kargs
