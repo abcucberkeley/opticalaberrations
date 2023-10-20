@@ -114,13 +114,13 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 're
 
 def na_and_background_filter(
     image: cp.ndarray,
-    samplepsfgen: SyntheticPSF,  # SyntheticPSF class with image's voxel size, etc.
+    na_mask: np.ndarray,  # light sheet NA mask
     low_sigma: float,
     high_sigma: Union[float] = None,
     mode: str = 'nearest',
     cval: int = 0,
     truncate: float = 4.0,
-    snr_threshold: int = 5,
+    min_psnr: int = 5,
 ):
     """
     Use the sample API as dog filter.
@@ -132,13 +132,13 @@ def na_and_background_filter(
         mode:
         cval:
         truncate:
-        snr_threshold:
+        min_psnr:
 
     Returns:
 
     """
     fourier = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(image)))
-    fourier[samplepsfgen.na_mask() == 0] = 0
+    fourier[na_mask == 0] = 0
     im1 = np.real(np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(fourier))))  # needs to be 'real' not abs in this case
 
     spatial_dims = image.ndim
@@ -158,17 +158,17 @@ def na_and_background_filter(
     im2 = cp.empty_like(image, dtype=cp_dtype)  # need to supply gauss filter output with the data type we want
     im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
 
-    return combine_filtered_imgs(image, im1, im2, snr_threshold=snr_threshold, dtype=cp_dtype)
+    return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=cp_dtype)
 
 
 def dog(
     image: cp.ndarray,
+    min_psnr: int,
     low_sigma: float,
     high_sigma: Union[float] = None,
     mode: str = 'nearest',
     cval: int = 0,
     truncate: float = 4.0,
-    snr_threshold: int = 10,
 ):
     """
     Image is a cp.ndarray, processing is performed on GPU.
@@ -206,7 +206,7 @@ def dog(
             is 0.0
         truncate: float, optional (default is 4.0)
             Truncate the filter at this many standard deviations.
-        snr_threshold: if SNR is poor, the image returned will be all zeros..
+        min_psnr: if SNR is poor, the image returned will be all zeros..
 
     Returns:
         filtered_image : ndarray
@@ -241,21 +241,27 @@ def dog(
         im1 = cp.zeros_like(image, dtype=cp_dtype)
     im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
 
-    return combine_filtered_imgs(image, im1, im2, snr_threshold=snr_threshold, dtype=cp_dtype)
+    return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=cp_dtype)
 
 
-def combine_filtered_imgs(original_image, im1_sharper, im2_low_freqs_to_subtract, snr_threshold, dtype):
+def combine_filtered_imgs(original_image: cp.ndarray,
+                          im1_sharper: cp.ndarray,
+                          im2_low_freqs_to_subtract: cp.ndarray,
+                          min_psnr: int,
+                          dtype) -> cp.ndarray:
     """
-    Combines the two filtered real space images.  (im1 - im2)
+    Combines the two filters (real space images) to produce filtered_img = (im1 - im2) - noise.
+    Uses std_dev(im2) to determine if image is spare (we can increase background subtraction by noise) or dense
 
     Args:
         original_image: Raw data
         im1_sharper: Raw_data with highest frequencies removed
-        im2_low_freqs_to_subtract: Just lowest frequencies (non-uniform background)
-        snr_threshold:
-        cp_dtype:
+        im2_low_freqs_to_subtract: Just lowest frequencies (aka the non-uniform background to be subtracted)
+        min_psnr:
+        dtype:
 
     Returns:
+        filtered_img : 3D cupy array
 
     """
     mask = tukey_window(cp.ones_like(original_image, dtype=dtype))
@@ -264,17 +270,18 @@ def combine_filtered_imgs(original_image, im1_sharper, im2_low_freqs_to_subtract
     # if blurred shows little std deviation: this is sparse, will want to more aggressively subtract
     if cp.std(im2_low_freqs_to_subtract[mask == 1]) < 3:
         snr = measure_snr(original_image * mask)
-        if snr > snr_threshold:  # sparse, yet SNR of original image is good
-            noise = cp.std(original_image - im2_low_freqs_to_subtract)  # increase the background subtraction by the noise
+        if snr > min_psnr:  # sparse, yet SNR of original image is good
+            noise = cp.std(original_image - im2_low_freqs_to_subtract)  # increase the bkgrd subtraction by the noise
             return im1_sharper - (im2_low_freqs_to_subtract + noise)
         else:  # sparse, and SNR of original image is poor
-            logger.warning("Dropping sparse image for poor SNR")
+            logger.warning(f"Dropping sparse image for poor SNR {snr} < {min_psnr}")
             return np.zeros_like(original_image)  # return zeros
 
     else:  # This is a dense image
         filtered_img = im1_sharper - im2_low_freqs_to_subtract
-        if measure_snr(filtered_img) < snr_threshold:  # SNR poor
-            logger.warning("Dropping  dense image for poor SNR")
+        snr = measure_snr(filtered_img)
+        if snr < min_psnr:  # SNR poor
+            logger.warning(f"Dropping  dense image for poor SNR {snr} < {min_psnr}")
             return np.zeros_like(original_image)  # return zeros
         else:
             return filtered_img  # SNR good. Return filtered image.
@@ -287,19 +294,25 @@ def remove_background_noise(
         method: str = 'difference_of_gaussians',  # 'difference_of_gaussians',  fourier_filter
         high_sigma: float = 3.0,
         low_sigma: float = 0.7,
-):
+        min_psnr: int = 5,
+) -> cp.ndarray:
     """ Remove background noise from a given image volume.
-        Difference of gaussians (DoG) works best via bandpass (reject past nyquist, reject non-uniform DC/background/scattering). Runs
-        on GPU. DoG filter also checks if sparse, returns zeros if image doesn't have signal.
+        Difference of gaussians (DoG) works best via bandpass (reject past nyquist, reject
+        non-uniform DC/background/scattering).
+        Runs on GPU.
+        Also checks if sparse, returns zeros if filtered image doesn't have enough signal.
 
     Args:
         image (np.ndarray or cp.ndarray): 3D image volume
         read_noise_bias (float, optional): When method="mode", empty pixels will still be non-zero due to read noise of camera.
             This value increases the amount subtracted to put empty pixels at zero. Defaults to 5.
         method (str, optional): method for background subtraction. Defaults to 'difference_of_gaussians'.
+        high_sigma: Sets threshold for removing low frequencies (i.e. non-uniform bkgrd)
+        low_sigma:  Sets threshold for removing high frequencies (i.e. beyond OTF support)
+        min_psnr: Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold
 
     Returns:
-        _type_: np.array
+        _type_: cp.ndarray
     """
 
     try:
@@ -312,17 +325,23 @@ def remove_background_noise(
     if method == 'mode':
         mode = int(st.mode(image, axis=None).mode[0])
         image -= mode + read_noise_bias
+
     elif method == 'difference_of_gaussians':
-        image = dog(image, low_sigma=low_sigma, high_sigma=high_sigma)
+        image = dog(image, low_sigma=low_sigma, high_sigma=high_sigma, min_psnr=min_psnr)
+
     elif method == 'fourier_filter':
-        # Create lattice SyntheticPSF so we can get the NA Mask.
         logger.warning("Using hardcoded NA Mask for Fourier filter. Code should be updated to use actual NA Mask.")
-        samplepsfgen = SyntheticPSF(
-            order='ansi',
+        na_mask = SyntheticPSF(
             psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
             psf_shape=image.shape,
-        )
-        image = na_and_background_filter(image, low_sigma=low_sigma, high_sigma=high_sigma, samplepsfgen=samplepsfgen)
+        ).na_mask()
+
+        image = na_and_background_filter(image,
+                                         low_sigma=low_sigma,
+                                         high_sigma=high_sigma,
+                                         na_mask=na_mask,
+                                         min_psnr=min_psnr)
+
     else:
         raise Exception(f"Unknown method '{method}' for remove_background_noise functions.")
 

@@ -248,7 +248,7 @@ def remove_interference_pattern(
         windowing: bool = True,
         window_size: tuple = (21, 21, 21),
         plot_interference_pattern: bool = False,
-        min_psnr: float = 15.0,
+        min_psnr: float = 10.0,
 ):
     """
     Normalize interference pattern from the given FFT
@@ -363,15 +363,19 @@ def remove_interference_pattern(
     noise = preprocessing.measure_noise(psf)
     baseline = np.nanmedian(psf)
     good_psnr = np.zeros(pois.shape[0], dtype=bool)
+    psnrs = np.zeros(pois.shape[0], dtype=float)
     for i, p in enumerate(pois):
-        good_psnr[i] = (np.nanmax(
+        psnrs[i] = (np.nanmax(
             psf[
                 max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
                 max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
                 max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
-        ]) - baseline) / noise > min_psnr
+        ]) - baseline) / noise
+        good_psnr[i] = psnrs[i] > min_psnr
 
-    #logger.info(f"{pois.shape[0]} objects detected. {np.count_nonzero(good_psnr)} were above {min_psnr} min_psnr")
+    logger.info(f"{len(pois)} objects detected. "
+                f"Of these, {np.count_nonzero(good_psnr)} were above {min_psnr} min_psnr.  "
+                f"Worst SNR = {np.min(psnrs).astype(int)}")
     pois = pois[good_psnr]  # remove points that are below peak snr
 
     for p in pois:
@@ -544,7 +548,7 @@ def compute_emb(
     else:
         na_mask = na_mask.astype(bool)
 
-    if otf.shape != model_psf_shape: #the psf should be the same FOV size in um, then we crop the otf to the iotf shape
+    if otf.shape != model_psf_shape:  # psf should be the same FOV size in um, then we crop the otf to the iotf shape
         real = resize_with_crop_or_pad(np.real(otf), crop_shape=model_psf_shape, mode='constant')  # only center crop
         imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=model_psf_shape, mode='constant')  # only center crop
         otf = real + 1j * imag
