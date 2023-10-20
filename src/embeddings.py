@@ -373,9 +373,9 @@ def remove_interference_pattern(
         ]) - baseline) / noise
         good_psnr[i] = psnrs[i] > min_psnr
 
-    logger.info(f"{len(pois)} objects detected. "
-                f"Of these, {np.count_nonzero(good_psnr)} were above {min_psnr} min_psnr.  "
-                f"Worst SNR = {np.min(psnrs).astype(int)}")
+    # logger.info(f"{len(pois)} objects detected. "
+    #             f"Of these, {np.count_nonzero(good_psnr)} were above {min_psnr} min_psnr.  "
+    #             f"Worst SNR = {np.min(psnrs).astype(int)}")
     pois = pois[good_psnr]  # remove points that are below peak snr
 
     for p in pois:
