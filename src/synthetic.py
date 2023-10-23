@@ -148,9 +148,16 @@ class SyntheticPSF:
         wavelength: float = .510,
         threshold: float = 4e-3,
     ):
-        zm, ym, xm = ((i // 2) - 1 for i in self.psf_shape)
-        vxz = line(r0=zm, c0=xm, r1=0, c1=self.psf_shape[0] - 1)
-        vxy = line(r0=ym, c0=xm, r1=0, c1=self.psf_shape[2] - 1)
+        """
+        Find how much OTF support there is for this psf_type.  This is to be used only in a ratio to find how to
+        scale the FOVs for non-lightsheets.  This will make the embeddings of non-lightsheets fill a similar space
+        in their 64 x 64 images, so the model can generalize.
+
+        March from midpoint to (0, 0), and find the distance along that line hits the na_mask.
+        """
+        zm, ym, xm = (i // 2 for i in self.psf_shape)
+        vxz = line(r0=zm, c0=xm, r1=0, c1=0)
+        vxy = line(r0=ym, c0=xm, r1=0, c1=0)
 
         phi = Wavefront(
             amplitudes=np.zeros(self.n_modes),
@@ -180,7 +187,7 @@ class SyntheticPSF:
         iotf = np.where(iotf < threshold, iotf, 1.)
         iotf = np.where(iotf >= threshold, iotf, 0.)
 
-        axial_support_index = next((i for i, z in enumerate(iotf[vxz[0], vxz[1], xm]) if z == 0), 0)
+        axial_support_index = next((i for i, z in enumerate(iotf[vxz[0], ym, vxz[1]]) if z == 0), 0)
         lateral_support_index = next((i for i, x in enumerate(iotf[zm, vxy[0], vxy[1]]) if x == 0), 0)
         return axial_support_index, lateral_support_index
 
