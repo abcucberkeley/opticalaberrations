@@ -343,6 +343,7 @@ def main(args=None):
 
     gen = SyntheticPSF(
         order='ansi',
+        amplitude_ranges=(args.min_amplitude, args.max_amplitude),
         cpu_workers=args.cpu_workers,
         n_modes=args.modes,
         distribution=args.dist,

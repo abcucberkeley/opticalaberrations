@@ -642,6 +642,7 @@ def main(args=None):
     generators, upsampled_generators = {}, {}
     for psf in set(args.psf_type):
         generators[psf] = SyntheticPSF(
+            amplitude_ranges=(args.min_amplitude, args.max_amplitude),
             psf_shape=3 * [args.input_shape],
             order='ansi',
             cpu_workers=args.cpu_workers,
@@ -661,6 +662,7 @@ def main(args=None):
         )
 
         upsampled_generators[psf] = SyntheticPSF(
+            amplitude_ranges=generators[psf].amplitude_ranges,
             psf_shape=3*[2 * args.input_shape],
             order=generators[psf].order,
             n_modes=generators[psf].n_modes,
