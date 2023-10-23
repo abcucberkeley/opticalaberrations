@@ -359,7 +359,6 @@ def remove_interference_pattern(
         beads[beads < .05] = 0.
         pois = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
 
-    psf_peaks = np.zeros_like(psf)  # create a volume masked around each peak, don't go past vol bounds
     noise = preprocessing.measure_noise(psf)
     baseline = np.nanmedian(psf)
     good_psnr = np.zeros(pois.shape[0], dtype=bool)
@@ -378,6 +377,7 @@ def remove_interference_pattern(
     #             f"Worst SNR = {np.min(psnrs).astype(int)}")
     pois = pois[good_psnr]  # remove points that are below peak snr
 
+    psf_peaks = np.zeros_like(psf)  # create a volume masked around each peak, don't go past vol bounds
     for p in pois:
         psf_peaks[
             max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
