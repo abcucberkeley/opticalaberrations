@@ -53,7 +53,6 @@ import opticalnet
 import opticalresnet
 import baseline
 import otfnet
-from lion import Lion
 
 
 logging.basicConfig(
@@ -1284,7 +1283,6 @@ def train(
         increase_dropout_depth: bool = False,
         decrease_dropout_depth: bool = False,
         stem: bool = False,
-        sam: bool = True,
 ):
     network = network.lower()
     opt = opt.lower()
@@ -1302,16 +1300,13 @@ def train(
         SGDR - Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
         AdamW - Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
         SAM - Sharpness-Aware-Minimization (SAM): https://openreview.net/pdf?id=6Tm1mposlrM
-        Lion - Symbolic Discovery of Optimization Algorithms: https://arxiv.org/pdf/2302.06675
     """
-    if opt.lower() == 'lion':
-        opt = Lion(learning_rate=lr, weight_decay=wd)
-    elif opt.lower() == 'adam':
+    if opt.lower() == 'adam':
         opt = Adam(learning_rate=lr)
     elif opt == 'sgd':
         opt = SGD(learning_rate=lr, momentum=0.9)
     elif opt.lower() == 'adamw':
-        opt = AdamW(learning_rate=lr, weight_decay=wd)
+        opt = AdamW(learning_rate=lr, weight_decay=wd, beta_1=0.9, beta_2=0.99)
     elif opt == 'sgdw':
         opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
     else:
@@ -1343,7 +1338,6 @@ def train(
             name='OpticalNet',
             roi=roi,
             stem=stem,
-            sam=sam,
             patches=patch_size,
             modes=pmodes,
             depth_scalar=depth_scalar,
@@ -1452,7 +1446,7 @@ def train(
     else:
         lrscheduler = LearningRateScheduler(
             initial_learning_rate=opt.learning_rate,
-            weight_decay=opt.weight_decay,
+            weight_decay=opt.weight_decay if hasattr(opt, 'weight_decay') else None,
             decay_period=epochs if decay_period is None else decay_period,
             warmup_epochs=0 if warmup is None or warmup >= epochs else warmup,
             alpha=.01,

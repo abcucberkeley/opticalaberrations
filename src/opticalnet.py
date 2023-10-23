@@ -430,7 +430,6 @@ class OpticalTransformer(Base, ABC):
             radial_encoding_nth_order=4,
             decrease_dropout_depth=False,
             increase_dropout_depth=False,
-            sam=False,
             stem=False,
             **kwargs
     ):
@@ -454,74 +453,12 @@ class OpticalTransformer(Base, ABC):
         self.radial_encoding_nth_order = radial_encoding_nth_order
         self.increase_dropout_depth = increase_dropout_depth
         self.decrease_dropout_depth = decrease_dropout_depth
-        self.sam = sam
 
     def _calc_channels(self, channels, width_scalar):
         return int(tf.math.ceil(width_scalar * channels))
 
     def _calc_repeats(self, repeats, depth_scalar):
         return int(tf.math.ceil(depth_scalar * repeats))
-
-    def sharpness_aware_minimization(self, x, y, sample_weight=None, rho=0.05, eps=1e-12):
-        """
-            Sharpness-Aware-Minimization (SAM): https://openreview.net/pdf?id=6Tm1mposlrM
-            https://github.com/Jannoshh/simple-sam
-        """
-
-        with tf.GradientTape() as tape:
-            y_pred = self(x, training=True)
-            loss = self.compiled_loss(y, y_pred, sample_weight=sample_weight, regularization_losses=self.losses)
-
-        trainable_vars = self.trainable_variables
-        gradients = tape.gradient(loss, trainable_vars)
-
-        # first step
-        e_ws = []
-        grad_norm = tf.linalg.global_norm(gradients)
-        ew_multiplier = rho / (grad_norm + eps)
-        for i in range(len(trainable_vars)):
-            e_w = tf.math.multiply(gradients[i], ew_multiplier)
-            trainable_vars[i].assign_add(e_w)
-            e_ws.append(e_w)
-
-        with tf.GradientTape() as tape:
-            y_pred = self(x, training=True)
-            loss = self.compiled_loss(y, y_pred, sample_weight=sample_weight, regularization_losses=self.losses)
-
-        trainable_vars = self.trainable_variables
-        gradients = tape.gradient(loss, trainable_vars)
-
-        for i in range(len(trainable_vars)):
-            trainable_vars[i].assign_sub(e_ws[i])
-
-        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-        self.compiled_metrics.update_state(y, y_pred, sample_weight=sample_weight)
-        return {m.name: m.result() for m in self.metrics}
-
-    def train_step(self, data):
-
-        # Unpack the data. Its structure depends on your model and
-        # on what you pass to `fit()`.
-        if len(data) == 3:
-            x, y, sample_weight = data
-        else:
-            sample_weight = None
-            x, y = data
-
-        if self.sam:
-            return self.sharpness_aware_minimization(x=x, y=y, sample_weight=sample_weight)
-        else:
-
-            with tf.GradientTape() as tape:
-                y_pred = self(x, training=True)
-                loss = self.compiled_loss(y, y_pred, sample_weight=sample_weight, regularization_losses=self.losses)
-
-            trainable_vars = self.trainable_variables
-            gradients = tape.gradient(loss, trainable_vars)
-
-            self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-            self.compiled_metrics.update_state(y, y_pred, sample_weight=sample_weight)
-            return {m.name: m.result() for m in self.metrics}
 
     def transitional_block(self, inputs, img_shape, patch_size, expansion=1, org_patch_size=None):
         if org_patch_size is not None:

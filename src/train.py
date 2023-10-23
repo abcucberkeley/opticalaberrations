@@ -139,11 +139,6 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        '--sam', action='store_true',
-        help='toggle to use sharpness aware minimization'
-    )
-
-    train_parser.add_argument(
         "--activation", default='gelu', type=str, help='activation function for the model'
     )
 
@@ -289,7 +284,6 @@ def main(args=None):
             radial_encoding_nth_order=args.radial_encoding_nth_order,
             positional_encoding_scheme=args.positional_encoding_scheme,
             stem=args.stem,
-            sam=args.sam,
             increase_dropout_depth=args.increase_dropout_depth,
             decrease_dropout_depth=args.decrease_dropout_depth,
         )
