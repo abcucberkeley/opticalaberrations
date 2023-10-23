@@ -1381,6 +1381,9 @@ def train(
             modes=pmodes
         )
 
+    else:
+        raise Exception(f'Network "{network}" is unknown.')
+
     if network == 'baseline':
         inputs = (input_shape, input_shape, input_shape, 1)
     else:
