@@ -27,7 +27,7 @@ INCREASE_DROPOUT='--increase_dropout_depth'
 DECREASE_DROPOUT='--decrease_dropout_depth'
 
 
-SUBSET='new_modalities'
+SUBSET='fixed_density'
 if [ $CLUSTER = 'slurm' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"
 else
@@ -63,16 +63,12 @@ do
 
   for DROPOUT in $INCREASE_DROPOUT $DECREASE_DROPOUT
   do
-    for i in "5e-4 5e-3" "5e-5 5e-4" "5e-5 5e-5"
+    for LR in 5e-3 5e-4 5e-5
     do
-      set -- $i
-      LR=$1
-      WD=$2
-
       python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-      --task "$DROPOUT --lr $LR --wd $WD $POSITIONAL_ENCODING_SCHEME $RADIAL_ENCODING_PERIOD --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
+      --task "$DROPOUT --lr $LR $POSITIONAL_ENCODING_SCHEME $RADIAL_ENCODING_PERIOD --psf_type $PTYPE --wavelength $LAM --network $NETWORK --embedding $EMB --patch_size '32-16-8-8' --modes $MODES --max_amplitude $MAXAMP --batch_size $BATCH --dataset $DATA --input_shape $SHAPE --depth_scalar $DEPTH --epochs $EPOCHS --warmup $WARMUP" \
       --taskname $NETWORK \
-      --name new/$SUBSET/$NETWORK-$MODES-$DIR-$LR-$WD-$DROPOUT
+      --name new/$SUBSET/$NETWORK-$MODES-$DIR-$LR-$DROPOUT
     done
   done
 done
