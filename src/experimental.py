@@ -100,7 +100,9 @@ def reloadmodel_if_needed(
                     model_fov=preloaded.modelpsfgen.psf_fov,
                     sample_voxel_size=ideal_empirical_psf_voxel_size,
                     remove_background=True,
-                    normalize=True)
+                    normalize=True,
+                    min_psnr=0
+                )
 
         preloaded.modelpsfgen.update_ideal_psf_with_empirical(ideal_empirical_preprocessed_psf)
 
@@ -149,6 +151,7 @@ def generate_embeddings(
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = None,
     psf_type: Optional[Union[str, Path]] = None,
+    min_psnr: int = 5,
 ):
 
     model, modelpsfgen = reloadmodel_if_needed(
@@ -165,6 +168,7 @@ def generate_embeddings(
         return_psnr=True,
         remove_background=True,
         normalize=False,
+        min_psnr=0
     )
     logger.info(f"Sample: {sample.shape}")
 
@@ -189,6 +193,7 @@ def generate_embeddings(
         digital_rotations=digital_rotations,
         read_noise_bias=read_noise_bias,
         plot=file.with_suffix('') if plot else None,
+        min_psnr=min_psnr
     )
 
 
@@ -363,7 +368,8 @@ def predict_sample(
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = 361,
     psf_type: Optional[Union[str, Path]] = None,
-    cpu_workers: int = -1
+    cpu_workers: int = -1,
+    min_psnr: int = 5,
 ):
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
@@ -384,6 +390,7 @@ def predict_sample(
         return_psnr=True,
         remove_background=True,
         normalize=False,
+        min_psnr=0
     )
     logger.info(f"Sample: {sample.shape}")
 
@@ -405,6 +412,7 @@ def predict_sample(
         remove_background=True,
         normalize=True,
         fov_is_small=True,
+        min_psnr=min_psnr,
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
     )
 
@@ -540,7 +548,8 @@ def predict_large_fov(
     ideal_empirical_psf: Any = None,
     digital_rotations: Optional[int] = 361,
     psf_type: Optional[Union[str, Path]] = None,
-    cpu_workers: int = -1
+    cpu_workers: int = -1,
+    min_psnr: int = 5,
 ):
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
@@ -561,6 +570,7 @@ def predict_large_fov(
         return_psnr=True,
         remove_background=True,
         normalize=False,
+        min_psnr=0
     )
     logger.info(f"Sample: {sample.shape}")
 
@@ -584,6 +594,7 @@ def predict_large_fov(
         remove_background=True,
         normalize=True,
         fov_is_small=False,
+        min_psnr=min_psnr,
         rolling_strides=optimal_rolling_strides(preloadedpsfgen.psf_fov, sample_voxel_size, sample.shape),
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
     )
@@ -828,7 +839,7 @@ def predict_snr_map(
     )
     rois = tiles['path'].values
 
-    prep = partial(prep_sample, return_psnr=True)
+    prep = partial(prep_sample, return_psnr=True, min_psnr=0)
     snrs = utils.multiprocess(func=prep, jobs=rois, desc=f'Calc PNSRs.', unit="tiles")
     snrs = np.reshape(snrs, (ztiles, nrows, ncols))
     snrs = resize(snrs, (snrs.shape[0], sample.shape[1], sample.shape[2]), order=1, mode='edge')
@@ -862,6 +873,7 @@ def predict_tiles(
     cpu_workers: int = -1,
     shifting: tuple = (0, 0, 0),
     psf_type: Optional[Union[str, Path]] = None,
+    min_psnr: int = 5,
 ):
     # Begin spawning workers for Generate Fourier Embeddings (windows only). Must die to release their GPU memory.
     # if platform.system() == "Windows":
@@ -894,6 +906,7 @@ def predict_tiles(
         return_psnr=True,
         remove_background=True,
         normalize=False,
+        min_psnr=0
     )
 
     if any(np.array(shifting) != 0):
@@ -923,6 +936,7 @@ def predict_tiles(
             sample_voxel_size=samplepsfgen.voxel_size,
             remove_background=True,
             normalize=True,
+            min_psnr=min_psnr
         )
     else:
         prep = partial(
@@ -930,6 +944,7 @@ def predict_tiles(
             sample_voxel_size=samplepsfgen.voxel_size,
             remove_background=True,
             normalize=True,
+            min_psnr=min_psnr
         )
 
     # obtain each tile and save to .tif.

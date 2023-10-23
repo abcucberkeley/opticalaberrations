@@ -180,6 +180,7 @@ def generate_sample(
                 no_phase=no_phase,
                 remove_background=True,
                 normalize=True,
+                min_psnr=0,
                 # plot=True
             )
             return emb
@@ -398,6 +399,7 @@ def iter_evaluate(
         plot_rotations=plot_rotations,
         digital_rotations=rotations if digital_rotations else None,
         cpu_workers=8,
+        min_psnr=0,
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
@@ -1463,6 +1465,7 @@ def random_samples(
                         remove_background=True,
                         normalize=True,
                         plot=save_path / f'{s}',
+                        min_psnr=0,
                     )
 
                     if digital_rotations:
@@ -1688,6 +1691,7 @@ def eval_object(
                 digital_rotations=digital_rotations,
                 remove_background=True,
                 normalize=True,
+                min_psnr=0,
             )
             for i in tqdm(inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout)
         ], axis=0)
@@ -2013,6 +2017,7 @@ def eval_modalities(
                         remove_background=False,
                         normalize=True,
                         plot=save_path / f'{z}',
+                        min_psnr=0,
                     )
                     imwrite(save_path / f'{z}_embeddings.tif', embeddings.astype(np.float32), imagej=True)
 
@@ -2088,6 +2093,7 @@ def eval_modalities(
                         sample_voxel_size=gen.voxel_size,
                         remove_background=True,
                         normalize=True,
+                        min_psnr=0
                     )
 
                     processed_corrected = backend.prep_sample(
@@ -2096,6 +2102,7 @@ def eval_modalities(
                         sample_voxel_size=gen.voxel_size,
                         remove_background=True,
                         normalize=True,
+                        min_psnr=0
                     )
 
                     vis.diagnostic_assessment(
@@ -2191,6 +2198,7 @@ def eval_confidence(
                     noisy_img /= maxcounts
 
                     for trained_model in tqdm(models, file=sys.stdout):
+                        logger.info(trained_model)
                         m = backend.load(trained_model)
                         no_phase = True if m.input_shape[1] == 3 else False
 
@@ -2206,6 +2214,7 @@ def eval_confidence(
                             remove_background=True,
                             normalize=True,
                             plot=save_path / f'{s}',
+                            min_psnr=0,
                         )
 
                         if digital_rotations:

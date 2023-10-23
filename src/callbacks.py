@@ -157,6 +157,9 @@ class LearningRateScheduler(Callback):
         except AttributeError:
             raise ValueError('Optimizer must have a `learning_rate`')
 
+        if hasattr(self.model.optimizer, 'weight_decay'):
+            wd = backend.get_value(self.model.optimizer.weight_decay)
+
         if not self.fixed:
             lr = tf.cond(
                 epoch < self.warmup_epochs,
@@ -171,18 +174,30 @@ class LearningRateScheduler(Callback):
             )
             backend.set_value(self.model.optimizer.lr, backend.get_value(lr))
 
+            if hasattr(self.model.optimizer, 'weight_decay'):
+                wd = tf.cond(
+                    epoch < self.warmup_epochs,
+                    lambda: self.linear_warmup(
+                        val=self.weight_decay,
+                        step=epoch,
+                    ),
+                    lambda: self.cosine_decay(
+                        val=self.weight_decay,
+                        step=epoch - self.warmup_epochs,
+                    )
+                )
+                backend.set_value(self.model.optimizer.weight_decay, backend.get_value(wd))
+
         if self.verbose > 0:
             logger.info(f'Scheduler setting learning rate: {lr}')
+
+            if hasattr(self.model.optimizer, 'weight_decay'):
+                logger.info(f'Scheduler setting weight decay: {wd}')
 
         tf.summary.scalar('learning rate', data=lr, step=epoch)
 
         if hasattr(self.model.optimizer, 'weight_decay'):
-            backend.set_value(self.model.optimizer.weight_decay, backend.get_value(self.weight_decay))
-
-            if self.verbose > 0:
-                logger.info(f'Scheduler setting weight decay: {backend.get_value(self.model.optimizer.weight_decay)}')
-
-            tf.summary.scalar('weight decay', data=self.weight_decay, step=epoch)
+            tf.summary.scalar('weight decay', data=wd, step=epoch)
 
     def linear_warmup(self, val, step, power=1.0):
         completed_fraction = step / self.warmup_epochs

@@ -6,7 +6,7 @@ DZ=200
 SHAPE=64
 MODES=15
 ROTATIONS='--digital_rotations'
-ITERS=3
+ITERS=1
 MAX=10000
 PRETRAINED="../pretrained_models/"
 DATASET="fixed_density"
@@ -18,11 +18,13 @@ CLUSTER=slurm
 TRAINED_MODELS=(
   "spatial_planes10"
   "YuMB_lambda510-nostem"
-  "YuMB_lambda510-nostem-radial-encoding-p16"
-#  "v2Hex_lambda510"
-#  "2photon_lambda920"
-#  "confocal_lambda510"
-#  "widefield_lambda510"
+  "YuMB_lambda510-fourier-decomposition-p16"
+  "YuMB_lambda510-power-decomposition-4p16"
+  "YuMB_lambda510-zernike-polynomials-4"
+  "YuMB_lambda510-zernike-polynomials-10"
+  "YuMB_lambda510-rotational-symmetry-p1"
+  "YuMB_lambda510-rotational-symmetry-p4"
+  "YuMB_lambda510-rotational-symmetry-p16"
 )
 
 

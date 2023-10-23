@@ -26,14 +26,10 @@ from tqdm import tqdm
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.optimizers import SGD
-from tensorflow_addons.optimizers import AdamW
-from tensorflow_addons.optimizers import SGDW
+from tensorflow.keras.optimizers import Adam, SGD
+from tensorflow_addons.optimizers import AdamW, SGDW
 
-from tensorflow.keras.callbacks import CSVLogger
-from tensorflow.keras.callbacks import ModelCheckpoint
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping
 from callbacks import Defibrillator
 from callbacks import LearningRateScheduler
 from callbacks import TensorBoardCallback
@@ -257,7 +253,8 @@ def preprocess(
     no_phase: bool = False,
     fov_is_small: bool = True,
     rolling_strides: Optional[tuple] = None,
-    skip_prep_sample: bool = False
+    skip_prep_sample: bool = False,
+    min_psnr: int = 10,
 ):
     if samplepsfgen is None:
         samplepsfgen = modelpsfgen
@@ -280,7 +277,8 @@ def preprocess(
                 remove_background=remove_background,
                 normalize=normalize,
                 read_noise_bias=read_noise_bias,
-                plot=plot if plot else None
+                min_psnr=min_psnr,
+                plot=plot if plot else None,
             )
 
         return fourier_embeddings(
@@ -1144,6 +1142,7 @@ def predict_files(
     cpu_workers: int = -1,
     template: Optional[pd.DataFrame] = None,
     pool: Optional[mp.Pool] = None,
+    min_psnr: int = 5
 ):
     no_phase = True if model.input_shape[1] == 3 else False
 
@@ -1160,7 +1159,8 @@ def predict_files(
             normalize=True,
             fov_is_small=fov_is_small,
             rolling_strides=rolling_strides,
-            skip_prep_sample=skip_prep_sample
+            skip_prep_sample=skip_prep_sample,
+            min_psnr=min_psnr
         ),
         desc='Generate Fourier embeddings',
         unit=' file',
@@ -1256,6 +1256,7 @@ def train(
         opt: str,
         lr: float,
         wd: float,
+        dropout: float,
         warmup: int,
         decay_period: int,
         wavelength: float,
@@ -1278,7 +1279,9 @@ def train(
         radial_encoding: bool = False,
         radial_encoding_period: int = 1,
         radial_encoding_nth_order: int = 4,
-        radial_encoding_scheme: str = 'rotational_symmetry',
+        positional_encoding_scheme: str = 'default',
+        increase_dropout_depth: bool = False,
+        decrease_dropout_depth: bool = False,
         stem: bool = False,
 ):
     network = network.lower()
@@ -1293,16 +1296,17 @@ def train(
     loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
 
     """
-        Adam: A Method for Stochastic Optimization: https://arxiv.org/pdf/1412.6980
-        SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
-        Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
+        Adam - A Method for Stochastic Optimization: https://arxiv.org/pdf/1412.6980
+        SGDR - Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
+        AdamW - Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
+        SAM - Sharpness-Aware-Minimization (SAM): https://openreview.net/pdf?id=6Tm1mposlrM
     """
     if opt.lower() == 'adam':
         opt = Adam(learning_rate=lr)
     elif opt == 'sgd':
         opt = SGD(learning_rate=lr, momentum=0.9)
     elif opt.lower() == 'adamw':
-        opt = AdamW(learning_rate=lr, weight_decay=wd)
+        opt = AdamW(learning_rate=lr, weight_decay=wd, beta_1=0.9, beta_2=0.99)
     elif opt == 'sgdw':
         opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
     else:
@@ -1338,13 +1342,15 @@ def train(
             modes=pmodes,
             depth_scalar=depth_scalar,
             width_scalar=width_scalar,
+            dropout_rate=dropout,
             activation=activation,
             mul=mul,
             no_phase=no_phase,
-            radial_encoding=radial_encoding,
+            positional_encoding_scheme=positional_encoding_scheme,
             radial_encoding_period=radial_encoding_period,
             radial_encoding_nth_order=radial_encoding_nth_order,
-            radial_encoding_scheme=radial_encoding_scheme,
+            increase_dropout_depth=increase_dropout_depth,
+            decrease_dropout_depth=decrease_dropout_depth,
         )
 
     elif network == 'opticalresnet':
@@ -1443,7 +1449,7 @@ def train(
     else:
         lrscheduler = LearningRateScheduler(
             initial_learning_rate=opt.learning_rate,
-            weight_decay=opt.weight_decay,
+            weight_decay=opt.weight_decay if hasattr(opt, 'weight_decay') else None,
             decay_period=epochs if decay_period is None else decay_period,
             warmup_epochs=0 if warmup is None or warmup >= epochs else warmup,
             alpha=.01,

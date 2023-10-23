@@ -24,7 +24,7 @@ def kargs():
         num_tiles=num_tiles,
         tiles_shape=(num_modes, num_tiles+5),
         num_modes=num_modes,
-        model=repo / f'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-{num_modes}.h5',
+        model=repo / f'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-{num_modes}-spatial_planes10.h5',
         dm_calibration=repo/'calibration/aang/28_mode_calibration.csv',
         psf_type=repo/'lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         pois=repo/f'examples/single/results/Detection3D.mat',
@@ -54,6 +54,7 @@ def kargs():
         num_rois=10,
         min_intensity=200,
         minimum_distance=.5,
+        min_psnr=5,
     )
 
     return kargs

@@ -42,6 +42,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 @profile
 def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float:
     """ Return estimated noise """
@@ -161,6 +162,51 @@ def na_and_background_filter(
     return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=cp_dtype)
 
 
+def combine_filtered_imgs(
+    original_image: cp.ndarray,
+    im1_sharper: cp.ndarray,
+    im2_low_freqs_to_subtract: cp.ndarray,
+    min_psnr: int,
+    dtype
+) -> cp.ndarray:
+    """
+    Combines the two filters (real space images) to produce filtered_img = (im1 - im2) - noise.
+    Uses std_dev(im2) to determine if image is spare (we can increase background subtraction by noise) or dense
+
+    Args:
+        original_image: Raw data
+        im1_sharper: Raw_data with highest frequencies removed
+        im2_low_freqs_to_subtract: Just lowest frequencies (aka the non-uniform background to be subtracted)
+        min_psnr:
+        dtype:
+
+    Returns:
+        filtered_img : 3D cupy array
+
+    """
+    mask = tukey_window(cp.ones_like(original_image, dtype=dtype))
+    mask[mask < .9] = cp.nan
+    mask[mask >= .9] = 1
+    # if blurred shows little std deviation: this is sparse, will want to more aggressively subtract
+    if cp.std(im2_low_freqs_to_subtract[mask == 1]) < 3:
+        snr = measure_snr(original_image * mask)
+        if snr > min_psnr:  # sparse, yet SNR of original image is good
+            noise = cp.std(original_image - im2_low_freqs_to_subtract)  # increase the bkgrd subtraction by the noise
+            return im1_sharper - (im2_low_freqs_to_subtract + noise)
+        else:  # sparse, and SNR of original image is poor
+            logger.warning(f"Dropping sparse image for poor SNR {snr} < {min_psnr}")
+            return np.zeros_like(original_image)  # return zeros
+
+    else:  # This is a dense image
+        filtered_img = im1_sharper - im2_low_freqs_to_subtract
+        snr = measure_snr(filtered_img)
+        if snr < min_psnr:  # SNR poor
+            logger.warning(f"Dropping  dense image for poor SNR {snr} < {min_psnr}")
+            return np.zeros_like(original_image)  # return zeros
+        else:
+            return filtered_img  # SNR good. Return filtered image.
+
+
 def dog(
     image: cp.ndarray,
     min_psnr: int,
@@ -244,49 +290,6 @@ def dog(
     return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=cp_dtype)
 
 
-def combine_filtered_imgs(original_image: cp.ndarray,
-                          im1_sharper: cp.ndarray,
-                          im2_low_freqs_to_subtract: cp.ndarray,
-                          min_psnr: int,
-                          dtype) -> cp.ndarray:
-    """
-    Combines the two filters (real space images) to produce filtered_img = (im1 - im2) - noise.
-    Uses std_dev(im2) to determine if image is spare (we can increase background subtraction by noise) or dense
-
-    Args:
-        original_image: Raw data
-        im1_sharper: Raw_data with highest frequencies removed
-        im2_low_freqs_to_subtract: Just lowest frequencies (aka the non-uniform background to be subtracted)
-        min_psnr:
-        dtype:
-
-    Returns:
-        filtered_img : 3D cupy array
-
-    """
-    mask = tukey_window(cp.ones_like(original_image, dtype=dtype))
-    mask[mask < .9] = cp.nan
-    mask[mask >= .9] = 1
-    # if blurred shows little std deviation: this is sparse, will want to more aggressively subtract
-    if cp.std(im2_low_freqs_to_subtract[mask == 1]) < 3:
-        snr = measure_snr(original_image * mask)
-        if snr > min_psnr:  # sparse, yet SNR of original image is good
-            noise = cp.std(original_image - im2_low_freqs_to_subtract)  # increase the bkgrd subtraction by the noise
-            return im1_sharper - (im2_low_freqs_to_subtract + noise)
-        else:  # sparse, and SNR of original image is poor
-            logger.warning(f"Dropping sparse image for poor SNR {snr} < {min_psnr}")
-            return np.zeros_like(original_image)  # return zeros
-
-    else:  # This is a dense image
-        filtered_img = im1_sharper - im2_low_freqs_to_subtract
-        snr = measure_snr(filtered_img)
-        if snr < min_psnr:  # SNR poor
-            logger.warning(f"Dropping  dense image for poor SNR {snr} < {min_psnr}")
-            return np.zeros_like(original_image)  # return zeros
-        else:
-            return filtered_img  # SNR good. Return filtered image.
-
-
 @profile
 def remove_background_noise(
         image,
@@ -321,7 +324,6 @@ def remove_background_noise(
     except Exception:
         logger.warning("No CUDA-capable device is detected")
 
-
     if method == 'mode':
         mode = int(st.mode(image, axis=None).mode[0])
         image -= mode + read_noise_bias
@@ -336,11 +338,13 @@ def remove_background_noise(
             psf_shape=image.shape,
         ).na_mask()
 
-        image = na_and_background_filter(image,
-                                         low_sigma=low_sigma,
-                                         high_sigma=high_sigma,
-                                         na_mask=na_mask,
-                                         min_psnr=min_psnr)
+        image = na_and_background_filter(
+            image,
+            low_sigma=low_sigma,
+            high_sigma=high_sigma,
+            na_mask=na_mask,
+            min_psnr=min_psnr
+        )
 
     else:
         raise Exception(f"Unknown method '{method}' for remove_background_noise functions.")
@@ -380,6 +384,7 @@ def prep_sample(
     remove_background: bool = True,
     read_noise_bias: float = 5,
     plot: Any = None,
+    min_psnr: int = 5,
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
         
@@ -402,6 +407,8 @@ def prep_sample(
         normalize: scale values between 0 and 1.
         read_noise_bias: bias offset for camera noise
         windowing: optional toggle to apply to mask the input with a window to avoid boundary effects
+        min_psnr: Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold
+
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
@@ -448,7 +455,7 @@ def prep_sample(
         axes[0, 1].set_title(f"PSNR: {measure_snr(sample)}")
 
     if remove_background:
-        sample = remove_background_noise(sample, read_noise_bias=read_noise_bias)
+        sample = remove_background_noise(sample, read_noise_bias=read_noise_bias, min_psnr=min_psnr)
         psnr = measure_snr(sample)
     else:
         psnr = measure_snr(sample)

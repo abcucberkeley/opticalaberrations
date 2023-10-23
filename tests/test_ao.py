@@ -49,6 +49,7 @@ def test_predict_sample(kargs):
         batch_size=kargs['batch_size'],
         ignore_modes=kargs['ignore_modes'],
         prediction_threshold=kargs['prediction_threshold'],
+        min_psnr=kargs['min_psnr']
     )
     assert zernikes.shape[0] == kargs['num_modes']
 
@@ -69,6 +70,7 @@ def test_predict_large_fov(kargs):
         batch_size=kargs['batch_size'],
         ignore_modes=kargs['ignore_modes'],
         prediction_threshold=kargs['prediction_threshold'],
+        min_psnr=kargs['min_psnr']
     )
     assert zernikes.shape[0] == kargs['num_modes']
 
@@ -89,6 +91,7 @@ def test_predict_tiles(kargs):
         batch_size=kargs['batch_size'],
         ignore_modes=kargs['ignore_modes'],
         window_size=kargs['window_size'],
+        min_psnr=kargs['min_psnr']
     )
 
     assert tile_predictions.shape == kargs['tiles_shape']

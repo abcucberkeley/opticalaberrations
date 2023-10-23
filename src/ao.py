@@ -102,6 +102,10 @@ def parse_args(args):
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
+    preprocessing.add_argument(
+        "--min_psnr", default=5, type=int,
+        help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
+    )
 
     embeddings = subparsers.add_parser("embeddings")
     embeddings.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -139,6 +143,10 @@ def parse_args(args):
         "--psf_type", default=None, type=str,
         help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
              '(Default: None; to keep default mode used during training)'
+    )
+    embeddings.add_argument(
+        "--min_psnr", default=5, type=int,
+        help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
 
     detect_rois = subparsers.add_parser("detect_rois")
@@ -245,6 +253,10 @@ def parse_args(args):
         help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
              '(Default: None; to keep default mode used during training)'
     )
+    predict_sample.add_argument(
+        "--min_psnr", default=5, type=int,
+        help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
+    )
 
     predict_large_fov = subparsers.add_parser("predict_large_fov")
     predict_large_fov.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -335,6 +347,10 @@ def parse_args(args):
         "--psf_type", default=None, type=str,
         help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
              '(Default: None; to keep default mode used during training)'
+    )
+    predict_large_fov.add_argument(
+        "--min_psnr", default=5, type=int,
+        help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
 
     predict_rois = subparsers.add_parser("predict_rois")
@@ -525,6 +541,10 @@ def parse_args(args):
         "--psf_type", default=None, type=str,
         help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
              '(Default: None; to keep default mode used during training)'
+    )
+    predict_tiles.add_argument(
+        "--min_psnr", default=5, type=int,
+        help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
@@ -917,6 +937,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     return_psnr=True,
                     plot=None,
                     normalize=False,
+                    min_psnr=0,
                 )
 
             elif args.func == 'fourier_snr':
@@ -927,6 +948,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     return_psnr=True,
                     plot=None,
                     normalize=False,
+                    min_psnr=0
                 )
                 measure_fourier_snr(sample, psnr=psnr, plot=args.input.with_suffix('.svg'))
 
@@ -940,6 +962,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     read_noise_bias=args.read_noise_bias,
                     normalize=args.normalize,
                     plot=args.input.with_suffix('') if args.plot else None,
+                    min_psnr=args.min_psnr
                 )
 
             elif args.func == 'embeddings':
@@ -952,7 +975,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     plot=args.plot,
                     ideal_empirical_psf=args.ideal_empirical_psf,
                     preloaded=preloaded,
-                    psf_type=args.psf_type
+                    psf_type=args.psf_type,
+                    min_psnr=args.min_psnr
                 )
 
             elif args.func == 'predict_sample':
@@ -980,7 +1004,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded,
-                    psf_type=args.psf_type
+                    psf_type=args.psf_type,
+                    min_psnr=args.min_psnr
                 )
 
             elif args.func == 'predict_large_fov':
@@ -1008,7 +1033,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded,
-                    psf_type=args.psf_type
+                    psf_type=args.psf_type,
+                    min_psnr=args.min_psnr
                 )
 
             elif args.func == 'predict_rois':
@@ -1066,7 +1092,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded,
                     shifting=(0, 0, args.shift),
-                    psf_type=args.psf_type
+                    psf_type=args.psf_type,
+                    min_psnr=args.min_psnr
                 )
             elif args.func == 'aggregate_predictions':
                 experimental.aggregate_predictions(
