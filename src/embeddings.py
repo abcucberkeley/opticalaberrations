@@ -277,18 +277,18 @@ def remove_interference_pattern(
 
     # get max pixel in the image
     half_length = kernel_size // 2
-    poi = list(np.unravel_index(np.nanargmax(blured_psf, axis=None), blured_psf.shape))
+    template_poi = list(np.unravel_index(np.nanargmax(blured_psf, axis=None), blured_psf.shape))
 
     # crop a window around the object for template matching
-    poi[0] = np.clip(poi[0], a_min=half_length, a_max=(psf.shape[0] - half_length) - 1)
-    poi[1] = np.clip(poi[1], a_min=half_length, a_max=(psf.shape[1] - half_length) - 1)
-    poi[2] = np.clip(poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
+    template_poi[0] = np.clip(template_poi[0], a_min=half_length, a_max=(psf.shape[0] - half_length) - 1)
+    template_poi[1] = np.clip(template_poi[1], a_min=half_length, a_max=(psf.shape[1] - half_length) - 1)
+    template_poi[2] = np.clip(template_poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
 
-    high_snr =  preprocessing.measure_snr(psf) > 30 # SNR good enough for template
+    high_snr = preprocessing.measure_snr(psf) > 30  # SNR good enough for template
 
     if high_snr:
         # logger.info('Using template')
-        init_pos = [p-half_length for p in poi]
+        init_pos = [p-half_length for p in template_poi]
         kernel = blured_psf[
             init_pos[0]:init_pos[0]+kernel_size,
             init_pos[1]:init_pos[1]+kernel_size,
@@ -327,7 +327,12 @@ def remove_interference_pattern(
 
         beads = np.zeros_like(psf)
 
-        if len(detected_peaks) == 1:
+        if len(detected_peaks) == 0 and high_snr:
+            p = template_poi
+            beads[p[0], p[1], p[2]] = 1
+            pois.append(p)
+
+        elif len(detected_peaks) == 1:
             p = detected_peaks[0]
             beads[p[0], p[1], p[2]] = 1
             pois.append(p)
