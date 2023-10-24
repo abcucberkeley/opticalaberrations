@@ -156,7 +156,8 @@ class SyntheticPSF:
         March from midpoint to (0, 0), and find the distance along that line hits the na_mask.
         """
         zm, ym, xm = (i // 2 for i in self.psf_shape)
-        vxz = line(r0=zm, c0=xm, r1=0, c1=0)
+
+        vxz = line(r0=zm, c0=2 * xm // 3, r1=0, c1=2 * xm // 3)
         vxy = line(r0=ym, c0=xm, r1=0, c1=0)
 
         phi = Wavefront(

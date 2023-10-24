@@ -199,6 +199,15 @@ class PsfGenerator3D:
         psf /= np.max(psf)
         return psf
 
+    def round_to_even(self, n):
+        answer = round(n)
+        if not answer % 2:
+            return int(answer)
+        if abs(answer + 1 - n) < abs(answer - 1 - n):
+            return int(answer + 1)
+        else:
+            return int(answer - 1)
+
     @profile
     def incoherent_psf(self, phi, lls_defocus_offset=None):
         """
@@ -232,40 +241,43 @@ class PsfGenerator3D:
             _psf = exc_psf ** 2
 
         elif self.psf_type == 'confocal':
-            lls_profile_dz = 0.1    # (0.1 media wavelengths)
+            media_wavelength = 0.1
             lam_excitation = .488
             f = 1  # number of AUs
 
             exc_psf = self.widefield_psf(phi)
 
-            eff_pixel_size = lam_excitation / self.n * lls_profile_dz       # microns per pixel
+            eff_pixel_size = lam_excitation / self.n * media_wavelength       # microns per pixel
             au = 0.61 * (self.lam_detection / self.n) / self.na_detection   # airy radius in microns
+            w = _psf.shape[0] // 2
+            lateral_extent = self.round_to_even(2 * w * self.dy / eff_pixel_size)
+            axial_extent = 2 * w
 
             # pix pitch=eff_pixel_size (0.1 media wavelengths)
-            if self.Nx <= 64:
-                Z, Y, X = np.ogrid[-200:201, -200:201, -200:201]
-            elif self.Nx <= 128:
-                Z, Y, X = np.ogrid[-400:401, -400:401, -400:401]
-            else:
-                Z, Y, X = np.ogrid[-1000:1001, -1000:501, -1000:1001]
+            Z, Y, X = np.ogrid[
+                -axial_extent:axial_extent+1,
+                -lateral_extent:lateral_extent+1,
+                -lateral_extent:lateral_extent+1
+            ]
 
             circ_func = Y ** 2 + X ** 2 <= (f * au / eff_pixel_size) ** 2
             circ_func = circ_func & (Z == 0)
 
             circ_func = rescale(
                 circ_func.astype(np.float32),
-                (eff_pixel_size/self.dz, eff_pixel_size/self.dy, eff_pixel_size/self.dx),
+                (1, eff_pixel_size/self.dy, eff_pixel_size/self.dx),
                 order=0,
             )   # downscale voxels to go from ~36nm to 100nm voxel size. Fails if circ_func has even number of pixels.
 
             # clip to the number of voxels we want (e.g. _psf.shape), won't work if _psf.shape is odd.
-            w = _psf.shape[0]//2
+
             focal_plane = np.array(circ_func.shape)//2
             circ_func = circ_func[
                 focal_plane[0]-w:focal_plane[0]+w,
                 focal_plane[1]-w:focal_plane[1]+w,
                 focal_plane[2]-w:focal_plane[2]+w,
             ]
+            circ_func /= np.max(circ_func)
 
             det_psf = convolve_fft(
                 _psf,
