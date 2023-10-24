@@ -428,8 +428,7 @@ class OpticalTransformer(Base, ABC):
             radial_encoding_period=1,
             positional_encoding_scheme='default',
             radial_encoding_nth_order=4,
-            decrease_dropout_depth=False,
-            increase_dropout_depth=False,
+            fixed_dropout_depth=False,
             stem=False,
             **kwargs
     ):
@@ -451,8 +450,7 @@ class OpticalTransformer(Base, ABC):
         self.radial_encoding_period = radial_encoding_period
         self.positional_encoding_scheme = positional_encoding_scheme
         self.radial_encoding_nth_order = radial_encoding_nth_order
-        self.increase_dropout_depth = increase_dropout_depth
-        self.decrease_dropout_depth = decrease_dropout_depth
+        self.fixed_dropout_depth = fixed_dropout_depth
 
     def _calc_channels(self, channels, width_scalar):
         return int(tf.math.ceil(width_scalar * channels))
@@ -511,12 +509,10 @@ class OpticalTransformer(Base, ABC):
 
             res = m
             for j in range(self._calc_repeats(r, depth_scalar=self.depth_scalar)):
-                if self.increase_dropout_depth:
-                    dropout_rate = self.dropout_rate * (i + 1) / sum(self.repeats)
-                elif self.decrease_dropout_depth:
-                    dropout_rate = self.dropout_rate / (i + 1)
-                else:
+                if self.fixed_dropout_depth:
                     dropout_rate = self.dropout_rate
+                else:
+                    dropout_rate = self.dropout_rate * (i + 1) / sum(self.repeats)
 
                 m = Transformer(
                     heads=self._calc_channels(h, width_scalar=self.width_scalar),

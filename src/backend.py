@@ -1276,12 +1276,10 @@ def train(
         plot_patches: bool = True,
         lls_defocus: bool = False,
         defocus_only: bool = False,
-        radial_encoding: bool = False,
         radial_encoding_period: int = 1,
         radial_encoding_nth_order: int = 4,
         positional_encoding_scheme: str = 'default',
-        increase_dropout_depth: bool = False,
-        decrease_dropout_depth: bool = False,
+        fixed_dropout_depth: bool = False,
         stem: bool = False,
 ):
     network = network.lower()
@@ -1349,8 +1347,7 @@ def train(
             positional_encoding_scheme=positional_encoding_scheme,
             radial_encoding_period=radial_encoding_period,
             radial_encoding_nth_order=radial_encoding_nth_order,
-            increase_dropout_depth=increase_dropout_depth,
-            decrease_dropout_depth=decrease_dropout_depth,
+            fixed_dropout_depth=fixed_dropout_depth,
         )
 
     elif network == 'opticalresnet':
