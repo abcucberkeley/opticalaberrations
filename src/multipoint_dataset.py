@@ -113,7 +113,7 @@ def beads(
     photons: int = 1,
     object_size: Optional[int] = 0,
     num_objs: int = 1,
-    fill_radius: float = .75,           # .75 will be roughly a bit inside of the Tukey window
+    fill_radius: float = .66,           # .66 will be roughly a bit inside of the Tukey window
     zborder: int = 10
 ):
     """

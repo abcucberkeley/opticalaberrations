@@ -139,7 +139,7 @@ def test_multipoint_dataset(kargs):
     sample = multipoint_dataset.create_synthetic_sample(
         filename='1',
         npoints=5,
-        fill_radius=.75,
+        fill_radius=.66,
         generators={str(kargs['psf_type']): gen},
         upsampled_generators={str(kargs['psf_type']): gen},
         modes=kargs['num_modes'],
@@ -218,7 +218,7 @@ def test_multimodal_dataset(kargs):
     samples = multipoint_dataset.create_synthetic_sample(
         filename='1',
         npoints=5,
-        fill_radius=.75,
+        fill_radius=.66,
         generators=generators,
         upsampled_generators=upsampled_generators,
         modes=kargs['num_modes'],
