@@ -24,7 +24,7 @@ def parse_args(args):
     train_parser = cli.argparser()
 
     train_parser.add_argument(
-        "--network", default='opticaltransformer', type=str, help="codename for target network to train"
+        "--network", default='opticalnet', type=str, help="codename for target network to train"
     )
 
     train_parser.add_argument(
@@ -36,7 +36,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--batch_size", default=512, type=int, help="number of images per batch"
+        "--batch_size", default=1024, type=int, help="number of images per batch"
     )
 
     train_parser.add_argument(
@@ -69,7 +69,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--modes", default=55, type=int, help="number of modes to describe aberration"
+        "--modes", default=15, type=int, help="number of modes to describe aberration"
     )
 
     train_parser.add_argument(
@@ -89,7 +89,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--embedding", default='', type=str, help="embedding option to use for training"
+        "--embedding", default='spatial_planes', type=str, help="embedding option to use for training"
     )
 
     train_parser.add_argument(
