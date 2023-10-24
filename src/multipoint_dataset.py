@@ -20,7 +20,8 @@ import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 import cli
-from utils import mean_min_distance, randuniform, add_noise, electrons2counts, photons2electrons
+from utils import mean_min_distance, randuniform, add_noise
+from utils import electrons2counts, photons2electrons, counts2electrons, electrons2photons
 from preprocessing import prep_sample, resize_with_crop_or_pad
 from utils import fftconvolution, multiprocess
 from synthetic import SyntheticPSF
@@ -113,6 +114,7 @@ def beads(
     object_size: Optional[int] = 0,
     num_objs: int = 1,
     fill_radius: float = .75,           # .75 will be roughly a bit inside of the Tukey window
+    zborder: int = 10
 ):
     """
     Args:
@@ -146,7 +148,7 @@ def beads(
                 x = r * np.cos(theta) + (image_shape[2] - 1) * 0.5
                 y = r * np.sin(theta) + (image_shape[1] - 1) * 0.5
                 reference[
-                    rng.integers(5, int(image_shape[0] - 5)),
+                    rng.integers(zborder, int(image_shape[0] - zborder)),
                     np.round(y).astype(np.int32),
                     np.round(x).astype(np.int32)
                 ] = photons
@@ -179,7 +181,8 @@ def sim(
     mean_background_offset=100,
     electrons_per_count: float = .22,
     quantum_efficiency: float = .82,
-    model_psf_shape: tuple = (64, 64, 64)
+    model_psf_shape: tuple = (64, 64, 64),
+    scale_by_maxcounts: Optional[int] = None
 ):
 
     # aberrated PSF without noise
@@ -190,20 +193,16 @@ def sim(
     )
 
     if gen.psf_type == 'widefield':  # normalize PSF by the total energy in the focal plane
-        focal_plane_index = [(w // 2) - 1 for w in kernel.shape]
-        kernel /= np.sum(kernel[focal_plane_index[0], focal_plane_index[1], focal_plane_index[2]])
-
-        # num_planes = 5
-        # kernel /= np.sum(kernel[
-        #      focal_plane_index[0] - num_planes:focal_plane_index[0] + num_planes + 1,
-        #      focal_plane_index[1] - num_planes:focal_plane_index[1] + num_planes + 1,
-        #      focal_plane_index[2] - num_planes:focal_plane_index[2] + num_planes + 1,
-        # ])
+        kernel /= np.max(kernel)
     else:
         kernel /= np.sum(kernel)
 
     img = fftconvolution(sample=reference, kernel=kernel)  # image in photons
     img = resize_with_crop_or_pad(img, crop_shape=model_psf_shape, mode='constant')  # only center crop
+
+    if gen.psf_type == 'widefield':
+        img /= np.max(img)
+        img *= electrons2photons(counts2electrons(scale_by_maxcounts))
 
     p2v = phi.peak2valley(na=1.0)
     if npoints > 1:
@@ -243,7 +242,7 @@ def sim(
                 remove_background=remove_background,
                 normalize=normalize,
                 min_psnr=0,
-                # plot=odir/filename,
+                plot=odir/filename,
             )
 
             embeddings = np.squeeze(fourier_embeddings(
@@ -253,7 +252,7 @@ def sim(
                 embedding_option=e,
                 alpha_val=alpha_val,
                 phi_val=phi_val,
-                # plot=odir/filename
+                plot=odir/filename
             ))
 
             save_synthetic_sample(
@@ -356,7 +355,7 @@ def create_synthetic_sample(
         fill_radius=fill_radius,
     )
 
-    inputs = np.zeros((len(generators), 64, 64, 64))
+    inputs = {}
 
     for k, (gen, upsampled_gen) in enumerate(zip(generators.values(), upsampled_generators.values())):
         if gen.psf_type == '2photon':
@@ -417,7 +416,7 @@ def create_synthetic_sample(
                     with TiffFile(path.with_suffix('.tif')) as tif:
                         inputs[k] = tif.asarray()
             except Exception as e:
-                sim(
+                inputs[gen.psf_type] = sim(
                     filename=filename,
                     reference=reference,
                     model_psf_shape=reference.shape,
@@ -435,9 +434,11 @@ def create_synthetic_sample(
                     alpha_val=alpha_val,
                     phi_val=phi_val,
                     lls_defocus_offset=lls_defocus_offset,
+                    scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
+                    if gen.psf_type == 'widefield' else None
                 )
         else:
-            inputs[k] = sim(
+            inputs[gen.psf_type] = sim(
                 filename=filename,
                 reference=reference,
                 model_psf_shape=reference.shape,
@@ -455,9 +456,11 @@ def create_synthetic_sample(
                 alpha_val=alpha_val,
                 phi_val=phi_val,
                 lls_defocus_offset=lls_defocus_offset,
+                scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
+                if gen.psf_type == 'widefield' else None
             )
 
-    return inputs
+    return np.stack(list(inputs.values()), axis=0)
 
 
 def parse_args(args):
@@ -640,7 +643,7 @@ def main(args=None):
     logger.info(args)
 
     generators, upsampled_generators = {}, {}
-    for psf in set(args.psf_type):
+    for psf in args.psf_type:
         generators[psf] = SyntheticPSF(
             amplitude_ranges=(args.min_amplitude, args.max_amplitude),
             psf_shape=3 * [args.input_shape],
@@ -661,6 +664,7 @@ def main(args=None):
             na_detection=args.na_detection,
         )
 
+        # just for the widefield case
         upsampled_generators[psf] = SyntheticPSF(
             amplitude_ranges=generators[psf].amplitude_ranges,
             psf_shape=3*[2 * args.input_shape],
