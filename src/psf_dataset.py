@@ -21,6 +21,8 @@ import cli
 from utils import multiprocess, add_noise, randuniform, electrons2counts, photons2electrons
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
+from preprocessing import prep_sample
+from embeddings import fourier_embeddings
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -39,6 +41,7 @@ def save_synthetic_sample(
     p2v,
     gen,
     lls_defocus_offset=0.,
+    realspace=None,
     counts_mode=None,
     counts_percentiles=None,
     sigma_background_noise=None,
@@ -47,8 +50,12 @@ def save_synthetic_sample(
     quantum_efficiency=None,
     psf_type=None,
 ):
-    logger.info(f"Saved: {savepath}")
-    imwrite(f"{savepath}.tif", inputs)
+
+    if realspace is not None:
+        imwrite(f"{savepath}_realspace.tif", realspace.astype(np.float32), compression='deflate')
+
+    imwrite(f"{savepath}.tif", inputs.astype(np.float32), compression='deflate')
+    # logger.info(f"Saved: {savepath.resolve()}.tif")
 
     with Path(f"{savepath}.json").open('w') as f:
         json = dict(
@@ -89,13 +96,15 @@ def save_synthetic_sample(
         )
 
 
-def sim(
+def simulate_psf(
     filename: str,
     outdir: Path,
     gen: SyntheticPSF,
-    photons: tuple,
+    phi: Wavefront,
+    photons: int,
     noise: bool = True,
     normalize: bool = True,
+    emb: bool = False,
     lls_defocus_offset: Any = 0.,
     sigma_background_noise=40,
     mean_background_offset=100,
@@ -104,11 +113,10 @@ def sim(
 
 ):
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
-    photons = randuniform(photons)
 
     # aberrated PSF without noise
     kernel, amps, lls_defocus_offset = gen.single_psf(
-        phi=gen.amplitude_ranges,
+        phi=phi,
         lls_defocus_offset=lls_defocus_offset,
         normed=True,
         meta=True,
@@ -116,7 +124,7 @@ def sim(
     kernel /= np.sum(kernel)
     kernel *= photons
 
-    p2v = Wavefront(amps, lam_detection=gen.lam_detection).peak2valley(na=1.0)
+    p2v = phi.peak2valley(na=1.0)
 
     if noise:  # convert to electrons to add shot noise and dark read noise, then convert to counts
         inputs = add_noise(
@@ -137,25 +145,65 @@ def sim(
     if normalize:
         inputs /= np.max(inputs)
 
-    save_synthetic_sample(
-        outdir / filename,
-        inputs,
-        amps=amps,
-        photons=photons,
-        counts=counts,
-        counts_mode=counts_mode,
-        counts_percentiles=counts_percentiles,
-        p2v=p2v,
-        gen=gen,
-        lls_defocus_offset=lls_defocus_offset,
-        sigma_background_noise=sigma_background_noise,
-        mean_background_offset=mean_background_offset,
-        electrons_per_count=electrons_per_count,
-        quantum_efficiency=quantum_efficiency,
-        psf_type=gen.psf_type,
-    )
+    if emb:
+        embeddings = prep_sample(
+            inputs,
+            sample_voxel_size=gen.voxel_size,
+            model_fov=gen.psf_fov,
+            remove_background=True,
+            normalize=normalize,
+            min_psnr=0,
+            # plot=outdir/filename
+        )
 
-    return inputs
+        embeddings = np.squeeze(fourier_embeddings(
+            inputs=embeddings,
+            iotf=gen.iotf,
+            na_mask=gen.na_mask(),
+            # plot=outdir/filename
+        ))
+
+        save_synthetic_sample(
+            outdir / filename,
+            embeddings,
+            realspace=inputs,
+            amps=amps,
+            photons=photons,
+            counts=counts,
+            counts_mode=counts_mode,
+            counts_percentiles=counts_percentiles,
+            p2v=p2v,
+            gen=gen,
+            lls_defocus_offset=lls_defocus_offset,
+            sigma_background_noise=sigma_background_noise,
+            mean_background_offset=mean_background_offset,
+            electrons_per_count=electrons_per_count,
+            quantum_efficiency=quantum_efficiency,
+            psf_type=gen.psf_type,
+        )
+
+        return embeddings
+
+    else:
+        save_synthetic_sample(
+            outdir / filename,
+            inputs,
+            amps=amps,
+            photons=photons,
+            counts=counts,
+            counts_mode=counts_mode,
+            counts_percentiles=counts_percentiles,
+            p2v=p2v,
+            gen=gen,
+            lls_defocus_offset=lls_defocus_offset,
+            sigma_background_noise=sigma_background_noise,
+            mean_background_offset=mean_background_offset,
+            electrons_per_count=electrons_per_count,
+            quantum_efficiency=quantum_efficiency,
+            psf_type=gen.psf_type,
+        )
+
+        return inputs
 
 
 def create_synthetic_sample(
@@ -170,6 +218,7 @@ def create_synthetic_sample(
     normalize: bool,
     min_lls_defocus_offset: float = 0.,
     max_lls_defocus_offset: float = 0.,
+    emb: bool = False,
 ):
     outdir = savedir / rf"{gen.psf_type.replace('../lattice/', '').split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
     outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
@@ -191,11 +240,26 @@ def create_synthetic_sample(
 
     outdir.mkdir(exist_ok=True, parents=True)
 
-    return sim(
+    phi = Wavefront(
+        amplitudes=(min_amplitude, max_amplitude),
+        order=gen.order,
+        distribution=gen.distribution,
+        mode_weights=gen.mode_weights,
+        modes=gen.n_modes,
+        gamma=gen.gamma,
+        signed=gen.signed,
+        rotate=gen.rotate,
+        lam_detection=gen.lam_detection,
+    )
+    photons = randuniform((min_photons, max_photons))
+
+    return simulate_psf(
         filename=filename,
         outdir=outdir,
         gen=gen,
-        photons=(min_photons, max_photons),
+        phi=phi,
+        emb=emb,
+        photons=photons,
         noise=noise,
         normalize=normalize,
         lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset)
@@ -207,6 +271,11 @@ def parse_args(args):
 
     parser.add_argument("--filename", type=str, default='1')
     parser.add_argument("--outdir", type=Path, default='../dataset')
+
+    parser.add_argument(
+        '--emb', action='store_true',
+        help='toggle to save embeddings only'
+    )
 
     parser.add_argument(
         "--iters", default=10, type=int,
@@ -364,6 +433,7 @@ def main(args=None):
     sample = partial(
         create_synthetic_sample,
         gen=gen,
+        emb=args.emb,
         savedir=args.outdir,
         noise=args.noise,
         normalize=args.normalize,

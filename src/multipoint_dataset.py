@@ -57,7 +57,6 @@ def save_synthetic_sample(
     quantum_efficiency=None,
     psf_type=None,
 ):
-
     if gt is not None:
         imwrite(f"{savepath}_gt.tif", gt.astype(np.float32), compression='deflate')
 
@@ -159,7 +158,7 @@ def beads(
     return reference
 
 
-def sim(
+def simulate_image(
     filename: str,
     reference: np.ndarray,
     outdir: Path,
@@ -173,7 +172,7 @@ def sim(
     normalize: bool = True,
     remove_background: bool = True,
     random_crop: Any = None,
-    embedding_option: Union[set, list, tuple] = (),
+    embedding_option: Union[set, list, tuple] = { 'spatial_planes' },
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
     lls_defocus_offset: Any = 0.,
@@ -242,7 +241,7 @@ def sim(
                 remove_background=remove_background,
                 normalize=normalize,
                 min_psnr=0,
-                plot=odir/filename,
+                # plot=odir/filename,
             )
 
             embeddings = np.squeeze(fourier_embeddings(
@@ -252,7 +251,7 @@ def sim(
                 embedding_option=e,
                 alpha_val=alpha_val,
                 phi_val=phi_val,
-                plot=odir/filename
+                # plot=odir/filename
             ))
 
             save_synthetic_sample(
@@ -276,6 +275,7 @@ def sim(
                 quantum_efficiency=quantum_efficiency,
                 psf_type=gen.psf_type,
             )
+            return embeddings
     else:
         save_synthetic_sample(
             outdir/filename,
@@ -297,8 +297,7 @@ def sim(
             quantum_efficiency=quantum_efficiency,
             psf_type=gen.psf_type,
         )
-
-    return inputs
+        return inputs
 
 
 def create_synthetic_sample(
@@ -321,8 +320,8 @@ def create_synthetic_sample(
     random_crop: Any,
     noise: bool,
     normalize: bool,
-    emb: bool,
-    embedding_option: set,
+    emb: bool = False,
+    embedding_option: set = {'spatial_planes'},
     alpha_val: str = 'abs',
     phi_val: str = 'angle',
     min_lls_defocus_offset: float = 0.,
@@ -414,9 +413,10 @@ def create_synthetic_sample(
                         ujson.load(f)
 
                     with TiffFile(path.with_suffix('.tif')) as tif:
-                        inputs[k] = tif.asarray()
+                        inputs[gen.psf_type] = np.squeeze(tif.asarray())
+
             except Exception as e:
-                inputs[gen.psf_type] = sim(
+                inputs[gen.psf_type] = simulate_image(
                     filename=filename,
                     reference=reference,
                     model_psf_shape=reference.shape,
@@ -438,7 +438,7 @@ def create_synthetic_sample(
                     if gen.psf_type == 'widefield' else None
                 )
         else:
-            inputs[gen.psf_type] = sim(
+            inputs[gen.psf_type] = simulate_image(
                 filename=filename,
                 reference=reference,
                 model_psf_shape=reference.shape,
@@ -498,11 +498,6 @@ def parse_args(args):
     parser.add_argument(
         '--normalize', action='store_true',
         help='toggle to scale the generated PSFs to 1.0'
-    )
-
-    parser.add_argument(
-        '--fog', action='store_true',
-        help='toggle to add a random hazy background'
     )
 
     parser.add_argument(

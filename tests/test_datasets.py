@@ -120,6 +120,41 @@ def test_psf_dataset(kargs):
 
 
 @pytest.mark.run(order=4)
+def test_psf_embedding_dataset(kargs):
+    gen = SyntheticPSF(
+        order='ansi',
+        n_modes=kargs['num_modes'],
+        distribution='mixed',
+        mode_weights='pyramid',
+        signed=True,
+        rotate=True,
+        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+        lam_detection=kargs['wavelength'],
+        psf_shape=[64, 64, 64],
+        x_voxel_size=kargs['lateral_voxel_size'],
+        y_voxel_size=kargs['lateral_voxel_size'],
+        z_voxel_size=kargs['axial_voxel_size'],
+    )
+
+    sample = psf_dataset.create_synthetic_sample(
+        filename='1',
+        gen=gen,
+        emb=True,
+        savedir=Path(f"{kargs['repo']}/dataset/psfs"),
+        noise=True,
+        normalize=True,
+        min_amplitude=.1,
+        max_amplitude=.2,
+        min_lls_defocus_offset=-2,
+        max_lls_defocus_offset=2,
+        min_photons=100000,
+        max_photons=200000,
+    )
+
+    assert sample.shape == (6, 64, 64)
+
+
+@pytest.mark.run(order=5)
 def test_multipoint_dataset(kargs):
     gen = SyntheticPSF(
         order='ansi',
@@ -166,7 +201,53 @@ def test_multipoint_dataset(kargs):
     assert sample.shape == (1, 64, 64, 64)
 
 
-@pytest.mark.run(order=5)
+@pytest.mark.run(order=6)
+def test_multipoint_embedding_dataset(kargs):
+    gen = SyntheticPSF(
+        order='ansi',
+        n_modes=kargs['num_modes'],
+        distribution='mixed',
+        mode_weights='pyramid',
+        signed=True,
+        rotate=True,
+        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+        lam_detection=kargs['wavelength'],
+        psf_shape=[64, 64, 64],
+        x_voxel_size=kargs['lateral_voxel_size'],
+        y_voxel_size=kargs['lateral_voxel_size'],
+        z_voxel_size=kargs['axial_voxel_size'],
+    )
+
+    sample = multipoint_dataset.create_synthetic_sample(
+        filename='1',
+        npoints=5,
+        fill_radius=.66,
+        generators={str(kargs['psf_type']): gen},
+        upsampled_generators={str(kargs['psf_type']): gen},
+        modes=kargs['num_modes'],
+        savedir=Path(f"{kargs['repo']}/dataset/beads"),
+        distribution=gen.distribution,
+        mode_dist=gen.mode_weights,
+        gamma=.75,
+        randomize_voxel_size=False,
+        emb=True,
+        signed=True,
+        random_crop=None,
+        rotate=True,
+        noise=True,
+        normalize=True,
+        min_amplitude=.1,
+        max_amplitude=.2,
+        min_lls_defocus_offset=-2,
+        max_lls_defocus_offset=2,
+        min_photons=100000,
+        max_photons=200000,
+    )
+
+    assert sample.shape == (1, 6, 64, 64)
+
+
+@pytest.mark.run(order=7)
 def test_multimodal_dataset(kargs):
 
     psf_types = [
