@@ -153,7 +153,8 @@ class SyntheticPSF:
         scale the FOVs for non-lightsheets.  This will make the embeddings of non-lightsheets fill a similar space
         in their 64 x 64 images, so the model can generalize.
 
-        March from midpoint to (0, 0), and find the distance along that line hits the na_mask.
+        For axial support: Start from 2/3rd along kx, then go up (in kz) and measure how far to hit the na_mask.
+        For lateral support: March from midpoint to (0, 0), and find the distance along that line hits the na_mask.
         """
         zm, ym, xm = (i // 2 for i in self.psf_shape)
 
@@ -188,8 +189,8 @@ class SyntheticPSF:
         iotf = np.where(iotf < threshold, iotf, 1.)
         iotf = np.where(iotf >= threshold, iotf, 0.)
 
-        axial_support_index = next((i for i, z in enumerate(iotf[vxz[0], ym, vxz[1]]) if z == 0), 0)
-        lateral_support_index = next((i for i, x in enumerate(iotf[zm, vxy[0], vxy[1]]) if x == 0), 0)
+        axial_support_index = next((i for i, z in enumerate(iotf[vxz[0], ym, vxz[1]]) if z == 0), 0)    # march until 0
+        lateral_support_index = next((i for i, x in enumerate(iotf[zm, vxy[0], vxy[1]]) if x == 0), 0)  # march until 0
         return axial_support_index, lateral_support_index
 
     @profile
@@ -301,8 +302,7 @@ class SyntheticPSF:
         """
         Args:
             phi: Wavefront object or array of amplitudes of Zernike polynomials (or path to array)
-            normed: a toggle to normalize PSF
-            noise: a toggle to add noise
+            normed: a toggle to normalize PSF by the psf max
             meta: return extra variables for debugging
             no_phase: used only when meta=true.
             lls_defocus_offset: optional shift of the excitation and detection focal plan (microns)
