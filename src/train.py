@@ -207,13 +207,8 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        '--increase_dropout_depth', action='store_true',
+        '--fixed_dropout_depth', action='store_true',
         help='toggle to linearly increase dropout rate for deeper layers'
-    )
-
-    train_parser.add_argument(
-        '--decrease_dropout_depth', action='store_true',
-        help='toggle to linearly decrease dropout rate for deeper layers'
     )
 
     return train_parser.parse_known_args(args)[0]
@@ -284,8 +279,7 @@ def main(args=None):
             radial_encoding_nth_order=args.radial_encoding_nth_order,
             positional_encoding_scheme=args.positional_encoding_scheme,
             stem=args.stem,
-            increase_dropout_depth=args.increase_dropout_depth,
-            decrease_dropout_depth=args.decrease_dropout_depth,
+            fixed_dropout_depth=args.fixed_dropout_depth,
         )
 
         atexit.register(strategy._extended._collective_ops._pool.close)
