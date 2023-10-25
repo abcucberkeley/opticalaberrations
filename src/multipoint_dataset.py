@@ -640,7 +640,7 @@ def main(args=None):
     logger.info(args)
 
     generators, upsampled_generators = {}, {}
-    for psf in args.psf_type:
+    for psf in sorted(set(args.psf_type)):
         generators[psf] = SyntheticPSF(
             amplitude_ranges=(args.min_amplitude, args.max_amplitude),
             psf_shape=3 * [args.input_shape],

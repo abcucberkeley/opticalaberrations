@@ -249,6 +249,7 @@ def remove_interference_pattern(
         window_size: tuple = (21, 21, 21),
         plot_interference_pattern: bool = False,
         min_psnr: float = 10.0,
+        zborder: int = 10
 ):
     """
     Normalize interference pattern from the given FFT
@@ -274,6 +275,10 @@ def remove_interference_pattern(
         otf = fft(psf)
 
     blured_psf = ndimage.gaussian_filter(psf, sigma=1.1)
+
+    # exclude values close to the egde in Z for finding our template
+    blured_psf[0: zborder] = 0
+    blured_psf[blured_psf.shape[0]-zborder:blured_psf.shape[0]] = 0
 
     # get max pixel in the image
     max_poi = list(np.unravel_index(np.nanargmax(blured_psf, axis=None), blured_psf.shape))
