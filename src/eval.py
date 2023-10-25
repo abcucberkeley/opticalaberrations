@@ -637,10 +637,10 @@ def plot_heatmap_p2v(
             )
 
             ax.add_patch(
-                plt.Rectangle((0, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+                plt.Rectangle((0, .3), .2, .2, ec="k", fc="none", transform=ax.transAxes)
             )
             ax.text(
-                .05, .4, 'I',
+                .1, .4, 'I',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -700,10 +700,10 @@ def plot_heatmap_p2v(
             )
 
             ax.add_patch(
-                plt.Rectangle((.2, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+                plt.Rectangle((.4, .3), .2, .2, ec="k", fc="none", transform=ax.transAxes)
             )
             ax.text(
-                .25, .4, 'II',
+                .5, .4, 'II',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -712,7 +712,7 @@ def plot_heatmap_p2v(
             )
 
             x = histograms[
-                (histograms.pbins >= 5e5) & (histograms.pbins <= 6e5) &
+                (histograms.pbins >= 4e5) & (histograms.pbins <= 5e5) &
                 (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
             ]
 
@@ -763,11 +763,11 @@ def plot_heatmap_p2v(
             )
 
             ax.add_patch(
-                plt.Rectangle((.5, .3), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+                plt.Rectangle((.8, .3), .2, .2, ec="k", fc="none", transform=ax.transAxes)
             )
 
             ax.text(
-                .55, .4, 'III',
+                .9, .4, 'III',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -934,11 +934,12 @@ def plot_heatmap_p2v(
             ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     if label == 'Integrated photons' or label == 'Integrated photoelectrons':
-        ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
-        ax.set_xticks(np.arange(0, 1e6+10e4, 5e4), minor=True)
+        ax.set_xticks(np.arange(lims[0], lims[1]+5e4, 5e4), minor=False)
+        ax.set_xticks(np.arange(lims[0], lims[1]+2.5e4, 2.5e4), minor=True)
     elif label == 'Number of iterations':
         ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
 
+    ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0), useMathText=True)
     ax.set_xlabel(label)
     ax.set_xlim(lims)
 
@@ -1124,12 +1125,12 @@ def snrheatmap(
 
         if x == 'photons':
             label = f'Integrated photons'
-            lims = (0, 10**6)
-            pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
+            lims = (0, 5*10**5)
+            pbins = np.arange(lims[0], lims[-1]+1e4, 5e4)
         elif x == 'photoelectrons':
             label = f'Integrated photoelectrons'
-            lims = (0, 10**6)
-            pbins = np.arange(lims[0], lims[-1]+10e4, 5e4)
+            lims = (0, 5*10**5)
+            pbins = np.arange(lims[0], lims[-1]+1e4, 5e4)
         elif x == 'counts':
             label = f'Integrated counts'
             lims = (2.6e7, 3e7)
