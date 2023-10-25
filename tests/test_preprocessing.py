@@ -9,25 +9,42 @@ warnings.filterwarnings("ignore")
 import logging
 logger = logging.getLogger('')
 
-from pathlib import Path
+import math
+import pytest
 import numpy as np
 import cupy as cp
+from pathlib import Path
 from tifffile import imwrite
+import matplotlib.image as plt
+
+from src import backend
+from src import preprocessing
 from src.synthetic import SyntheticPSF
 from src.preprocessing import na_and_background_filter, dog
 
 
-import imageio
-import pytest
-
 @pytest.mark.run(order=1)
-def test_filter(kargs):
+def test_psnr(kargs):
+    sample = backend.load_sample(kargs['inputs'])
+
+    psnr = preprocessing.prep_sample(
+        sample,
+        remove_background=True,
+        return_psnr=True,
+        plot=None,
+        normalize=False,
+    )
+    assert math.isclose(psnr, 30, rel_tol=1)
+
+
+@pytest.mark.run(order=2)
+def test_remove_background_noise(kargs):
     """
     Will generate the filter response for removing background filters (dog and na_and_background_filter)
 
     """
     high_sigma = 3.0  # sets the low frequency cutoff.
-    low_sigma  = 0.7
+    low_sigma = 0.7
 
     # Create lattice SyntheticPSF so we can get the NA Mask
     samplepsfgen = SyntheticPSF(
@@ -54,26 +71,28 @@ def test_filter(kargs):
     realsp -= np.mean(realsp)                   # set DC frequency to zero so it doesn't overload otf.
     fourier = samplepsfgen.fft(realsp)
 
-    base_folder = Path("./filter")
+    base_folder = Path(f"{kargs['repo']}/preprocessing")
     base_folder.mkdir(exist_ok=True)
     imwrite(f'{base_folder}/fourier.tif', np.abs(cp.asnumpy(fourier)).astype(np.float32))
     imwrite(f'{base_folder}/realsp.tif', np.abs(cp.asnumpy(realsp)).astype(np.float32))
 
-    print(f"\n\nUsing {high_sigma=}, {low_sigma=}")
-    print(f'Testing "dog" on CPU...\n')
+    logger.info(f"\n\nUsing {high_sigma=}, {low_sigma=}")
+    logger.info(f'Testing "dog" on CPU...\n')
     dogfiltered_realsp = dog(cp.asnumpy(realsp), low_sigma=low_sigma, high_sigma=high_sigma, min_psnr=1)
     dogfiltered_realsp -= np.mean(cp.asnumpy(dogfiltered_realsp))
 
-    print(f'Testing "dog" on GPU...\n')
+    logger.info(f'Testing "dog" on GPU...\n')
     dogfiltered_realsp_GPU = dog(realsp, low_sigma=low_sigma, high_sigma=high_sigma, min_psnr=1)
     dogfiltered_realsp_GPU -= cp.mean(dogfiltered_realsp_GPU)
 
-    print(f'Checking if GPU "dog" and CPU "dog" agree...\n')
+    logger.info(f'Checking if GPU "dog" and CPU "dog" agree...\n')
     np.testing.assert_allclose(cp.asnumpy(dogfiltered_realsp_GPU), dogfiltered_realsp, rtol=0, atol=1e-7)
 
     # filter the real space image. Remove DC.
-    print(f'Testing "na_and_background_filter"...')
-    FFTfiltered_realsp = na_and_background_filter(realsp, low_sigma=low_sigma, high_sigma=high_sigma, na_mask=na_mask, min_psnr=1)
+    logger.info(f'Testing "na_and_background_filter"...')
+    FFTfiltered_realsp = na_and_background_filter(
+        realsp, low_sigma=low_sigma, high_sigma=high_sigma, na_mask=na_mask, min_psnr=1
+    )
     FFTfiltered_realsp -= np.mean(FFTfiltered_realsp)
 
     imwrite(f'{base_folder}/FFTfiltered_realsp.tif', np.abs(cp.asnumpy(FFTfiltered_realsp)).astype(np.float32))
@@ -87,15 +106,36 @@ def test_filter(kargs):
 
     imwrite(f'{base_folder}/FFTfiltered_otf.tif', FFTfiltered_otf)
     imwrite(f'{base_folder}/dogfiltered_otf.tif', dogfiltered_otf)
-    print(f'3D Frequency supports saved to:\n'
-            f'{Path(base_folder / "FFTfiltered_otf.tif").resolve()}\n'
-            f'{Path(base_folder / "dogfiltered_otf.tif").resolve()}\n')
+    logger.info(
+        f'3D Frequency supports saved to:\n'
+        f'{Path(base_folder / "FFTfiltered_otf.tif").resolve()}\n'
+        f'{Path(base_folder / "dogfiltered_otf.tif").resolve()}\n'
+    )
 
     # Save principle planes
-    imageio.imsave(f'{base_folder}FFTfiltered_otf_XY.png', FFTfiltered_otf[center[2],:,:])
-    imageio.imsave(f'{base_folder}/dogfiltered_otf_XY.png', dogfiltered_otf[center[2],:,:])
-    imageio.imsave(f'{base_folder}/FFTfiltered_otf_XZ.png', FFTfiltered_otf[:,center[1],:])
-    imageio.imsave(f'{base_folder}/dogfiltered_otf_XZ.png', dogfiltered_otf[:,center[1],:])
-    imageio.imsave(f'{base_folder}/FFTfiltered_otf_YZ.png', np.transpose(FFTfiltered_otf[:,:,center[0]]))
-    imageio.imsave(f'{base_folder}/dogfiltered_otf_YZ.png', np.transpose(dogfiltered_otf[:,:,center[0]]))
+    plt.imsave(f'{base_folder}/FFTfiltered_otf_XY.png', FFTfiltered_otf[center[2], :, :])
+    plt.imsave(f'{base_folder}/dogfiltered_otf_XY.png', dogfiltered_otf[center[2], :, :])
+    plt.imsave(f'{base_folder}/FFTfiltered_otf_XZ.png', FFTfiltered_otf[:, center[1], :])
+    plt.imsave(f'{base_folder}/dogfiltered_otf_XZ.png', dogfiltered_otf[:, center[1], :])
+    plt.imsave(f'{base_folder}/FFTfiltered_otf_YZ.png', np.transpose(FFTfiltered_otf[:, :, center[0]]))
+    plt.imsave(f'{base_folder}/dogfiltered_otf_YZ.png', np.transpose(dogfiltered_otf[:, :, center[0]]))
+
+
+@pytest.mark.run(order=3)
+def test_preprocessing(kargs):
+    sample_voxel_size = (
+        kargs['axial_voxel_size'],
+        kargs['lateral_voxel_size'],
+        kargs['lateral_voxel_size']
+    )
+    sample = backend.load_sample(kargs['inputs'])
+
+    sample = preprocessing.prep_sample(
+        sample,
+        sample_voxel_size=sample_voxel_size,
+        remove_background=True,
+        normalize=True,
+        plot=kargs['inputs'].with_suffix('') if kargs['plot'] else None,
+    )
+    assert sample.shape == kargs['input_shape']
 
