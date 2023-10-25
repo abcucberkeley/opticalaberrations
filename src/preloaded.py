@@ -5,7 +5,7 @@ from typing import Optional, Union
 import tensorflow as tf
 from tifffile import TiffFile
 
-from src.preprocessing import prep_sample
+from preprocessing import prep_sample
 
 
 class Preloadedmodelclass:
