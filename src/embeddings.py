@@ -276,10 +276,11 @@ def remove_interference_pattern(
     blured_psf = ndimage.gaussian_filter(psf, sigma=1.1)
 
     # get max pixel in the image
-    half_length = kernel_size // 2
-    template_poi = list(np.unravel_index(np.nanargmax(blured_psf, axis=None), blured_psf.shape))
+    max_poi = list(np.unravel_index(np.nanargmax(blured_psf, axis=None), blured_psf.shape))
 
     # crop a window around the object for template matching
+    template_poi = max_poi.copy()
+    half_length = kernel_size // 2
     template_poi[0] = np.clip(template_poi[0], a_min=half_length, a_max=(psf.shape[0] - half_length) - 1)
     template_poi[1] = np.clip(template_poi[1], a_min=half_length, a_max=(psf.shape[1] - half_length) - 1)
     template_poi[2] = np.clip(template_poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
@@ -295,7 +296,7 @@ def remove_interference_pattern(
             init_pos[2]:init_pos[2]+kernel_size,
         ]
         effective_kernel_width = kernel_size // 2
-    else: # SNR isn't good enough for template, use a gaussian kernel
+    else:  # SNR isn't good enough for template, use a gaussian kernel
         # logger.info('Using gaussian kernel')
         effective_kernel_width = 1
         kernel = gaussian_kernel(kernlen=[kernel_size]*3, std=effective_kernel_width)
@@ -328,7 +329,7 @@ def remove_interference_pattern(
         beads = np.zeros_like(psf)
 
         if len(detected_peaks) == 0 and high_snr:
-            p = template_poi
+            p = max_poi
             beads[p[0], p[1], p[2]] = 1
             pois.append(p)
 
@@ -394,7 +395,7 @@ def remove_interference_pattern(
             max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
         ]
 
-    if pois.shape[0] > 0: # found anything?
+    if pois.shape[0] > 0:  # found anything?
         interference_pattern = fft(beads)
 
         if np.all(beads == 0) or np.all(interference_pattern == 0):
