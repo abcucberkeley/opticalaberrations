@@ -11,6 +11,7 @@ from functools import partial
 from typing import Any, Sequence, Union, Optional
 import numpy as np
 from scipy import stats as st
+from scipy.ndimage import gaussian_filter
 import pandas as pd
 import seaborn as sns
 import zarr
@@ -29,7 +30,7 @@ from synthetic import SyntheticPSF
 
 try:
     import cupy as cp
-    from cupyx.scipy.ndimage import gaussian_filter
+    from cupyx.scipy.ndimage import gaussian_filter as cp_gaussian_filter
 except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
@@ -107,14 +108,16 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 're
         # window_y = window(('tukey', pad_width[1]), padded.shape[1])
         # window_x = window(('tukey', pad_width[2]), padded.shape[2])
         # zv, yv, xv = np.meshgrid(window_z, window_y, window_x, indexing='ij', copy=True)
-        if isinstance(padded, cp.ndarray):
-            window_z = cp.array(window_z)
+        if isinstance(padded, np.ndarray):
+            pass
+        else:
+            window_z = cp.array(window_z)  # GPU array
         padded *= window_z[..., np.newaxis, np.newaxis]
         return padded
 
 
 def na_and_background_filter(
-    image: cp.ndarray,
+    image: np.ndarray,
     na_mask: np.ndarray,  # light sheet NA mask
     low_sigma: float,
     high_sigma: Union[float] = None,
@@ -144,31 +147,35 @@ def na_and_background_filter(
 
     spatial_dims = image.ndim
 
-    cp_dtype = cp.float32
-    low_sigma = cp.array(low_sigma, dtype=cp_dtype, ndmin=1)
+    dtype = np.float32
+    low_sigma = np.array(low_sigma, dtype=dtype, ndmin=1)
     if high_sigma is None:
         high_sigma = low_sigma * 1.6
     else:
-        high_sigma = cp.array(high_sigma, dtype=cp_dtype, ndmin=1)
+        high_sigma = np.array(high_sigma, dtype=dtype, ndmin=1)
 
     if len(high_sigma) != 1 and len(high_sigma) != spatial_dims:
         raise ValueError('high_sigma must have length equal to number of spatial dimensions of input')
 
-    high_sigma = high_sigma * cp.ones(spatial_dims, dtype=cp_dtype)
+    high_sigma = high_sigma * np.ones(spatial_dims, dtype=dtype)
 
-    im2 = cp.empty_like(image, dtype=cp_dtype)  # need to supply gauss filter output with the data type we want
-    im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
+    im2 = np.empty_like(image, dtype=dtype)  # need to supply gauss filter output with the data type we want
+    if isinstance(image, np.ndarray):
+        # CPU only.  Call scipy function
+        im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
+    else:
+        im2 = cp_gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
 
-    return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=cp_dtype)
+    return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=dtype)
 
 
 def combine_filtered_imgs(
-    original_image: cp.ndarray,
-    im1_sharper: cp.ndarray,
-    im2_low_freqs_to_subtract: cp.ndarray,
+    original_image: np.ndarray,
+    im1_sharper: np.ndarray,
+    im2_low_freqs_to_subtract: np.ndarray,
     min_psnr: int,
     dtype
-) -> cp.ndarray:
+) -> np.ndarray:
     """
     Combines the two filters (real space images) to produce filtered_img = (im1 - im2) - noise.
     Uses std_dev(im2) to determine if image is spare (we can increase background subtraction by noise) or dense
@@ -181,17 +188,18 @@ def combine_filtered_imgs(
         dtype:
 
     Returns:
-        filtered_img : 3D cupy array
+        filtered_img : 3D cupy or numpy array
 
     """
-    mask = tukey_window(cp.ones_like(original_image, dtype=dtype))
-    mask[mask < .9] = cp.nan
+    mask = tukey_window(np.ones_like(original_image, dtype=dtype))  # GPU or CPU array
+    mask[mask < .9] = np.nan
+
     mask[mask >= .9] = 1
     # if blurred shows little std deviation: this is sparse, will want to more aggressively subtract
-    if cp.std(im2_low_freqs_to_subtract[mask == 1]) < 3:
+    if np.std(im2_low_freqs_to_subtract[mask == 1]) < 3:
         snr = measure_snr(original_image * mask)
         if snr > min_psnr:  # sparse, yet SNR of original image is good
-            noise = cp.std(original_image - im2_low_freqs_to_subtract)  # increase the bkgrd subtraction by the noise
+            noise = np.std(original_image - im2_low_freqs_to_subtract)  # increase the bkgrd subtraction by the noise
             return im1_sharper - (im2_low_freqs_to_subtract + noise)
         else:  # sparse, and SNR of original image is poor
             logger.warning(f"Dropping sparse image for poor SNR {snr} < {min_psnr}")
@@ -208,7 +216,7 @@ def combine_filtered_imgs(
 
 
 def dog(
-    image: cp.ndarray,
+    image: np.ndarray,
     min_psnr: int,
     low_sigma: float,
     high_sigma: Union[float] = None,
@@ -217,7 +225,7 @@ def dog(
     truncate: float = 4.0,
 ):
     """
-    Image is a cp.ndarray, processing is performed on GPU.
+    Image is a cp.ndarray, processing is performed on GPU, otherwise CPU
 
     Find features between ``low_sigma`` and ``high_sigma`` in size.
     This function uses the Difference of Gaussians method for applying
@@ -257,15 +265,17 @@ def dog(
     Returns:
         filtered_image : ndarray
     """
-    # must use GPU
+
+    # CPU or GPU version
     spatial_dims = image.ndim
 
-    cp_dtype = cp.float32
-    low_sigma = cp.array(low_sigma, dtype=cp_dtype, ndmin=1)
+    np_dtype = np.float32
+
+    low_sigma = np.array(low_sigma, dtype=np_dtype, ndmin=1)
     if high_sigma is None:
         high_sigma = low_sigma * 1.6
     else:
-        high_sigma = cp.array(high_sigma, dtype=cp_dtype, ndmin=1)
+        high_sigma = np.array(high_sigma, dtype=np_dtype, ndmin=1)
 
     if len(low_sigma) != 1 and len(low_sigma) != spatial_dims:
         raise ValueError('low_sigma must have length equal to number of spatial dimensions of input')
@@ -273,21 +283,30 @@ def dog(
     if len(high_sigma) != 1 and len(high_sigma) != spatial_dims:
         raise ValueError('high_sigma must have length equal to number of spatial dimensions of input')
 
-    low_sigma = low_sigma * cp.ones(spatial_dims, dtype=cp_dtype)
-    high_sigma = high_sigma * cp.ones(spatial_dims, dtype=cp_dtype)
+    low_sigma = low_sigma * np.ones(spatial_dims, dtype=np_dtype)
+    high_sigma = high_sigma * np.ones(spatial_dims, dtype=np_dtype)
 
     if any(high_sigma < low_sigma):
         raise ValueError('high_sigma must be equal to or larger than low_sigma for all axes')
 
-    im1 = cp.empty_like(image, dtype=cp_dtype)  # need to supply gauss filter output with the data type we want
-    im2 = cp.empty_like(image, dtype=cp_dtype)  # need to supply gauss filter output with the data type we want
-    if all(low_sigma) > 0:
-        im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=im1)   # sharper
+    im1 = np.empty_like(image, dtype=np_dtype)  # need to supply gauss filter output with the data type we want
+    im2 = np.empty_like(image, dtype=np_dtype)  # need to supply gauss filter output with the data type we want
+    if isinstance(image, np.ndarray):
+        # CPU only.  Call scipy function
+        if all(low_sigma) > 0:
+            im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=im1)  # sharper
+        else:
+            im1 = np.zeros_like(image, dtype=np_dtype)
+        im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
     else:
-        im1 = cp.zeros_like(image, dtype=cp_dtype)
-    im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
+        # GPU only.  Call cupy function
+        if all(low_sigma) > 0:
+            im1 = cp_gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=im1)  # sharper
+        else:
+            im1 = np.zeros_like(image, dtype=np_dtype)
+        im2 = cp_gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
 
-    return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=cp_dtype)
+    return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=np_dtype)
 
 
 @profile
@@ -298,7 +317,7 @@ def remove_background_noise(
         high_sigma: float = 3.0,
         low_sigma: float = 0.7,
         min_psnr: int = 5,
-) -> cp.ndarray:
+) -> np.ndarray:
     """ Remove background noise from a given image volume.
         Difference of gaussians (DoG) works best via bandpass (reject past nyquist, reject
         non-uniform DC/background/scattering).
@@ -315,14 +334,14 @@ def remove_background_noise(
         min_psnr: Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold
 
     Returns:
-        _type_: cp.ndarray
+        _type_: cp.ndarray or np.ndarray
     """
 
     try:
         if not isinstance(image, cp.ndarray):
             image = cp.array(image)
     except Exception:
-        logger.warning("No CUDA-capable device is detected")
+        logger.warning(f"No CUDA-capable device is detected. 'image' will be type {type(image)}")
 
     if method == 'mode':
         mode = int(st.mode(image, axis=None).mode[0])
@@ -367,8 +386,10 @@ def tukey_window(image: np.ndarray, alpha: float = .5):
     # That will cut a lot of data, we can do better by using cylindrical mask, because we don't use
     # an XZ or YZ projection of the FFT.
     w = window(('tukey', alpha), image.shape[1:])  # 2D window (basically an inscribed circle in X, Y)
-    if isinstance(image, cp.ndarray):
-        w = cp.array(w)
+    if isinstance(image, np.ndarray):
+        pass
+    else:
+        w = cp.array(w)  # make this a GPU array.
     image *= w[np.newaxis, ...]   # apply 2D window over 3D volume as a cylinder
     return image
 
@@ -420,9 +441,11 @@ def prep_sample(
 
         sample = np.expand_dims(sample, axis=-1)
 
-    # convert to 32bit cupy
-    if not isinstance(sample, cp.ndarray):
+    # convert to 32bit cupy if available
+    try:
         sample = cp.array(sample, dtype=cp.float32)
+    except:
+        pass
 
     if plot is not None:
         plt.rcParams.update({
@@ -438,7 +461,7 @@ def prep_sample(
         fig, axes = plt.subplots(3, ncols=3, figsize=(10, 10))
 
         plot_mip(
-            vol=cp.asnumpy(sample),
+            vol=sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample),
             xy=axes[0, 0],
             xz=axes[0, 1],
             yz=axes[0, 2],
@@ -464,7 +487,7 @@ def prep_sample(
         axes[1, 1].set_title(f"PSNR: {psnr}")
 
         plot_mip(
-            vol=cp.asnumpy(sample),
+            vol=sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample),
             xy=axes[1, 0],
             xz=axes[1, 1],
             yz=axes[1, 2],
@@ -497,7 +520,7 @@ def prep_sample(
 
     if plot is not None:
         plot_mip(
-            vol=cp.asnumpy(sample),
+            vol=sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample),
             xy=axes[-1, 0],
             xz=axes[-1, 1],
             yz=axes[-1, 2],
@@ -511,10 +534,7 @@ def prep_sample(
         logger.info(f"PSNR: {psnr:4}   {sample_path}")
         return psnr
     else:
-        if isinstance(sample, cp.ndarray):
-            return cp.asnumpy(sample).astype(np.float32)
-        else:
-            return sample.astype(np.float32)
+        return sample.astype(np.float32) if isinstance(sample, np.ndarray) else cp.asnumpy(sample).astype(np.float32)
 
 
 @profile
