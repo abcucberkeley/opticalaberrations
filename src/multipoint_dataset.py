@@ -181,8 +181,10 @@ def simulate_image(
     electrons_per_count: float = .22,
     quantum_efficiency: float = .82,
     model_psf_shape: tuple = (64, 64, 64),
-    scale_by_maxcounts: Optional[int] = None
+    scale_by_maxcounts: Optional[int] = None,
+    plot: bool = False
 ):
+    outdir.mkdir(exist_ok=True, parents=True)
 
     # aberrated PSF without noise
     kernel = upsampled_gen.single_psf(
@@ -241,7 +243,7 @@ def simulate_image(
                 remove_background=remove_background,
                 normalize=normalize,
                 min_psnr=0,
-                # plot=odir/filename,
+                plot=odir/filename if plot else None,
             )
 
             embeddings = np.squeeze(fourier_embeddings(
@@ -251,7 +253,7 @@ def simulate_image(
                 embedding_option=e,
                 alpha_val=alpha_val,
                 phi_val=phi_val,
-                # plot=odir/filename
+                plot=odir/filename  if plot else None,
             ))
 
             save_synthetic_sample(

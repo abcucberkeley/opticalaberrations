@@ -307,7 +307,7 @@ class SyntheticPSF:
             no_phase: used only when meta=true.
             lls_defocus_offset: optional shift of the excitation and detection focal plan (microns)
         """
-        if not isinstance(phi, Wavefront):
+        if not hasattr(phi, 'order'):
             phi = Wavefront(
                 phi,
                 order=self.order,

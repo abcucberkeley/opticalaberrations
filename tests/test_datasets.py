@@ -1,5 +1,8 @@
 
 import sys
+
+import numpy as np
+
 sys.path.append('.')
 sys.path.append('./src')
 
@@ -15,131 +18,232 @@ from pathlib import Path
 from src import psf_dataset
 from src import multipoint_dataset
 from src.synthetic import SyntheticPSF
+from src.wavefront import Wavefront
+
+
+def get_synthetic_generator(kargs):
+    return SyntheticPSF(
+        order='ansi',
+        n_modes=15,
+        distribution='mixed',
+        mode_weights='pyramid',
+        signed=True,
+        rotate=True,
+        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+        lam_detection=.510,
+        psf_shape=[64, 64, 64],
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.2,
+    )
 
 
 @pytest.mark.run(order=1)
-def test_psf_aberrated_dataset(kargs):
-    gen = SyntheticPSF(
-        order='ansi',
-        n_modes=kargs['num_modes'],
-        distribution='mixed',
-        mode_weights='pyramid',
-        signed=True,
-        rotate=True,
-        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-        lam_detection=kargs['wavelength'],
-        psf_shape=[64, 64, 64],
-        x_voxel_size=kargs['lateral_voxel_size'],
-        y_voxel_size=kargs['lateral_voxel_size'],
-        z_voxel_size=kargs['axial_voxel_size'],
-    )
+def test_zernike_modes(kargs):
 
-    sample = psf_dataset.create_synthetic_sample(
-        filename='1',
-        gen=gen,
-        savedir=Path(f"{kargs['repo']}/dataset/aberrations"),
-        noise=True,
-        normalize=True,
-        min_amplitude=.1,
-        max_amplitude=.2,
-        min_lls_defocus_offset=0,
-        max_lls_defocus_offset=0,
-        min_photons=100000,
-        max_photons=200000,
-    )
+    gen = get_synthetic_generator(kargs)
 
-    assert sample.shape == (64, 64, 64)
+    amplitude = .1
+    zernikes = np.zeros(16)
+
+    for z in range(3, 16):
+
+        if z == 4:  # skip defocus
+            continue
+
+        aberration = zernikes.copy()
+        aberration[z] = amplitude
+
+        phi = Wavefront(
+            amplitudes=aberration,
+            order=gen.order,
+            distribution=gen.distribution,
+            mode_weights=gen.mode_weights,
+            modes=gen.n_modes,
+            gamma=gen.gamma,
+            signed=gen.signed,
+            rotate=gen.rotate,
+            lam_detection=gen.lam_detection,
+        )
+
+        np.testing.assert_array_equal(phi.amplitudes, aberration)
+
+        sample = psf_dataset.simulate_psf(
+            filename=f'z{z}',
+            outdir=Path(f"{kargs['repo']}/dataset/zernikes"),
+            gen=gen,
+            phi=phi,
+            emb=False,
+            photons=100000,
+            noise=True,
+            normalize=True,
+            lls_defocus_offset=(0, 0)
+        )
+
+        assert sample.shape == gen.psf_shape
+
+        embeddings = psf_dataset.simulate_psf(
+            filename=f'z{z}',
+            outdir=Path(f"{kargs['repo']}/dataset/zernikes"),
+            gen=gen,
+            phi=phi,
+            emb=True,
+            photons=100000,
+            noise=True,
+            normalize=True,
+            lls_defocus_offset=(0, 0),
+            plot=True
+        )
+
+        assert embeddings.shape == (6, gen.psf_shape[1], gen.psf_shape[2])
 
 
 @pytest.mark.run(order=2)
-def test_psf_lls_defocus_dataset(kargs):
-    gen = SyntheticPSF(
-        order='ansi',
-        n_modes=kargs['num_modes'],
-        distribution='mixed',
-        mode_weights='pyramid',
-        signed=True,
-        rotate=True,
-        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-        lam_detection=kargs['wavelength'],
-        psf_shape=[64, 64, 64],
-        x_voxel_size=kargs['lateral_voxel_size'],
-        y_voxel_size=kargs['lateral_voxel_size'],
-        z_voxel_size=kargs['axial_voxel_size'],
+def test_random_aberrated_psf(kargs):
+
+    gen = get_synthetic_generator(kargs)
+
+    phi = Wavefront(
+        amplitudes=(.1, .2),
+        order=gen.order,
+        distribution=gen.distribution,
+        mode_weights=gen.mode_weights,
+        modes=gen.n_modes,
+        gamma=gen.gamma,
+        signed=gen.signed,
+        rotate=gen.rotate,
+        lam_detection=gen.lam_detection,
     )
 
-    sample = psf_dataset.create_synthetic_sample(
+    sample = psf_dataset.simulate_psf(
         filename='1',
+        outdir=Path(f"{kargs['repo']}/dataset/aberrations"),
         gen=gen,
-        savedir=Path(f"{kargs['repo']}/dataset/lls"),
+        phi=phi,
+        emb=False,
+        photons=100000,
         noise=True,
         normalize=True,
-        min_amplitude=0.,
-        max_amplitude=0.,
-        min_lls_defocus_offset=-2,
-        max_lls_defocus_offset=2,
-        min_photons=100000,
-        max_photons=200000,
+        lls_defocus_offset=(0, 0)
     )
 
-    assert sample.shape == (64, 64, 64)
+    assert sample.shape == gen.psf_shape
+
+    embeddings = psf_dataset.simulate_psf(
+        filename='2',
+        outdir=Path(f"{kargs['repo']}/dataset/aberrations"),
+        gen=gen,
+        phi=phi,
+        emb=True,
+        photons=100000,
+        noise=True,
+        normalize=True,
+        lls_defocus_offset=(0, 0),
+        plot=True
+    )
+
+    assert embeddings.shape == (6, gen.psf_shape[1], gen.psf_shape[2])
 
 
 @pytest.mark.run(order=3)
-def test_psf_dataset(kargs):
-    gen = SyntheticPSF(
-        order='ansi',
-        n_modes=kargs['num_modes'],
-        distribution='mixed',
-        mode_weights='pyramid',
-        signed=True,
-        rotate=True,
-        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-        lam_detection=kargs['wavelength'],
-        psf_shape=[64, 64, 64],
-        x_voxel_size=kargs['lateral_voxel_size'],
-        y_voxel_size=kargs['lateral_voxel_size'],
-        z_voxel_size=kargs['axial_voxel_size'],
+def test_random_defocused_psf(kargs):
+    gen = get_synthetic_generator(kargs)
+
+    phi = Wavefront(
+        amplitudes=(0, 0),
+        order=gen.order,
+        distribution=gen.distribution,
+        mode_weights=gen.mode_weights,
+        modes=gen.n_modes,
+        gamma=gen.gamma,
+        signed=gen.signed,
+        rotate=gen.rotate,
+        lam_detection=gen.lam_detection,
     )
 
-    sample = psf_dataset.create_synthetic_sample(
+    sample = psf_dataset.simulate_psf(
         filename='1',
+        outdir=Path(f"{kargs['repo']}/dataset/lls"),
         gen=gen,
-        savedir=Path(f"{kargs['repo']}/dataset/psfs"),
+        phi=phi,
+        emb=False,
+        photons=100000,
         noise=True,
         normalize=True,
-        min_amplitude=.1,
-        max_amplitude=.2,
-        min_lls_defocus_offset=-2,
-        max_lls_defocus_offset=2,
-        min_photons=100000,
-        max_photons=200000,
+        lls_defocus_offset=(1, 2)
     )
 
-    assert sample.shape == (64, 64, 64)
+    assert sample.shape == gen.psf_shape
+
+    embeddings = psf_dataset.simulate_psf(
+        filename='2',
+        outdir=Path(f"{kargs['repo']}/dataset/lls"),
+        gen=gen,
+        phi=phi,
+        emb=True,
+        photons=100000,
+        noise=True,
+        normalize=True,
+        lls_defocus_offset=(1, 2),
+        plot=True
+    )
+
+    assert embeddings.shape == (6, gen.psf_shape[1], gen.psf_shape[2])
 
 
 @pytest.mark.run(order=4)
-def test_psf_embedding_dataset(kargs):
-    gen = SyntheticPSF(
-        order='ansi',
-        n_modes=kargs['num_modes'],
-        distribution='mixed',
-        mode_weights='pyramid',
-        signed=True,
-        rotate=True,
-        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-        lam_detection=kargs['wavelength'],
-        psf_shape=[64, 64, 64],
-        x_voxel_size=kargs['lateral_voxel_size'],
-        y_voxel_size=kargs['lateral_voxel_size'],
-        z_voxel_size=kargs['axial_voxel_size'],
+def test_random_aberrated_defocused_psf(kargs):
+    gen = get_synthetic_generator(kargs)
+
+    phi = Wavefront(
+        amplitudes=(.1, .2),
+        order=gen.order,
+        distribution=gen.distribution,
+        mode_weights=gen.mode_weights,
+        modes=gen.n_modes,
+        gamma=gen.gamma,
+        signed=gen.signed,
+        rotate=gen.rotate,
+        lam_detection=gen.lam_detection,
     )
+
+    sample = psf_dataset.simulate_psf(
+        filename='1',
+        outdir=Path(f"{kargs['repo']}/dataset/psfs"),
+        gen=gen,
+        phi=phi,
+        emb=False,
+        photons=100000,
+        noise=True,
+        normalize=True,
+        lls_defocus_offset=(1, 2)
+    )
+
+    assert sample.shape == gen.psf_shape
+
+    embeddings = psf_dataset.simulate_psf(
+        filename='2',
+        outdir=Path(f"{kargs['repo']}/dataset/psfs"),
+        gen=gen,
+        phi=phi,
+        emb=True,
+        photons=100000,
+        noise=True,
+        normalize=True,
+        lls_defocus_offset=(1, 2),
+        plot=True
+    )
+
+    assert embeddings.shape == (6, gen.psf_shape[1], gen.psf_shape[2])
+
+
+@pytest.mark.run(order=5)
+def test_psf_dataset(kargs):
+    gen = get_synthetic_generator(kargs)
 
     sample = psf_dataset.create_synthetic_sample(
         filename='1',
         gen=gen,
-        emb=True,
         savedir=Path(f"{kargs['repo']}/dataset/psfs"),
         noise=True,
         normalize=True,
@@ -151,25 +255,12 @@ def test_psf_embedding_dataset(kargs):
         max_photons=200000,
     )
 
-    assert sample.shape == (6, 64, 64)
+    assert sample.shape == gen.psf_shape
 
 
-@pytest.mark.run(order=5)
+@pytest.mark.run(order=6)
 def test_multipoint_dataset(kargs):
-    gen = SyntheticPSF(
-        order='ansi',
-        n_modes=kargs['num_modes'],
-        distribution='mixed',
-        mode_weights='pyramid',
-        signed=True,
-        rotate=True,
-        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-        lam_detection=kargs['wavelength'],
-        psf_shape=[64, 64, 64],
-        x_voxel_size=kargs['lateral_voxel_size'],
-        y_voxel_size=kargs['lateral_voxel_size'],
-        z_voxel_size=kargs['axial_voxel_size'],
-    )
+    gen = get_synthetic_generator(kargs)
 
     sample = multipoint_dataset.create_synthetic_sample(
         filename='1',
@@ -198,53 +289,7 @@ def test_multipoint_dataset(kargs):
         max_photons=200000,
     )
 
-    assert sample.shape == (1, 64, 64, 64)
-
-
-@pytest.mark.run(order=6)
-def test_multipoint_embedding_dataset(kargs):
-    gen = SyntheticPSF(
-        order='ansi',
-        n_modes=kargs['num_modes'],
-        distribution='mixed',
-        mode_weights='pyramid',
-        signed=True,
-        rotate=True,
-        psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-        lam_detection=kargs['wavelength'],
-        psf_shape=[64, 64, 64],
-        x_voxel_size=kargs['lateral_voxel_size'],
-        y_voxel_size=kargs['lateral_voxel_size'],
-        z_voxel_size=kargs['axial_voxel_size'],
-    )
-
-    sample = multipoint_dataset.create_synthetic_sample(
-        filename='1',
-        npoints=5,
-        fill_radius=.66,
-        generators={str(kargs['psf_type']): gen},
-        upsampled_generators={str(kargs['psf_type']): gen},
-        modes=kargs['num_modes'],
-        savedir=Path(f"{kargs['repo']}/dataset/beads"),
-        distribution=gen.distribution,
-        mode_dist=gen.mode_weights,
-        gamma=.75,
-        randomize_voxel_size=False,
-        emb=True,
-        signed=True,
-        random_crop=None,
-        rotate=True,
-        noise=True,
-        normalize=True,
-        min_amplitude=.1,
-        max_amplitude=.2,
-        min_lls_defocus_offset=-2,
-        max_lls_defocus_offset=2,
-        min_photons=100000,
-        max_photons=200000,
-    )
-
-    assert sample.shape == (1, 6, 64, 64)
+    assert sample.shape == (1, *gen.psf_shape)
 
 
 @pytest.mark.run(order=7)

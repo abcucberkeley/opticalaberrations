@@ -110,8 +110,9 @@ def simulate_psf(
     mean_background_offset=100,
     electrons_per_count: float = .22,
     quantum_efficiency: float = .82,
-
+    plot: bool = False
 ):
+    outdir.mkdir(exist_ok=True, parents=True)
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
 
     # aberrated PSF without noise
@@ -153,14 +154,14 @@ def simulate_psf(
             remove_background=True,
             normalize=normalize,
             min_psnr=0,
-            # plot=outdir/filename
+            plot=outdir/filename if plot else None
         )
 
         embeddings = np.squeeze(fourier_embeddings(
             inputs=embeddings,
             iotf=gen.iotf,
             na_mask=gen.na_mask(),
-            # plot=outdir/filename
+            plot=outdir/filename if plot else None
         ))
 
         save_synthetic_sample(
