@@ -44,6 +44,7 @@ def test_filter(kargs):
         y_voxel_size=kargs['lateral_voxel_size'],
         z_voxel_size=kargs['axial_voxel_size'],
     )
+    na_mask = samplepsfgen.na_mask()
 
     # Setup test images: "realsp" and "fourier"
     # real space image = a single voxel at the center of a volume.  This will create a uniform otf.
@@ -59,15 +60,21 @@ def test_filter(kargs):
     imwrite(f'{base_folder}/realsp.tif', np.abs(cp.asnumpy(realsp)).astype(np.float32))
 
     print(f"\n\nUsing {high_sigma=}, {low_sigma=}")
+    print(f'Testing "dog" on CPU...\n')
+    dogfiltered_realsp = dog(cp.asnumpy(realsp), low_sigma=low_sigma, high_sigma=high_sigma, min_psnr=1)
+    dogfiltered_realsp -= np.mean(cp.asnumpy(dogfiltered_realsp))
+
+    print(f'Testing "dog" on GPU...\n')
+    dogfiltered_realsp_GPU = dog(realsp, low_sigma=low_sigma, high_sigma=high_sigma, min_psnr=1)
+    dogfiltered_realsp_GPU -= cp.mean(dogfiltered_realsp_GPU)
+
+    print(f'Checking if GPU "dog" and CPU "dog" agree...\n')
+    np.testing.assert_allclose(cp.asnumpy(dogfiltered_realsp_GPU), dogfiltered_realsp, rtol=0, atol=1e-7)
 
     # filter the real space image. Remove DC.
     print(f'Testing "na_and_background_filter"...')
-    FFTfiltered_realsp = na_and_background_filter(realsp, low_sigma=low_sigma, high_sigma=high_sigma, samplepsfgen=samplepsfgen)
+    FFTfiltered_realsp = na_and_background_filter(realsp, low_sigma=low_sigma, high_sigma=high_sigma, na_mask=na_mask, min_psnr=1)
     FFTfiltered_realsp -= np.mean(FFTfiltered_realsp)
-
-    print(f'Testing "dog"...\n')
-    dogfiltered_realsp = dog(realsp, low_sigma=low_sigma, high_sigma=high_sigma)
-    dogfiltered_realsp -= np.mean(dogfiltered_realsp)
 
     imwrite(f'{base_folder}/FFTfiltered_realsp.tif', np.abs(cp.asnumpy(FFTfiltered_realsp)).astype(np.float32))
     imwrite(f'{base_folder}/dogfiltered_realsp.tif', np.abs(cp.asnumpy(dogfiltered_realsp)).astype(np.float32))
