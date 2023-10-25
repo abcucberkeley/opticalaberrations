@@ -18,7 +18,6 @@ from typing import Any, List, Union, Optional, Generator
 
 try:
     import cupy as cp
-    from cupyx.scipy.ndimage import gaussian_filter
 except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
