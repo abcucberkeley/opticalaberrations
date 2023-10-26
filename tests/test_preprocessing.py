@@ -1,13 +1,10 @@
-
+import logging
 import sys
 sys.path.append('.')
 sys.path.append('./src')
 
 import warnings
 warnings.filterwarnings("ignore")
-
-import logging
-logger = logging.getLogger('')
 
 import math
 import pytest
@@ -76,20 +73,20 @@ def test_remove_background_noise(kargs):
     imwrite(f'{base_folder}/fourier.tif', np.abs(cp.asnumpy(fourier)).astype(np.float32))
     imwrite(f'{base_folder}/realsp.tif', np.abs(cp.asnumpy(realsp)).astype(np.float32))
 
-    logger.info(f"\n\nUsing {high_sigma=}, {low_sigma=}")
-    logger.info(f'Testing "dog" on CPU...\n')
+    logging.info(f"Using {high_sigma=}, {low_sigma=}")
+    logging.info(f'Testing "dog" on CPU...')
     dogfiltered_realsp = dog(cp.asnumpy(realsp), low_sigma=low_sigma, high_sigma=high_sigma, min_psnr=1)
     dogfiltered_realsp -= np.mean(cp.asnumpy(dogfiltered_realsp))
 
-    logger.info(f'Testing "dog" on GPU...\n')
+    logging.info(f'Testing "dog" on GPU...')
     dogfiltered_realsp_GPU = dog(realsp, low_sigma=low_sigma, high_sigma=high_sigma, min_psnr=1)
     dogfiltered_realsp_GPU -= cp.mean(dogfiltered_realsp_GPU)
 
-    logger.info(f'Checking if GPU "dog" and CPU "dog" agree...\n')
+    logging.info(f'Checking if GPU "dog" and CPU "dog" agree...')
     np.testing.assert_allclose(cp.asnumpy(dogfiltered_realsp_GPU), dogfiltered_realsp, rtol=0, atol=1e-7)
 
     # filter the real space image. Remove DC.
-    logger.info(f'Testing "na_and_background_filter"...')
+    logging.info(f'Testing "na_and_background_filter"...')
     FFTfiltered_realsp = na_and_background_filter(
         realsp, low_sigma=low_sigma, high_sigma=high_sigma, na_mask=na_mask, min_psnr=1
     )
@@ -106,10 +103,10 @@ def test_remove_background_noise(kargs):
 
     imwrite(f'{base_folder}/FFTfiltered_otf.tif', FFTfiltered_otf)
     imwrite(f'{base_folder}/dogfiltered_otf.tif', dogfiltered_otf)
-    logger.info(
-        f'3D Frequency supports saved to:\n'
-        f'{Path(base_folder / "FFTfiltered_otf.tif").resolve()}\n'
-        f'{Path(base_folder / "dogfiltered_otf.tif").resolve()}\n'
+    logging.info(
+        f'3D Frequency supports saved to:'
+        f'{Path(base_folder / "FFTfiltered_otf.tif").resolve()}'
+        f'{Path(base_folder / "dogfiltered_otf.tif").resolve()}'
     )
 
     # Save principle planes

@@ -11,7 +11,6 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import logging
-logger = logging.getLogger('')
 
 import pytest
 from time import time
@@ -39,6 +38,6 @@ def test_bulid_runtime(kargs):
 
     np.testing.assert_allclose(results_trt, results_tf, atol=1e-2)
 
-    logger.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
-    logger.info(f"Runtime for native TRT backend: {embeddings.shape} - {timer_trt:.2f} sec.")
+    logging.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
+    logging.info(f"Runtime for native TRT backend: {embeddings.shape} - {timer_trt:.2f} sec.")
 

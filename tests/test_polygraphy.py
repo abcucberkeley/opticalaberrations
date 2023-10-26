@@ -11,8 +11,6 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import logging
-logger = logging.getLogger('')
-
 import pytest
 from time import time
 from src import convert
@@ -40,8 +38,8 @@ def test_polygraphy_trt(kargs):
 
     np.testing.assert_allclose(results_polygraphy, results_tf, atol=1e-2)
 
-    logger.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
-    logger.info(f"Runtime for polygraphy.trt backend: {embeddings.shape} - {timer_polygraphy:.2f} sec.")
+    logging.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
+    logging.info(f"Runtime for polygraphy.trt backend: {embeddings.shape} - {timer_polygraphy:.2f} sec.")
 
 
 @pytest.mark.run(order=2)
@@ -65,6 +63,6 @@ def test_polygraphy_engine(kargs):
 
     np.testing.assert_allclose(results_polygraphy_engine, results_tf, atol=1e-2)
 
-    logger.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
-    logger.info(f"Runtime for polygraphy.engine backend: {embeddings.shape} - {timer_polygraphy_engine:.2f} sec.")
+    logging.info(f"Runtime for TF backend: {embeddings.shape} - {timer_tf:.2f} sec.")
+    logging.info(f"Runtime for polygraphy.engine backend: {embeddings.shape} - {timer_polygraphy_engine:.2f} sec.")
 

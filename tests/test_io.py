@@ -6,10 +6,6 @@ sys.path.append('./src')
 import warnings
 warnings.filterwarnings("ignore")
 
-import logging
-logger = logging.getLogger('')
-
-
 import pytest
 
 from src import experimental
