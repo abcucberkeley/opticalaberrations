@@ -26,33 +26,36 @@ LOGS="${OUTDIR}/logs"
 mkdir -p $OUTDIR
 mkdir -p $LOGS
 
-if [ "$DATASET" = "train" ];then
+if [ "$DATASET" = "train" ];then  # 2M samples
   TYPE='--emb'
   SAMPLES_PER_JOB=200
   SAMPLES_PER_BIN=400
-  OBJS=(1 2 3 4 5)
-  mPH=($(seq 1 25000 250000))
-  xPH=($(seq 25000 25000 250000))
-  amps1=($(seq 0 .01 .24))
-  amps2=($(seq .01 .01 .25))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
-  DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
+  OBJS=(1 2 3 4 5)  # 5 bins
+  mPH=($(seq 1 25000 250000)) # 10 bins
+  xPH=($(seq 25000 25000 250000))
+  amps1=($(seq 0 .01 .24))  # 25 bins
+  amps2=($(seq .01 .01 .25))
+  DISTRIBUTIONS=(single bimodal powerlaw dirichlet) # 4 bins
   FILL_RADIUS=0.66
 else
   TYPE=''
   SAMPLES_PER_JOB=25
   SAMPLES_PER_BIN=25
+  SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   OBJS=(1 2 3 5 10 25 50 100 125 150)
   mPH=($(seq     1 25000 525000))
   xPH=($(seq 25000 25000 525000))
   amps1=($(seq    0 .025 .475))
   amps2=($(seq .025 .025 .50))
-  SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   DISTRIBUTIONS=(mixed)
   FILL_RADIUS=0.66
 fi
 
+TOTAL_SAMPLES=$(( ${#DISTRIBUTIONS[@]} * ${#mPH[@]} * ${#amps1[@]} * ${#OBJS[@]} * $SAMPLES_PER_BIN ))
+TOTAL_JOBS=$(( $TOTAL_SAMPLES / $SAMPLES_PER_JOB ))
 
+JOB_COUNTER=0
 for DIST in `seq 1 ${#DISTRIBUTIONS[@]}`
 do
   for PH in `seq 1 ${#xPH[@]}`
@@ -67,6 +70,8 @@ do
             do
               sleep 10s
             done
+
+            (( JOB_COUNTER=JOB_COUNTER+1 ))
 
             j="${ENV} multipoint_dataset.py ${TYPE}"
             j="${j} --npoints ${OBJS[$N-1]}"
@@ -123,9 +128,12 @@ do
             task="${task} -We ${TIMELIMIT}"
             task="${task} -o ${LOGS}/${JOB}.log"
             task="${task} \"${j}\""
-            echo $task | bash
 
+            echo $task | bash
             echo "$(bjobs -u $USER -sum)"
+            printf "JOBS: [ %'d / %'d ] \n" $(($TOTAL_JOBS - $JOB_COUNTER)) $TOTAL_JOBS
+            printf "SAMPLES: [ %'d / %'d ] \n" $((($TOTAL_JOBS - $JOB_COUNTER) * $SAMPLES_PER_JOB)) $TOTAL_SAMPLES
+
         done
       done
     done

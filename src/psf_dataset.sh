@@ -13,7 +13,7 @@ LAMBDA=.510
 NA=1.0
 CPUS=1
 MEM='20G'
-TIMELIMIT='1:00:00'
+TIMELIMIT='2:00:00'
 SHAPE=64
 
 MODES=15
@@ -25,18 +25,21 @@ LOGS="${OUTDIR}/logs"
 mkdir -p $OUTDIR
 mkdir -p $LOGS
 
-SAMPLES_PER_JOB=100
+SAMPLES_PER_JOB=200
 SAMPLES_PER_BIN=200
-mPH=($(seq 1 50000 460000))
-xPH=($(seq 50000 50000 500000))
-defocus1=($(seq -2 .2 1.8))
-defocus2=($(seq -1.8 .2 2))
-amps1=($(seq 0 .01 .24))
-amps2=($(seq .01 .01 .25))
+mPH=($(seq 1 25000 250000))
+xPH=($(seq 25000 25000 250000))
+defocus1=($(seq -1.5 .1 1.4))
+defocus2=($(seq -1.4 .1 1.5))
+amps1=($(seq 0 .025 .24))
+amps2=($(seq .025 .025 .25))
 SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
 DISTRIBUTIONS=(single bimodal powerlaw dirichlet)
 
+TOTAL_SAMPLES=$(( ${#DISTRIBUTIONS[@]} * ${#mPH[@]} * ${#amps1[@]} * ${#defocus1[@]} * $SAMPLES_PER_BIN ))
+TOTAL_JOBS=$(( $TOTAL_SAMPLES / $SAMPLES_PER_JOB ))
 
+JOB_COUNTER=0
 for DIST in `seq 1 ${#DISTRIBUTIONS[@]}`
 do
   for PH in `seq 1 ${#xPH[@]}`
@@ -47,6 +50,8 @@ do
       do
         for S in `seq 1 ${#SAMPLES[@]}`
         do
+          (( JOB_COUNTER=JOB_COUNTER+1 ))
+
           j="${ENV} psf_dataset.py"
           j="${j} --psf_type ${PSF_TYPE}"
           j="${j} --dist ${DISTRIBUTIONS[$DIST-1]}"
@@ -94,10 +99,13 @@ do
             task="${task} --wrap=\"${j}\""
 
             echo $task | bash
-            echo "ABC : R[$(squeue -u $USER -h -t running -r -p abc | wc -l)], P[$(squeue -u $USER -h -t pending -r -p abc | wc -l)]"
+            echo "ABC : Running[$(squeue -u $USER -h -t running -r -p abc | wc -l)], Pending[$(squeue -u $USER -h -t pending -r -p abc | wc -l)]"
           else
             echo $j | bash
           fi
+
+          printf "JOBS: [ %'d / %'d ] \n" $(($TOTAL_JOBS - $JOB_COUNTER)) $TOTAL_JOBS
+          printf "SAMPLES: [ %'d / %'d ] \n" $((($TOTAL_JOBS - $JOB_COUNTER) * $SAMPLES_PER_JOB)) $TOTAL_SAMPLES
 
         done
       done

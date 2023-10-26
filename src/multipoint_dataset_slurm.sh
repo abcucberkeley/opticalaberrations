@@ -53,7 +53,10 @@ else
   FILL_RADIUS=0.66
 fi
 
+TOTAL_SAMPLES=$(( ${#DISTRIBUTIONS[@]} * ${#mPH[@]} * ${#amps1[@]} * ${#OBJS[@]} * $SAMPLES_PER_BIN ))
+TOTAL_JOBS=$(( $TOTAL_SAMPLES / $SAMPLES_PER_JOB ))
 
+JOB_COUNTER=0
 for DIST in `seq 1 ${#DISTRIBUTIONS[@]}`
 do
   for PH in `seq 1 ${#xPH[@]}`
@@ -68,6 +71,8 @@ do
             do
               sleep 10s
             done
+
+            (( JOB_COUNTER=JOB_COUNTER+1 ))
 
             j="${ENV} multipoint_dataset.py ${TYPE}"
             j="${j} --npoints ${OBJS[$N-1]}"
@@ -145,11 +150,14 @@ do
             task="${task} --output=${LOGS}/${JOB}.log"
             task="${task} --export=ALL"
             task="${task} --wrap=\"${j}\""
-            echo $task | bash
 
-            echo "DGX : R[$(squeue -u $USER -h -t running -r -p dgx | wc -l)], P[$(squeue -u $USER -h -t pending -r -p dgx | wc -l)]"
-            echo "A100: R[$(squeue -u $USER -h -t running -r -p abc_a100 | wc -l)], P[$(squeue -u $USER -h -t pending -r -p abc_a100 | wc -l)]"
-            echo "ABC : R[$(squeue -u $USER -h -t running -r -p abc | wc -l)], P[$(squeue -u $USER -h -t pending -r -p abc | wc -l)]"
+            echo $task | bash
+            echo "DGX : Running[$(squeue -u $USER -h -t running -r -p dgx | wc -l)], Pending[$(squeue -u $USER -h -t pending -r -p dgx | wc -l)]"
+            echo "A100: Running[$(squeue -u $USER -h -t running -r -p abc_a100 | wc -l)], Pending[$(squeue -u $USER -h -t pending -r -p abc_a100 | wc -l)]"
+            echo "ABC : Running[$(squeue -u $USER -h -t running -r -p abc | wc -l)], Pending[$(squeue -u $USER -h -t pending -r -p abc | wc -l)]"
+            printf "JOBS: [ %'d / %'d ] \n" $(($TOTAL_JOBS - $JOB_COUNTER)) $TOTAL_JOBS
+            printf "SAMPLES: [ %'d / %'d ] \n" $((($TOTAL_JOBS - $JOB_COUNTER) * $SAMPLES_PER_JOB)) $TOTAL_SAMPLES
+
         done
       done
     done
