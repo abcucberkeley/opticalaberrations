@@ -404,7 +404,8 @@ def remove_interference_pattern(
         interference_pattern = fft(beads)
 
         if np.all(beads == 0) or np.all(interference_pattern == 0):
-            raise Exception("Bad interference pattern")
+            logger.error("Bad interference pattern")
+            return otf
 
         corrected_otf = otf / interference_pattern
 
@@ -438,7 +439,8 @@ def remove_interference_pattern(
         corrected_psf /= np.nanmax(corrected_psf)
 
         if np.all(corrected_psf == 0) or np.any(np.isnan(corrected_psf)):
-            raise Exception("Couldn't remove interference pattern")
+            logger.error("Couldn't remove interference pattern")
+            return otf
 
         if plot is not None:
             plot_interference(
@@ -453,7 +455,7 @@ def remove_interference_pattern(
                     kernel=kernel,
                     interference_pattern=interference_pattern
                 )
-            imwrite( file=f'{plot}_corrected_psf.tif', data=corrected_psf.astype(np.float32), dtype=np.float32)
+            imwrite(file=f'{plot}_corrected_psf.tif', data=corrected_psf.astype(np.float32), dtype=np.float32)
 
         return corrected_otf
     else:
