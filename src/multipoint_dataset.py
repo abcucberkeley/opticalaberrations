@@ -356,9 +356,34 @@ def create_synthetic_sample(
         fill_radius=fill_radius,
     )
 
-    inputs = {}
+    inputs, wavefronts = {}, {}
+    template = None
 
     for k, (gen, upsampled_gen) in enumerate(zip(generators.values(), upsampled_generators.values())):
+
+        if template is None:
+            template = wavefronts.get("../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat")
+
+        outdir = savedir / rf"{gen.psf_type.replace('../lattice/', '').split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
+
+        if not randomize_voxel_size:
+            outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
+
+        outdir = outdir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
+        outdir = outdir / f"z{gen.n_modes}"
+
+        if gen.distribution == 'powerlaw':
+            outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
+        else:
+            outdir = outdir / f"{gen.distribution}"
+
+        outdir = outdir / f"photons_{photon_range[0]}-{photon_range[1]}"
+        outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                          f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
+        outdir = outdir / f"npoints_{npoints}"
+        outdir.mkdir(exist_ok=True, parents=True)
+
         if gen.psf_type == '2photon':
             # boost um RMS aberration amplitudes for '2photon', so we create equivalent p2v aberrations
             r = gen.lam_detection / default_wavelength
@@ -386,44 +411,65 @@ def create_synthetic_sample(
                 lam_detection=gen.lam_detection,
             )
 
-        outdir = savedir / rf"{gen.psf_type.replace('../lattice/', '').split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
-
-        if not randomize_voxel_size:
-            outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
-
-        outdir = outdir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
-        outdir = outdir / f"z{gen.n_modes}"
-
-        if gen.distribution == 'powerlaw':
-            outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
-        else:
-            outdir = outdir / f"{gen.distribution}"
-
-        outdir = outdir / f"photons_{photon_range[0]}-{photon_range[1]}"
-        outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-                          f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
-
-        outdir = outdir / f"npoints_{npoints}"
-        outdir.mkdir(exist_ok=True, parents=True)
-
         if emb:
             try:  # check if file already exists and not corrupted
+
                 for e in embedding_option:
                     path = Path(f"{outdir/e}/{filename}")
-
-                    with open(path.with_suffix('.json')) as f:
-                        ujson.load(f)
 
                     with TiffFile(path.with_suffix('.tif')) as tif:
                         inputs[gen.psf_type] = np.squeeze(tif.asarray())
 
-            except Exception as e:
+                    with open(path.with_suffix('.json')) as f:
+                        hashtbl = ujson.load(f)
+                        amplitudes = np.array(hashtbl['zernikes']).astype(np.float32)
+
+                    w = Wavefront(
+                        amplitudes=amplitudes,
+                        order=gen.order,
+                        distribution=gen.distribution,
+                        mode_weights=gen.mode_weights,
+                        modes=gen.n_modes,
+                        gamma=gen.gamma,
+                        signed=gen.signed,
+                        rotate=gen.rotate,
+                        lam_detection=gen.lam_detection,
+                    )
+
+                    if template is None:
+                        wavefronts[gen.psf_type] = w
+                    else:
+                        if gen.psf_type == '2photon':
+                            r = gen.lam_detection / default_wavelength
+                            template_amplitudes = r * template.amplitudes
+                        else:
+                            template_amplitudes = template.amplitudes
+
+                        if np.allclose(template_amplitudes, w.amplitudes):
+                            wavefronts[gen.psf_type] = w
+                        else:
+                            # Override wavefront to generate sample again
+                            wavefronts[gen.psf_type] = Wavefront(
+                                amplitudes=template_amplitudes,
+                                order=gen.order,
+                                distribution=gen.distribution,
+                                mode_weights=gen.mode_weights,
+                                modes=gen.n_modes,
+                                gamma=gen.gamma,
+                                signed=gen.signed,
+                                rotate=gen.rotate,
+                                lam_detection=gen.lam_detection,
+                            )
+                            raise Exception("Wavefront does not match template. Creating sample again.")
+
+            except Exception as exc:
+                wavefronts[gen.psf_type] = phi
                 inputs[gen.psf_type] = simulate_image(
                     filename=filename,
                     reference=reference,
                     model_psf_shape=reference.shape,
                     outdir=outdir,
-                    phi=phi,
+                    phi=wavefronts[gen.psf_type],
                     gen=gen,
                     upsampled_gen=upsampled_gen,
                     npoints=npoints,
@@ -440,12 +486,13 @@ def create_synthetic_sample(
                     if gen.psf_type == 'widefield' else None
                 )
         else:
+            wavefronts[gen.psf_type] = phi
             inputs[gen.psf_type] = simulate_image(
                 filename=filename,
                 reference=reference,
                 model_psf_shape=reference.shape,
                 outdir=outdir,
-                phi=phi,
+                phi=wavefronts[gen.psf_type],
                 gen=gen,
                 upsampled_gen=upsampled_gen,
                 npoints=npoints,
