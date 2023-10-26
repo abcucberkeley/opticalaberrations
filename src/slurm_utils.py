@@ -1,17 +1,21 @@
 
 import re
-import logging
 import subprocess
 import pandas as pd
 
+import logging
+logger = logging.getLogger('')
+
 
 def get_number_of_idle_nodes(hostname, partition, username):
-    logger = logging.getLogger('')
     retry = True
     while retry:
-        table = subprocess.run(f"ssh {username}@{hostname} \"sinfo -p {partition} --states idle -O NODES\"",
-                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               )
+        table = subprocess.run(
+            f"ssh {username}@{hostname} \"sinfo -p {partition} --states idle -O NODES\"",
+            capture_output=True,
+            shell=True
+        )
+
         response = str(table.stdout)
         error_str = str(table.stderr)
         if 'unbound variable' not in error_str:
