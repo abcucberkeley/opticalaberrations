@@ -831,7 +831,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             if number_of_idle_nodes < args.idle_minimum:
                 time.sleep(1)  # Sleep for 1 second
             number_of_idle_nodes = slurm_utils.get_number_of_idle_nodes(hostname, partition, username)
-            print(f'Number of idle nodes is {number_of_idle_nodes} on {partition}. Need {args.idle_minimum}')
+            logger.info(f'Number of idle nodes is {number_of_idle_nodes} on {partition}. Need {args.idle_minimum}')
 
         return number_of_idle_nodes
 
@@ -857,7 +857,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             requested_partition='abc_a100'
         ).sort_values('available_gpus', ascending=False)
 
-        print(available_nodes)
+        logger.info(available_nodes)
         desired_node = available_nodes.iloc[0].to_dict()
 
         flags = re.sub(

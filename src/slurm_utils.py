@@ -51,13 +51,19 @@ def get_available_resources(username, hostname, requested_partition='abc_a100'):
         if partition == requested_partition:
             available_cpus = total_cpus - allocated_cpus
 
+            # Remove once RMA is completed for missing A00 GPUs
+            if name == 'g0003.abc0' or name == 'g0006.abc0':
+                available_gpus = 3
+            else:
+                available_gpus = available_cpus // 4 if available_cpus != 0 else 0
+
             resources[name] = {
                 "total_cpus": total_cpus,
                 "available_cpus": available_cpus,
                 "total_mem": f"{30 * total_cpus}GB",  # 30GB per core
                 "available_mem": f"{30 * available_cpus}GB" if available_cpus != 0 else 0,  # 30GB per core
                 "total_gpus": total_cpus // 4,  # 4 cores per gpu
-                "available_gpus": available_cpus // 4 if available_cpus != 0 else 0,  # 4 cores per gpu
+                "available_gpus": available_gpus,  # 4 cores per gpu
             }
 
     return pd.DataFrame.from_dict(resources, orient='index')
