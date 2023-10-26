@@ -103,11 +103,8 @@ def test_remove_background_noise(kargs):
 
     imwrite(f'{base_folder}/FFTfiltered_otf.tif', FFTfiltered_otf)
     imwrite(f'{base_folder}/dogfiltered_otf.tif', dogfiltered_otf)
-    logging.info(
-        f'3D Frequency supports saved to:'
-        f'{Path(base_folder / "FFTfiltered_otf.tif").resolve()}'
-        f'{Path(base_folder / "dogfiltered_otf.tif").resolve()}'
-    )
+    logging.info(f'3D Frequency supports saved to: {Path(base_folder / "FFTfiltered_otf.tif").resolve()}')
+    logging.info(f'3D Frequency supports saved to: {Path(base_folder / "dogfiltered_otf.tif").resolve()}')
 
     # Save principle planes
     plt.imsave(f'{base_folder}/FFTfiltered_otf_XY.png', FFTfiltered_otf[center[2], :, :])
