@@ -860,19 +860,20 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         print(available_nodes)
         desired_node = available_nodes.iloc[0].to_dict()
 
-        flags = re.sub(
-            pattern='--batch_size \d+',  # replace w/ 896; max number of samples we can fit on A100 w/ 80G of vram
-            repl=f'--batch_size {896*desired_node["available_gpus"]}',
-            string=flags
-        )
+        # flags = re.sub(
+        #     pattern='--batch_size \d+',  # replace w/ 896; max number of samples we can fit on A100 w/ 80G of vram
+        #     repl=f'--batch_size {896*desired_node["available_gpus"]}',
+        #     string=flags
+        # )
 
         sjob = f"srun "
         sjob += f"-p {partition} "
         sjob += f" --nodes=1 "
-        sjob += f' --gres=gpu:{desired_node["available_gpus"]} '
-        sjob += f' --cpus-per-task={desired_node["available_cpus"]} '
-        sjob += f" --mem='{desired_node['available_mem']}' "
+        # sjob += f' --gres=gpu:{desired_node["available_gpus"]} '
+        # sjob += f' --cpus-per-task={desired_node["available_cpus"]} '
+        # sjob += f" --mem='{desired_node['available_mem']}' "
         # sjob += f" --nodelist='{available_nodes.index[0]}' "
+        sjob += f"--exclusive "
         sjob += f"--job-name={args.func}_{args.input.stem} "
         sjob += f"{cluster_env} {script} {flags}"
         logger.info(sjob)
@@ -910,6 +911,9 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
 
         gpu_workers = strategy.num_replicas_in_sync
         logging.info(f'Number of active GPUs: {gpu_workers}')
+
+        # update batchsize automatically
+        args.batch_size = 896 * gpu_workers
 
         with strategy.scope():
             if args.func == 'deskew':
