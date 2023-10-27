@@ -10,7 +10,7 @@ DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
 NETWORK=opticalnet
 MODES=15
-CLUSTER=lsf
+CLUSTER='lsf'
 
 SUBSET='fixed_density'
 if [ $CLUSTER = 'slurm' ];then
@@ -46,10 +46,10 @@ do
     LAM=.510
   fi
 
-  CONFIG="--psf_type $PTYPE --wavelength $LAM --network $NETWORK --modes $MODES --dataset $DATA --input_shape $SHAPE"
+  CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  --task \"$CONFIG\" \
+  --task "$CONFIG" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR
 done
@@ -62,11 +62,11 @@ done
 #--partition abc --constraint 'titan' --mem '500GB' --nodes 3 --gpus 4 --cpus 20 \
 
 #  python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 1 --gpus 4 --cpus 16 \
-#  --task \"--multinode $CONFIG\" \
+#  --task "--multinode $CONFIG" \
 #  --taskname $NETWORK \
 #  --name new/$SUBSET/$NETWORK-$MODES-$DIR
 
 #python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
-#  --task \"$CONFIG\" \
+#  --task "$CONFIG" \
 #  --taskname $NETWORK \
 #  --name new/$SUBSET/$NETWORK-$MODES-$DIR
