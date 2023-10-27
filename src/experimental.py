@@ -396,7 +396,7 @@ def predict_sample(
 
     samplepsfgen = SyntheticPSF(
         psf_type=preloadedpsfgen.psf_type,
-        psf_shape=sample.shape,
+        psf_shape=preloadedpsfgen.psf_shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
@@ -862,7 +862,7 @@ def predict_tiles(
     freq_strength_threshold: float = .01,
     confidence_threshold: float = .02,
     sign_threshold: float = .9,
-    plot: bool = True,
+    plot: bool = False,
     plot_rotations: bool = False,
     prev: Any = None,
     estimate_sign_with_decon: bool = False,
@@ -953,7 +953,8 @@ def predict_tiles(
         savepath=outdir,
         strides=window_size,
         window_size=window_size,
-        prep=prep
+        prep=prep,
+        plot=plot
     )
     rois = tiles[tiles['ignored'] == False]['path'].values  # skip tiles with low snr or no signal
     logger.info(f" {rois.shape[0]} valid tiles found with sufficient SNR out of {tiles.shape[0]}")

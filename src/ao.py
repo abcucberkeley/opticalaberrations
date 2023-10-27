@@ -857,7 +857,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
             requested_partition='abc_a100'
         ).sort_values('available_gpus', ascending=False)
 
-        logger.info(available_nodes)
+        print(available_nodes)
         desired_node = available_nodes.iloc[0].to_dict()
 
         flags = re.sub(

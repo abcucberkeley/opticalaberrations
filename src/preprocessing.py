@@ -764,6 +764,7 @@ def get_tiles(
     save_files: bool = True,
     save_file_type: str = '.tif',
     prep: Optional[partial] = None,
+    plot: bool = False
 ):
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -793,16 +794,6 @@ def get_tiles(
     ztiles, nrows, ncols = windows.shape[:3]
     windows = np.reshape(windows, (-1, *window_size))
 
-    if prep is not None:
-        from utils import multiprocess
-        windows = multiprocess(
-            jobs=windows,  # [cp.array(x.copy()) for x in windows]  # make copies not views into "dataset"
-            func=prep,
-            desc="Preprocessing tiles",
-            cores=1,  # =1 because "windows" are views in "dataset", so multiprocess would make N copies of "dataset"
-            unit='tiles',
-        )
-
     tiles = {}
     for i, (z, y, x) in enumerate(itertools.product(
         range(ztiles), range(nrows), range(ncols),
@@ -812,6 +803,9 @@ def get_tiles(
         file=sys.stdout
     )):
         name = f"z{z}-y{y}-x{x}"
+
+        if prep is not None:
+            windows[i] = prep(windows[i],  plot=savepath / f"{name}" if plot else None)
 
         if np.all(windows[i] == 0):
             tiles[name] = dict(
