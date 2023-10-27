@@ -59,7 +59,7 @@ def multiprocess(
     jobs = list(jobs)
 
     if cores == 1 or len(jobs) == 1:
-        logs = []
+        results = []
         for j in tqdm(
                 jobs,
                 total=len(jobs),
@@ -68,10 +68,10 @@ def multiprocess(
                 unit=unit,
                 file=sys.stdout,
         ):
-            logs.append(func(j))
+            results.append(func(j))
     elif cores == -1 and len(jobs) > 0:
         with pool if pool is not None else mp.Pool(min(mp.cpu_count(), len(jobs))) as p:
-            logs = list(tqdm(
+            results = list(tqdm(
                 p.imap(func, jobs),
                 total=len(jobs),
                 desc=desc,
@@ -81,7 +81,7 @@ def multiprocess(
             ))
     elif cores > 1 and len(jobs) > 0:
         with pool if pool is not None else mp.Pool(cores) as p:
-            logs = list(tqdm(
+            results = list(tqdm(
                 p.imap(func, jobs),
                 total=len(jobs),
                 desc=desc,
@@ -93,7 +93,7 @@ def multiprocess(
         logging.error('Jobs must be a positive integer')
         return False
 
-    return np.array(logs)
+    return np.array(results)
 
 
 def photons2electrons(image, quantum_efficiency: float = .82):
