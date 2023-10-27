@@ -1170,9 +1170,9 @@ def plot_embeddings(
 
                 ax.axis('off')
 
-        cax = inset_axes(axes[0, 2], width="10%", height="100%", loc='center right', borderpad=-3)
+        cax = inset_axes(axes[0, 0], width="10%", height="100%", loc='center left', borderpad=-5)
         cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_label_position("right")
+        cax.yaxis.set_label_position("left")
         cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
     else:
         m = plot_mip(
@@ -1222,7 +1222,7 @@ def plot_embeddings(
         cax.yaxis.set_label_position("left")
         cax.set_ylabel(r'Embedding ($\varphi$, radians)')
 
-    for ax in axes[1:].flatten():
+    for ax in axes.flatten():
         ax.axis('off')
 
     if save_path == True:

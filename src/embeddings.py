@@ -1040,7 +1040,7 @@ def rolling_fourier_embeddings(
 
                 if plot:
                     gamma = 0.5
-                    avg_psf = ifft(avg_otf) # this will have ipsf voxel size (a different voxel size than sample).
+                    avg_psf = ifft(avg_otf)  # this will have ipsf voxel size (a different voxel size than sample).
 
                     fig, axes = plt.subplots(
                         nrows=4,
@@ -1050,7 +1050,8 @@ def rolling_fourier_embeddings(
                         sharex=False
                     )
                     for row in range(min(3, phi_otfs.shape[0])):
-                        phi_psf = ifft(resize_with_crop_or_pad(phi_otfs[row], crop_shape=window_size)) # this will have ipsf voxel size (a different voxel size than sample).
+                        # this will have ipsf voxel size (a different voxel size than sample).
+                        phi_psf = ifft(resize_with_crop_or_pad(phi_otfs[row], crop_shape=window_size))
                         for ax in range(3):
                             m5 = axes[row, ax].imshow(np.nanmax(phi_psf, axis=ax)**gamma, cmap='magma')
 
@@ -1060,9 +1061,6 @@ def rolling_fourier_embeddings(
                         cb = plt.colorbar(m5, cax=cax)
                         cax.yaxis.set_label_position("right")
                         cax.set_ylabel(label)
-
-                        for ax in axes.flatten():
-                            ax.axis('off')
 
                     for ax in range(3):
                         m5 = axes[3, ax].imshow(np.nanmax(avg_psf, axis=ax)**gamma, cmap='magma')
