@@ -805,9 +805,11 @@ def get_tiles(
         name = f"z{z}-y{y}-x{x}"
 
         if prep is not None:
-            windows[i] = prep(windows[i],  plot=savepath / f"{name}" if plot else None)
+            w = prep(windows[i],  plot=savepath / f"{name}" if plot else None)
+        else:
+            w = windows[i]
 
-        if np.all(windows[i] == 0):
+        if np.all(w == 0):
             tiles[name] = dict(
                 path=savepath / f"{name}.tif",
                 ignored=True,
@@ -815,9 +817,9 @@ def get_tiles(
         else:
             if save_files:
                 if save_file_type == '.npy':
-                    np.save(savepath / f"{name}.npy", windows[i])
+                    np.save(savepath / f"{name}.npy", w)
                 else:
-                    imwrite(savepath / f"{name}.tif", windows[i])
+                    imwrite(savepath / f"{name}.tif", w)
 
 
             tiles[name] = dict(
