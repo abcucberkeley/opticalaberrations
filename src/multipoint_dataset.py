@@ -201,7 +201,7 @@ def simulate_image(
     img = fftconvolution(sample=reference, kernel=kernel)  # image in photons
     img = resize_with_crop_or_pad(img, crop_shape=model_psf_shape, mode='constant')  # only center crop
 
-    if gen.psf_type == 'widefield':
+    if scale_by_maxcounts is not None:
         img /= np.max(img)
         img *= electrons2photons(counts2electrons(scale_by_maxcounts))
 
@@ -253,7 +253,7 @@ def simulate_image(
                 embedding_option=e,
                 alpha_val=alpha_val,
                 phi_val=phi_val,
-                plot=odir/filename  if plot else None,
+                plot=odir/filename if plot else None,
             ))
 
             save_synthetic_sample(
@@ -277,7 +277,6 @@ def simulate_image(
                 quantum_efficiency=quantum_efficiency,
                 psf_type=gen.psf_type,
             )
-            return embeddings
     else:
         save_synthetic_sample(
             outdir/filename,
@@ -299,7 +298,7 @@ def simulate_image(
             quantum_efficiency=quantum_efficiency,
             psf_type=gen.psf_type,
         )
-        return inputs
+    return inputs
 
 
 def create_synthetic_sample(
@@ -330,6 +329,8 @@ def create_synthetic_sample(
     max_lls_defocus_offset: float = 0.,
     fill_radius: float = 0.,
     default_wavelength: float = .510,
+    override: bool = False,
+    plot: bool = False
 ):
 
     aberration = Wavefront(
@@ -414,6 +415,9 @@ def create_synthetic_sample(
         if emb:
             try:  # check if file already exists and not corrupted
 
+                if override:
+                    raise Exception(f'Override {filename}')
+
                 for e in embedding_option:
                     path = Path(f"{outdir/e}/{filename}")
 
@@ -483,7 +487,8 @@ def create_synthetic_sample(
                     phi_val=phi_val,
                     lls_defocus_offset=lls_defocus_offset,
                     scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
-                    if gen.psf_type == 'widefield' else None
+                    if gen.psf_type == 'widefield' else None,
+                    plot=plot
                 )
         else:
             wavefronts[gen.psf_type] = phi
@@ -506,7 +511,8 @@ def create_synthetic_sample(
                 phi_val=phi_val,
                 lls_defocus_offset=lls_defocus_offset,
                 scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
-                if gen.psf_type == 'widefield' else None
+                if gen.psf_type == 'widefield' else None,
+                plot=plot
             )
 
     return np.stack(list(inputs.values()), axis=0)
@@ -678,6 +684,16 @@ def parse_args(args):
         help='number of CPU cores to use'
     )
 
+    parser.add_argument(
+        '--override', action='store_true',
+        help='optional toggle to override existing data'
+    )
+
+    parser.add_argument(
+        '--plot', action='store_true',
+        help='optional toggle to plot preprocessing'
+    )
+
     return parser.parse_args(args)
 
 
@@ -756,6 +772,8 @@ def main(args=None):
         min_photons=args.min_photons,
         max_photons=args.max_photons,
         fill_radius=args.fill_radius,
+        override=args.override,
+        plot=args.plot
     )
     logger.info(f"Output folder: {Path(args.outdir).resolve()}")
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]
