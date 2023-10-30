@@ -926,10 +926,16 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         )
 
         gpu_workers = strategy.num_replicas_in_sync
-        logging.info(f'Number of active GPUs: {gpu_workers}')
 
-        # update batchsize automatically
-        args.batch_size = 896 * gpu_workers
+        if gpu_workers > 0:
+            gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
+            if gpu_model.find('A100') >= 0:
+                # update batchsize automatically
+                args.batch_size = 896 * gpu_workers
+        else:
+            gpu_model = None
+
+        logging.info(f'Number of active GPUs: {gpu_workers}, {gpu_model}, batch_size={args.batch_size}')
 
         with strategy.scope():
             if args.func == 'deskew':
