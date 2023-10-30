@@ -540,3 +540,13 @@ def round_to_odd(n):
         return int(answer + 1)
     else:
         return int(answer - 1)
+
+
+def gaussian_kernel(kernlen: tuple = (21, 21, 21), std=3):
+    """Returns a 2D Gaussian kernel array."""
+    x = np.arange((-kernlen[2] // 2)+1, (-kernlen[2] // 2)+1 + kernlen[2], 1)
+    y = np.arange((-kernlen[1] // 2)+1, (-kernlen[1] // 2)+1 + kernlen[1], 1)
+    z = np.arange((-kernlen[0] // 2)+1, (-kernlen[0] // 2)+1 + kernlen[0], 1)
+    zz, yy, xx = np.meshgrid(z, y, x, indexing='ij')
+    kernel = np.exp(-(xx ** 2 + yy ** 2 + zz ** 2) / (2 * std ** 2))
+    return kernel / np.nansum(kernel)
