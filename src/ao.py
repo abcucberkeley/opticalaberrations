@@ -257,6 +257,10 @@ def parse_args(args):
         "--min_psnr", default=5, type=int,
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
+    predict_sample.add_argument(
+        "--object_width", default=0.0, type=float,
+        help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
+    )
 
     predict_large_fov = subparsers.add_parser("predict_large_fov")
     predict_large_fov.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -351,6 +355,10 @@ def parse_args(args):
     predict_large_fov.add_argument(
         "--min_psnr", default=5, type=int,
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
+    )
+    predict_large_fov.add_argument(
+        "--object_width", default=0.0, type=float,
+        help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
     )
 
     predict_rois = subparsers.add_parser("predict_rois")
@@ -451,6 +459,10 @@ def parse_args(args):
         help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
              '(Default: None; to keep default mode used during training)'
     )
+    predict_rois.add_argument(
+        "--object_width", default=0.0, type=float,
+        help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
+    )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -497,6 +509,10 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--sign_threshold", default=.9, type=float,
         help='flip sign of modes above given threshold relative to your initial prediction'
+    )
+    predict_tiles.add_argument(
+        "--object_width", default=0.0, type=float,
+        help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
     )
     predict_tiles.add_argument(
         "--plot", action='store_true',
@@ -1009,7 +1025,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded,
                     psf_type=args.psf_type,
-                    min_psnr=args.min_psnr
+                    min_psnr=args.min_psnr,
+                    object_gaussian_kernel_width=args.object_width,
                 )
 
             elif args.func == 'predict_large_fov':
@@ -1038,7 +1055,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded,
                     psf_type=args.psf_type,
-                    min_psnr=args.min_psnr
+                    min_psnr=args.min_psnr,
+                    object_gaussian_kernel_width=args.object_width,
                 )
 
             elif args.func == 'predict_rois':
@@ -1069,7 +1087,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     digital_rotations=args.digital_rotations,
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded,
-                    psf_type=args.psf_type
+                    psf_type=args.psf_type,
+                    object_gaussian_kernel_width=args.object_width,
                 )
             elif args.func == 'predict_tiles':
                 experimental.predict_tiles(
@@ -1097,7 +1116,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     preloaded=preloaded,
                     shifting=(0, 0, args.shift),
                     psf_type=args.psf_type,
-                    min_psnr=args.min_psnr
+                    min_psnr=args.min_psnr,
+                    object_gaussian_kernel_width=args.object_width,
                 )
             elif args.func == 'aggregate_predictions':
                 experimental.aggregate_predictions(
