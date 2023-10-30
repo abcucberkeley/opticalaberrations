@@ -255,6 +255,7 @@ def preprocess(
     rolling_strides: Optional[tuple] = None,
     skip_prep_sample: bool = False,
     min_psnr: int = 10,
+    object_gaussian_kernel_width: float = 0  # to simulate ideal OTF for objects bigger than diffraction limit
 ):
     if samplepsfgen is None:
         samplepsfgen = modelpsfgen
@@ -266,6 +267,12 @@ def preprocess(
         plot = file.with_suffix('')
 
     sample = load_sample(file)
+
+    if object_gaussian_kernel_width != 0:
+        obj = utils.gaussian_kernel(kernlen=sample.shape, std=object_gaussian_kernel_width)
+        iotf = utils.fftconvolution(sample=obj, kernel=modelpsfgen.iotf)
+    else:
+        iotf = modelpsfgen.iotf
 
     if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
 
@@ -283,7 +290,7 @@ def preprocess(
 
         return fourier_embeddings(
             sample,
-            iotf=modelpsfgen.iotf,
+            iotf=iotf,
             na_mask=modelpsfgen.na_mask(),
             plot=plot if plot else None,
             no_phase=no_phase,
@@ -346,7 +353,7 @@ def preprocess(
 
         return rolling_fourier_embeddings(  # aka "large_fov"
             rois,
-            iotf=modelpsfgen.iotf,
+            iotf=iotf,
             na_mask=modelpsfgen.na_mask(),
             plot=plot,
             no_phase=no_phase,
@@ -1142,7 +1149,8 @@ def predict_files(
     cpu_workers: int = -1,
     template: Optional[pd.DataFrame] = None,
     pool: Optional[mp.Pool] = None,
-    min_psnr: int = 5
+    min_psnr: int = 5,
+    object_gaussian_kernel_width: float = 0
 ):
     no_phase = True if model.input_shape[1] == 3 else False
 
@@ -1160,7 +1168,8 @@ def predict_files(
             fov_is_small=fov_is_small,
             rolling_strides=rolling_strides,
             skip_prep_sample=skip_prep_sample,
-            min_psnr=min_psnr
+            min_psnr=min_psnr,
+            object_gaussian_kernel_width=object_gaussian_kernel_width
         ),
         desc='Generate Fourier embeddings',
         unit=' file',
