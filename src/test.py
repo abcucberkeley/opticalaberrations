@@ -165,6 +165,13 @@ def main(args=None):
                 batch_size=args.batch_size,
                 digital_rotations=args.digital_rotations,
             )
+        elif args.target == 'sizes':
+            savepath = eval.evaluate_object_sizes(
+                args.model,
+                eval_sign=args.eval_sign,
+                batch_size=args.batch_size,
+                digital_rotations=args.digital_rotations,
+            )
         elif args.target == "random":
             savepath = eval.random_samples(
                 model=args.model,

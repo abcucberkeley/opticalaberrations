@@ -1620,6 +1620,7 @@ def create_samples(
     gen: SyntheticPSF,
     savepath: Any = None,
     num_objs: int = 1,
+    object_size: int = 0,
 ):
     kernels = [gen.single_psf(phi=w, normed=True) for w in wavefronts]
 
@@ -1630,7 +1631,7 @@ def create_samples(
                 simulate_beads(
                     psf=kernels[k],
                     psf_type=gen.psf_type,
-                    object_size=0,
+                    object_size=object_size,
                     num_objs=num_objs,
                     photons=ph,
                     # maxcounts=ph,
@@ -1659,7 +1660,8 @@ def eval_object(
     eval_sign: str = 'signed',
     savepath: Any = None,
     psf_type: Any = None,
-    digital_rotations: Optional[int] = 361
+    digital_rotations: Optional[int] = 361,
+    object_size: int = 0
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(
@@ -1680,6 +1682,7 @@ def eval_object(
         gen=gen,
         savepath=savepath,
         num_objs=num_objs,
+        object_size=object_size,
     )
 
     if Path(f"{savepath}_embeddings.npy").exists():
@@ -2559,3 +2562,129 @@ def compare_models(
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+@profile
+def evaluate_object_sizes(
+    model: Path,
+    eval_sign: str = 'signed',
+    batch_size: int = 512,
+    num_objs: Optional[int] = 1,
+    digital_rotations: bool = True,
+    agg: str = 'median',
+    na: float = 1.0,
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    digital_rotations = 361 if digital_rotations else None
+
+    m = backend.load(model)
+    gen = backend.load_metadata(
+        model,
+        psf_shape=3*[m.input_shape[2]],
+        rotate=False
+    )
+
+    outdir = model.with_suffix('') / eval_sign / 'evalobjects' / f'num_objs_{num_objs}'
+
+    for photons in [100000, 300000, 500000]:
+        for i in range(3, gen.n_modes):
+            if i == 4: continue
+
+            savepath = outdir / f"z{i}"
+            savepath.mkdir(parents=True, exist_ok=True)
+            savepath = savepath / f"ph{photons}"
+
+            zernikes = np.zeros(15)
+            zernikes[i] = .1
+
+            sizes = np.arange(0.1, 5.26, .25).round(2)
+            wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection, rotate=False)
+            psf = gen.single_psf(phi=wavefront, normed=True)
+            psf /= np.sum(psf)
+
+            inputs = [
+                utils.add_noise(utils.fftconvolution(
+                    sample=psf,
+                    kernel=utils.gaussian_kernel(kernlen=(21, 21, 21), std=s/(2 * np.sqrt(2 * np.log(2)))) * photons
+                )) for s in sizes
+            ]
+            inputs = np.stack(inputs, axis=0)[..., np.newaxis]
+
+            embeddings = np.stack([
+                backend.preprocess(
+                    i,
+                    modelpsfgen=gen,
+                    digital_rotations=digital_rotations,
+                    remove_background=True,
+                    normalize=True,
+                    min_psnr=0,
+                    plot=Path(f"{savepath}_{sizes[s]}"),
+                )
+                for s, i in enumerate(tqdm(inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout))
+            ], axis=0)
+
+            ys = np.stack([wavefront.amplitudes for s in sizes])
+
+            embeddings = tf.data.Dataset.from_tensor_slices(embeddings)
+
+            res = backend.predict_dataset(
+                model,
+                inputs=embeddings,
+                psfgen=gen,
+                batch_size=batch_size,
+                save_path=[f"{savepath}_{s}" for s in sizes],
+                digital_rotations=digital_rotations,
+                plot_rotations=True
+            )
+
+            try:
+                preds, stdev = res
+            except ValueError:
+                preds, stdev, lls_defocus = res
+
+            residuals = ys - preds
+
+            df = pd.DataFrame([s for s in sizes], columns=['size'])
+            df['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
+            df['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
+            df['counts'] = [np.sum(i) for i in inputs]
+            df.to_csv(f'{savepath}.csv')
+            print(df)
+            print(df.describe())
+
+            fig, ax = plt.subplots(figsize=(8, 6))
+
+            sns.regplot(
+                data=df,
+                x="size",
+                y="residuals",
+                scatter=True,
+                truncate=False,
+                order=2,
+                color=".2",
+                ax=ax
+            )
+
+            ax.set_yticks(np.arange(0, 1.1, .1))
+            ax.set_xlim(0, sizes[-1])
+            ax.set_ylim(0, 1)
+            ax.set_ylabel(rf'Residuals ($\lambda = {int(gen.lam_detection * 1000)}~nm$)')
+            ax.set_xlabel(r'Gaussian kernel width ($\sigma = w / 2 \sqrt{2 \ln{2}}  $)')
+            ax.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0, alpha=.5)
+            ax.spines.right.set_visible(False)
+            ax.spines.top.set_visible(False)
+
+            plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    return savepath
