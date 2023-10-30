@@ -1695,7 +1695,7 @@ def create_consensus_map(
 
         optimized_zernikes = stack_preds[optimized_stack_id].loc[(z, y, x)][zernike_indices].values
 
-        consensus_tile = optimized_zernikes + current_zernikes
+        consensus_tile = optimized_zernikes + current_zernikes  # current_zernikes came from before's clusters, that we used to take the optimized stack.  optimized_zernikes = new predictions on the optimized stack.
         consensus_stdev = stack_stdevs[optimized_stack_id].loc[(z, y, x)][zernike_indices].values
 
         optimized_volume[
