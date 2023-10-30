@@ -413,7 +413,7 @@ def remove_interference_pattern(
         # # If we put bead at the center of 64 cube, it will have a phase ramp, so don't do the next line.
         # corrected_otf *= pix_shift_to_phase_ramp(pixel_shift_for_corrected_psf, corrected_otf.shape)
 
-        if windowing and not high_snr:
+        if windowing: # and not high_snr:
             window_border = np.floor((corrected_otf.shape - np.array(window_size)) // 2).astype(int)
             window_extent = corrected_otf.shape - window_border * 2
 

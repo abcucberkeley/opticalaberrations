@@ -13,6 +13,7 @@ from typing import Any, Union, Optional
 from itertools import repeat
 from functools import partial
 from line_profiler_pycharm import profile
+from tifffile import imwrite
 
 import pandas as pd
 from skimage.restoration import richardson_lucy
@@ -269,8 +270,15 @@ def preprocess(
     sample = load_sample(file)
 
     if object_gaussian_kernel_width != 0:
-        obj = utils.gaussian_kernel(kernlen=sample.shape, std=object_gaussian_kernel_width)
-        iotf = utils.fftconvolution(sample=obj, kernel=modelpsfgen.iotf)
+        gaussian_sigma = object_gaussian_kernel_width / (2 * np.sqrt(2*np.log(2)))  # convert from FWHM to std dev
+        kernel = utils.gaussian_kernel(kernlen=(21, 21, 21), std=gaussian_sigma)
+        ipsf = utils.fftconvolution(sample=modelpsfgen.ipsf, kernel=kernel).astype(np.float32)
+        ipsf /= np.max(ipsf)
+        if plot:
+            imwrite(f"{plot.with_suffix('')}_ipsf.tif", ipsf, dtype=np.float32)
+        iotf = modelpsfgen.fft(ipsf)
+        iotf = modelpsfgen._normalize(iotf, iotf)
+
     else:
         iotf = modelpsfgen.iotf
 
