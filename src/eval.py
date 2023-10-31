@@ -2776,7 +2776,7 @@ def evaluate_object_sizes(
     digital_rotations: bool = True,
     agg: str = 'median',
     na: float = 1.0,
-    photons: int = 50000,
+    photons: int = 100000,
     override: bool = False,
 ):
     plt.rcParams.update({
@@ -2795,36 +2795,54 @@ def evaluate_object_sizes(
     gen = backend.load_metadata(
         model,
         psf_shape=3*[m.input_shape[2]],
-        rotate=False
+        # psf_type='widefield',
+        rotate=False,
+        x_voxel_size=.097,
+        y_voxel_size=.097,
+        z_voxel_size=.2,
     )
     w = Wavefront(np.zeros(15))
 
-    outdir = model.with_suffix('') / eval_sign / 'evalobjects' / f'num_objs_{num_objs}'
+    outdir = model.with_suffix('') / eval_sign / 'test' / f'num_objs_{num_objs}'
 
     for i, (mode, twin) in enumerate(w.twins.items()):
         if mode.index_ansi == 4: continue
 
-        savepath = outdir / f"z{mode.index_ansi}"
-        savepath.mkdir(parents=True, exist_ok=True)
-        savepath = savepath / f"ph{photons}"
-
         zernikes = np.zeros(15)
         zernikes[mode.index_ansi] = .1
+
+        if np.all(zernikes == 0):
+            savepath = outdir / f"z0"
+        else:
+            savepath = outdir / f"z{mode.index_ansi}"
+
+        savepath.mkdir(parents=True, exist_ok=True)
+        savepath = savepath / f"ph{photons}"
 
         sizes = np.arange(0, 5.25, .25).round(2)
         wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection, rotate=False)
         psf = gen.single_psf(phi=wavefront, normed=True)
         psf /= np.sum(psf)
 
+        width2sigma = lambda w: w / (2 * np.sqrt(2 * np.log(2)))
+        sigma2width = lambda s: s * (2 * np.sqrt(2 * np.log(2)))
+
         if not override and Path(f"{savepath}_inputs.npy").exists():
             inputs = np.load(f"{savepath}_inputs.npy")
         else:
-            inputs = [
-                utils.add_noise(utils.fftconvolution(
-                    sample=psf,
-                    kernel=utils.gaussian_kernel(kernlen=(21, 21, 21), std=s/(2 * np.sqrt(2 * np.log(2)))) * photons
-                )) if s > 0 else utils.add_noise(psf * photons) for s in sizes
-            ]
+            inputs = np.zeros((len(sizes), *psf.shape))
+
+            for i, w in enumerate(sizes):
+                if w > 0:
+                    inputs[i] = utils.add_noise(utils.fftconvolution(
+                        sample=psf,
+                        kernel=utils.gaussian_kernel(kernlen=(21, 21, 21), std=width2sigma(w)) * photons
+                    ))
+                else:
+                    inputs[i] = utils.add_noise(psf * photons)
+
+                imwrite(f"{savepath}_{w}.tif", inputs[i].astype(np.float32), dtype=np.float32)
+
             inputs = np.stack(inputs, axis=0)[..., np.newaxis]
             np.save(f"{savepath}_inputs", inputs)
 
@@ -2839,13 +2857,15 @@ def evaluate_object_sizes(
                     remove_background=True,
                     normalize=True,
                     min_psnr=0,
-                    plot=Path(f"{savepath}_{sizes[s]}"),
+                    plot=Path(f"{savepath}_{sizes[w]}"),
                 )
-                for s, i in enumerate(tqdm(inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout))
+                for w, i in enumerate(tqdm(
+                    inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout
+                ))
             ], axis=0)
             np.save(f"{savepath}_embeddings", embeddings)
 
-        ys = np.stack([wavefront.amplitudes for s in sizes])
+        ys = np.stack([wavefront.amplitudes for w in sizes])
 
         embeddings = tf.data.Dataset.from_tensor_slices(embeddings)
 
@@ -2857,7 +2877,7 @@ def evaluate_object_sizes(
                 inputs=embeddings,
                 psfgen=gen,
                 batch_size=batch_size,
-                save_path=[f"{savepath}_{s}" for s in sizes],
+                save_path=[f"{savepath}_{w}" for w in sizes],
                 digital_rotations=digital_rotations,
                 plot_rotations=True
             )
@@ -2871,7 +2891,7 @@ def evaluate_object_sizes(
 
         residuals = ys - preds
 
-        df = pd.DataFrame([s for s in sizes], columns=['size'])
+        df = pd.DataFrame([w for w in sizes], columns=['size'])
         df['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
         df['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
         df['moi'] = ys[:, mode.index_ansi] - preds[:, mode.index_ansi]
@@ -2898,10 +2918,13 @@ def evaluate_object_sizes(
         ax.axhline(y=0, color='r')
         ax.set_ylabel(r'Residuals ($y - \hat{y}$)')
         # ax.set_ylabel(rf'Residuals ($\lambda = {int(gen.lam_detection * 1000)}~nm$)')
-        ax.set_xlabel(r'Gaussian kernel width ($\sigma = w / 2 \sqrt{2 \ln{2}}  $)')
+        ax.set_xlabel(r'Gaussian kernel full width at half maximum (FWHM) $w$')
         ax.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0, alpha=.5)
         ax.spines.right.set_visible(False)
         ax.spines.top.set_visible(False)
+
+        secax = ax.secondary_xaxis('top', functions=(width2sigma, sigma2width))
+        secax.set_xlabel(r'Gaussian kernel $\sigma$ ($\sigma = w / 2 \sqrt{2 \ln{2}}$)')
 
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)

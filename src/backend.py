@@ -121,6 +121,8 @@ def load_metadata(
         psf_shape: Union[tuple, list] = (64, 64, 64),
         psf_type=None,
         n_modes=None,
+        x_voxel_size=None,
+        y_voxel_size=None,
         z_voxel_size=None,
         lam_detection=None,
         **kwargs
@@ -158,8 +160,8 @@ def load_metadata(
             psf_shape=psf_shape,
             n_modes=int(file.get('n_modes')[()]) if n_modes is None else n_modes,
             lam_detection=float(file.get('wavelength')[()]) if lam_detection is None else lam_detection,
-            x_voxel_size=float(file.get('x_voxel_size')[()]),
-            y_voxel_size=float(file.get('y_voxel_size')[()]),
+            x_voxel_size=float(file.get('x_voxel_size')[()]) if x_voxel_size is None else x_voxel_size,
+            y_voxel_size=float(file.get('y_voxel_size')[()]) if y_voxel_size is None else y_voxel_size,
             z_voxel_size=float(file.get('z_voxel_size')[()]) if z_voxel_size is None else z_voxel_size,
             embedding_option=embedding_option,
             **kwargs
