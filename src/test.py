@@ -196,6 +196,23 @@ def main(args=None):
                 lam_detection=args.wavelength,
                 num_beads=args.num_beads
             )
+        elif args.target == 'eval_folder':
+            savepath = eval.predict_folder(
+                iter_num=args.niter,
+                modelpath=args.model,
+                datadir=args.datadir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=args.batch_size,
+                eval_sign=args.eval_sign,
+                digital_rotations=args.digital_rotations,
+                plot=args.plot,
+                plot_rotations=args.plot_rotations,
+                psf_type=args.psf_type,
+                lam_detection=args.wavelength,
+                num_beads=args.num_beads
+            )
         elif args.target == "confidence":
             savepath = eval.eval_confidence(
                 model=args.model,
@@ -255,32 +272,33 @@ def main(args=None):
                 lam_detection=args.wavelength
             )
 
-        with Path(f"{savepath.with_suffix('')}_eval_settings.json").open('w') as f:
-            json = dict(
-                iter_num=int(args.niter),
-                modelpath=str(args.model),
-                datadir=str(args.datadir),
-                distribution=str(args.dist),
-                samplelimit=int(args.n_samples) if args.n_samples is not None else None,
-                na=float(args.na),
-                batch_size=int(args.batch_size),
-                eval_sign=bool(args.eval_sign),
-                digital_rotations=bool(args.digital_rotations),
-                photons_min=float(args.photons_min),
-                photons_max=float(args.photons_max),
-                psf_type=args.psf_type,
-                lam_detection=args.wavelength,
-            )
+        if savepath is not None:
+            with Path(f"{savepath.with_suffix('')}_eval_settings.json").open('w') as f:
+                json = dict(
+                    iter_num=int(args.niter),
+                    modelpath=str(args.model),
+                    datadir=str(args.datadir),
+                    distribution=str(args.dist),
+                    samplelimit=int(args.n_samples) if args.n_samples is not None else None,
+                    na=float(args.na),
+                    batch_size=int(args.batch_size),
+                    eval_sign=bool(args.eval_sign),
+                    digital_rotations=bool(args.digital_rotations),
+                    photons_min=float(args.photons_min),
+                    photons_max=float(args.photons_max),
+                    psf_type=args.psf_type,
+                    lam_detection=args.wavelength,
+                )
 
-            ujson.dump(
-                json,
-                f,
-                indent=4,
-                sort_keys=False,
-                ensure_ascii=False,
-                escape_forward_slashes=False
-            )
-            logging.info(f"Saved: {f.name}")
+                ujson.dump(
+                    json,
+                    f,
+                    indent=4,
+                    sort_keys=False,
+                    ensure_ascii=False,
+                    escape_forward_slashes=False
+                )
+                logging.info(f"Saved: {f.name}")
 
         atexit.register(strategy._extended._collective_ops._pool.close)
 

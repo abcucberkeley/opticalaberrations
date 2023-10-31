@@ -1209,6 +1209,150 @@ def snrheatmap(
 
 
 @profile
+def predict_folder(
+    modelpath: Path,
+    datadir: Path,
+    iter_num: int = 0,
+    distribution: str = '/',
+    samplelimit: Any = None,
+    na: float = 1.0,
+    batch_size: int = 100,
+    eval_sign: str = 'signed',
+    digital_rotations: bool = False,
+    plot: Any = None,
+    plot_rotations: bool = False,
+    agg: str = 'median',
+    psf_type: Optional[str] = None,
+    num_beads: Optional[int] = None,
+    lam_detection: Optional[float] = .510,
+    photons_range: Any = None,
+    npoints_range: Any = None,
+):
+    if not datadir.exists():
+        raise Exception(f'Datadirectory does not exist : {datadir}')
+
+    modelspecs = backend.load_metadata(modelpath)
+    # put prediction results into a new folder (based on model path, etc) so we can eval multiple models if we wanted to.
+    savepath = modelpath.with_suffix('') / eval_sign / f'predictfolder'
+
+
+    if psf_type is not None:
+        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
+    if num_beads is not None:
+        savepath = savepath / f'beads-{num_beads}'
+    else:
+        savepath = savepath / 'beads'
+
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    if distribution != '/':
+        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+    else:
+        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    model = backend.load(modelpath)
+
+    gen = backend.load_metadata(
+        modelpath,
+        signed=True,
+        rotate=False,
+        batch_size=batch_size,
+        psf_shape=3 * [model.input_shape[2]],
+        psf_type=psf_type,
+        lam_detection=lam_detection,
+    )
+
+    # Setup the dataframe with file paths and info we want to eval
+    results = collect_data(
+        datapath=datadir,
+        model=model,
+        samplelimit=samplelimit,
+        distribution=distribution,
+        photons_range=photons_range,
+        npoints_range=npoints_range,
+        psf_type=gen.psf_type,
+        lam_detection=gen.lam_detection
+    )
+
+    prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
+    confidence_cols = [col for col in results.columns if col.endswith('_confidence')]
+    ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
+    residual_cols = [col for col in results.columns if col.endswith('_residual')]
+    previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
+
+    current = previous.copy()
+    current['iter_num'] = iter_num
+    paths = results.file.values
+    current['file'] = paths
+    current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
+
+    predictions, stdevs = backend.predict_files(
+        paths=paths,
+        outdir=savepath,
+        model=model,
+        modelpsfgen=gen,
+        samplepsfgen=None,
+        dm_calibration=None,
+        dm_state=None,
+        batch_size=batch_size,
+        fov_is_small=True,
+        plot=plot,
+        plot_rotations=plot_rotations,
+        cpu_workers=8,
+        min_psnr=0,
+    )
+    current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
+    current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
+    current[ground_truth_cols] = previous[residual_cols]
+
+    if eval_sign == 'positive_only':
+        current[prediction_cols] = current[prediction_cols].abs()
+        current[ground_truth_cols] = current[ground_truth_cols].abs()
+
+    current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
+
+    # compute residuals for each sample
+    current['residuals'] = current.apply(
+        lambda row: Wavefront(row[residual_cols].values, lam_detection=gen.lam_detection).peak2valley(na=na),
+        axis=1
+    )
+
+    current['residuals_umRMS'] = current.apply(
+        lambda row: np.linalg.norm(row[residual_cols].values),
+        axis=1
+    )
+
+    primary_modes = current[prediction_cols].idxmax(axis=1).replace(r'_prediction', r'_confidence', regex=True)
+    current['confidence'] = [
+        utils.microns2waves(current.loc[i, primary_modes[i]], wavelength=gen.lam_detection)
+        for i in primary_modes.index.values
+    ]
+
+    current['confidence_sum'] = current.apply(
+        lambda row: utils.microns2waves(np.sum(row[confidence_cols].values), wavelength=gen.lam_detection),
+        axis=1
+    )
+
+    current['confidence_umRMS'] = current.apply(
+        lambda row: np.linalg.norm(row[confidence_cols].values),
+        axis=1
+    )
+
+    results = pd.concat([results, current], ignore_index=True, sort=False)
+
+    if savepath is not None:
+        try:
+            results.to_csv(f'{savepath}_predictions.csv')
+        except PermissionError:
+            savepath = f'{savepath}_x'
+            results.to_csv(f'{savepath}_predictions.csv')
+        logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
+
+    return results
+
+
+@profile
 def densityheatmap(
     modelpath: Path,
     datadir: Path,
@@ -2559,3 +2703,63 @@ def compare_models(
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+def residuals_histogram(csv_path:Path = r"C:\Users\milkied10\Desktop\na_1.0_predictions.csv"):
+    predictions = pd.read_csv(csv_path)
+    fig, axes = plt.subplots(8, 2, figsize=(16, 4))
+
+
+    for z in range(3, 15):
+        if z == 4:
+            pass
+
+        pax = axes[z // 2, z % 2]
+        col = f"z{z}_residual"
+        data = predictions[col]
+
+        sns.histplot(data, kde=True, ax=pax, color='dimgrey')
+        pax.set_xlabel(
+            f"z{z}_residual"
+        )
+        pax.set_ylabel(rf'Samples')
+        #
+        # hist, bins = np.histogram(dmodes, bins=zernikes.columns.values)
+        # idx = (hist > 0).nonzero()
+        # hist = hist / hist.sum()
+        #
+        # if len(idx[0]) != 0:
+        #     bars = sns.barplot(bins[idx], hist[idx], ax=cax, palette='Accent')
+        #     for index, label in enumerate(bars.get_xticklabels()):
+        #         if index % 2 == 0:
+        #             label.set_visible(True)
+        #         else:
+        #             label.set_visible(False)
+        #
+        # cax.set_xlabel(
+        #     f'Number of highly influential modes\n'
+        #     rf'$\alpha_i / \sum_{{k=1}}^{{{psfargs["n_modes"]}}}{{\alpha_{{k}}}} > 5\%$'
+        # )
+
+        # modes = zernikes.sum(axis=0)
+        # modes /= modes.sum(axis=0)
+        #
+        # cmap = sns.color_palette("viridis", len(modes))
+        # rank = modes.argsort().argsort()
+        # bars = sns.barplot(modes.index - 1, modes.values, ax=zax, palette=np.array(cmap[::-1])[rank])
+        #
+        # for index, label in enumerate(bars.get_xticklabels()):
+        #     if index % 4 == 0:
+        #         label.set_visible(True)
+        #     else:
+        #         label.set_visible(False)
+        #
+        # zax.set_xlabel(f'Influential modes (ANSI)')
+        #
+        # pax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
+        # cax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
+        # zax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
+
+    save_path = Path(f'{csv_path.with_suffix("")}_histogram.png')
+    plt.savefig(save_path, dpi=300, bbox_inches='tight', pad_inches=.25)
+    logger.info(f"Saved: {save_path}")
