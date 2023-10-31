@@ -2568,11 +2568,12 @@ def compare_models(
 def evaluate_object_sizes(
     model: Path,
     eval_sign: str = 'signed',
-    batch_size: int = 512,
+    batch_size: int = 256,
     num_objs: Optional[int] = 1,
     digital_rotations: bool = True,
     agg: str = 'median',
     na: float = 1.0,
+    photons: int = 50000
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -2592,33 +2593,40 @@ def evaluate_object_sizes(
         psf_shape=3*[m.input_shape[2]],
         rotate=False
     )
+    w = Wavefront(np.zeros(15))
 
     outdir = model.with_suffix('') / eval_sign / 'evalobjects' / f'num_objs_{num_objs}'
 
-    for photons in [100000, 300000, 500000]:
-        for i in range(3, gen.n_modes):
-            if i == 4: continue
+    for i, (mode, twin) in enumerate(w.twins.items()):
+        if mode.index_ansi == 4: continue
 
-            savepath = outdir / f"z{i}"
-            savepath.mkdir(parents=True, exist_ok=True)
-            savepath = savepath / f"ph{photons}"
+        savepath = outdir / f"z{mode.index_ansi}"
+        savepath.mkdir(parents=True, exist_ok=True)
+        savepath = savepath / f"ph{photons}"
 
-            zernikes = np.zeros(15)
-            zernikes[i] = .1
+        zernikes = np.zeros(15)
+        zernikes[mode.index_ansi] = .1
 
-            sizes = np.arange(0.1, 5.26, .25).round(2)
-            wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection, rotate=False)
-            psf = gen.single_psf(phi=wavefront, normed=True)
-            psf /= np.sum(psf)
+        sizes = np.arange(0, 5.25, .25).round(2)
+        wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection, rotate=False)
+        psf = gen.single_psf(phi=wavefront, normed=True)
+        psf /= np.sum(psf)
 
+        if Path(f"{savepath}_inputs.npy").exists():
+            inputs = np.load(f"{savepath}_inputs.npy")
+        else:
             inputs = [
                 utils.add_noise(utils.fftconvolution(
                     sample=psf,
                     kernel=utils.gaussian_kernel(kernlen=(21, 21, 21), std=s/(2 * np.sqrt(2 * np.log(2)))) * photons
-                )) for s in sizes
+                )) if s > 0 else utils.add_noise(psf * photons) for s in sizes
             ]
             inputs = np.stack(inputs, axis=0)[..., np.newaxis]
+            np.save(f"{savepath}_inputs", inputs)
 
+        if Path(f"{savepath}_embeddings.npy").exists():
+            embeddings = np.load(f"{savepath}_embeddings.npy")
+        else:
             embeddings = np.stack([
                 backend.preprocess(
                     i,
@@ -2627,15 +2635,19 @@ def evaluate_object_sizes(
                     remove_background=True,
                     normalize=True,
                     min_psnr=0,
-                    plot=Path(f"{savepath}_{sizes[s]}"),
+                    # plot=Path(f"{savepath}_{sizes[s]}"),
                 )
                 for s, i in enumerate(tqdm(inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout))
             ], axis=0)
+            np.save(f"{savepath}_embeddings", embeddings)
 
-            ys = np.stack([wavefront.amplitudes for s in sizes])
+        ys = np.stack([wavefront.amplitudes for s in sizes])
 
-            embeddings = tf.data.Dataset.from_tensor_slices(embeddings)
+        embeddings = tf.data.Dataset.from_tensor_slices(embeddings)
 
+        if Path(f"{savepath}_predictions.npy").exists():
+            preds = np.load(f"{savepath}_predictions.npy")
+        else:
             res = backend.predict_dataset(
                 model,
                 inputs=embeddings,
@@ -2643,7 +2655,7 @@ def evaluate_object_sizes(
                 batch_size=batch_size,
                 save_path=[f"{savepath}_{s}" for s in sizes],
                 digital_rotations=digital_rotations,
-                plot_rotations=True
+                # plot_rotations=True
             )
 
             try:
@@ -2651,40 +2663,44 @@ def evaluate_object_sizes(
             except ValueError:
                 preds, stdev, lls_defocus = res
 
-            residuals = ys - preds
+            np.save(f"{savepath}_predictions", preds)
 
-            df = pd.DataFrame([s for s in sizes], columns=['size'])
-            df['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
-            df['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
-            df['counts'] = [np.sum(i) for i in inputs]
-            df.to_csv(f'{savepath}.csv')
-            print(df)
-            print(df.describe())
+        residuals = ys - preds
 
-            fig, ax = plt.subplots(figsize=(8, 6))
+        df = pd.DataFrame([s for s in sizes], columns=['size'])
+        df['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
+        df['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
+        df['moi'] = ys[:, mode.index_ansi] - preds[:, mode.index_ansi]
+        df['counts'] = [np.sum(i) for i in inputs]
+        df.to_csv(f'{savepath}.csv')
+        print(df)
 
-            sns.regplot(
-                data=df,
-                x="size",
-                y="residuals",
-                scatter=True,
-                truncate=False,
-                order=2,
-                color=".2",
-                ax=ax
-            )
+        fig, ax = plt.subplots(figsize=(8, 6))
 
-            ax.set_yticks(np.arange(0, 1.1, .1))
-            ax.set_xlim(0, sizes[-1])
-            ax.set_ylim(0, 1)
-            ax.set_ylabel(rf'Residuals ($\lambda = {int(gen.lam_detection * 1000)}~nm$)')
-            ax.set_xlabel(r'Gaussian kernel width ($\sigma = w / 2 \sqrt{2 \ln{2}}  $)')
-            ax.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0, alpha=.5)
-            ax.spines.right.set_visible(False)
-            ax.spines.top.set_visible(False)
+        sns.regplot(
+            data=df,
+            x="size",
+            y="moi",
+            scatter=True,
+            truncate=False,
+            order=2,
+            color=".2",
+            ax=ax
+        )
 
-            plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-            plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-            plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        ax.set_yticks(np.arange(-.1, .11, .01))
+        ax.set_xlim(0, sizes[-1])
+        ax.set_ylim(-.1, .1)
+        ax.axhline(y=0, color='r')
+        ax.set_ylabel(r'Residuals ($y - \hat{y}$)')
+        # ax.set_ylabel(rf'Residuals ($\lambda = {int(gen.lam_detection * 1000)}~nm$)')
+        ax.set_xlabel(r'Gaussian kernel width ($\sigma = w / 2 \sqrt{2 \ln{2}}  $)')
+        ax.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0, alpha=.5)
+        ax.spines.right.set_visible(False)
+        ax.spines.top.set_visible(False)
+
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return savepath
