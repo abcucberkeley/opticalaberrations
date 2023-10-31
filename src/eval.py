@@ -2828,15 +2828,15 @@ def evaluate_object_sizes(
     gen = backend.load_metadata(
         model,
         psf_shape=3*[m.input_shape[2]],
-        # psf_type='widefield',
         rotate=False,
-        x_voxel_size=.097,
-        y_voxel_size=.097,
-        z_voxel_size=.2,
+        # psf_type='widefield',
+        # x_voxel_size=.097,
+        # y_voxel_size=.097,
+        # z_voxel_size=.2,
     )
     w = Wavefront(np.zeros(15))
 
-    outdir = model.with_suffix('') / eval_sign / 'test' / f'num_objs_{num_objs}'
+    outdir = model.with_suffix('') / eval_sign / 'evalobjects' / f'num_objs_{num_objs}'
 
     for i, (mode, twin) in enumerate(w.twins.items()):
         if mode.index_ansi == 4: continue

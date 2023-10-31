@@ -13,17 +13,16 @@ from pathlib import Path
 from tifffile import TiffFile
 from tifffile import imwrite
 import numpy as np
-import raster_geometry as rg
 from scipy import stats as st
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 import cli
-from utils import mean_min_distance, randuniform, add_noise
+from utils import mean_min_distance, randuniform, add_noise, round_to_odd, round_to_even
 from utils import electrons2counts, photons2electrons, counts2electrons, electrons2photons
 from preprocessing import prep_sample, resize_with_crop_or_pad
-from utils import fftconvolution, multiprocess
+from utils import fftconvolution, multiprocess, gaussian_kernel
 from synthetic import SyntheticPSF
 from embeddings import fourier_embeddings
 from wavefront import Wavefront
@@ -127,33 +126,28 @@ def beads(
     rng = np.random.default_rng()
 
     for i in range(num_objs):
-        if object_size is None:
-            object_size = np.random.choice([0, 1, 2], p=[.95, .04, .01])
+        if fill_radius > 0:  # make uniform distribution in polar
+            r = np.sqrt(np.random.random(1)) * fill_radius * (image_shape[2] - 1) * 0.5
+            theta = np.random.random(1) * 2 * np.pi
+            x = np.round(r * np.cos(theta) + (image_shape[2] - 1) * 0.5).astype(np.int32)
+            y = np.round(r * np.sin(theta) + (image_shape[1] - 1) * 0.5).astype(np.int32)
+            z = rng.integers(zborder, int(image_shape[0] - zborder))
+        else:  # bead at center
+            z, y, x = image_shape[0] // 2, image_shape[1] // 2, image_shape[2] // 2
 
         if object_size > 0:
-            reference += rg.sphere(
-                shape=image_shape,
-                radius=object_size,
-                position=rng.integers(
-                    int(image_shape[0] * (.5 - fill_radius)), int(image_shape[0] * (.5 + fill_radius)), 3
-                ),
-            ).astype(np.float32) * photons
-        else:
-            # object_size = 0 diffraction-limited
-            if fill_radius > 0:
-                # make uniform distribution in polar
-                r = np.sqrt(np.random.random(1)) * fill_radius * (image_shape[2] - 1) * 0.5
-                theta = np.random.random(1) * 2 * np.pi
-                x = r * np.cos(theta) + (image_shape[2] - 1) * 0.5
-                y = r * np.sin(theta) + (image_shape[1] - 1) * 0.5
-                reference[
-                    rng.integers(zborder, int(image_shape[0] - zborder)),
-                    np.round(y).astype(np.int32),
-                    np.round(x).astype(np.int32)
-                ] = photons
-            else:
-                # bead at center
-                reference[image_shape[0] // 2, image_shape[1] // 2, image_shape[2] // 2] = photons
+            kernlen = round_to_odd(object_size * 3)
+
+            # convert from full width at half maximum (FWHM) to std
+            std = object_size / (2 * np.sqrt(2 * np.log(2)))
+            obj = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=std) * photons
+            reference[
+                np.min(0, z-kernlen):np.max(reference.shape[0], z+kernlen),
+                np.min(0, y-kernlen):np.max(reference.shape[1], y+kernlen),
+                np.min(0, x-kernlen):np.max(reference.shape[2], x+kernlen),
+            ] = obj
+        else:  # object_size = 0 diffraction-limited
+            reference[z, y, x] = photons
 
     return reference
 
