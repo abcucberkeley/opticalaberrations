@@ -406,6 +406,7 @@ def prep_sample(
     read_noise_bias: float = 5,
     plot: Any = None,
     min_psnr: int = 5,
+    expand_dims: bool = True
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
         
@@ -439,7 +440,8 @@ def prep_sample(
         with TiffFile(sample) as tif:
             sample = tif.asarray()
 
-        sample = np.expand_dims(sample, axis=-1)
+        if expand_dims:
+            sample = np.expand_dims(sample, axis=-1)
 
     # convert to 32bit cupy if available
     try:

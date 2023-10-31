@@ -563,6 +563,105 @@ def parse_args(args):
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
 
+    predict_folder = subparsers.add_parser("predict_folder")
+    predict_folder.add_argument("model", type=Path, help="path to pretrained tensorflow model")
+    predict_folder.add_argument("input", type=Path, help="path to input directory with *.tif files")
+    predict_folder.add_argument(
+        "dm_calibration", type=Path,
+        help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
+    )
+    predict_folder.add_argument(
+        "--filename_pattern", default=r'*[!_gt|!_realspace].tif', type=str,
+        help="optional regex pattern for selecting files in the given directory (Default: `r'*[!_gt|!_realspace].tif'`)"
+    )
+    predict_folder.add_argument(
+        "--current_dm", default=None, type=Path,
+        help="optional path to current DM .csv file (Default: `blank mirror`)"
+    )
+    predict_folder.add_argument(
+        "--batch_size", default=100, type=int, help='maximum batch size for the model'
+    )
+    predict_folder.add_argument(
+        "--prev", default=None, type=Path,
+        help="previous predictions .csv file (Default: `None`)"
+    )
+    predict_folder.add_argument(
+        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+    )
+    predict_folder.add_argument(
+        "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
+    )
+    predict_folder.add_argument(
+        "--wavelength", default=.510, type=float,
+        help='wavelength in microns'
+    )
+    predict_folder.add_argument(
+        "--freq_strength_threshold", default=.01, type=float,
+        help='minimum frequency threshold in fourier space '
+             '(percentages; values below that will be set to the desired minimum)'
+    )
+    predict_folder.add_argument(
+        "--confidence_threshold", default=0.015, type=float,
+        help='optional threshold to flag unconfident predictions '
+             'based on the standard deviations of the predicted amplitudes for all digital rotations (microns)'
+    )
+    predict_folder.add_argument(
+        "--sign_threshold", default=.9, type=float,
+        help='flip sign of modes above given threshold relative to your initial prediction'
+    )
+    predict_folder.add_argument(
+        "--object_width", default=0.0, type=float,
+        help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
+    )
+    predict_folder.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
+    predict_folder.add_argument(
+        "--plot_rotations", action='store_true',
+        help='a toggle for plotting predictions for digital rotations'
+    )
+    predict_folder.add_argument(
+        "--num_predictions", default=1, type=int,
+        help="number of predictions per tile to estimate model's confidence"
+    )
+    predict_folder.add_argument(
+        "--estimate_sign_with_decon", action='store_true',
+        help='a toggle for estimating signs of each Zernike mode via decon'
+    )
+    predict_folder.add_argument(
+        "--ignore_mode", action='append', default=[0, 1, 2, 4],
+        help='ANSI index for mode you wish to ignore'
+    )
+    predict_folder.add_argument(
+        "--ideal_empirical_psf", default=None, type=Path,
+        help='path to an ideal empirical psf (Default: `None` ie. will be simulated automatically)'
+    )
+    predict_folder.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+    predict_folder.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
+    predict_folder.add_argument(
+        "--digital_rotations", default=361, type=int,
+        help='optional flag for applying digital rotations'
+    )
+    predict_folder.add_argument(
+        "--shift", default=0, type=int,
+        help='optional flag for applying digital x shift'
+    )
+    predict_folder.add_argument(
+        "--psf_type", default=None, type=str,
+        help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
+             '(Default: None; to keep default mode used during training)'
+    )
+    predict_folder.add_argument(
+        "--min_psnr", default=5, type=int,
+        help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
+    )
+
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
 
     aggregate_predictions.add_argument("input", type=Path, help="path to csv file")
@@ -938,24 +1037,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         logging.info(f'Number of active GPUs: {gpu_workers}, {gpu_model}, batch_size={args.batch_size}')
 
         with strategy.scope():
-            if args.func == 'deskew':
-                experimental_llsm.deskew(
-                    img=args.input,
-                    axial_voxel_size=args.axial_voxel_size,
-                    lateral_voxel_size=args.lateral_voxel_size,
-                    flipz=args.flipz,
-                    skew_angle=args.skew_angle,
-                )
-
-            elif args.func == 'detect_rois':
-                experimental_llsm.detect_rois(
-                    img=args.input,
-                    psf=args.psf,
-                    axial_voxel_size=args.axial_voxel_size,
-                    lateral_voxel_size=args.lateral_voxel_size,
-                )
-
-            elif args.func == 'psnr':
+            if args.func == 'psnr':
                 sample = load_sample(args.input)
                 prep_sample(
                     sample,
@@ -1111,6 +1193,35 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     num_predictions=args.num_predictions,
                     wavelength=args.wavelength,
                     window_size=tuple(int(i) for i in args.window_size.split('-')),
+                    plot=args.plot,
+                    plot_rotations=args.plot_rotations,
+                    batch_size=args.batch_size,
+                    estimate_sign_with_decon=args.estimate_sign_with_decon,
+                    ignore_modes=args.ignore_mode,
+                    ideal_empirical_psf=args.ideal_empirical_psf,
+                    digital_rotations=args.digital_rotations,
+                    cpu_workers=args.cpu_workers,
+                    preloaded=preloaded,
+                    shifting=(0, 0, args.shift),
+                    psf_type=args.psf_type,
+                    min_psnr=args.min_psnr,
+                    object_gaussian_kernel_width=args.object_width,
+                )
+            elif args.func == 'predict_folder':
+                experimental.predict_folder(
+                    model=args.model,
+                    folder=args.input,
+                    filename_pattern=args.filename_pattern,
+                    prev=args.prev,
+                    dm_calibration=args.dm_calibration,
+                    dm_state=args.current_dm,
+                    freq_strength_threshold=args.freq_strength_threshold,
+                    confidence_threshold=args.confidence_threshold,
+                    sign_threshold=args.sign_threshold,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    num_predictions=args.num_predictions,
+                    wavelength=args.wavelength,
                     plot=args.plot,
                     plot_rotations=args.plot_rotations,
                     batch_size=args.batch_size,

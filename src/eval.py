@@ -1237,7 +1237,6 @@ def predict_folder(
     # put prediction results into a new folder (based on model path, etc) so we can eval multiple models if we wanted to.
     savepath = modelpath.with_suffix('') / eval_sign / f'predictfolder'
 
-
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
 
@@ -2809,7 +2808,8 @@ def evaluate_object_sizes(
     digital_rotations: bool = True,
     agg: str = 'median',
     na: float = 1.0,
-    photons: int = 50000
+    photons: int = 50000,
+    override: bool = False,
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -2848,7 +2848,7 @@ def evaluate_object_sizes(
         psf = gen.single_psf(phi=wavefront, normed=True)
         psf /= np.sum(psf)
 
-        if Path(f"{savepath}_inputs.npy").exists():
+        if not override and Path(f"{savepath}_inputs.npy").exists():
             inputs = np.load(f"{savepath}_inputs.npy")
         else:
             inputs = [
@@ -2860,7 +2860,7 @@ def evaluate_object_sizes(
             inputs = np.stack(inputs, axis=0)[..., np.newaxis]
             np.save(f"{savepath}_inputs", inputs)
 
-        if Path(f"{savepath}_embeddings.npy").exists():
+        if not override and Path(f"{savepath}_embeddings.npy").exists():
             embeddings = np.load(f"{savepath}_embeddings.npy")
         else:
             embeddings = np.stack([
@@ -2871,7 +2871,7 @@ def evaluate_object_sizes(
                     remove_background=True,
                     normalize=True,
                     min_psnr=0,
-                    # plot=Path(f"{savepath}_{sizes[s]}"),
+                    plot=Path(f"{savepath}_{sizes[s]}"),
                 )
                 for s, i in enumerate(tqdm(inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout))
             ], axis=0)
@@ -2881,7 +2881,7 @@ def evaluate_object_sizes(
 
         embeddings = tf.data.Dataset.from_tensor_slices(embeddings)
 
-        if Path(f"{savepath}_predictions.npy").exists():
+        if not override and Path(f"{savepath}_predictions.npy").exists():
             preds = np.load(f"{savepath}_predictions.npy")
         else:
             res = backend.predict_dataset(
@@ -2891,7 +2891,7 @@ def evaluate_object_sizes(
                 batch_size=batch_size,
                 save_path=[f"{savepath}_{s}" for s in sizes],
                 digital_rotations=digital_rotations,
-                # plot_rotations=True
+                plot_rotations=True
             )
 
             try:
