@@ -45,7 +45,7 @@ def test_zernike_modes(kargs):
     amplitude = .1
     zernikes = np.zeros(15)
 
-    for z in range(3, 16):
+    for z in range(3, 15):  # zernikes from (3,..,14)
 
         if z == 4:  # skip defocus
             continue
