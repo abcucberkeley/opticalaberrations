@@ -2710,7 +2710,7 @@ def compare_models(
 
 def residuals_histogram(
         csv_path: Path = Path(r"C:\Users\milkied10\Desktop\na_1.0_predictions.csv"),
-        amp_range: tuple = (0.08, 0.12),
+        amp_range: tuple = (0.18, 0.22),
         photon_min: float = 50000,
         total_ab_max: float = 3.5,
 ):
@@ -2752,14 +2752,15 @@ def residuals_histogram(
                        (predictions[gt_col] < amp_range[1])
                        ]
 
+    binrange = (-0.205, 0.2)
     sns.histplot(
         (data[col], data[gt_col]),
         ax=pax,
-        binwidth=0.02,
+        binwidth=0.01,
         kde=False,
         log_scale=(False, False),
-        binrange=(-0.2, 0.2),
-        multiple="dodge",
+        binrange=binrange,
+        multiple="layer",
         stat="percent",
     )
     pax.set_xlabel('astig_res')
@@ -2779,15 +2780,15 @@ def residuals_histogram(
             sns.histplot(
                 (data[col], data[gt_col]),
                 ax=pax,
-                binwidth=0.02,
+                binwidth=0.01,
                 kde=False,
                 log_scale=(False, False),
-                binrange=(-0.2, 0.2),
-                multiple="dodge",
+                binrange=binrange,
+                multiple="layer",
                 stat="percent",
             )
             pax.set_xlabel(f"z{z}_residual")
-            pax.set_ylabel(f'Samples ({len(data[col])} total samples)')
+            pax.set_ylabel(f'Percentage ({len(data[col])} total samples)')
             logger.info(f"{col}, \t{len(data[col])} total samples")
 
         with tempfile.NamedTemporaryFile(suffix=f'_{col}.png', delete=False) as fp:
