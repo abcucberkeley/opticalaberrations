@@ -1,6 +1,8 @@
 import itertools
 import matplotlib
 matplotlib.use('Agg')
+import tempfile
+import shutil
 
 from multiprocessing import Pool
 
@@ -2707,64 +2709,94 @@ def compare_models(
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
+def residuals_histogram(
+        csv_path: Path = Path(r"C:\Users\milkied10\Desktop\na_1.0_predictions.csv"),
+        amp_range: tuple = (0.08, 0.12),
+        photon_min: float = 50000,
+        total_ab_max: float = 3.5,
+):
+    """
+    Make some histogram plots to show if the model overshoots or undershoots and under which conditions.
 
-def residuals_histogram(csv_path:Path = r"C:\Users\milkied10\Desktop\na_1.0_predictions.csv"):
+    Args:
+        csv_path:
+        amp_range:
+        photon_min:
+        total_ab_max:
+
+    Returns:
+
+    """
     predictions = pd.read_csv(csv_path)
-    fig, axes = plt.subplots(8, 2, figsize=(16, 4))
+    save_path = Path(f'{csv_path.with_suffix("")}_histogram.png')
+    fig, axes = plt.subplots(8, 2, figsize=(16, 28))
+    axes[0,0].set_title(f'Samples with gt amp of {amp_range}, >{photon_min//1000}k photons')
 
+    predictions = predictions[predictions['photons'] > photon_min]   # keep rows that have photons above threshold
+    predictions = predictions[
+        (predictions['aberration'] < total_ab_max) &
+        (predictions['aberration'] < total_ab_max)
+    ]  # keep rows that have photons above threshold
+
+    predictions['astig_gt'] = np.sqrt(predictions["z3_ground_truth"] * predictions["z3_ground_truth"] +
+                                      predictions["z5_ground_truth"] * predictions["z5_ground_truth"])
+
+    predictions['astig_pred'] = np.sqrt(predictions["z3_prediction"] * predictions["z3_prediction"] +
+                                        predictions["z5_prediction"] * predictions["z5_prediction"])
+
+    predictions['astig_res'] = predictions['astig_gt'] - predictions['astig_pred']
+
+    pax = axes[0,0]
+    gt_col = 'astig_gt'
+    col = 'astig_res'
+    data = predictions[(predictions[gt_col] > amp_range[0]) &
+                       (predictions[gt_col] < amp_range[1])
+                       ]
+
+    sns.histplot(
+        (data[col], data[gt_col]),
+        ax=pax,
+        binwidth=0.02,
+        kde=False,
+        log_scale=(False, False),
+        binrange=(-0.2, 0.2),
+        multiple="dodge",
+        stat="percent",
+    )
+    pax.set_xlabel('astig_res')
+    pax.set_ylabel(f'Samples ({len(data[col])} total samples)')
+    logger.info(f"{col}, \t{len(data[col])} total samples")
 
     for z in range(3, 15):
         if z == 4:
             pass
+        else:
+            pax = axes[z // 2, z % 2]
+            gt_col = f"z{z}_ground_truth"
+            col = f"z{z}_residual"
+            data = predictions[(predictions[gt_col] > amp_range[0]) &
+                               (predictions[gt_col] < amp_range[1])
+            ]
+            sns.histplot(
+                (data[col], data[gt_col]),
+                ax=pax,
+                binwidth=0.02,
+                kde=False,
+                log_scale=(False, False),
+                binrange=(-0.2, 0.2),
+                multiple="dodge",
+                stat="percent",
+            )
+            pax.set_xlabel(f"z{z}_residual")
+            pax.set_ylabel(f'Samples ({len(data[col])} total samples)')
+            logger.info(f"{col}, \t{len(data[col])} total samples")
 
-        pax = axes[z // 2, z % 2]
-        col = f"z{z}_residual"
-        data = predictions[col]
+        with tempfile.NamedTemporaryFile(suffix=f'_{col}.png', delete=False) as fp:
+            # use a temporary file for savefig, so a real-time viewing of the image file doesn't cause errors
+            fp.close()
+            plt.savefig(fp.name, dpi=300, bbox_inches='tight', pad_inches=.25)
+            shutil.move(fp.name, save_path)
 
-        sns.histplot(data, kde=True, ax=pax, color='dimgrey')
-        pax.set_xlabel(
-            f"z{z}_residual"
-        )
-        pax.set_ylabel(rf'Samples')
-        #
-        # hist, bins = np.histogram(dmodes, bins=zernikes.columns.values)
-        # idx = (hist > 0).nonzero()
-        # hist = hist / hist.sum()
-        #
-        # if len(idx[0]) != 0:
-        #     bars = sns.barplot(bins[idx], hist[idx], ax=cax, palette='Accent')
-        #     for index, label in enumerate(bars.get_xticklabels()):
-        #         if index % 2 == 0:
-        #             label.set_visible(True)
-        #         else:
-        #             label.set_visible(False)
-        #
-        # cax.set_xlabel(
-        #     f'Number of highly influential modes\n'
-        #     rf'$\alpha_i / \sum_{{k=1}}^{{{psfargs["n_modes"]}}}{{\alpha_{{k}}}} > 5\%$'
-        # )
-
-        # modes = zernikes.sum(axis=0)
-        # modes /= modes.sum(axis=0)
-        #
-        # cmap = sns.color_palette("viridis", len(modes))
-        # rank = modes.argsort().argsort()
-        # bars = sns.barplot(modes.index - 1, modes.values, ax=zax, palette=np.array(cmap[::-1])[rank])
-        #
-        # for index, label in enumerate(bars.get_xticklabels()):
-        #     if index % 4 == 0:
-        #         label.set_visible(True)
-        #     else:
-        #         label.set_visible(False)
-        #
-        # zax.set_xlabel(f'Influential modes (ANSI)')
-        #
-        # pax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
-        # cax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
-        # zax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
-
-    save_path = Path(f'{csv_path.with_suffix("")}_histogram.png')
-    plt.savefig(save_path, dpi=300, bbox_inches='tight', pad_inches=.25)
     logger.info(f"Saved: {save_path}")
 
 
