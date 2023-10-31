@@ -69,7 +69,7 @@ def test_zernike_modes(kargs):
 
         sample = psf_dataset.simulate_psf(
             filename=f'z{z}',
-            outdir=Path(f"{kargs['repo']}/dataset/zernikes"),
+            outdir=Path(f"{kargs['repo']}/dataset/zernikes/psfs"),
             gen=gen,
             phi=phi,
             emb=False,
@@ -83,7 +83,7 @@ def test_zernike_modes(kargs):
 
         embeddings = psf_dataset.simulate_psf(
             filename=f'z{z}',
-            outdir=Path(f"{kargs['repo']}/dataset/zernikes"),
+            outdir=Path(f"{kargs['repo']}/dataset/zernikes/embeddings"),
             gen=gen,
             phi=phi,
             emb=True,

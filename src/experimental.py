@@ -1033,6 +1033,175 @@ def predict_tiles(
     return predictions
 
 
+@profile
+def predict_folder(
+        folder: Path,
+        model: Path,
+        dm_calibration: Any,
+        dm_state: Any,
+        axial_voxel_size: float,
+        lateral_voxel_size: float,
+        wavelength: float = .605,
+        num_predictions: int = 1,
+        batch_size: int = 1,
+        freq_strength_threshold: float = .01,
+        confidence_threshold: float = .02,
+        sign_threshold: float = .9,
+        plot: bool = False,
+        plot_rotations: bool = False,
+        prev: Any = None,
+        estimate_sign_with_decon: bool = False,
+        ignore_modes: list = (0, 1, 2, 4),
+        preloaded: Preloadedmodelclass = None,
+        ideal_empirical_psf: Any = None,
+        digital_rotations: Optional[int] = 361,
+        cpu_workers: int = -1,
+        shifting: tuple = (0, 0, 0),
+        psf_type: Optional[Union[str, Path]] = None,
+        min_psnr: int = 5,
+        object_gaussian_kernel_width: float = 0,
+        filename_pattern: str = r'*[!_gt|!_realspace].tif'
+):
+    pool = None
+    dm_state = utils.load_dm(dm_state)
+
+    outdir = folder / 'files'
+    outdir.mkdir(exist_ok=True, parents=True)
+
+    candidates = sorted(Path(folder).rglob(filename_pattern))
+    with TiffFile(candidates[0]) as tif:
+        input_shape = tif.asarray().shape
+
+    preloadedmodel, preloadedpsfgen = reloadmodel_if_needed(
+        modelpath=model,
+        preloaded=preloaded,
+        psf_type=psf_type,
+        ideal_empirical_psf=ideal_empirical_psf,
+        ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
+    )
+
+    samplepsfgen = SyntheticPSF(
+        psf_type=preloadedpsfgen.psf_type,
+        psf_shape=input_shape,
+        n_modes=preloadedmodel.output_shape[1],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
+
+    fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
+
+    if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
+        prep = partial(
+            prep_sample,
+            model_fov=preloadedpsfgen.psf_fov,  # this is what we will crop to
+            sample_voxel_size=samplepsfgen.voxel_size,
+            remove_background=True,
+            normalize=True,
+            min_psnr=min_psnr,
+            expand_dims=False
+        )
+    else:
+        prep = partial(
+            prep_sample,
+            sample_voxel_size=samplepsfgen.voxel_size,
+            remove_background=True,
+            normalize=True,
+            min_psnr=min_psnr,
+            expand_dims=False
+        )
+
+    files = {}
+    for path in tqdm(
+        candidates,
+        desc=f"Locating files: {len(candidates)}",
+        bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
+        unit=' file',
+        file=sys.stdout
+    ):
+        f = prep(path,  plot=outdir/path.name.strip('.tif') if plot else None)
+        if np.all(f == 0):
+            files[path.name] = dict(
+                path=outdir / path.name,
+                ignored=True,
+            )
+        else:
+            files[path.name] = dict(
+                path=outdir / path.name,
+                ignored=False,
+            )
+            imwrite(outdir / path.name, f)
+
+    files = pd.DataFrame.from_dict(files, orient='index')
+    rois = files[files['ignored'] == False]['path'].values  # skip files with low snr or no signal
+    logger.info(
+        f" {rois.shape[0]} valid files found that meet criteria [{filename_pattern}]"
+        f" with sufficient SNR out of {files.shape[0]}"
+    )
+
+    if rois.shape[0] == 0:
+        raise Exception(f'No valid files found with sufficient SNR. Please use a different folder.')
+
+    template = pd.DataFrame(columns=files.index.values)
+
+    with Path(f"{folder}/folder_predictions_settings.json").open('w') as f:
+        json = dict(
+            path=str(folder),
+            model=str(model),
+            input_shape=input_shape,
+            sample_voxel_size=list(samplepsfgen.voxel_size),
+            model_voxel_size=list(preloadedpsfgen.voxel_size),
+            psf_fov=list(preloadedpsfgen.psf_fov),
+            wavelength=float(wavelength),
+            prediction_threshold=float(0),
+            dm_state=list(dm_state),
+            freq_strength_threshold=float(freq_strength_threshold),
+            prev=str(prev),
+            ignore_modes=list(ignore_modes),
+            ideal_empirical_psf=str(ideal_empirical_psf),
+            number_of_tiles=int(len(rois)),
+            dm_calibration=str(dm_calibration),
+            psf_type=str(preloadedpsfgen.psf_type),
+        )
+
+        ujson.dump(
+            json,
+            f,
+            indent=4,
+            sort_keys=False,
+            ensure_ascii=False,
+            escape_forward_slashes=False
+        )
+
+    predictions, stdevs = backend.predict_files(
+        paths=rois,
+        outdir=outdir,
+        model=preloadedmodel,
+        modelpsfgen=preloadedpsfgen,
+        samplepsfgen=samplepsfgen,
+        dm_calibration=dm_calibration,
+        dm_state=dm_state,
+        prediction_threshold=0,
+        confidence_threshold=confidence_threshold,
+        batch_size=batch_size,
+        wavelength=wavelength,
+        ignore_modes=ignore_modes,
+        freq_strength_threshold=freq_strength_threshold,
+        fov_is_small=fov_is_small,
+        plot=plot,
+        plot_rotations=plot_rotations,
+        digital_rotations=digital_rotations,
+        cpu_workers=cpu_workers,
+        skip_prep_sample=True,
+        template=template,
+        pool=pool,
+        object_gaussian_kernel_width=object_gaussian_kernel_width
+    )
+
+    return predictions
+
+
 def kmeans_clustering(data, k):
     km = KMeans(
         init="k-means++",
