@@ -22,7 +22,7 @@ import cli
 from utils import mean_min_distance, randuniform, add_noise, round_to_odd, round_to_even
 from utils import electrons2counts, photons2electrons, counts2electrons, electrons2photons
 from preprocessing import prep_sample, resize_with_crop_or_pad
-from utils import fftconvolution, multiprocess, gaussian_kernel
+from utils import fftconvolution, multiprocess, gaussian_kernel, fwhm2sigma
 from synthetic import SyntheticPSF
 from embeddings import fourier_embeddings
 from wavefront import Wavefront
@@ -112,7 +112,9 @@ def beads(
     object_size: Optional[int] = 0,
     num_objs: int = 1,
     fill_radius: float = .66,           # .66 will be roughly a bit inside of the Tukey window
-    zborder: int = 10
+    zborder: int = 10,
+    kernlen: int = 21,
+    kernhalfwidth: int = 10,
 ):
     """
     Args:
@@ -122,32 +124,48 @@ def beads(
         fill_radius: Fractional (0 for a single bead at the center of the image)
     """
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
-    reference = np.zeros(image_shape)
     rng = np.random.default_rng()
+    reference = np.zeros(image_shape)
+
+    if object_size == 0:
+        bead = photons
+    elif object_size is None or object_size == 'None':  # bead size will be randomly selected
+        pick_random_bead_size = lambda: np.random.uniform(low=1, high=5)
+    else:  # all beads will have the same size
+        bead = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=fwhm2sigma(object_size)) * photons
 
     for i in range(num_objs):
+
         if fill_radius > 0:  # make uniform distribution in polar
             r = np.sqrt(np.random.random(1)) * fill_radius * (image_shape[2] - 1) * 0.5
             theta = np.random.random(1) * 2 * np.pi
-            x = np.round(r * np.cos(theta) + (image_shape[2] - 1) * 0.5).astype(np.int32)
-            y = np.round(r * np.sin(theta) + (image_shape[1] - 1) * 0.5).astype(np.int32)
+            x = np.round(r * np.cos(theta) + (image_shape[2] - 1) * 0.5).astype(np.int32)[0]
+            y = np.round(r * np.sin(theta) + (image_shape[1] - 1) * 0.5).astype(np.int32)[0]
             z = rng.integers(zborder, int(image_shape[0] - zborder))
         else:  # bead at center
             z, y, x = image_shape[0] // 2, image_shape[1] // 2, image_shape[2] // 2
 
-        if object_size > 0:
-            kernlen = round_to_odd(object_size * 3)
+        if object_size == 0:  # object_size = 0 diffraction-limited
+            reference[z, y, x] = bead
 
-            # convert from full width at half maximum (FWHM) to std
-            std = object_size / (2 * np.sqrt(2 * np.log(2)))
-            obj = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=std) * photons
+        elif object_size is None or object_size == 'None':  # bead size will be randomly selected
+            bead = gaussian_kernel(
+                kernlen=(kernlen, kernlen, kernlen),
+                std=fwhm2sigma(pick_random_bead_size())
+            ) * photons
+
             reference[
-                np.min(0, z-kernlen):np.max(reference.shape[0], z+kernlen),
-                np.min(0, y-kernlen):np.max(reference.shape[1], y+kernlen),
-                np.min(0, x-kernlen):np.max(reference.shape[2], x+kernlen),
-            ] = obj
-        else:  # object_size = 0 diffraction-limited
-            reference[z, y, x] = photons
+                max(0, z-kernhalfwidth):min(reference.shape[0], z+kernhalfwidth+1),
+                max(0, y-kernhalfwidth):min(reference.shape[1], y+kernhalfwidth+1),
+                max(0, x-kernhalfwidth):min(reference.shape[2], x+kernhalfwidth+1),
+            ] += bead
+
+        else:  # all beads will have the same size
+            reference[
+                max(0, z-kernhalfwidth):min(reference.shape[0], z+kernhalfwidth+1),
+                max(0, y-kernhalfwidth):min(reference.shape[1], y+kernhalfwidth+1),
+                max(0, x-kernhalfwidth):min(reference.shape[2], x+kernhalfwidth+1),
+            ] += bead
 
     return reference
 
@@ -322,6 +340,7 @@ def create_synthetic_sample(
     min_lls_defocus_offset: float = 0.,
     max_lls_defocus_offset: float = 0.,
     fill_radius: float = 0.,
+    object_size: Optional[float] = 0.,
     default_wavelength: float = .510,
     override: bool = False,
     plot: bool = False
@@ -346,7 +365,7 @@ def create_synthetic_sample(
     reference = beads(
         image_shape=(64, 64, 64),    # Change this to change image size (e.g. 256,256,256).
         photons=photons,
-        object_size=0,
+        object_size=object_size,
         num_objs=npoints,
         fill_radius=fill_radius,
     )
@@ -659,6 +678,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--object_size", default=0.0,
+        help="optional bead size (Default: 0 for diffraction-limited beads, None for beads with random sizes)"
+    )
+
+    parser.add_argument(
         "--lam_detection", default=.510, type=float,
         help='wavelength in microns'
     )
@@ -766,6 +790,7 @@ def main(args=None):
         min_photons=args.min_photons,
         max_photons=args.max_photons,
         fill_radius=args.fill_radius,
+        object_size=args.object_size,
         override=args.override,
         plot=args.plot
     )
