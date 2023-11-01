@@ -129,7 +129,7 @@ def beads(
 
     if object_size == 0:
         bead = photons
-    elif object_size is None or object_size == 'None':  # bead size will be randomly selected
+    elif object_size == -1:  # bead size will be randomly selected
         pick_random_bead_size = lambda: np.random.uniform(low=1, high=5)
     else:  # all beads will have the same size
         bead = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=fwhm2sigma(object_size)) * photons
@@ -148,7 +148,7 @@ def beads(
         if object_size == 0:  # object_size = 0 diffraction-limited
             reference[z, y, x] = bead
 
-        elif object_size is None or object_size == 'None':  # bead size will be randomly selected
+        elif object_size == -1:  # bead size will be randomly selected
             bead = gaussian_kernel(
                 kernlen=(kernlen, kernlen, kernlen),
                 std=fwhm2sigma(pick_random_bead_size())
@@ -678,8 +678,8 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--object_size", default=0.0,
-        help="optional bead size (Default: 0 for diffraction-limited beads, None for beads with random sizes)"
+        "--object_size", default=0.0, type=float,
+        help="optional bead size (Default: 0 for diffraction-limited beads, -1 for beads with random sizes)"
     )
 
     parser.add_argument(
