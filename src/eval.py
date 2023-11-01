@@ -2809,7 +2809,7 @@ def evaluate_object_sizes(
     digital_rotations: bool = True,
     agg: str = 'median',
     na: float = 1.0,
-    photons: int = 50000,
+    photons: int = 1000000,
     override: bool = False,
 ):
     plt.rcParams.update({
@@ -2862,9 +2862,6 @@ def evaluate_object_sizes(
         psf = samplegen.single_psf(phi=wavefront, normed=True)
         psf /= np.sum(psf)
 
-        width2sigma = lambda w: w / (2 * np.sqrt(2 * np.log(2)))
-        sigma2width = lambda s: s * (2 * np.sqrt(2 * np.log(2)))
-
         if not override and Path(f"{savepath}_inputs.npy").exists():
             inputs = np.load(f"{savepath}_inputs.npy")
         else:
@@ -2874,7 +2871,7 @@ def evaluate_object_sizes(
                 if w > 0:
                     inputs[i] = utils.add_noise(utils.fftconvolution(
                         sample=psf,
-                        kernel=utils.gaussian_kernel(kernlen=(21, 21, 21), std=width2sigma(w)) * photons
+                        kernel=utils.gaussian_kernel(kernlen=(21, 21, 21), std=utils.fwhm2sigma(w)) * photons
                     ))
                 else:
                     inputs[i] = utils.add_noise(psf * photons)
@@ -2962,7 +2959,7 @@ def evaluate_object_sizes(
         ax.spines.right.set_visible(False)
         ax.spines.top.set_visible(False)
 
-        secax = ax.secondary_xaxis('top', functions=(width2sigma, sigma2width))
+        secax = ax.secondary_xaxis('top', functions=(utils.fwhm2sigma, utils.sigma2fwhm))
         secax.set_xlabel(r'Gaussian kernel $\sigma$ ($\sigma = w / 2 \sqrt{2 \ln{2}}$)')
 
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)

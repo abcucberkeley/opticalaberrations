@@ -1,4 +1,5 @@
 import matplotlib
+
 matplotlib.use('Agg')
 
 import io
@@ -24,6 +25,7 @@ except ImportError as e:
 from wavefront import Wavefront
 
 import matplotlib.pyplot as plt
+
 plt.set_loglevel('error')
 
 logging.basicConfig(
@@ -36,12 +38,12 @@ logger = logging.getLogger(__name__)
 
 @profile
 def multiprocess(
-    jobs: Union[Generator, List, np.ndarray],
-    func: Any,
-    desc: str = 'Processing',
-    cores: int = -1,
-    unit: str = 'it',
-    pool: Optional[mp.Pool] = None,
+        jobs: Union[Generator, List, np.ndarray],
+        func: Any,
+        desc: str = 'Processing',
+        cores: int = -1,
+        unit: str = 'it',
+        pool: Optional[mp.Pool] = None,
 ):
     """ Multiprocess a generic function
     Args:
@@ -142,11 +144,11 @@ def poisson_noise(image: np.ndarray) -> np.array:
 
 
 def add_noise(
-    image: np.ndarray,
-    mean_background_offset: int = 100,
-    sigma_background_noise: int = 40,
-    quantum_efficiency: float = .82,
-    electrons_per_count: float = .22,
+        image: np.ndarray,
+        mean_background_offset: int = 100,
+        sigma_background_noise: int = 40,
+        quantum_efficiency: float = .82,
+        electrons_per_count: float = .22,
 ):
     """
 
@@ -163,22 +165,22 @@ def add_noise(
     image = photons2electrons(image, quantum_efficiency=quantum_efficiency)
     sigma_background_noise *= electrons_per_count  # electrons;  40 counts = 40 * .22 electrons per count
     dark_read_noise = normal_noise(mean=0, sigma=sigma_background_noise, size=image.shape)  # dark image in electrons
-    shot_noise = poisson_noise(image)   # shot noise in electrons
+    shot_noise = poisson_noise(image)  # shot noise in electrons
 
     image += shot_noise + dark_read_noise
     image = electrons2counts(image, electrons_per_count=electrons_per_count)
 
-    image += mean_background_offset    # add camera offset (camera offset in counts)
+    image += mean_background_offset  # add camera offset (camera offset in counts)
     image[image < 0] = 0
     return image
 
 
 def microns2waves(a, wavelength):
-    return a/wavelength
+    return a / wavelength
 
 
 def waves2microns(a, wavelength):
-    return a*wavelength
+    return a * wavelength
 
 
 def mae(y: np.array, p: np.array, axis=0) -> np.array:
@@ -192,7 +194,7 @@ def mse(y: np.array, p: np.array, axis=0) -> np.array:
 
 
 def rmse(y: np.array, p: np.array, axis=0) -> np.array:
-    error = np.sqrt((y - p)**2)
+    error = np.sqrt((y - p) ** 2)
     return np.mean(error[np.isfinite(error)], axis=axis)
 
 
@@ -210,7 +212,7 @@ def p2v(zernikes, wavelength=.510, na=1.0):
     theta = np.arctan2(Y, X)
 
     Y, X = np.ogrid[:grid, :grid]
-    dist_from_center = np.sqrt((X - grid//2) ** 2 + (Y - grid//2) ** 2)
+    dist_from_center = np.sqrt((X - grid // 2) ** 2 + (Y - grid // 2) ** 2)
     na_mask = dist_from_center <= (na * grid) / 2
 
     nm_pairs = set((n, m) for n in range(11) for m in range(-n, n + 1, 2))
@@ -340,13 +342,12 @@ def fftconvolution(kernel, sample):
         normalize_kernel=False,
         nan_treatment='fill',
         fill_value=0
-    ).astype(sample.dtype)   # otherwise returns as float64
+    ).astype(sample.dtype)  # otherwise returns as float64
     conv[conv < 0] = 0  # clip negative small values
     return conv
 
 
 def fft_decon(kernel, sample, iters):
-
     for k in range(kernel.ndim):
         kernel = np.roll(kernel, kernel.shape[k] // 2, axis=k)
 
@@ -448,14 +449,13 @@ def create_multiindex_tile_dataframe(
 
 
 def get_tile_confidence(
-    predictions: pd.DataFrame,
-    stdevs: pd.DataFrame,
-    prediction_threshold: float = 0.25,
-    ignore_tile: Optional[list] = None,
-    ignore_modes: Optional[list] = [0, 1, 2, 4],
-    verbose: bool = False,
+        predictions: pd.DataFrame,
+        stdevs: pd.DataFrame,
+        prediction_threshold: float = 0.25,
+        ignore_tile: Optional[list] = None,
+        ignore_modes: Optional[list] = [0, 1, 2, 4],
+        verbose: bool = False,
 ):
-
     if ignore_tile is not None:
         for cc in ignore_tile:
             z, y, x = [int(s) for s in cc if s.isdigit()]
@@ -515,9 +515,9 @@ def convert_path_to_other_cam(src_path: Path, dst='B'):
         Path to existing file.
 
     """
-    filename = src_path.name                                     # 'before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0177969396msecAbs_-01x_-01y_-01z_0000t.tif'
-    prefix = re.findall(r"^.*Cam", filename)[0] + dst    # 'after_threestacks_Iter_0000_Cam' + 'B'
-    ending = re.findall(r"msec_.*", filename)[0]         # 'msec_0160433718msecAbs_-01x_-01y_-01z_0000t.tif'
+    filename = src_path.name  # 'before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0177969396msecAbs_-01x_-01y_-01z_0000t.tif'
+    prefix = re.findall(r"^.*Cam", filename)[0] + dst  # 'after_threestacks_Iter_0000_Cam' + 'B'
+    ending = re.findall(r"msec_.*", filename)[0]  # 'msec_0160433718msecAbs_-01x_-01y_-01z_0000t.tif'
     cam_b = src_path.parent.glob(f"{prefix}*{ending}")
     return list(cam_b)[0]
 
@@ -544,9 +544,19 @@ def round_to_odd(n):
 
 def gaussian_kernel(kernlen: tuple = (21, 21, 21), std=3):
     """Returns a 2D Gaussian kernel array."""
-    x = np.arange((-kernlen[2] // 2)+1, (-kernlen[2] // 2)+1 + kernlen[2], 1)
-    y = np.arange((-kernlen[1] // 2)+1, (-kernlen[1] // 2)+1 + kernlen[1], 1)
-    z = np.arange((-kernlen[0] // 2)+1, (-kernlen[0] // 2)+1 + kernlen[0], 1)
+    x = np.arange((-kernlen[2] // 2) + 1, (-kernlen[2] // 2) + 1 + kernlen[2], 1)
+    y = np.arange((-kernlen[1] // 2) + 1, (-kernlen[1] // 2) + 1 + kernlen[1], 1)
+    z = np.arange((-kernlen[0] // 2) + 1, (-kernlen[0] // 2) + 1 + kernlen[0], 1)
     zz, yy, xx = np.meshgrid(z, y, x, indexing='ij')
     kernel = np.exp(-(xx ** 2 + yy ** 2 + zz ** 2) / (2 * std ** 2))
     return kernel / np.nansum(kernel)
+
+
+def fwhm2sigma(w):
+    """ convert from full width at half maximum (FWHM) to std """
+    return w / (2 * np.sqrt(2 * np.log(2)))
+
+
+def sigma2fwhm(s):
+    """ convert from std to full width at half maximum (FWHM) """
+    return s * (2 * np.sqrt(2 * np.log(2)))
