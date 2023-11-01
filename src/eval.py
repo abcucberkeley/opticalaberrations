@@ -2809,7 +2809,7 @@ def evaluate_object_sizes(
     digital_rotations: bool = True,
     agg: str = 'median',
     na: float = 1.0,
-    photons: int = 100000,
+    photons: int = 50000,
     override: bool = False,
 ):
     plt.rcParams.update({
@@ -2825,14 +2825,19 @@ def evaluate_object_sizes(
     digital_rotations = 361 if digital_rotations else None
 
     m = backend.load(model)
-    gen = backend.load_metadata(
+    modelgen = backend.load_metadata(
         model,
         psf_shape=3*[m.input_shape[2]],
         rotate=False,
+    )
+    samplegen = backend.load_metadata(
+        model,
+        psf_shape=(72, 72, 72),
+        rotate=False,
         # psf_type='widefield',
-        # x_voxel_size=.097,
-        # y_voxel_size=.097,
-        # z_voxel_size=.2,
+        x_voxel_size=.097,
+        y_voxel_size=.097,
+        z_voxel_size=.2,
     )
     w = Wavefront(np.zeros(15))
 
@@ -2853,8 +2858,8 @@ def evaluate_object_sizes(
         savepath = savepath / f"ph{photons}"
 
         sizes = np.arange(0, 5.25, .25).round(2)
-        wavefront = Wavefront(zernikes, lam_detection=gen.lam_detection, rotate=False)
-        psf = gen.single_psf(phi=wavefront, normed=True)
+        wavefront = Wavefront(zernikes, lam_detection=samplegen.lam_detection, rotate=False)
+        psf = samplegen.single_psf(phi=wavefront, normed=True)
         psf /= np.sum(psf)
 
         width2sigma = lambda w: w / (2 * np.sqrt(2 * np.log(2)))
@@ -2885,7 +2890,8 @@ def evaluate_object_sizes(
             embeddings = np.stack([
                 backend.preprocess(
                     i,
-                    modelpsfgen=gen,
+                    modelpsfgen=modelgen,
+                    samplepsfgen=samplegen,
                     digital_rotations=digital_rotations,
                     remove_background=True,
                     normalize=True,
@@ -2908,7 +2914,7 @@ def evaluate_object_sizes(
             res = backend.predict_dataset(
                 model,
                 inputs=embeddings,
-                psfgen=gen,
+                psfgen=modelgen,
                 batch_size=batch_size,
                 save_path=[f"{savepath}_{w}" for w in sizes],
                 digital_rotations=digital_rotations,
@@ -2925,8 +2931,8 @@ def evaluate_object_sizes(
         residuals = ys - preds
 
         df = pd.DataFrame([w for w in sizes], columns=['size'])
-        df['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
-        df['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
+        df['prediction'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in preds]
+        df['residuals'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in residuals]
         df['moi'] = ys[:, mode.index_ansi] - preds[:, mode.index_ansi]
         df['counts'] = [np.sum(i) for i in inputs]
         df.to_csv(f'{savepath}.csv')
