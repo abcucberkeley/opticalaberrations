@@ -171,6 +171,11 @@ def parse_args(args):
         help='allies name for this job'
     )
 
+    default.add_argument(
+        "--exclusive", action='store_true',
+        help='allies name for this job'
+    )
+
     return parser.parse_args(args)
 
 
@@ -200,8 +205,14 @@ def main(args=None):
         if args.constraint is not None:
             sjob += f" -C '{args.constraint}' "
 
-        if args.gpus > 0:
-            sjob += f' --gres=gpu:{args.gpus} '
+        if args.exclusive:
+            sjob += f"--exclusive "
+        else:
+            if args.gpus > 0:
+                sjob += f' --gres=gpu:{args.gpus} '
+
+            sjob += f' --cpus-per-task={args.cpus} '
+            sjob += f" --mem='{args.mem}' "
 
         if args.nodelist is not None:
             sjob += f" --nodelist='{args.nodelist}' "
@@ -209,8 +220,6 @@ def main(args=None):
         if args.dependency is not None:
             sjob += f" --dependency={args.dependency} "
 
-        sjob += f' --cpus-per-task={args.cpus} '
-        sjob += f" --mem='{args.mem}' "
         sjob += f" --job-name={args.name} "
         sjob += f" --output={outdir}/{args.script.split('.')[0]}.log"
         sjob += f" --export=ALL,"

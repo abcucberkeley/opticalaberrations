@@ -27,12 +27,14 @@ if [ $CLUSTER = 'slurm' ];then
   GPUS=4
   CPUS=16
   MEM="500GB"
+  EXCLUSIVE="--exclusive"
 else
   DATA="/groups/betzig/betziglab/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
   PARTITION="gpu_a100"
   GPUS=4
   CPUS=8
   MEM="320GB"
+  EXCLUSIVE="-x"
 fi
 
 
@@ -89,17 +91,17 @@ do
 
     for (( i=1; i<=$ITERS; i++ ))
     do
-      python manager.py $CLUSTER test.py --dependency singleton  --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS \
+      python manager.py $CLUSTER test.py --dependency singleton  --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
       --task "$MODEL.h5 --niter $i --num_beads 1 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
       --taskname $NA \
       --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
-      python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS \
+      python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
       --task "$MODEL.h5 --niter $i --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
       --taskname $NA \
       --name $MODEL/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
-      #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS \
+      #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
       #--task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
       #--taskname $NA \
       #--name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
@@ -109,26 +111,26 @@ do
   done
 
 
-  BATCH=128
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH random" \
-  --taskname random \
-  --name $MODEL/$EVALSIGN/samples
-
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modes" \
-  --taskname evalmodes \
-  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_1'
-
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 $ROTATIONS --batch_size $BATCH modes" \
-  --taskname evalmodes \
-  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
-
-  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modalities" \
-  --taskname modalities \
-  --name $MODEL/$EVALSIGN/modalities
+#  BATCH=128
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH random" \
+#  --taskname random \
+#  --name $MODEL/$EVALSIGN/samples
+#
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modes" \
+#  --taskname evalmodes \
+#  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_1'
+#
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 $ROTATIONS --batch_size $BATCH modes" \
+#  --taskname evalmodes \
+#  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
+#
+#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modalities" \
+#  --taskname modalities \
+#  --name $MODEL/$EVALSIGN/modalities
 
 done
 
