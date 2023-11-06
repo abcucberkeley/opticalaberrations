@@ -210,6 +210,7 @@ def load_dataset(
     photons_range=None,
     npoints_range=None,
     suffix_to_avoid=None,
+    filename_pattern: str = r'*[!_gt|!_realspace|!_noisefree].tif'
 ):
     logger.info(
         f'Searching for files that meet:'
@@ -231,7 +232,7 @@ def load_dataset(
     )
     files = multiprocess(
         func=check,
-        jobs=Path(datadir).rglob('*[!_gt|!_realspace].tif'),
+        jobs=Path(datadir).rglob(filename_pattern),
         cores=-1,
         desc='Loading dataset hashtable',
         unit=' .tif candidates checked'
@@ -267,8 +268,8 @@ def load_dataset(
 
 
 @profile
-def check_dataset(datadir):
-    jobs = multiprocess(func=check_sample, jobs=Path(datadir).rglob('*[!_gt|!_realspace].tif'), cores=-1)
+def check_dataset(datadir, filename_pattern: str = r'*[!_gt|!_realspace|!_noisefree].tif'):
+    jobs = multiprocess(func=check_sample, jobs=Path(datadir).rglob(filename_pattern), cores=-1)
     corrupted = [j for j in jobs if j != 1]
     corrupted = pd.DataFrame(corrupted, columns=['path'])
     logger.info(f"Corrupted files [{corrupted.index.shape[0]}]")

@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 import cli
-from utils import mean_min_distance, randuniform, add_noise, round_to_odd, round_to_even
+from utils import mean_min_distance, randuniform, add_noise
 from utils import electrons2counts, photons2electrons, counts2electrons, electrons2photons
 from preprocessing import prep_sample, resize_with_crop_or_pad
 from utils import fftconvolution, multiprocess, gaussian_kernel, fwhm2sigma
@@ -48,6 +48,7 @@ def save_synthetic_sample(
     npoints=1,
     gt=None,
     realspace=None,
+    realspace_noisefree=None,
     counts_mode=None,
     counts_percentiles=None,
     sigma_background_noise=None,
@@ -55,6 +56,7 @@ def save_synthetic_sample(
     electrons_per_count=None,
     quantum_efficiency=None,
     psf_type=None,
+    gtsavepath=None,
 ):
     if gt is not None:
         imwrite(f"{savepath}_gt.tif", gt.astype(np.float32), compression='deflate')
@@ -64,6 +66,9 @@ def save_synthetic_sample(
 
     imwrite(f"{savepath}.tif", inputs.astype(np.float32), compression='deflate')
     # logger.info(f"Saved: {savepath.resolve()}.tif")
+
+    if gtsavepath is not None:
+        imwrite(f"{gtsavepath}.tif", realspace_noisefree.astype(np.float32), compression='deflate')
 
     with Path(f"{savepath}.json").open('w') as f:
         json = dict(
@@ -77,7 +82,7 @@ def save_synthetic_sample(
             counts=int(counts),
             counts_mode=int(counts_mode),
             counts_percentiles=counts_percentiles.tolist(),
-            npoints=int(npoints),
+            npoints=npoints,
             peak2peak=float(p2v),
             avg_min_distance=float(avg_min_distance),
             mean_background_offset=int(mean_background_offset),
@@ -110,7 +115,7 @@ def beads(
     image_shape: tuple,
     photons: int = 1,
     object_size: Optional[int] = 0,
-    num_objs: int = 1,
+    num_objs: Optional[int] = 1,
     fill_radius: float = .66,           # .66 will be roughly a bit inside of the Tukey window
     zborder: int = 10,
     kernlen: int = 21,
@@ -126,6 +131,9 @@ def beads(
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
     rng = np.random.default_rng()
     reference = np.zeros(image_shape)
+
+    if num_objs == 'random':
+        num_objs = int(randuniform((1, 100)))
 
     if object_size == 0:
         bead = photons
@@ -194,7 +202,8 @@ def simulate_image(
     quantum_efficiency: float = .82,
     model_psf_shape: tuple = (64, 64, 64),
     scale_by_maxcounts: Optional[int] = None,
-    plot: bool = False
+    plot: bool = False,
+    gtdir: Optional[Path] = None,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
 
@@ -218,10 +227,14 @@ def simulate_image(
         img *= electrons2photons(counts2electrons(scale_by_maxcounts))
 
     p2v = phi.peak2valley(na=1.0)
-    if npoints > 1:
+    if npoints == 'random' or npoints > 1:
         avg_min_distance = np.nan_to_num(mean_min_distance(reference, voxel_size=gen.voxel_size), nan=0)
     else:
         avg_min_distance = 0.
+
+    # convert image to counts
+    inputs_noisefree = photons2electrons(img, quantum_efficiency=quantum_efficiency)
+    inputs_noisefree = electrons2counts(inputs_noisefree, electrons_per_count=electrons_per_count)
 
     if noise:  # convert to electrons to add shot noise and dark read noise, then convert to counts
         inputs = add_noise(
@@ -231,9 +244,8 @@ def simulate_image(
             quantum_efficiency=quantum_efficiency,
             electrons_per_count=electrons_per_count,
         )
-    else:  # convert image to counts
-        inputs = photons2electrons(img, quantum_efficiency=quantum_efficiency)
-        inputs = electrons2counts(inputs, electrons_per_count=electrons_per_count)
+    else:
+        inputs = inputs_noisefree
 
     counts = np.sum(inputs)
     counts_mode = int(st.mode(inputs.astype(int), axis=None).mode[0])
@@ -281,6 +293,7 @@ def simulate_image(
                 gt=reference,
                 gen=gen,
                 realspace=inputs,
+                realspace_noisefree=inputs_noisefree,
                 avg_min_distance=avg_min_distance,
                 lls_defocus_offset=lls_defocus_offset,
                 sigma_background_noise=sigma_background_noise,
@@ -291,8 +304,10 @@ def simulate_image(
             )
     else:
         save_synthetic_sample(
-            outdir/filename,
-            inputs,
+            savepath=outdir/filename,
+            inputs=inputs,
+            gtsavepath=gtdir/filename if gtdir is not None else None,
+            realspace_noisefree=inputs_noisefree if gtdir is not None else None,
             gt=reference,
             amps=phi.amplitudes,
             photons=photons,
@@ -317,7 +332,7 @@ def create_synthetic_sample(
     filename: str,
     generators: dict,
     upsampled_generators: dict,
-    npoints: int,
+    npoints: Optional[int],
     savedir: Path,
     modes: int,
     distribution: str,
@@ -343,7 +358,8 @@ def create_synthetic_sample(
     object_size: Optional[float] = 0.,
     default_wavelength: float = .510,
     override: bool = False,
-    plot: bool = False
+    plot: bool = False,
+    denoising_dataset: bool = False,
 ):
 
     aberration = Wavefront(
@@ -378,25 +394,33 @@ def create_synthetic_sample(
         if template is None:
             template = wavefronts.get("../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat")
 
-        outdir = savedir / rf"{gen.psf_type.replace('../lattice/', '').split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
+        if denoising_dataset:
+            outdir = savedir / 'noisy'
+            outdir.mkdir(exist_ok=True, parents=True)
 
-        if not randomize_voxel_size:
-            outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
-
-        outdir = outdir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
-        outdir = outdir / f"z{gen.n_modes}"
-
-        if gen.distribution == 'powerlaw':
-            outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
+            gtdir = savedir / 'gt'
+            gtdir.mkdir(exist_ok=True, parents=True)
         else:
-            outdir = outdir / f"{gen.distribution}"
+            gtdir = None
+            outdir = savedir / rf"{gen.psf_type.replace('../lattice/', '').split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
 
-        outdir = outdir / f"photons_{photon_range[0]}-{photon_range[1]}"
-        outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
-                          f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+            if not randomize_voxel_size:
+                outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
 
-        outdir = outdir / f"npoints_{npoints}"
-        outdir.mkdir(exist_ok=True, parents=True)
+            outdir = outdir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
+            outdir = outdir / f"z{gen.n_modes}"
+
+            if gen.distribution == 'powerlaw':
+                outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
+            else:
+                outdir = outdir / f"{gen.distribution}"
+
+            outdir = outdir / f"photons_{photon_range[0]}-{photon_range[1]}"
+            outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
+            outdir = outdir / f"npoints_{npoints}"
+            outdir.mkdir(exist_ok=True, parents=True)
 
         if gen.psf_type == '2photon':
             # boost um RMS aberration amplitudes for '2photon', so we create equivalent p2v aberrations
@@ -486,6 +510,7 @@ def create_synthetic_sample(
                     reference=reference,
                     model_psf_shape=reference.shape,
                     outdir=outdir,
+                    gtdir=gtdir,
                     phi=wavefronts[gen.psf_type],
                     gen=gen,
                     upsampled_gen=upsampled_gen,
@@ -510,6 +535,7 @@ def create_synthetic_sample(
                 reference=reference,
                 model_psf_shape=reference.shape,
                 outdir=outdir,
+                gtdir=gtdir,
                 phi=wavefronts[gen.psf_type],
                 gen=gen,
                 upsampled_gen=upsampled_gen,
@@ -525,7 +551,7 @@ def create_synthetic_sample(
                 lls_defocus_offset=lls_defocus_offset,
                 scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
                 if gen.psf_type == 'widefield' else None,
-                plot=plot
+                plot=plot,
             )
 
     return np.stack(list(inputs.values()), axis=0)
@@ -535,7 +561,7 @@ def parse_args(args):
     parser = cli.argparser()
 
     parser.add_argument("--filename", type=str, default='1')
-    parser.add_argument("--npoints", type=int, default=1)
+    parser.add_argument("--npoints", default=1)
     parser.add_argument("--outdir", type=Path, default='../dataset')
 
     parser.add_argument(
@@ -712,6 +738,11 @@ def parse_args(args):
         help='optional toggle to plot preprocessing'
     )
 
+    parser.add_argument(
+        '--denoising_dataset', action='store_true',
+        help='optional toggle to create a dataset for training a denoising model'
+    )
+
     return parser.parse_args(args)
 
 
@@ -792,7 +823,8 @@ def main(args=None):
         fill_radius=args.fill_radius,
         object_size=args.object_size,
         override=args.override,
-        plot=args.plot
+        plot=args.plot,
+        denoising_dataset=args.denoising_dataset,
     )
     logger.info(f"Output folder: {Path(args.outdir).resolve()}")
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]

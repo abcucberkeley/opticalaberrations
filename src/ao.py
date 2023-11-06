@@ -571,8 +571,8 @@ def parse_args(args):
         help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
     )
     predict_folder.add_argument(
-        "--filename_pattern", default=r'*[!_gt|!_realspace].tif', type=str,
-        help="optional regex pattern for selecting files in the given directory (Default: `r'*[!_gt|!_realspace].tif'`)"
+        "--filename_pattern", default=r'*[!_gt|!_realspace|!_noisefree].tif', type=str,
+        help="optional regex pattern for selecting files in the given directory (Default: `r'*[!_gt|!_realspace|!_noisefree].tif'`)"
     )
     predict_folder.add_argument(
         "--current_dm", default=None, type=Path,

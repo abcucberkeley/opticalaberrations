@@ -1060,7 +1060,7 @@ def predict_folder(
         psf_type: Optional[Union[str, Path]] = None,
         min_psnr: int = 5,
         object_gaussian_kernel_width: float = 0,
-        filename_pattern: str = r'*[!_gt|!_realspace].tif'
+        filename_pattern: str = r'*[!_gt|!_realspace|!_noisefree].tif'
 ):
     pool = None
     dm_state = utils.load_dm(dm_state)

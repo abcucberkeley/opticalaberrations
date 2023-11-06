@@ -543,7 +543,7 @@ def round_to_odd(n):
 
 
 def gaussian_kernel(kernlen: tuple = (21, 21, 21), std=3):
-    """Returns a 2D Gaussian kernel array."""
+    """Returns a 3D Gaussian kernel array."""
     x = np.arange((-kernlen[2] // 2) + 1, (-kernlen[2] // 2) + 1 + kernlen[2], 1)
     y = np.arange((-kernlen[1] // 2) + 1, (-kernlen[1] // 2) + 1 + kernlen[1], 1)
     z = np.arange((-kernlen[0] // 2) + 1, (-kernlen[0] // 2) + 1 + kernlen[0], 1)

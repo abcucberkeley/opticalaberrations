@@ -1133,7 +1133,7 @@ def plot_embeddings(
             np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
         ),
         [1, 1, 1, 1],
-        plt.get_cmap('YlOrRd' if vmax == 3 else 'OrRd', 256)(
+        plt.get_cmap('YlOrRd' if vmax != 1 else 'OrRd', 256)(
             np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
         )
     ))
