@@ -88,6 +88,11 @@ def parse_args(args):
         help='select a specific node type eg. titan'
     )
 
+    slurm.add_argument(
+        "--exclusive", action='store_true',
+        help='allies name for this job'
+    )
+
     lsf = subparsers.add_parser("lsf", help='use LSF to submit jobs')
 
     lsf.add_argument(
@@ -142,6 +147,11 @@ def parse_args(args):
     lsf.add_argument(
         "--dependency", default=None, type=str,
         help='submit job with a specific dependency'
+    )
+
+    lsf.add_argument(
+        "--exclusive", action='store_true',
+        help='allies name for this job'
     )
 
     default = subparsers.add_parser("default", help='run a job using default python')
