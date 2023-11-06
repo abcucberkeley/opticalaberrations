@@ -16,15 +16,8 @@ ABC_A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
 CLUSTER=slurm
 
 TRAINED_MODELS=(
-  "spatial_planes10"
-  "YuMB_lambda510-nostem"
-  "YuMB_lambda510-fourier-decomposition-p16"
-  "YuMB_lambda510-power-decomposition-4p16"
-  "YuMB_lambda510-zernike-polynomials-4"
-  "YuMB_lambda510-zernike-polynomials-10"
-  "YuMB_lambda510-rotational-symmetry-p1"
-  "YuMB_lambda510-rotational-symmetry-p4"
-  "YuMB_lambda510-rotational-symmetry-p16"
+  "YuMB_lambda510"
+  "YuMB_lambda510-default"
 )
 
 
@@ -116,26 +109,26 @@ do
   done
 
 
-#  BATCH=128
-#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH random" \
-#  --taskname random \
-#  --name $MODEL/$EVALSIGN/samples
-#
-#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modes" \
-#  --taskname evalmodes \
-#  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_1'
-#
-#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-#  --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 $ROTATIONS --batch_size $BATCH modes" \
-#  --taskname evalmodes \
-#  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
-#
-#  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
-#  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modalities" \
-#  --taskname modalities \
-#  --name $MODEL/$EVALSIGN/modalities
+  BATCH=128
+  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH random" \
+  --taskname random \
+  --name $MODEL/$EVALSIGN/samples
+
+  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modes" \
+  --taskname evalmodes \
+  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_1'
+
+  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+  --task "$MODEL.h5 --eval_sign $EVALSIGN --num_objs 5 --n_samples 5 $ROTATIONS --batch_size $BATCH modes" \
+  --taskname evalmodes \
+  --name $MODEL/$EVALSIGN/evalmodes/'num_objs_5'
+
+  python manager.py slurm test.py --partition abc --constraint 'titan' --mem '125GB' --cpus 5 --gpus 1 \
+  --task "$MODEL.h5 --eval_sign $EVALSIGN $ROTATIONS --batch_size $BATCH modalities" \
+  --taskname modalities \
+  --name $MODEL/$EVALSIGN/modalities
 
 done
 

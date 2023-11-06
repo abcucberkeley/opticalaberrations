@@ -966,14 +966,14 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
         flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
 
-        available_nodes = slurm_utils.get_available_resources(
-            username=username,
-            hostname=hostname,
-            requested_partition='abc_a100'
-        ).sort_values('available_gpus', ascending=False)
-
-        print(available_nodes)
-        desired_node = available_nodes.iloc[0].to_dict()
+        # available_nodes = slurm_utils.get_available_resources(
+        #     username=username,
+        #     hostname=hostname,
+        #     requested_partition='abc_a100'
+        # ).sort_values('available_gpus', ascending=False)
+        #
+        # print(available_nodes)
+        # desired_node = available_nodes.iloc[0].to_dict()
 
         # flags = re.sub(
         #     pattern='--batch_size \d+',  # replace w/ 896; max number of samples we can fit on A100 w/ 80G of vram
@@ -1028,8 +1028,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
 
         if gpu_workers > 0:
             gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
-            if gpu_model.find('A100') >= 0:
-                # update batchsize automatically
+            if gpu_model.find('A100') >= 0:  # update batchsize automatically
                 args.batch_size = 896 * gpu_workers
         else:
             gpu_model = None
