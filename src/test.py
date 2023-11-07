@@ -93,11 +93,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--photons_min", default=2e5, type=float, help='min number of photons to use'
+        "--photons_min", default=1.5e5, type=float, help='min number of photons to use'
     )
 
     parser.add_argument(
-        "--photons_max", default=3e5, type=float, help='max number of photons to use'
+        "--photons_max", default=2e5, type=float, help='max number of photons to use'
     )
 
     parser.add_argument(
@@ -154,16 +154,17 @@ def main(args=None):
     )
 
     gpu_workers = strategy.num_replicas_in_sync
+    gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
     logging.info(f'Number of active GPUs: {gpu_workers}')
 
-    if gpu_workers > 0:
-        gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
-        if gpu_model.find('A100') >= 0:  # update batchsize automatically
-            args.batch_size = 896 * gpu_workers
+    if gpu_workers > 0 and gpu_model.find('A100') >= 0:  # update batchsize automatically
+        batch_size = 768 * gpu_workers
+    elif gpu_workers > 0 and gpu_model.find('RTX') >= 0:
+        batch_size = 256 * gpu_workers
     else:
-        gpu_model = None
+        batch_size = args.batch_size
 
-    logging.info(f'Number of active GPUs: {gpu_workers}, {gpu_model}, batch_size={args.batch_size}')
+    logging.info(f'Number of active GPUs: {gpu_workers}, {gpu_model}, batch_size={batch_size}')
 
     with strategy.scope():
         if args.target == 'modes':
@@ -171,28 +172,28 @@ def main(args=None):
                 args.model,
                 eval_sign=args.eval_sign,
                 num_objs=args.num_objs,
-                batch_size=args.batch_size,
+                batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
             )
         elif args.target == 'sizes':
             savepath = eval.evaluate_object_sizes(
                 args.model,
                 eval_sign=args.eval_sign,
-                batch_size=args.batch_size,
+                batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
             )
         elif args.target == "random":
             savepath = eval.random_samples(
                 model=args.model,
                 eval_sign=args.eval_sign,
-                batch_size=args.batch_size,
+                batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
             )
         elif args.target == "modalities":
             savepath = eval.eval_modalities(
                 model=args.model,
                 eval_sign=args.eval_sign,
-                batch_size=args.batch_size,
+                batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
             )
         elif args.target == 'snrheatmap':
@@ -203,7 +204,7 @@ def main(args=None):
                 distribution=args.dist,
                 samplelimit=args.n_samples,
                 na=args.na,
-                batch_size=args.batch_size,
+                batch_size=batch_size,
                 eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
                 plot=args.plot,
@@ -220,7 +221,7 @@ def main(args=None):
                 distribution=args.dist,
                 samplelimit=args.n_samples,
                 na=args.na,
-                batch_size=args.batch_size,
+                batch_size=batch_size,
                 eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
                 plot=args.plot,
@@ -233,7 +234,7 @@ def main(args=None):
             savepath = eval.eval_confidence(
                 model=args.model,
                 eval_sign=args.eval_sign,
-                batch_size=args.batch_size,
+                batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
             )
         elif args.target == 'confidence_heatmap':
@@ -244,7 +245,7 @@ def main(args=None):
                 distribution=args.dist,
                 samplelimit=args.n_samples,
                 na=args.na,
-                batch_size=args.batch_size,
+                batch_size=batch_size,
                 eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
                 plot=args.plot,
@@ -260,7 +261,7 @@ def main(args=None):
                 distribution=args.dist,
                 samplelimit=args.n_samples,
                 na=args.na,
-                batch_size=args.batch_size,
+                batch_size=batch_size,
                 eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
                 photons_range=(args.photons_min, args.photons_max),
@@ -278,7 +279,7 @@ def main(args=None):
                 distribution=args.dist,
                 samplelimit=args.n_samples,
                 na=args.na,
-                batch_size=args.batch_size,
+                batch_size=batch_size,
                 eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
                 photons_range=(args.photons_min, args.photons_max),
@@ -297,7 +298,7 @@ def main(args=None):
                     distribution=str(args.dist),
                     samplelimit=int(args.n_samples) if args.n_samples is not None else None,
                     na=float(args.na),
-                    batch_size=int(args.batch_size),
+                    batch_size=int(batch_size),
                     eval_sign=bool(args.eval_sign),
                     digital_rotations=bool(args.digital_rotations),
                     photons_min=float(args.photons_min),

@@ -133,7 +133,7 @@ def beads(
     reference = np.zeros(image_shape)
 
     if num_objs == 'random':
-        num_objs = int(randuniform((1, 100)))
+        num_objs = int(randuniform((1, 50)))
 
     if object_size == 0:
         bead = photons

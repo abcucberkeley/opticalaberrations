@@ -592,51 +592,54 @@ def plot_heatmap_p2v(
                     bins = np.arange(0, xmax + binwidth, binwidth)
                     xticks = np.arange(0, xmax+.05, .05)
 
-            ax1t = ax1.twinx()
-            ax1t = sns.histplot(
-                ax=ax1t,
-                data=x,
-                x=hist_col,
-                stat='percent',
-                kde=True,
-                bins=bins,
-                color=hist_color,
-                element="step",
-            )
-            ax1t.lines[0].set_color(kde_color)
-            ax1t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
-            ax1t.set_ylabel('KDE', color=kde_color)
-            ax1t.set_ylim(0, 30)
+            try:
+                ax1t = ax1.twinx()
+                ax1t = sns.histplot(
+                    ax=ax1t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax1t.lines[0].set_color(kde_color)
+                ax1t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax1t.set_ylabel('KDE', color=kde_color)
+                ax1t.set_ylim(0, 30)
 
-            ax1 = sns.histplot(
-                ax=ax1,
-                data=x,
-                x=hist_col,
-                stat='proportion',
-                color=cdf_color,
-                bins=bins,
-                element="poly",
-                fill=False,
-                cumulative=True,
-            )
+                ax1 = sns.histplot(
+                    ax=ax1,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color=cdf_color,
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                )
 
-            ax1.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
-            ax1.set_ylabel('CDF', color=cdf_color)
-            ax1.set_ylim(0, 1)
-            ax1.set_yticks(np.arange(0, 1.2, .2))
-            ax1.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, label='Median', zorder=3)
-            ax1.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, label='Mean', zorder=3)
-            ax1.set_xlim(0, xmax)
-            ax1.set_xticks(xticks)
-            ax1.set_xlabel(color_label)
-            ax1.text(
-                .9, .8, 'I',
-                horizontalalignment='center',
-                verticalalignment='center',
-                fontsize=20,
-                color='k',
-                transform=ax1.transAxes
-            )
+                ax1.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax1.set_ylabel('CDF', color=cdf_color)
+                ax1.set_ylim(0, 1)
+                ax1.set_yticks(np.arange(0, 1.2, .2))
+                ax1.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, label='Median', zorder=3)
+                ax1.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, label='Mean', zorder=3)
+                ax1.set_xlim(0, xmax)
+                ax1.set_xticks(xticks)
+                ax1.set_xlabel(color_label)
+                ax1.text(
+                    .9, .8, 'I',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax1.transAxes
+                )
+            except IndexError:
+                pass
 
             ax.add_patch(
                 plt.Rectangle((0, .3), .2, .2, ec="k", fc="none", transform=ax.transAxes)
@@ -655,51 +658,53 @@ def plot_heatmap_p2v(
                 (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
             ]
 
+            try:
+                ax2t = ax2.twinx()
+                ax2t = sns.histplot(
+                    ax=ax2t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax2t.lines[0].set_color(kde_color)
+                ax2t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax2t.set_ylabel('KDE', color=kde_color)
+                ax2t.set_ylim(0, 30)
 
-            ax2t = ax2.twinx()
-            ax2t = sns.histplot(
-                ax=ax2t,
-                data=x,
-                x=hist_col,
-                stat='percent',
-                kde=True,
-                bins=bins,
-                color=hist_color,
-                element="step",
-            )
-            ax2t.lines[0].set_color(kde_color)
-            ax2t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
-            ax2t.set_ylabel('KDE', color=kde_color)
-            ax2t.set_ylim(0, 30)
-
-            ax2 = sns.histplot(
-                ax=ax2,
-                data=x,
-                x=hist_col,
-                stat='proportion',
-                color=cdf_color,
-                bins=bins,
-                element="poly",
-                fill=False,
-                cumulative=True,
-            )
-            ax2.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
-            ax2.set_ylabel('CDF', color=cdf_color)
-            ax2.set_ylim(0, 1)
-            ax2.set_yticks(np.arange(0, 1.2, .2))
-            ax2.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
-            ax2.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
-            ax2.set_xlim(0, xmax)
-            ax2.set_xticks(xticks)
-            ax2.set_xlabel(color_label)
-            ax2.text(
-                .9, .8, 'II',
-                horizontalalignment='center',
-                verticalalignment='center',
-                fontsize=20,
-                color='k',
-                transform=ax2.transAxes
-            )
+                ax2 = sns.histplot(
+                    ax=ax2,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color=cdf_color,
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                )
+                ax2.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax2.set_ylabel('CDF', color=cdf_color)
+                ax2.set_ylim(0, 1)
+                ax2.set_yticks(np.arange(0, 1.2, .2))
+                ax2.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+                ax2.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
+                ax2.set_xlim(0, xmax)
+                ax2.set_xticks(xticks)
+                ax2.set_xlabel(color_label)
+                ax2.text(
+                    .9, .8, 'II',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax2.transAxes
+                )
+            except IndexError:
+                pass
 
             ax.add_patch(
                 plt.Rectangle((.4, .3), .2, .2, ec="k", fc="none", transform=ax.transAxes)
@@ -718,51 +723,54 @@ def plot_heatmap_p2v(
                 (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
             ]
 
-            ax3t = ax3.twinx()
-            ax3t = sns.histplot(
-                ax=ax3t,
-                data=x,
-                x=hist_col,
-                stat='percent',
-                kde=True,
-                bins=bins,
-                color=hist_color,
-                element="step",
-            )
-            ax3t.lines[0].set_color(kde_color)
-            ax3t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
-            ax3t.set_ylabel('KDE', color=kde_color)
-            ax3t.set_ylim(0, 30)
+            try:
+                ax3t = ax3.twinx()
+                ax3t = sns.histplot(
+                    ax=ax3t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax3t.lines[0].set_color(kde_color)
+                ax3t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax3t.set_ylabel('KDE', color=kde_color)
+                ax3t.set_ylim(0, 30)
 
-            ax3 = sns.histplot(
-                ax=ax3,
-                data=x,
-                x=hist_col,
-                stat='proportion',
-                color='k',
-                bins=bins,
-                element="poly",
-                fill=False,
-                cumulative=True,
-                zorder=3
-            )
-            ax3.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
-            ax3.set_ylabel('CDF', color=cdf_color)
-            ax3.set_ylim(0, 1)
-            ax3.set_yticks(np.arange(0, 1.2, .2))
-            ax3.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
-            ax3.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
-            ax3.set_xlim(0, xmax)
-            ax3.set_xticks(xticks)
-            ax3.set_xlabel(color_label)
-            ax3.text(
-                .9, .8, 'III',
-                horizontalalignment='center',
-                verticalalignment='center',
-                fontsize=20,
-                color='k',
-                transform=ax3.transAxes
-            )
+                ax3 = sns.histplot(
+                    ax=ax3,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color='k',
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                    zorder=3
+                )
+                ax3.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax3.set_ylabel('CDF', color=cdf_color)
+                ax3.set_ylim(0, 1)
+                ax3.set_yticks(np.arange(0, 1.2, .2))
+                ax3.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+                ax3.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
+                ax3.set_xlim(0, xmax)
+                ax3.set_xticks(xticks)
+                ax3.set_xlabel(color_label)
+                ax3.text(
+                    .9, .8, 'III',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax3.transAxes
+                )
+            except IndexError:
+                pass
 
             ax.add_patch(
                 plt.Rectangle((.8, .3), .2, .2, ec="k", fc="none", transform=ax.transAxes)
@@ -2708,11 +2716,12 @@ def compare_models(
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
+
 def residuals_histogram(
-        csv_path: Path = Path(r"C:\Users\milkied10\Desktop\na_1.0_predictions.csv"),
-        amp_range: tuple = (0.18, 0.22),
-        photon_min: float = 50000,
-        total_ab_max: float = 3.5,
+    csv_path: Path = Path(r"C:\Users\milkied10\Desktop\na_1.0_predictions.csv"),
+    amp_range: tuple = (0.18, 0.22),
+    photon_min: float = 50000,
+    total_ab_max: float = 3.5,
 ):
     """
     Make some histogram plots to show if the model overshoots or undershoots and under which conditions.
@@ -2729,7 +2738,7 @@ def residuals_histogram(
     predictions = pd.read_csv(csv_path)
     save_path = Path(f'{csv_path.with_suffix("")}_histogram.png')
     fig, axes = plt.subplots(8, 2, figsize=(16, 28))
-    axes[0,0].set_title(f'Samples with gt amp of {amp_range}, >{photon_min//1000}k photons')
+    axes[0, 0].set_title(f'Samples with gt amp of {amp_range}, >{photon_min//1000}k photons')
 
     predictions = predictions[predictions['photons'] > photon_min]   # keep rows that have photons above threshold
     predictions = predictions[

@@ -44,8 +44,8 @@ else
   SAMPLES_PER_JOB=25
   SAMPLES_PER_BIN=25
   OBJS=(1 2 3 5 10 25 50 100 125 150)
-  mPH=($(seq     1 25000 525000))
-  xPH=($(seq 25000 25000 525000))
+  mPH=($(seq     1 25000 500000))
+  xPH=($(seq 25000 25000 500000))
   amps1=($(seq    0 .025 .475))
   amps2=($(seq .025 .025 .50))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
