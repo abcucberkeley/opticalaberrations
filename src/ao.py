@@ -1033,7 +1033,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         else:
             gpu_model = None
 
-        logging.info(f'Number of active GPUs: {gpu_workers}, {gpu_model}, batch_size={args.batch_size}')
+        if hasattr(args, 'batch_size'):
+            logging.info(f'Number of active GPUs: {gpu_workers}, {gpu_model}, batch_size={args.batch_size}')
 
         with strategy.scope():
             if args.func == 'psnr':
