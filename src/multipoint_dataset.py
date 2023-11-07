@@ -114,7 +114,7 @@ def save_synthetic_sample(
 def beads(
     image_shape: tuple,
     photons: int = 1,
-    object_size: Optional[int] = 0,
+    object_size: int = 0,
     num_objs: Optional[int] = 1,
     fill_radius: float = .66,           # .66 will be roughly a bit inside of the Tukey window
     zborder: int = 10,
@@ -132,7 +132,7 @@ def beads(
     rng = np.random.default_rng()
     reference = np.zeros(image_shape)
 
-    if num_objs == 'random':
+    if num_objs == -1:
         num_objs = int(randuniform((1, 50)))
     else:
         num_objs = int(num_objs)
@@ -229,7 +229,7 @@ def simulate_image(
         img *= electrons2photons(counts2electrons(scale_by_maxcounts))
 
     p2v = phi.peak2valley(na=1.0)
-    if npoints == 'random' or int(npoints) > 1:
+    if npoints == -1 or int(npoints) > 1:
         avg_min_distance = np.nan_to_num(mean_min_distance(reference, voxel_size=gen.voxel_size), nan=0)
     else:
         avg_min_distance = 0.
@@ -334,7 +334,7 @@ def create_synthetic_sample(
     filename: str,
     generators: dict,
     upsampled_generators: dict,
-    npoints: Optional[int],
+    npoints: int,
     savedir: Path,
     modes: int,
     distribution: str,
@@ -563,7 +563,7 @@ def parse_args(args):
     parser = cli.argparser()
 
     parser.add_argument("--filename", type=str, default='1')
-    parser.add_argument("--npoints", default=1)
+    parser.add_argument("--npoints", type=int, default=1)
     parser.add_argument("--outdir", type=Path, default='../dataset')
 
     parser.add_argument(

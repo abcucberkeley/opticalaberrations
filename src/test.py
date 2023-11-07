@@ -93,11 +93,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--photons_min", default=1.5e5, type=float, help='min number of photons to use'
+        "--photons_min", default=1e5, type=float, help='min number of photons to use'
     )
 
     parser.add_argument(
-        "--photons_max", default=2e5, type=float, help='max number of photons to use'
+        "--photons_max", default=1.5e5, type=float, help='max number of photons to use'
     )
 
     parser.add_argument(

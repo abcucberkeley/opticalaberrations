@@ -243,7 +243,6 @@ def collect_data(
         no_phase=no_phase,
         photons_range=photons_range,
         npoints_range=npoints_range,
-        suffix_to_avoid="_sample_predictions_psf.tif"
     )  # metadata is a list of arrays
 
     # This runs multiple samples (aka images) at a time.
@@ -400,7 +399,7 @@ def iter_evaluate(
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=rotations if digital_rotations else None,
-        cpu_workers=8,
+        cpu_workers=len(tf.config.list_physical_devices('GPU'))*2,
         min_psnr=0,
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)

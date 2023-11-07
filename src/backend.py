@@ -1169,6 +1169,7 @@ def predict_files(
         func=partial(
             preprocess,
             modelpsfgen=modelpsfgen,
+            samplepsfgen=samplepsfgen,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
             plot=plot,
@@ -1210,11 +1211,11 @@ def predict_files(
         digital_rotations=digital_rotations,
         confidence_threshold=confidence_threshold,
         desc=f"[{paths.shape[0]} ROIs] x [{digital_rotations} Rotations] = "
-             f"{paths.shape[0] * digital_rotations} predictions, requires "
-             f"{int(np.ceil(paths.shape[0] * digital_rotations / batch_size))} inference batches. "
-             f"emb={6*64*64 * batch_size * digital_rotations * 32 / 8 / 1e6:.2f} MB/batch. ",
+             f"{paths.shape[0] * digital_rotations if digital_rotations else 1} predictions, requires "
+             f"{int(np.ceil(paths.shape[0] * digital_rotations if digital_rotations else 1 / batch_size))} inference batches. "
+             f"emb={6*64*64 * batch_size * digital_rotations if digital_rotations else 1 * 32 / 8 / 1e6:.2f} MB/batch.",
         cpu_workers=cpu_workers,
-        pool=None, # let the "eval_tiles" pool spawn just before predict is called
+        pool=None,  # let the "eval_tiles" pool spawn just before predict is called
     )
 
     if template is not None:
