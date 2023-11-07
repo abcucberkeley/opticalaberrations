@@ -81,7 +81,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--num_beads", default=None, type=int, help='number of beads in the fov'
+        "--num_beads", default=1, type=int, help='number of beads in the fov'
     )
 
     parser.add_argument(

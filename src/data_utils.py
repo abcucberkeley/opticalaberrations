@@ -83,7 +83,8 @@ def get_sample(
         hashtbl = ujson.load(f)
 
 
-    npoints = hashtbl.get('npoints', 1)
+
+    npoints = int(hashtbl.get('npoints', 1))
     photons = hashtbl.get('photons', 0)
     counts = hashtbl.get('counts', 0)
     counts_mode = hashtbl.get('counts_mode', 0)
@@ -175,14 +176,12 @@ def check_criteria(
     max_amplitude=1.,
     photons_range=None,
     npoints_range=None,
-    suffix_to_avoid=None,
 ):
     path = str(file)
     amp = float(str([s for s in file.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.'))
     photons = tuple(map(int, str([s.strip('photons_') for s in file.parts if s.startswith('photons_')][0]).split('-')))
     npoints = int([s.strip('npoints_') for s in file.parts if s.startswith('npoints')][0])
 
-    # if distribution=='/' is stupid hack to deal with Windows paths
     if 'iter' not in path \
         and (distribution == '/' or distribution in path) \
         and embedding in path \
@@ -190,7 +189,6 @@ def check_criteria(
         and amp <= max_amplitude \
         and ((npoints_range[0] <= npoints <= npoints_range[1]) if npoints_range is not None else True) \
         and ((photons_range[0] <= photons[0] and photons[1] <= photons_range[1]) if photons_range is not None else True) \
-        and ((not path.endswith(suffix_to_avoid)) if suffix_to_avoid is not None else True) \
         and check_sample(file) == 1:    # access file system only after everything else has passed.
         return path
     else:
@@ -209,8 +207,7 @@ def load_dataset(
     max_amplitude=1.,
     photons_range=None,
     npoints_range=None,
-    suffix_to_avoid=None,
-    filename_pattern: str = r'*[!_gt|!_realspace|!_noisefree].tif'
+    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
 ):
     logger.info(
         f'Searching for files that meet:'
@@ -228,7 +225,6 @@ def load_dataset(
         max_amplitude=max_amplitude,
         photons_range=photons_range,
         npoints_range=npoints_range,
-        suffix_to_avoid=suffix_to_avoid,
     )
     files = multiprocess(
         func=check,
@@ -268,7 +264,10 @@ def load_dataset(
 
 
 @profile
-def check_dataset(datadir, filename_pattern: str = r'*[!_gt|!_realspace|!_noisefree].tif'):
+def check_dataset(
+    datadir,
+    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
+):
     jobs = multiprocess(func=check_sample, jobs=Path(datadir).rglob(filename_pattern), cores=-1)
     corrupted = [j for j in jobs if j != 1]
     corrupted = pd.DataFrame(corrupted, columns=['path'])
@@ -293,7 +292,6 @@ def collect_dataset(
     embedding_option='spatial_planes',
     photons_range=None,
     npoints_range=None,
-    suffix_to_avoid=None,
     iotf=None,
     metadata=False,
     lls_defocus: bool = False
@@ -342,7 +340,6 @@ def collect_dataset(
             max_amplitude=max_amplitude,
             photons_range=photons_range,
             npoints_range=npoints_range,
-            suffix_to_avoid=suffix_to_avoid
         )
 
         train = train_data.map(lambda x: tf.py_function(load, [x], dtypes))
@@ -368,7 +365,6 @@ def collect_dataset(
             max_amplitude=max_amplitude,
             photons_range=photons_range,
             npoints_range=npoints_range,
-            suffix_to_avoid=suffix_to_avoid,
         ) # TF dataset
 
         data = data.map(lambda x: tf.py_function(load, [x], dtypes)) # TFdataset -> img & zern or -> metadata df
