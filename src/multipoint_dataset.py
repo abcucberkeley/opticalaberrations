@@ -134,6 +134,8 @@ def beads(
 
     if num_objs == 'random':
         num_objs = int(randuniform((1, 50)))
+    else:
+        num_objs = int(num_objs)
 
     if object_size == 0:
         bead = photons
@@ -227,7 +229,7 @@ def simulate_image(
         img *= electrons2photons(counts2electrons(scale_by_maxcounts))
 
     p2v = phi.peak2valley(na=1.0)
-    if npoints == 'random' or npoints > 1:
+    if npoints == 'random' or int(npoints) > 1:
         avg_min_distance = np.nan_to_num(mean_min_distance(reference, voxel_size=gen.voxel_size), nan=0)
     else:
         avg_min_distance = 0.

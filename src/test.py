@@ -155,7 +155,6 @@ def main(args=None):
 
     gpu_workers = strategy.num_replicas_in_sync
     gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
-    logging.info(f'Number of active GPUs: {gpu_workers}')
 
     if gpu_workers > 0 and gpu_model.find('A100') >= 0:  # update batchsize automatically
         batch_size = 768 * gpu_workers
