@@ -53,8 +53,15 @@ else
   FILL_RADIUS=0.66
 fi
 
-TOTAL_SAMPLES=$(( ${#DISTRIBUTIONS[@]} * ${#mPH[@]} * ${#amps1[@]} * ${#OBJS[@]} * $SAMPLES_PER_BIN ))
+BINS=$(( ${#DISTRIBUTIONS[@]} * ${#mPH[@]} * ${#amps1[@]} * ${#OBJS[@]} ))
+TOTAL_SAMPLES=$(( $BINS * $SAMPLES_PER_BIN ))
 TOTAL_JOBS=$(( $TOTAL_SAMPLES / $SAMPLES_PER_JOB ))
+
+printf "DISTRIBUTIONS: [ %'d ] bins \n" ${#DISTRIBUTIONS[@]}
+printf "PHOTONS:       [ %'d ] bins \n" ${#mPH[@]}
+printf "AMPLITUDES:    [ %'d ] bins \n" ${#amps1[@]}
+printf "BEADS:         [ %'d ] bins \n" ${#OBJS[@]}
+printf "SAMPLES:       [ %'d bins x %'d samples ] = %'d samples \n" $BINS $SAMPLES_PER_BIN $TOTAL_SAMPLES
 
 JOB_COUNTER=0
 for DIST in `seq 1 ${#DISTRIBUTIONS[@]}`
