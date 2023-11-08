@@ -83,9 +83,6 @@ def main(args=None):
     elif args.cmd == "shapes_embeddings":
         simulations.plot_shapes_embeddings()
 
-    elif args.cmd == "gaussian":
-        simulations.plot_gaussian_filters()
-
     elif args.cmd == "simulation":
         simulations.plot_simulation()
 

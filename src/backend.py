@@ -46,13 +46,8 @@ from embeddings import fourier_embeddings, rolling_fourier_embeddings
 from preprocessing import prep_sample
 from utils import round_to_even
 
-from stem import Stem
-from activation import MaskedActivation
-from depthwiseconv import DepthwiseConv3D
-from spatial import SpatialAttention
 from roi import ROI
 import opticalnet
-import opticalresnet
 import baseline
 import otfnet
 
@@ -70,26 +65,16 @@ tf.get_logger().setLevel(logging.ERROR)
 def load(model_path: Path, mosaic=False) -> tf.keras.Model:
     model_path = Path(model_path)
 
-    if 'resnet' in str(model_path):
-        custom_objects = {
-            "Stem": Stem,
-            "MaskedActivation": MaskedActivation,
-            "SpatialAttention": SpatialAttention,
-            "DepthwiseConv3D": DepthwiseConv3D,
-            "CAB": opticalresnet.CAB,
-            "TB": opticalresnet.TB,
-        }
-    else:
-        custom_objects = {
-            "ROI": ROI,
-            "Stem": opticalnet.Stem,
-            "Patchify": opticalnet.Patchify,
-            "Merge": opticalnet.Merge,
-            "PatchEncoder": opticalnet.PatchEncoder,
-            "MLP": opticalnet.MLP,
-            "StochasticDepth": opticalnet.StochasticDepth,
-            "Transformer": opticalnet.Transformer,
-        }
+    custom_objects = {
+        "ROI": ROI,
+        "Stem": opticalnet.Stem,
+        "Patchify": opticalnet.Patchify,
+        "Merge": opticalnet.Merge,
+        "PatchEncoder": opticalnet.PatchEncoder,
+        "MLP": opticalnet.MLP,
+        "StochasticDepth": opticalnet.StochasticDepth,
+        "Transformer": opticalnet.Transformer,
+    }
 
     if mosaic:
         if model_path.is_file() and model_path.suffix == '.h5':

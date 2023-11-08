@@ -5,7 +5,6 @@ from abc import ABC
 import tensorflow as tf
 from tensorflow.keras import layers
 from depthwiseconv import DepthwiseConv3D
-from tensorflow_addons.layers import GroupNormalization
 from base import Base
 
 logging.basicConfig(
@@ -48,7 +47,7 @@ class Baseline(Base, ABC):
         return layers.multiply([inputs, att])
 
     def _cab(self, inputs, filters, kernel_size, expansion=4):
-        x = GroupNormalization(groups=16, axis=-1, epsilon=1e-6)(inputs)
+        x = layers.LayerNormalization(axis=-1, epsilon=1e-6)(inputs)
         x = self._attention(x, filters=filters, ratio=.25)
         x = DepthwiseConv3D(kernel_size=kernel_size, depth_multiplier=1, padding='same')(x)
         x = layers.Conv3D(filters=filters*expansion, kernel_size=1, padding='same', activation=self.activation)(x)
