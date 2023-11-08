@@ -3,7 +3,6 @@ import sys
 from abc import ABC
 
 import tensorflow as tf
-import tensorflow_addons as tfa
 from tensorflow.keras import layers
 from base import Base
 from activation import MaskedActivation
@@ -17,6 +16,43 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class StochasticDepth(layers.Layer):
+    """
+    Deep Networks with Stochastic Depth: https://arxiv.org/abs/1603.09382
+    https://github.com/tensorflow/addons/blob/v0.20.0/tensorflow_addons/layers/stochastic_depth.py#L5-L90
+    """
+    def __init__(self, survival_probability: float = .5, **kwargs):
+        super().__init__(**kwargs)
+        self.survival_probability = survival_probability
+
+    def compute_output_shape(self, input_shape):
+        return input_shape[0]
+
+    def get_config(self):
+        config = super(StochasticDepth, self).get_config()
+        config.update({
+            "survival_probability": self.survival_probability,
+        })
+        return config
+
+    def call(self, inputs, training=False, **kwargs):
+        if not isinstance(inputs, list) or len(inputs) != 2:
+            raise ValueError("input must be a list of length 2.")
+
+        shortcut, residual = inputs
+
+        # Random bernoulli variable indicating whether the branch should be kept or not
+        b_l = tf.keras.backend.random_bernoulli([], p=self.survival_probability, dtype=shortcut.dtype)
+
+        def _call_train():
+            return shortcut + b_l * residual
+
+        def _call_test():
+            return shortcut + self.survival_probability * residual
+
+        return tf.keras.backend.in_train_phase(_call_train, _call_test, training=training)
 
 
 class CAB(layers.Layer):
@@ -60,7 +96,7 @@ class CAB(layers.Layer):
 
         self.ln = layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
-        self.drop_path = tfa.layers.StochasticDepth(survival_probability=1 - self.dropout_rate)
+        self.drop_path = StochasticDepth(survival_probability=1-self.dropout_rate)
 
         self.sca = SpatialAttention(
             channels=self.filters,
@@ -109,7 +145,7 @@ class CAB(layers.Layer):
         })
         return config
 
-    def call(self, inputs, training=True, **kwargs):
+    def call(self, inputs, training=False, **kwargs):
         x = self.ln(inputs)
         x = self.sca(x)
         x = layers.concatenate([self.dwc3(x), self.dwc7(x)])
@@ -117,7 +153,7 @@ class CAB(layers.Layer):
         x = self.expand(x)
         x = self.act(x)
         x = self.conv(x)
-        return self.drop_path([inputs, x])
+        return self.drop_path([inputs, x], training=training)
 
 
 class TB(layers.Layer):
@@ -151,7 +187,7 @@ class TB(layers.Layer):
         })
         return config
 
-    def call(self, inputs, training=True, **kwargs):
+    def call(self, inputs, **kwargs):
 
         if self.opt == 'strides':
             x = self.strides(inputs)
@@ -217,7 +253,7 @@ class OpticalResNet(Base, ABC):
     def _calc_repeats(self, repeats, depth_scalar):
         return int(tf.math.ceil(depth_scalar * repeats))
 
-    def call(self, inputs, training=True, **kwargs):
+    def call(self, inputs, training=False, **kwargs):
 
         m = Stem(
             filters=self._calc_channels(24, width_scalar=self.width_scalar),
@@ -255,7 +291,7 @@ class OpticalResNet(Base, ABC):
                     y_voxel_size=self.y_voxel_size,
                     z_voxel_size=self.z_voxel_size,
                     dropout_rate=self.dropout_rate/(i+1)
-                )(m)
+                )(m, training=training)
             m = layers.add([res, m])
 
         m = self.avg(m)
