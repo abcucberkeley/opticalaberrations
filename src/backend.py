@@ -1,3 +1,4 @@
+import os
 import matplotlib
 matplotlib.use('Agg')
 
@@ -86,6 +87,7 @@ def load(model_path: Path, mosaic=False) -> tf.keras.Model:
             "Merge": opticalnet.Merge,
             "PatchEncoder": opticalnet.PatchEncoder,
             "MLP": opticalnet.MLP,
+            "StochasticDepth": opticalnet.StochasticDepth,
             "Transformer": opticalnet.Transformer,
         }
 
@@ -1341,7 +1343,6 @@ def train(
             status = checkpoint.restore(str(model_path)).expect_partial()
 
             if status:
-                logger.info(f"Model restored from {model_path}")
                 restored = True
                 network = str(model_path)
                 training_history = pd.read_csv(model_path/'logbook.csv', header=0, index_col=0)
@@ -1351,7 +1352,10 @@ def train(
     except Exception as e:
         logger.warning(f"No model found in {outdir}; Creating a new model.")
 
-    if network == 'opticalnet':
+    if restored:
+        logger.info(f"Model {model.name} restored from {model_path}")
+
+    elif network == 'opticalnet':
         model = opticalnet.OpticalTransformer(
             name='OpticalNet',
             roi=roi,
@@ -1414,10 +1418,20 @@ def train(
 
     if not restored:
         model = model.build(input_shape=inputs)
+
+        """
+        To enable automatic mixed precision training for tensorflow
+        https://www.tensorflow.org/guide/mixed_precision#gpu_performance_tips
+        https://docs.nvidia.com/deeplearning/performance/mixed-precision-training/index.html#mptrain
+        https://on-demand.gputechconf.com/gtc-taiwan/2018/pdf/5-1_Internal%20Speaker_Michael%20Carilli_PDF%20For%20Sharing.pdf
+        opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
+        """
+
         model.compile(
             optimizer=opt,
             loss=loss,
             metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
+            # jit_compile=True
         )
 
     outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
