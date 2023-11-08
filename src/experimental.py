@@ -2203,18 +2203,22 @@ def phase_retrieval(
         ni=psfgen.refractive_index,
         res=lateral_voxel_size,
         zres=axial_voxel_size,
-    )
+    )   # all in microns
 
     logger.info("Starting phase retrieval iterations")
     data_prepped = prep_data_for_PR(np.flip(data, axis=0), multiplier=1.1)
-    data_prepped = cp.asarray(data_prepped)  # use GPU. Comment this line to use CPU.
+
+    try:
+        data_prepped = cp.asarray(data_prepped)  # use GPU. Comment this line to use CPU.
+    except Exception:
+        logger.warning(f"No CUDA-capable device is detected. 'image' will be type {type(data_prepped)}")
     pr_result = pr.retrieve_phase(
         data_prepped,
         params,
         max_iters=num_iterations,
         pupil_tol=1e-5,
         mse_tol=0,
-        phase_only=True
+        phase_only=False
     )
     pupil = pr_result.phase / (2 * np.pi)  # convert radians to waves
     pupil[pupil != 0.] -= np.mean(pupil[pupil != 0.])   # remove a piston term by subtracting the mean of the pupil
@@ -2262,7 +2266,20 @@ def phase_retrieval(
         )
 
     psf = psfgen.single_psf(pred, normed=True)
-    imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf)
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf.astype(np.float32))
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_psf_direct_mag.tif", cp.asnumpy(pr_result.mag).astype(np.float32))
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_psf_direct_kr.tif", cp.asnumpy(pr_result.r).astype(np.float32))
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_psf_direct_theta.tif", cp.asnumpy(pr_result.theta % (2*np.pi)).astype(np.float32))
+    vis.otf_diagnosis(psf,
+                      save_path=img.with_suffix(''),
+                      lateral_voxel_size=lateral_voxel_size,
+                      axial_voxel_size=axial_voxel_size,
+                      na_detection=psfgen.na_detection,
+                      lam_detection=psfgen.lam_detection,
+                      refractive_index=psfgen.refractive_index,
+                      )
+    logger.info(f'Files saved to : {img.parent.resolve()}')
+
 
     if plot:
         vis.diagnosis(

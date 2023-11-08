@@ -2035,3 +2035,61 @@ def compare_ao_iterations(
     plt.savefig(f'{save_path}_mips.png', bbox_inches='tight', dpi=300, pad_inches=.25)
     plt.savefig(f'{save_path}_mips.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
     plt.savefig(f'{save_path}_mips.pdf', bbox_inches='tight', dpi=300, pad_inches=.25)
+
+def otf_diagnosis(
+        psfs: np.ndarray,
+        save_path: Union[Path, str],
+        lateral_voxel_size: float=0.108,
+        axial_voxel_size: float=0.1,
+        na_detection: float=1.0,
+        lam_detection: float=.510,
+        refractive_index: float=1.33,
+):
+    from embeddings import fft
+    from src.preprocessing import resize_with_crop_or_pad
+
+    plt.style.use("default")
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(5, 5))
+
+    if psfs.ndim == 3:
+        psfs = np.expand_dims(psfs, axis=0)  # make 4D array
+
+    for i in range(psfs.shape[0]):
+        linestyle = 'solid'
+        if i > 0:
+            linestyle = 'dashed'
+        voxel_size = np.array([axial_voxel_size, lateral_voxel_size, lateral_voxel_size])
+        desired_cubic_fov = np.min(np.array(psfs[i].shape) * voxel_size)    # field of view in um to crop to
+
+        psf = resize_with_crop_or_pad(psfs[i], np.round(desired_cubic_fov / voxel_size).astype(int))
+
+        otf = np.abs(fft(psf))
+
+        G = np.array(otf.shape)
+
+        midpt = (G + 1) // 2
+
+        fattest_column = np.round(midpt[2] + G[2]*na_detection/refractive_index/4).astype(np.int32)
+
+        xz_det_OTF = np.squeeze(otf[:, midpt[1], :])    # XZ slice
+        LateralWFCrossSection = np.squeeze(otf[midpt[0],    midpt[1], :])          # cut along x axis
+        AxialWFCrossSection =   np.squeeze(otf[:,           midpt[1], midpt[2]])            # cut along z axis
+        BowtieWFCrossSection =  np.squeeze(otf[:,           midpt[1], fattest_column])     # cut along z axis at max
+
+        axes[0].semilogy(LateralWFCrossSection, color='b', lw='.75')
+        axes[0].semilogy(AxialWFCrossSection, color='r', lw='.75')
+        axes[0].semilogy(BowtieWFCrossSection, color='g', lw='.75')
+
+
+
+    # plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=0, wspace=0)
+    plt.savefig(f'{save_path}_otf_diagnosis.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
