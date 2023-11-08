@@ -89,7 +89,7 @@ class PsfGenerator3D:
                 w = psf_shape[0] // 2
                 focal_plane_index = self.excitation_profile.shape[0] // 2
                 self.lls_excitation_profile = self.excitation_profile[
-                    focal_plane_index - w:focal_plane_index + w,
+                    focal_plane_index - w:focal_plane_index - w + psf_shape[0],
                     np.newaxis,
                     np.newaxis
                 ]
