@@ -18,6 +18,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.ticker import FormatStrFormatter, LogFormatterMathtext
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
+from itertools import cycle
 
 from typing import Any, Union, Optional
 import numpy as np
@@ -2046,6 +2047,7 @@ def otf_diagnosis(
         na_detection: float=1.0,
         lam_detection: float=.510,
         refractive_index: float=1.33,
+        otf_floor: float = 0.5e-5,
 ):
     from embeddings import fft
     from src.preprocessing import resize_with_crop_or_pad
@@ -2057,7 +2059,7 @@ def otf_diagnosis(
         'axes.labelsize': 12,
         'xtick.labelsize': 10,
         'ytick.labelsize': 10,
-        'legend.fontsize': 10,
+        'legend.fontsize': 8,
         'axes.autolimit_mode': 'round_numbers'
     })
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(15, 5), layout="constrained")
@@ -2066,10 +2068,11 @@ def otf_diagnosis(
     if psfs.ndim == 3:
         psfs = np.expand_dims(psfs, axis=0)  # make 4D array
 
+    lines = ["-", "--", "-.", ":"]
+    linecycler = cycle(lines)
+
     for i in range(psfs.shape[0]):
-        linestyle = 'solid'
-        if i > 0:
-            linestyle = 'dashed'
+        linestyle = next(linecycler)
         voxel_size = np.array([axial_voxel_size, lateral_voxel_size, lateral_voxel_size])
         desired_cubic_fov = np.min(np.array(psfs[i].shape) * voxel_size)    # field of view in um to crop to
 
@@ -2085,21 +2088,24 @@ def otf_diagnosis(
 
         fattest_column = np.round(midpt[2] + G[2]*na_detection/refractive_index/4).astype(np.int32)
 
-        xz_det_OTF = np.squeeze(otf[:, midpt[1], :])    # XZ slice
-        LateralWFCrossSection = np.squeeze(otf[midpt[0],    midpt[1], :])               # cut along x axis
-        AxialWFCrossSection =   np.squeeze(otf[:,           midpt[1], midpt[2]])        # cut along z axis
-        BowtieWFCrossSection =  np.squeeze(otf[:,           midpt[1], fattest_column])  # cut along z axis at max
+        LateralXWFCrossSection = np.squeeze(otf[midpt[0],    midpt[1], :])               # linecut along x axis
+        LateralYWFCrossSection = np.squeeze(otf[midpt[0],    :,        midpt[2]])        # linecut along y axis
+        AxialWFCrossSection =    np.squeeze(otf[:,           midpt[1], midpt[2]])        # linecut along z axis
+        BowtieWFCrossSection =   np.squeeze(otf[:,           midpt[1], fattest_column])  # linecut along z axis at bowtie
 
-        axes[0].semilogy(kx, LateralWFCrossSection, color='b', lw='.75', linestyle=linestyle, label=labels[i])
-        axes[1].semilogy(kz, AxialWFCrossSection,   color='r', lw='.75', linestyle=linestyle, label=labels[i])
-        axes[2].semilogy(kz, BowtieWFCrossSection,  color='g', lw='.75', linestyle=linestyle, label=labels[i])
+        axes[0].semilogy(kx, LateralXWFCrossSection,  lw='.75', linestyle=linestyle, label=labels[i])
+        axes[1].semilogy(kz, BowtieWFCrossSection,    lw='.75', linestyle=linestyle, label=labels[i])
+        axes[2].semilogy(kx, LateralYWFCrossSection,  lw='.75', linestyle=linestyle, label=labels[i])
 
-    axes[0].legend(title='LateralWFCrossSection')
-    axes[1].legend(title='AxialWFCrossSection')
-    axes[2].legend(title='BowtieWFCrossSection')
+    axes[0].legend(title='Lateral X WF\nCrossSection')
+    axes[1].legend(title='Bowtie WF\nCrossSection')
+    axes[2].legend(title='Lateral Y WF\nCrossSection')
 
     axes[0].set_xlabel('kx (1/$\lambda$)')
     axes[0].set_ylabel('OTF mag')
     axes[1].set_xlabel('kz (1/$\lambda$)')
-    axes[2].set_xlabel('kz (1/$\lambda$)')
+    axes[2].set_xlabel('ky (1/$\lambda$)')
+    axes[0].set_ylim(top=1, bottom=otf_floor)
+    axes[1].set_ylim(top=1, bottom=otf_floor)
+    axes[2].set_ylim(top=1, bottom=otf_floor)
     savesvg(fig,f'{save_path}_otf_diagnosis.svg')

@@ -2161,13 +2161,15 @@ def phase_retrieval(
     num_iterations: int = 150,
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.0,
-    use_pyotf_zernikes: bool = False
+    use_pyotf_zernikes: bool = False,
+    plot_otf_diagnosis: bool = True,
 ):
 
     try:
         import pyotf.pyotf.phaseretrieval as pr
-        from pyotf.pyotf.utils import prep_data_for_PR
+        from pyotf.pyotf.utils import prep_data_for_PR, psqrt
         from pyotf.pyotf.zernike import osa2degrees
+        from pyotf.pyotf.otf import HanserPSF, SheppardPSF
     except ImportError as e:
         logger.error(e)
         return -1
@@ -2176,7 +2178,8 @@ def phase_retrieval(
 
     data = np.int_(imread(img))
     crop_shape = [round_to_odd(dim_len - .1) for dim_len in data.shape]
-    data = resize_with_crop_or_pad(data, crop_shape)    # make sure we round down to even number of voxels
+    data = resize_with_crop_or_pad(data, crop_shape)    # make each dimension an odd number of voxels
+    logger.info(f'Cropping from {data.shape} to {crop_shape}')
 
     psfgen = SyntheticPSF(
         psf_type='widefield',
@@ -2208,7 +2211,7 @@ def phase_retrieval(
     )   # all in microns
 
     logger.info("Starting phase retrieval iterations")
-    data_prepped = prep_data_for_PR(np.flip(data, axis=0), multiplier=1.2)
+    data_prepped = prep_data_for_PR(np.flip(data, axis=0), multiplier=1.15)
     logger.info(f"Subtracted background of: {np.max(data) - np.max(data_prepped):0.2f} counts")
 
     try:
@@ -2270,22 +2273,49 @@ def phase_retrieval(
 
     psf = psfgen.single_psf(pred, normed=True)
     data_prepped = cp.asnumpy(data_prepped)
+    pupil_mag = cp.asnumpy(pr_result.mag)
     imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf.astype(np.float32))
-    imwrite(f"{img.with_suffix('')}_phase_retrieval_psf_direct_mag.tif", cp.asnumpy(pr_result.mag).astype(np.float32))
-    imwrite(f"{img.with_suffix('')}_phase_retrieval_psf_direct_kr.tif", cp.asnumpy(pr_result.r).astype(np.float32))
-    imwrite(f"{img.with_suffix('')}_phase_retrieval_psf_direct_theta.tif", cp.asnumpy(pr_result.theta % (2*np.pi)).astype(np.float32))
-    logger.info(f'Plotting...')
-    vis.otf_diagnosis(psfs=[data_prepped, psf],
-                      labels=["data_prepped", r"PR'd Wavefront"],
-                      save_path=img.with_suffix(''),
-                      lateral_voxel_size=lateral_voxel_size,
-                      axial_voxel_size=axial_voxel_size,
-                      na_detection=psfgen.na_detection,
-                      lam_detection=psfgen.lam_detection,
-                      refractive_index=psfgen.refractive_index,
-                      )
-    logger.info(f'Files saved to : {img.parent.resolve()}')
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_field_mag.tif", pupil_mag.astype(np.float32))
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_field_kr.tif", cp.asnumpy(pr_result.r).astype(np.float32))
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_field_theta.tif", cp.asnumpy(pr_result.theta % (2*np.pi)).astype(np.float32))
 
+    if plot_otf_diagnosis:
+        logger.info(f'Plotting OTF Diagnosis...')
+
+        # common parameters for pyotf to generate PSFs
+        kwargs = dict(
+            wl=wavelength,
+            na=psfgen.na_detection,
+            ni=psfgen.refractive_index,
+            res=lateral_voxel_size,
+            size=data_prepped.shape[-1],
+            zres=axial_voxel_size,
+            zsize=data_prepped.shape[0],
+            vec_corr="none",    # we will overwrite the pupil magnitude: Set to 'none' to match retrieve_phase()
+            condition="none",   # we will overwrite the pupil magnitude: Set to 'none' to match retrieve_phase()
+        )
+
+        pupil_field = np.fft.ifftshift(pupil_mag.astype(complex))
+        model = HanserPSF(**kwargs)
+        model.apply_pupil(pupil_field)
+        hanser_pupil = np.squeeze(model.PSFi)
+
+        RW_path = Path(r"..\scope_psf\RW_PSFs\PSF_RW_515em_128_128_101_100nmSteps_97nmXY.tif")
+        RW = imread(RW_path)
+        RW = resize_with_crop_or_pad(RW, crop_shape)
+
+        model_result = cp.asnumpy(pr_result.model.PSFi)     # direct from PR. Has pupil magnitude *and* phase.
+
+        vis.otf_diagnosis(
+                          psfs=[data_prepped, hanser_pupil, RW, model_result],
+                          labels=["Experimental", "FT(Experimental Pupil)", "RW theory", 'PR mag & phase'],
+                          save_path=img.with_suffix(''),
+                          lateral_voxel_size=lateral_voxel_size,
+                          axial_voxel_size=axial_voxel_size,
+                          na_detection=psfgen.na_detection,
+                          lam_detection=psfgen.lam_detection,
+                          refractive_index=psfgen.refractive_index,
+                          )
 
     if plot:
         vis.diagnosis(
@@ -2297,6 +2327,7 @@ def phase_retrieval(
         fig, axes = pr_result.plot()
         axes[0].set_title("Phase in waves")
         vis.savesvg(fig, Path(f"{img.with_suffix('')}_phase_retrieval_convergence.svg"))
+        logger.info(f'Files saved to : {img.parent.resolve()}')
 
     return coefficients
 
