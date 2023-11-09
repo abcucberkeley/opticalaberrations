@@ -37,13 +37,13 @@ from scipy.optimize import minimize_scalar, minimize
 import utils
 import vis
 import backend
-from utils import round_to_even
+from utils import round_to_even, round_to_odd
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern
-from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles
+from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad
 
 import logging
 logger = logging.getLogger('')
@@ -2175,6 +2175,8 @@ def phase_retrieval(
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
     data = np.int_(imread(img))
+    crop_shape = [round_to_odd(dim_len - .1) for dim_len in data.shape]
+    data = resize_with_crop_or_pad(data, crop_shape)    # make sure we round down to even number of voxels
 
     psfgen = SyntheticPSF(
         psf_type='widefield',
@@ -2206,7 +2208,8 @@ def phase_retrieval(
     )   # all in microns
 
     logger.info("Starting phase retrieval iterations")
-    data_prepped = prep_data_for_PR(np.flip(data, axis=0), multiplier=1.1)
+    data_prepped = prep_data_for_PR(np.flip(data, axis=0), multiplier=1.2)
+    logger.info(f"Subtracted background of: {np.max(data) - np.max(data_prepped):0.2f} counts")
 
     try:
         data_prepped = cp.asarray(data_prepped)  # use GPU. Comment this line to use CPU.
@@ -2266,11 +2269,14 @@ def phase_retrieval(
         )
 
     psf = psfgen.single_psf(pred, normed=True)
+    data_prepped = cp.asnumpy(data_prepped)
     imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf.astype(np.float32))
     imwrite(f"{img.with_suffix('')}_phase_retrieval_psf_direct_mag.tif", cp.asnumpy(pr_result.mag).astype(np.float32))
     imwrite(f"{img.with_suffix('')}_phase_retrieval_psf_direct_kr.tif", cp.asnumpy(pr_result.r).astype(np.float32))
     imwrite(f"{img.with_suffix('')}_phase_retrieval_psf_direct_theta.tif", cp.asnumpy(pr_result.theta % (2*np.pi)).astype(np.float32))
-    vis.otf_diagnosis(psf,
+    logger.info(f'Plotting...')
+    vis.otf_diagnosis(psfs=[data_prepped, psf],
+                      labels=["data_prepped", r"PR'd Wavefront"],
                       save_path=img.with_suffix(''),
                       lateral_voxel_size=lateral_voxel_size,
                       axial_voxel_size=axial_voxel_size,
