@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 @profile
-def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float:
+def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float32:
     """ Return estimated noise """
     noise = np.nanstd(a, axis=axis)
     return noise
@@ -568,7 +568,7 @@ def find_roi(
     if isinstance(path, (np.ndarray, np.generic)):
         dataset = path
     elif path.suffix == '.tif':
-        dataset = imread(path).astype(np.float)
+        dataset = imread(path).astype(np.float32)
     elif path.suffix == '.zarr':
         dataset = zarr.open_array(str(path), mode='r', order='F')
     else:
@@ -782,7 +782,7 @@ def get_tiles(
     if isinstance(path, (np.ndarray, np.generic)):
         dataset = path
     elif path.suffix == '.tif':
-        dataset = imread(path).astype(np.float)
+        dataset = imread(path).astype(np.float32)
     elif path.suffix == '.zarr':
         dataset = zarr.open_array(str(path), mode='r', order='F')
     else:
