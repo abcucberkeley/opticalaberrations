@@ -817,7 +817,7 @@ def plot_shapes_embeddings(
     """
     def sphere(image_size, radius=.5, position=.5):
         img = rg.sphere(shape=image_size, radius=radius, position=position)
-        return img.astype(np.float)
+        return img.astype(np.float32)
 
     savepath = f"{savepath}/{embedding_option}/{int(wavelength*1000)}/x{int(x_voxel_size*1000)}-y{int(y_voxel_size*1000)}-z{int(z_voxel_size*1000)}"
     plt.rcParams.update({
