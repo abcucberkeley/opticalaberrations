@@ -2975,3 +2975,177 @@ def evaluate_object_sizes(
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return savepath
+
+
+@profile
+def evaluate_uniform_background(
+    model: Path,
+    eval_sign: str = 'signed',
+    batch_size: int = 256,
+    num_objs: Optional[int] = 10,
+    digital_rotations: bool = True,
+    agg: str = 'median',
+    na: float = 1.0,
+    photons: int = 20000,
+    override: bool = False,
+    amplutide: float = .0
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    digital_rotations = 361 if digital_rotations else None
+
+    m = backend.load(model)
+    modelgen = backend.load_metadata(
+        model,
+        psf_shape=3*[m.input_shape[2]],
+        rotate=False,
+    )
+    samplegen = backend.load_metadata(
+        model,
+        psf_shape=(64, 64, 64),
+        rotate=False,
+        x_voxel_size=.108,
+        y_voxel_size=.108,
+        z_voxel_size=.2,
+    )
+    w = Wavefront(np.zeros(15))
+
+    outdir = model.with_suffix('') / eval_sign / 'background'
+
+    for i, (mode, twin) in enumerate(w.twins.items()):
+        if mode.index_ansi == 4: continue
+
+        zernikes = np.zeros(15)
+        zernikes[mode.index_ansi] = amplutide
+
+        if np.all(zernikes == 0):
+            savepath = outdir / f"z0"
+        else:
+            savepath = outdir / f"z{mode.index_ansi}"
+
+        savepath.mkdir(parents=True, exist_ok=True)
+        savepath = savepath / f"ph{photons}"
+
+        backgrounds = np.arange(0, 2200, 200)
+        wavefront = Wavefront(zernikes, lam_detection=samplegen.lam_detection, rotate=False)
+        psf = samplegen.single_psf(phi=wavefront, normed=True)
+        psf /= np.sum(psf)
+
+        ref = multipoint_dataset.beads(
+            image_shape=modelgen.psf_shape,
+            photons=photons,
+            object_size=0,
+            num_objs=10,
+            fill_radius=.66,
+            uniform_background=0
+        )
+
+        if not override and Path(f"{savepath}_inputs.npy").exists():
+            inputs = np.load(f"{savepath}_inputs.npy")
+        else:
+            inputs = np.zeros((len(backgrounds), *psf.shape))
+
+            for i, w in enumerate(backgrounds):
+                sample = ref.copy()
+                sample[ref == 0] = w
+
+                inputs[i] = utils.add_noise(utils.fftconvolution(
+                    sample=sample,
+                    kernel=psf
+                ))
+
+                imwrite(f"{savepath}_{w}.tif", inputs[i].astype(np.float32), dtype=np.float32)
+
+            inputs = np.stack(inputs, axis=0)[..., np.newaxis]
+            np.save(f"{savepath}_inputs", inputs)
+
+        if not override and Path(f"{savepath}_embeddings.npy").exists():
+            embeddings = np.load(f"{savepath}_embeddings.npy")
+        else:
+            embeddings = np.stack([
+                backend.preprocess(
+                    i,
+                    modelpsfgen=modelgen,
+                    samplepsfgen=samplegen,
+                    digital_rotations=digital_rotations,
+                    remove_background=True,
+                    normalize=True,
+                    min_psnr=0,
+                    plot=Path(f"{savepath}_{backgrounds[w]}"),
+                )
+                for w, i in enumerate(tqdm(
+                    inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout
+                ))
+            ], axis=0)
+            np.save(f"{savepath}_embeddings", embeddings)
+
+        ys = np.stack([wavefront.amplitudes for w in backgrounds])
+
+        embeddings = tf.data.Dataset.from_tensor_slices(embeddings)
+
+        if not override and Path(f"{savepath}_predictions.npy").exists():
+            preds = np.load(f"{savepath}_predictions.npy")
+        else:
+            res = backend.predict_dataset(
+                model,
+                inputs=embeddings,
+                psfgen=modelgen,
+                batch_size=batch_size,
+                save_path=[f"{savepath}_{w}" for w in backgrounds],
+                digital_rotations=digital_rotations,
+                plot_rotations=True
+            )
+
+            try:
+                preds, stdev = res
+            except ValueError:
+                preds, stdev, lls_defocus = res
+
+            np.save(f"{savepath}_predictions", preds)
+
+        residuals = ys - preds
+
+        df = pd.DataFrame([w for w in backgrounds], columns=['backgrounds'])
+        df['prediction'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in preds]
+        df['residuals'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in residuals]
+        df['moi'] = ys[:, mode.index_ansi] - preds[:, mode.index_ansi]
+        df['counts'] = [np.sum(i) for i in inputs]
+        df.to_csv(f'{savepath}.csv')
+        print(df)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        sns.regplot(
+            data=df,
+            x="backgrounds",
+            y="moi",
+            scatter=True,
+            truncate=False,
+            order=2,
+            color=".2",
+            ax=ax
+        )
+
+        ax.set_yticks(np.arange(-.1, .11, .01))
+        ax.set_xlim(0, backgrounds[-1])
+        ax.set_ylim(-.1, .1)
+        ax.axhline(y=0, color='r')
+        ax.set_ylabel(r'Residuals ($y - \hat{y}$)')
+        ax.set_xlabel(r'Uniform background value (photons)')
+        ax.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0, alpha=.5)
+        ax.spines.right.set_visible(False)
+        ax.spines.top.set_visible(False)
+
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    return savepath
