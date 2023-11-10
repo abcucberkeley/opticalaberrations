@@ -23,6 +23,6 @@ class Base(Model, ABC):
         self.classifier = layers.Dense(modes, activation='softmax', name='classifier')
 
     def build(self, input_shape):
-        psf = layers.Input(shape=input_shape)
-        return Model(inputs=psf, outputs=self.call(psf), name=self.name)
-
+        inputs = layers.Input(shape=input_shape)
+        outputs = self.call(inputs)
+        return Model(inputs=inputs, outputs=outputs, name=self.name)

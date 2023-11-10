@@ -21,17 +21,17 @@ fi
 
 declare -a PSF_DATASETS=(
   "YuMB_lambda510"
-  "v2Hex_lambda510"
-  "widefield_lambda510"
-  "confocal_lambda510"
-  "2photon_lambda920"
+#  "v2Hex_lambda510"
+#  "widefield_lambda510"
+#  "confocal_lambda510"
+#  "2photon_lambda920"
 )
 declare -a PSF_TYPES=(
   "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
-  "../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat"
-  "widefield"
-  "confocal"
-  "2photon"
+#  "../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat"
+#  "widefield"
+#  "confocal"
+#  "2photon"
 )
 
 for S in `seq 1 ${#PSF_DATASETS[@]}`
@@ -49,9 +49,18 @@ do
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  --task "$CONFIG" \
+  --task "$CONFIG --fixed_precision" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-fixed-precision
+
+  for OPT in adamw lamb
+  do
+      python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+      --task "$CONFIG --batch_size 2048 --opt $OPT" \
+      --taskname $NETWORK \
+      --name new/$SUBSET/$NETWORK-$MODES-$DIR-$OPT-amp
+  done
+
 done
 
 

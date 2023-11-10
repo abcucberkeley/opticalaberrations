@@ -1,23 +1,388 @@
-import atexit
+import matplotlib
+matplotlib.use('Agg')
+
+import os
 import logging
 import sys
 import time
+import numpy as np
+import cupy as cp
+import pandas as pd
 from pathlib import Path
+from datetime import datetime
+from typing import Any, Optional
+
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
 import tensorflow as tf
+from tensorflow.keras.models import load_model, save_model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers.experimental import AdamW
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping
 
-try:
-    import cupy as cp
-except ImportError as e:
-    logging.warning(f"Cupy not supported on your system: {e}")
+from lamb import LAMB
+from warmupcosinedecay import WarmupCosineDecay
+from callbacks import LRLogger
+from callbacks import Defibrillator
+from callbacks import TensorBoardCallback
 
+import utils
+import data_utils
+import opticalnet
+import baseline
+import otfnet
 import cli
-import backend
+
 
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
+logger = logging.getLogger(__name__)
+tf.get_logger().setLevel(logging.ERROR)
+plt.set_loglevel('error')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
+
+
+def train_model(
+    dataset: Path,
+    outdir: Path,
+    network: str,
+    distribution: str,
+    embedding: str,
+    samplelimit: int,
+    max_amplitude: float,
+    input_shape: int,
+    batch_size: int,
+    patch_size: list,
+    steps_per_epoch: int,
+    depth_scalar: int,
+    width_scalar: int,
+    activation: str,
+    fixedlr: bool,
+    opt: str,
+    lr: float,
+    wd: float,
+    dropout: float,
+    warmup: int,
+    wavelength: float,
+    psf_type: str,
+    x_voxel_size: float,
+    y_voxel_size: float,
+    z_voxel_size: float,
+    modes: int,
+    pmodes: Optional[int],
+    min_photons: int,
+    max_photons: int,
+    epochs: int,
+    mul: bool,
+    roi: Any = None,
+    refractive_index: float = 1.33,
+    no_phase: bool = False,
+    plot_patches: bool = False,
+    lls_defocus: bool = False,
+    defocus_only: bool = False,
+    radial_encoding_period: int = 1,
+    radial_encoding_nth_order: int = 4,
+    positional_encoding_scheme: str = 'default',
+    fixed_dropout_depth: bool = False,
+    stem: bool = False,
+):
+    network = network.lower()
+    opt = opt.lower()
+    restored = False
+
+    # model's output shape
+    pmodes = modes if pmodes is None else pmodes
+
+    if lls_defocus:  # add LLS defocus offset to predictions
+        pmodes += 1
+
+    if defocus_only:  # only predict LLS defocus offset
+        pmodes = 1
+
+    if network == 'baseline':
+        inputs = (input_shape, input_shape, input_shape, 1)
+    else:
+        inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
+
+    if dataset is None:
+        config = dict(
+            psf_type=psf_type,
+            psf_shape=inputs,
+            photons=(min_photons, max_photons),
+            n_modes=modes,
+            distribution=distribution,
+            embedding_option=embedding,
+            amplitude_ranges=(-max_amplitude, max_amplitude),
+            lam_detection=wavelength,
+            batch_size=batch_size,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            refractive_index=refractive_index,
+            cpu_workers=-1
+        )
+
+        train_data = data_utils.create_dataset(config)
+        training_steps = steps_per_epoch
+    else:
+        train_data = data_utils.collect_dataset(
+            dataset,
+            metadata=False,
+            modes=modes,
+            distribution=distribution,
+            embedding=embedding,
+            samplelimit=samplelimit,
+            max_amplitude=max_amplitude,
+            no_phase=no_phase,
+            lls_defocus=lls_defocus,
+            photons_range=(min_photons, max_photons)
+        )
+
+        sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
+        with sample_writer.as_default():
+            for s in range(10):
+                fig = None
+                for i, (img, y) in enumerate(train_data.shuffle(1000).take(5)):
+                    img = np.squeeze(img, axis=-1)
+
+                    if fig is None:
+                        fig, axes = plt.subplots(5, img.shape[0], figsize=(8, 8))
+
+                    for k in range(img.shape[0]):
+                        if k > 2:
+                            mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=-.5, vmax=.5)
+                        else:
+                            malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
+
+                        axes[i, k].axis('off')
+
+                    if img.shape[0] > 3:
+                        cax = inset_axes(axes[i, 0], width="10%", height="100%", loc='center left', borderpad=-3)
+                        cb = plt.colorbar(malpha, cax=cax)
+                        cax.yaxis.set_label_position("left")
+
+                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
+                        cb = plt.colorbar(mphi, cax=cax)
+                        cax.yaxis.set_label_position("right")
+
+                    else:
+                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
+                        cb = plt.colorbar(malpha, cax=cax)
+                        cax.yaxis.set_label_position("right")
+
+                tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
+
+        def configure_for_performance(ds):
+            ds = ds.cache()
+            ds = ds.shuffle(batch_size)
+            ds = ds.batch(batch_size)
+            ds = ds.prefetch(buffer_size=tf.data.AUTOTUNE)
+            return ds
+
+        train_data = configure_for_performance(train_data)
+        training_steps = tf.data.experimental.cardinality(train_data).numpy()
+
+    for img, y in train_data.shuffle(buffer_size=100).take(1):
+        logger.info(f"Batch size: {batch_size}")
+        logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
+
+        if plot_patches:
+            for k, label in enumerate(['xy', 'xz', 'yz']):
+                img = np.expand_dims(img[0], axis=0)
+                original = np.squeeze(img[0, k])
+
+                vmin = np.min(original)
+                vmax = np.max(original)
+                vcenter = (vmin + vmax) / 2
+                step = .01
+
+                highcmap = plt.get_cmap('YlOrRd', 256)
+                lowcmap = plt.get_cmap('YlGnBu_r', 256)
+                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+                cmap = mcolors.ListedColormap(cmap)
+
+                plt.figure(figsize=(4, 4))
+                plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
+                plt.axis("off")
+                plt.title('Original')
+                plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+                for p in patch_size:
+                    patches = opticalnet.Patchify(patch_size=p)(img)
+                    merged = opticalnet.Merge(patch_size=p)(patches)
+
+                    patches = patches[0, k]
+                    merged = np.squeeze(merged[0, k])
+
+                    plt.figure(figsize=(4, 4))
+                    plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
+                    plt.axis("off")
+                    plt.title('Merged')
+                    plt.savefig(f'{outdir}/{label}_merged.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+                    n = int(np.sqrt(patches.shape[0]))
+                    plt.figure(figsize=(4, 4))
+                    plt.title('Patches')
+                    for i, patch in enumerate(patches):
+                        ax = plt.subplot(n, n, i + 1)
+                        patch_img = tf.reshape(patch, (p, p)).numpy()
+                        ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
+                        ax.axis("off")
+
+                    plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    if fixedlr:
+        scheduler = lr
+    else:
+        warmup_steps = warmup * training_steps
+        decay_steps = (epochs - warmup) * training_steps
+
+        scheduler = WarmupCosineDecay(
+            initial_learning_rate=0.,
+            decay_steps=decay_steps,
+            warmup_target=lr,
+            warmup_steps=warmup_steps,
+            alpha=.01,
+        )
+
+    if opt.lower() == 'lamb':
+        opt = LAMB(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99)
+    elif opt.lower() == 'adamw':
+        opt = AdamW(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99)
+    else:
+        opt = Adam(learning_rate=scheduler)
+
+    try:  # check if model already exists
+        model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent  # sort models to get the latest checkpoint
+
+        if model_path.exists():
+            model = load_model(model_path)
+            opt = model.optimizer
+
+            checkpoint = tf.train.Checkpoint(model=model, optimizer=opt)
+            status = checkpoint.restore(str(model_path)).expect_partial()
+
+            if status:
+                restored = True
+                network = str(model_path)
+                training_history = pd.read_csv(model_path/'logbook.csv', header=0, index_col=0)
+            else:
+                logger.info("Initializing from scratch")
+
+    except Exception as e:
+        logger.warning(f"No model found in {outdir}; Creating a new model.")
+
+    if restored:
+        logger.info(f"Model {model.name} restored from {model_path}")
+
+    elif network == 'opticalnet':
+        model = opticalnet.OpticalTransformer(
+            name='OpticalNet',
+            roi=roi,
+            stem=stem,
+            patches=patch_size,
+            modes=pmodes,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            dropout_rate=dropout,
+            activation=activation,
+            mul=mul,
+            no_phase=no_phase,
+            positional_encoding_scheme=positional_encoding_scheme,
+            radial_encoding_period=radial_encoding_period,
+            radial_encoding_nth_order=radial_encoding_nth_order,
+            fixed_dropout_depth=fixed_dropout_depth,
+        )
+
+    elif network == 'baseline':
+        model = baseline.Baseline(
+            name='Baseline',
+            modes=pmodes,
+            depth_scalar=depth_scalar,
+            width_scalar=width_scalar,
+            activation=activation,
+        )
+
+    elif network == 'otfnet':
+        model = otfnet.OTFNet(
+            name='OTFNet',
+            modes=pmodes
+        )
+
+    else:
+        raise Exception(f'Network "{network}" is unknown.')
+
+    if not restored:
+        model = model.build(input_shape=inputs)
+        model.compile(
+            optimizer=opt,
+            loss='mse',
+            metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
+        )
+
+        logger.info(model.optimizer.get_config())
+
+    outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
+    outdir.mkdir(exist_ok=True, parents=True)
+    logger.info(model.summary())
+
+    tblogger = CSVLogger(
+        f"{outdir}/logbook.csv",
+        append=True,
+    )
+
+    pb_checkpoints = ModelCheckpoint(
+        filepath=f"{outdir}",
+        monitor="loss",
+        save_best_only=True,
+        verbose=1,
+    )
+
+    earlystopping = EarlyStopping(
+        monitor='loss',
+        min_delta=0,
+        patience=50,
+        verbose=1,
+        mode='auto',
+        restore_best_weights=True
+    )
+
+    defibrillator = Defibrillator(
+        monitor='loss',
+        patience=25,
+        verbose=1,
+    )
+
+    tensorboard = TensorBoardCallback(
+        log_dir=outdir,
+        histogram_freq=1,
+        profile_batch=100000000
+    )
+
+    lrlogger = LRLogger()
+
+    model.fit(
+        train_data,
+        steps_per_epoch=training_steps,
+        epochs=epochs,
+        verbose=2,
+        shuffle=True,
+        callbacks=[
+            tblogger,
+            tensorboard,
+            pb_checkpoints,
+            earlystopping,
+            defibrillator,
+            lrlogger
+        ],
+    )
 
 
 def parse_args(args):
@@ -147,10 +512,6 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--decay_period", default=None, type=int, help='number of epochs to decay over before restarting LR'
-    )
-
-    train_parser.add_argument(
         "--epochs", default=500, type=int, help="number of training epochs"
     )
 
@@ -211,13 +572,19 @@ def parse_args(args):
         help='toggle to linearly increase dropout rate for deeper layers'
     )
 
+    train_parser.add_argument(
+        "--fixed_precision", action='store_true',
+        help='optional toggle to disable automatic mixed precision training'
+             '(https://www.tensorflow.org/guide/mixed_precision)'
+    )
+
     return train_parser.parse_known_args(args)[0]
 
 
 def main(args=None):
     timeit = time.time()
     args = parse_args(args)
-    logging.info(args)
+    logger.info(args)
 
     physical_devices = tf.config.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
@@ -235,10 +602,21 @@ def main(args=None):
         strategy = tf.distribute.MirroredStrategy()
 
     gpu_workers = strategy.num_replicas_in_sync
-    logging.info(f'Number of active GPUs: {gpu_workers}')
+    logger.info(f'Number of active GPUs: {gpu_workers}')
+
+    """
+        To enable automatic mixed precision training for tensorflow:
+        https://www.tensorflow.org/guide/mixed_precision
+        https://docs.nvidia.com/deeplearning/performance/mixed-precision-training/index.html#mptrain
+        https://on-demand.gputechconf.com/gtc-taiwan/2018/pdf/5-1_Internal%20Speaker_Michael%20Carilli_PDF%20For%20Sharing.pdf
+    """
+
+    if not args.fixed_precision:
+        policy = tf.keras.mixed_precision.Policy('mixed_float16')
+        tf.keras.mixed_precision.set_global_policy(policy)
 
     with strategy.scope():
-        backend.train(
+        train_model(
             dataset=args.dataset,
             embedding=args.embedding,
             outdir=args.outdir,
@@ -262,8 +640,7 @@ def main(args=None):
             fixedlr=args.fixedlr,
             warmup=args.warmup,
             epochs=args.epochs,
-            decay_period=args.decay_period,
-            pmodes=args.modes if args.pmodes is None else args.pmodes,
+            pmodes=args.pmodes,
             min_photons=args.min_photons,
             max_photons=args.max_photons,
             max_amplitude=args.max_amplitude,
@@ -282,9 +659,7 @@ def main(args=None):
             fixed_dropout_depth=args.fixed_dropout_depth,
         )
 
-        atexit.register(strategy._extended._collective_ops._pool.close)
-
-    logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+    logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
 
 if __name__ == "__main__":

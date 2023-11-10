@@ -120,6 +120,7 @@ def beads(
     zborder: int = 10,
     kernlen: int = 21,
     kernhalfwidth: int = 10,
+    uniform_background: int = 0
 ):
     """
     Args:
@@ -130,7 +131,7 @@ def beads(
     """
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
     rng = np.random.default_rng()
-    reference = np.zeros(image_shape)
+    reference = np.ones(image_shape) * uniform_background
 
     if num_objs == -1:
         num_objs = int(randuniform((1, 50)))
@@ -362,6 +363,7 @@ def create_synthetic_sample(
     override: bool = False,
     plot: bool = False,
     denoising_dataset: bool = False,
+    uniform_background: int = 0,
 ):
 
     aberration = Wavefront(
@@ -386,6 +388,7 @@ def create_synthetic_sample(
         object_size=object_size,
         num_objs=npoints,
         fill_radius=fill_radius,
+        uniform_background=uniform_background
     )
 
     inputs, wavefronts = {}, {}
@@ -711,6 +714,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
+        "--uniform_background", default=0, type=int,
+        help="optional uniform background value"
+    )
+
+    parser.add_argument(
         "--lam_detection", default=.510, type=float,
         help='wavelength in microns'
     )
@@ -827,6 +835,7 @@ def main(args=None):
         override=args.override,
         plot=args.plot,
         denoising_dataset=args.denoising_dataset,
+        uniform_background=args.uniform_background,
     )
     logger.info(f"Output folder: {Path(args.outdir).resolve()}")
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]

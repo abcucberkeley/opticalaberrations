@@ -1,14 +1,19 @@
-import os
 import matplotlib
 matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+import warnings
+warnings.filterwarnings("ignore")
+
 import logging
 import sys
 import h5py
-from datetime import datetime
+
 from pathlib import Path
 from typing import Any, Union, Optional
 from itertools import repeat
@@ -18,8 +23,6 @@ from tifffile import imwrite
 
 import pandas as pd
 from skimage.restoration import richardson_lucy
-import matplotlib.colors as mcolors
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
 import numpy as np
@@ -28,13 +31,7 @@ from tqdm import tqdm
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
-from tensorflow.keras.optimizers import Adam, SGD
-from tensorflow_addons.optimizers import AdamW, SGDW
-
-from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping
-from callbacks import Defibrillator
-from callbacks import LearningRateScheduler
-from callbacks import TensorBoardCallback
+from tensorflow_addons.optimizers import AdamW  # keep for old models trained with TF2.5
 
 import utils
 import vis
@@ -48,8 +45,6 @@ from utils import round_to_even
 
 from roi import ROI
 import opticalnet
-import baseline
-import otfnet
 
 
 logging.basicConfig(
@@ -1150,41 +1145,36 @@ def predict_files(
     object_gaussian_kernel_width: float = 0
 ):
     no_phase = True if model.input_shape[1] == 3 else False
+    mp.set_start_method('spawn', force=True)
 
     generate_fourier_embeddings = partial(
-        utils.multiprocess,
-        func=partial(
-            preprocess,
-            modelpsfgen=modelpsfgen,
-            samplepsfgen=samplepsfgen,
-            freq_strength_threshold=freq_strength_threshold,
-            digital_rotations=digital_rotations,
-            plot=plot,
-            no_phase=no_phase,
-            remove_background=True,
-            normalize=True,
-            fov_is_small=fov_is_small,
-            rolling_strides=rolling_strides,
-            skip_prep_sample=skip_prep_sample,
-            min_psnr=min_psnr,
-            object_gaussian_kernel_width=object_gaussian_kernel_width
-        ),
-        desc='Generate Fourier embeddings',
-        unit=' file',
-        cores=cpu_workers,
-        pool=pool,
+        preprocess,
+        modelpsfgen=modelpsfgen,
+        samplepsfgen=samplepsfgen,
+        freq_strength_threshold=freq_strength_threshold,
+        digital_rotations=digital_rotations,
+        plot=plot,
+        no_phase=no_phase,
+        remove_background=True,
+        normalize=True,
+        fov_is_small=fov_is_small,
+        rolling_strides=rolling_strides,
+        skip_prep_sample=skip_prep_sample,
+        min_psnr=min_psnr,
+        object_gaussian_kernel_width=object_gaussian_kernel_width
     )
 
     inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
 
-    # unroll because each input generates 360 embs to predict here, and we must rebatch on the whole set
-    inputs = inputs.batch(batch_size).map(
+    inputs = inputs.map(
         lambda x: tf.py_function(
             generate_fourier_embeddings,
             inp=[x],
             Tout=tf.float32,
         ),
-    ).unbatch().prefetch(tf.data.AUTOTUNE)
+        deterministic=True,
+        num_parallel_calls=tf.data.AUTOTUNE
+    )
 
     preds, std = predict_dataset(
         model,
@@ -1199,7 +1189,7 @@ def predict_files(
         confidence_threshold=confidence_threshold,
         desc=f"[{paths.shape[0]} ROIs] x [{digital_rotations} Rotations] = "
              f"{paths.shape[0] * digital_rotations if digital_rotations else 1} predictions, requires "
-             f"{int(np.ceil(paths.shape[0] * digital_rotations if digital_rotations else 1 / batch_size))} inference batches. "
+             f"{int(np.ceil((paths.shape[0] * digital_rotations if digital_rotations else 1) / batch_size))} inference batches. "
              f"emb={6*64*64 * batch_size * digital_rotations if digital_rotations else 1 * 32 / 8 / 1e6:.2f} MB/batch.",
         cpu_workers=cpu_workers,
         pool=None,  # let the "eval_tiles" pool spawn just before predict is called
@@ -1242,379 +1232,3 @@ def predict_files(
     stdevs.to_csv(f"{outdir}_stdevs.csv")
 
     return predictions, stdevs
-
-
-def train(
-        dataset: Path,
-        outdir: Path,
-        network: str,
-        distribution: str,
-        embedding: str,
-        samplelimit: int,
-        max_amplitude: float,
-        input_shape: int,
-        batch_size: int,
-        patch_size: list,
-        steps_per_epoch: int,
-        depth_scalar: int,
-        width_scalar: int,
-        activation: str,
-        fixedlr: bool,
-        opt: str,
-        lr: float,
-        wd: float,
-        dropout: float,
-        warmup: int,
-        decay_period: int,
-        wavelength: float,
-        psf_type: str,
-        x_voxel_size: float,
-        y_voxel_size: float,
-        z_voxel_size: float,
-        modes: int,
-        pmodes: int,
-        min_photons: int,
-        max_photons: int,
-        epochs: int,
-        mul: bool,
-        roi: Any = None,
-        refractive_index: float = 1.33,
-        no_phase: bool = False,
-        plot_patches: bool = True,
-        lls_defocus: bool = False,
-        defocus_only: bool = False,
-        radial_encoding_period: int = 1,
-        radial_encoding_nth_order: int = 4,
-        positional_encoding_scheme: str = 'default',
-        fixed_dropout_depth: bool = False,
-        stem: bool = False,
-):
-    network = network.lower()
-    opt = opt.lower()
-    restored = False
-
-    if defocus_only:
-        pmodes = 1
-    elif lls_defocus:
-        pmodes += + 1
-
-    loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
-
-    """
-        Adam - A Method for Stochastic Optimization: https://arxiv.org/pdf/1412.6980
-        SGDR - Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
-        AdamW - Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
-        SAM - Sharpness-Aware-Minimization (SAM): https://openreview.net/pdf?id=6Tm1mposlrM
-    """
-    if opt.lower() == 'adam':
-        opt = Adam(learning_rate=lr)
-    elif opt == 'sgd':
-        opt = SGD(learning_rate=lr, momentum=0.9)
-    elif opt.lower() == 'adamw':
-        opt = AdamW(learning_rate=lr, weight_decay=wd, beta_1=0.9, beta_2=0.99)
-    elif opt == 'sgdw':
-        opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
-    else:
-        raise ValueError(f'Unknown optimizer `{opt}`')
-
-    try:  # check if model already exists
-        model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent  # sort models to get the latest checkpoint
-
-        if model_path.exists():
-            model = load_model(model_path)
-            opt = model.optimizer
-
-            checkpoint = tf.train.Checkpoint(model=model, optimizer=opt)
-            status = checkpoint.restore(str(model_path)).expect_partial()
-
-            if status:
-                restored = True
-                network = str(model_path)
-                training_history = pd.read_csv(model_path/'logbook.csv', header=0, index_col=0)
-            else:
-                logger.info("Initializing from scratch")
-
-    except Exception as e:
-        logger.warning(f"No model found in {outdir}; Creating a new model.")
-
-    if restored:
-        logger.info(f"Model {model.name} restored from {model_path}")
-
-    elif network == 'opticalnet':
-        model = opticalnet.OpticalTransformer(
-            name='OpticalNet',
-            roi=roi,
-            stem=stem,
-            patches=patch_size,
-            modes=pmodes,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            dropout_rate=dropout,
-            activation=activation,
-            mul=mul,
-            no_phase=no_phase,
-            positional_encoding_scheme=positional_encoding_scheme,
-            radial_encoding_period=radial_encoding_period,
-            radial_encoding_nth_order=radial_encoding_nth_order,
-            fixed_dropout_depth=fixed_dropout_depth,
-        )
-
-    elif network == 'opticalresnet':
-        model = opticalresnet.OpticalResNet(
-            name='OpticalResNet',
-            modes=pmodes,
-            na_det=1.0,
-            refractive_index=refractive_index,
-            lambda_det=wavelength,
-            psf_type=psf_type,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            mask_shape=input_shape,
-            activation=activation,
-            mul=mul,
-            no_phase=no_phase
-        )
-
-    elif network == 'baseline':
-        model = baseline.Baseline(
-            name='Baseline',
-            modes=pmodes,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            activation=activation,
-        )
-
-    elif network == 'otfnet':
-        model = otfnet.OTFNet(
-            name='OTFNet',
-            modes=pmodes
-        )
-
-    else:
-        raise Exception(f'Network "{network}" is unknown.')
-
-    if network == 'baseline':
-        inputs = (input_shape, input_shape, input_shape, 1)
-    else:
-        inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
-
-    if not restored:
-        model = model.build(input_shape=inputs)
-
-        """
-        To enable automatic mixed precision training for tensorflow
-        https://www.tensorflow.org/guide/mixed_precision#gpu_performance_tips
-        https://docs.nvidia.com/deeplearning/performance/mixed-precision-training/index.html#mptrain
-        https://on-demand.gputechconf.com/gtc-taiwan/2018/pdf/5-1_Internal%20Speaker_Michael%20Carilli_PDF%20For%20Sharing.pdf
-        opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
-        """
-
-        model.compile(
-            optimizer=opt,
-            loss=loss,
-            metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
-            # jit_compile=True
-        )
-
-    outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
-    outdir.mkdir(exist_ok=True, parents=True)
-    logger.info(model.summary())
-
-    tblogger = CSVLogger(
-        f"{outdir}/logbook.csv",
-        append=True,
-    )
-
-    pb_checkpoints = ModelCheckpoint(
-        filepath=f"{outdir}",
-        monitor="loss",
-        save_best_only=True,
-        verbose=1,
-    )
-
-    earlystopping = EarlyStopping(
-        monitor='loss',
-        min_delta=0,
-        patience=50,
-        verbose=1,
-        mode='auto',
-        restore_best_weights=True
-    )
-
-    defibrillator = Defibrillator(
-        monitor='loss',
-        patience=25,
-        verbose=1,
-    )
-
-    tensorboard = TensorBoardCallback(
-        log_dir=outdir,
-        histogram_freq=1,
-        profile_batch=100000000
-    )
-
-    if fixedlr:
-        lrscheduler = LearningRateScheduler(
-            initial_learning_rate=lr,
-            verbose=0,
-            fixed=True
-        )
-    else:
-        lrscheduler = LearningRateScheduler(
-            initial_learning_rate=opt.learning_rate,
-            weight_decay=opt.weight_decay if hasattr(opt, 'weight_decay') else None,
-            decay_period=epochs if decay_period is None else decay_period,
-            warmup_epochs=0 if warmup is None or warmup >= epochs else warmup,
-            alpha=.01,
-            decay_multiplier=2.,
-            decay=.9,
-            verbose=1,
-        )
-
-    if dataset is None:
-
-        config = dict(
-            psf_type=psf_type,
-            psf_shape=inputs,
-            photons=(min_photons, max_photons),
-            n_modes=modes,
-            distribution=distribution,
-            embedding_option=embedding,
-            amplitude_ranges=(-max_amplitude, max_amplitude),
-            lam_detection=wavelength,
-            batch_size=batch_size,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            cpu_workers=-1
-        )
-
-        train_data = data_utils.create_dataset(config)
-        training_steps = steps_per_epoch
-    else:
-        train_data = data_utils.collect_dataset(
-            dataset,
-            metadata=False,
-            modes=modes,
-            distribution=distribution,
-            embedding=embedding,
-            samplelimit=samplelimit,
-            max_amplitude=max_amplitude,
-            no_phase=no_phase,
-            lls_defocus=lls_defocus,
-            photons_range=(min_photons, max_photons)
-        )
-
-        sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
-        with sample_writer.as_default():
-            for s in range(10):
-                fig = None
-                for i, (img, y) in enumerate(train_data.shuffle(1000).take(5)):
-                    img = np.squeeze(img, axis=-1)
-
-                    if fig is None:
-                        fig, axes = plt.subplots(5, img.shape[0], figsize=(8, 8))
-
-                    for k in range(img.shape[0]):
-                        if k > 2:
-                            mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=-.5, vmax=.5)
-                        else:
-                            malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
-
-                        axes[i, k].axis('off')
-
-                    if img.shape[0] > 3:
-                        cax = inset_axes(axes[i, 0], width="10%", height="100%", loc='center left', borderpad=-3)
-                        cb = plt.colorbar(malpha, cax=cax)
-                        cax.yaxis.set_label_position("left")
-
-                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                        cb = plt.colorbar(mphi, cax=cax)
-                        cax.yaxis.set_label_position("right")
-
-                    else:
-                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                        cb = plt.colorbar(malpha, cax=cax)
-                        cax.yaxis.set_label_position("right")
-
-                tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
-
-        def configure_for_performance(ds):
-            ds = ds.cache()
-            ds = ds.shuffle(batch_size)
-            ds = ds.batch(batch_size)
-            ds = ds.prefetch(buffer_size=tf.data.AUTOTUNE)
-            return ds
-
-        train_data = configure_for_performance(train_data)
-        training_steps = tf.data.experimental.cardinality(train_data).numpy()
-
-    for img, y in train_data.shuffle(buffer_size=100).take(1):
-        logger.info(f"Batch size: {batch_size}")
-        logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
-
-        if plot_patches:
-            for k, label in enumerate(['xy', 'xz', 'yz']):
-                img = np.expand_dims(img[0], axis=0)
-                original = np.squeeze(img[0, k])
-
-                vmin = np.min(original)
-                vmax = np.max(original)
-                vcenter = (vmin + vmax) / 2
-                step = .01
-
-                highcmap = plt.get_cmap('YlOrRd', 256)
-                lowcmap = plt.get_cmap('YlGnBu_r', 256)
-                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-                cmap = mcolors.ListedColormap(cmap)
-
-                plt.figure(figsize=(4, 4))
-                plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
-                plt.axis("off")
-                plt.title('Original')
-                plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-                for p in patch_size:
-                    patches = opticalnet.Patchify(patch_size=p)(img)
-                    merged = opticalnet.Merge(patch_size=p)(patches)
-
-                    patches = patches[0, k]
-                    merged = np.squeeze(merged[0, k])
-
-                    plt.figure(figsize=(4, 4))
-                    plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
-                    plt.axis("off")
-                    plt.title('Merged')
-                    plt.savefig(f'{outdir}/{label}_merged.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-                    n = int(np.sqrt(patches.shape[0]))
-                    plt.figure(figsize=(4, 4))
-                    plt.title('Patches')
-                    for i, patch in enumerate(patches):
-                        ax = plt.subplot(n, n, i + 1)
-                        patch_img = tf.reshape(patch, (p, p)).numpy()
-                        ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
-                        ax.axis("off")
-
-                    plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-    model.fit(
-        train_data,
-        steps_per_epoch=training_steps,
-        epochs=epochs,
-        verbose=2,
-        shuffle=True,
-        callbacks=[
-            tblogger,
-            tensorboard,
-            pb_checkpoints,
-            earlystopping,
-            defibrillator,
-            lrscheduler,
-        ],
-    )

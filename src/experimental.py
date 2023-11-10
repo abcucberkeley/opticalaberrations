@@ -1,9 +1,14 @@
-import platform
-
 import matplotlib
 matplotlib.use('Agg')
+
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+import warnings
+warnings.filterwarnings("ignore")
+
 import re
-import sys, os
+import sys
 
 from functools import partial
 import ujson
@@ -16,7 +21,6 @@ from pathlib import Path
 import tensorflow as tf
 from typing import Any, Union, Optional
 import numpy as np
-from numpy.lib.stride_tricks import sliding_window_view
 
 import pandas as pd
 import seaborn as sns
@@ -893,7 +897,6 @@ def predict_tiles(
     # else:
     #     pool = None     #
     pool = None
-
 
     dm_state = utils.load_dm(dm_state)
 

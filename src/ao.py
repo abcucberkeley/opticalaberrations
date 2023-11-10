@@ -1,4 +1,4 @@
-import atexit
+
 import os
 import subprocess
 import multiprocessing as mp
@@ -20,7 +20,6 @@ except ImportError as e:
 
 import cli
 import experimental
-import experimental_llsm
 import experimental_eval
 import slurm_utils
 
@@ -1332,8 +1331,6 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                 )
             else:
                 logger.error(f"Error")
-
-            atexit.register(strategy._extended._collective_ops._pool.close)
 
         logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

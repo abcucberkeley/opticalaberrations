@@ -181,6 +181,13 @@ def main(args=None):
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
             )
+        elif args.target == 'background':
+            savepath = eval.evaluate_uniform_background(
+                args.model,
+                eval_sign=args.eval_sign,
+                batch_size=batch_size,
+                digital_rotations=args.digital_rotations,
+            )
         elif args.target == "random":
             savepath = eval.random_samples(
                 model=args.model,
