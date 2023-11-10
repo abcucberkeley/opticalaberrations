@@ -127,9 +127,9 @@ class Zernike:
         super().__setattr__('_mutable', True)
 
         if isinstance(index, (list, tuple)) and len(index) == 2:
-            self.n, self.m = int(index[0]), int(index[1])
+            n, m = int(index[0]), int(index[1])
 
-            if (self.n, self.m) not in self._nm_pairs:
+            if (n, m) not in self._nm_pairs:
                 raise ValueError(
                     "Your input for index is list/tuple : Could not identify the n,m order of Zernike polynomial"
                 )
@@ -147,7 +147,7 @@ class Zernike:
                         "Your input for index is int and input for Zernike nomenclature is "
                         "Noll: Could not identify the Zernike polynomial with this index"
                     )
-                self.n, self.m = self._noll_to_nm[index]
+                n, m = self._noll_to_nm[index]
 
             elif order == 'ansi':
                 if index not in self._ansi_to_nm:
@@ -155,12 +155,13 @@ class Zernike:
                         "Your input for index is int and input for Zernike nomenclature is "
                         "ANSI: Could not identify the Zernike polynomial with this index"
                     )
-                self.n, self.m = self._ansi_to_nm[index]
+                n, m = self._ansi_to_nm[index]
         else:
             logging.error(ValueError("Could not identify your index input, we accept strings, lists and tuples only"))
 
-        self.index_noll = nm_to_noll(self.n, self.m)
-        self.index_ansi = nm_to_ansi(self.n, self.m)
+        self.n, self.m = n, m
+        self.index_noll = nm_to_noll(n, m)
+        self.index_ansi = nm_to_ansi(n, m)
         self._mutable = False
 
     @lru_cache(maxsize=55)
