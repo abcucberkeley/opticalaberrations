@@ -6,15 +6,28 @@ All rights reserved.
 
 import logging
 import sys
+import cmath
+from functools import lru_cache
+
 from pathlib import Path
 from copy import deepcopy
 from typing import Optional, Union
 
 import numpy as np
+from numpy.fft import fftshift
+try:
+    import cupy as cp
+except ImportError as e:
+    logging.warning(f"Cupy not supported on your system: {e}")
+
 from skimage.transform import rescale
 from line_profiler_pycharm import profile
 from astropy.convolution import convolve_fft
+from scipy.interpolate import RegularGridInterpolator
 import h5py
+from tifffile import imread, imwrite
+from pyotf.pyotf.otf import HanserPSF
+from utils import microns2waves
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -22,6 +35,86 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def round_to_even(n):
+    answer = round(n)
+    if not answer % 2:
+        return int(answer)
+    if abs(answer + 1 - n) < abs(answer - 1 - n):
+        return int(answer + 1)
+    else:
+        return int(answer - 1)
+
+
+def cart2pol(x, y):
+    """Convert cartesian (x, y) to polar (rho, phi_in_radians)
+    """
+    rho = np.sqrt(x ** 2 + y ** 2)
+    phi = np.arctan2(y, x)  # Note role reversal: the "y-coordinate" is 1st parameter, the "x-coordinate" is 2nd.
+    return rho, phi
+
+
+nprect = np.vectorize(cmath.rect)  # stupid cmath.rect can't handle 2D arrays.
+
+
+def complex_pupil_array(dx: float,
+                        nx: float,
+                        wavefront,  # wavefront object
+                        na_detection: float,
+                        lam_detection: float,   # in microns
+                        pupil_mag_file: Path,
+                        ) -> np.ndarray:
+    """
+    Calculate the pupil field at the supplied 2D arrays of kx and ky (usually given as shifted)
+    Args:
+        dx: spacing in XY plane
+        nx: size of X and Y dimension
+        wavefront: Wavefront object
+        na_detection: numerical aperture
+        lam_detection: detection wavelength in microns
+        pupil_mag_file: tif file with pupil magnitude
+
+    Returns:
+        complex_pupil: pupil ready for pyotf's apply_pupil. Needs a np.fft.fftshift() to save out as an image.
+
+    """
+
+    pupil_magnitude, rho, theta, diff_limit = pupil_magnitude_array(dx, nx, na_detection,
+                                                                    lam_detection, pupil_mag_file)
+    pupil_phase = wavefront.phase(rho=rho / diff_limit, theta=theta, normed=True, outside=None)
+    pupil_phase = microns2waves(pupil_phase, wavelength=lam_detection) * 2 * np.pi    # Convert to radians
+
+    complex_pupil = nprect(pupil_magnitude, pupil_phase)  # numpy's cartesian to complex
+    return complex_pupil
+
+
+@lru_cache()
+def pupil_magnitude_array(dx: float, nx: float, na_detection: float, lam_detection: float, pupil_mag_file: Path):
+    k = np.fft.fftfreq(nx, dx)
+    pyotf_model_kxx, pyotf_model_kyy = np.meshgrid(k, k)
+    if pupil_mag_file is not None:
+        if pupil_mag_file.exists():
+            pupil_mag = imread(pupil_mag_file)
+            pupil_kx = imread(f"{pupil_mag_file.with_suffix('')}_kxx.tif")[0, :]  # 1D row
+            pupil_ky = imread(f"{pupil_mag_file.with_suffix('')}_kyy.tif")[:, 0]  # 1D col
+            interp = RegularGridInterpolator(
+                points=(pupil_ky, pupil_kx),  # ky then kx
+                values=pupil_mag,
+                bounds_error=False,
+                fill_value=0,
+                method='cubic'
+            )
+            pupil_magnitude = interp((pyotf_model_kyy, pyotf_model_kxx))  # ky then kx
+        else:
+            logger.error(f'{pupil_mag_file.resolve()} does not exist.')
+            pupil_magnitude = np.ones_like(pyotf_model_kxx)
+    else:
+        pupil_magnitude = np.ones_like(pyotf_model_kxx)
+    rho, theta = cart2pol(pyotf_model_kxx, pyotf_model_kyy)  # kx then ky
+    diff_limit = na_detection / lam_detection  # see _gen_pupil
+    pupil_magnitude[rho > diff_limit] = 0  # avoid where we've extrapolated past diffraction limit
+    return pupil_magnitude, rho, theta, diff_limit
 
 
 class PsfGenerator3D:
@@ -66,13 +159,6 @@ class PsfGenerator3D:
         self.na_detection = na_detection
         self.lam_detection = lam_detection
         self.kcut = 1. * self.na_detection / self.lam_detection
-
-        kx = np.fft.fftfreq(self.Nx, self.dx)
-        ky = np.fft.fftfreq(self.Ny, self.dy)
-
-        idx = np.arange(self.Nz) - self.Nz // 2
-        kz = self.dz * idx
-        self.theoretical_psf(kx=kx, ky=ky, kz=kz)
         self.psf_type = psf_type
 
         if isinstance(lls_excitation_profile, np.ndarray) and lls_excitation_profile.size != 0:
@@ -147,87 +233,79 @@ class PsfGenerator3D:
         else:
             raise Exception(f"Unknown format for `lls_defocus_offset`: {offset}")
 
-    @profile
-    def theoretical_psf(self, kx, ky, kz):
-        KZ3, KY3, KX3 = np.meshgrid(kz, ky, kx, indexing="ij")
-        KR3 = np.sqrt(KX3 ** 2 + KY3 ** 2)
-
-        # the cutoff in fourier domain
-        kmask3 = (KR3 <= self.kcut)
-        H = np.sqrt(1. * self.n ** 2 - KR3 ** 2 * self.lam_detection ** 2)
-
-        out_ind = np.isnan(H)
-        kprop = np.exp(-2.j * np.pi * KZ3 / self.lam_detection * H)
-        kprop[out_ind] = 0.
-
-        KY2, KX2 = np.meshgrid(ky, kx, indexing="ij")
-        KR2 = np.hypot(KX2, KY2)
-
-        self.kbase = kmask3 * kprop
-        self.krho = KR2 / self.kcut
-        self.kphi = np.arctan2(KY2, KX2)
-        self.kmask2 = (KR2 <= self.kcut)
-
-    @profile
-    def masked_phase_array(self, phi, normed=True):
+    def widefield_psf(self, wavefront) -> np.ndarray:
         """
-        Returns masked Zernike polynomial for back focal plane, masked according to the setup
+        Calculate 3D PSF for the given parameters in 'self', and the abberation in the Wavefront object 'wavefront'
 
         Args:
-            phi: Zernike/ZernikeWavefront object
-            normed: boolean, multiplied by normalization factor, eg True
-        """
-        return self.kmask2 * phi.phase(self.krho, self.kphi, normed=normed, outside=None)
+            wavefront: Wavefront class
 
-    @profile
-    def coherent_psf(self, phi):
+        Returns:
+            psf: 3D np.ndarray
         """
-        Returns the coherent psf for a given wavefront phi
+        # psf = np.abs(self.coherent_psf(wavefront)) ** 2
+        # psf = np.array([p / np.sum(p) for p in psf])
+        # psf = np.fft.fftshift(psf)
+        # psf /= np.max(psf)
 
-        Args:
-            phi: Zernike/ZernikeWavefront object
-        """
-        phi = self.masked_phase_array(phi)
-        ku = self.kbase * np.exp(2.j * np.pi * phi / self.lam_detection)
-        res = np.fft.ifftn(ku, axes=(1, 2))
-        return np.fft.fftshift(res, axes=(0,))
+        # gpu_support = 'cupy' in sys.modules
+        gpu_support = False  # Seems faster
 
-    def widefield_psf(self, phi):
-        psf = np.abs(self.coherent_psf(phi)) ** 2
-        psf = np.array([p / np.sum(p) for p in psf])
-        psf = np.fft.fftshift(psf)
-        psf /= np.max(psf)
+        pyotf_model = HanserPSF(
+            wl=self.lam_detection,
+            na=self.na_detection,
+            ni=self.n,
+            res=self.dx,
+            size=self.Nx,
+            zres=self.dz,
+            zsize=self.Nz,
+            vec_corr="none",    # will overwrite the pupil magnitude: Set to 'none' to match retrieve_phase()
+            condition="none",   # will overwrite the pupil magnitude: Set to 'none' to match retrieve_phase()
+            gpu=gpu_support,
+        )
+
+        pyotf_model._gen_kr()   # need to generate model's _kx and _ky
+        pupil_mag_file = Path(__file__).parent.joinpath(r"..\scope_psf\WF_150ms_phase_retrieval_pupil_mag.tif")
+        pupil = complex_pupil_array(
+            dx=self.dx,
+            nx=self.Nx,
+            wavefront=wavefront,
+            na_detection=self.na_detection,
+            lam_detection=self.lam_detection,
+            pupil_mag_file=pupil_mag_file
+        )
+        pyotf_model.apply_pupil(pupil)
+
+        # imwrite(f"{pupil_mag_file.with_suffix('')}_interp.tif", fftshift(np.abs(pupil)).astype(np.float32))
+        # imwrite(f"{pupil_mag_file.with_suffix('')}_phase_interp.tif", fftshift(np.angle(pupil)).astype(np.float32))
+
+        psf = np.squeeze(pyotf_model.PSFi)
+        from preprocessing import resize_with_crop_or_pad
+        psf = resize_with_crop_or_pad(psf, (self.Nz, self.Ny, self.Nx))
+        if gpu_support:
+            psf = cp.asnumpy(psf)
         return psf
 
-    def round_to_even(self, n):
-        answer = round(n)
-        if not answer % 2:
-            return int(answer)
-        if abs(answer + 1 - n) < abs(answer - 1 - n):
-            return int(answer + 1)
-        else:
-            return int(answer - 1)
-
     @profile
-    def incoherent_psf(self, phi, lls_defocus_offset=None):
+    def incoherent_psf(self, wavefront, lls_defocus_offset=None):
         """
-        Returns the incoherent psf for a given wavefront phi
+        Returns the incoherent psf for a given wavefront
            (which is just the squared absolute value of the coherent one)
            The psf is normalized such that the sum intensity on each plane equals one
 
         Args:
-            phi: Zernike/ZernikeWavefront object
+            wavefront: Wavefront object
             lls_defocus_offset: the offset between the excitation and detection focal plan (microns)
         """
-        ideal_phi = deepcopy(phi)
-        ideal_phi.zernikes = {k: 0. for k, v in ideal_phi.zernikes.items()}  # set aberration to zero for ideal_psf
+        ideal_wavefront = deepcopy(wavefront)
+        ideal_wavefront.zernikes = {k: 0. for k, v in ideal_wavefront.zernikes.items()}  # set aberration to 0 for ideal
 
-        # initalize the total PSF with (aberrated) widefield detection PSF
-        _psf = self.widefield_psf(phi)
+        # Initialize the total PSF with (aberrated) widefield detection PSF
+        _psf = self.widefield_psf(wavefront)
 
         if self.lls_excitation_profile is not None:
 
-            if lls_defocus_offset is not None:
+            if lls_defocus_offset is not None and lls_defocus_offset != 0:
                 _psf *= self.defocus_excitation_profile(offset=lls_defocus_offset, desired_shape=_psf.shape[0])
             else:
                 _psf *= self.lls_excitation_profile
@@ -237,7 +315,7 @@ class PsfGenerator3D:
 
         elif self.psf_type == '2photon':
             # we only have one lamda defined in this class: self.lam_detection. That should already be set with .920
-            exc_psf = self.widefield_psf(phi)
+            exc_psf = self.widefield_psf(wavefront)
             _psf = exc_psf ** 2
 
         elif self.psf_type == 'confocal':
@@ -245,12 +323,12 @@ class PsfGenerator3D:
             lam_excitation = .488
             f = 1  # number of AUs
 
-            exc_psf = self.widefield_psf(phi)
+            exc_psf = self.widefield_psf(wavefront)
 
             eff_pixel_size = lam_excitation / self.n * media_wavelength       # microns per pixel
             au = 0.61 * (self.lam_detection / self.n) / self.na_detection   # airy radius in microns
             w = _psf.shape[0] // 2
-            lateral_extent = self.round_to_even(2 * w * self.dy / eff_pixel_size)
+            lateral_extent = round_to_even(2 * w * self.dy / eff_pixel_size)
             axial_extent = 2 * w
 
             # pix pitch=eff_pixel_size (0.1 media wavelengths)

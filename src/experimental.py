@@ -2275,9 +2275,9 @@ def phase_retrieval(
     data_prepped = cp.asnumpy(data_prepped)
     pupil_mag = cp.asnumpy(pr_result.mag)
     imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf.astype(np.float32))
-    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_field_mag.tif", pupil_mag.astype(np.float32))
-    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_field_kr.tif", cp.asnumpy(pr_result.r).astype(np.float32))
-    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_field_theta.tif", cp.asnumpy(pr_result.theta % (2*np.pi)).astype(np.float32))
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_mag.tif", pupil_mag.astype(np.float32), compression='deflate')
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_mag_kxx.tif", cp.asnumpy(pr_result.kxx).astype(np.float32), compression='deflate')
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_mag_kyy.tif", cp.asnumpy(pr_result.kyy).astype(np.float32), compression='deflate')
 
     if plot_otf_diagnosis:
         logger.info(f'Plotting OTF Diagnosis...')
@@ -2300,15 +2300,15 @@ def phase_retrieval(
         model.apply_pupil(pupil_field)
         hanser_pupil = np.squeeze(model.PSFi)
 
-        RW_path = Path(r"..\scope_psf\RW_PSFs\PSF_RW_515em_128_128_101_100nmSteps_97nmXY.tif")
+        RW_path = Path(__file__).parent.joinpath(r"..\scope_psf\RW_PSFs\PSF_RW_515em_128_128_101_100nmSteps_97nmXY.tif")
         RW = imread(RW_path)
         RW = resize_with_crop_or_pad(RW, crop_shape)
 
         model_result = cp.asnumpy(pr_result.model.PSFi)     # direct from PR. Has pupil magnitude *and* phase.
 
         vis.otf_diagnosis(
-                          psfs=[data_prepped, hanser_pupil, RW, model_result],
-                          labels=["Experimental", "FT(Experimental Pupil)", "RW theory", 'PR mag & phase'],
+                          psfs=[data_prepped, hanser_pupil, RW, psf],
+                          labels=["Experimental", "FT(Experimental Pupil)", "RW theory", 'psfgen'],
                           save_path=img.with_suffix(''),
                           lateral_voxel_size=lateral_voxel_size,
                           axial_voxel_size=axial_voxel_size,
