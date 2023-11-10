@@ -399,7 +399,6 @@ def iter_evaluate(
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=rotations if digital_rotations else None,
-        cpu_workers=len(tf.config.list_physical_devices('GPU'))*2,
         min_psnr=0,
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
