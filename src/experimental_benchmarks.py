@@ -650,7 +650,7 @@ def predict_cocoa(
                 yz=axes[0, 2],
                 dxy=lateral_voxel_size,
                 dz=axial_voxel_size,
-                label='Input (MIP) [$\gamma$=.5]'
+                label=r'Input (MIP) [$\gamma$=.5]'
             )
 
             vis.plot_mip(
@@ -660,7 +660,7 @@ def predict_cocoa(
                 yz=axes[1, 2],
                 dxy=lateral_voxel_size,
                 dz=axial_voxel_size,
-                label='Estimated (MIP) [$\gamma$=.5]'
+                label=r'Estimated (MIP) [$\gamma$=.5]'
             )
 
             vis.plot_mip(
@@ -670,7 +670,7 @@ def predict_cocoa(
                 yz=axes[2, 2],
                 dxy=lateral_voxel_size,
                 dz=axial_voxel_size,
-                label='Reconstructed (MIP) [$\gamma$=.5]'
+                label=r'Reconstructed (MIP) [$\gamma$=.5]'
             )
 
             vis.plot_mip(
@@ -680,7 +680,7 @@ def predict_cocoa(
                 yz=axes[-1, 2],
                 dxy=lateral_voxel_size,
                 dz=axial_voxel_size,
-                label='Deconvolved (MIP) [$\gamma$=.5]'
+                label=r'Deconvolved (MIP) [$\gamma$=.5]'
             )
 
             vis.savesvg(fig, Path(f"{savepath}_cocoa_mips.svg"))

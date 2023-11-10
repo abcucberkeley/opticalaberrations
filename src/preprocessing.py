@@ -469,7 +469,7 @@ def prep_sample(
             yz=axes[0, 2],
             dxy=sample_voxel_size[-1],
             dz=sample_voxel_size[0],
-            label='Input (MIP) [$\gamma$=.5]'
+            label=r'Input (MIP) [$\gamma$=.5]'
         )
 
         axes[0, 0].set_title(
@@ -495,7 +495,7 @@ def prep_sample(
             yz=axes[1, 2],
             dxy=sample_voxel_size[-1],
             dz=sample_voxel_size[0],
-            label='DoG [$\gamma$=.5]'
+            label=r'DoG [$\gamma$=.5]'
         )
 
     if model_fov is not None:
@@ -528,7 +528,7 @@ def prep_sample(
             yz=axes[-1, 2],
             dxy=sample_voxel_size[-1],
             dz=sample_voxel_size[0],
-            label='Processed [$\gamma$=.5]'
+            label=r'Processed [$\gamma$=.5]'
         )
         savesvg(fig, f'{plot}_preprocessing.svg')
 

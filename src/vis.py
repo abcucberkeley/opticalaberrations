@@ -105,7 +105,7 @@ def plot_mip(
 
         m = xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
 
-        xy.set_xlabel('XY ($\mu$m)')
+        xy.set_xlabel(r'XY ($\mu$m)')
         if ticks:
             xy.yaxis.set_ticks_position('right')
             xy.xaxis.set_major_formatter(partial(formatter, dd=dxy))
@@ -123,7 +123,7 @@ def plot_mip(
 
         m = xz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
 
-        xz.set_xlabel('XZ ($\mu$m)')
+        xz.set_xlabel(r'XZ ($\mu$m)')
         if ticks:
             xz.yaxis.set_ticks_position('right')
             xz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
@@ -141,7 +141,7 @@ def plot_mip(
 
         m = yz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
 
-        yz.set_xlabel('YZ ($\mu$m)')
+        yz.set_xlabel(r'YZ ($\mu$m)')
         if ticks:
             yz.yaxis.set_ticks_position('right')
             yz.xaxis.set_major_formatter(partial(formatter, dd=dxy))
@@ -164,7 +164,7 @@ def plot_mip(
         else:
             formatter = FormatStrFormatter("%.1f")
 
-        cb = plt.colorbar(m, cax, norm=norm)
+        cb = plt.colorbar(m, cax=cax, norm=norm)
         cax.yaxis.set_major_formatter(formatter)
         cax.set_ylabel(f"{label}")
         cax.yaxis.set_label_position("left")
@@ -400,7 +400,7 @@ def diagnostic_assessment(
         xz=ax_xz,
         yz=ax_yz,
         vol=psf,
-        label=f'Input (MIP) [$\gamma$={gamma}]',
+        label=rf'Input (MIP) [$\gamma$={gamma}]',
         cmap=psf_cmap,
         dxy=dxy,
         dz=dz,
@@ -411,7 +411,7 @@ def diagnostic_assessment(
         xz=ax_pxz,
         yz=ax_pyz,
         vol=predicted_psf,
-        label=f'Predicted [$\gamma$={gamma}]',
+        label=rf'Predicted [$\gamma$={gamma}]',
         cmap=psf_cmap,
         dxy=dxy,
         dz=dz,
@@ -422,7 +422,7 @@ def diagnostic_assessment(
         xz=ax_cxz,
         yz=ax_cyz,
         vol=corrected_psf,
-        label=f'Corrected [$\gamma$={gamma}]',
+        label=rf'Corrected [$\gamma$={gamma}]',
         cmap=psf_cmap,
         dxy=dxy,
         dz=dz,
@@ -437,7 +437,7 @@ def diagnostic_assessment(
             xz=ax_xzgt,
             yz=ax_yzgt,
             vol=gt_psf,
-            label=f'Simulated [$\gamma$={gamma}]',
+            label=rf'Simulated [$\gamma$={gamma}]',
             ticks=False
         )
 
@@ -963,7 +963,7 @@ def compare_mips(
         xy=fig.add_subplot(gs[0, 0]),
         xz=fig.add_subplot(gs[0, 1]),
         yz=fig.add_subplot(gs[0, 2]),
-        label=f'Input [$\gamma$={gamma}]',
+        label=rf'Input [$\gamma$={gamma}]',
         vol=noao_img,
         cmap=psf_cmap,
         dxy=dxy,
@@ -975,7 +975,7 @@ def compare_mips(
         xy=fig.add_subplot(gs[1, 0]),
         xz=fig.add_subplot(gs[1, 1]),
         yz=fig.add_subplot(gs[1, 2]),
-        label=f'SH [$\gamma$={gamma}]',
+        label=rf'SH [$\gamma$={gamma}]',
         vol=sh_img,
         cmap=psf_cmap,
         dxy=dxy,
@@ -988,7 +988,7 @@ def compare_mips(
         xz=fig.add_subplot(gs[2, 1]),
         yz=fig.add_subplot(gs[2, 2]),
         vol=ml_img,
-        label=f'Model [$\gamma$={gamma}]',
+        label=rf'Model [$\gamma$={gamma}]',
         cmap=psf_cmap,
         dxy=dxy,
         dz=dz,
@@ -1176,16 +1176,11 @@ def plot_embeddings(
         cax.yaxis.set_label_position("left")
         cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
     else:
-        m = plot_mip(
-            vol=inputs,
-            xy=axes[0, 0],
-            xz=axes[0, 1],
-            yz=axes[0, 2],
-            colorbar=False,
-        )
-
+        m = axes[0, 0].imshow(np.max(inputs**gamma, axis=0), cmap='hot', vmin=0, vmax=1)
+        axes[0, 1].imshow(np.max(inputs**gamma, axis=1), cmap='hot', vmin=0, vmax=1)
+        axes[0, 2].imshow(np.max(inputs**gamma, axis=2), cmap='hot', vmin=0, vmax=1)
         cax = inset_axes(axes[0, 0], width="10%", height="100%", loc='center left', borderpad=-5)
-        cb = plt.colorbar(m, cax=cax)
+        cb = fig.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("left")
         cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
 
@@ -1193,7 +1188,7 @@ def plot_embeddings(
     axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
     axes[1, 2].imshow(emb[2], cmap=cmap, vmin=vmin, vmax=vmax)
     cax = inset_axes(axes[1, 0], width="10%", height="100%", loc='center left', borderpad=-5)
-    cb = plt.colorbar(m, cax=cax)
+    cb = fig.colorbar(m, cax=cax)
     cax.yaxis.set_label_position("left")
     cax.set_ylabel(r'Embedding ($\alpha$)')
 
@@ -1219,7 +1214,7 @@ def plot_embeddings(
         axes[-1, 1].imshow(emb[4], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
         axes[-1, 2].imshow(emb[5], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
         cax = inset_axes(axes[-1, 0], width="10%", height="100%", loc='center left', borderpad=-5)
-        cb = plt.colorbar(m, cax=cax, format=lambda x, _: f"{x:.1f}")
+        cb = fig.colorbar(m, cax=cax, format=lambda x, _: f"{x:.1f}")
         cax.yaxis.set_label_position("left")
         cax.set_ylabel(r'Embedding ($\varphi$, radians)')
 
@@ -1787,7 +1782,7 @@ def compare_ao_iterations(
                 xz=None,
                 yz=None,
                 gamma=gamma,
-                label=f'OpticalNet [$\gamma$={gamma}]',
+                label=rf'OpticalNet [$\gamma$={gamma}]',
                 vol=results['noao_img'],
                 cmap=psf_cmap,
                 dxy=dxy,
