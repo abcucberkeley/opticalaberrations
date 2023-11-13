@@ -41,7 +41,7 @@ class LRLogger(Callback):
             lr_schedule = lr_schedule(self.model.optimizer.iterations)
 
         logger.info(lr_schedule)
-        logger.info('\n'.join("%s: %s" % item for item in attrs.items()))
+        # logger.info('\n'.join("%s: %s" % item for item in attrs.items()))
 
 
 class Defibrillator(Callback):
