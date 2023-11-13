@@ -203,7 +203,6 @@ def simulate_image(
     mean_background_offset=100,
     electrons_per_count: float = .22,
     quantum_efficiency: float = .82,
-    model_psf_shape: tuple = (64, 64, 64),
     scale_by_maxcounts: Optional[int] = None,
     plot: bool = False,
     gtdir: Optional[Path] = None,
@@ -223,7 +222,7 @@ def simulate_image(
         kernel /= np.sum(kernel)
 
     img = fftconvolution(sample=reference, kernel=kernel)  # image in photons
-    img = resize_with_crop_or_pad(img, crop_shape=model_psf_shape, mode='constant')  # only center crop
+    img = resize_with_crop_or_pad(img, crop_shape=gen.psf_shape, mode='constant')  # only center crop
 
     if scale_by_maxcounts is not None:
         img /= np.max(img)
@@ -383,7 +382,7 @@ def create_synthetic_sample(
     lls_defocus_offset = randuniform((min_lls_defocus_offset, max_lls_defocus_offset))
 
     reference = beads(
-        image_shape=(64, 64, 64),    # Change this to change image size (e.g. 256,256,256).
+        image_shape=(128, 128, 128),
         photons=photons,
         object_size=object_size,
         num_objs=npoints,
@@ -513,7 +512,6 @@ def create_synthetic_sample(
                 inputs[gen.psf_type] = simulate_image(
                     filename=filename,
                     reference=reference,
-                    model_psf_shape=reference.shape,
                     outdir=outdir,
                     gtdir=gtdir,
                     phi=wavefronts[gen.psf_type],
@@ -538,7 +536,6 @@ def create_synthetic_sample(
             inputs[gen.psf_type] = simulate_image(
                 filename=filename,
                 reference=reference,
-                model_psf_shape=reference.shape,
                 outdir=outdir,
                 gtdir=gtdir,
                 phi=wavefronts[gen.psf_type],
