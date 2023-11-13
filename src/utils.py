@@ -302,7 +302,7 @@ def mean_min_distance(sample: np.array, voxel_size: tuple, plot: bool = False):
     scaled_peaks[:, 2] = beads[:, 2] * voxel_size[2]
 
     kd = KDTree(scaled_peaks)
-    dists, idx = kd.query(scaled_peaks, k=2, workers=-1)
+    dists, idx = kd.query(scaled_peaks, k=2)
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False, sharex=False)
