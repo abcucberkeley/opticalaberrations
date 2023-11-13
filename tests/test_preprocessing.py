@@ -18,6 +18,7 @@ from src import backend
 from src import preprocessing
 from src.synthetic import SyntheticPSF
 from src.preprocessing import na_and_background_filter, dog
+from src.utils import fft
 
 
 @pytest.mark.run(order=1)
@@ -66,7 +67,7 @@ def test_remove_background_noise(kargs):
     center = np.array(realsp.shape) // 2
     realsp[center[2], center[1], center[0]] = 1
     realsp -= np.mean(realsp)                   # set DC frequency to zero so it doesn't overload otf.
-    fourier = samplepsfgen.fft(realsp)
+    fourier = fft(realsp)
 
     base_folder = Path(f"{kargs['repo']}/preprocessing")
     base_folder.mkdir(exist_ok=True)
@@ -95,8 +96,8 @@ def test_remove_background_noise(kargs):
     imwrite(f'{base_folder}/FFTfiltered_realsp.tif', np.abs(cp.asnumpy(FFTfiltered_realsp)).astype(np.float32))
     imwrite(f'{base_folder}/dogfiltered_realsp.tif', np.abs(cp.asnumpy(dogfiltered_realsp)).astype(np.float32))
 
-    FFTfourier = samplepsfgen.fft(FFTfiltered_realsp)
-    dogfourier = samplepsfgen.fft(dogfiltered_realsp)
+    FFTfourier = fft(FFTfiltered_realsp)
+    dogfourier = fft(dogfiltered_realsp)
 
     FFTfiltered_otf = np.abs(cp.asnumpy(FFTfourier)).astype(np.float32)
     dogfiltered_otf = np.abs(cp.asnumpy(dogfourier)).astype(np.float32)

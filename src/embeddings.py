@@ -14,7 +14,7 @@ import numpy as np
 from tqdm import tqdm
 from functools import partial
 from pathlib import Path
-from skimage.filters import scharr, window
+from skimage.filters import window
 from skimage.restoration import unwrap_phase
 from skimage.feature import peak_local_max
 from skimage.transform import resize
@@ -34,7 +34,7 @@ except ImportError as e:
 
 import preprocessing
 from preprocessing import resize_with_crop_or_pad
-from utils import multiprocess, gaussian_kernel
+from utils import multiprocess, gaussian_kernel, fft, ifft, normalize_otf
 from vis import savesvg, plot_interference, plot_embeddings
 
 logging.basicConfig(
@@ -43,41 +43,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-
-@profile
-def fft(inputs, padsize=None):
-    if padsize is not None:
-        shape = inputs.shape[1]
-        size = shape * (padsize / shape)
-        pad = int((size - shape) // 2)
-        inputs = np.pad(inputs, ((pad, pad), (pad, pad), (pad, pad)), 'constant', constant_values=0)
-
-    otf = np.fft.ifftshift(inputs)
-    otf = np.fft.fftn(otf)
-    otf = np.fft.fftshift(otf)
-    return otf
-
-
-@profile
-def ifft(otf):
-    psf = np.fft.ifftshift(otf)
-    psf = np.fft.ifftn(psf)
-    psf = np.abs(np.fft.fftshift(psf))
-    return psf
-
-
-@profile
-def normalize(emb, otf, freq_strength_threshold: float = 0.):
-    emb /= np.nanpercentile(np.abs(otf), 99.99)
-    emb[emb > 1] = 1
-    emb[emb < -1] = -1
-    emb = np.nan_to_num(emb, nan=0)
-
-    if freq_strength_threshold != 0.:
-        emb[np.abs(emb) < freq_strength_threshold] = 0.
-
-    return emb
 
 
 @profile
@@ -223,7 +188,7 @@ def remove_phase_ramp(masked_phase, plot):
             axes[i, 2].axis('off')
             savesvg(fig, f"{plot}_phase_ramp.svg")
 
-    return np.nan_to_num(masked_phase, nan=0)
+    return np.nan_to_num(masked_phase, nan=0, neginf=0, posinf=0)
 
 
 @profile
@@ -564,6 +529,9 @@ def compute_emb(
             na_mask.astype(float), crop_shape=model_psf_shape, mode='constant'
         ).astype(bool)
 
+    if norm:
+        otf = normalize_otf(otf, freq_strength_threshold=freq_strength_threshold)
+
     if val == 'real':
         emb = np.real(otf)
 
@@ -592,12 +560,9 @@ def compute_emb(
     else:
         emb = np.abs(otf)
 
-    if norm:
-        emb = normalize(emb, otf, freq_strength_threshold=freq_strength_threshold)
-
     if ratio:
-        emb /= iotf
-        emb = np.nan_to_num(emb, nan=0)
+        emb /= np.abs(iotf)
+        emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
 
     emb *= na_mask
 
@@ -834,6 +799,10 @@ def fourier_embeddings(
                 if no_phase else np.zeros((6, *model_psf_shape[1:]))
 
     else:
+        # bead = gaussian_kernel(kernlen=iotf.shape, std=fwhm2sigma(3))
+        # bead_fft = fft(bead)
+        # iotf = normalize_otf(iotf*bead_fft, iotf, freq_strength_threshold=0.05)
+
         if no_phase:
             emb = compute_emb(
                 otf,
@@ -1057,7 +1026,7 @@ def rolling_fourier_embeddings(
 
                     label = f'Reconstructed\navg $\gamma$={gamma}'
 
-                    cax = inset_axes(axes[-1,-1], width="10%", height="90%", loc='center right', borderpad=-2)
+                    cax = inset_axes(axes[-1, -1], width="10%", height="90%", loc='center right', borderpad=-2)
                     cb = plt.colorbar(m5, cax=cax)
                     cax.yaxis.set_label_position("right")
                     cax.set_ylabel(label)

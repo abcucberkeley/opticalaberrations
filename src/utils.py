@@ -560,3 +560,53 @@ def fwhm2sigma(w):
 def sigma2fwhm(s):
     """ convert from std to full width at half maximum (FWHM) """
     return s * (2 * np.sqrt(2 * np.log(2)))
+
+
+def sphere_mask(image_shape, radius=1):
+    center = [s // 2 for s in image_shape]
+    Z, Y, X = np.ogrid[:image_shape[0], :image_shape[1], :image_shape[2]]
+    dist_from_center = np.sqrt((Z - center[0]) ** 2 + (Y - center[1]) ** 2 + (X - center[2]) ** 2)
+    mask = dist_from_center <= radius
+    return mask
+
+
+@profile
+def fft(inputs, padsize=None):
+    if padsize is not None:
+        shape = inputs.shape[1]
+        size = shape * (padsize / shape)
+        pad = int((size - shape) // 2)
+        inputs = np.pad(inputs, ((pad, pad), (pad, pad), (pad, pad)), 'constant', constant_values=0)
+
+    otf = np.fft.ifftshift(inputs)
+    otf = np.fft.fftn(otf)
+    otf = np.fft.fftshift(otf)
+    return otf
+
+
+@profile
+def ifft(otf):
+    psf = np.fft.fftshift(otf)
+    psf = np.fft.ifftn(psf)
+    psf = np.fft.ifftshift(psf)
+    return np.abs(psf)
+
+
+@profile
+def normalize_otf(otf, freq_strength_threshold: float = 0., percentile: bool = True):
+
+    if percentile:
+        otf = np.abs(otf)
+        otf /= np.nanpercentile(otf, 99.99)
+        otf[otf > 1] = 1
+        otf[otf < -1] = -1
+    else:
+        roi = otf[sphere_mask(image_shape=otf.shape, radius=3)]
+        dc = np.max(roi)
+        otf /= np.mean(roi - dc)
+
+    if freq_strength_threshold != 0.:
+        otf[np.abs(otf) < freq_strength_threshold] = 0.
+
+    emb = np.nan_to_num(otf, nan=0, neginf=0, posinf=0)
+    return emb

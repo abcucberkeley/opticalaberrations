@@ -19,7 +19,7 @@ from typing import Optional
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
-from utils import randuniform, round_to_even
+from utils import randuniform, round_to_even, fft, normalize_otf
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -138,8 +138,8 @@ class SyntheticPSF:
 
         # ideal psf (theoretical, no noise)
         self.ipsf = self.theoretical_psf(normed=True)
-        self.iotf = np.abs(self.fft(self.ipsf, padsize=None))
-        self.iotf = self._normalize(self.iotf, self.iotf)
+        self.iotf = np.abs(fft(self.ipsf, padsize=None))
+        self.iotf = normalize_otf(self.iotf)
 
     @profile
     def calc_max_support_index(
@@ -183,7 +183,7 @@ class SyntheticPSF:
         ipsf = gen.incoherent_psf(phi)
         ipsf /= np.nanmax(ipsf)
 
-        iotf = np.abs(self.fft(ipsf, padsize=None))
+        iotf = np.abs(fft(ipsf, padsize=None))
         iotf /= np.nanmax(iotf)
 
         iotf = np.where(iotf < threshold, iotf, 1.)
@@ -203,9 +203,9 @@ class SyntheticPSF:
         # PSF has been pre-processed already
         self.ipsf = ideal_empirical_preprocessed_psf
 
-        self.iotf = np.abs(self.fft(self.ipsf, padsize=None))
+        self.iotf = np.abs(fft(self.ipsf, padsize=None))
         self.iotf = np.nan_to_num(self.iotf, nan=0)
-        self.iotf = self._normalize(self.iotf, self.iotf)
+        self.iotf = normalize_otf(self.iotf)
         self.iotf *= self.na_mask()
 
     @profile
@@ -249,7 +249,7 @@ class SyntheticPSF:
         """
 
         ipsf = self.theoretical_psf(normed=True)
-        mask = np.abs(self.fft(ipsf, padsize=None))
+        mask = np.abs(fft(ipsf, padsize=None))
         mask /= np.nanmax(mask)
 
         if threshold is None:
@@ -258,37 +258,6 @@ class SyntheticPSF:
         mask = np.where(mask < threshold, mask, 1.)
         mask = np.where(mask >= threshold, mask, 0.)
         return mask.astype(np.float32)
-
-    @profile
-    def fft(self, inputs, padsize=None):
-        if padsize is not None:
-            shape = inputs.shape[1]
-            size = shape * (padsize / shape)
-            pad = int((size - shape) // 2)
-            inputs = np.pad(inputs, ((pad, pad), (pad, pad), (pad, pad)), 'constant', constant_values=0)
-        otf = np.fft.ifftshift(inputs)
-        otf = np.fft.fftn(otf)
-        otf = np.fft.fftshift(otf)
-        return otf
-
-    @profile
-    def ifft(self, otf):
-        psf = np.fft.ifftshift(otf)
-        psf = np.fft.ifftn(psf)
-        psf = np.abs(np.fft.fftshift(psf))
-        return psf
-
-    @profile
-    def _normalize(self, emb, otf, freq_strength_threshold: float = 0.):
-        emb /= np.nanpercentile(np.abs(otf), 99.99)
-        emb[emb > 1] = 1
-        emb[emb < -1] = -1
-        emb = np.nan_to_num(emb, nan=0)
-
-        if freq_strength_threshold != 0.:
-            emb[np.abs(emb) < freq_strength_threshold] = 0.
-
-        return emb
 
     @profile
     def single_psf(

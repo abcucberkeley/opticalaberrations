@@ -260,8 +260,8 @@ def preprocess(
         ipsf /= np.max(ipsf)
         if plot:
             imwrite(f"{plot.with_suffix('')}_ipsf.tif", ipsf, dtype=np.float32)
-        iotf = modelpsfgen.fft(ipsf)
-        iotf = modelpsfgen._normalize(iotf, iotf)
+        iotf = utils.fft(ipsf)
+        iotf = utils.normalize_otf(iotf)
 
     else:
         iotf = modelpsfgen.iotf

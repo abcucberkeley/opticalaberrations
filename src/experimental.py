@@ -2195,7 +2195,7 @@ def phase_retrieval(
     )
 
     psf = data / np.nanmax(data)
-    otf = psfgen.fft(psf)
+    otf = utils.fft(psf)
     otf = remove_interference_pattern(
         psf=psf,
         otf=otf,
@@ -2203,7 +2203,7 @@ def phase_retrieval(
         max_num_peaks=1,
         windowing=False,
     )
-    data = np.int_(psfgen.ifft(otf) * np.nanmax(data))
+    data = np.int_(utils.ifft(otf) * np.nanmax(data))
 
     params = dict(
         wl=psfgen.lam_detection,
