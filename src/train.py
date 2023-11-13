@@ -90,6 +90,7 @@ def train_model(
     positional_encoding_scheme: str = 'default',
     fixed_dropout_depth: bool = False,
     stem: bool = False,
+    strategy: Any = None
 ):
     network = network.lower()
     opt = opt.lower()
@@ -177,72 +178,71 @@ def train_model(
 
                 tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
 
-        def configure_for_performance(ds):
-            ds = ds.cache()
-            ds = ds.shuffle(batch_size)
-            ds = ds.batch(batch_size)
-            ds = ds.prefetch(buffer_size=tf.data.AUTOTUNE)
-            return ds
+        for img, y in train_data.take(1):
+            if plot_patches:
+                for k, label in enumerate(['xy', 'xz', 'yz']):
+                    img = np.expand_dims(img[0], axis=0)
+                    original = np.squeeze(img[0, k])
 
-        train_data = configure_for_performance(train_data)
+                    vmin = np.min(original)
+                    vmax = np.max(original)
+                    vcenter = (vmin + vmax) / 2
+                    step = .01
+
+                    highcmap = plt.get_cmap('YlOrRd', 256)
+                    lowcmap = plt.get_cmap('YlGnBu_r', 256)
+                    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+                    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+                    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+                    cmap = mcolors.ListedColormap(cmap)
+
+                    plt.figure(figsize=(4, 4))
+                    plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
+                    plt.axis("off")
+                    plt.title('Original')
+                    plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+                    for p in patch_size:
+                        patches = opticalnet.Patchify(patch_size=p)(img)
+                        merged = opticalnet.Merge(patch_size=p)(patches)
+
+                        patches = patches[0, k]
+                        merged = np.squeeze(merged[0, k])
+
+                        plt.figure(figsize=(4, 4))
+                        plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
+                        plt.axis("off")
+                        plt.title('Merged')
+                        plt.savefig(f'{outdir}/{label}_merged.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+                        n = int(np.sqrt(patches.shape[0]))
+                        plt.figure(figsize=(4, 4))
+                        plt.title('Patches')
+                        for i, patch in enumerate(patches):
+                            ax = plt.subplot(n, n, i + 1)
+                            patch_img = tf.reshape(patch, (p, p)).numpy()
+                            ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
+                            ax.axis("off")
+
+                        plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+        train_data = train_data.cache()
+        train_data = train_data.shuffle(batch_size)
+        train_data = train_data.batch(batch_size)
+        train_data = train_data.prefetch(buffer_size=tf.data.AUTOTUNE)
         training_steps = tf.data.experimental.cardinality(train_data).numpy()
 
-    for img, y in train_data.shuffle(buffer_size=100).take(1):
-        logger.info(f"Batch size: {batch_size}")
-        logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
-
-        if plot_patches:
-            for k, label in enumerate(['xy', 'xz', 'yz']):
-                img = np.expand_dims(img[0], axis=0)
-                original = np.squeeze(img[0, k])
-
-                vmin = np.min(original)
-                vmax = np.max(original)
-                vcenter = (vmin + vmax) / 2
-                step = .01
-
-                highcmap = plt.get_cmap('YlOrRd', 256)
-                lowcmap = plt.get_cmap('YlGnBu_r', 256)
-                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-                cmap = mcolors.ListedColormap(cmap)
-
-                plt.figure(figsize=(4, 4))
-                plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
-                plt.axis("off")
-                plt.title('Original')
-                plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-                for p in patch_size:
-                    patches = opticalnet.Patchify(patch_size=p)(img)
-                    merged = opticalnet.Merge(patch_size=p)(patches)
-
-                    patches = patches[0, k]
-                    merged = np.squeeze(merged[0, k])
-
-                    plt.figure(figsize=(4, 4))
-                    plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
-                    plt.axis("off")
-                    plt.title('Merged')
-                    plt.savefig(f'{outdir}/{label}_merged.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-                    n = int(np.sqrt(patches.shape[0]))
-                    plt.figure(figsize=(4, 4))
-                    plt.title('Patches')
-                    for i, patch in enumerate(patches):
-                        ax = plt.subplot(n, n, i + 1)
-                        patch_img = tf.reshape(patch, (p, p)).numpy()
-                        ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
-                        ax.axis("off")
-
-                    plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        options = tf.data.Options()
+        options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+        train_data = train_data.with_options(options)
 
     if fixedlr:
         scheduler = lr
+        logger.info(f"Training steps: [{training_steps * epochs}]")
     else:
         warmup_steps = warmup * training_steps
         decay_steps = (epochs - warmup) * training_steps
+        logger.info(f"Training steps [{training_steps * epochs}] = [{warmup_steps}] warmup + [{decay_steps}] decay")
 
         scheduler = WarmupCosineDecay(
             initial_learning_rate=0.,
@@ -326,7 +326,6 @@ def train_model(
             loss='mse',
             metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
         )
-
         logger.info(model.optimizer.get_config())
 
     outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
@@ -657,6 +656,7 @@ def main(args=None):
             positional_encoding_scheme=args.positional_encoding_scheme,
             stem=args.stem,
             fixed_dropout_depth=args.fixed_dropout_depth,
+            strategy=strategy
         )
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")

@@ -1052,7 +1052,7 @@ def predict_dataset(
         average prediction, stdev
     """
     options = tf.data.Options()
-    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
 
     if isinstance(model, Path):
         model = load(model)
