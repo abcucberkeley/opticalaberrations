@@ -304,7 +304,7 @@ class Wavefront:
         theta = theta[valid].flatten()
         pupil_displacement = wavefront[valid].flatten()
 
-        Z = np.array([nm_polynomial(z.n, z.m, rho=rho, theta=theta) for z in zernikes])
+        Z = np.array([nm_polynomial(n=z.n, m=z.m, rho=rho, theta=theta) for z in zernikes])
         coeffs, residuals, rank, s = np.linalg.lstsq(Z.T, pupil_displacement, rcond=None)
         coeffs[self.prefixed] = 0.
         return coeffs

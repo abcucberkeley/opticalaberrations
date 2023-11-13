@@ -48,8 +48,7 @@ def round_to_even(n):
 
 
 def cart2pol(x, y):
-    """Convert cartesian (x, y) to polar (rho, phi_in_radians)
-    """
+    """Convert cartesian (x, y) to polar (rho, phi_in_radians)"""
     rho = np.sqrt(x ** 2 + y ** 2)
     phi = np.arctan2(y, x)  # Note role reversal: the "y-coordinate" is 1st parameter, the "x-coordinate" is 2nd.
     return rho, phi
@@ -57,7 +56,7 @@ def cart2pol(x, y):
 
 nprect = np.vectorize(cmath.rect)  # stupid cmath.rect can't handle 2D arrays.
 
-
+@profile
 def complex_pupil_array(dx: float,
                         nx: float,
                         wavefront,  # wavefront object
@@ -66,24 +65,23 @@ def complex_pupil_array(dx: float,
                         pupil_mag_file: Path,
                         ) -> np.ndarray:
     """
-    Calculate the pupil field at the supplied 2D arrays of kx and ky (usually given as shifted)
+    Calculate the pupil field at the supplied 2D arrays of kx and ky (usually given after fft shift)
     Args:
-        dx: spacing in XY plane
-        nx: size of X and Y dimension
+        dx: spacing in XY plane in microns
+        nx: size of X (and) Y dimension
         wavefront: Wavefront object
         na_detection: numerical aperture
         lam_detection: detection wavelength in microns
         pupil_mag_file: tif file with pupil magnitude
 
     Returns:
-        complex_pupil: pupil ready for pyotf's apply_pupil. Needs a np.fft.fftshift() to save out as an image.
+        complex_pupil: 2D array ready for pyotf's apply_pupil. (usually np.fft.fftshift() needed to save as image.)
 
     """
 
-    pupil_magnitude, rho, theta, diff_limit = pupil_magnitude_array(dx, nx, na_detection,
-                                                                    lam_detection, pupil_mag_file)
-    pupil_phase = wavefront.phase(rho=rho / diff_limit, theta=theta, normed=True, outside=None)
-    pupil_phase = microns2waves(pupil_phase, wavelength=lam_detection) * 2 * np.pi    # Convert to radians
+    pupil_magnitude, rho, theta = pupil_magnitude_array(dx, nx, na_detection, lam_detection, pupil_mag_file)
+    pupil_phase = wavefront.phase(rho=rho, theta=theta, normed=True, outside=None)  # 2D array
+    pupil_phase = microns2waves(pupil_phase, wavelength=lam_detection) * 2 * np.pi  # Convert wavefront phase to radians
 
     complex_pupil = nprect(pupil_magnitude, pupil_phase)  # numpy's cartesian to complex
     return complex_pupil
@@ -91,30 +89,55 @@ def complex_pupil_array(dx: float,
 
 @lru_cache()
 def pupil_magnitude_array(dx: float, nx: float, na_detection: float, lam_detection: float, pupil_mag_file: Path):
+    """
+    Wrapper function to allow for lru cache
+    Args:
+        dx: spacing in XY plane in microns
+        nx: size of X (and) Y dimension
+        na_detection: numerical aperture
+        lam_detection: detection wavelength in microns
+        pupil_mag_file: tif file with pupil magnitude
+
+    Returns:
+        pupil_magnitude: 2d float array
+        rho: 2D array for rho in polar coordinates in units of pupil radii
+        theta: 2D array for polar angle in units of radians
+    """
+
     k = np.fft.fftfreq(nx, dx)
     pyotf_model_kxx, pyotf_model_kyy = np.meshgrid(k, k)
     if pupil_mag_file is not None:
-        if pupil_mag_file.exists():
-            pupil_mag = imread(pupil_mag_file)
-            pupil_kx = imread(f"{pupil_mag_file.with_suffix('')}_kxx.tif")[0, :]  # 1D row
-            pupil_ky = imread(f"{pupil_mag_file.with_suffix('')}_kyy.tif")[:, 0]  # 1D col
+        try:
+            pupil_kx, pupil_ky, pupil_mag = load_pupil_file(pupil_mag_file)
             interp = RegularGridInterpolator(
                 points=(pupil_ky, pupil_kx),  # ky then kx
                 values=pupil_mag,
-                bounds_error=False,
-                fill_value=0,
-                method='cubic'
+                bounds_error=False,     # allow for padding with zeros
+                fill_value=0,           # allow for padding with zeros
+                method='linear'
             )
             pupil_magnitude = interp((pyotf_model_kyy, pyotf_model_kxx))  # ky then kx
-        else:
-            logger.error(f'{pupil_mag_file.resolve()} does not exist.')
-            pupil_magnitude = np.ones_like(pyotf_model_kxx)
+        except:
+            logger.error(f'Cannot load one of: \n'
+                         f'{pupil_mag_file.resolve()}\n'
+                         f'{pupil_mag_file.with_suffix("").resolve()}_kxx.tif\n'
+                         f'{pupil_mag_file.with_suffix("").resolve()}_kxy.tif')
+            pupil_magnitude = np.ones_like(pyotf_model_kxx)     # Use flat pupil
     else:
         pupil_magnitude = np.ones_like(pyotf_model_kxx)
-    rho, theta = cart2pol(pyotf_model_kxx, pyotf_model_kyy)  # kx then ky
+    kr, theta = cart2pol(pyotf_model_kxx, pyotf_model_kyy)  # kx then ky
     diff_limit = na_detection / lam_detection  # see _gen_pupil
-    pupil_magnitude[rho > diff_limit] = 0  # avoid where we've extrapolated past diffraction limit
-    return pupil_magnitude, rho, theta, diff_limit
+    rho = kr / diff_limit
+    pupil_magnitude[rho > 1] = 0  # avoid where we've extrapolated past diffraction limit
+    return pupil_magnitude, rho, theta
+
+
+@lru_cache()
+def load_pupil_file(pupil_mag_file: Path):
+    pupil_mag = imread(pupil_mag_file)
+    pupil_kx = imread(f"{pupil_mag_file.with_suffix('')}_kxx.tif")[0, :]  # 1D row
+    pupil_ky = imread(f"{pupil_mag_file.with_suffix('')}_kyy.tif")[:, 0]  # 1D col
+    return pupil_kx, pupil_ky, pupil_mag
 
 
 class PsfGenerator3D:
@@ -130,6 +153,7 @@ class PsfGenerator3D:
             n: float,
             na_detection: float,
             psf_type: Union[str, Path],
+            pupil_mag_file: Path=Path(__file__).parent.parent / "scope_psf" / "WF_150ms_phase_retrieval_pupil_mag.tif",
             lls_excitation_profile: Optional[np.ndarray] = None
     ):
         """
@@ -160,6 +184,29 @@ class PsfGenerator3D:
         self.lam_detection = lam_detection
         self.kcut = 1. * self.na_detection / self.lam_detection
         self.psf_type = psf_type
+        self.pupil_mag_file = pupil_mag_file
+
+        # gpu_support = 'cupy' in sys.modules
+        gpu_support = False  # Seems faster
+
+        zrange = -(np.arange(self.Nz) - (self.Nz + 1) // 2) * self.dz  # set z direction to match old psf gen method
+        if gpu_support:
+            zrange = cp.asarray(zrange)
+
+        self.pyotf_gen = HanserPSF(
+            wl=self.lam_detection,
+            na=self.na_detection,
+            ni=self.n,
+            res=self.dx,
+            size=self.Nx,
+            zres=self.dz,
+            zsize=self.Nz,
+            vec_corr="none",    # we will overwrite the pupil magnitude: Set to 'none' to match retrieve_phase()
+            condition="none",   # we will overwrite the pupil magnitude: Set to 'none' to match retrieve_phase()
+            gpu=gpu_support,
+            zrange=zrange  # set z direction to match old psf gen method
+        )
+
 
         if isinstance(lls_excitation_profile, np.ndarray) and lls_excitation_profile.size != 0:
             self.excitation_profile = lls_excitation_profile
@@ -233,6 +280,7 @@ class PsfGenerator3D:
         else:
             raise Exception(f"Unknown format for `lls_defocus_offset`: {offset}")
 
+    @profile
     def widefield_psf(self, wavefront) -> np.ndarray:
         """
         Calculate 3D PSF for the given parameters in 'self', and the abberation in the Wavefront object 'wavefront'
@@ -248,41 +296,27 @@ class PsfGenerator3D:
         # psf = np.fft.fftshift(psf)
         # psf /= np.max(psf)
 
-        # gpu_support = 'cupy' in sys.modules
-        gpu_support = False  # Seems faster
-
-        pyotf_model = HanserPSF(
-            wl=self.lam_detection,
-            na=self.na_detection,
-            ni=self.n,
-            res=self.dx,
-            size=self.Nx,
-            zres=self.dz,
-            zsize=self.Nz,
-            vec_corr="none",    # will overwrite the pupil magnitude: Set to 'none' to match retrieve_phase()
-            condition="none",   # will overwrite the pupil magnitude: Set to 'none' to match retrieve_phase()
-            gpu=gpu_support,
-        )
-
-        pyotf_model._gen_kr()   # need to generate model's _kx and _ky
-        pupil_mag_file = Path(__file__).parent.joinpath(r"..\scope_psf\WF_150ms_phase_retrieval_pupil_mag.tif")
         pupil = complex_pupil_array(
             dx=self.dx,
             nx=self.Nx,
             wavefront=wavefront,
             na_detection=self.na_detection,
             lam_detection=self.lam_detection,
-            pupil_mag_file=pupil_mag_file
-        )
-        pyotf_model.apply_pupil(pupil)
+            pupil_mag_file=self.pupil_mag_file
+        )   # Interpolate pupil
 
         # imwrite(f"{pupil_mag_file.with_suffix('')}_interp.tif", fftshift(np.abs(pupil)).astype(np.float32))
         # imwrite(f"{pupil_mag_file.with_suffix('')}_phase_interp.tif", fftshift(np.angle(pupil)).astype(np.float32))
 
-        psf = np.squeeze(pyotf_model.PSFi)
-        from preprocessing import resize_with_crop_or_pad
-        psf = resize_with_crop_or_pad(psf, (self.Nz, self.Ny, self.Nx))
-        if gpu_support:
+        if self.pyotf_gen.gpu:
+            pupil = cp.array(pupil)
+
+        psf = np.squeeze(self.pyotf_gen.gen_psf(pupil_base=pupil))  # PSF amplitude
+        psf = np.abs(psf) ** 2                                      # PSF intensity
+        psf /= np.max(psf)
+        if (self.Nz, self.Ny, self.Nx) != psf.shape:
+            raise Exception(f'PSF sizes dont match. {self.Nz, self.Ny, self.Nx} vs {psf.shape=}')
+        if self.pyotf_gen.gpu:
             psf = cp.asnumpy(psf)
         return psf
 

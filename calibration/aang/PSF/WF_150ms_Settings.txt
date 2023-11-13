@@ -1,0 +1,935 @@
+***** ***** ***** General ***** ***** ***** 
+Date :	11/6/2023 2:02:44 PM
+Acq Mode :	Z stack
+Version :	v 4.09748 10-25-2023
+PC :	Aang
+
+***** ***** ***** Notes ***** ***** ***** 
+Microscopist :	Jason Hong
+Collaborator :	
+Sample :	
+Cam A Filter :	
+Cam B Filter :	
+Notes :	
+
+
+
+***** ***** ***** 3D Tile location (X,Y,Z,T indices) ***** ***** ***** 
+X :	-1
+Y :	-1
+Z :	-1
+T :	0
+
+***** ***** ***** ALPAO ***** ***** ***** 
+-0.013015, -0.019902, -0.013685, 0.007689, 0.004325, -0.017438, -0.005908, -0.001427, 0.018928, 0.020607, 0.007309, -0.041796, -0.002070, -0.001621, 0.014077, 0.011610, -0.002332, -0.015480, 0.015384, 0.026805, -0.009788, -0.009707, -0.008684, 0.021932, -0.010572, -0.016163, -0.010120, -0.015938, 0.023938, -0.015362, -0.001861, -0.001029, 0.007445, -0.003347, -0.007128, -0.002363, 0.022726, 0.004832, 0.003876, 0.019713, -0.015022, 0.006786, -0.007935, 0.000408, 0.025116, 0.004234, 0.002356, -0.011157, 0.009986, -0.018053, -0.004963, 0.021284, 0.010878, -0.006537, -0.001826, -0.006285, -0.016058, 0.032363, 0.020539, -0.009293, -0.011289, 0.001733, -0.011599, 0.007106, 0.023104, 0.040034, 0.003756, -0.045904, -0.028223
+
+
+***** ***** ***** ALPAO 180***** ***** ***** 
+
+
+***** ***** ***** Waveform ***** ***** ***** 
+Waveform type :	Linear
+
+X Galvo Offset, Interval (um), # of Pixels for Excitation (0) :	1190	0.1	94
+
+Z Galvo Offset, Interval (um), # of Pixels for Excitation (0) :	99.9918	0.1	101
+
+Z PZT Offset, Interval (um), # of Pixels for Excitation (0) :	0	0	101
+
+ISM Offset, Interval (um), # of Pixels for Excitation (0) :	0	0.2	1
+
+XZ stage Offset, Interval (um), # of Pixels for Excitation (0) :	5	0.1	101
+
+# of stacks (0) :	1
+
+Excitation Filter, Laser, Power (%), Exp(ms), Laser2, Power2 (%), Laser3, Power3 (%) (0) :	N/A	488	100	150	OFF	0.1	OFF	0.1
+
+Cycle lasers :	per Z
+
+Z motion :	Z galvo & DO XZ stage
+
+XZ dither? :	FALSE
+TPAF applied? :	FALSE
+
+XZ galvo angles :	0
+
+XZ coupling angles :	0	0
+
+Z wave :	Step
+
+AOTF Continuous :	FALSE
+
+Pulse enabled? :	FALSE
+Laser :	405
+X galvo Offset (um) :	0
+Z galvo Offset (um) :	0
+Pulse delay (ms) :	0
+Settle time 1 (ms) :	0
+Settle time 2 (ms) :	0
+Stop imaging time (ms) :	0
+Pulse duration (ms) :	0
+Other lasers off during pulse? :	FALSE
+
+***** ***** ***** Beam Path ***** ***** ***** 
+Excitation Objective :	EO
+Detection Objective :	DO
+Dual Flipper :	Filter
+Last Set Path :	EO LLS
+Toggle Open :	1	1	1	0	1	1	1	1	0	0	1	0	1	0	1	1	1	1	1	1	1	1	0	0	0	0	1	1	1	0	1	0	1	0	0	1	1	0
+ISM detection :	FALSE
+Primary Cam Rotation :	Rot 270
+Primary Twin Cam Rotation :	Rot 270
+
+***** ***** *****   Camera  ***** ***** ***** 
+Model :	C14440-20UP
+Serial :	1133
+Frame Transfer :	OFF
+Trigger :	External
+Exp(s) :	0.15000
+Cycle(s) :	0.15067
+Cycle(Hz) :	6.64 Hz
+Frame Mode :	Run Till Abort
+Readout Mode :	Image
+ROI :	Left=1089 Top=1089 Right=1216 Bot=1216 
+Binning :	X=1 Y=1 
+# of Pixels :	X=2304 Y=2304 
+VSSspeed :	0.00000
+HSSspeed :	0.00000
+VSSAmplitude :	3
+Output Amplifier :	EM Amp
+Temp(C) :	0.00000
+AD Channel :	0
+EM Gain :	0
+HS Speed index :	0
+Preamp Gain :	0
+Bit depth :	0
+Baseline Clamp :	Yes
+Spool :	Enabled?=No File stem=<Not A Path> # buffs=10 Method=16-buit TIFF 
+# of Exps :	101 exp(s)
+Cropped :	On?=No # of pix=X=2304 Y=2304  Bin=X=1 Y=1  
+L ROI :	Left=1089 Top=1089 Right=0 Bot=1216 
+R ROI :	Left=0 Top=1089 Right=1216 Bot=1216 
+FOV ROI :	Left=1089 Top=1089 Right=1216 Bot=1216 
+# of Imgs :	101 img(s)
+subROIs :	Unknown type
+
+***** ***** *****   Advanced Timing  ***** ***** ***** 
+Trigger Mode :	FPGA
+# exp per SLM enable :	1
+Delay SLM Enable during SLM to Cam synch? :	FALSE
+SLM enable (ms) :
+
+***** ***** *****   SLM  ***** ***** ***** 
+Wave (nm)	Type	# beams	AutoSpacing	Spacing	NA Max	NA Min	Crop	Envelope	X Width (um)	fill_factor?	crop_factor	fill_factor	gammaSLM	sigmaSLM	NA Lattice	NA Sigma	NA Mask Max	NA Mask Min	Binary?	thetasigma	EFieldOverlapThreshold	Yaw	Pitch	Roll (deg)	Nudge X	Nudge Y	Row	Crop row offset	Powell FL(mm) V	Powell Offset V	Powell FL(mm) H	Powell Offset H 	Defocus FL(mm) V	Defocus Offset V	Defocus FL(mm) H	Defocus Offset H 	Defocus(pupil)	Hex Phases	Zc	AO	algorithm	lattice_descrip	PW
+405	Off	20	FALSE	10	0.3	0.2	10	0	263.488	FALSE	0.1	0	0.9	Inf	0.35	0.1	0.4	0.3	TRUE	1	0.05	3°	-0.5°	1.3°	0	0	797	0	-170	0	-1700	0	0	0	0	0	0				new	YuMB	PW_Sq45
+445	Off	20	FALSE	10	0.55	0.5	10	0	263.488	FALSE	0.1	0	1	Inf	0.35	0.1	0.4	0.3	TRUE	1	0.05	5°	6°	1.3°	0	0	671	2	-160	0	-1850	0	0	0	0	0	0	0;0;0;0;0;0			new	YuMB	PW_Sq45
+488	V2 Custom	10	FALSE	7	0.4	0.35	6	0	52.416	FALSE	0.1	0	1	Inf	0.35	0.09	0.4	0.3	FALSE	1	0.1	0.2°	5°	-0°	0	0	538	0	-130	0	-2200	0	0	0	0	0	0				new	YuMB	PW_Sq45
+514	Off	20	FALSE	10	0.4	0.3	10	0	263.488	FALSE	0	1	1	Inf	0.21	0.001	0.4	0.35	FALSE	1	0.05	-7.17391°	-5.86957°	0°	0	0	400	0	-145	0	-2900	0	0	0	0	0	0				new	YuMB	PW_Sq45
+560	V2 Custom	20	FALSE	5	0.4	0.3	1.8	0	52.416	FALSE	0.1	0	1	Inf	0.35	0.09	0.4	0.3	FALSE	1	0.05	-5.5°	8.5°	0°	-3.2	-0.55	257	0	-140	0	-2050	0	0	0	0	0	0	0;0;0;0;0;0			new	YuMB	PW_Sq45
+607	Off	80	TRUE	2.01425	0.4	0.3	10	0	85.296	FALSE	0	0	1	Inf	0.35	0.1	0.6	0.2	FALSE	1	0.05	-0.75°	3.75°	1.3°	0	-0.25	0	0	-165	0	-1880	0	0	0	0	0	0				new	default	PW_Hex_Fund_MaxComp_1
+642	V2 Custom	10	FALSE	5	0.4	0.35	2	0	52.416	FALSE	0.1	0	1	Inf	0.35	0.09	0.4	0.3	FALSE	1	0.05	-5.8°	7.83°	-0.7°	-4	0	135	0	-130	0	-2150	0	0	0	0	0	0				new	YuMB	PW_Sq45
+
+
+***** ***** *****   Laser Power   ***** ***** ***** 
+11/6/2023 2:02:42 PM  (Date time of laser query)
+                Laser S/N, Laser Pow (mW)
+                 TP laser,    0.0
+                         ,    0.0
+                         ,    0.0
+                         ,    0.0
+                         ,    0.0
+    2RU-VFL-P-500-488-B1R,   49.9
+            Simulated 445,    0.0
+            Simulated 405,    0.0
+
+
+***** ***** *****   Other   ***** ***** ***** 
+Save every N stacks :	1
+
+***** ***** *****   MCS2 PID   ***** ***** ***** 
+Enable custom PID values=TRUE Enable LUT=FALSE,Default,Step & Settle,Continuous Sweep
+P (X),120,1000,0
+I (X),0,5E+6,1.5E+8
+D (X),10,10,10
+Anti-windup (X),0,1,1
+,,,
+P (Y),120,120,120
+I (Y),0,0,0
+D (Y),10,10,10
+Anti-windup (Y),0,0,0
+,,,
+P (Z),120,200,120
+I (Z),0,0,0
+D (Z),10,10,10
+Anti-windup (Z),0,0,0
+,,,
+P (EM X),5500,7500,5500
+I (EM X),10,50,0
+D (EM X),32000,32000,32000
+Anti-windup (EM X),0,0,0
+,,,
+
+
+***** ***** *****   .ini File  ***** ***** ***** 
+[Hamamatsu Camera Settings]
+Orca 2.8 SN = "0"
+Orca 4.0 SN = "001134"
+Orca 4.0 SN (Twin Camera) = "001133"
+Orca 4.0 2 SN = "0"
+Orca 4.0 2 SN (Twin Camera) = "0"
+Use Synch readout mode? = TRUE
+Number of skip images = 0
+Cooling level N/C, -10, -30 (OFF, ON, MAX) = "ON"
+Lightsheet Mode enabled? = FALSE
+Lightsheet width (pix) = 200
+
+[Attocube]
+Enabled = FALSE
+Controller is Pro upgraded = TRUE
+
+[E-871 or E-873]
+Enabled = FALSE
+RS232 Com Port = 0
+Baud = 115200
+Number of controllers = 3
+X Controller = "LPS stage X"
+X Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+Y Controller = "LPS stage Y"
+Y Reference switch (Positive limit, Reference, Negative limit) = "Positive limit"
+Z Controller = "LPS stage Z"
+Z Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+X Lower Limit (mm) = 0
+X Upper Limit (mm) = 20
+Z Lower Limit (mm) = 0
+Z Upper Limit (mm) = 20
+Y Lower Limit (mm) = 0
+Y Upper Limit (mm) = 20
+
+[Move and Wait Motion]
+Precision tolerance (nm) (when to retry) = 900
+Distance to move back before retry (nm) = 3000
+Target window (nm) (when to start timeout clock) = 3000
+Timeout (ms) = 3000
+Number of retries = 10
+
+[E-871 OSPM]
+Enabled = FALSE
+RS232 Com Port = 0
+Baud = 0
+Theta Controller = "THETA"
+Theta Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+EO 0 Controller = "0115056684"
+EO 0 Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+EO 60 Controller = "0115056685"
+EO 60 Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+EO 120 Controller = "0115056677"
+EO 120 Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+DO EPI 0 Controller = "0115056680"
+DO EPI 0 Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+DO EPI 180 Controller = "0115056683"
+DO EPI 180 Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+DO SH 0 Controller = "0115056678"
+DO SH 0 Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+DO SH 180 Controller = "0115056681"
+DO SH 180 Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+Delay 1 Controller = "DELAY1"
+Delay 1 Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+Delay 2 Controller = "DELAY2"
+Delay 2 Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+
+[SLM]
+Enable? = FALSE
+4D Serial Number = "0117000257"
+Running Order = 0
+
+[FPGA AI Labels]
+AI 0 = "AI 0"
+AI 1 = "AI 1"
+AI 2 = "AI 2"
+AI 3 = "AI 3"
+AI 4 = "AI 4"
+AI 5 = "AI 5"
+AI 6 = "AI 6"
+AI 7 = "AI 7"
+
+[CAM 1]
+Enabled? = TRUE
+Type = "Orca4.0"
+FPGA Fire input line = "DIO 1"
+
+[Microns to Volt calibrations]
+Galvo cmd Y um/Y Volt = NaN
+Zpiezo um/Zpiezo Volt = -10
+XTile um/V = 1
+SamplePiezo um/SamplePiezo Volt = 10
+Descanned X Galvo um/V = 1.9635
+Descanned Y Galvo um/V = 1.9635
+Z Galvo and Z Piezo point in the same direction? = FALSE
+Z Galvo and Sample Piezo point in the same direction? = FALSE
+X um/X Volt EO = "200"
+Z um/Z Volt EO = "66.667"
+Galvo position cmd V/pos V = "0.5"
+X um/X Volt DO,IO,UO = 114
+Z um/Z Volt DO,IO,UO = 37.037
+8k RG um/V = 0.5
+
+[CAM 2]
+Enabled? = TRUE
+Type = "Dart"
+FPGA Fire input line = "N/C"
+Pixel Size at focus (nm/pix) = 110
+
+[General]
+Objective PZT Controller (E-665, E-625) = "E-665"
+CAM 1 Twin cam mode? = TRUE
+CAM 2 Twin cam mode? = FALSE
+CAM 3 Twin cam mode? = FALSE
+CAM 4 Twin cam mode? = FALSE
+ROI Presets = "64x64,128x128,256x256,512x512,1024x1024,192x192,1800x512,1024x512,1800x320,2048x512,768x768,128x512,256x512,96x96,32x32"
+Cam Trigger mode = "FPGA"
+Delay SLM Enable during SLM to Cam synch? = FALSE
+Camera trigger pulse width when no extra settle time (s) = 1.1E-5
+Number of exp per SLM enable = "1"
+Default file format (.tif, .zarr, ...) = ".tif"
+
+[CAM 3]
+Enabled? = FALSE
+Type = "Disabled"
+FPGA Fire input line = "N/C"
+
+[CAM 4]
+Enabled? = FALSE
+Type = "Disabled"
+FPGA Fire input line = "N/C"
+Pixel Size at focus (nm/pix) = 256
+
+[SLM Config]
+SLM type = "P1920-0635"
+
+[SH_Calc]
+Excitation Center ref path = "/C/SPIM/SPIM/SPIM LV8.6 VIs/Scan/Modules/Correction Scan/Matlab/Mats/ESH_CenterRef_920-510_20170308_G.mat"
+Excitation Vector path = "/C/SPIM/SPIM/SPIM LV8.6 VIs/Scan/Modules/Correction Scan/Matlab/Mats/ESH_VectorSimu_Andor897_20150825_DM.mat"
+Excitation LS path = "/C/SPIM/SPIM/SPIM LV8.6 VIs/Scan/Modules/Correction Scan/Matlab/SLM/LS.mat"
+Zernike_mode_act_basis path = "/C/SPIM/SPIM/SPIM LV8.6 VIs/Scan/Modules/Correction Scan/Matlab/Mats/Zernike_mode_act_basis_6all_55modes.mat"
+Center ref path = "/C/SPIM/SPIM/SPIM LV8.6 VIs/Scan/Modules/Correction Scan/Matlab/Mats/DSH_CenterRef_1040-605_20160905_G.mat"
+Vector path = "/C/SPIM/SPIM/SPIM LV8.6 VIs/Scan/Modules/Correction Scan/Matlab/Mats/DSH_VectorRef_20160208_G2.mat"
+ALP.mat path = "/C/SPIM/SPIM/SPIM LV8.6 VIs/Scan/Modules/Correction Scan/Matlab/Acts/ALP.mat"
+N_modes = 55
+Gain = 0.56
+Photon_threshold = 200
+Peak_range = 10
+Sig = 1.5
+Min number of valid SH = 81
+FFT filter = TRUE
+Photon_threshold_ref = 300
+Zernike threshold for probing a lenslet = 12
+Minimum number of lenslets for a Zernike to be useful = 4
+Precision_threshold (pix) = 0.5
+Cutout around max = TRUE
+Use Impulse as well = TRUE
+Fit using = "Full Gauss Fit"
+Adaptive basis = FALSE
+Constrain with LS = TRUE
+Constrain with NN = TRUE
+Constrain with Biharmonic = FALSE
+
+[Tiling Galvo]
+Vertical shift per um (pix) = 0
+
+[Detection optics]
+Magnification = 67.0103
+
+[Photobleach compensation]
+Enable? = FALSE
+Percentile = 70
+Slice = 70
+Image ROI (L, T, R, B) = ""
+Image to analyze = "Slice"
+
+[LC]
+Enable? = FALSE
+COM Port = "COM7"
+TNE pulse duration (ms) = 2
+TNE amplitude (U16 V) = 50000
+Left-to-Right delay (us) = 8000
+Right-to-Left delay (us) = 8000
+
+[PALM PID]
+Enabled = FALSE
+Output High Limit (volts) = 2
+Output Low Limit (volts) = 0
+Proportional (Kc) = 0.1
+Integral (Ti, iter) = 0
+Derivative (Td, iter) = 0
+Desired number of peaks per frame filtered = 877.193
+Output Change High Limit (delta volts) = 0.2
+Output Change Low Limit (delta volts) = -0.2
+
+[C-843]
+Enabled = FALSE
+Max speed (mm/s) = 100
+
+[C-863]
+Z Stage = "PI C-863 Mercury SN 0145500005"
+Reference switch (Positive limit, Reference, Negative limit) = "Negative limit"
+Enabled = FALSE
+
+[AOTF controller]
+FPGA AOTF index 0 is connected to AOTF controller input = 1
+FPGA AOTF index 1 is connected to AOTF controller input = 2
+FPGA AOTF index 2 is connected to AOTF controller input = 3
+FPGA AOTF index 3 is connected to AOTF controller input = 4
+Enabled = TRUE
+Modulate power using = "Digital lines"
+Baud Rate = 57600
+Remote Computer Name or IP = ""
+AOM Enabled = TRUE
+USB ID or COM(AOTF), COM(AOM) = "FTDIBUS.VID_0403.PID_6001"
+
+[E-861]
+Z Stage = "LPS stage"
+Reference switch (Positive limit, Reference, Negative limit) = "Reference"
+Enabled = FALSE
+Stage 1 Lower Limit (mm) = 0
+Max Z speed (mm/s) = 100
+Stage 1 Upper Limit (mm) = 20
+
+[C-867]
+Enabled = FALSE
+Controller Type (C-867.160 or C-867.260) = "C-867.260"
+X Controller = "PI C-867 Piezomotor Controller SN 0109010576"
+Y Controller = "PI C-867 Piezomotor Controller SN 0109010573"
+X Reference switch (Positive limit, Reference, Negative limit) = "Positive limit"
+Y Reference switch (Positive limit, Reference, Negative limit) = "Positive limit"
+
+[Scripting]
+Retry on error? = FALSE
+Scan timeout (s) = Inf
+General timeout (s) = 1300
+
+[AlpAO deformable mirror]
+Selected path = "/U/Data/JasonHong/20231106_calibrationsAang/20231106_DM.csv"
+Flatten mscript = ""
+Enable? = TRUE
+Serial number (BXXYYY) = "BAX272"
+Serial number 2 (BXXYYY) = "N/A"
+Zernike calibration CSV from ALPAO = "/C/AangSettings/PhaseRetrival/PR_outputs/PSF/Zernike_Aang_Bax272.csv"
+
+[Andor Camera Settings]
+Use External Trigger? = FALSE
+
+[Pockel Settings]
+Pockel Channel(s) = ""
+
+[Z Galvo Offsets (um)]
+Channel 405 = 0
+Channel 445 = 0
+Channel 488 = 0
+Channel 514 = 0
+Channel 560 = 0
+Channel 607 = 0
+Channel 642 = -3.5
+Channel 920 TP = 0
+
+[TP AF]
+Detection Objective Depth of focus (um) = 1.5
+Detection Objective Depth of focus Tolerance (um) = 1
+LLS width (um) = 0.5
+LLS width Tolerance (um) = 0.1
+Minimum threshold (counts) = 0
+DO FP to LLS distance (pix) = 0.5
+DO FP adjustment (pix) = 0.5
+Fit Success amplitude threshold/RMS ratio = 1
+Second fit amplitude threshold/RMS ratio = 7
+Gaussian success amplitude threshold as a percentage of raw data's range = 50
+Detection Objective Vis to IR chromatic shift (um) = -1
+Excitation Objective Vis to IR chromatic shift (um) = 0
+Inverted Objective Vis to IR chromatic shift (um) = 0
+Upright Objective Vis to IR chromatic shift (um) = 0
+TP AF mode = "Brightest plane"
+Last known TP AF Ref location (pix) = 463.955
+Last known DO FP location (pix) = 159.143
+TP AF Ref filepath = "/C/SPIM/SPIM/SPIM Support files/SPIMProject TP AF Reference Img.tif"
+
+[Link Tiling Galvo to AOTF]
+Enable = FALSE
+Tiling V for AOTF channel 0 = 0
+Tiling V for AOTF channel 1 = 0
+Tiling V for AOTF channel 2 = 0
+Tiling V for AOTF channel 3 = 0
+Tiling V for AOTF channel 4 = 0
+Tiling V for AOTF channel 5 = 0
+Tiling V for AOTF channel 6 = 0
+Tiling V for AOTF channel 7 = 0
+
+[Autofocus]
+Grating period (um) = 5
+Grating Tolerance (fractional) = 0.1
+Depth of focus (um) = 1.5
+Depth of focus Tolerance (um) = 0.5
+Bessel width (um) = 0.5
+Bessel Tolerance (um) = 0.3
+Minimum threshold (counts) = 130
+Bead diameter (pixels) (-1 use all pixels in ROI) = -1
+Rescan if peak near (%) of range edge = 0
+Rescan overlap with orginial range (%) = 30
+Max number of rescans = 3
+AF relative change limit (um) = 3
+Bead Gaussian filter enabled? = FALSE
+Variance is normalized? = TRUE
+
+[Autofocus Bead settings]
+Stage 1 : Galvo sweep enabled = TRUE
+Stage 2 : PZT sweep enabled = TRUE
+Stage 3 : LS optimization enabled = TRUE
+LS optimization stopping tolerance (%) = 10
+LS initial step (nm) = 50
+
+[Reactivation module]
+Continue reactivation until within distance to saturation (%) = 10
+Continue reactivation until N consecutirve iterations are below threshold = 3
+Continue reactivation until M measurements have been taken = 10
+
+[AOTF Settings]
+Number of channels = 1
+
+[AlpAO deformable mirror triggering]
+Mirror pattern mode = "Manual"
+DM 0 degree trigger images -  405 = ""
+DM 0 degree trigger images -  445 = ""
+DM 0 degree trigger images -  488 = ""
+DM 0 degree trigger images -  514 = ""
+DM 0 degree trigger images -  560 = ""
+DM 0 degree trigger images -  607 = ""
+DM 0 degree trigger images -  642 = ""
+DM 180 degree trigger images -  405 = ""
+DM 180 degree trigger images -  445 = ""
+DM 180 degree trigger images -  488 = ""
+DM 180 degree trigger images -  514 = ""
+DM 180 degree trigger images -  560 = ""
+DM 180 degree trigger images -  607 = ""
+DM 180 degree trigger images -  642 = ""
+DM 0 degree trigger images -  920 TP = ""
+DM 180 degree trigger images -  920 TP = ""
+
+[Sample stage]
+Angle between stage and bessel beam (deg) = 32.45
+Positive X stage motion travels toward Excitation Objective? = 32.45
+AI2_AI3 = "SmarActZ"
+
+[Stage Settle]
+Add extra time = TRUE
+Added time (ms) = 0
+
+[Imaging power compensation]
+Enable compensation = FALSE
+Method = "Percentile on XY MIP"
+Percentile = 90
+Slice = 10
+Imaging power max (percent) = 100
+Imaging power min (percent) = 0
+Threshold (U16) = 100
+
+[Twin Cam Saving]
+Saving Camera A 405 = FALSE
+Saving Camera A 445 = FALSE
+Saving Camera A 488 = TRUE
+Saving Camera A 514 = FALSE
+Saving Camera A 560 = FALSE
+Saving Camera A 607 = FALSE
+Saving Camera A 642 = FALSE
+Saving Camera B 405 = FALSE
+Saving Camera B 445 = FALSE
+Saving Camera B 488 = FALSE
+Saving Camera B 514 = FALSE
+Saving Camera B 560 = FALSE
+Saving Camera B 607 = FALSE
+Saving Camera B 642 = FALSE
+Saving Camera A 920 TP = FALSE
+Saving Camera B 920 TP = FALSE
+
+[Meadowlark SLM]
+USB ID or COM Port = "FTDIBUS.VID_0403.PID_6015"
+LUT file = "/C/SPIM/Common/SLM/Meadowlark/SLM_4626_at642_HDMI_long.blt"
+Phase calibration = "/C/SPIM/SPIM/SPIM Support files/Phase calibration between 642nm and 405nm 2020_09_26.tsv"
+Phase to graylevel scale factor = 1
+Crosstalk factor (0 means no crosstalk) = 0.1
+Extra border when autocropping SLM to LLS FOV (um) = 40
+Enabled? = TRUE
+
+[SmarAct MCS2]
+SmarAct MCS2 "A" Enabled = TRUE
+SmarAct MCS2 "B" Enabled = TRUE
+SmarAct MCS2 "C" Enabled = FALSE
+Recalibrate all stages on next startup = FALSE
+SmarAct MCS2 "A" Identifier = "network:sn:MCS2-00001886"
+SmarAct MCS2 "B" Identifier = "network:sn:MCS2-00001861"
+SmarAct MCS2 "C" Identifier = ""
+SmarAct MCS2 "EM Drive" Enabled = FALSE
+SmarAct MCS2 "EM Drive" Identifier = "network:sn:MCS2-00006422"
+Max Z speed (mm/s) = 0.3
+X Imaging Position Lower Limit (mm) = -15
+X Imaging Position Upper Limit (mm) = 15
+Y Imaging Position Lower Limit (mm) = -20
+Y Imaging Position Upper Limit (mm) = 8
+Z Imaging Position Lower Limit (mm) = -15
+Z Imaging Position Upper Limit (mm) = 1
+Toggle Imaging Position Lower Limit (mm) = -12
+Toggle Imaging Position Upper Limit (mm) = 14
+Transition point between "Imaging" and "Load" limits (Chamber mm) = 15
+X Load Position Lower Limit (mm) = -15
+X Load Position Upper Limit (mm) = 15
+Y Load Position Lower Limit (mm) = -16
+Y Load Position Upper Limit (mm) = 8
+Z Load Position Lower Limit (mm) = -15
+Z Load Position Upper Limit (mm) = 1
+Toggle Load Position Lower Limit (mm) = 0
+Toggle Load Position Upper Limit (mm) = 0
+SmarAct stability window width (um) = 0.02
+SmarAct stability baseline (ms, max is 6.24) = 3
+SmarAct stability min distance threshold (fraction of a step) = 0.9
+SmarAct stability timeout for a step to complete (ms) = 20
+Dual Flipper attached to "C"? = FALSE
+DualFlip Imaging Position Lower Limit (mm) = 0
+DualFlip Imaging Position Upper Limit (mm) = 0
+DualFlip Load Position Lower Limit (mm) = 0
+DualFlip Load Position Upper Limit (mm) = 0
+Dual Flipper Max CLF (kHz) = 18.5
+MaskToggle Imaging Position Lower Limit (mm) = 15
+MaskToggle Imaging Position Upper Limit (mm) = -15
+MaskToggle Load Position Lower Limit (mm) = 0
+MaskToggle Load Position Upper Limit (mm) = 0
+Flyback MoveVelocity (pm/s) = 1E+8
+Max X speed (mm/s) = 0.3
+Max Y speed (mm/s) = 0.3
+Turn off stage power when beam path motors reach their destination = TRUE
+
+[Servo]
+Maestro S/N or Serial Port : LC = "00265045"
+Maestro S/N or Serial Port : Top = "00269684"
+Maestro S/N or Serial Port : Middle = "00269672"
+Maestro S/N or Serial Port : Side = "00267508"
+Maestro S/N or Serial Port : SideBot = "00267432"
+Maestro S/N or Serial Port : Front = "00269762"
+Maestro Enabled : LC = TRUE
+Maestro Enabled : Top = TRUE
+Maestro Enabled : Middle = TRUE
+Maestro Enabled : Side = TRUE
+Maestro Enabled : SideBot = TRUE
+Maestro Enabled : Front = TRUE
+Speed = 352
+Acceleration = 60
+Remote Computer Name or IP = ""
+Protocol (COM, NativeUSB) = "COM"
+
+[Thorlabs Mask Rotator]
+Enabled? = TRUE
+USB ID/SN or COM Port = "Silicon Labs CP210x USB to UART Bridge"
+Remote Computer Name or IP = "192.168.1.111"
+Mask image in GUI needs to be reversed? = TRUE
+Move current (%) = NaN
+Hold current (%) = NaN
+Accel (usteps/s^2) = NaN
+Velocity (usteps/s) = NaN
+
+[Toptica lasers]
+Enabled? = FALSE
+USB ID/SN or COM Ports (comma delimited) = "Prolific USB-to-Serial Comm Port"
+Remote Computer Name or IP = "192.168.1.111"
+Disable Topticas when not acquiring = FALSE
+
+[Coherent Chameleon TP laser]
+Enabled? = FALSE
+USB ID/SN or COM Ports (comma delimited) = "Prolific USB-to-Serial Comm Port"
+Remote Computer Name or IP = "192.168.1.111"
+
+[Cerna controller]
+Enabled Sample Chamber = TRUE
+Enabled Upright X = FALSE
+Enabled Upright Y = FALSE
+USB ID/SN or COM Port = "TRINAMIC Stepper Device"
+Remote Computer Name or IP = "192.168.1.111"
+Position 1 (mm) = 8.5
+Position 2 (mm) = 5
+Position 3 (mm) = 0
+Sample Chamber DeviceID = "{USB\\VID_2A3C&PID_0100&REV_0002,USB\\VID_2A3C&PID_0100}"
+Upright X DeviceID = ""
+Upright Y DeviceID = ""
+Upright Limit X max (mm) = 25.4
+Upright Limit X min (mm) = 0
+Upright Limit Y max (mm) = 25.4
+Upright Limit Y min (mm) = 0
+
+[CONEX motors]
+Enabled = FALSE
+Chamber Measurement position (mm) = 1
+Chamber Loading 1 position (mm) = 0
+Chamber Loading 2 position (mm) = 0
+
+[PI stage]
+X max speed (mm/s) = 100
+Y max speed (mm/s) = 0
+
+[Matlab]
+Matlab <-> LabVIEW data exchange folder = "/D/Matlab data/Matlab_for_AOLS"
+
+[PI Pulses]
+XZ angle (deg) = 32.4
+Step size (mm) = 1E-6
+
+[Notifications]
+Enable = FALSE
+Recipients (comma delimited) = "milkied10@janelia.hhmi.org"
+Login(s) (primary_smtp, port, username, pwd; backup1_smtp, port,...) = ""
+3D tile Enable = FALSE
+3D Tiling Recipients (comma delimited) = "milkied10@janelia.hhmi.org"
+
+[Two-photon power compensation]
+Enable compensation = FALSE
+Method = "Aim for photon number"
+TP power max (percent) = 100
+TP power min (percent) = 0
+#[Ace Camera Settings]
+#Use External Trigger? = TRUE; Copied from TianMingFu ini file
+
+[MPB Lasers]
+Enabled = TRUE
+USB ID = "VID_1C69&PID_1000"
+Baud Rate = 9600
+Remote Computer Name or IP = "192.168.1.111"
+
+[Descan X]
+Offset (um) = 0
+Amplitude (um) = 0
+Freq (Hz) = 0
+Shape (Triangle, Sine) = "Sine"
+
+[Dither Z]
+Offset (um) = 0
+Amplitude (um) = 0
+Freq (Hz) = 0
+Shape (Triangle, Sine) = "Triangle"
+
+[Dither X]
+Offset (um) = 0
+Amplitude (um) = 0
+Freq (Hz) = 0
+Shape (Triangle, Sine) = "Triangle"
+
+[Descan Y]
+Offset (um) = 0
+Amplitude (um) = 0
+Freq (Hz) = 0
+Shape (Triangle, Sine) = "Triangle"
+
+[3D tiling]
+Estimated time to move between tiles (s) = 0.5
+
+[Objective]
+Focal length (mm) = 12.5
+Numerical Aperature = 0.8
+Magnification from SLM to back pupil = 0.5
+Magnification from galvo to back pupil = 0.5
+
+[Microlens]
+Focal length (mm) = 13.8
+Pitch (um) = "500"
+
+[ESH]
+Center of pupil (pix) X = 509.5
+Center of pupil (pix) Y = 485.5
+ESH Reference image path = ""
+
+[Excitation AO modification]
+Rotation angle (deg) = 180
+Radius scale = 1.05
+Amplitude scale = 1
+X offset (pupil radii) = 0
+Y offset (pupil radii) = 0
+Flip Vertical = FALSE
+Flip Horizontal = FALSE
+Discard Tip,Tilt = TRUE
+Discard Tip,Tilt, Defocus = TRUE
+
+[Pulse Camera Settings]
+Camera Name = "AutoFocus"
+Use Software Trigger? = FALSE
+
+[SH]
+ESH Reference image path = "/D/AangBuildSettingsNotes/20200206_SHCal_Aang/SHCalibration/ESH/ESH_Reference_20200729.tif"
+ESH Background image path = "/D/AangBuildSettingsNotes/20200206_SHCal_Aang/SHCalibration/ESH/ESH_Background_20200729.tif"
+DO Image DSH Reference image path = "/D/AangBuildSettingsNotes/20200206_SHCal_Aang/SHCalibration/DSH/DSH_Reference_20200729.tif"
+DO Image DSH Zernike image folder = "/D/AangBuildSettingsNotes/20200206_SHCal_Aang/SHCalibration/DSH/Zernike_Impulse"
+DO Image DSH Background image = "/D/AangBuildSettingsNotes/20200206_SHCal_Aang/SHCalibration/DSH/DSH_Background_20200729.tif"
+DO Descan DSH Reference image path = "/D/AangBuildSettingsNotes/20200206_SHCal_Aang/SHCalibration/DSH/DSH_Reference_20200718.tif"
+DO Descan DSH Zernike image folder = "/D/AangBuildSettingsNotes/20200206_SHCal_Aang/SHCalibration/DSH/Zernike_Impulse"
+DO Descan DSH Background image = "/D/AangBuildSettingsNotes/20200206_SHCal_Aang/SHCalibration/DSH/DSH_Background_20200718.tif"
+N_lens = 100
+Array_shift = 61.5385
+FilterRatio = 0.8
+DSH mask = "278, 152, 677, 150, 851, 303, 857, 785, 689, 953, 303, 955, 132, 791, 130, 319, 278, 152"
+ESH mask = "75, 674, 78, 252, 277, 47, 661, 46, 777, 161, 873, 254, 891, 282, 914, 699, 816, 774, 693, 916, 641, 937, 335, 936, 152, 790, 75, 674"
+ESH Center of pupil (pix) X = 521.5
+ESH Center of pupil (pix) Y = 491.5
+
+[Two Photon AutoFocus (TPAF)]
+Last known TPAF Ref location (pix) = 0
+Last known DO FP location (pix) = 106.784
+
+[FLIR Filter Wheel]
+Enable? = FALSE
+Wait for filter to be in place? = FALSE
+COM Port = ""
+Filter 0 = ""
+Filter 1 = ""
+Filter 2 = ""
+Filter 3 = ""
+Filter 4 = ""
+Filter 5 = ""
+Filter 6 = ""
+Filter 7 = ""
+Filter 8 = ""
+Filter 9 = ""
+
+[Sutter Filter Wheel]
+Enable? = FALSE
+Wait for filter to be in place? = FALSE
+COM Port = ""
+Filter 0 = ""
+Filter 1 = ""
+Filter 2 = ""
+Filter 3 = ""
+Filter 4 = ""
+Filter 5 = ""
+Filter 6 = ""
+Filter 7 = ""
+Filter 8 = ""
+Filter 9 = ""
+
+[SRS SIM900 Settings]
+X Galvo Slot = 8
+Enable? = FALSE
+Z Galvo Slot = 6
+Z Piezo Slot = 1
+X Tile Galvo Slot = 8
+Sample Piezo Slot = -1
+Descan X Slot = 8
+Descan Y Slot = 6
+Z Galvo Slot deg 0 = -1
+Z Galvo Slot deg 60 = -1
+Z Galvo Slot deg 120 = -1
+SHY Slot 0 = -1
+SHX Slot 0 = -1
+SHY Slot 180 = -1
+SHX Slot 180 = -1
+SRS SIM900 = "COM1"
+X Galvo offset Slot = 2
+Z Galvo offset Slot = 4
+Minimum rounding error (um) = 0.005
+
+[DO to IO camera offset]
+X (um) = 0
+Y (um) = 0
+Z (um) = 0
+
+[SH refs]
+ESH Reference image path = "/C/AangSettings/20200206_SHCal_Aang/SHCalibration/ESH/ESH_Reference_Eggwater_20230403.tif"
+ESH Background image path = "/C/AangSettings/20200206_SHCal_Aang/SHCalibration/ESH/ESH_Background_Eggwater_20230403.tif"
+DO Image DSH Reference image path = "/C/AangSettings/20200206_SHCal_Aang/SHCalibration/DSH/DSH_Reference_eggWater_20230403.tif"
+DO Image DSH Zernike image folder = "/C/AangSettings/20200206_SHCal_Aang/SHCalibration/DSH/Zernike_Impulse"
+DO Image DSH Background image = "/C/AangSettings/20200206_SHCal_Aang/SHCalibration/DSH/DSH_Background_20230403.tif"
+DO Descan DSH Reference image path = "/D/AangBuildSettingsNotes/20200206_SHCal_Aang/SHCalibration/DSH/DSH_Reference_20200718.tif"
+DO Descan DSH Zernike image folder = "/D/AangBuildSettingsNotes/20200206_SHCal_Aang/SHCalibration/DSH/Zernike_Impulse"
+DO Descan DSH Background image = "/D/AangBuildSettingsNotes/20200206_SHCal_Aang/SHCalibration/DSH/DSH_Background_20200718.tif"
+IO Image DSH Reference image path = "<Not A Path>"
+IO Image DSH Zernike image folder = "<Not A Path>"
+IO Image DSH Background image = "<Not A Path>"
+IO Descan DSH Reference image path = "<Not A Path>"
+IO Descan DSH Zernike image folder = "<Not A Path>"
+IO Descan DSH Background image = "<Not A Path>"
+UO Image DSH Reference image path = "<Not A Path>"
+UO Image DSH Zernike image folder = "<Not A Path>"
+UO Image DSH Background image = "<Not A Path>"
+UO Descan DSH Reference image path = "<Not A Path>"
+UO Descan DSH Zernike image folder = "<Not A Path>"
+UO Descan DSH Background image = "<Not A Path>"
+
+[Zaber Waveplate Rotator]
+Enabled? = FALSE
+USB ID/SN or COM Port = "X-MCB2"
+Remote Computer Name or IP = ""
+Zero degree Grating position (deg) = 46.6256
+HWP to QWP LUT = ""
+
+[CSP Motion GUI]
+Background image rotation (deg) = 0
+Sample midpoint X (mm) = 8.35
+Sample midpoint Y (mm) = 8.35
+
+[Dual Flipper]
+SmarAct Mirror position (mm) = 83
+SmarAct Open position (mm) = 23
+SmarAct Filter position (mm) = 56
+
+[Galvo Static Gain and Offset module]
+Enabled? = TRUE
+X wvfrm Gain = 0.139542
+X offset Gain = 0.847747
+Z wvfrm Gain = 0.431269
+
+[Dover DOF5]
+Dover DOF5 Enabled = FALSE
+USB ID/SN or COM Port = "Keyspan USB Serial Port"
+
+[Inspection Camera]
+Sample Inspection Camera Image Pixel Size (um/pixel) = 0.088
+
+[SmarAct Mask Toggle]
+Enabled = TRUE
+SmarAct Controller (A, B, C) = "B"
+SmarAct Channel (0, 1, 2) = 2
+SmarAct Open position (mm) = 0
+SmarAct 2p position (mm) = -25
+SmarAct 3D SIM position (mm) = 30
+
+[Reference Tracking]
+relative_shift_limit (um) = 2.5
+Lead the target enabled? = FALSE
+MIP disagreement limit (pix) = 10
+Lead the target limit (um) = 10
+Total_shift_limit (um) = 10
+RXY limit (%) = 0
+RXZ limit (%) = 0
+
+[Tiled SIM pattern]
+Cut style = "cut vert"
+Number of tiles = "2.000000"
+Galvo jump (um) between SLM tiles ("auto" will use SLM tile width) = "55"
+
+[Performance options]
+Max img buf in stack = 11000
+Faster scripted Scans by not disabling controls during scan = FALSE
+Zero images at start of scan? = TRUE
+Save Zarr in SQLite container? = FALSE
+
+[Compression]
+Desired File Compression = 3
+Buffer left to disable compression (s) = 0.1
+Buffer left to reenable compression (s) = 0.2
+
+[Thorlabs MCM3000]
+Enabled Sample Chamber = FALSE
+Enabled Upright X = FALSE
+Enabled Upright Y = FALSE
+USB ID/SN or COM Port = "MCM3000"
+Remote Computer Name or IP = ""
+Position 1 (mm) = 10.5
+Position 2 (mm) = 1
+Position 3 (mm) = 0
+Upright Limit X max (mm) = 10
+Upright Limit X min (mm) = -10
+Upright Limit Y max (mm) = 10
+Upright Limit Y min (mm) = -10
+
+[Patterned Photostim]
+Decimation factor = 10

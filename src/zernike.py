@@ -7,7 +7,7 @@ All rights reserved.
 import logging
 import sys
 from functools import lru_cache
-
+from cachetools import cached, LRUCache, keys
 import numpy as np
 from scipy.special import binom
 
@@ -43,7 +43,16 @@ def nm_normalization(n, m):
     return np.sqrt((1. + (m == 0)) / (2. * n + 2))
 
 
-def nm_polynomial(n, m, rho, theta, normed=True):
+def customhashkey(*args, rho=np.array([]), theta=np.array([]), **kwargs):
+    key = keys.hashkey(*args, **kwargs)  # hash the hashable arguments.
+    key += tuple(theta.shape)
+    midpoint = np.array(rho.shape) // 2
+    key += (rho[tuple(midpoint + 1)], rho[tuple(midpoint)])
+    return key
+
+
+@cached(LRUCache(maxsize=128), key=customhashkey)
+def nm_polynomial(n, m, rho=np.array([]), theta=np.array([]), normed=True):
     """returns the zernike polyonimal by classical n,m enumeration
 
     if normed=True, then they form an orthonormal system
@@ -108,7 +117,7 @@ def rho_theta(size):
 @lru_cache(maxsize=1)
 def outside_mask(size):
     rho, theta = rho_theta(size)
-    return nm_polynomial(0, 0, rho, theta, normed=False) < 1
+    return nm_polynomial(n=0, m=0, rho=rho, theta=theta, normed=False) < 1
 
 
 class Zernike:
@@ -197,10 +206,10 @@ class Zernike:
         np.isscalar(normed) or logging.error(ValueError())
         outside is None or np.isscalar(outside) or logging.error(
             ValueError("Only scalar constant value for outside is accepted"))
-        w = nm_polynomial(self.n, self.m, rho, theta, normed=bool(normed))
+        w = nm_polynomial(n=self.n, m=self.m, rho=rho, theta=theta, normed=bool(normed))
 
         if outside is not None:
-            w[nm_polynomial(0, 0, rho, theta, normed=False) < 1] = outside
+            w[nm_polynomial(n=0, m=0, rho=rho, theta=theta, normed=False) < 1] = outside
         return w
 
     def __hash__(self):
