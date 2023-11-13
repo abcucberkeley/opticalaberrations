@@ -153,7 +153,7 @@ class PsfGenerator3D:
             n: float,
             na_detection: float,
             psf_type: Union[str, Path],
-            pupil_mag_file: Path=Path(__file__).parent.parent / "scope_psf" / "WF_150ms_phase_retrieval_pupil_mag.tif",
+            pupil_mag_file: Path=Path(__file__).parent.parent / "calibration" /"aang" / "PSF" / "510nm_mag.tif",
             lls_excitation_profile: Optional[np.ndarray] = None
     ):
         """
