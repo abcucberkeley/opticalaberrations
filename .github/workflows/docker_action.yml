@@ -162,6 +162,10 @@ jobs:
       - name: Test synthetic datasets
         run: |
           docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_datasets.py"
+          
+      - name: Test training
+        run: |
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_train.py"
 
       - name: Build and push Docker image
         id: build-and-push
