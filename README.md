@@ -48,16 +48,30 @@ Create a new `conda` environment using the following commands (will create an en
 | Windows | [`windows.yml`](windows.yml) |
 
 ```shell
+# Ubuntu via .yml
 cd opticalaberrations
 conda env create -f ubuntu.yml
 conda activate ml
 ```
-
+```shell
+# Windows via .yml
+cd opticalaberrations
+conda env create -f windows.yml
+conda activate ml
+```
 >....to later update to the latest packages in `*.yml`:
 >
 >```shell
 >conda env update --file ***.yml 
 >```
+
+```shell
+# Windows via conda and pip.  If you abscond from installing from the .yml file, you may try this at your own risk:
+conda create python=3.10 cudatoolkit=11.2 cudnn=8.1.0  matplotlib astropy seaborn numpy scikit-image scikit-learn scikit-spatial pandas ipython pytest ujson zarr conda pycudadecon -c conda-forge -n ml --yes
+conda activate ml
+pip install tensorflow=2.10 keras=2.10 
+pip install cupy-cuda11x tensorflow_addons dphtools csbdeep line-profiler line-profiler-pycharm tifffile=2023.9.18 imagecodecs==2023.9.18 
+```
 
 ### Pre-trained models
 
