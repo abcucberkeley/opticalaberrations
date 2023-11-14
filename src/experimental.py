@@ -2165,7 +2165,7 @@ def phase_retrieval(
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.0,
     use_pyotf_zernikes: bool = False,
-    plot_otf_diagnosis: bool = True,
+    plot_otf_diagnosis: bool = False,
 ):
 
     try:
@@ -2310,15 +2310,15 @@ def phase_retrieval(
         model_result = cp.asnumpy(pr_result.model.PSFi)     # direct from PR. Has pupil magnitude *and* phase.
 
         vis.otf_diagnosis(
-                          psfs=[data_prepped, hanser_pupil, RW, psf],
-                          labels=["Experimental", "FT(Experimental Pupil)", "RW theory", 'psfgen'],
-                          save_path=img.with_suffix(''),
-                          lateral_voxel_size=lateral_voxel_size,
-                          axial_voxel_size=axial_voxel_size,
-                          na_detection=psfgen.na_detection,
-                          lam_detection=psfgen.lam_detection,
-                          refractive_index=psfgen.refractive_index,
-                          )
+            psfs=[data_prepped, hanser_pupil, RW, psf],
+            labels=["Experimental", "FT(Experimental Pupil)", "RW theory", 'psfgen'],
+            save_path=img.with_suffix(''),
+            lateral_voxel_size=lateral_voxel_size,
+            axial_voxel_size=axial_voxel_size,
+            na_detection=psfgen.na_detection,
+            lam_detection=psfgen.lam_detection,
+            refractive_index=psfgen.refractive_index,
+        )
 
     if plot:
         vis.diagnosis(
