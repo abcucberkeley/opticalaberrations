@@ -89,13 +89,17 @@ def plot_mip(
         return f'{np.ceil(x * dd).astype(int):1d}'
 
     if log:
-        t = 1e-4
-        norm = mcolors.LogNorm(vmin=t, vmax=1)
-        vol[vol < t] = t
+        vmin, vmax, step = 1e-4, 1, .025
+        norm = mcolors.LogNorm(vmin=vmin, vmax=vmax)
+        cmap = mcolors.ListedColormap(plt.get_cmap('hot', 256)(np.arange(vmin, vmax+step, step)))
+        vol[vol < vmin] = vmin
     else:
         vol = vol ** gamma
+        vol /= vol.max()
         vol = np.nan_to_num(vol)
-        norm = None
+        vmin, vmax, step = 0, 1, .025
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        cmap = mcolors.ListedColormap(plt.get_cmap('hot', 256)(np.arange(vmin, vmax+step, step)))
 
     if xy is not None:
         if mip:
@@ -103,7 +107,7 @@ def plot_mip(
         else:
             v = vol[vol.shape[0]//2, :, :]
 
-        m = xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
+        xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
 
         xy.set_xlabel(r'XY ($\mu$m)')
         if ticks:
@@ -121,7 +125,7 @@ def plot_mip(
         else:
             v = vol[:, vol.shape[0] // 2, :]
 
-        m = xz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
+        xz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
 
         xz.set_xlabel(r'XZ ($\mu$m)')
         if ticks:
@@ -139,7 +143,7 @@ def plot_mip(
         else:
             v = vol[:, :, vol.shape[0] // 2]
 
-        m = yz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
+        yz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
 
         yz.set_xlabel(r'YZ ($\mu$m)')
         if ticks:
@@ -164,7 +168,8 @@ def plot_mip(
         else:
             formatter = FormatStrFormatter("%.1f")
 
-        cb = plt.colorbar(m, cax=cax, norm=norm)
+        m = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+        cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_major_formatter(formatter)
         cax.set_ylabel(f"{label}")
         cax.yaxis.set_label_position("left")
@@ -198,7 +203,7 @@ def plot_wavefront(
         return mask
 
     dlimit = .05
-    step = .025
+    step = .01
 
     if vmin is None:
         vmin = np.floor(np.nanmin(phi)*2)/4     # round down to nearest 0.25 wave
@@ -208,26 +213,23 @@ def plot_wavefront(
         vmax = np.ceil(np.nanmax(phi)*2)/4  # round up to nearest 0.25 wave
         vmax = dlimit if vmax < 0.01 else vmax
 
-    # highcmap = plt.get_cmap('magma_r', 256)
-    # middlemap = plt.get_cmap('gist_gray', 256)
-    # lowcmap = plt.get_cmap('gist_earth_r', 256)
-    #
-    # ll = np.arange(vmin, -1*dlimit+step, step)
-    # hh = np.arange(dlimit, vmax+step, step)
+    highcmap = plt.get_cmap('magma_r', 256)
+    middlemap = plt.get_cmap('gist_gray_r', 256)
+    lowcmap = plt.get_cmap('gist_earth_r', 256)
 
-    # wave_cmap = np.vstack((
-    #     lowcmap(.66 * ll / ll.min()),
-    #     middlemap([.8, .9, 1, .9, .8]),
-    #     highcmap(.66 * hh / hh.max())
-    # ))
-    # wave_cmap = mcolors.ListedColormap(wave_cmap)
+    ll = np.arange(vmin, -1*dlimit+step, step)
+    hh = np.arange(dlimit, vmax+step, step)
+    mm = [1]  # [.8, .9, 1, .9, .8]
 
-    mat = iax.imshow(
-        phi,
-        cmap='Spectral_r',
-        vmin=vmin,
-        vmax=vmax,
-    )
+    wave_cmap = np.vstack((
+        lowcmap(.66 * ll / ll.min()),
+        middlemap(mm),
+        highcmap(.66 * hh / hh.max())
+    ))
+    cmap = mcolors.ListedColormap(wave_cmap)
+
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    mat = iax.imshow(phi, cmap=cmap, norm=norm)
 
     pcts = []
     for d in nas:
@@ -256,14 +258,20 @@ def plot_wavefront(
 
     if vcolorbar:
         cax = inset_axes(iax, width="10%", height="100%", loc='center right', borderpad=-3)
-        cbar = plt.colorbar(mat, cax=cax, extend='both', format=formatter)
+        cbar = plt.colorbar(
+            matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap),
+            cax=cax, extend='both', format=formatter
+        )
         cbar.ax.set_title(r'$\lambda$', pad=10)
         cbar.ax.yaxis.set_ticks_position('right')
         cbar.ax.yaxis.set_label_position('left')
 
     if hcolorbar:
         cax = inset_axes(iax, width="100%", height="10%", loc='lower center', borderpad=-1)
-        cbar = plt.colorbar(mat, cax=cax, extend='both', format=formatter, orientation='horizontal')
+        cbar = plt.colorbar(
+            matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap),
+            cax=cax, extend='both', format=formatter, orientation='horizontal'
+        )
         cbar.ax.xaxis.set_ticks_position('bottom')
         cbar.ax.xaxis.set_label_position('top')
 
@@ -1018,6 +1026,14 @@ def plot_interference(
         sharex=False
     )
     transparency = 0.6
+
+    vmin, vmax, step = 0, 1, .025
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    cmap = mcolors.ListedColormap(plt.get_cmap('hot', 256)(np.arange(vmin, vmax+step, step)))
+
+    greysnorm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    greyscmap = mcolors.ListedColormap(plt.get_cmap('Greys_r', 256)(np.arange(vmin, vmax+step, step)))
+
     for ax in range(3):
         for p in range(pois.shape[0]):
             if ax == 0:
@@ -1054,9 +1070,9 @@ def plot_interference(
                     color=f'C{p}',
                     alpha=transparency
                 ))
-        m1 = axes[0, ax].imshow(np.nanmax(psf_peaks, axis=ax), cmap='hot')
-        m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot')
-        m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66)
+        m1 = axes[0, ax].imshow(np.nanmax(psf_peaks, axis=ax), cmap=cmap, norm=norm)
+        m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap=cmap, norm=norm)
+        m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap=greyscmap, norm=greysnorm, alpha=.66)
 
         if plot_interference_pattern:
             interference = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=axes[3, ax], wspace=0.05, hspace=0)
@@ -1070,7 +1086,7 @@ def plot_interference(
             ax2.axis('off')
             ax2.set_title(r'$|\mathscr{F}(\mathcal{S})|$')
 
-        m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot')
+        m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap=cmap, norm=norm)
 
     for ax, m, label in zip(
         range(5) if plot_interference_pattern else range(4),
@@ -1089,6 +1105,7 @@ def plot_interference(
             'Reconstructed'
         ]
     ):
+
         cax = inset_axes(axes[ax, -1], width="10%", height="90%", loc='center right', borderpad=-3)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
@@ -1140,6 +1157,10 @@ def plot_embeddings(
     ))
     cmap = mcolors.ListedColormap(cmap)
 
+    ivmin, ivmax, istep = 0, 1, .025
+    inorm = mcolors.Normalize(vmin=ivmin, vmax=ivmax)
+    icmap = mcolors.ListedColormap(plt.get_cmap('hot', 256)(np.arange(ivmin, ivmax+istep, istep)))
+
     if emb.shape[0] == 3:
         fig, axes = plt.subplots(2, 3, figsize=(8, 6))
     else:
@@ -1164,21 +1185,22 @@ def plot_embeddings(
                 ax = fig.add_subplot(grid[i, j])
 
                 try:
-                    m = ax.imshow(np.max(inputs[idx], axis=proj) ** gamma, cmap='hot', vmin=0, vmax=1)
+                    m = ax.imshow(np.max(inputs[idx], axis=proj) ** gamma, cmap=icmap, norm=inorm)
 
                 except IndexError: # if we dropped a tile due to poor SNR
-                    m = ax.imshow(np.zeros_like(np.max(inputs[0], axis=proj)), cmap='hot', vmin=0, vmax=1)
+                    m = ax.imshow(np.zeros_like(np.max(inputs[0], axis=proj)), cmap=icmap, norm=inorm)
 
                 ax.axis('off')
+            axes[0, proj].axis('off')
 
         cax = inset_axes(axes[0, 0], width="10%", height="100%", loc='center left', borderpad=-5)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("left")
         cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
     else:
-        m = axes[0, 0].imshow(np.max(inputs**gamma, axis=0), cmap='hot', vmin=0, vmax=1)
-        axes[0, 1].imshow(np.max(inputs**gamma, axis=1), cmap='hot', vmin=0, vmax=1)
-        axes[0, 2].imshow(np.max(inputs**gamma, axis=2), cmap='hot', vmin=0, vmax=1)
+        m = axes[0, 0].imshow(np.max(inputs**gamma, axis=0), cmap=icmap, norm=inorm)
+        axes[0, 1].imshow(np.max(inputs**gamma, axis=1), cmap=icmap, norm=inorm)
+        axes[0, 2].imshow(np.max(inputs**gamma, axis=2), cmap=icmap, norm=inorm)
         cax = inset_axes(axes[0, 0], width="10%", height="100%", loc='center left', borderpad=-5)
         cb = fig.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("left")
