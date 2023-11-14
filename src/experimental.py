@@ -2166,6 +2166,7 @@ def phase_retrieval(
     prediction_threshold: float = 0.0,
     use_pyotf_zernikes: bool = False,
     plot_otf_diagnosis: bool = False,
+    RW_path: Path = Path(__file__).parent.parent / "calibration" / "PSF_RW_515em_128_128_101_100nmSteps_97nmXY.tif",
 ):
 
     try:
@@ -2303,7 +2304,6 @@ def phase_retrieval(
         model.apply_pupil(pupil_field)
         hanser_pupil = np.squeeze(model.PSFi)
 
-        RW_path = Path(__file__).parent.joinpath(r"..\scope_psf\RW_PSFs\PSF_RW_515em_128_128_101_100nmSteps_97nmXY.tif")
         RW = imread(RW_path)
         RW = resize_with_crop_or_pad(RW, crop_shape)
 
