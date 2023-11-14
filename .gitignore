@@ -168,3 +168,4 @@ src/all_coords_cache_3x361x6x64x64_float16.npy
 /src/cocoa_repo/
 /src/cocoa_repo/**/*.*
 /src/cocoa_repo/**/**/*.*
+/scope_psf
