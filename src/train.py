@@ -2,6 +2,11 @@ import matplotlib
 matplotlib.use('Agg')
 
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
+
+import warnings
+warnings.filterwarnings("ignore")
+
 import logging
 import sys
 import time
@@ -20,9 +25,9 @@ import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.optimizers.experimental import AdamW
-from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping, BackupAndRestore
+from tensorflow_addons.optimizers import LAMB
 
-from lamb import LAMB
 from warmupcosinedecay import WarmupCosineDecay
 from callbacks import LRLogger
 from callbacks import Defibrillator
@@ -35,7 +40,6 @@ import baseline
 import otfnet
 import cli
 
-
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -44,52 +48,51 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 plt.set_loglevel('error')
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 
 def train_model(
     dataset: Path,
     outdir: Path,
-    network: str,
-    distribution: str,
-    embedding: str,
-    samplelimit: int,
-    max_amplitude: float,
-    input_shape: int,
-    batch_size: int,
-    patch_size: list,
-    steps_per_epoch: int,
-    depth_scalar: int,
-    width_scalar: int,
-    activation: str,
-    fixedlr: bool,
-    opt: str,
-    lr: float,
-    wd: float,
-    dropout: float,
-    warmup: int,
-    wavelength: float,
-    psf_type: str,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
-    modes: int,
-    pmodes: Optional[int],
-    min_photons: int,
-    max_photons: int,
-    epochs: int,
-    mul: bool,
+    network: str = 'opticalnet',
+    distribution: str = '/',
+    embedding: str = 'spatial_planes',
+    samplelimit: Optional[int] = None,
+    max_amplitude: float = 1,
+    input_shape: int = 64,
+    batch_size: int = 32,
+    patch_size: list = (32, 16, 8, 8),
+    depth_scalar: float = 1.,
+    width_scalar: float = 1.,
+    activation: str = 'gelu',
+    fixedlr: bool = False,
+    opt: str = 'AdamW',
+    lr: float = 5e-4,
+    wd: float = 5e-6,
+    dropout: float = .1,
+    warmup: int = 2,
+    epochs: int = 5,
+    wavelength: float = .510,
+    psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+    x_voxel_size: float = .108,
+    y_voxel_size: float = .108,
+    z_voxel_size: float = .2,
+    modes: int = 15,
+    pmodes: Optional[int] = None,
+    min_photons: int = 1,
+    max_photons: int = 1000000,
     roi: Any = None,
     refractive_index: float = 1.33,
     no_phase: bool = False,
     plot_patches: bool = False,
     lls_defocus: bool = False,
     defocus_only: bool = False,
-    radial_encoding_period: int = 1,
+    radial_encoding_period: int = 16,
     radial_encoding_nth_order: int = 4,
-    positional_encoding_scheme: str = 'default',
+    positional_encoding_scheme: str = 'rotational_symmetry',
     fixed_dropout_depth: bool = False,
+    steps_per_epoch: Optional[int] = None,
     stem: bool = False,
+    mul: bool = False,
     strategy: Any = None
 ):
     network = network.lower()
@@ -355,7 +358,7 @@ def train_model(
 
     defibrillator = Defibrillator(
         monitor='loss',
-        patience=25,
+        patience=10,
         verbose=1,
     )
 
@@ -363,6 +366,11 @@ def train_model(
         log_dir=outdir,
         histogram_freq=1,
         profile_batch=100000000
+    )
+
+    backup = BackupAndRestore(
+        backup_dir=f"{outdir}/backup",
+        delete_checkpoint=False,
     )
 
     lrlogger = LRLogger()
@@ -379,6 +387,7 @@ def train_model(
             pb_checkpoints,
             earlystopping,
             defibrillator,
+            backup,
             lrlogger
         ],
     )

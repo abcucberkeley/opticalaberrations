@@ -344,7 +344,8 @@ def remove_background_noise(
         logger.warning(f"No CUDA-capable device is detected. 'image' will be type {type(image)}")
 
     if method == 'mode':
-        mode = int(st.mode(image, axis=None).mode[0])
+        mode = st.mode(image, axis=None).mode
+        mode = int(mode[0]) if isinstance(mode, (list, tuple, np.ndarray)) else int(mode)
         image -= mode + read_noise_bias
 
     elif method == 'difference_of_gaussians':

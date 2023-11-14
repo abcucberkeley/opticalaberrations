@@ -292,6 +292,38 @@ def test_multipoint_dataset(kargs):
 
 
 @pytest.mark.run(order=7)
+def test_multipoint_dataset(kargs):
+    gen = get_synthetic_generator(kargs)
+
+    for i in range(5):
+        multipoint_dataset.create_synthetic_sample(
+            filename=f'{i}',
+            npoints=5,
+            fill_radius=.66,
+            generators={str(kargs['psf_type']): gen},
+            upsampled_generators={str(kargs['psf_type']): gen},
+            modes=kargs['num_modes'],
+            savedir=Path(f"{kargs['repo']}/dataset/example"),
+            distribution=gen.distribution,
+            mode_dist=gen.mode_weights,
+            gamma=.75,
+            randomize_voxel_size=False,
+            emb=True,
+            signed=True,
+            random_crop=None,
+            rotate=True,
+            noise=True,
+            normalize=True,
+            min_amplitude=.1,
+            max_amplitude=.2,
+            min_lls_defocus_offset=-2,
+            max_lls_defocus_offset=2,
+            min_photons=100000,
+            max_photons=200000,
+        )
+
+
+@pytest.mark.run(order=8)
 def test_multimodal_dataset(kargs):
 
     psf_types = [

@@ -3,7 +3,7 @@ import sys
 from typing import Any
 import numpy as np
 
-sys.path.append('.')
+sys.path.append('../tests')
 sys.path.append('./src')
 sys.path.append('./tests')
 

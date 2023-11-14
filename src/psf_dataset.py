@@ -140,7 +140,8 @@ def simulate_psf(
         inputs = electrons2counts(inputs, electrons_per_count=electrons_per_count)
 
     counts = np.sum(inputs)
-    counts_mode = int(st.mode(inputs, axis=None).mode[0])
+    counts_mode = st.mode(inputs, axis=None).mode
+    counts_mode = int(counts_mode[0]) if isinstance(counts_mode, (list, tuple, np.ndarray)) else int(counts_mode)
     counts_percentiles = np.array([np.percentile(inputs, p) for p in range(1, 101)], dtype=int)
 
     if normalize:

@@ -172,7 +172,7 @@ def add_noise(
 
     image += mean_background_offset  # add camera offset (camera offset in counts)
     image[image < 0] = 0
-    return image
+    return image.astype(np.float32)
 
 
 def microns2waves(a, wavelength):

@@ -12,9 +12,8 @@ from functools import lru_cache
 from pathlib import Path
 from copy import deepcopy
 from typing import Optional, Union
-
 import numpy as np
-from numpy.fft import fftshift
+
 try:
     import cupy as cp
 except ImportError as e:
@@ -153,7 +152,7 @@ class PsfGenerator3D:
             n: float,
             na_detection: float,
             psf_type: Union[str, Path],
-            pupil_mag_file: Path=Path(__file__).parent.parent / "calibration" /"aang" / "PSF" / "510nm_mag.tif",
+            pupil_mag_file: Path = Path(__file__).parent.parent.resolve() / "calibration" / "aang" / "PSF" / "510nm_mag.tif",
             lls_excitation_profile: Optional[np.ndarray] = None
     ):
         """
