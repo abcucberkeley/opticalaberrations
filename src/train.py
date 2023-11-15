@@ -39,6 +39,7 @@ import opticalnet
 import baseline
 import otfnet
 import cli
+from roi import ROI
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -48,6 +49,54 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 plt.set_loglevel('error')
+
+
+def plot_patches(img: np.ndarray, outdir: Path, patch_size: list):
+    for k, label in enumerate(['xy', 'xz', 'yz']):
+        img = np.expand_dims(img[0], axis=0)
+        original = np.squeeze(img[0, k])
+
+        vmin = np.min(original)
+        vmax = np.max(original)
+        vcenter = (vmin + vmax) / 2
+        step = .01
+
+        highcmap = plt.get_cmap('YlOrRd', 256)
+        lowcmap = plt.get_cmap('YlGnBu_r', 256)
+        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+        cmap = mcolors.ListedColormap(cmap)
+
+        plt.figure(figsize=(4, 4))
+        plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
+        plt.axis("off")
+        plt.title('Original')
+        plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+        for p in patch_size:
+            patches = opticalnet.Patchify(patch_size=p)(img)
+            merged = opticalnet.Merge(patch_size=p)(patches)
+
+            patches = patches[0, k]
+            merged = np.squeeze(merged[0, k])
+
+            plt.figure(figsize=(4, 4))
+            plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
+            plt.axis("off")
+            plt.title('Merged')
+            plt.savefig(f'{outdir}/{label}_merged.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+            n = int(np.sqrt(patches.shape[0]))
+            plt.figure(figsize=(4, 4))
+            plt.title('Patches')
+            for i, patch in enumerate(patches):
+                ax = plt.subplot(n, n, i + 1)
+                patch_img = tf.reshape(patch, (p, p)).numpy()
+                ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
+                ax.axis("off")
+
+            plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
 def train_model(
@@ -83,7 +132,7 @@ def train_model(
     roi: Any = None,
     refractive_index: float = 1.33,
     no_phase: bool = False,
-    plot_patches: bool = False,
+    plot_patchfiy: bool = False,
     lls_defocus: bool = False,
     defocus_only: bool = False,
     radial_encoding_period: int = 16,
@@ -93,20 +142,13 @@ def train_model(
     steps_per_epoch: Optional[int] = None,
     stem: bool = False,
     mul: bool = False,
+    finetune: bool = False,
     strategy: Any = None
 ):
+    outdir.mkdir(exist_ok=True, parents=True)
     network = network.lower()
     opt = opt.lower()
     restored = False
-
-    # model's output shape
-    pmodes = modes if pmodes is None else pmodes
-
-    if lls_defocus:  # add LLS defocus offset to predictions
-        pmodes += 1
-
-    if defocus_only:  # only predict LLS defocus offset
-        pmodes = 1
 
     if network == 'baseline':
         inputs = (input_shape, input_shape, input_shape, 1)
@@ -130,9 +172,7 @@ def train_model(
             refractive_index=refractive_index,
             cpu_workers=-1
         )
-
         train_data = data_utils.create_dataset(config)
-        training_steps = steps_per_epoch
     else:
         train_data = data_utils.collect_dataset(
             dataset,
@@ -151,7 +191,11 @@ def train_model(
         with sample_writer.as_default():
             for s in range(10):
                 fig = None
-                for i, (img, y) in enumerate(train_data.shuffle(1000).take(5)):
+                for i, (img, y) in enumerate(train_data.take(5)):
+
+                    if plot_patchfiy:
+                        plot_patches(img=img, outdir=outdir, patch_size=patch_size)
+
                     img = np.squeeze(img, axis=-1)
 
                     if fig is None:
@@ -181,59 +225,11 @@ def train_model(
 
                 tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
 
-        for img, y in train_data.take(1):
-            if plot_patches:
-                for k, label in enumerate(['xy', 'xz', 'yz']):
-                    img = np.expand_dims(img[0], axis=0)
-                    original = np.squeeze(img[0, k])
-
-                    vmin = np.min(original)
-                    vmax = np.max(original)
-                    vcenter = (vmin + vmax) / 2
-                    step = .01
-
-                    highcmap = plt.get_cmap('YlOrRd', 256)
-                    lowcmap = plt.get_cmap('YlGnBu_r', 256)
-                    low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-                    high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-                    cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-                    cmap = mcolors.ListedColormap(cmap)
-
-                    plt.figure(figsize=(4, 4))
-                    plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
-                    plt.axis("off")
-                    plt.title('Original')
-                    plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-                    for p in patch_size:
-                        patches = opticalnet.Patchify(patch_size=p)(img)
-                        merged = opticalnet.Merge(patch_size=p)(patches)
-
-                        patches = patches[0, k]
-                        merged = np.squeeze(merged[0, k])
-
-                        plt.figure(figsize=(4, 4))
-                        plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
-                        plt.axis("off")
-                        plt.title('Merged')
-                        plt.savefig(f'{outdir}/{label}_merged.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-                        n = int(np.sqrt(patches.shape[0]))
-                        plt.figure(figsize=(4, 4))
-                        plt.title('Patches')
-                        for i, patch in enumerate(patches):
-                            ax = plt.subplot(n, n, i + 1)
-                            patch_img = tf.reshape(patch, (p, p)).numpy()
-                            ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
-                            ax.axis("off")
-
-                        plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
         train_data = train_data.cache()
         train_data = train_data.shuffle(batch_size)
         train_data = train_data.batch(batch_size)
         train_data = train_data.prefetch(buffer_size=tf.data.AUTOTUNE)
-        training_steps = tf.data.experimental.cardinality(train_data).numpy()
+        steps_per_epoch = tf.data.experimental.cardinality(train_data).numpy()
 
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
@@ -241,11 +237,11 @@ def train_model(
 
     if fixedlr:
         scheduler = lr
-        logger.info(f"Training steps: [{training_steps * epochs}]")
+        logger.info(f"Training steps: [{steps_per_epoch * epochs}]")
     else:
-        warmup_steps = warmup * training_steps
-        decay_steps = (epochs - warmup) * training_steps
-        logger.info(f"Training steps [{training_steps * epochs}] = [{warmup_steps}] warmup + [{decay_steps}] decay")
+        warmup_steps = warmup * steps_per_epoch
+        decay_steps = (epochs - warmup) * steps_per_epoch
+        logger.info(f"Training steps [{steps_per_epoch * epochs}] = ({warmup_steps=}) + ({decay_steps=})")
 
         scheduler = WarmupCosineDecay(
             initial_learning_rate=0.,
@@ -255,85 +251,104 @@ def train_model(
             alpha=.01,
         )
 
-    if opt.lower() == 'lamb':
-        opt = LAMB(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99)
-    elif opt.lower() == 'adamw':
-        opt = AdamW(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99)
+    if opt == 'lamb':
+        optimizer = LAMB(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99)
+    elif opt == 'adamw':
+        optimizer = AdamW(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99)
     else:
-        opt = Adam(learning_rate=scheduler)
+        optimizer = Adam(learning_rate=scheduler)
 
     try:  # check if model already exists
         model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent  # sort models to get the latest checkpoint
 
-        if model_path.exists():
-            model = load_model(model_path)
-            opt = model.optimizer
+        custom_objects = {
+            "ROI": ROI,
+            "Stem": opticalnet.Stem,
+            "Patchify": opticalnet.Patchify,
+            "Merge": opticalnet.Merge,
+            "PatchEncoder": opticalnet.PatchEncoder,
+            "MLP": opticalnet.MLP,
+            "StochasticDepth": opticalnet.StochasticDepth,
+            "Transformer": opticalnet.Transformer,
+            "WarmupCosineDecay": WarmupCosineDecay,
+        }
 
-            checkpoint = tf.train.Checkpoint(model=model, optimizer=opt)
-            status = checkpoint.restore(str(model_path)).expect_partial()
+        model = load_model(model_path, custom_objects=custom_objects)
+        optimizer = model.optimizer
 
-            if status:
-                restored = True
-                network = str(model_path)
-                training_history = pd.read_csv(model_path/'logbook.csv', header=0, index_col=0)
-            else:
-                logger.info("Initializing from scratch")
+        if isinstance(model, tf.keras.Model):
+            restored = True
+            network = str(model_path)
+            outdir = model_path
+            training_history = pd.read_csv(model_path / 'logbook.csv', header=0, index_col=0)
+            logger.info(f"Training history: {training_history}")
+        else:
+            outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
+            outdir.mkdir(exist_ok=True, parents=True)
 
     except Exception as e:
         logger.warning(f"No model found in {outdir}; Creating a new model.")
 
-    if restored:
-        logger.info(f"Model {model.name} restored from {model_path}")
+    if not restored:  # Build a new model
+        if defocus_only:  # only predict LLS defocus offset
+            pmodes = 1
+        elif lls_defocus:  # add LLS defocus offset to predictions
+            pmodes = modes+1 if pmodes is None else pmodes+1
+        else:
+            pmodes = modes if pmodes is None else pmodes
 
-    elif network == 'opticalnet':
-        model = opticalnet.OpticalTransformer(
-            name='OpticalNet',
-            roi=roi,
-            stem=stem,
-            patches=patch_size,
-            modes=pmodes,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            dropout_rate=dropout,
-            activation=activation,
-            mul=mul,
-            no_phase=no_phase,
-            positional_encoding_scheme=positional_encoding_scheme,
-            radial_encoding_period=radial_encoding_period,
-            radial_encoding_nth_order=radial_encoding_nth_order,
-            fixed_dropout_depth=fixed_dropout_depth,
-        )
+        if network == 'opticalnet':
+            model = opticalnet.OpticalTransformer(
+                name='OpticalNet',
+                roi=roi,
+                stem=stem,
+                patches=patch_size,
+                modes=pmodes,
+                depth_scalar=depth_scalar,
+                width_scalar=width_scalar,
+                dropout_rate=dropout,
+                activation=activation,
+                mul=mul,
+                no_phase=no_phase,
+                positional_encoding_scheme=positional_encoding_scheme,
+                radial_encoding_period=radial_encoding_period,
+                radial_encoding_nth_order=radial_encoding_nth_order,
+                fixed_dropout_depth=fixed_dropout_depth,
+            )
 
-    elif network == 'baseline':
-        model = baseline.Baseline(
-            name='Baseline',
-            modes=pmodes,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            activation=activation,
-        )
+        elif network == 'baseline':
+            model = baseline.Baseline(
+                name='Baseline',
+                modes=pmodes,
+                depth_scalar=depth_scalar,
+                width_scalar=width_scalar,
+                activation=activation,
+            )
 
-    elif network == 'otfnet':
-        model = otfnet.OTFNet(
-            name='OTFNet',
-            modes=pmodes
-        )
+        elif network == 'otfnet':
+            model = otfnet.OTFNet(
+                name='OTFNet',
+                modes=pmodes
+            )
 
+        else:
+            raise Exception(f'Network "{network}" is unknown.')
+
+    if restored and not finetune:
+        logger.info(f"Continue training {model.name} restored from {model_path}")
     else:
-        raise Exception(f'Network "{network}" is unknown.')
+        if finetune:
+            logger.info(f"Finetuning {model.name} using {optimizer.get_config()}")
+        else:  # creating a new model
+            model = model.build(input_shape=inputs)
+            logger.info(model.summary())
+            logger.info(optimizer.get_config())
 
-    if not restored:
-        model = model.build(input_shape=inputs)
         model.compile(
-            optimizer=opt,
+            optimizer=optimizer,
             loss='mse',
             metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
         )
-        logger.info(model.optimizer.get_config())
-
-    outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
-    outdir.mkdir(exist_ok=True, parents=True)
-    logger.info(model.summary())
 
     tblogger = CSVLogger(
         f"{outdir}/logbook.csv",
@@ -345,6 +360,11 @@ def train_model(
         monitor="loss",
         save_best_only=True,
         verbose=1,
+    )
+
+    backup = BackupAndRestore(
+        backup_dir=f"{outdir}",
+        delete_checkpoint=False,
     )
 
     earlystopping = EarlyStopping(
@@ -368,16 +388,11 @@ def train_model(
         profile_batch=100000000
     )
 
-    backup = BackupAndRestore(
-        backup_dir=f"{outdir}/backup",
-        delete_checkpoint=False,
-    )
-
     lrlogger = LRLogger()
 
     model.fit(
         train_data,
-        steps_per_epoch=training_steps,
+        steps_per_epoch=steps_per_epoch,
         epochs=epochs,
         verbose=2,
         shuffle=True,
