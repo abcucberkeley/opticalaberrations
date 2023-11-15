@@ -489,10 +489,12 @@ def compute_emb(
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
+    We usually do val='abs' to compute the alpha embeddings, with "ratio=True"
+    We usually do val='angle' to compute the phase embeddings, with "ratio=False"
 
     Args:
         otf: fft of the input data. Must have the same frequency spacing as iotf (which means the same real-space FOV in microns)
-        iotf: ideal theoretical or empirical OTF
+        iotf: ideal theoretical or empirical OTF (complex number)
         na_mask: theoretical NA support mask
         val: what to compute (either 'real', 'imag' imaginary, or phase 'angle' from the complex OTF)
         ratio: optional toggle to return ratio of data to ideal OTF
@@ -507,6 +509,8 @@ def compute_emb(
             (`rotary_slices`,     'rs'): return three radial slices
             (`spatial_quadrants`, 'sq'): return four different spatial planes in each quadrant
              or just return the full stack if nothing is passed
+    Returns:
+        embedding astype(np.float32)
     """
     if na_mask is None:
         na_mask = np.abs(iotf)
@@ -532,6 +536,7 @@ def compute_emb(
     if norm:
         otf = normalize_otf(otf, freq_strength_threshold=freq_strength_threshold)
 
+
     if val == 'real':
         emb = np.real(otf)
 
@@ -539,16 +544,11 @@ def compute_emb(
         emb = np.imag(otf)
 
     elif val == 'angle':
-        emb = otf / np.nanpercentile(np.abs(otf), 99.99)
-
-        if freq_strength_threshold != 0.:
-            emb[np.abs(emb) < freq_strength_threshold] = 0.
-            na_mask[np.abs(emb) < freq_strength_threshold] = 0.
-
-        emb = np.angle(emb)
+        emb = np.angle(otf)
         emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
 
         try:
+            # unwrap phase if we have at least 100 nonzero points left in emb.
             if len(np.ma.nonzero(emb)[0]) > 100:
                 emb = np.ma.masked_array(emb, mask=~na_mask, fill_value=0)
                 emb = unwrap_phase(emb)
@@ -557,8 +557,11 @@ def compute_emb(
         except TimeoutError as e:
             logger.warning(f"`unwrap_phase`: {e}")
 
-    else:
+    elif val == 'abs':
         emb = np.abs(otf)
+
+    else:
+        raise Exception(f'invalid choice, {val=}, for compute_emb')
 
     if ratio:
         emb /= np.abs(iotf)
@@ -596,7 +599,7 @@ def compute_emb(
 
     else:
         logger.warning(f"embedding_option is unrecognized : {embedding_option}")
-        return emb
+        return emb.astype(np.float32)
 
 
 @lru_cache(maxsize=361, typed=True)
@@ -774,8 +777,6 @@ def fourier_embeddings(
             we have a few options to minimize the size of the embedding.
         debug_rotations: Print out the rotations if true
     """
-    inputs = inputs.astype(np.float32)
-    iotf = iotf.astype(np.float32)
 
     if isinstance(inputs, tuple):
         psf, otf = inputs
@@ -926,9 +927,6 @@ def rolling_fourier_embeddings(
             Capitalizing on the radial symmetry of the FFT,
             we have a few options to minimize the size of the embedding.
     """
-
-    iotf = iotf.astype(np.float32)
-    rois = rois.astype(np.float32)
 
     if np.all(rois == 0):
         if digital_rotations is not None:

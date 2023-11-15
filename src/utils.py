@@ -563,6 +563,14 @@ def sigma2fwhm(s):
 
 
 def sphere_mask(image_shape, radius=1):
+    """
+    Args:
+        image_shape:
+        radius:
+
+    Returns:
+        3D Boolean array where True within the sphere
+    """
     center = [s // 2 for s in image_shape]
     Z, Y, X = np.ogrid[:image_shape[0], :image_shape[1], :image_shape[2]]
     dist_from_center = np.sqrt((Z - center[0]) ** 2 + (Y - center[1]) ** 2 + (X - center[2]) ** 2)
@@ -593,20 +601,21 @@ def ifft(otf):
 
 
 @profile
-def normalize_otf(otf, freq_strength_threshold: float = 0., percentile: bool = True):
+def normalize_otf(otf, freq_strength_threshold: float = 0., percentile: bool = False):
 
     if percentile:
-        otf = np.abs(otf)
-        otf /= np.nanpercentile(otf, 99.99)
-        otf[otf > 1] = 1
-        otf[otf < -1] = -1
+        otf /= np.nanpercentile(np.abs(otf), 99.99)
     else:
-        roi = otf[sphere_mask(image_shape=otf.shape, radius=3)]
+        roi = np.abs(otf[sphere_mask(image_shape=otf.shape, radius=3)])
         dc = np.max(roi)
-        otf /= np.mean(roi - dc)
+        otf /= np.mean(roi[roi != dc])
+
+    # since the DC has no bearing on aberration: clamp to -1, +1
+    otf[otf > 1] = 1
+    otf[otf < -1] = -1
 
     if freq_strength_threshold != 0.:
         otf[np.abs(otf) < freq_strength_threshold] = 0.
 
-    emb = np.nan_to_num(otf, nan=0, neginf=0, posinf=0)
-    return emb
+    otf = np.nan_to_num(otf, nan=0, neginf=0, posinf=0)
+    return otf

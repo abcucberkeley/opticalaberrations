@@ -52,6 +52,8 @@ class SyntheticPSF:
             na_detection=1.0,
             lam_detection=.510,
             refractive_index=1.33,
+            pupil_mag_file: Optional[Path] = Path(
+                __file__).parent.parent.resolve() / "calibration" / "aang" / "PSF" / "510nm_mag.tif",
             cpu_workers=-1
     ):
         """
@@ -96,6 +98,7 @@ class SyntheticPSF:
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
         self.amplitude_ranges = amplitude_ranges
         self.psf_type = psf_type
+        self.pupil_mag_file = pupil_mag_file
 
         yumb_axial_support_index, yumb_lateral_support_index = self.calc_max_support_index(
             psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
@@ -133,12 +136,13 @@ class SyntheticPSF:
             na_detection=self.na_detection,
             psf_type=self.psf_type,
             lls_excitation_profile=lls_excitation_profile,
+            pupil_mag_file=self.pupil_mag_file,
         )
         self.lls_excitation_profile = self.psfgen.lls_excitation_profile
 
         # ideal psf (theoretical, no noise)
         self.ipsf = self.theoretical_psf(normed=True)
-        self.iotf = np.abs(fft(self.ipsf, padsize=None))
+        self.iotf = fft(self.ipsf, padsize=None)
         self.iotf = normalize_otf(self.iotf)
 
     @profile
@@ -178,6 +182,7 @@ class SyntheticPSF:
             n=self.refractive_index,
             na_detection=self.na_detection,
             psf_type=psf_type,
+            pupil_mag_file=self.pupil_mag_file,
         )
 
         ipsf = gen.incoherent_psf(phi)
@@ -203,8 +208,7 @@ class SyntheticPSF:
         # PSF has been pre-processed already
         self.ipsf = ideal_empirical_preprocessed_psf
 
-        self.iotf = np.abs(fft(self.ipsf, padsize=None))
-        self.iotf = np.nan_to_num(self.iotf, nan=0)
+        self.iotf = fft(self.ipsf, padsize=None)
         self.iotf = normalize_otf(self.iotf)
         self.iotf *= self.na_mask()
 
