@@ -39,7 +39,7 @@ def kargs():
         prediction_threshold=0.,
         confidence_threshold=0.02,
         num_predictions=1,
-        batch_size=128,
+        batch_size=96,
         plot=True,
         plot_rotations=True,
         ignore_modes=[0, 1, 2, 4],
