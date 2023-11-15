@@ -292,7 +292,7 @@ def test_multipoint_dataset(kargs):
 
 
 @pytest.mark.run(order=7)
-def test_multipoint_dataset(kargs):
+def test_training_dataset(kargs):
     gen = get_synthetic_generator(kargs)
 
     for i in range(5):
