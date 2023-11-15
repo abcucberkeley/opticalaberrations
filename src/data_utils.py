@@ -1,5 +1,5 @@
 import logging
-import sys
+import sys, os
 from functools import partial
 from line_profiler_pycharm import profile
 
@@ -209,13 +209,13 @@ def load_dataset(
     npoints_range=None,
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
 ):
-    logger.info(
-        f'Searching for files that meet:'
-        f' npoints_range=({int(npoints_range[0]):,} to {int(npoints_range[1]):,} objects),' if npoints_range is not None else ''
-        f' photons_range=({int(photons_range[0]):,} to {int(photons_range[1]):,} photons),' if photons_range is not None else ''
-        f' {max_amplitude=},'
-        f' number of {modes=}'
-    )
+    s1 = f'Searching for files that meet:'
+    s2 = f'npoints_range=({int(npoints_range[0]):,} to {int(npoints_range[1]):,} objects),' if npoints_range is not None else ""
+    s3 = f'photons_range=({int(photons_range[0]):,} to {int(photons_range[1]):,} photons),' if photons_range is not None else ""
+    s4 = f'{max_amplitude=}, number of {modes=}.'
+    s5 = f'In data directory: {Path(datadir).resolve()} which exists={Path(datadir).exists()}'
+    logger.info(" ".join([s1, s2, s3, s4]))
+    logger.info(s5)
 
     check = partial(
         check_criteria,
@@ -226,15 +226,21 @@ def load_dataset(
         photons_range=photons_range,
         npoints_range=npoints_range,
     )
+    candidate_files = sorted(Path(datadir).rglob(filename_pattern))
     files = multiprocess(
         func=check,
-        jobs=sorted(Path(datadir).rglob(filename_pattern)),
+        jobs=candidate_files,
         cores=-1,
         desc='Loading dataset hashtable',
         unit=' .tif candidates checked'
     )
-    files = [f for f in files if f is not None]
-    logger.info(f'.tif files that meet criteria: {len(files)} files')
+    try:
+        files = [f for f in files if f is not None]
+        logger.info(f'.tif files that meet criteria: {len(files)} files')
+    except TypeError:
+        raise Exception(f'No files that meet criteria out of {len(candidate_files)} candidate files, '
+                        f'{sum(len(files) for _, _, files in os.walk(datadir))} total files, '
+                        f'in data directory: {Path(datadir).resolve()} which exists={Path(datadir).exists()}')
 
     if samplelimit is not None:
         files = np.random.choice(files, min(samplelimit,len(files)), replace=False).tolist()
