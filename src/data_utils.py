@@ -209,6 +209,8 @@ def load_dataset(
     npoints_range=None,
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
 ):
+    if not Path(datadir).exists():
+        raise Exception(f"The 'datadir' does not exist: {datadir}")
     s1 = f'Searching for files that meet:'
     s2 = f'npoints_range=({int(npoints_range[0]):,} to {int(npoints_range[1]):,} objects),' if npoints_range is not None else ""
     s3 = f'photons_range=({int(photons_range[0]):,} to {int(photons_range[1]):,} photons),' if photons_range is not None else ""
