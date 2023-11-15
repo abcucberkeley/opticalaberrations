@@ -37,6 +37,7 @@ def test_zernike_model(kargs):
             z_voxel_size=kargs['axial_voxel_size'],
             modes=kargs['num_modes'],
             wavelength=kargs['wavelength'],
+            batch_size=kargs['batch_size'],
             warmup=1,
             epochs=5,
             strategy=strategy
@@ -65,6 +66,7 @@ def test_defocus_model(kargs):
             z_voxel_size=kargs['axial_voxel_size'],
             modes=kargs['num_modes'],
             wavelength=kargs['wavelength'],
+            batch_size=kargs['batch_size'],
             warmup=1,
             epochs=5,
             strategy=strategy,
@@ -94,6 +96,7 @@ def test_zernike_defocus_model(kargs):
             z_voxel_size=kargs['axial_voxel_size'],
             modes=kargs['num_modes'],
             wavelength=kargs['wavelength'],
+            batch_size=kargs['batch_size'],
             warmup=1,
             epochs=5,
             strategy=strategy,
