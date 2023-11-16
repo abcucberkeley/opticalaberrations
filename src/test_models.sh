@@ -84,12 +84,12 @@ do
       CONFIG=" --niter $i --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
       python manager.py $JOB \
-      --task "\" $MODEL.h5 --num_beads 1 $CONFIG snrheatmap \"" \
+      --task "$MODEL.h5 --num_beads 1 $CONFIG snrheatmap" \
       --taskname $NA \
       --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
       python manager.py $JOB \
-      --task "\" $MODEL.h5  $CONFIG densityheatmap \"" \
+      --task "$MODEL.h5  $CONFIG densityheatmap" \
       --taskname $NA \
       --name $MODEL/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
