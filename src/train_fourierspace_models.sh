@@ -12,7 +12,7 @@ NETWORK=opticalnet
 MODES=15
 CLUSTER='lsf'
 
-SUBSET='fixed_density'
+SUBSET='aang_dataset'
 if [ $CLUSTER = 'slurm' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"
 else
@@ -49,6 +49,11 @@ do
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG --fixed_precision --positional_encoding_scheme default" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-default
+
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
   --task "$CONFIG --fixed_precision" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-fixed-precision
@@ -56,9 +61,14 @@ do
   for OPT in adamw lamb
   do
       python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-      --task "$CONFIG --batch_size 2048 --opt $OPT" \
+      --task "$CONFIG --batch_size 2048 --lr 1e-4 --opt $OPT" \
       --taskname $NETWORK \
-      --name new/$SUBSET/$NETWORK-$MODES-$DIR-$OPT-amp
+      --name new/$SUBSET/$NETWORK-$MODES-$DIR-$OPT-amp-lre4
+
+      python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+      --task "$CONFIG --batch_size 2048 --lr 1e-4 --wd 5e-4 --opt $OPT" \
+      --taskname $NETWORK \
+      --name new/$SUBSET/$NETWORK-$MODES-$DIR-$OPT-amp-lre4-wd5e4
   done
 
 done

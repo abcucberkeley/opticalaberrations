@@ -252,11 +252,11 @@ def train_model(
         )
 
     if opt == 'lamb':
-        optimizer = LAMB(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99)
+        optimizer = LAMB(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99, clipnorm=1.0)
     elif opt == 'adamw':
-        optimizer = AdamW(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99)
+        optimizer = AdamW(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99, clipnorm=1.0)
     else:
-        optimizer = Adam(learning_rate=scheduler)
+        optimizer = Adam(learning_rate=scheduler, clipnorm=1.0)
 
     try:  # check if model already exists
         model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent  # sort models to get the latest checkpoint
