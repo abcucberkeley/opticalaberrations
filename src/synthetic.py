@@ -126,7 +126,7 @@ class SyntheticPSF:
         logger.info(f"FOV scalar: {self.psf_type} => (axial: {self.axial_scalar:.2f}), (lateral: {self.lateral_scalar:.2f})")
 
         self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size) * np.array(self.fov_scaler))
-        self.adjusted_psf_shape = tuple(round_to_even(i) for i in np.array(self.psf_shape) * np.array(self.fov_scaler))
+        self.adjusted_psf_shape = tuple(round_to_even(i) for i in np.array(self.psf_shape) * np.array(self.fov_scaler))  # same physical fov
 
         self.psfgen = PsfGenerator3D(
             psf_shape=self.adjusted_psf_shape,
@@ -252,8 +252,7 @@ class SyntheticPSF:
 
         """
 
-        ipsf = self.theoretical_psf(normed=True)
-        mask = np.abs(fft(ipsf, padsize=None))
+        mask = np.abs(fft(self.ipsf, padsize=None))
         mask /= np.nanmax(mask)
 
         if threshold is None:

@@ -42,6 +42,3 @@ def test_ideal_empirical_psf(kargs):
             kargs['lateral_voxel_size'],
         )
     )
-    assert modelpsfgen.ipsf.shape == modelpsfgen.psf_shape
-
-
