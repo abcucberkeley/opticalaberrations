@@ -49,7 +49,7 @@ def parse_args(args):
     )
 
     slurm.add_argument(
-        "--gpus", default=1, type=int,
+        "--gpus", default=0, type=int,
         help='number of GPUs to use for this job'
     )
 
@@ -91,6 +91,11 @@ def parse_args(args):
     slurm.add_argument(
         "--exclusive", action='store_true',
         help='allies name for this job'
+    )
+
+    slurm.add_argument(
+        "--timelimit", default=None, type=str,
+        help='execution timelimit string'
     )
 
     lsf = subparsers.add_parser("lsf", help='use LSF to submit jobs')
@@ -147,6 +152,11 @@ def parse_args(args):
     lsf.add_argument(
         "--dependency", default=None, type=str,
         help='submit job with a specific dependency'
+    )
+
+    lsf.add_argument(
+        "--timelimit", default=None, type=str,
+        help='execution timelimit string'
     )
 
     lsf.add_argument(
@@ -230,6 +240,9 @@ def main(args=None):
         if args.dependency is not None:
             sjob += f" --dependency={args.dependency} "
 
+        if args.timelimit is not None:
+            sjob += f" --time={args.timelimit} "
+
         sjob += f" --job-name={args.name} "
         sjob += f" --output={outdir}/{args.script.split('.')[0]}.log"
         sjob += f" --export=ALL,"
@@ -258,6 +271,9 @@ def main(args=None):
 
         if args.dependency is not None:
             sjob += f'-w "done({args.name})"'
+
+        if args.timelimit is not None:
+            sjob += f" --We {args.timelimit} "
 
         sjob += f' -n {args.cpus}'
         sjob += f" -J {args.name}"
