@@ -122,8 +122,8 @@ def train_model(
     epochs: int = 5,
     wavelength: float = .510,
     psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-    x_voxel_size: float = .108,
-    y_voxel_size: float = .108,
+    x_voxel_size: float = .097,
+    y_voxel_size: float = .097,
     z_voxel_size: float = .2,
     modes: int = 15,
     pmodes: Optional[int] = None,
@@ -441,11 +441,11 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--x_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+        "--x_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
 
     train_parser.add_argument(
-        "--y_voxel_size", default=.108, type=float, help='lateral voxel size in microns for Y'
+        "--y_voxel_size", default=.097, type=float, help='lateral voxel size in microns for Y'
     )
 
     train_parser.add_argument(

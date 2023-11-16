@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="aggregate_predictions &quot;U:\Data\TestsForThayer\20230817_ap2\exp2\rotated\before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0050565672msecAbs_-01x_-01y_-01z_0000t_tiles_predictions.csv&quot; ../calibration/aang/15_mode_calibration.csv --current_dm None --prediction_threshold 0.25 --aggregation_rule median --plot" />
+    <option name="PARAMETERS" value="aggregate_predictions $USER_HOME$/nvme2/Data/TestsForThayer/decon_test/exp5_newfish_before_cropped_tiles_predictions.csv ../calibration/aang/15_mode_calibration.csv --current_dm None --aggregation_rule median --plot" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

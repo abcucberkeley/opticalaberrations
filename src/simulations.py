@@ -152,8 +152,8 @@ def plot_embedding_pyramid(
         res=64,
         n_modes=60,
         wavelength=.510,
-        x_voxel_size=.108,
-        y_voxel_size=.108,
+        x_voxel_size=.097,
+        y_voxel_size=.097,
         z_voxel_size=.2,
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         datadir='../data/embeddings',
@@ -318,8 +318,8 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
             lam_detection=wavelength,
             amplitude_ranges=(0, 1),
             psf_shape=(32, 32, 32),
-            x_voxel_size=.108,
-            y_voxel_size=.108,
+            x_voxel_size=.097,
+            y_voxel_size=.097,
             z_voxel_size=.2,
             batch_size=batch_size,
             cpu_workers=-1,
@@ -562,8 +562,8 @@ def plot_embeddings(
         padsize=None,
         n_modes=55,
         wavelength=.510,
-        x_voxel_size=.108,
-        y_voxel_size=.108,
+        x_voxel_size=.097,
+        y_voxel_size=.097,
         z_voxel_size=.2,
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         savepath='../data/embeddings',
@@ -675,8 +675,8 @@ def plot_rotations(
         padsize=None,
         n_modes=55,
         wavelength=.510,
-        x_voxel_size=.108,
-        y_voxel_size=.108,
+        x_voxel_size=.097,
+        y_voxel_size=.097,
         z_voxel_size=.2,
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         savepath='../data/rotations',
@@ -794,8 +794,8 @@ def plot_shapes_embeddings(
         padsize=None,
         shapes=5,
         wavelength=.510,
-        x_voxel_size=.108,
-        y_voxel_size=.108,
+        x_voxel_size=.097,
+        y_voxel_size=.097,
         z_voxel_size=.2,
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         savepath='../data/shapes_embeddings',
@@ -809,8 +809,8 @@ def plot_shapes_embeddings(
         padsize: Uh, doesn't get used here.  It will appear in the name of the folder path. Defaults to None.
         shapes: Number of puncta sizes to test. Defaults to 5 different sizes
         wavelength:   Defaults to .510 microns
-        x_voxel_size: Defaults to .108 microns
-        y_voxel_size: Defaults to .108 microns
+        x_voxel_size: Defaults to .097 microns
+        y_voxel_size: Defaults to .097 microns
         z_voxel_size: Defaults to .2   microns
         psf_type: Defaults to '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'.
         savepath: Defaults to '../data/shapes_embeddings'.

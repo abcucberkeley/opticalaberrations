@@ -3011,8 +3011,8 @@ def evaluate_uniform_background(
         model,
         psf_shape=(64, 64, 64),
         rotate=False,
-        x_voxel_size=.108,
-        y_voxel_size=.108,
+        x_voxel_size=.097,
+        y_voxel_size=.097,
         z_voxel_size=.2,
     )
     w = Wavefront(np.zeros(15))

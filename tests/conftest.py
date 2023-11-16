@@ -33,7 +33,7 @@ def kargs():
         dm_state=None,
         wavelength=.510,
         dm_damping_scalar=1.0,
-        lateral_voxel_size=.108,
+        lateral_voxel_size=.097,
         axial_voxel_size=.2,
         freq_strength_threshold=.01,
         prediction_threshold=0.,

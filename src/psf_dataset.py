@@ -300,12 +300,12 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--x_voxel_size", default=.108, type=float,
+        "--x_voxel_size", default=.097, type=float,
         help='lateral voxel size in microns for X'
     )
 
     parser.add_argument(
-        "--y_voxel_size", default=.108, type=float,
+        "--y_voxel_size", default=.097, type=float,
         help='lateral voxel size in microns for Y'
     )
 

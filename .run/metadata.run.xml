@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/config.py" />
-    <option name="PARAMETERS" value="$PROJECT_DIR$/models/new/new_modalities/opticalnet-15-v2Hex_lambda510 --psf_type ../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat --n_modes 15 --wavelength .510 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --embedding_option spatial_planes metadata" />
+    <option name="PARAMETERS" value="$PROJECT_DIR$/models/new/fixed_density/opticalnet-15-YuMB_lambda510-default --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat --n_modes 15 --wavelength .510 --x_voxel_size .097 --y_voxel_size .097 --z_voxel_size .2 --embedding_option spatial_planes metadata" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

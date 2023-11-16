@@ -43,7 +43,7 @@ def parse_args(args):
     deskew = subparsers.add_parser("deskew")
     deskew.add_argument("input", type=Path, help="path to input .tif file")
     deskew.add_argument(
-        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
     deskew.add_argument(
         "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
@@ -77,7 +77,7 @@ def parse_args(args):
     preprocessing = subparsers.add_parser("preprocessing")
     preprocessing.add_argument("input", type=Path, help="path to input .tif file")
     preprocessing.add_argument(
-        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
     preprocessing.add_argument(
         "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
@@ -110,7 +110,7 @@ def parse_args(args):
     embeddings.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     embeddings.add_argument("input", type=Path, help="path to input .tif file")
     embeddings.add_argument(
-        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
     embeddings.add_argument(
         "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
@@ -152,7 +152,7 @@ def parse_args(args):
     detect_rois.add_argument("input", type=Path, help="path to input .tif file")
     detect_rois.add_argument("--psf", default=None, type=Path, help="path to PSF .tif file")
     detect_rois.add_argument(
-        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
     detect_rois.add_argument(
         "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
@@ -178,7 +178,7 @@ def parse_args(args):
         help="previous predictions .csv file (Default: `None`)"
     )
     predict_sample.add_argument(
-        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
     predict_sample.add_argument(
         "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
@@ -277,7 +277,7 @@ def parse_args(args):
         help="previous predictions .csv file (Default: `None`)"
     )
     predict_large_fov.add_argument(
-        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
     predict_large_fov.add_argument(
         "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
@@ -396,7 +396,7 @@ def parse_args(args):
         help='minimum distance to the nearest neighbor (microns)'
     )
     predict_rois.add_argument(
-        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
     predict_rois.add_argument(
         "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
@@ -486,7 +486,7 @@ def parse_args(args):
         help="previous predictions .csv file (Default: `None`)"
     )
     predict_tiles.add_argument(
-        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
     predict_tiles.add_argument(
         "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
@@ -585,7 +585,7 @@ def parse_args(args):
         help="previous predictions .csv file (Default: `None`)"
     )
     predict_folder.add_argument(
-        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
     predict_folder.add_argument(
         "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
@@ -780,7 +780,7 @@ def parse_args(args):
         help="optional path to current DM .csv file (Default: `blank mirror`)"
     )
     phase_retrieval.add_argument(
-        "--lateral_voxel_size", default=.108, type=float, help='lateral voxel size in microns for X'
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
     )
     phase_retrieval.add_argument(
         "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'

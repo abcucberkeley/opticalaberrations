@@ -121,7 +121,7 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `help`                     | show this help message and exit                                                                                                  |
 | `current_dm`               | optional path to current DM state .csv file (Default: `blank mirror`)                                                            |
 | `prev`                     | previous predictions .csv file (Default: `None`)                                                                                 |
-| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                                           |
+| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.097`)                                                                           |
 | `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                               |
 | `wavelength`               | wavelength in microns (Default: `0.51`)                                                                                          |
 | `dm_damping_scalar`        | scale DM actuators by an arbitrary multiplier (Default: `0.75`)                                                                  |
@@ -163,7 +163,7 @@ The script takes 2 positional arguments and a few optional ones described below.
 | `help`                     | show this help message and exit                                                                                                  |
 | `window_size`              | size of the window to crop for each tile (Default: `64`)                                                                         |
 | `prev`                     | previous predictions .csv file (Default: `None`)                                                                                 |
-| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.108`)                                                                           |
+| `lateral_voxel_size`       | lateral voxel size in microns for X (Default: `0.097`)                                                                           |
 | `axial_voxel_size`         | axial voxel size in microns for Z (Default: `0.1`)                                                                               |
 | `wavelength`               | wavelength in microns (Default: `0.51`)                                                                                          |
 | `freq_strength_threshold`  | minimum frequency threshold in fourier space [fractional values below that will be set to the desired minimum] (Default: `0.01`) |
@@ -218,7 +218,7 @@ The script takes 3 positional arguments and a few optional ones described below.
 | `aggregation_rule`     | rule to use to calculate final prediction [mean, median, min, max] (Default: `mean`) |
 | `min_percentile`       | minimum percentile to filter out outliers (Default: `10`)                            |
 | `max_percentile`       | maximum percentile to filter out outliers (Default: `90`)                            |
-| `lateral_voxel_size`   | lateral voxel size in microns for X (Default: `0.108`)                               |
+| `lateral_voxel_size`   | lateral voxel size in microns for X (Default: `0.097`)                               |
 | `axial_voxel_size`     | axial voxel size in microns for Z (Default: `0.1`)                                   |
 | `wavelength`           | wavelength in microns (Default: `0.51`)                                              |
 | `plot`                 | a toggle for plotting predictions                                                    |

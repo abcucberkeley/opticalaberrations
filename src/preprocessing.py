@@ -401,7 +401,7 @@ def prep_sample(
     return_psnr: bool = False,
     normalize: bool = True,
     windowing: bool = True,
-    sample_voxel_size: tuple = (.2, .108, .108),
+    sample_voxel_size: tuple = (.2, .097, .097),
     model_fov: Any = None,
     remove_background: bool = True,
     read_noise_bias: float = 5,
@@ -552,7 +552,7 @@ def find_roi(
     min_intensity: Any = 100,
     pois: Any = None,
     max_neighbor: int = 5,
-    voxel_size: tuple = (.200, .108, .108),
+    voxel_size: tuple = (.200, .097, .097),
     timestamp: int = 17
 ):
     savepath.mkdir(parents=True, exist_ok=True)

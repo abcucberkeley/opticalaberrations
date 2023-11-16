@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/benchmark.py" />
-    <option name="PARAMETERS" value="phasenet_heatmap ../dataset/test/YuMB_lambda510/z200-y108-x108/z64-y64-x64/z15/ --na 1.0 --eval_sign signed" />
+    <option name="PARAMETERS" value="phasenet_heatmap $USER_HOME$/nvme/thayer/opticalaberrations/src/phasenet_repo/signed/psf/na_1.0_predictions.csv --no_bead --n_samples 10000 --na 1.0 --eval_sign signed" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

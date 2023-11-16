@@ -4,8 +4,8 @@
 
 SHAPE=64
 DZ=200
-DY=108
-DX=108
+DY=97
+DX=97
 DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
 NETWORK=opticalnet

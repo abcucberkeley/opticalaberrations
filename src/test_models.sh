@@ -1,7 +1,7 @@
 #!/bin/bash
 
-DX=108
-DY=108
+DX=97
+DY=97
 DZ=200
 SHAPE=64
 MODES=15

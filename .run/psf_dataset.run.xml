@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/psf_dataset.py" />
-    <option name="PARAMETERS" value="--input_shape 64 --dist mixed --modes 15 --signed --noise --norm --rotate --iter 100 --min_lls_defocus_offset 1 --max_lls_defocus_offset 2 --min_amplitude 0. --max_amplitude 0.15 --x_voxel_size .108 --y_voxel_size .108 --z_voxel_size .2 --lam_detection .510 --min_photons 50000 --max_photons 100000 --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat --cpu_workers -1" />
+    <option name="PARAMETERS" value="--input_shape 64 --dist mixed --modes 15 --signed --noise --norm --rotate --iter 100 --min_lls_defocus_offset 1 --max_lls_defocus_offset 2 --min_amplitude 0. --max_amplitude 0.15 --x_voxel_size .097 --y_voxel_size .097 --z_voxel_size .2 --lam_detection .510 --min_photons 50000 --max_photons 100000 --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat --emb --cpu_workers -1" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

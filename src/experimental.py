@@ -212,7 +212,7 @@ def reconstruct_wavefront_error_landscape(
     image: np.ndarray,
     save_path: Union[Path, str],
     window_size: tuple,
-    lateral_voxel_size: float = .108,
+    lateral_voxel_size: float = .097,
     axial_voxel_size: float = .2,
     wavelength: float = .510,
     threshold: float = 0.,

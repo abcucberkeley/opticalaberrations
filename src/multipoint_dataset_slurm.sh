@@ -3,8 +3,8 @@
 ENV=~/anaconda3/envs/ml/bin/python
 NODES='abc'
 
-xVOXEL=.108
-yVOXEL=.108
+xVOXEL=.097
+yVOXEL=.097
 zVOXEL=.200
 LAMBDA=.510
 NA=1.0
@@ -12,7 +12,7 @@ ALPHA='abs'
 PHI='angle'
 CPUS=1
 MEM='20G'
-TIMELIMIT='2:00:00'
+TIMELIMIT='1:00:00'
 SHAPE=64
 MAX_LLS_OFFSET=0
 RAND_VSIZE=false

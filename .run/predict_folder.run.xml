@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="predict_folder ../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5 ../dataset/zernikes/psfs ../calibration/aang/15_mode_calibration.csv --current_dm None --wavelength 0.51 --lateral_voxel_size 0.108 --axial_voxel_size 0.2 --freq_strength_threshold 0.01 --batch_size 400 --prev None --plot --plot_rotations" />
+    <option name="PARAMETERS" value="predict_folder ../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5 $PROJECT_DIR$/dataset/denoising_dataset/inference_test/noisy/dn_results_32x64x64patch/ ../calibration/aang/15_mode_calibration.csv --current_dm None --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --freq_strength_threshold 0.01 --batch_size 400 --prev None --plot --plot_rotations" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

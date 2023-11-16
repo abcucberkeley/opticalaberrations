@@ -30,8 +30,8 @@ def test_training_dataset(kargs):
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         lam_detection=.510,
         psf_shape=[64, 64, 64],
-        x_voxel_size=.108,
-        y_voxel_size=.108,
+        x_voxel_size=.097,
+        y_voxel_size=.097,
         z_voxel_size=.2,
     )
 
@@ -77,7 +77,7 @@ def test_zernike_model(kargs):
 
     with strategy.scope():
         train.train_model(
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y108-x108/z64-y64-x64/z15/"),
+            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/"),
             outdir=Path(f"{kargs['repo']}/models/tests/yumb_zernike_model"),
             psf_type=kargs['psf_type'],
             x_voxel_size=kargs['lateral_voxel_size'],
@@ -106,7 +106,7 @@ def test_defocus_model(kargs):
 
     with strategy.scope():
         train.train_model(
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y108-x108/z64-y64-x64/z15/"),
+            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/"),
             outdir=Path(f"{kargs['repo']}/models/tests/yumb_defocus_model"),
             psf_type=kargs['psf_type'],
             x_voxel_size=kargs['lateral_voxel_size'],
@@ -136,7 +136,7 @@ def test_zernike_defocus_model(kargs):
 
     with strategy.scope():
         train.train_model(
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y108-x108/z64-y64-x64/z15/"),
+            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/"),
             outdir=Path(f"{kargs['repo']}/models/tests/yumb_zernike_defocus_model"),
             psf_type=kargs['psf_type'],
             x_voxel_size=kargs['lateral_voxel_size'],
@@ -166,7 +166,7 @@ def test_finetune_zernike_model(kargs):
 
     with strategy.scope():
         train.train_model(
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y108-x108/z64-y64-x64/z15/"),
+            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/"),
             outdir=Path(f"{kargs['repo']}/models/tests/yumb_zernike_model"),
             psf_type=kargs['psf_type'],
             x_voxel_size=kargs['lateral_voxel_size'],

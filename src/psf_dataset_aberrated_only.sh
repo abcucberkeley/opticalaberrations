@@ -6,8 +6,8 @@ ENV=~/anaconda3/envs/ml/bin/python
 #PSF_TYPE='widefield'
 PSF_TYPE='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'
 
-xVOXEL=.108
-yVOXEL=.108
+xVOXEL=.097
+yVOXEL=.097
 zVOXEL=.200
 LAMBDA=.510
 NA=1.0
