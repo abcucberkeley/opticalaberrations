@@ -234,7 +234,7 @@ def collect_data(
     else:
         predicted_modes = 15
 
-    metadata = data_utils.collect_dataset(
+    dataset = data_utils.collect_dataset(
         datapath,
         metadata=True,
         modes=predicted_modes,
@@ -243,35 +243,35 @@ def collect_data(
         no_phase=no_phase,
         photons_range=photons_range,
         npoints_range=npoints_range,
-    )  # metadata is a list of arrays
+    )
 
     # This runs multiple samples (aka images) at a time.
     # ys is a 2D array, rows are each sample, columns give aberration in zernike coefficients
-    metadata = np.array(list(metadata.take(-1)))
-    ys = np.zeros((metadata.shape[0], predicted_modes))
-    counts_percentiles = np.zeros((metadata.shape[0], 100))
-    results = eval_template(shape=metadata.shape, psf_type=psf_type, lam_detection=lam_detection)
+    dataset = np.array(list(dataset.take(-1)), dtype=object)
+    ys = np.zeros((dataset.shape[0], predicted_modes))
+    counts_percentiles = np.zeros((dataset.shape[0], 100))
+    results = eval_template(shape=dataset.shape, psf_type=psf_type, lam_detection=lam_detection)
 
     # see `data_utils.get_sample` to check order of objects returned
-    for i in range(metadata.shape[0]):
+    for i in range(dataset.shape[0]):
 
         # rescale zernike amplitudes to maintain the same peak2valley for different PSFs
-        ys[i] = lam_detection / default_wavelength * metadata[i, 0].numpy()[:predicted_modes]
+        ys[i] = lam_detection / default_wavelength * dataset[i, 0].numpy()[:predicted_modes]
         results['residuals_umRMS'][i] = np.linalg.norm(ys[i])
 
-        results['photons'][i] = metadata[i, 1].numpy()
-        results['counts'][i] = metadata[i, 2].numpy()
-        results['counts_mode'][i] = metadata[i, 3].numpy()
+        results['photons'][i] = dataset[i, 1].numpy()
+        results['counts'][i] = dataset[i, 2].numpy()
+        results['counts_mode'][i] = dataset[i, 3].numpy()
 
-        counts_percentiles[i] = metadata[i, 4].numpy()
+        counts_percentiles[i] = dataset[i, 4].numpy()
 
-        results['aberration'][i] = metadata[i, 5].numpy()
+        results['aberration'][i] = dataset[i, 5].numpy()
         results['residuals'][i] = results['aberration'][i]
 
-        results['neighbors'][i] = metadata[i, 7].numpy()
-        results['distance'][i] = metadata[i, 8].numpy()
+        results['neighbors'][i] = dataset[i, 7].numpy()
+        results['distance'][i] = dataset[i, 8].numpy()
 
-        f = Path(str(metadata[i, -1].numpy(), "utf-8"))
+        f = Path(str(dataset[i, -1].numpy(), "utf-8"))
         results['file'][i] = f
         results['file_windows'][i] = utils.convert_to_windows_file_string(f)
         results['beads'][i] = f.with_name(f'{f.stem}_gt' + f.suffix)
