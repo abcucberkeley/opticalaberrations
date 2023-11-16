@@ -14,6 +14,7 @@ EVALSIGN="signed"
 NA=1.0
 ABC_A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
 CLUSTER=slurm
+TIMELIMIT='24:00:00'  #hh:mm:ss
 
 TRAINED_MODELS=(
   "YuMB_lambda510"
@@ -21,28 +22,9 @@ TRAINED_MODELS=(
 )
 
 
-if [ $CLUSTER = 'slurm' ];then
-  DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
-  PARTITION="abc_a100"
-  GPUS=4
-  CPUS=16
-  MEM="500GB"
-  EXCLUSIVE="--exclusive"
-else
-  DATA="/groups/betzig/betziglab/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
-  PARTITION="gpu_a100"
-  GPUS=4
-  CPUS=8
-  MEM="320GB"
-  EXCLUSIVE="-x"
-fi
-
-
 for M in ${TRAINED_MODELS[@]}
 do
   MODEL="$PRETRAINED/opticalnet-$MODES-$M"
-
-  BATCH=$(( 896 * $GPUS ))
 
   if [ "${M:0:4}" = YuMB ];then
     declare -a PSFS=(
@@ -91,13 +73,23 @@ do
 
     for (( i=1; i<=$ITERS; i++ ))
     do
-      python manager.py $CLUSTER test.py --dependency singleton  --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
-      --task "$MODEL.h5 --niter $i --num_beads 1 --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
+      if [ $CLUSTER = 'slurm' ];then
+        DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
+        JOB="${CLUSTER} test.py --timelimit $TIMELIMIT --dependency singleton --partition abc_a100 --mem=500GB --cpus 16 --gpus 4 --exclusive"
+      else
+        DATA="/groups/betzig/betziglab/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
+        JOB="${CLUSTER} test.py --timelimit $TIMELIMIT --dependency singleton --partition gpu_a100 --cpus 8 --gpus 4"
+      fi
+
+      CONFIG=" --niter $i --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
+
+      python manager.py $JOB \
+      --task "\" $MODEL.h5 --num_beads 1 $CONFIG snrheatmap \"" \
       --taskname $NA \
       --name $MODEL/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
-      python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
-      --task "$MODEL.h5 --niter $i --datadir $DATA --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS densityheatmap" \
+      python manager.py $JOB \
+      --task "\" $MODEL.h5  $CONFIG densityheatmap \"" \
       --taskname $NA \
       --name $MODEL/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
