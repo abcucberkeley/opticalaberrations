@@ -73,8 +73,8 @@ conda activate ml
 # Windows via conda and pip.  If you abscond from installing from the .yml file, you may try this at your own risk:
 conda create python=3.10 cudatoolkit=11.2 cudnn=8.1.0  matplotlib astropy seaborn numpy scikit-image scikit-learn scikit-spatial pandas ipython pytest ujson zarr conda pycudadecon -c conda-forge -n ml --yes
 conda activate ml
-pip install tensorflow=2.10 keras=2.10 
-pip install cupy-cuda11x tensorflow_addons dphtools csbdeep line-profiler line-profiler-pycharm tifffile=2023.9.18 imagecodecs==2023.9.18 
+pip install tensorflow==2.10 keras==2.10 
+pip install cupy-cuda11x tensorflow_addons dphtools csbdeep line-profiler line-profiler-pycharm tifffile==2023.9.18 imagecodecs==2023.9.18 
 ```
 
 ### Pre-trained models
