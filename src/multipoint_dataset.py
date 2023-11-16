@@ -2,6 +2,7 @@
 import matplotlib
 matplotlib.use('Agg')
 
+import re
 import logging
 import sys
 import os
@@ -408,7 +409,7 @@ def create_synthetic_sample(
             gtdir.mkdir(exist_ok=True, parents=True)
         else:
             gtdir = None
-            outdir = savedir / rf"{str(gen.psf_type).replace('../lattice/', '').split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
+            outdir = savedir / rf"{re.sub(r'.*/lattice/', '', str(gen.psf_type)).split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
 
             if not randomize_voxel_size:
                 outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
@@ -558,7 +559,7 @@ def create_synthetic_sample(
                 plot=plot,
             )
 
-    return np.stack(list(inputs.values()), axis=0)
+    return inputs
 
 
 def parse_args(args):

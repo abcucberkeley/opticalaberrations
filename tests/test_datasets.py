@@ -113,7 +113,7 @@ def test_random_aberrated_psf(kargs):
 
     sample = psf_dataset.simulate_psf(
         filename='1',
-        outdir=Path(f"{kargs['repo']}/dataset/aberrations"),
+        outdir=Path(f"{kargs['repo']}/dataset/aberrated"),
         gen=gen,
         phi=phi,
         emb=False,
@@ -127,7 +127,7 @@ def test_random_aberrated_psf(kargs):
 
     embeddings = psf_dataset.simulate_psf(
         filename='2',
-        outdir=Path(f"{kargs['repo']}/dataset/aberrations"),
+        outdir=Path(f"{kargs['repo']}/dataset/aberrated"),
         gen=gen,
         phi=phi,
         emb=True,
@@ -159,7 +159,7 @@ def test_random_defocused_psf(kargs):
 
     sample = psf_dataset.simulate_psf(
         filename='1',
-        outdir=Path(f"{kargs['repo']}/dataset/lls"),
+        outdir=Path(f"{kargs['repo']}/dataset/defocused"),
         gen=gen,
         phi=phi,
         emb=False,
@@ -173,7 +173,7 @@ def test_random_defocused_psf(kargs):
 
     embeddings = psf_dataset.simulate_psf(
         filename='2',
-        outdir=Path(f"{kargs['repo']}/dataset/lls"),
+        outdir=Path(f"{kargs['repo']}/dataset/defocused"),
         gen=gen,
         phi=phi,
         emb=True,
@@ -205,7 +205,7 @@ def test_random_aberrated_defocused_psf(kargs):
 
     sample = psf_dataset.simulate_psf(
         filename='1',
-        outdir=Path(f"{kargs['repo']}/dataset/psfs"),
+        outdir=Path(f"{kargs['repo']}/dataset/aberrated_defocused"),
         gen=gen,
         phi=phi,
         emb=False,
@@ -219,7 +219,7 @@ def test_random_aberrated_defocused_psf(kargs):
 
     embeddings = psf_dataset.simulate_psf(
         filename='2',
-        outdir=Path(f"{kargs['repo']}/dataset/psfs"),
+        outdir=Path(f"{kargs['repo']}/dataset/aberrated_defocused"),
         gen=gen,
         phi=phi,
         emb=True,
@@ -285,7 +285,7 @@ def test_multipoint_dataset(kargs):
         max_photons=200000,
     )
 
-    assert sample.shape == (1, *gen.psf_shape)
+    assert sample[kargs['psf_type']].shape == gen.psf_shape
 
 
 @pytest.mark.run(order=7)
@@ -364,5 +364,5 @@ def test_multimodal_dataset(kargs):
         max_photons=200000,
     )
 
-    assert samples.shape == (len(psf_types), 64, 64, 64)
-
+    for psf in psf_types:
+        assert samples[psf].shape == generators[psf].psf_shape

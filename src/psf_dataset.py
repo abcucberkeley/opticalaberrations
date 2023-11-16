@@ -2,6 +2,7 @@
 import matplotlib
 matplotlib.use('Agg')
 
+import re
 import logging
 import sys
 import os
@@ -222,7 +223,7 @@ def create_synthetic_sample(
     max_lls_defocus_offset: float = 0.,
     emb: bool = False,
 ):
-    outdir = savedir / rf"{str(gen.psf_type).replace('../lattice/', '').split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
+    outdir = savedir / rf"{re.sub(r'.*/lattice/', '', str(gen.psf_type)).split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
     outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
     outdir = outdir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
     outdir = outdir / f"z{gen.n_modes}"
