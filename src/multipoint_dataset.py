@@ -381,9 +381,10 @@ def create_synthetic_sample(
     photon_range = (min_photons, max_photons)
     photons = randuniform(photon_range)
     lls_defocus_offset = randuniform((min_lls_defocus_offset, max_lls_defocus_offset))
+    image_shape = next(iter(generators.values())).psf_shape
 
     reference = beads(
-        image_shape=(128, 128, 128),
+        image_shape=image_shape,
         photons=photons,
         object_size=object_size,
         num_objs=npoints,

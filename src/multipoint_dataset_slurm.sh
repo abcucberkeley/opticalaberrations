@@ -18,7 +18,7 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='fixed_density'
+TITLE='aang_dataset'
 DATASET='test'
 
 MODE_DIST='pyramid'
@@ -29,7 +29,7 @@ mkdir -p $LOGS
 
 if [ "$DATASET" = "train" ];then
   TYPE='--emb'
-  SAMPLES_PER_JOB=200
+  SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=400
   OBJS=(1 2 3 4 5)
   mPH=($(seq 1 25000 250000))

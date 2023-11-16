@@ -17,7 +17,7 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='fixed_density'
+TITLE='aang_dataset'
 DATASET='train'
 
 MODE_DIST='pyramid'
@@ -28,7 +28,7 @@ mkdir -p $LOGS
 
 if [ "$DATASET" = "train" ];then  # 2M samples
   TYPE='--emb'
-  SAMPLES_PER_JOB=200
+  SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=400
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   OBJS=(1 2 3 4 5)  # 5 bins
@@ -73,7 +73,7 @@ do
       do
         for S in `seq 1 ${#SAMPLES[@]}`
         do
-            while [ $(bjobs -u $USER | wc -l) -gt 5000 ]
+            while [ $(bjobs -u $USER | wc -l) -gt 25000 ]
             do
               sleep 10s
             done
