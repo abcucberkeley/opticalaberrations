@@ -78,11 +78,13 @@ jobs:
             src:
               - src/**
             conda-ymls:
-              - '**.yml'  
+              - '**.yml'
+            anybody:
+              - '**'
 
       - name: List all changed files
         run: |
-          for file in ${{ steps.changed-files-yaml.outputs.all_changed_files }}; do
+          for file in ${{ steps.changed-files-yaml.outputs.anybody_all_changed_files }}; do
             echo "$file was changed"
           done
 
