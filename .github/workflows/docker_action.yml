@@ -7,6 +7,7 @@ on:
       - 'main'
       - 'develop'
       - 'releases/**'
+      - 'latest-tf'
     tags:
       - '*'
   pull_request:
@@ -144,7 +145,7 @@ jobs:
             org.opencontainers.image.vendor=Advanced Bioimaging Center at UC Berkeley and Janelia Research Campus
 
       - name: Build and load Docker image with no-cache
-        id: retry-build-and-load        
+        id: build-and-load-no-cache
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -199,9 +200,7 @@ jobs:
           file: ./Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max          
+          labels: ${{ steps.meta.outputs.labels }}         
 
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
