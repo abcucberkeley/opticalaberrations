@@ -153,8 +153,8 @@ jobs:
               
       - name: Test TensorFlow
         run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
-
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --colors=yes --disable-warnings tests/test_tensorflow.py"
+          
       - name: Test IO
         run: |
           docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --colors=yes --disable-warnings tests/test_io.py"
