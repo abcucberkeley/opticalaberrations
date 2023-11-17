@@ -147,7 +147,7 @@ jobs:
         run: |
           docker run --rm --gpus all ${{ steps.meta.outputs.tags }} nvidia-smi
 
-      - name: Test TensorFlow
+      - name: Conda list
         run: |
           docker run --rm --gpus all ${{ steps.meta.outputs.tags }} conda list
               
