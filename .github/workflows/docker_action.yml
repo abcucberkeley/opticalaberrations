@@ -143,24 +143,7 @@ jobs:
             org.opencontainers.image.description=Docker image for a transformer network to perform sensorless detection of aberrations in adaptive optics. https://github.com/abcucberkeley/opticalaberrations
             org.opencontainers.image.vendor=Advanced Bioimaging Center at UC Berkeley and Janelia Research Campus
 
-      # Load image for local test.
-      - name: Build and load Docker image
-        if: steps.changed-files-yaml.outputs.conda-ymls_any_changed == 'false'  
-        id: build-and-load
-        continue-on-error: true
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          load: true        
-
       - name: Build and load Docker image with no-cache
-        if: steps.build-and-load.outcome == 'failure' || steps.changed-files-yaml.outputs.conda-ymls_any_changed == 'true'
         id: retry-build-and-load        
         uses: docker/build-push-action@v5
         with:
@@ -170,19 +153,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           no-cache: true
-          cache-to: type=gha,mode=max
           load: true
-
-      - # At the moment, old cache entries aren't deleted, so the cache size keeps growing.
-        # https://docs.docker.com/build/ci/github-actions/cache/#local-cache
-        # https://github.com/docker/build-push-action/issues/252
-        # https://github.com/moby/buildkit/issues/1896
-        # Workaround: 
-        name: Move cache
-        if: false
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       - name: Test NVIDIA-SMI
         run: |
