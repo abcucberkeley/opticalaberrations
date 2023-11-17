@@ -54,6 +54,10 @@ WORKDIR /app
 RUN git clone -b develop --filter=blob:none --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
 WORKDIR /app/opticalaberrations
 
+# Download the current github commit page for the .yml that will invalidate the cache for later layers when the commit version changes.
+ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=develop&path=win_or_ubuntu_gpu.yml&per_page=1" dummy_location_one
+RUN git pull --recurse-submodules
+
 # COPY windows.yml  /app/opticalaberrations/windows.yml
 # COPY win_or_ubuntu_gpu.yml   /app/opticalaberrations/win_or_ubuntu_gpu.yml
 
@@ -69,13 +73,6 @@ RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.s
     . /root/.bashrc && \ 
     conda env create -f win_or_ubuntu_gpu.yml && \
     conda clean --all --yes
-
-# Download the current github commit page for the .yml that will invalidate the cache for later layers when the commit version changes.
-# "git pull" to get the latest, then update conda.
-ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=develop&path=win_or_ubuntu_gpu.yml&per_page=1" dummy_location_one
-RUN git pull --recurse-submodules && \
-    conda env update --file win_or_ubuntu_gpu.yml --prune --quiet && \
-    conda list -n ml
 
 # Download the current github commit page to invalidate cache for later layers when the commit version changes.
 # "git pull" to get the latest.
