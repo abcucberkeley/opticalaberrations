@@ -1148,33 +1148,39 @@ def predict_files(
     mp.set_start_method('spawn', force=True)
 
     generate_fourier_embeddings = partial(
-        preprocess,
-        modelpsfgen=modelpsfgen,
-        samplepsfgen=samplepsfgen,
-        freq_strength_threshold=freq_strength_threshold,
-        digital_rotations=digital_rotations,
-        plot=plot,
-        no_phase=no_phase,
-        remove_background=True,
-        normalize=True,
-        fov_is_small=fov_is_small,
-        rolling_strides=rolling_strides,
-        skip_prep_sample=skip_prep_sample,
-        min_psnr=min_psnr,
-        object_gaussian_kernel_width=object_gaussian_kernel_width
+        utils.multiprocess,
+        func=partial(
+            preprocess,
+            modelpsfgen=modelpsfgen,
+            samplepsfgen=samplepsfgen,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
+            plot=plot,
+            no_phase=no_phase,
+            remove_background=True,
+            normalize=True,
+            fov_is_small=fov_is_small,
+            rolling_strides=rolling_strides,
+            skip_prep_sample=skip_prep_sample,
+            min_psnr=min_psnr,
+            object_gaussian_kernel_width=object_gaussian_kernel_width
+        ),
+        desc='Generate Fourier embeddings',
+        unit=' file',
+        cores=len(tf.config.list_physical_devices('GPU')),
+        pool=pool,
     )
 
     inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
 
-    inputs = inputs.map(
+    # unroll because each input generates 360 embs to predict here, and we must rebatch on the whole set
+    inputs = inputs.batch(batch_size).map(
         lambda x: tf.py_function(
             generate_fourier_embeddings,
             inp=[x],
             Tout=tf.float32,
         ),
-        deterministic=True,
-        num_parallel_calls=tf.data.AUTOTUNE
-    )
+    ).unbatch().prefetch(tf.data.AUTOTUNE)
 
     preds, std = predict_dataset(
         model,
