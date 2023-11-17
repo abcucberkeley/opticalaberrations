@@ -73,12 +73,12 @@ jobs:
               - docs/**
               - README.md
             test:
-              - test/**
-              - '!test/**.md'
+              - tests/**
+              - '!tests/**.md'
             src:
               - src/**
             conda-ymls:
-              - '**.yml'
+              - '*.yml'
             anybody:
               - '**'
 
@@ -194,31 +194,31 @@ jobs:
               
       - name: Test TensorFlow
         run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --colors=yes --disable-warnings tests/test_tensorflow.py"
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_tensorflow.py"
 
       - name: Test IO
         run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --colors=yes --disable-warnings tests/test_io.py"
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_io.py"
 
       - name: Test preprocessing
         run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --colors=yes --disable-warnings tests/test_preprocessing.py"
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_preprocessing.py"
 
       - name: Test embeddings
         run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --colors=yes --disable-warnings tests/test_embeddings.py"
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_embeddings.py"
 
       - name: Test AO
         run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --colors=yes --disable-warnings tests/test_ao.py"
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_ao.py"
 
       - name: Test synthetic datasets
         run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --colors=yes --disable-warnings tests/test_datasets.py"
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_datasets.py"
           
       - name: Test training
         run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --colors=yes --disable-warnings tests/test_train.py"
+          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_train.py"
 
       - name: Build and push Docker image
         id: build-and-push
