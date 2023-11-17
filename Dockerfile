@@ -1,8 +1,8 @@
 #   to (re)build image, run container:
-# docker rm ml_cont; docker build . -t ml --progress=plain; docker run -it --name ml_cont --gpus all   ml  /bin/bash
+# docker rm ml_cont || docker build . -t ml --progress=plain && docker run -it --name ml_cont --gpus all   ml  /bin/bash
 
 #   to (re)build image with no cache:
-# docker rm ml_cont; docker build . -t ml --progress=plain --no-cache; docker run -it --name ml_cont --gpus all   ml  /bin/bash
+# docker rm ml_cont || docker build . -t ml --progress=plain --no-cache && docker run -it --name ml_cont --gpus all   ml  /bin/bash
 
 #   then (optionally) run tests from within the container:
 # conda activate ml
@@ -18,6 +18,7 @@
 # install nvidia container toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 # install github self-hosted runner: https://github.com/abcucberkeley/opticalaberrations/settings/actions/runners/new?arch=x64&os=linux
 # make github self-hosted runner as a service: https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service
+# docker system prune
 
 # test tensorflow GPU:
 # python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"

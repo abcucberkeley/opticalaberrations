@@ -59,6 +59,24 @@ jobs:
           echo "The GitHub Actor's username is: $GITHUB_ACTOR"
           echo "GitHub SHA: $GITHUB_SHA"
           
+      - name: Get all test, doc, yml, and src files that have changed
+        id: changed-files-yaml
+        uses: tj-actions/changed-files@v40
+        with:
+          files_yaml: |
+            doc:
+              - '**.md'
+              - docs/**
+              - README.md
+            test:
+              - test/**
+              - '!test/**.md'
+            src:
+              - src/**
+            conda-ymls:
+              - '**.yml'  
+        
+
       - name: Free Disk Space (Ubuntu)
         if: runner.environment != 'self-hosted' 
         uses: jlumbroso/free-disk-space@main
@@ -116,6 +134,7 @@ jobs:
 
       # Load image for local test.
       - name: Build and load Docker image
+        if: steps.changed-files-yaml.outputs.conda-ymls_any_changed == 'false'  
         id: build-and-load
         continue-on-error: true
         uses: docker/build-push-action@v5
@@ -129,8 +148,8 @@ jobs:
           cache-to: type=gha,mode=max
           load: true        
 
-      - name: Retry Build and load Docker image with no-cache
-        if: steps.build-and-load.outcome == 'failure'
+      - name: Build and load Docker image with no-cache
+        if: steps.build-and-load.outcome == 'failure' || steps.changed-files-yaml.outputs.conda-ymls_any_changed == 'true'
         id: retry-build-and-load        
         uses: docker/build-push-action@v5
         with:
@@ -143,6 +162,16 @@ jobs:
           cache-to: type=gha,mode=max
           load: true
 
+      - # At the moment, old cache entries aren't deleted, so the cache size keeps growing.
+        # https://docs.docker.com/build/ci/github-actions/cache/#local-cache
+        # https://github.com/docker/build-push-action/issues/252
+        # https://github.com/moby/buildkit/issues/1896
+        # Workaround: 
+        name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
       - name: Test NVIDIA-SMI
         run: |
           docker run --rm --gpus all ${{ steps.meta.outputs.tags }} nvidia-smi
@@ -154,7 +183,7 @@ jobs:
       - name: Test TensorFlow
         run: |
           docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --colors=yes --disable-warnings tests/test_tensorflow.py"
-          
+
       - name: Test IO
         run: |
           docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --colors=yes --disable-warnings tests/test_io.py"
