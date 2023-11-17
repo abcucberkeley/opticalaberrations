@@ -59,6 +59,10 @@ jobs:
           echo "The GitHub Actor's username is: $GITHUB_ACTOR"
           echo "GitHub SHA: $GITHUB_SHA"
           
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # OR "2" -> To retrieve the preceding commit.
+
       - name: Get all test, doc, yml, and src files that have changed
         id: changed-files-yaml
         uses: tj-actions/changed-files@v40
@@ -75,7 +79,12 @@ jobs:
               - src/**
             conda-ymls:
               - '**.yml'  
-        
+
+      - name: List all changed files
+        run: |
+          for file in ${{ steps.changed-files-yaml.outputs.all_changed_files }}; do
+            echo "$file was changed"
+          done
 
       - name: Free Disk Space (Ubuntu)
         if: runner.environment != 'self-hosted' 
