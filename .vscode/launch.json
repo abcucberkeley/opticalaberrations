@@ -56,9 +56,9 @@
             "name": "test_ao.py",
             "type": "python",
             "request": "launch",
-            "program": "test_ao.py",
+            "program": "tests\\test_ao.py",
             "console": "integratedTerminal",
-            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\src",
+            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations",
             "justMyCode": true
         },
         {

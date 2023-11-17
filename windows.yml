@@ -207,7 +207,7 @@ dependencies:
       - astunparse==1.6.3
       - cachetools==5.3.2
       - csbdeep==0.7.4
-      - cupy-cuda11x==12.2.0
+      - cupy-cuda11x
       - dphtools==0.0.3
       - fastrlock==0.8.2
       - flatbuffers==23.5.26

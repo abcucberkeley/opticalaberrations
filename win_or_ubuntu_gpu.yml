@@ -1,0 +1,35 @@
+name: ml
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10 
+  - cudatoolkit=11.2 
+  - cudnn=8.1.0 
+  - matplotlib 
+  - astropy 
+  - seaborn 
+  - numpy 
+  - scikit-image 
+  - scikit-learn
+  - scikit-spatial 
+  - pandas
+  - ipython
+  - pytest
+  - ujson
+  - zarr
+  - pycudadecon
+  - pip
+  - pip:
+      - tensorflow==2.10 
+      - keras==2.10
+      - cupy-cuda11x
+      - tensorflow_addons
+      - dphtools
+      - csbdeep
+      - line-profiler
+      - line-profiler-pycharm
+      - tifffile==2023.9.18
+      - imagecodecs==2023.9.18 
+
+
