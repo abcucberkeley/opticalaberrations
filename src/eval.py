@@ -1163,7 +1163,7 @@ def snrheatmap(
 
         for agg in ['mean', 'median']:
             dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
-            dataframe.insert(0, 0, dataframe.index.values)
+            dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
 
             try:
                 dataframe = dataframe.sort_index().interpolate()
@@ -1187,7 +1187,7 @@ def snrheatmap(
             try:
                 for c in ['confidence', 'confidence_sum']:
                     dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
-                    dataframe.insert(0, 0, dataframe.index.values)
+                    dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
 
                     try:
                         dataframe = dataframe.sort_index().interpolate()
@@ -1433,7 +1433,12 @@ def densityheatmap(
         [(1, 150), (0, 2)]
     ):
         dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns=col, aggfunc=agg)
-        dataframe = dataframe.sort_index().interpolate()
+        dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
+
+        try:
+            dataframe = dataframe.sort_index().interpolate()
+        except ValueError:
+            pass
 
         dataframe.to_csv(f'{savepath}.csv')
         logger.info(f'Saved: {savepath.resolve()}.csv')
@@ -1985,7 +1990,12 @@ def evaluate_modes(
             df['xbins'] = pd.cut(df[x], xbins, labels=xbins[1:], include_lowest=True)
 
         dataframe = pd.pivot_table(df, values='residuals', index='ybins', columns='xbins', aggfunc=agg)
-        dataframe = dataframe.sort_index().interpolate()
+        dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
+
+        try:
+            dataframe = dataframe.sort_index().interpolate()
+        except ValueError:
+            pass
 
         fig = plt.figure(figsize=(8, 8))
         gs = fig.add_gridspec(4, 4)
@@ -2539,7 +2549,7 @@ def confidence_heatmap(
 
         for c in ['confidence', 'confidence_sum']:
             dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
-            dataframe.insert(0, 0, dataframe.index.values)
+            dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
 
             try:
                 dataframe = dataframe.sort_index().interpolate()
