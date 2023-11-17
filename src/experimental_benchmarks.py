@@ -301,7 +301,7 @@ def phasenet_heatmap(
         )
 
         dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
-        dataframe.insert(0, 0, dataframe.index.values)
+        dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
 
         try:
             dataframe = dataframe.sort_index().interpolate()
