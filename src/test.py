@@ -1,4 +1,3 @@
-import atexit
 import os
 import subprocess
 import multiprocessing as mp
@@ -322,8 +321,6 @@ def main(args=None):
                     escape_forward_slashes=False
                 )
                 logging.info(f"Saved: {f.name}")
-
-        atexit.register(strategy._extended._collective_ops._pool.close)
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
