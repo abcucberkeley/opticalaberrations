@@ -31,7 +31,7 @@ from tqdm import tqdm
 
 import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
-from tensorflow_addons.optimizers import AdamW  # keep for old models trained with TF2.5
+from tensorflow_addons.optimizers import AdamW, LAMB  # keep for old models trained with TF2.5
 
 import utils
 import vis
@@ -45,6 +45,7 @@ from utils import round_to_even
 
 from roi import ROI
 import opticalnet
+from warmupcosinedecay import WarmupCosineDecay
 
 
 logging.basicConfig(
@@ -69,6 +70,7 @@ def load(model_path: Path, mosaic=False) -> tf.keras.Model:
         "MLP": opticalnet.MLP,
         "StochasticDepth": opticalnet.StochasticDepth,
         "Transformer": opticalnet.Transformer,
+        "WarmupCosineDecay": WarmupCosineDecay,
     }
 
     if mosaic:
@@ -83,9 +85,9 @@ def load(model_path: Path, mosaic=False) -> tf.keras.Model:
         try:
             '''.pb format'''
             if model_path.is_file() and model_path.suffix == '.pb':
-                return load_model(str(model_path.parent))
+                return load_model(str(model_path.parent), custom_objects=custom_objects)
             else:
-                return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
+                return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent), custom_objects=custom_objects)
 
         except IndexError or FileNotFoundError or OSError:
             '''.h5/hdf5 format'''

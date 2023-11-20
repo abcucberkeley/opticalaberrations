@@ -9,7 +9,7 @@ ROTATIONS='--digital_rotations'
 ITERS=1
 MAX=10000
 PRETRAINED="../pretrained_models/"
-DATASET="fixed_density"
+DATASET="aang_dataset"
 EVALSIGN="signed"
 NA=1.0
 ABC_A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
@@ -17,8 +17,9 @@ CLUSTER=slurm
 TIMELIMIT='24:00:00'  #hh:mm:ss
 
 TRAINED_MODELS=(
-  "YuMB_lambda510"
+  "YuMB_lambda510-fixed-precision"
   "YuMB_lambda510-default"
+  "YuMB_lambda510-amp"
 )
 
 
