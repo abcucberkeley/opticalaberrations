@@ -143,7 +143,7 @@ def main(args=None):
     gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
 
     if gpu_workers > 0 and gpu_model.find('A100') >= 0:  # update batchsize automatically
-        batch_size = 512 * gpu_workers
+        batch_size = 384 * gpu_workers
     elif gpu_workers > 0 and gpu_model.find('RTX') >= 0:
         batch_size = 256 * gpu_workers
     else:
