@@ -58,17 +58,17 @@ do
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-fixed-precision
 
-  for OPT in adamw lamb
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG --batch_size 2048" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-$OPT-amp
+
+  for LR in 1e-3 5e-4 1e-4 5e-5
   do
       python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-      --task "$CONFIG --batch_size 2048 --lr 1e-4 --opt $OPT" \
+      --task "$CONFIG --batch_size 2048 --lr $LR --opt lamb" \
       --taskname $NETWORK \
-      --name new/$SUBSET/$NETWORK-$MODES-$DIR-$OPT-amp-lre4
-
-      python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-      --task "$CONFIG --batch_size 2048 --lr 1e-4 --wd 5e-4 --opt $OPT" \
-      --taskname $NETWORK \
-      --name new/$SUBSET/$NETWORK-$MODES-$DIR-$OPT-amp-lre4-wd5e4
+      --name new/$SUBSET/$NETWORK-$MODES-$DIR-lamb-amp-$LR
   done
 
 done

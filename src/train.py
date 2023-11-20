@@ -346,7 +346,7 @@ def train_model(
 
         model.compile(
             optimizer=optimizer,
-            loss='mse',
+            loss=tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.SUM),
             metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
         )
 
@@ -378,7 +378,7 @@ def train_model(
 
     defibrillator = Defibrillator(
         monitor='loss',
-        patience=10,
+        patience=25,
         verbose=1,
     )
 
