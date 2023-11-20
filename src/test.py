@@ -8,11 +8,6 @@ import time
 from pathlib import Path
 import tensorflow as tf
 
-try:
-    import cupy as cp
-except ImportError as e:
-    logging.warning(f"Cupy not supported on your system: {e}")
-
 import cli
 import eval
 import ujson
@@ -140,14 +135,6 @@ def main(args=None):
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
-    try:
-        if len(physical_devices) > 1:
-            cp.fft.config.use_multi_gpus = True
-            cp.fft.config.set_cufft_gpus(list(range(len(physical_devices))))
-
-    except ImportError as e:
-        logging.warning(f"Cupy not supported on your system: {e}")
-
     strategy = tf.distribute.MirroredStrategy(
         devices=[f"{physical_devices[i].device_type}:{i}" for i in range(len(physical_devices))]
     )
@@ -156,7 +143,7 @@ def main(args=None):
     gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
 
     if gpu_workers > 0 and gpu_model.find('A100') >= 0:  # update batchsize automatically
-        batch_size = 768 * gpu_workers
+        batch_size = 512 * gpu_workers
     elif gpu_workers > 0 and gpu_model.find('RTX') >= 0:
         batch_size = 256 * gpu_workers
     else:

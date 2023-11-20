@@ -1147,42 +1147,35 @@ def predict_files(
     object_gaussian_kernel_width: float = 0
 ):
     no_phase = True if model.input_shape[1] == 3 else False
-    mp.set_start_method('spawn', force=True)
 
     generate_fourier_embeddings = partial(
-        utils.multiprocess,
-        func=partial(
-            preprocess,
-            modelpsfgen=modelpsfgen,
-            samplepsfgen=samplepsfgen,
-            freq_strength_threshold=freq_strength_threshold,
-            digital_rotations=digital_rotations,
-            plot=plot,
-            no_phase=no_phase,
-            remove_background=True,
-            normalize=True,
-            fov_is_small=fov_is_small,
-            rolling_strides=rolling_strides,
-            skip_prep_sample=skip_prep_sample,
-            min_psnr=min_psnr,
-            object_gaussian_kernel_width=object_gaussian_kernel_width
-        ),
-        desc='Generate Fourier embeddings',
-        unit=' file',
-        cores=len(tf.config.list_physical_devices('GPU')),
-        pool=pool,
+        preprocess,
+        modelpsfgen=modelpsfgen,
+        samplepsfgen=samplepsfgen,
+        freq_strength_threshold=freq_strength_threshold,
+        digital_rotations=digital_rotations,
+        plot=plot,
+        no_phase=no_phase,
+        remove_background=True,
+        normalize=True,
+        fov_is_small=fov_is_small,
+        rolling_strides=rolling_strides,
+        skip_prep_sample=skip_prep_sample,
+        min_psnr=min_psnr,
+        object_gaussian_kernel_width=object_gaussian_kernel_width
     )
 
     inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
 
-    # unroll because each input generates 360 embs to predict here, and we must rebatch on the whole set
-    inputs = inputs.batch(batch_size).map(
+    inputs = inputs.map(
         lambda x: tf.py_function(
             generate_fourier_embeddings,
             inp=[x],
             Tout=tf.float32,
         ),
-    ).unbatch().prefetch(tf.data.AUTOTUNE)
+        num_parallel_calls=tf.data.AUTOTUNE,
+        deterministic=True,
+    )
 
     preds, std = predict_dataset(
         model,
