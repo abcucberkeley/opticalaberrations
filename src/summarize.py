@@ -63,15 +63,17 @@ def concat_U16_tiffs(source_files=list([]), dst: Path = None, ch_two=None, drop_
     image_labels = [x.stem[:40] for x in source_files]
     image_labels = list(np.repeat(image_labels, z_size))  # every slice needs a label
 
-    imwrite(dst,
-            hyperstack,
-            dtype=data_type,
-            imagej=True,
-            metadata={
-                'axes': axes_string,
-                'Labels': image_labels,
-            },
-            )
+    imwrite(
+        dst,
+        hyperstack,
+        dtype=data_type,
+        imagej=True,
+        metadata={
+            'axes': axes_string,
+            'Labels': image_labels,
+        },
+        compression = 'deflate'
+    )
     print(f"Saved:\n{dst.resolve()}\n")
 
 
@@ -146,14 +148,16 @@ for i in range(len(consensus_clusters)):
 dst.parent.mkdir(parents=True, exist_ok=True)
 image_labels = [x.stem[:40] + '...' + x.stem[-20:] for x in consensus_clusters]
 image_labels = list(np.repeat(image_labels, z_size))  # every slice needs a label
-imwrite(dst,
-        hyperstack.astype(np.ubyte),
-        photometric='rgb',
-        imagej=True,
-        metadata={
-            'axes': 'TZYXS',
-            'Labels': image_labels,
-        },
-        )
+imwrite(
+    dst,
+    hyperstack.astype(np.ubyte),
+    photometric='rgb',
+    imagej=True,
+    metadata={
+        'axes': 'TZYXS',
+        'Labels': image_labels,
+    },
+    compression='deflate'
+)
 
 print(f"\nSaved:\n{dst.resolve()}")

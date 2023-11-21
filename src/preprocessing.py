@@ -752,7 +752,7 @@ def find_roi(
 
         if r.size != 0:
             tile = f"z{0}-y{y}-x{x}"
-            imwrite(savepath / f"{tile}.tif", r)
+            imwrite(savepath / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
             rois.append(savepath / f"{tile}.tif")
 
     return np.array(rois), ztiles, nrows, ncols
@@ -821,8 +821,10 @@ def get_tiles(
             if save_files:
                 if save_file_type == '.npy':
                     np.save(savepath / f"{name}.npy", w)
+                if save_file_type == '.npz':
+                    np.savez_compressed(savepath / f"{name}.npz", w)
                 else:
-                    imwrite(savepath / f"{name}.tif", w)
+                    imwrite(savepath / f"{name}.tif", w, compression='deflate', dtype=np.float32)
 
 
             tiles[name] = dict(

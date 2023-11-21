@@ -633,7 +633,7 @@ def plot_embeddings(
                 embedding_option=embedding_option,
                 plot=f"{outdir}/{str(abr).replace('.', 'p')}",
             )
-            imwrite(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
+            imwrite(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb, compression='deflate')
 
             plt.figure(fig.number)
             for ax in range(6):
@@ -752,7 +752,7 @@ def plot_rotations(
                 embedding_option=embedding_option,
                 plot=f"{outdir}/amp{str(amp).replace('.', 'p')}_deg{str(deg)}",
             )
-            imwrite(f"{outdir}/amp{str(amp).replace('.', 'p')}_deg{str(deg)}.tif", emb)
+            imwrite(f"{outdir}/amp{str(amp).replace('.', 'p')}_deg{str(deg)}.tif", emb, compression='deflate')
 
             plt.figure(fig.number)
             for ax in range(6):
@@ -863,7 +863,7 @@ def plot_shapes_embeddings(
 
             outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/r{radius}')
             outdir.mkdir(exist_ok=True, parents=True)
-            imwrite(f"{outdir}/reference_{radius}.tif", reference)
+            imwrite(f"{outdir}/reference_{radius}.tif", reference, compression='deflate')
 
 
             fig, axes = plt.subplots(6, len(waves)+1, figsize=(12, 6))
@@ -888,7 +888,7 @@ def plot_shapes_embeddings(
 
                 outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/r{radius}/convolved/')
                 outdir.mkdir(exist_ok=True, parents=True)
-                imwrite(f"{outdir}/{str(abr).replace('.', 'p')}.tif", inputs)
+                imwrite(f"{outdir}/{str(abr).replace('.', 'p')}.tif", inputs, compression='deflate')
 
                 emb = fourier_embeddings(
                     inputs,
@@ -901,7 +901,7 @@ def plot_shapes_embeddings(
                 )
                 outdir = Path(f'{savepath}/i{res}_pad_{padsize}_lattice/mode_{mode}/r{radius}/embeddings/')
                 outdir.mkdir(exist_ok=True, parents=True)
-                imwrite(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb)
+                imwrite(f"{outdir}/{str(abr).replace('.', 'p')}.tif", emb, compression='deflate')
 
 
                 plt.figure(fig.number)
@@ -968,8 +968,8 @@ def plot_simulation(
     outdir = Path(f'{savepath}/i{res}_pad_{padsize}/')
     outdir.mkdir(exist_ok=True, parents=True)
 
-    imwrite(f"{outdir}/theoretical_psf.tif", gen.ipsf)
-    imwrite(f"{outdir}/theoretical_otf.tif", gen.iotf)
+    imwrite(f"{outdir}/theoretical_psf.tif", gen.ipsf, compression='deflate')
+    imwrite(f"{outdir}/theoretical_otf.tif", gen.iotf, compression='deflate')
 
     for mode in trange(5, n_modes):
         for amp in waves:
@@ -990,7 +990,7 @@ def plot_simulation(
 
             emb = Path(f'{outdir}/mode_{mode}/embeddings')
             emb.mkdir(exist_ok=True, parents=True)
-            imwrite(f"{emb}/{str(abr).replace('.', 'p')}.tif", embedding)
+            imwrite(f"{emb}/{str(abr).replace('.', 'p')}.tif", embedding, compression='deflate')
 
             psf = gen.single_psf(
                 phi=phi,
@@ -1000,7 +1000,7 @@ def plot_simulation(
 
             reals = Path(f'{outdir}/mode_{mode}/psfs')
             reals.mkdir(exist_ok=True, parents=True)
-            imwrite(f"{reals}/{str(abr).replace('.', 'p')}.tif", psf)
+            imwrite(f"{reals}/{str(abr).replace('.', 'p')}.tif", psf, compression='deflate')
 
 
 def plot_signal(n_modes=55, wavelength=.605):

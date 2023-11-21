@@ -343,7 +343,7 @@ def reconstruct_wavefront_error_landscape(
     #  terrain3d is full brightness RGB color then use vol to determine brightness
     terrain3d = isoplanatic_patch_colormap[terrain3d] * image[..., np.newaxis]
     terrain3d = terrain3d.astype(np.ubyte)
-    imwrite(save_path, terrain3d, photometric='rgb')
+    imwrite(save_path, terrain3d, photometric='rgb', compression='deflate', dtype=np.float32)
 
     return terrain3d
 
@@ -484,8 +484,8 @@ def predict_sample(
         )
 
     psf = samplepsfgen.single_psf(phi=p, normed=True)
-    imwrite(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf)
-    imwrite(f"{img.with_suffix('')}_sample_predictions_wavefront.tif", p.wave(), dtype=np.float32)
+    imwrite(f"{img.with_suffix('')}_sample_predictions_psf.tif", psf, compression='deflate', dtype=np.float32)
+    imwrite(f"{img.with_suffix('')}_sample_predictions_wavefront.tif", p.wave(), compression='deflate', dtype=np.float32)
 
     with Path(f"{img.with_suffix('')}_sample_predictions_settings.json").open('w') as f:
         json = dict(
@@ -652,8 +652,8 @@ def predict_large_fov(
         )
 
     psf = samplepsfgen.single_psf(phi=p, normed=True)
-    imwrite(f"{img.with_suffix('')}_large_fov_predictions_psf.tif", psf)
-    imwrite(f"{img.with_suffix('')}_large_fov_predictions_wavefront.tif", p.wave(), dtype=np.float32)
+    imwrite(f"{img.with_suffix('')}_large_fov_predictions_psf.tif", psf, compression='deflate', dtype=np.float32)
+    imwrite(f"{img.with_suffix('')}_large_fov_predictions_wavefront.tif", p.wave(), compression='deflate', dtype=np.float32)
 
     with Path(f"{img.with_suffix('')}_large_fov_predictions_settings.json").open('w') as f:
         json = dict(
@@ -854,7 +854,7 @@ def predict_snr_map(
     snrs = np.reshape(snrs, (ztiles, nrows, ncols))
     snrs = resize(snrs, (snrs.shape[0], sample.shape[1], sample.shape[2]), order=1, mode='edge')
     snrs = resize(snrs, sample.shape, order=0, mode='edge')
-    imwrite(Path(f"{img.with_suffix('')}_snrs.tif"), snrs.astype(np.float32), dtype=np.float32)
+    imwrite(Path(f"{img.with_suffix('')}_snrs.tif"), snrs.astype(np.float32), compression='deflate', dtype=np.float32)
 
 
 @profile
@@ -922,7 +922,7 @@ def predict_tiles(
     if any(np.array(shifting) != 0):
         sample = shift(sample, shift=(-1*shifting[0], -1*shifting[1], -1*shifting[2]))
         img = Path(f"{img.with_suffix('')}_shifted_z{shifting[0]}_y{shifting[1]}_x{shifting[2]}.tif")
-        imwrite(img, sample.astype(np.float32))
+        imwrite(img, sample.astype(np.float32), compression='deflate', dtype=np.float32)
 
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
@@ -1134,7 +1134,7 @@ def predict_folder(
                 path=outdir / path.name,
                 ignored=False,
             )
-            imwrite(outdir / path.name, f)
+            imwrite(outdir / path.name, f, compression='deflate', dtype=np.float32)
 
     files = pd.DataFrame.from_dict(files, orient='index')
     rois = files[files['ignored'] == False]['path'].values  # skip files with low snr or no signal
@@ -1382,9 +1382,9 @@ def cluster_tiles(
 
             imwrite(Path(f"{savepath}_{postfix}_{cluster}_wavefront.tif"),
                     wavefronts_montage[z*64:(z+1)*64, k*64:(k+1)*64],
-                    dtype=np.float32,
-                    )
-
+                    compression='deflate',
+                    dtype=np.float32
+            )
 
             pred_std = Wavefront(
                 np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0),
@@ -1413,8 +1413,9 @@ def cluster_tiles(
     imwrite(Path(f"{savepath}_{postfix}_wavefronts_montage.tif"),
             wavefronts_montage,
             resolution=(64, 64),
-            dtype=np.float32,
-            )
+            compression='deflate',
+            dtype=np.float32
+    )
 
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
@@ -1450,6 +1451,7 @@ def color_clusters(
         photometric='rgb',
         resolution=(xw, yw),
         metadata={'axes': 'ZYXS'},
+        compression='deflate',
     )
     logger.info(f'Saved {savepath}')
 
@@ -1553,7 +1555,7 @@ def aggregate_predictions(
     errormap = resize(errormap, (ztiles, vol.shape[1], vol.shape[2]),  order=1, mode='edge')  # linear interp XY
     errormap = resize(errormap, vol.shape,  order=0, mode='edge')   # nearest neighbor for z
     # errormap = resize(errormap, volume_shape, order=0, mode='constant')  # to show tiles
-    imwrite(Path(f"{model_pred.with_suffix('')}_{postfix}_p2v_error.tif"), errormap.astype(np.float32))
+    imwrite(Path(f"{model_pred.with_suffix('')}_{postfix}_p2v_error.tif"), errormap.astype(np.float32), compression='deflate', dtype=np.float32)
 
     cluster_colors = np.split(
         np.array(sns.color_palette(clusters3d_colormap, n_colors=(max_isoplanatic_clusters * ztiles)))*255,
@@ -1657,10 +1659,10 @@ def aggregate_predictions(
 
             clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((zw, yw, xw), int(c)) # filled with cluster id 0,1,2,3, 4,5,6,7, 8] 8 is unconfident, color gets assigned later
 
-    imwrite(f"{model_pred.with_suffix('')}_{postfix}_wavefronts.tif", wavefront_heatmap.astype(np.float32))
-    imwrite(f"{model_pred.with_suffix('')}_{postfix}_wavefronts_expected.tif", expected_wavefront_heatmap.astype(np.float32))
-    imwrite(f"{model_pred.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32))
-    imwrite(f"{model_pred.with_suffix('')}_{postfix}_psfs_expected.tif", expected_psf_heatmap.astype(np.float32))
+    imwrite(f"{model_pred.with_suffix('')}_{postfix}_wavefronts.tif", wavefront_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
+    imwrite(f"{model_pred.with_suffix('')}_{postfix}_wavefronts_expected.tif", expected_wavefront_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
+    imwrite(f"{model_pred.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
+    imwrite(f"{model_pred.with_suffix('')}_{postfix}_psfs_expected.tif", expected_psf_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
 
     color_clusters(
         vol,
@@ -2061,7 +2063,7 @@ def combine_tiles(
             consensus_stacks_path=consensus_stacks_path,
         )
         output_base_path_b = utils.convert_path_to_other_cam(correction_scan_paths[0])
-        imwrite(f"{output_base_path_b.with_suffix('')}_optimized.tif", optimized_volume_b.astype(np.float32))
+        imwrite(f"{output_base_path_b.with_suffix('')}_optimized.tif", optimized_volume_b.astype(np.float32), compression='deflate', dtype=np.float32)
         logger.info(f"{output_base_path_b.with_suffix('')}_optimized.tif")
 
     # optimized_volume for Cam A
@@ -2080,12 +2082,12 @@ def combine_tiles(
         new_stdevs_path=new_stdevs_path,
         consensus_stacks_path=consensus_stacks_path,
     )
-    imwrite(f"{output_base_path}_{postfix}_volume_used.tif", volume_used.astype(np.uint16))
-    imwrite(f"{output_base_path}_optimized.tif", optimized_volume.astype(np.float32))
+    imwrite(f"{output_base_path}_{postfix}_volume_used.tif", volume_used.astype(np.uint16), compression='deflate')
+    imwrite(f"{output_base_path}_optimized.tif", optimized_volume.astype(np.float32), compression='deflate', dtype=np.float32)
     logger.info(f"{output_base_path}_optimized.tif")
 
     # aggregate consensus maps
-    imwrite(f"{output_base_path}_{postfix}.tif", correction_scans[0].astype(np.float32))
+    imwrite(f"{output_base_path}_{postfix}.tif", correction_scans[0].astype(np.float32), compression='deflate', dtype=np.float32)
     logger.info(f"{output_base_path}_{postfix}.tif")
     with Path(f"{output_base_path}_{postfix}_tiles_predictions_settings.json").open('w') as f:
         ujson.dump(
@@ -2278,10 +2280,10 @@ def phase_retrieval(
     psf = psfgen.single_psf(pred, normed=True)
     data_prepped = cp.asnumpy(data_prepped)
     pupil_mag = cp.asnumpy(pr_result.mag)
-    imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf.astype(np.float32))
-    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_mag.tif", pupil_mag.astype(np.float32), compression='deflate')
-    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_mag_kxx.tif", cp.asnumpy(pr_result.kxx).astype(np.float32), compression='deflate')
-    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_mag_kyy.tif", cp.asnumpy(pr_result.kyy).astype(np.float32), compression='deflate')
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf.astype(np.float32), compression='deflate', dtype=np.float32)
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_mag.tif", pupil_mag.astype(np.float32), compression='deflate', dtype=np.float32)
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_mag_kxx.tif", cp.asnumpy(pr_result.kxx).astype(np.float32), compression='deflate', dtype=np.float32)
+    imwrite(f"{img.with_suffix('')}_phase_retrieval_pupil_mag_kyy.tif", cp.asnumpy(pr_result.kyy).astype(np.float32), compression='deflate', dtype=np.float32)
 
     if plot_otf_diagnosis:
         logger.info(f'Plotting OTF Diagnosis...')
@@ -2504,7 +2506,7 @@ def decon(
 
     decon_vol = vol.copy()
     est_vol   = vol.copy()
-    imwrite(savepath, decon_vol.astype(np.float32))
+    imwrite(savepath, decon_vol.astype(np.float32), compression='deflate', dtype=np.float32)
 
     psfs = np.zeros(
         (ztiles*samplepsfgen.psf_shape[0], ytiles*samplepsfgen.psf_shape[1], xtiles*samplepsfgen.psf_shape[2]),
@@ -2582,7 +2584,7 @@ def decon(
 
                 est_vol[tile_slice(target='dst', tile_index=(z, y, x))
                 ] = out_y[tile_slice(target='extract', tile_index=(z, y, x))]
-                imwrite(f"{savepath.with_suffix('')}_estimated.tif", est_vol)
+                imwrite(f"{savepath.with_suffix('')}_estimated.tif", est_vol, compression='deflate', dtype=np.float32)
 
                 kernel = out_k_m
             elif task == 'decon':
@@ -2600,8 +2602,8 @@ def decon(
                     y * kyw:(y * kyw) + kyw,
                     x * kxw:(x * kxw) + kxw] = kernel[0:kzw, 0:kyw, 0:kxw]
 
-            imwrite(f"{model_pred.with_suffix('')}_{task}_psfs.tif", psfs.astype(np.float32), resolution=(xw, yw))
-            imwrite(savepath, decon_vol)
+            imwrite(f"{model_pred.with_suffix('')}_{task}_psfs.tif", psfs.astype(np.float32), resolution=(xw, yw), compression='deflate', dtype=np.float32)
+            imwrite(savepath, decon_vol, compression='deflate', dtype=np.float32)
     else:
         # identify all the unique PSFs that we need to deconvolve with
         predictions['psf_id'] = predictions.groupby(predictions.columns.values.tolist(), sort=False).grouper.group_info[0]
@@ -2682,9 +2684,14 @@ def decon(
                     x * kxw:(x * kxw) + kxw] = kernel[0:kzw, 0:kyw, 0:kxw]
 
             imwrite(savepath, decon_vol.astype(np.float32), resolution=(xw, yw))
-            imwrite(f"{model_pred.with_suffix('')}_{task}_psfs.tif", psfs.astype(np.float32), resolution=(psf_shape[1], psf_shape[2]))
+            imwrite(
+                f"{model_pred.with_suffix('')}_{task}_psfs.tif", psfs.astype(np.float32),
+                resolution=(psf_shape[1], psf_shape[2]),
+                compression='deflate',
+                dtype=np.float32
+            )
 
-    imwrite(savepath, decon_vol.astype(np.float32))
+    imwrite(savepath, decon_vol.astype(np.float32), compression='deflate', dtype=np.float32)
     logger.info(f"Decon image saved to : \n{savepath.resolve()}")
 
 

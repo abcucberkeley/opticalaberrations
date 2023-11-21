@@ -410,7 +410,7 @@ def remove_interference_pattern(
                     kernel=kernel,
                     interference_pattern=interference_pattern
                 )
-            imwrite(f'{plot}_corrected_psf.tif', data=corrected_psf.astype(np.float32), dtype=np.float32)
+            imwrite(f'{plot}_corrected_psf.tif', data=corrected_psf.astype(np.float32), compression='deflate', dtype=np.float32)
 
         return corrected_otf
     else:

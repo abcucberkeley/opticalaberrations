@@ -71,8 +71,8 @@ def test_remove_background_noise(kargs):
 
     base_folder = Path(f"{kargs['repo']}/preprocessing")
     base_folder.mkdir(exist_ok=True)
-    imwrite(f'{base_folder}/fourier.tif', np.abs(cp.asnumpy(fourier)).astype(np.float32))
-    imwrite(f'{base_folder}/realsp.tif', np.abs(cp.asnumpy(realsp)).astype(np.float32))
+    imwrite(f'{base_folder}/fourier.tif', np.abs(cp.asnumpy(fourier)).astype(np.float32), compression='deflate')
+    imwrite(f'{base_folder}/realsp.tif', np.abs(cp.asnumpy(realsp)).astype(np.float32), compression='deflate')
 
     logging.info(f"Using {high_sigma=}, {low_sigma=}")
     logging.info(f'Testing "dog" on CPU...')
@@ -93,8 +93,8 @@ def test_remove_background_noise(kargs):
     )
     FFTfiltered_realsp -= np.mean(FFTfiltered_realsp)
 
-    imwrite(f'{base_folder}/FFTfiltered_realsp.tif', np.abs(cp.asnumpy(FFTfiltered_realsp)).astype(np.float32))
-    imwrite(f'{base_folder}/dogfiltered_realsp.tif', np.abs(cp.asnumpy(dogfiltered_realsp)).astype(np.float32))
+    imwrite(f'{base_folder}/FFTfiltered_realsp.tif', np.abs(cp.asnumpy(FFTfiltered_realsp)).astype(np.float32), compression='deflate')
+    imwrite(f'{base_folder}/dogfiltered_realsp.tif', np.abs(cp.asnumpy(dogfiltered_realsp)).astype(np.float32), compression='deflate')
 
     FFTfourier = fft(FFTfiltered_realsp)
     dogfourier = fft(dogfiltered_realsp)
@@ -102,8 +102,8 @@ def test_remove_background_noise(kargs):
     FFTfiltered_otf = np.abs(cp.asnumpy(FFTfourier)).astype(np.float32)
     dogfiltered_otf = np.abs(cp.asnumpy(dogfourier)).astype(np.float32)
 
-    imwrite(f'{base_folder}/FFTfiltered_otf.tif', FFTfiltered_otf)
-    imwrite(f'{base_folder}/dogfiltered_otf.tif', dogfiltered_otf)
+    imwrite(f'{base_folder}/FFTfiltered_otf.tif', FFTfiltered_otf, compression='deflate')
+    imwrite(f'{base_folder}/dogfiltered_otf.tif', dogfiltered_otf, compression='deflate')
     logging.info(f'3D Frequency supports saved to: {Path(base_folder / "FFTfiltered_otf.tif").resolve()}')
     logging.info(f'3D Frequency supports saved to: {Path(base_folder / "dogfiltered_otf.tif").resolve()}')
 

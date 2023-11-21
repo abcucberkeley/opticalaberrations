@@ -608,11 +608,11 @@ def predict_cocoa(
     if savepath is not None:
         df.to_csv(f"{savepath}_cocoa_zernike_coefficients.csv")
 
-        imwrite(f"{savepath}_cocoa_predicted_psf.tif", out_k_m, dtype=np.float32)
-        imwrite(f"{savepath}_cocoa_wavefront.tif", wavefront.wave(), dtype=np.float32)
-        imwrite(f"{savepath}_cocoa_predicted_wavefront.tif", predicted_wavefront, dtype=np.float32)
-        imwrite(f"{savepath}_cocoa_estimated.tif", out_y, dtype=np.float32)
-        imwrite(f"{savepath}_cocoa_reconstructed.tif", reconstructed, dtype=np.float32)
+        imwrite(f"{savepath}_cocoa_predicted_psf.tif", out_k_m, compression='deflate', dtype=np.float32)
+        imwrite(f"{savepath}_cocoa_wavefront.tif", wavefront.wave(), compression='deflate', dtype=np.float32)
+        imwrite(f"{savepath}_cocoa_predicted_wavefront.tif", predicted_wavefront, compression='deflate', dtype=np.float32)
+        imwrite(f"{savepath}_cocoa_estimated.tif", out_y, compression='deflate', dtype=np.float32)
+        imwrite(f"{savepath}_cocoa_reconstructed.tif", reconstructed, compression='deflate', dtype=np.float32)
 
         logger.info(f"Raw data: \t{Path(f'{savepath}.tif').resolve()}")
         logger.info(f"Saved prediction of the raw data to: \t{Path(f'{savepath}_cocoa_estimated.tif').resolve()}")
@@ -620,10 +620,10 @@ def predict_cocoa(
 
         predicted_psf = psfgen.incoherent_psf(phi=wavefront)
         predicted_psf /= predicted_psf.sum()
-        imwrite(f"{savepath}_cocoa_psf.tif", predicted_psf, dtype=np.float32)
+        imwrite(f"{savepath}_cocoa_psf.tif", predicted_psf, compression='deflate', dtype=np.float32)
         if decon:
             out_decon = utils.fft_decon(kernel=predicted_psf, sample=img, iters=decon_iters)
-            imwrite(f"{savepath}_cocoa_deconvolved.tif", out_decon, dtype=np.float32)
+            imwrite(f"{savepath}_cocoa_deconvolved.tif", out_decon, compression='deflate', dtype=np.float32)
             logger.info(f"Saved deconvolved (w/ cocoa PSF) to: \t{Path(f'{savepath}_cocoa_deconvolved.tif').resolve()}")
     
         if plot:

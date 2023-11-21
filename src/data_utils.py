@@ -34,17 +34,21 @@ def get_image(path):
     else:
         path = Path(str(path))
 
-    if path.suffix == '.npy':
+    if path.suffix == '.npy' or path.suffix == '.npz':
         img = np.load(path)
-    else:
+    elif path.suffix == '.tif':
         with TiffFile(path) as tif:
             img = tif.asarray()
+    else:
+        raise Exception(f"Unknown file format {path.suffix}")
 
     if np.isnan(np.sum(img)):
         logger.error("NaN!")
 
-    img = np.expand_dims(img, axis=-1)
-    return img
+    if img.shape[-1] != 1:  # add a channel dim
+        img = np.expand_dims(img, axis=-1)
+
+    return img.astype(np.float32)
 
 
 def get_metadata(path, codename: str):

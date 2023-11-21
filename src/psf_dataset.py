@@ -53,9 +53,9 @@ def save_synthetic_sample(
 ):
 
     if realspace is not None:
-        imwrite(f"{savepath}_realspace.tif", realspace.astype(np.float32), compression='deflate')
+        imwrite(f"{savepath}_realspace.tif", realspace.astype(np.float32), compression='deflate', dtype=np.float32)
 
-    imwrite(f"{savepath}.tif", inputs.astype(np.float32), compression='deflate')
+    imwrite(f"{savepath}.tif", inputs.astype(np.float32), compression='deflate', dtype=np.float32)
     # logger.info(f"Saved: {savepath.resolve()}.tif")
 
     with Path(f"{savepath}.json").open('w') as f:
