@@ -123,7 +123,8 @@ def generate_sample(
     savedir: Optional[Path] = None,
     no_phase: bool = False,
     digital_rotations: Optional[int] = None,
-    no_beads: bool = False
+    no_beads: bool = False,
+    preprocess: bool = False
 ):
     hashtable = data[data['id'] == image_id].iloc[0].to_dict()
     f = Path(str(hashtable['file']))
@@ -171,11 +172,8 @@ def generate_sample(
                 scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
             )
 
-        if savedir is not None:
-            imwrite(savepath, noisy_img.astype(np.float32), dtype=np.float32)
-            return savepath
-        else:
-            emb = backend.preprocess(
+        if preprocess:
+            noisy_img = backend.preprocess(
                 noisy_img,
                 modelpsfgen=psfgen,
                 digital_rotations=digital_rotations,
@@ -185,7 +183,12 @@ def generate_sample(
                 min_psnr=0,
                 # plot=True
             )
-            return emb
+
+        if savedir is not None:
+            imwrite(savepath, noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
+            return savepath
+        else:
+            return noisy_img
 
 
 @profile
@@ -374,9 +377,10 @@ def iter_evaluate(
             psfgen=gen,
             no_phase=no_phase,
             digital_rotations=rotations if digital_rotations else None,
+            preprocess=True
         ),
         jobs=previous['id'].values,
-        desc=f'Generate samples ({savepath.resolve()})',
+        desc=f'Generate Fourier embeddings ({savepath.resolve()})',
         unit=' sample',
         cores=-1
     )
@@ -400,6 +404,7 @@ def iter_evaluate(
         plot_rotations=plot_rotations,
         digital_rotations=rotations if digital_rotations else None,
         min_psnr=0,
+        skip_preprocess=True,
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
@@ -1677,8 +1682,8 @@ def random_samples(
                     corrected_noisy_img = simulate_beads(corrected_psf, psf_type=gen.psf_type, beads=reference, noise=True)
                     corrected_noisy_img /= np.max(corrected_noisy_img)
 
-                    imwrite(save_path / f'psf_{s}.tif', noisy_img)
-                    imwrite(save_path / f'corrected_psf_{s}.tif', corrected_psf)
+                    imwrite(save_path / f'psf_{s}.tif', noisy_img, compression='deflate', dtype=np.float32)
+                    imwrite(save_path / f'corrected_psf_{s}.tif', corrected_psf, compression='deflate', dtype=np.float32)
 
                     task = partial(
                         vis.diagnostic_assessment,
@@ -2184,7 +2189,7 @@ def eval_modalities(
                         plot=save_path / f'{z}',
                         min_psnr=0,
                     )
-                    imwrite(save_path / f'{z}_embeddings.tif', embeddings.astype(np.float32), imagej=True)
+                    imwrite(save_path / f'{z}_embeddings.tif', embeddings.astype(np.float32), imagej=True, compression='deflate', dtype=np.float32)
 
                     if digital_rotations:
                         res = backend.predict_rotation(
@@ -2239,18 +2244,18 @@ def eval_modalities(
                     corrected_noisy_img /= np.max(corrected_noisy_img)
 
                     if amp == 0:
-                        imwrite(save_path / f'{z}_na_mask.tif', gen.na_mask().astype(np.float32))
+                        imwrite(save_path / f'{z}_na_mask.tif', gen.na_mask().astype(np.float32), compression='deflate', dtype=np.float32)
 
-                    imwrite(save_path / f'{z}_input.tif', noisy_img.astype(np.float32))
+                    imwrite(save_path / f'{z}_input.tif', noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
 
-                    imwrite(save_path / f'{z}_pred_psf.tif', p_psf.astype(np.float32))
-                    imwrite(save_path / f'{z}_pred_wavefront.tif', p_wave.wave().astype(np.float32))
+                    imwrite(save_path / f'{z}_pred_psf.tif', p_psf.astype(np.float32), compression='deflate', dtype=np.float32)
+                    imwrite(save_path / f'{z}_pred_wavefront.tif', p_wave.wave().astype(np.float32), compression='deflate', dtype=np.float32)
 
-                    imwrite(save_path / f'{z}_gt_psf.tif', gt_psf.astype(np.float32))
-                    imwrite(save_path / f'{z}_gt_wavefront.tif', y_wave.wave().astype(np.float32))
+                    imwrite(save_path / f'{z}_gt_psf.tif', gt_psf.astype(np.float32), compression='deflate', dtype=np.float32)
+                    imwrite(save_path / f'{z}_gt_wavefront.tif', y_wave.wave().astype(np.float32), compression='deflate', dtype=np.float32)
 
-                    imwrite(save_path / f'{z}_corrected_psf.tif', corrected_psf.astype(np.float32))
-                    imwrite(save_path / f'{z}_corrected_wavefront.tif', residuals.wave().astype(np.float32))
+                    imwrite(save_path / f'{z}_corrected_psf.tif', corrected_psf.astype(np.float32), compression='deflate', dtype=np.float32)
+                    imwrite(save_path / f'{z}_corrected_wavefront.tif', residuals.wave().astype(np.float32), compression='deflate', dtype=np.float32)
 
                     processed_input = backend.prep_sample(
                         noisy_img,
@@ -2434,8 +2439,8 @@ def eval_confidence(
                         corrected_noisy_img = simulate_beads(corrected_psf, psf_type=gen.psf_type, beads=reference, noise=True)
                         corrected_noisy_img /= np.max(corrected_noisy_img)
 
-                        imwrite(save_path / f'psf_{s}.tif', noisy_img)
-                        imwrite(save_path / f'corrected_psf_{s}.tif', corrected_psf)
+                        imwrite(save_path / f'psf_{s}.tif', noisy_img, compression='deflate', dtype=np.float32)
+                        imwrite(save_path / f'corrected_psf_{s}.tif', corrected_psf, compression='deflate', dtype=np.float32)
 
                         task = partial(
                             vis.diagnostic_assessment,
@@ -2893,7 +2898,7 @@ def evaluate_object_sizes(
                 else:
                     inputs[i] = utils.add_noise(psf * photons)
 
-                imwrite(f"{savepath}_{w}.tif", inputs[i].astype(np.float32), dtype=np.float32)
+                imwrite(f"{savepath}_{w}.tif", inputs[i].astype(np.float32), compression='deflate', dtype=np.float32)
 
             inputs = np.stack(inputs, axis=0)[..., np.newaxis]
             np.save(f"{savepath}_inputs", inputs)
@@ -3071,7 +3076,7 @@ def evaluate_uniform_background(
                     kernel=psf
                 ))
 
-                imwrite(f"{savepath}_{w}.tif", inputs[i].astype(np.float32), dtype=np.float32)
+                imwrite(f"{savepath}_{w}.tif", inputs[i].astype(np.float32), compression='deflate', dtype=np.float32)
 
             inputs = np.stack(inputs, axis=0)[..., np.newaxis]
             np.save(f"{savepath}_inputs", inputs)

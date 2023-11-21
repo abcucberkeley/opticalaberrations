@@ -215,15 +215,19 @@ def save_metadata(
 def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
     if isinstance(data, np.ndarray):
         img = data.astype(np.float32)
+
     elif isinstance(data, bytes):
         data = Path(str(data, "utf-8"))
-        img = data_utils.get_image(data).astype(np.float32)
+        img = data_utils.get_image(data)
+
     elif isinstance(data, tf.Tensor):
         path = Path(str(data.numpy(), "utf-8"))
-        img = data_utils.get_image(path).astype(tf.float32)
+        img = data_utils.get_image(path)
+
     else:
         path = Path(str(data))
-        img = data_utils.get_image(path).astype(np.float32)
+        img = data_utils.get_image(path)
+
     return np.squeeze(img)
 
 
@@ -261,7 +265,7 @@ def preprocess(
         ipsf = utils.fftconvolution(sample=modelpsfgen.ipsf, kernel=kernel).astype(np.float32)
         ipsf /= np.max(ipsf)
         if plot:
-            imwrite(f"{plot.with_suffix('')}_ipsf.tif", ipsf, dtype=np.float32)
+            imwrite(f"{plot.with_suffix('')}_ipsf.tif", ipsf, compression='deflate', dtype=np.float32)
         iotf = utils.fft(ipsf)
         iotf = utils.normalize_otf(iotf)
 
@@ -1064,12 +1068,17 @@ def predict_dataset(
     ignore_modes = list(map(int, ignore_modes))
     logger.info(f"Ignoring modes: {ignore_modes}")
     logger.info(f"[Batch size={batch_size}] {desc}")
-    inputs = inputs.with_options(options).prefetch(tf.data.AUTOTUNE).batch(batch_size)
+    inputs = inputs.with_options(options).batch(batch_size).prefetch(tf.data.AUTOTUNE)
     # prefetch will fill GPU RAM
 
     if digital_rotations is not None:
-        inputs = inputs.map(lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:])))
-        inputs = inputs.unbatch().batch(batch_size).with_options(options).prefetch(tf.data.AUTOTUNE)
+        inputs = inputs.map(
+            lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:])),
+            num_parallel_calls=tf.data.AUTOTUNE,
+            deterministic=True,
+        ).unbatch()
+
+        inputs = inputs.batch(batch_size).with_options(options).prefetch(tf.data.AUTOTUNE)
 
         # for i in inputs.take(1):
         #     logger.info(i.numpy().shape)
@@ -1137,45 +1146,55 @@ def predict_files(
     digital_rotations: Optional[int] = 361,
     rolling_strides: Optional[tuple] = None,
     fov_is_small: bool = True,
-    plot: bool = True,
+    plot: bool = False,
     plot_rotations: bool = False,
     skip_prep_sample: bool = False,
+    skip_preprocess: bool = False,
     cpu_workers: int = -1,
     template: Optional[pd.DataFrame] = None,
     pool: Optional[mp.Pool] = None,
     min_psnr: int = 5,
     object_gaussian_kernel_width: float = 0
 ):
-    no_phase = True if model.input_shape[1] == 3 else False
-
-    generate_fourier_embeddings = partial(
-        preprocess,
-        modelpsfgen=modelpsfgen,
-        samplepsfgen=samplepsfgen,
-        freq_strength_threshold=freq_strength_threshold,
-        digital_rotations=digital_rotations,
-        plot=plot,
-        no_phase=no_phase,
-        remove_background=True,
-        normalize=True,
-        fov_is_small=fov_is_small,
-        rolling_strides=rolling_strides,
-        skip_prep_sample=skip_prep_sample,
-        min_psnr=min_psnr,
-        object_gaussian_kernel_width=object_gaussian_kernel_width
-    )
-
     inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
 
-    inputs = inputs.map(
-        lambda x: tf.py_function(
-            generate_fourier_embeddings,
-            inp=[x],
-            Tout=tf.float32,
-        ),
-        num_parallel_calls=tf.data.AUTOTUNE,
-        deterministic=True,
-    )
+    if skip_preprocess:
+        inputs = inputs.map(
+            lambda x: tf.py_function(
+                load_sample,
+                inp=[x],
+                Tout=tf.float32,
+            ),
+            num_parallel_calls=tf.data.AUTOTUNE,
+            deterministic=True,
+        )
+    else:
+        generate_fourier_embeddings = partial(
+            preprocess,
+            modelpsfgen=modelpsfgen,
+            samplepsfgen=samplepsfgen,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
+            plot=plot,
+            no_phase=True if model.input_shape[1] == 3 else False,
+            remove_background=True,
+            normalize=True,
+            fov_is_small=fov_is_small,
+            rolling_strides=rolling_strides,
+            skip_prep_sample=skip_prep_sample,
+            min_psnr=min_psnr,
+            object_gaussian_kernel_width=object_gaussian_kernel_width
+        )
+
+        inputs = inputs.map(
+            lambda x: tf.py_function(
+                generate_fourier_embeddings,
+                inp=[x],
+                Tout=tf.float32,
+            ),
+            num_parallel_calls=tf.data.AUTOTUNE,
+            deterministic=True,
+        )
 
     preds, std = predict_dataset(
         model,
