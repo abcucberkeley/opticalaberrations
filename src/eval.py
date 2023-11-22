@@ -124,7 +124,8 @@ def generate_sample(
     no_phase: bool = False,
     digital_rotations: Optional[int] = None,
     no_beads: bool = False,
-    preprocess: bool = False
+    preprocess: bool = False,
+    file_format: str = 'tif'
 ):
     hashtable = data[data['id'] == image_id].iloc[0].to_dict()
     f = Path(str(hashtable['file']))
@@ -133,7 +134,7 @@ def generate_sample(
     if savedir is not None:
         outdir = savedir / '/'.join(beads.parent.parts[-4:]) / f'iter_{iter_number}'
         outdir.mkdir(exist_ok=True, parents=True)
-        savepath = outdir / f.name
+        savepath = outdir / f"{f.with_suffix('').name}.{file_format}"
 
     if savepath.exists():
         return savepath
@@ -185,7 +186,11 @@ def generate_sample(
             )
 
         if savedir is not None:
-            imwrite(savepath, noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
+            if file_format == 'tif':
+                imwrite(savepath, noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
+            else:
+                np.savez_compressed(Path(f"{savepath.with_suffix('')}"), noisy_img.astype(np.float32))
+
             return savepath
         else:
             return noisy_img
@@ -228,6 +233,7 @@ def collect_data(
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = None,
     default_wavelength: Optional[float] = .510,
+    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
 ):
 
     if isinstance(model, tf.keras.Model):
@@ -246,6 +252,7 @@ def collect_data(
         no_phase=no_phase,
         photons_range=photons_range,
         npoints_range=npoints_range,
+        filename_pattern=filename_pattern
     )
 
     # This runs multiple samples (aka images) at a time.
@@ -316,7 +323,9 @@ def iter_evaluate(
     plot: Any = None,
     plot_rotations: bool = False,
     psf_type: Optional[str] = None,
-    lam_detection: Optional[float] = .510
+    lam_detection: Optional[float] = .510,
+    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
+    preprocess: bool = False
 ):
     """
     Gathers the set of .tif files that meet the input criteria.
@@ -358,7 +367,8 @@ def iter_evaluate(
             photons_range=photons_range,
             npoints_range=npoints_range,
             psf_type=gen.psf_type,
-            lam_detection=gen.lam_detection
+            lam_detection=gen.lam_detection,
+            filename_pattern=filename_pattern
         )
 
     prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
@@ -377,10 +387,10 @@ def iter_evaluate(
             psfgen=gen,
             no_phase=no_phase,
             digital_rotations=rotations if digital_rotations else None,
-            preprocess=True
+            preprocess=preprocess,
         ),
         jobs=previous['id'].values,
-        desc=f'Generate Fourier embeddings ({savepath.resolve()})',
+        desc=f'Create samples ({savepath.resolve()})',
         unit=' sample',
         cores=-1
     )
@@ -391,7 +401,7 @@ def iter_evaluate(
     current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
 
     predictions, stdevs = backend.predict_files(
-        paths=paths,
+        paths=np.hstack(paths) if digital_rotations else paths,
         outdir=savepath/f'iter_{iter_num}',
         model=model,
         modelpsfgen=gen,
@@ -404,7 +414,7 @@ def iter_evaluate(
         plot_rotations=plot_rotations,
         digital_rotations=rotations if digital_rotations else None,
         min_psnr=0,
-        skip_preprocess=True,
+        preprocessed=True if preprocess else False,
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
