@@ -34,8 +34,14 @@ def get_image(path):
     else:
         path = Path(str(path))
 
-    if path.suffix == '.npy' or path.suffix == '.npz':
-        img = np.load(path)
+    if path.suffix == '.npy':
+        with np.load(path) as arr:
+            img = arr
+
+    elif path.suffix == '.npz':
+        with np.load(path) as data:
+            img = data['arr_0']
+
     elif path.suffix == '.tif':
         with TiffFile(path) as tif:
             img = tif.asarray()
@@ -306,7 +312,8 @@ def collect_dataset(
     npoints_range=None,
     iotf=None,
     metadata=False,
-    lls_defocus: bool = False
+    lls_defocus: bool = False,
+    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
 ):
     """
     Returns:
@@ -352,6 +359,7 @@ def collect_dataset(
             max_amplitude=max_amplitude,
             photons_range=photons_range,
             npoints_range=npoints_range,
+            filename_pattern=filename_pattern
         )
 
         train = train_data.map(lambda x: tf.py_function(load, [x], dtypes))
@@ -377,6 +385,7 @@ def collect_dataset(
             max_amplitude=max_amplitude,
             photons_range=photons_range,
             npoints_range=npoints_range,
+            filename_pattern=filename_pattern
         ) # TF dataset
 
         data = data.map(lambda x: tf.py_function(load, [x], dtypes)) # TFdataset -> img & zern or -> metadata df
