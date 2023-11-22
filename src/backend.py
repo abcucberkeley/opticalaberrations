@@ -15,7 +15,7 @@ import sys
 import h5py
 
 from pathlib import Path
-from typing import Any, Union, Optional
+from typing import Any, Union, Optional, Callable
 from itertools import repeat
 from functools import partial
 from line_profiler_pycharm import profile
@@ -24,7 +24,6 @@ from tifffile import imwrite
 import pandas as pd
 from skimage.restoration import richardson_lucy
 from numpy.lib.stride_tricks import sliding_window_view
-import multiprocessing as mp
 import numpy as np
 import scipy as sp
 from tqdm import tqdm
@@ -32,6 +31,12 @@ from tqdm import tqdm
 import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
 from tensorflow_addons.optimizers import AdamW, LAMB  # keep for old models trained with TF2.5
+
+import psutil
+import multiprocessing as mp
+from dask_cuda import LocalCUDACluster
+from dask.distributed import LocalCluster, Client, progress
+mp.set_start_method('spawn', force=True)
 
 import utils
 import vis
@@ -55,6 +60,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
+
+
+class DatasetGenerator:
+    def __init__(self, paths: np.ndarray, preprocess_func: Optional[Callable]):
+        self.paths = paths
+        self.preprocess_func = preprocess_func
+        self.gpus = len(tf.config.list_physical_devices('GPU'))
+
+        if self.gpus >= 1:
+            self.client = Client(LocalCUDACluster(
+                CUDA_VISIBLE_DEVICES=np.arange(self.gpus),
+                threads_per_worker=psutil.cpu_count(logical=True)
+            ))
+        else:
+            self.client = Client(LocalCluster(
+                n_workers=psutil.cpu_count(logical=False)
+            ))
+
+    def __len__(self):
+        return self.paths.shape[0]
+
+    def __getitem__(self, idx):
+        x = self.paths[idx]
+        x = self.client.submit(self.preprocess_func, x)
+        x = x.result()
+        return x
+
+    def __call__(self):
+        for i in range(self.__len__()):
+            yield self.__getitem__(i)
 
 
 @profile
@@ -1032,7 +1067,7 @@ def predict_dataset(
         ignore_modes: list = (0, 1, 2, 4),
         threshold: float = 0.,
         confidence_threshold: float = .02,
-        verbose: bool = True,
+        verbose: int = 1,
         desc: str = 'MiniBatch-probabilistic-predictions',
         digital_rotations: Optional[int] = None,
         plot_rotations: Any = None,
@@ -1067,37 +1102,26 @@ def predict_dataset(
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
     ignore_modes = list(map(int, ignore_modes))
     logger.info(f"Ignoring modes: {ignore_modes}")
-    logger.info(f"[Batch size={batch_size}] {desc}")
-    inputs = inputs.with_options(options).batch(batch_size).prefetch(tf.data.AUTOTUNE)
-    # prefetch will fill GPU RAM
+    logger.info(desc)
 
     if digital_rotations is not None:
-        inputs = inputs.map(
-            lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:])),
-            num_parallel_calls=tf.data.AUTOTUNE,
-            deterministic=True,
-        ).unbatch()
+        inputs = inputs.map(lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:]))).unbatch()
+        inputs = inputs.with_options(options).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    else:
+        inputs = inputs.with_options(options).batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
-        inputs = inputs.batch(batch_size).with_options(options).prefetch(tf.data.AUTOTUNE)
-
-        # for i in inputs.take(1):
-        #     logger.info(i.numpy().shape)
+    preds = model.predict(inputs, verbose=verbose)
+    preds[:, ignore_modes] = 0.
+    preds[np.abs(preds) <= threshold] = 0.
 
     if digital_rotations is not None:
-
         with pool if pool is not None else mp.Pool(processes=cpu_workers if cpu_workers > 0 else mp.cpu_count()) as p:
-            # operations mapped and batched gets executed here (emb=>rotations=>predictions).
-            preds = model.predict(inputs, verbose=verbose)
-
-            preds[:, ignore_modes] = 0.
-            preds[np.abs(preds) <= threshold] = 0.
-            tile_predictions = np.array(np.split(preds, len(save_path)))
-
+            preds = np.array(np.split(preds, len(save_path)))
             jobs = list(tqdm(
                 p.starmap(
                     eval_rotation,  # order matters future thayer
                     zip(
-                        tile_predictions,                               # init_preds
+                        preds,                               # init_preds
                         repeat(digital_rotations),                      # rotations
                         repeat(psfgen),                                 # psfgen
                         save_path,                                      # save_path
@@ -1119,12 +1143,6 @@ def predict_dataset(
         return preds, std
 
     else:
-        # operations mapped and batched gets executed here (emb=>rotations=>predictions).
-        preds = model.predict(inputs, verbose=verbose)
-
-        preds[:, ignore_modes] = 0.
-        preds[np.abs(preds) <= threshold] = 0.
-
         return preds, np.zeros_like(preds)
 
 
@@ -1149,16 +1167,16 @@ def predict_files(
     plot: bool = False,
     plot_rotations: bool = False,
     skip_prep_sample: bool = False,
-    skip_preprocess: bool = False,
+    preprocessed: bool = False,
     cpu_workers: int = -1,
     template: Optional[pd.DataFrame] = None,
     pool: Optional[mp.Pool] = None,
     min_psnr: int = 5,
     object_gaussian_kernel_width: float = 0
 ):
-    inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
 
-    if skip_preprocess:
+    if preprocessed:
+        inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
         inputs = inputs.map(
             lambda x: tf.py_function(
                 load_sample,
@@ -1186,15 +1204,32 @@ def predict_files(
             object_gaussian_kernel_width=object_gaussian_kernel_width
         )
 
-        inputs = inputs.map(
-            lambda x: tf.py_function(
-                generate_fourier_embeddings,
-                inp=[x],
-                Tout=tf.float32,
-            ),
-            num_parallel_calls=tf.data.AUTOTUNE,
-            deterministic=True,
+        # inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
+        #
+        # inputs = inputs.map(
+        #     lambda x: tf.py_function(
+        #         generate_fourier_embeddings,
+        #         inp=[x],
+        #         Tout=tf.float32,
+        #     ),
+        #     num_parallel_calls=tf.data.AUTOTUNE,
+        #     deterministic=True,
+        # )
+
+        inputs = tf.data.Dataset.from_generator(
+            DatasetGenerator(paths=paths, preprocess_func=generate_fourier_embeddings),
+            output_types=(tf.float32),
+            output_shapes=(digital_rotations, *model.input_shape[1:])
         )
+
+    num_predictions = paths.shape[0] * digital_rotations if digital_rotations else paths.shape[0]
+
+    desc = ' '.join([
+        f"[{paths.shape[0]} ROIs] x [{digital_rotations} Rotations] =",
+        f"{num_predictions} predictions,",
+        f"requires {int(np.ceil(num_predictions / batch_size))} inference batches ({batch_size=}).",
+        # f"emb={6 * 64 * 64 * batch_size * digital_rotations if digital_rotations else 1 * 32 / 8 / 1e6:.2f} MB/batch.",
+    ])
 
     preds, std = predict_dataset(
         model,
@@ -1207,10 +1242,7 @@ def predict_files(
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
         confidence_threshold=confidence_threshold,
-        desc=f"[{paths.shape[0]} ROIs] x [{digital_rotations} Rotations] = "
-             f"{paths.shape[0] * digital_rotations if digital_rotations else 1} predictions, requires "
-             f"{int(np.ceil((paths.shape[0] * digital_rotations if digital_rotations else 1) / batch_size))} inference batches. "
-             f"emb={6*64*64 * batch_size * digital_rotations if digital_rotations else 1 * 32 / 8 / 1e6:.2f} MB/batch.",
+        desc=desc,
         cpu_workers=cpu_workers,
         pool=None,  # let the "eval_tiles" pool spawn just before predict is called
     )
