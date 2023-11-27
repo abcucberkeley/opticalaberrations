@@ -423,7 +423,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--batch_size", default=1024, type=int, help="number of images per batch"
+        "--batch_size", default=2048, type=int, help="number of images per batch"
     )
 
     train_parser.add_argument(
@@ -510,11 +510,12 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--lr", default=5e-4, type=float, help='initial learning rate'
+        "--lr", default=1e-3, type=float,
+        help='initial learning rate; optimal config: 1e-3 for LAMB and 5e-4 for AdamW'
     )
 
     train_parser.add_argument(
-        "--wd", default=5e-6, type=float, help='initial weight decay'
+        "--wd", default=1e-2, type=float, help='initial weight decay; optimal config: 1e-2 for LAMB and 5e-6 for AdamW'
     )
 
     train_parser.add_argument(
@@ -522,7 +523,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--opt", default='AdamW', type=str, help='optimizer to use for training'
+        "--opt", default='lamb', type=str, help='optimizer to use for training'
     )
 
     train_parser.add_argument(
