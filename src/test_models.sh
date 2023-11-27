@@ -6,7 +6,7 @@ DZ=200
 SHAPE=64
 MODES=15
 ROTATIONS='--digital_rotations'
-ITERS=3
+ITERS=1
 MAX=10000
 PRETRAINED="../pretrained_models/"
 DATASET="aang_dataset"
@@ -19,13 +19,14 @@ TIMELIMIT='24:00:00'  #hh:mm:ss
 TRAINED_MODELS=(
   "YuMB_lambda510-fixed-precision"
   "YuMB_lambda510-default"
-  "YuMB_lambda510-amp"
+  "YuMB_lambda510-adamw-amp"
+  "YuMB_lambda510-lamb-amp"
 )
 
 
 for M in ${TRAINED_MODELS[@]}
 do
-  MODEL="$PRETRAINED/opticalnet-$MODES-$M"
+  MODEL="$PRETRAINED/aang/opticalnet-$MODES-$M"
 
   if [ "${M:0:4}" = YuMB ];then
     declare -a PSFS=(

@@ -63,9 +63,9 @@ tf.get_logger().setLevel(logging.ERROR)
 
 
 class DatasetGenerator:
-    def __init__(self, paths: np.ndarray, preprocess_func: Optional[Callable]):
+    def __init__(self, paths: np.ndarray, load_preprocess_func: Callable):
         self.paths = paths
-        self.preprocess_func = preprocess_func
+        self.load_preprocess_func = load_preprocess_func
         self.gpus = len(tf.config.list_physical_devices('GPU'))
 
         if self.gpus >= 1:
@@ -83,7 +83,7 @@ class DatasetGenerator:
 
     def __getitem__(self, idx):
         x = self.paths[idx]
-        x = self.client.submit(self.preprocess_func, x)
+        x = self.client.submit(self.load_preprocess_func, x)
         x = x.result()
         return x
 
@@ -1217,7 +1217,7 @@ def predict_files(
         # )
 
         inputs = tf.data.Dataset.from_generator(
-            DatasetGenerator(paths=paths, preprocess_func=generate_fourier_embeddings),
+            DatasetGenerator(paths=paths, load_preprocess_func=generate_fourier_embeddings),
             output_types=(tf.float32),
             output_shapes=(digital_rotations, *model.input_shape[1:])
         )
