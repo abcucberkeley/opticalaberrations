@@ -71,7 +71,7 @@ class DatasetGenerator:
         if self.gpus >= 1:
             self.client = Client(LocalCUDACluster(
                 CUDA_VISIBLE_DEVICES=np.arange(self.gpus),
-                threads_per_worker=psutil.cpu_count(logical=True)
+                threads_per_worker=1
             ))
         else:
             self.client = Client(LocalCluster(
