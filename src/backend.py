@@ -407,7 +407,7 @@ def bootstrap_predict(
         inputs: np.array,
         psfgen: SyntheticPSF,
         batch_size: int = 512,
-        n_samples: int = 10,
+        n_samples: int = 1,
         no_phase: bool = False,
         padsize: Any = None,
         alpha_val: str = 'abs',
@@ -417,7 +417,7 @@ def bootstrap_predict(
         ignore_modes: list = (0, 1, 2, 4),
         threshold: float = 0.,
         freq_strength_threshold: float = .01,
-        verbose: bool = True,
+        verbose: int = 1,
         plot: Any = None,
         desc: str = 'MiniBatch-probabilistic-predictions',
         cpu_workers: int = 1
@@ -749,7 +749,6 @@ def predict_rotation(
         ignore_modes: list = (0, 1, 2, 4),
         threshold: float = 0.,
         freq_strength_threshold: float = .01,
-        verbose: bool = True,
         plot: Any = None,
         plot_rotations: Any = None,
         remove_interference: bool = True,
@@ -812,7 +811,6 @@ def predict_rotation(
         threshold=0.,
         ignore_modes=ignore_modes,
         plot=plot,
-        verbose=verbose,
         desc=desc,
         cpu_workers=cpu_workers
     )
