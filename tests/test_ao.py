@@ -1,5 +1,8 @@
 
 import sys
+
+import numpy as np
+
 sys.path.append('.')
 sys.path.append('./src')
 sys.path.append('./tests')
@@ -9,7 +12,7 @@ warnings.filterwarnings("ignore")
 
 import pytest
 from pathlib import Path
-
+import pandas as pd
 from src import experimental
 
 
@@ -73,6 +76,43 @@ def test_predict_large_fov(kargs):
 
 
 @pytest.mark.run(order=4)
+def test_predict_folder(kargs):
+    test_folder = Path(f"{kargs['repo']}/dataset/zernikes/psfs")
+    predictions = experimental.predict_folder(
+        model=kargs['model'],
+        folder=test_folder,
+        filename_pattern=kargs['prediction_filename_pattern'],
+        prev=kargs['prev'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=kargs['plot'],
+        plot_rotations=kargs['plot_rotations'],
+        batch_size=kargs['batch_size'],
+        ignore_modes=kargs['ignore_modes'],
+        min_psnr=kargs['min_psnr']
+    )
+
+    predictions = predictions.drop(columns=['mean', 'median', 'min', 'max', 'std'])
+    assert predictions.shape == (kargs['num_modes'], 11)
+
+    # aberrations = pd.DataFrame().reindex_like(predictions)
+    # for i, mode in enumerate(range(3, kargs['num_modes'])):
+    #     if mode == 4:
+    #         continue
+    #     else:
+    #         abr = np.zeros(15)
+    #         abr[mode] = .1
+    #         aberrations[f"z{mode}.tif"] = abr
+    #
+    # results = aberrations - predictions
+    # results = results.abs().round(3)
+    # np.testing.assert_allclose(results.values, np.zeros_like(results.values))
+
+
+@pytest.mark.run(order=5)
 def test_predict_tiles(kargs):
     tile_predictions = experimental.predict_tiles(
         model=kargs['model'],
@@ -91,10 +131,11 @@ def test_predict_tiles(kargs):
         min_psnr=kargs['min_psnr']
     )
 
-    assert tile_predictions.shape == kargs['tiles_shape']
+    tile_predictions = tile_predictions.drop(columns=['mean', 'median', 'min', 'max', 'std'])
+    assert tile_predictions.shape == (kargs['num_modes'], kargs['num_tiles'])
 
 
-@pytest.mark.run(order=5)
+@pytest.mark.run(order=6)
 def test_aggregate_tiles(kargs):
     zernikes = experimental.aggregate_predictions(
         model_pred=Path(f"{kargs['inputs'].with_suffix('')}_tiles_predictions.csv"),

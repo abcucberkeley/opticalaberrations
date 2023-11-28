@@ -123,6 +123,7 @@ def generate_sample(
     savedir: Optional[Path] = None,
     no_phase: bool = False,
     digital_rotations: Optional[int] = None,
+    plot: bool = False,
     no_beads: bool = False,
     preprocess: bool = False,
     file_format: str = 'tif'
@@ -182,7 +183,7 @@ def generate_sample(
                 remove_background=True,
                 normalize=True,
                 min_psnr=0,
-                # plot=True
+                plot=savepath.with_suffix('') if plot else None
             )
 
         if savedir is not None:
@@ -320,7 +321,7 @@ def iter_evaluate(
     digital_rotations: bool = False,
     rotations: Optional[int] = 361,
     savepath: Any = None,
-    plot: Any = None,
+    plot: bool = False,
     plot_rotations: bool = False,
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
@@ -336,7 +337,6 @@ def iter_evaluate(
     Returns:
         "results" dataframe
     """
-
     model = backend.load(modelpath)
 
     gen = backend.load_metadata(
@@ -388,6 +388,7 @@ def iter_evaluate(
             no_phase=no_phase,
             digital_rotations=rotations if digital_rotations else None,
             preprocess=preprocess,
+            plot=plot
         ),
         jobs=previous['id'].values,
         desc=f'Create samples ({savepath.resolve()})',
