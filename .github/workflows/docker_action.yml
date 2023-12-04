@@ -23,6 +23,9 @@ env:
   IMAGE_NAME: ${{ github.repository }}  
   DO_SIGNING: ${{ false }}
   DOCKER_BUILDKIT: 0
+  BRANCH: ${{ github.ref.name }}  # 'latest-tf' or 'develop'
+  CONTAINER_NAME : gha_${{ github.ref.name }} 
+  DOCKER_RUN: docker run --name gha_${{ github.ref.name }}  --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
 
 jobs:
   build:
@@ -46,10 +49,10 @@ jobs:
           RUNNER_CONTEXT: ${{ toJson(runner) }}
         run: echo "$RUNNER_CONTEXT"
 
-      - name: Extract branch name
-        shell: bash
-        run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
-        id: extract_branch
+      # - name: Extract branch name
+      #   shell: bash
+      #   run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+      #   id: extract_branch
 
       - name: Show default environment variables
         run: |
@@ -88,21 +91,6 @@ jobs:
             echo "$file was changed"
           done
 
-      - name: Free Disk Space (Ubuntu)
-        if: runner.environment != 'self-hosted' 
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # this might remove needed tools if set to "true" but frees about 6 GB
-          tool-cache: false
-          
-          # all of these default to true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: false
-          swap-storage: true
-
       - name: Checkout just Dockerfile
         uses: actions/checkout@v4
         with:
@@ -139,7 +127,7 @@ jobs:
 
       - name: Build and load Docker image. Use local cache.
         run: |
-          DOCKER_BUILDKIT=0 docker build . --build-arg BRANCH_NAME=${{ steps.extract_branch.outputs.branch }} --tag ${{ steps.meta.outputs.tags }}
+          DOCKER_BUILDKIT=0 docker build . --build-arg BRANCH_NAME=${{ BRANCH }} --tag ${{ steps.meta.outputs.tags }}
 
         # uses: docker/build-push-action@v5
         # with:
@@ -153,35 +141,37 @@ jobs:
         #   build-args: |
         #     BRANCH_NAME=${{ steps.extract_branch.outputs.branch }}
 
+      - name: Remove old container if it exists
+        continue-on-error: true
+        run: docker rm --name ${{ CONTAINER_NAME }}
+          
       - name: Test NVIDIA-SMI
-        run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} nvidia-smi
+        run: docker run --name ${{ container_name }} --rm --gpus all ${{ steps.meta.outputs.tags }} nvidia-smi
 
       - name: conda list -n ml
-        run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "conda list -n ml"
+        run: docker run --name ${{ container_name }} --rm --gpus all ${{ steps.meta.outputs.tags }} "conda list -n ml"
               
       - name: Test TensorFlow
-        run: docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_tensorflow.py"
+        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_tensorflow.py"
 
       - name: Test IO
-        run: docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_io.py"
+        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_io.py"
 
       - name: Test preprocessing
-        run: docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_preprocessing.py"
+        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_preprocessing.py"
 
       - name: Test embeddings
-        run: docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_embeddings.py"
+        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_embeddings.py"
 
       - name: Test AO
-        run: docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_ao.py"
+        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_ao.py"
 
       - name: Test synthetic datasets
-        run: docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_datasets.py"
+        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_datasets.py"
           
       - name: Test training
         continue-on-error: true
-        run: docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_train.py"
+        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_train.py"
 
       - name: Build and push Docker image
         id: build-and-push
