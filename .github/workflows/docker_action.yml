@@ -180,7 +180,9 @@ jobs:
       - name: Build and push test failed Docker image
         if: failure()
         id: build-and-push-if-failed
-        run: docker image push ${{ steps.meta.outputs.tags }}_failed_tests
+        # clone tag to _failed_tests and then push
+        run: docker tag ${{ steps.meta.outputs.tags }} ${{ steps.meta.outputs.tags }}_failed && docker image push ${{ steps.meta.outputs.tags }}_failed
+
 
         # uses: docker/build-push-action@v5
         # env:
