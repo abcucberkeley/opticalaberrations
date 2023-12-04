@@ -1,6 +1,6 @@
 
 import sys
-
+import logging
 import numpy as np
 
 sys.path.append('.')
@@ -114,6 +114,9 @@ def test_predict_folder(kargs):
 
 @pytest.mark.run(order=5)
 def test_predict_tiles(kargs):
+    logging.info(f"Pytest will assert that 'tile_predictions' has output shape of: "
+                 f"(num_modes={kargs['num_modes']}, num_tiles={kargs['num_tiles']}), "
+                 f"since window_size={kargs['window_size']}.")
     tile_predictions = experimental.predict_tiles(
         model=kargs['model'],
         img=kargs['inputs'],
@@ -132,8 +135,7 @@ def test_predict_tiles(kargs):
     )
 
     tile_predictions = tile_predictions.drop(columns=['mean', 'median', 'min', 'max', 'std'])
-    assert tile_predictions.shape == (kargs['num_modes'], kargs['num_tiles'])
-
+    assert tile_predictions.shape == (kargs['num_modes'], kargs['num_tiles']), f'{tile_predictions=}'
 
 @pytest.mark.run(order=6)
 def test_aggregate_tiles(kargs):
