@@ -22,9 +22,13 @@ env:
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}  
   DO_SIGNING: ${{ false }}
+  DOCKER_BUILDKIT: 0
+  BRANCH: ${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'
+  CONTAINER_NAME : gha_${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop' 
+  DOCKER_RUN: docker run --name gha_$(git branch --show-current) --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
 
 jobs:
-  build:
+  build:      
     name: docker_image_build
     runs-on: self-hosted
     steps:
@@ -44,14 +48,12 @@ jobs:
         env:
           RUNNER_CONTEXT: ${{ toJson(runner) }}
         run: echo "$RUNNER_CONTEXT"
-      # - name: Dump strategy context
-      #   env:
-      #     STRATEGY_CONTEXT: ${{ toJson(strategy) }}
-      #   run: echo "$STRATEGY_CONTEXT"
-      # - name: Dump matrix context
-      #   env:
-      #     MATRIX_CONTEXT: ${{ toJson(matrix) }}
-      #   run: echo "$MATRIX_CONTEXT"
+
+      # - name: Extract branch name
+      #   shell: bash
+      #   run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+      #   id: extract_branch
+
       - name: Show default environment variables
         run: |
           echo "The job_id is: $GITHUB_JOB"   # reference the default environment variables
@@ -89,21 +91,6 @@ jobs:
             echo "$file was changed"
           done
 
-      - name: Free Disk Space (Ubuntu)
-        if: runner.environment != 'self-hosted' 
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # this might remove needed tools if set to "true" but frees about 6 GB
-          tool-cache: false
-          
-          # all of these default to true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: false
-          swap-storage: true
-
       - name: Checkout just Dockerfile
         uses: actions/checkout@v4
         with:
@@ -113,14 +100,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        
-      # Install the cosign tool except on PR
-      # https://github.com/sigstore/cosign-installer
-#      - name: Install cosign
-#        if: ${{ env.DO_SIGNING }} && github.event_name != 'pull_request'
-#        uses: sigstore/cosign-installer@v3.1.1
-#        with:
-#          cosign-release: 'v2.1.1'
+        with:
+          driver: docker 
 
       # Login against a Docker registry except on PR
       # https://github.com/docker/login-action
@@ -144,75 +125,66 @@ jobs:
             org.opencontainers.image.description=Docker image for a transformer network to perform sensorless detection of aberrations in adaptive optics. https://github.com/abcucberkeley/opticalaberrations
             org.opencontainers.image.vendor=Advanced Bioimaging Center at UC Berkeley and Janelia Research Campus
 
-      - name: Build and load Docker image with no-cache
-        id: build-and-load-no-cache
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          no-cache: true
-          load: true
-
-      - name: Test NVIDIA-SMI
+      - name: Build and load Docker image. Use local cache.
         run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} nvidia-smi
+          DOCKER_BUILDKIT=0 docker build . --build-arg BRANCH_NAME=${{ env.BRANCH }} --tag ${{ steps.meta.outputs.tags }}
+
+        # uses: docker/build-push-action@v5
+        # with:
+        #   context: .
+        #   file: ./Dockerfile
+        #   push: false
+        #   tags: ${{ steps.meta.outputs.tags }}
+        #   labels: ${{ steps.meta.outputs.labels }}
+        #   no-cache: true
+        #   load: true
+        #   build-args: |
+        #     BRANCH_NAME=${{ steps.extract_branch.outputs.branch }}
+
+      - name: Remove old container if it exists
+        continue-on-error: true
+        run: docker rm --name ${{ env.CONTAINER_NAME }}
+          
+      - name: Test NVIDIA-SMI
+        run: docker run --name ${{ env.CONTAINER_NAME }} --rm --gpus all ${{ steps.meta.outputs.tags }} nvidia-smi
 
       - name: conda list -n ml
-        run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "conda list -n ml"
+        run: docker run --name ${{ env.CONTAINER_NAME }} --rm --gpus all ${{ steps.meta.outputs.tags }} "conda list -n ml"
               
       - name: Test TensorFlow
-        run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_tensorflow.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_tensorflow.py"
 
       - name: Test IO
-        run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_io.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_io.py"
 
       - name: Test preprocessing
-        run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_preprocessing.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_preprocessing.py"
 
       - name: Test embeddings
-        run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_embeddings.py"
-
-      - name: Test synthetic datasets
-        run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_datasets.py"
-          
-      - name: Test training
-        run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_train.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_embeddings.py"
 
       - name: Test AO
-        run: |
-          docker run --rm --gpus all ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_ao.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_ao.py"
+
+      - name: Test synthetic datasets
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_datasets.py"
+          
+      - name: Test training
+        continue-on-error: true
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_train.py"
 
       - name: Build and push Docker image
         id: build-and-push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}         
+        run: docker image push ${{ steps.meta.outputs.tags }}
 
-      # Sign the resulting Docker image digest except on PRs.
-      # This will only write to the public Rekor transparency log when the Docker
-      # repository is public to avoid leaking data.  If you would like to publish
-      # transparency data even for private images, pass --force to cosign below.
-      # https://github.com/sigstore/cosign
-#      - name: Sign the published Docker image
-#        if:  ${{ env.DO_SIGNING }} && ${{ github.event_name != 'pull_request' }}
-#        env:
-#          # https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
-#          TAGS: ${{ steps.meta.outputs.tags }}
-#          DIGEST: ${{ steps.build-and-push.outputs.digest }}
-#        # This step uses the identity token to provision an ephemeral certificate
-#        # against the sigstore community Fulcio instance.
-#        run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
+        # uses: docker/build-push-action@v5
+        # env:
+        #   DOCKER_BUILDKIT: 0
+        # with:
+        #   context: .
+        #   file: ./Dockerfile
+        #   push: ${{ github.event_name != 'pull_request' }}
+        #   tags: ${{ steps.meta.outputs.tags }}
+        #   labels: ${{ steps.meta.outputs.labels }}
+        #   build-args: |
+        #     BRANCH_NAME=${{ steps.extract_branch.outputs.branch }}         

@@ -4,7 +4,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
-import os
+import os, platform
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 import warnings
@@ -34,7 +34,9 @@ from tensorflow_addons.optimizers import AdamW, LAMB  # keep for old models trai
 
 import psutil
 import multiprocessing as mp
-from dask_cuda import LocalCUDACluster
+if platform.system() != "Windows":
+    from dask_cuda import LocalCUDACluster  # Only Linux is supported by Dask-CUDA at this time
+
 from dask.distributed import LocalCluster, Client, progress
 mp.set_start_method('spawn', force=True)
 
@@ -68,7 +70,7 @@ class DatasetGenerator:
         self.load_preprocess_func = load_preprocess_func
         self.gpus = len(tf.config.list_physical_devices('GPU'))
 
-        if self.gpus >= 1:
+        if self.gpus >= 1 and platform.system() != 'Windows':
             self.client = Client(LocalCUDACluster(
                 CUDA_VISIBLE_DEVICES=np.arange(self.gpus),
                 threads_per_worker=1
@@ -1246,7 +1248,7 @@ def predict_files(
     )
 
     if template is not None:
-        tile_names = [f.name for f in paths]
+        tile_names = [f.stem for f in paths]
         predictions = pd.DataFrame(np.zeros((preds.shape[1], template.shape[1])), columns=template.columns)
         predictions[tile_names] = preds.T
 
@@ -1254,7 +1256,7 @@ def predict_files(
         stdevs[tile_names] = std.T
 
     else:
-        tile_names = [f.name for f in paths]
+        tile_names = [f.stem for f in paths]
         predictions = pd.DataFrame(preds.T, columns=tile_names)
         stdevs = pd.DataFrame(std.T, columns=tile_names)
 
