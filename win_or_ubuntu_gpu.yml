@@ -4,15 +4,15 @@ channels:
   - defaults
 dependencies:
   - python=3.10 
-  - cudatoolkit=11.8 
-  - cudnn=8.9
   - cryptography
+  - cupy
   - dask-core
   - dask-cuda
   - matplotlib 
   - astropy 
   - seaborn 
-  - numpy 
+  - numpy
+  - scipy
   - scikit-image 
   - scikit-learn
   - scikit-spatial 
@@ -25,8 +25,6 @@ dependencies:
   - pycudadecon
   - pip
   - pip:
-      - keras==2.10
-      - cupy-cuda11x
       - tensorflow_addons
       - dphtools
       - csbdeep
