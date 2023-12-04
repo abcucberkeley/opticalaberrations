@@ -49,22 +49,22 @@ do
 
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
-  echo manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
   --task "$CONFIG --batch_size 2048 --lr 5e-4 --wd 5e-6 --opt adamw" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-adamw-amp
 
-  echo manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
   --task "$CONFIG --batch_size 2048 --lr 1e-3 --wd 1e-2 --opt lamb" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-lamb-amp
 
-  echo manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
   --task "$CONFIG --fixed_precision --batch_size 1024 --lr 5e-4 --wd 5e-6 --opt adamw" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-adamw-fp
 
-  echo manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
   --task "$CONFIG $DEFAULT" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-default
