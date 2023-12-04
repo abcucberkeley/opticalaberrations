@@ -24,8 +24,8 @@ env:
   DO_SIGNING: ${{ false }}
   DOCKER_BUILDKIT: 0
   BRANCH: ${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'
-  CONTAINER_NAME : gha_$BRANCH 
-  DOCKER_RUN: docker run --name $CONTAINER_NAME  --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
+  CONTAINER_NAME : gha_${{ BRANCH }}
+  DOCKER_RUN: docker run --name ${{ CONTAINER_NAME }}  --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
 
 jobs:
   build:
