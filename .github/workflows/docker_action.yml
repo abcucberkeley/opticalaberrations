@@ -25,11 +25,10 @@ env:
   DOCKER_BUILDKIT: 0
   BRANCH: ${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'
   CONTAINER_NAME : gha_${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop' 
+  DOCKER_RUN: docker run --name gha_$(git branch --show-current) --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
 
 jobs:
-  build:
-    env:
-      DOCKER_RUN: docker run --name gha_${{ github.head_ref || github.ref_name }}  --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
+  build:      
     name: docker_image_build
     runs-on: self-hosted
     steps:

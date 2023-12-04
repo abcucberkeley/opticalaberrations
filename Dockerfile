@@ -5,7 +5,7 @@
 # docker rm ml_cont || docker build . -t ml --build-arg BRANCH_NAME=latest-tf --progress=plain --no-cache && docker run -it --name ml_cont --gpus all   ml  /bin/bash
 
 #   to rebuild and tensorflow gpu test
-# docker rm ml_cont; DOCKER_BUILDKIT=0 docker build . -t ml --build-arg BRANCH_NAME=latest-tf ; docker run --rm --gpus all ml  "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_tensorflow.py"; docker run -it --name ml_cont --gpus all   ml  /bin/bash
+# docker rm ml_cont; DOCKER_BUILDKIT=0 docker build . -t ml --build-arg BRANCH_NAME=$(git branch --show-current) ; docker run --rm --gpus all ml  "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_tensorflow.py"; docker run -it --name ml_cont --gpus all   ml  /bin/bash
 
 
 #   then (optionally) run tests from within the container:
@@ -60,14 +60,6 @@ RUN apt-get update \
 # install git-lfs
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && apt-get install git-lfs && rm -rf /var/lib/apt/lists/*
 
-ARG BRANCH_NAME
-# git clone the repo, branch=develop, --filter=blob:none will only download the files in HEAD
-WORKDIR /app
-RUN git clone -b ${BRANCH_NAME} --filter=blob:none --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
-WORKDIR /app/opticalaberrations
-
-# COPY win_or_ubuntu_gpu.yml   /app/opticalaberrations/win_or_ubuntu_gpu.yml
-
 # install miniconda, create ml conda environment with tensorflow-gpu.
 ENV PATH="/root/miniconda3/bin:${PATH}"
 ARG PATH="/root/miniconda3/bin:${PATH}"
@@ -81,16 +73,19 @@ RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.s
     conda create -n ml pip setuptools tensorflow-gpu=2.10 python=3.10 --yes -c conda-forge && \
     conda clean --all --yes
 
-# Download the current github commit page for the conda install .yml that will invalidate the cache for later layers when the commit version changes.
-ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=${BRANCH_NAME}&path=win_or_ubuntu_gpu.yml&per_page=1" dummy_location_one
-RUN git pull --recurse-submodules
-RUN conda env update --file win_or_ubuntu_gpu.yml && conda clean --all --yes
 
-# Download the current github commit page for this branch to invalidate cache for git pull layer.
-# "git pull" to get the latest.
-ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=${BRANCH_NAME}&per_page=1" dummy_location_two
-RUN git pull --recurse-submodules
-RUN nvidia-smi
+# Download the current github commit page for this branch. This will invalidate the cache for later Docker layers when the commit changes things.
+ARG BRANCH_NAME
+ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=${BRANCH_NAME}&per_page=1" dummy_location
+
+RUN echo "Make sure GPU is active." && nvidia-smi
+# git clone the repo, branch=develop, --filter=blob:none will only download the files in HEAD
+WORKDIR /app
+RUN echo "branch=${BRANCH_NAME}" && git clone -b ${BRANCH_NAME} --filter=blob:none --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
+WORKDIR /app/opticalaberrations
+
+RUN echo "Running $(conda --version).  Time to update 'ml' environment with yml file. " && conda env update --file win_or_ubuntu_gpu.yml  && conda clean --all --yes
+
 RUN conda run -n ml python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 
 SHELL ["conda", "run", "-n", "venv", "/bin/bash", "-l", "-c"]

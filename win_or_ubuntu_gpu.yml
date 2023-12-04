@@ -2,6 +2,14 @@ name: ml
 channels:
   - conda-forge
   - defaults
+
+# versions for python, tensorflow-gpu, and 
+# dask-cuda are pinned to version present in 
+# the NVIDIA container (nvcr.io/nvidia/tensorflow:22.12-tf2-py3)
+# and some are present in Dockerfile.
+
+# tifffile and imagecodecs had bug in later version,
+# and needed to be pinned
 dependencies:
   - python=3.10 
   - cryptography
