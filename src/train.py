@@ -407,6 +407,108 @@ def train_model(
     )
 
 
+def eval_model(
+    dataset: Path,
+    network: str = 'opticalnet',
+    distribution: str = '/',
+    embedding: str = 'spatial_planes',
+    samplelimit: Optional[int] = None,
+    max_amplitude: float = 1,
+    input_shape: int = 64,
+    batch_size: int = 32,
+    wavelength: float = .510,
+    psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+    x_voxel_size: float = .097,
+    y_voxel_size: float = .097,
+    z_voxel_size: float = .2,
+    modes: int = 15,
+    min_photons: int = 1,
+    max_photons: int = 1000000,
+    refractive_index: float = 1.33,
+    no_phase: bool = False,
+    lls_defocus: bool = False,
+):
+    if network == 'baseline':
+        inputs = (input_shape, input_shape, input_shape, 1)
+    else:
+        inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
+
+    if dataset is None:
+        config = dict(
+            psf_type=psf_type,
+            psf_shape=inputs,
+            photons=(min_photons, max_photons),
+            n_modes=modes,
+            distribution=distribution,
+            embedding_option=embedding,
+            amplitude_ranges=(-max_amplitude, max_amplitude),
+            lam_detection=wavelength,
+            batch_size=batch_size,
+            x_voxel_size=x_voxel_size,
+            y_voxel_size=y_voxel_size,
+            z_voxel_size=z_voxel_size,
+            refractive_index=refractive_index,
+            cpu_workers=-1
+        )
+        train_data = data_utils.create_dataset(config)
+    else:
+        eval_data = data_utils.collect_dataset(
+            dataset,
+            metadata=False,
+            modes=modes,
+            distribution=distribution,
+            embedding=embedding,
+            samplelimit=samplelimit,
+            max_amplitude=max_amplitude,
+            no_phase=no_phase,
+            lls_defocus=lls_defocus,
+            photons_range=(min_photons, max_photons)
+        )
+
+        eval_data = eval_data.cache()
+        eval_data = eval_data.shuffle(batch_size)
+        eval_data = eval_data.batch(batch_size)
+        eval_data = eval_data.prefetch(buffer_size=tf.data.AUTOTUNE)
+        steps_per_epoch = tf.data.experimental.cardinality(eval_data).numpy()
+
+        options = tf.data.Options()
+        options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+        eval_data = eval_data.with_options(options)
+
+    custom_objects = {
+        "ROI": ROI,
+        "Stem": opticalnet.Stem,
+        "Patchify": opticalnet.Patchify,
+        "Merge": opticalnet.Merge,
+        "PatchEncoder": opticalnet.PatchEncoder,
+        "MLP": opticalnet.MLP,
+        "Transformer": opticalnet.Transformer,
+        "WarmupCosineDecay": WarmupCosineDecay,
+    }
+    model_path = Path(network)
+
+    try:
+        '''.pb format'''
+        if model_path.is_file() and model_path.suffix == '.pb':
+            model = load_model(str(model_path.parent), custom_objects=custom_objects)
+        else:
+            model = load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent), custom_objects=custom_objects)
+
+    except IndexError or FileNotFoundError or OSError:
+        '''.h5/hdf5 format'''
+        if model_path.is_file() and model_path.suffix == '.h5':
+            model_path = str(model_path)
+        else:
+            model_path = str(list(model_path.rglob('*.h5'))[0])
+
+        model = load_model(model_path, custom_objects=custom_objects)
+
+    results = model.evaluate(
+        eval_data,
+        verbose=1,
+    )
+
+
 def parse_args(args):
     train_parser = cli.argparser()
 
@@ -601,6 +703,11 @@ def parse_args(args):
              '(https://www.tensorflow.org/guide/mixed_precision)'
     )
 
+    train_parser.add_argument(
+        "--eval", action='store_true',
+        help='evaluate on validation set'
+    )
+
     return train_parser.parse_known_args(args)[0]
 
 
@@ -635,49 +742,71 @@ def main(args=None):
         tf.keras.mixed_precision.set_global_policy(policy)
 
     with strategy.scope():
-        train_model(
-            dataset=args.dataset,
-            embedding=args.embedding,
-            outdir=args.outdir,
-            network=args.network,
-            input_shape=args.input_shape,
-            batch_size=args.batch_size,
-            patch_size=[int(i) for i in args.patch_size.split('-')],
-            roi=[int(i) for i in args.roi.split('-')] if args.roi is not None else args.roi,
-            steps_per_epoch=args.steps_per_epoch,
-            psf_type=args.psf_type,
-            x_voxel_size=args.x_voxel_size,
-            y_voxel_size=args.y_voxel_size,
-            z_voxel_size=args.z_voxel_size,
-            modes=args.modes,
-            activation=args.activation,
-            mul=args.mul,
-            opt=args.opt,
-            lr=args.lr,
-            wd=args.wd,
-            dropout=args.dropout,
-            fixedlr=args.fixedlr,
-            warmup=args.warmup,
-            epochs=args.epochs,
-            pmodes=args.pmodes,
-            min_photons=args.min_photons,
-            max_photons=args.max_photons,
-            max_amplitude=args.max_amplitude,
-            distribution=args.dist,
-            samplelimit=args.samplelimit,
-            wavelength=args.wavelength,
-            depth_scalar=args.depth_scalar,
-            width_scalar=args.width_scalar,
-            no_phase=args.no_phase,
-            lls_defocus=args.lls_defocus,
-            defocus_only=args.defocus_only,
-            radial_encoding_period=args.radial_encoding_period,
-            radial_encoding_nth_order=args.radial_encoding_nth_order,
-            positional_encoding_scheme=args.positional_encoding_scheme,
-            stem=args.stem,
-            fixed_dropout_depth=args.fixed_dropout_depth,
-            strategy=strategy
-        )
+        if args.eval:
+            eval_model(
+                dataset=args.dataset,
+                network=args.network,
+                embedding=args.embedding,
+                input_shape=args.input_shape,
+                batch_size=args.batch_size,
+                psf_type=args.psf_type,
+                x_voxel_size=args.x_voxel_size,
+                y_voxel_size=args.y_voxel_size,
+                z_voxel_size=args.z_voxel_size,
+                modes=args.modes,
+                min_photons=args.min_photons,
+                max_photons=args.max_photons,
+                max_amplitude=args.max_amplitude,
+                distribution=args.dist,
+                samplelimit=args.samplelimit,
+                wavelength=args.wavelength,
+                no_phase=args.no_phase,
+                lls_defocus=args.lls_defocus,
+            )
+        else:
+            train_model(
+                dataset=args.dataset,
+                embedding=args.embedding,
+                outdir=args.outdir,
+                network=args.network,
+                input_shape=args.input_shape,
+                batch_size=args.batch_size,
+                patch_size=[int(i) for i in args.patch_size.split('-')],
+                roi=[int(i) for i in args.roi.split('-')] if args.roi is not None else args.roi,
+                steps_per_epoch=args.steps_per_epoch,
+                psf_type=args.psf_type,
+                x_voxel_size=args.x_voxel_size,
+                y_voxel_size=args.y_voxel_size,
+                z_voxel_size=args.z_voxel_size,
+                modes=args.modes,
+                activation=args.activation,
+                mul=args.mul,
+                opt=args.opt,
+                lr=args.lr,
+                wd=args.wd,
+                dropout=args.dropout,
+                fixedlr=args.fixedlr,
+                warmup=args.warmup,
+                epochs=args.epochs,
+                pmodes=args.pmodes,
+                min_photons=args.min_photons,
+                max_photons=args.max_photons,
+                max_amplitude=args.max_amplitude,
+                distribution=args.dist,
+                samplelimit=args.samplelimit,
+                wavelength=args.wavelength,
+                depth_scalar=args.depth_scalar,
+                width_scalar=args.width_scalar,
+                no_phase=args.no_phase,
+                lls_defocus=args.lls_defocus,
+                defocus_only=args.defocus_only,
+                radial_encoding_period=args.radial_encoding_period,
+                radial_encoding_nth_order=args.radial_encoding_nth_order,
+                positional_encoding_scheme=args.positional_encoding_scheme,
+                stem=args.stem,
+                fixed_dropout_depth=args.fixed_dropout_depth,
+                strategy=strategy
+            )
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
