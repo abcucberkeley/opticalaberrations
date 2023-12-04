@@ -6,6 +6,9 @@ dependencies:
   - python=3.10 
   - cudatoolkit=11.8 
   - cudnn=8.9
+  - cryptography
+  - dask-core
+  - dask-cuda
   - matplotlib 
   - astropy 
   - seaborn 
@@ -13,6 +16,7 @@ dependencies:
   - scikit-image 
   - scikit-learn
   - scikit-spatial 
+  - tensorflow-gpu=2.10
   - pandas
   - ipython
   - pytest
@@ -21,7 +25,6 @@ dependencies:
   - pycudadecon
   - pip
   - pip:
-      - tensorflow==2.10 
       - keras==2.10
       - cupy-cuda11x
       - tensorflow_addons
