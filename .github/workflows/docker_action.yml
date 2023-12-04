@@ -127,7 +127,7 @@ jobs:
 
       - name: Build and load Docker image. Use local cache.
         run: |
-          DOCKER_BUILDKIT=0 docker build . --build-arg BRANCH_NAME=${{ BRANCH }} --tag ${{ steps.meta.outputs.tags }}
+          DOCKER_BUILDKIT=0 docker build . --build-arg BRANCH_NAME=${{ env.BRANCH }} --tag ${{ steps.meta.outputs.tags }}
 
         # uses: docker/build-push-action@v5
         # with:
@@ -143,35 +143,35 @@ jobs:
 
       - name: Remove old container if it exists
         continue-on-error: true
-        run: docker rm --name ${{ CONTAINER_NAME }}
+        run: docker rm --name ${{ env.CONTAINER_NAME }}
           
       - name: Test NVIDIA-SMI
-        run: docker run --name ${{ container_name }} --rm --gpus all ${{ steps.meta.outputs.tags }} nvidia-smi
+        run: docker run --name ${{ env.CONTAINER_NAME }} --rm --gpus all ${{ steps.meta.outputs.tags }} nvidia-smi
 
       - name: conda list -n ml
-        run: docker run --name ${{ container_name }} --rm --gpus all ${{ steps.meta.outputs.tags }} "conda list -n ml"
+        run: docker run --name ${{ env.CONTAINER_NAME }} --rm --gpus all ${{ steps.meta.outputs.tags }} "conda list -n ml"
               
       - name: Test TensorFlow
-        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_tensorflow.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_tensorflow.py"
 
       - name: Test IO
-        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_io.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_io.py"
 
       - name: Test preprocessing
-        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_preprocessing.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_preprocessing.py"
 
       - name: Test embeddings
-        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_embeddings.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_embeddings.py"
 
       - name: Test AO
-        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_ao.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_ao.py"
 
       - name: Test synthetic datasets
-        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_datasets.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_datasets.py"
           
       - name: Test training
         continue-on-error: true
-        run: ${{ DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_train.py"
+        run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "~/miniconda3/envs/ml/bin/python -m pytest -vvv --color=yes --disable-warnings tests/test_train.py"
 
       - name: Build and push Docker image
         id: build-and-push
