@@ -5,9 +5,7 @@ channels:
 dependencies:
   - python=3.10 
   - cryptography
-  - cupy
-  - dask-core
-  - dask-cuda
+  - dask-cuda=22.12
   - matplotlib 
   - astropy 
   - seaborn 
@@ -28,6 +26,7 @@ dependencies:
       - tensorflow_addons
       - dphtools
       - csbdeep
+      - cupy-cuda11x
       - line-profiler
       - line-profiler-pycharm
       - tifffile==2023.9.18
