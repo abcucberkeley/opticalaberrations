@@ -1248,7 +1248,7 @@ def predict_files(
     )
 
     if template is not None:
-        tile_names = [f.name for f in paths]
+        tile_names = [f.stem for f in paths]
         predictions = pd.DataFrame(np.zeros((preds.shape[1], template.shape[1])), columns=template.columns)
         predictions[tile_names] = preds.T
 
@@ -1256,7 +1256,7 @@ def predict_files(
         stdevs[tile_names] = std.T
 
     else:
-        tile_names = [f.name for f in paths]
+        tile_names = [f.stem for f in paths]
         predictions = pd.DataFrame(preds.T, columns=tile_names)
         stdevs = pd.DataFrame(std.T, columns=tile_names)
 
