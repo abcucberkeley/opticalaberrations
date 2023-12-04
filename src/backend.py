@@ -105,7 +105,6 @@ def load(model_path: Path, mosaic=False) -> tf.keras.Model:
         "Merge": opticalnet.Merge,
         "PatchEncoder": opticalnet.PatchEncoder,
         "MLP": opticalnet.MLP,
-        "StochasticDepth": opticalnet.StochasticDepth,
         "Transformer": opticalnet.Transformer,
         "WarmupCosineDecay": WarmupCosineDecay,
     }

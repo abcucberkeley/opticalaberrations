@@ -11,6 +11,7 @@ DEFOCUS_ONLY='--defocus_only'
 NETWORK=opticalnet
 MODES=15
 CLUSTER='lsf'
+DEFAULT='--positional_encoding_scheme default --fixed_precision --batch_size 1024 --lr 5e-4 --wd 5e-6 --opt adamw'
 
 SUBSET='aang_dataset'
 if [ $CLUSTER = 'slurm' ];then
@@ -62,6 +63,11 @@ do
   --task "$CONFIG --fixed_precision --batch_size 1024 --lr 5e-4 --wd 5e-6 --opt adamw" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-adamw-fixed-precision
+
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG $DEFAULT" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-default
 done
 
 

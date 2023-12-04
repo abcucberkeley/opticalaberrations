@@ -2,6 +2,7 @@ import logging
 import sys
 from abc import ABC
 
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
@@ -333,8 +334,9 @@ class MLP(layers.Layer):
     def build(self, input_shape):
         super(MLP, self).build(input_shape)
         self.expand = layers.Dense(int(self.expand_rate * input_shape[-1]), activation=self.activation)
-        self.proj = layers.Dense(input_shape[-1], activation=self.activation)
-        self.dropout = layers.Dropout(self.dropout_rate)
+        self.proj = layers.Dense(input_shape[-1])
+        self.dropout1 = layers.Dropout(self.dropout_rate)
+        self.dropout2 = layers.Dropout(self.dropout_rate)
 
     def get_config(self):
         config = super(MLP, self).get_config()
@@ -345,49 +347,12 @@ class MLP(layers.Layer):
         })
         return config
 
-    def call(self, inputs, training=False, **kwargs):
+    def call(self, inputs, training=True, **kwargs):
         x = self.expand(inputs)
-        x = self.dropout(x, training=training)
+        x = self.dropout1(x)
         x = self.proj(x)
-        x = self.dropout(x, training=training)
+        x = self.dropout2(x)
         return x
-
-
-class StochasticDepth(layers.Layer):
-    """
-    Deep Networks with Stochastic Depth: https://arxiv.org/abs/1603.09382
-    https://github.com/tensorflow/addons/blob/v0.20.0/tensorflow_addons/layers/stochastic_depth.py#L5-L90
-    """
-    def __init__(self, survival_probability: float = .5, **kwargs):
-        super().__init__(**kwargs)
-        self.survival_probability = survival_probability
-
-    def compute_output_shape(self, input_shape):
-        return input_shape[0]
-
-    def get_config(self):
-        config = super(StochasticDepth, self).get_config()
-        config.update({
-            "survival_probability": self.survival_probability,
-        })
-        return config
-
-    def call(self, inputs, training=False, **kwargs):
-        if not isinstance(inputs, list) or len(inputs) != 2:
-            raise ValueError("input must be a list of length 2.")
-
-        shortcut, residual = inputs
-
-        # Random bernoulli variable indicating whether the branch should be kept or not
-        b_l = tf.keras.backend.random_bernoulli([], p=self.survival_probability, dtype=shortcut.dtype)
-
-        def _call_train():
-            return shortcut + b_l * residual
-
-        def _call_test():
-            return shortcut + self.survival_probability * residual
-
-        return tf.keras.backend.in_train_phase(_call_train, _call_test, training=training)
 
 
 class Transformer(layers.Layer):
@@ -407,9 +372,9 @@ class Transformer(layers.Layer):
         self.dropout_rate = dropout_rate
         self.expand_rate = expand_rate
 
-        self.inner_drop_path = StochasticDepth(survival_probability=1-dropout_rate)
-        self.outer_drop_path = StochasticDepth(survival_probability=1-dropout_rate)
-        self.ln = layers.LayerNormalization(axis=-1, epsilon=1e-6)
+        self.dropout = layers.Dropout(self.dropout_rate)
+        self.ln1 = layers.LayerNormalization(axis=-1, epsilon=1e-6)
+        self.ln2 = layers.LayerNormalization(axis=-1, epsilon=1e-6)
         self.msa = layers.MultiHeadAttention(
             num_heads=self.heads,
             key_dim=self.dims,
@@ -435,14 +400,15 @@ class Transformer(layers.Layer):
         })
         return config
 
-    def call(self, inputs, training=None, **kwargs):
-        ln1 = self.ln(inputs)
+    def call(self, inputs, training=True, **kwargs):
+        ln1 = self.ln1(inputs)
         att = self.msa(ln1, ln1)
-        s1 = self.inner_drop_path([inputs, att], training=training)
+        att = self.dropout(att)
+        s1 = layers.Add()([inputs, att])
 
-        ln2 = self.ln(s1)
-        s2 = self.mlp(ln2, training=training)
-        return self.outer_drop_path([s1, s2], training=training)
+        ln2 = self.ln2(s1)
+        s2 = self.mlp(ln2)
+        return layers.Add()([s1, s2])
 
 
 class OpticalTransformer(Base, ABC):
@@ -519,7 +485,7 @@ class OpticalTransformer(Base, ABC):
             )
         return m
 
-    def call(self, inputs, training=False, **kwargs):
+    def call(self, inputs, training=True, **kwargs):
 
         if self.stem:
             m = Stem(
@@ -555,7 +521,7 @@ class OpticalTransformer(Base, ABC):
                     activation=self.activation,
                     dropout_rate=dropout_rate,
                     expand_rate=self.expand_rate,
-                )(m, training=training)
+                )(m)
             m = layers.add([res, m])
 
         m = self.avg(m)
