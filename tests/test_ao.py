@@ -98,19 +98,6 @@ def test_predict_folder(kargs):
     predictions = predictions.drop(columns=['mean', 'median', 'min', 'max', 'std'])
     assert predictions.shape == (kargs['num_modes'], 11)
 
-    # aberrations = pd.DataFrame().reindex_like(predictions)
-    # for i, mode in enumerate(range(3, kargs['num_modes'])):
-    #     if mode == 4:
-    #         continue
-    #     else:
-    #         abr = np.zeros(15)
-    #         abr[mode] = .1
-    #         aberrations[f"z{mode}.tif"] = abr
-    #
-    # results = aberrations - predictions
-    # results = results.abs().round(3)
-    # np.testing.assert_allclose(results.values, np.zeros_like(results.values))
-
 
 @pytest.mark.run(order=5)
 def test_predict_tiles(kargs):
@@ -136,6 +123,7 @@ def test_predict_tiles(kargs):
 
     tile_predictions = tile_predictions.drop(columns=['mean', 'median', 'min', 'max', 'std'])
     assert tile_predictions.shape == (kargs['num_modes'], kargs['num_tiles']), f'{tile_predictions=}'
+
 
 @pytest.mark.run(order=6)
 def test_aggregate_tiles(kargs):

@@ -21,7 +21,6 @@ import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 import tensorflow as tf
-from tensorflow.keras.models import load_model, save_model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.optimizers.experimental import AdamW
 from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping, BackupAndRestore
@@ -31,6 +30,7 @@ from warmupcosinedecay import WarmupCosineDecay
 from callbacks import LRLogger
 from callbacks import Defibrillator
 from callbacks import TensorBoardCallback
+from backend import load
 
 import utils
 import data_utils
@@ -38,7 +38,6 @@ import opticalnet
 import baseline
 import otfnet
 import cli
-from roi import ROI
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -142,7 +141,6 @@ def train_model(
     stem: bool = False,
     mul: bool = False,
     finetune: bool = False,
-    strategy: Any = None
 ):
     outdir.mkdir(exist_ok=True, parents=True)
     network = network.lower()
@@ -258,21 +256,8 @@ def train_model(
         optimizer = Adam(learning_rate=scheduler, clipnorm=1.0)
 
     try:  # check if model already exists
-        model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent  # sort models to get the latest checkpoint
-
-        custom_objects = {
-            "ROI": ROI,
-            "Stem": opticalnet.Stem,
-            "Patchify": opticalnet.Patchify,
-            "Merge": opticalnet.Merge,
-            "PatchEncoder": opticalnet.PatchEncoder,
-            "MLP": opticalnet.MLP,
-            "StochasticDepth": opticalnet.StochasticDepth,
-            "Transformer": opticalnet.Transformer,
-            "WarmupCosineDecay": WarmupCosineDecay,
-        }
-
-        model = load_model(model_path, custom_objects=custom_objects)
+        model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent # sort models to get the latest checkpoint
+        model = load(model_path)
         optimizer = model.optimizer
 
         if isinstance(model, tf.keras.Model):
@@ -450,7 +435,7 @@ def eval_model(
             refractive_index=refractive_index,
             cpu_workers=-1
         )
-        train_data = data_utils.create_dataset(config)
+        eval_data = data_utils.create_dataset(config)
     else:
         eval_data = data_utils.collect_dataset(
             dataset,
@@ -469,40 +454,12 @@ def eval_model(
         eval_data = eval_data.shuffle(batch_size)
         eval_data = eval_data.batch(batch_size)
         eval_data = eval_data.prefetch(buffer_size=tf.data.AUTOTUNE)
-        steps_per_epoch = tf.data.experimental.cardinality(eval_data).numpy()
 
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
         eval_data = eval_data.with_options(options)
 
-    custom_objects = {
-        "ROI": ROI,
-        "Stem": opticalnet.Stem,
-        "Patchify": opticalnet.Patchify,
-        "Merge": opticalnet.Merge,
-        "PatchEncoder": opticalnet.PatchEncoder,
-        "MLP": opticalnet.MLP,
-        "Transformer": opticalnet.Transformer,
-        "WarmupCosineDecay": WarmupCosineDecay,
-    }
-    model_path = Path(network)
-
-    try:
-        '''.pb format'''
-        if model_path.is_file() and model_path.suffix == '.pb':
-            model = load_model(str(model_path.parent), custom_objects=custom_objects)
-        else:
-            model = load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent), custom_objects=custom_objects)
-
-    except IndexError or FileNotFoundError or OSError:
-        '''.h5/hdf5 format'''
-        if model_path.is_file() and model_path.suffix == '.h5':
-            model_path = str(model_path)
-        else:
-            model_path = str(list(model_path.rglob('*.h5'))[0])
-
-        model = load_model(model_path, custom_objects=custom_objects)
-
+    model = load(network)
     results = model.evaluate(
         eval_data,
         verbose=1,
@@ -805,7 +762,6 @@ def main(args=None):
                 positional_encoding_scheme=args.positional_encoding_scheme,
                 stem=args.stem,
                 fixed_dropout_depth=args.fixed_dropout_depth,
-                strategy=strategy
             )
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")

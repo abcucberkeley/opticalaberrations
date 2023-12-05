@@ -95,7 +95,7 @@ class DatasetGenerator:
 
 
 @profile
-def load(model_path: Path, mosaic=False) -> tf.keras.Model:
+def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
     model_path = Path(model_path)
 
     custom_objects = {
@@ -114,16 +114,13 @@ def load(model_path: Path, mosaic=False) -> tf.keras.Model:
             model_path = Path(model_path)
         else:
             model_path = Path(list(model_path.rglob('*.h5'))[0])
-
-        return load_model(model_path, custom_objects=custom_objects)
-
     else:
         try:
             '''.pb format'''
             if model_path.is_file() and model_path.suffix == '.pb':
-                return load_model(str(model_path.parent), custom_objects=custom_objects)
+                model_path = str(model_path.parent)
             else:
-                return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent), custom_objects=custom_objects)
+                model_path = str(list(model_path.rglob('saved_model.pb'))[0].parent)
 
         except IndexError or FileNotFoundError or OSError:
             '''.h5/hdf5 format'''
@@ -132,7 +129,7 @@ def load(model_path: Path, mosaic=False) -> tf.keras.Model:
             else:
                 model_path = str(list(model_path.rglob('*.h5'))[0])
 
-            return load_model(model_path, custom_objects=custom_objects)
+    return load_model(model_path, custom_objects=custom_objects)
 
 
 @profile
