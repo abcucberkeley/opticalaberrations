@@ -1118,14 +1118,14 @@ def predict_folder(
         unit=' file',
         file=sys.stdout
     ):
-        f = prep(path,  plot=outdir/path.name.strip('.tif') if plot else None)
+        f = prep(path,  plot=outdir/path.stem if plot else None)
         if np.all(f == 0):
-            files[path.name] = dict(
+            files[path.stem] = dict(
                 path=outdir / path.name,
                 ignored=True,
             )
         else:
-            files[path.name] = dict(
+            files[path.stem] = dict(
                 path=outdir / path.name,
                 ignored=False,
             )
