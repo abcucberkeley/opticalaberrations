@@ -88,7 +88,6 @@ def test_zernike_model(kargs):
             batch_size=kargs['batch_size'],
             warmup=1,
             epochs=5,
-            strategy=strategy,
         )
 
 
@@ -117,7 +116,6 @@ def test_defocus_model(kargs):
             batch_size=kargs['batch_size'],
             warmup=1,
             epochs=5,
-            strategy=strategy,
             defocus_only=True,
         )
 
@@ -147,7 +145,6 @@ def test_zernike_defocus_model(kargs):
             batch_size=kargs['batch_size'],
             warmup=1,
             epochs=5,
-            strategy=strategy,
             lls_defocus=True,
         )
 
@@ -177,6 +174,5 @@ def test_finetune_zernike_model(kargs):
             batch_size=kargs['batch_size'],
             warmup=1,
             epochs=5,
-            strategy=strategy,
             finetune=True,
         )
