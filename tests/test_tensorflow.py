@@ -10,6 +10,7 @@ warnings.filterwarnings("ignore")
 
 import pytest
 
+
 @pytest.mark.run(order=1)
 def test_tensorflow(kargs):
     physical_devices = tf.config.list_physical_devices('GPU')
