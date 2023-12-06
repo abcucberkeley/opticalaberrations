@@ -1,11 +1,11 @@
 #   to (re)build image, run container:
-# docker rm ml_cont || docker build . -t ml --build-arg BRANCH_NAME=latest-tf --progress=plain && docker run -it --name ml_cont --gpus all   ml  /bin/bash
+# docker rm ml_cont || DOCKER_BUILDKIT=0 docker build . -t ml --build-arg BRANCH_NAME=$(git branch --show-current) --progress=plain && docker run -it --name ml_cont --gpus all   ml  /bin/bash
 
 #   to (re)build image with no cache:
-# docker rm ml_cont || docker build . -t ml --build-arg BRANCH_NAME=latest-tf --progress=plain --no-cache && docker run -it --name ml_cont --gpus all   ml  /bin/bash
+# docker rm ml_cont || DOCKER_BUILDKIT=0 docker build . -t ml --build-arg BRANCH_NAME=$(git branch --show-current) --progress=plain --no-cache && docker run -it --name ml_cont --gpus all   ml  /bin/bash
 
 #   to rebuild and tensorflow gpu test
-# docker rm ml_cont; DOCKER_BUILDKIT=0 docker build . -t ml --build-arg BRANCH_NAME=$(git branch --show-current) ; docker run --rm --gpus all ml  "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_tensorflow.py"; docker run -it --name ml_cont --gpus all   ml  /bin/bash
+# docker rm ml_cont || DOCKER_BUILDKIT=0 docker build . -t ml --build-arg BRANCH_NAME=$(git branch --show-current) ; docker run --rm --gpus all ml  "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_tensorflow.py"; docker run -it --name ml_cont --gpus all   ml  /bin/bash
 
 
 #   then (optionally) run tests from within the container:
@@ -26,8 +26,7 @@
 # test tensorflow GPU:
 # python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 
-# 'conda install tensorflow' will not install GPU version because GPU is not detected ever during 'docker build'
-# 'pip install tensorflow' will install GPU version 
+# 'conda install tensorflow-gpu' will not install GPU version because GPU is not detected during 'docker build' unless DOCKER_BUILDKIT=0
 
 # Alternative starting points
 # FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04   
