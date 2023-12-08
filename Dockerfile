@@ -83,9 +83,9 @@ ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=$
 
 
 # git clone the repo, branch=develop, --filter=blob:none will only download the files in HEAD
-WORKDIR /app
+WORKDIR /docker_install
 RUN echo "branch=${BRANCH_NAME}" && git clone -n -b ${BRANCH_NAME} --depth 1 https://github.com/abcucberkeley/opticalaberrations.git 
-WORKDIR /app/opticalaberrations
+WORKDIR /docker_install/opticalaberrations
 RUN git checkout HEAD requirements.txt
 
 RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off 
@@ -93,6 +93,6 @@ RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off
 
 # RUN python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 
-WORKDIR /app/opticalaberrations
+WORKDIR /app
 # SHELL ["/bin/bash", "-l", "-c"]
 ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
