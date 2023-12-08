@@ -167,6 +167,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          load: true
           build-args: |
             BRANCH_NAME=${{ env.BRANCH }}    
 
@@ -180,6 +181,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}_failed
           labels: ${{ steps.meta.outputs.labels }}
+          load: true
           build-args: |
             BRANCH_NAME=${{ env.BRANCH }}      
         
@@ -194,12 +196,12 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
       ports:
         - 80
-      options: --gpus all --name gha_$(git branch --show-current) --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864
+      options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864
     defaults:
       run:
         shell: bash
     steps:
-      
+
       - name: Checkout repo in container
         uses: actions/checkout@v4
         with:

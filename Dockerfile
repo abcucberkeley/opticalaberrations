@@ -88,7 +88,7 @@ RUN echo "branch=${BRANCH_NAME}" && git clone -n -b ${BRANCH_NAME} --depth 1 htt
 WORKDIR /app/opticalaberrations
 RUN git checkout HEAD requirements.txt
 
-RUN pip install -r requirements.txt  --progress-bar off
+RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off 
 # # RUN echo "Running $(conda --version).  Time to update 'ml' environment with yml file. " && conda env update --file win_or_ubuntu_gpu.yml  && conda clean --all --yes
 
 # RUN python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
