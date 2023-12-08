@@ -112,18 +112,18 @@ jobs:
             org.opencontainers.image.description=Docker image for a transformer network to perform sensorless detection of aberrations in adaptive optics. https://github.com/abcucberkeley/opticalaberrations
             org.opencontainers.image.vendor=Advanced Bioimaging Center at UC Berkeley and Janelia Research Campus
 
-      - name: Build and load Docker image. Use local cache.
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          load: true
-          build-args: |
-            BRANCH_NAME=${{ env.BRANCH }}
-      # run: |
+      # - name: Build and load Docker image. Use local cache.
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: .
+      #     file: ./Dockerfile
+      #     push: false
+      #     tags: ${{ steps.meta.outputs.tags }}
+      #     labels: ${{ steps.meta.outputs.labels }}
+      #     load: true
+      #     build-args: |
+      #       BRANCH_NAME=${{ env.BRANCH }}
+      # # run: |
       #   DOCKER_BUILDKIT=0 docker build . --build-arg BRANCH_NAME=${{ env.BRANCH }} --tag ${{ steps.meta.outputs.tags }}
 
       # - name: Remove old container if it exists
@@ -158,8 +158,8 @@ jobs:
       #   continue-on-error: true
       #   run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "python -m pytest -vvv --color=yes --disable-warnings tests/test_train.py"
 
-      - name: Build and push tested Docker image
-        id: build-and-push-tested
+      - name: Build and push Docker image
+        id: build-and-push
         uses: docker/build-push-action@v5        
         with:
           context: .
@@ -167,30 +167,29 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          load: true
           build-args: |
             BRANCH_NAME=${{ env.BRANCH }}    
 
-      - name: Build and push test failed Docker image
-        if: failure()
-        id: build-and-push-if-failed
-        uses: docker/build-push-action@v5        
-        with:
-          context: .
-          file: ./Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}_failed
-          labels: ${{ steps.meta.outputs.labels }}
-          load: true
-          build-args: |
-            BRANCH_NAME=${{ env.BRANCH }}      
+      # - name: Build and push test failed Docker image
+      #   if: failure()
+      #   id: build-and-push-if-failed
+      #   uses: docker/build-push-action@v5        
+      #   with:
+      #     context: .
+      #     file: ./Dockerfile
+      #     push: ${{ github.event_name != 'pull_request' }}
+      #     tags: ${{ steps.meta.outputs.tags }}_failed
+      #     labels: ${{ steps.meta.outputs.labels }}
+      #     load: true
+      #     build-args: |
+      #       BRANCH_NAME=${{ env.BRANCH }}      
         
   container-test-job:
     needs: build
     if: always()
     runs-on: self-hosted
     container: 
-      image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'
+      image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # pull image 'latest-tf' or 'develop'
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
