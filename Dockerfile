@@ -35,57 +35,57 @@
 # FROM nvcr.io/nvidia/tensorrt:23.10-py3
 # Found tensorflow==2.10 https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html  here: FROM nvcr.io/nvidia/tensorflow:22.12-tf2-py3
 
-FROM nvcr.io/nvidia/tensorflow:22.12-tf2-py3
+FROM nvcr.io/nvidia/tensorflow:23.10-tf2-py3
 # docker run --rm -it -gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 nvcr.io/nvidia/tensorflow:23.10-tf2-py3 /bin/bash
 
-ENV NVIDIA_VISIBLE_DEVICES all
-ENV NVIDIA_DRIVER_CAPABILITIES video,compute,utility
-
 # Make sure we have nvidia gpus available during Docker Build or else tensorflow-gpu won't install
-RUN nvidia-smi
+# RUN nvidia-smi
 
 # install needed utils. Don't "apt-get upgrade" or else all the NVIDIA tools and drivers will update.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    git \
-    gnupg \
-    wget \
-    vim \
-  #  g++-11 \
-    && rm -rf /var/lib/apt/lists/*
+# RUN apt-get update \
+#   && apt-get install -y --no-install-recommends \
+#     ca-certificates \
+#     curl \
+#     git \
+#     gnupg \
+#     wget \
+#     vim \
+#   #  g++-11 \
+#     && rm -rf /var/lib/apt/lists/*
+
 
 # install git-lfs
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && apt-get install git-lfs && rm -rf /var/lib/apt/lists/*
 
-# install miniconda, create ml conda environment with tensorflow-gpu.
-ENV PATH="/root/miniconda3/bin:${PATH}"
-ARG PATH="/root/miniconda3/bin:${PATH}"
-RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
-    && mkdir /root/.conda \
-    && bash Miniconda3-latest-Linux-x86_64.sh -b \
-    && rm -f Miniconda3-latest-Linux-x86_64.sh \
-    && echo "Running $(conda --version)" && \
-    conda init bash && \
-    . /root/.bashrc && \ 
-    conda create -n ml pip setuptools tensorflow-gpu=2.10 python=3.10 --yes -c conda-forge && \
-    conda clean --all --yes
+# # install miniconda, create ml conda environment with tensorflow-gpu.
+# ENV PATH="/root/miniconda3/bin:${PATH}"
+# ARG PATH="/root/miniconda3/bin:${PATH}"
+# RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+#     && mkdir /root/.conda \
+#     && bash Miniconda3-latest-Linux-x86_64.sh -b \
+#     && rm -f Miniconda3-latest-Linux-x86_64.sh \
+#     && echo "Running $(conda --version)" && \
+#     conda init bash && \
+#     . /root/.bashrc && \ 
+#     conda create -n ml pip setuptools tensorflow-gpu=2.10 python=3.10 --yes -c conda-forge && \
+#     conda clean --all --yes
 
 
 # Download the current github commit page for this branch. This will invalidate the cache for later Docker layers when the commit changes things.
 ARG BRANCH_NAME
 ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=${BRANCH_NAME}&per_page=1" dummy_location
 
-RUN echo "Make sure GPU is active." && nvidia-smi
+# RUN echo "Make sure GPU is active." && nvidia-smi
 # git clone the repo, branch=develop, --filter=blob:none will only download the files in HEAD
 WORKDIR /app
 RUN echo "branch=${BRANCH_NAME}" && git clone -b ${BRANCH_NAME} --filter=blob:none --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
 WORKDIR /app/opticalaberrations
 
-RUN echo "Running $(conda --version).  Time to update 'ml' environment with yml file. " && conda env update --file win_or_ubuntu_gpu.yml  && conda clean --all --yes
+# COPY requirements.txt /app/opticalaberrations/requirements.txt
+RUN pip install -r requirements.txt 
+# # RUN echo "Running $(conda --version).  Time to update 'ml' environment with yml file. " && conda env update --file win_or_ubuntu_gpu.yml  && conda clean --all --yes
 
-RUN conda run -n ml python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+# RUN python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 
-SHELL ["conda", "run", "-n", "venv", "/bin/bash", "-l", "-c"]
+# SHELL ["/bin/bash", "-l", "-c"]
 ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
