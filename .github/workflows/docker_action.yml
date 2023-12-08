@@ -85,13 +85,6 @@ jobs:
             echo "$file was changed"
           done
 
-      - name: Checkout just Dockerfile
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-             Dockerfile
-          sparse-checkout-cone-mode: false
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -189,3 +182,32 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BRANCH_NAME=${{ env.BRANCH }}      
+        
+  container-test-job:
+    needs: build
+    runs-on: self-hosted
+    container: 
+      image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'
+      env:
+        NODE_ENV: development
+      ports:
+        - 80
+      options: |
+        --gpus all
+        --name gha_$(git branch --show-current)
+        --ipc=host 
+        --ulimit memlock=-1 
+        --ulimit stack=67108864
+    defaults:
+      run:
+        shell: bash
+    steps:
+
+      - name: Checkout repo in container
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+          fetch-depth: 0  # OR "2" -> To retrieve the preceding commit.
+      
+      - name: Test TensorFlow
+        run: python -m pytest -vvv --color=yes --disable-warnings tests/test_tensorflow.py

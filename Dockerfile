@@ -77,15 +77,16 @@ ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=$
 
 # RUN echo "Make sure GPU is active." && nvidia-smi
 # git clone the repo, branch=develop, --filter=blob:none will only download the files in HEAD
-WORKDIR /app
-RUN echo "branch=${BRANCH_NAME}" && git clone -b ${BRANCH_NAME} --filter=blob:none --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
-WORKDIR /app/opticalaberrations
+# WORKDIR /app
+# RUN echo "branch=${BRANCH_NAME}" && git clone -b ${BRANCH_NAME} --filter=blob:none --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
+# WORKDIR /app/opticalaberrations
 
-# COPY requirements.txt /app/opticalaberrations/requirements.txt
+COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt  --progress-bar off
 # # RUN echo "Running $(conda --version).  Time to update 'ml' environment with yml file. " && conda env update --file win_or_ubuntu_gpu.yml  && conda clean --all --yes
 
 # RUN python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 
+WORKDIR /app/opticalaberrations
 # SHELL ["/bin/bash", "-l", "-c"]
 ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
