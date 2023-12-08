@@ -48,11 +48,6 @@ jobs:
           RUNNER_CONTEXT: ${{ toJson(runner) }}
         run: echo "$RUNNER_CONTEXT"
 
-      # - name: Extract branch name
-      #   shell: bash
-      #   run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
-      #   id: extract_branch
-
       - name: Show default environment variables
         run: |
           echo "The job_id is: $GITHUB_JOB"   # reference the default environment variables
@@ -134,7 +129,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           load: true
           build-args: |
-            BRANCH_NAME=${{ steps.extract_branch.outputs.branch }}
+            BRANCH_NAME=${{ env.BRANCH }}
       # run: |
       #   DOCKER_BUILDKIT=0 docker build . --build-arg BRANCH_NAME=${{ env.BRANCH }} --tag ${{ steps.meta.outputs.tags }}
 
@@ -180,7 +175,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BRANCH_NAME=${{ steps.extract_branch.outputs.branch }}         
+            BRANCH_NAME=${{ env.BRANCH }}    
 
       - name: Build and push test failed Docker image
         if: failure()
@@ -193,4 +188,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}_failed
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BRANCH_NAME=${{ steps.extract_branch.outputs.branch }}         
+            BRANCH_NAME=${{ env.BRANCH }}      
