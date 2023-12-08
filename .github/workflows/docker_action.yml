@@ -193,12 +193,7 @@ jobs:
         NODE_ENV: development
       ports:
         - 80
-      options: |
-        --gpus all
-        --name gha_$(git branch --show-current)
-        --ipc=host 
-        --ulimit memlock=-1 
-        --ulimit stack=67108864
+      options: --gpus all --name gha_$(git branch --show-current) --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864
     defaults:
       run:
         shell: bash
