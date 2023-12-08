@@ -132,7 +132,6 @@ jobs:
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          no-cache: true
           load: true
           build-args: |
             BRANCH_NAME=${{ steps.extract_branch.outputs.branch }}
@@ -171,22 +170,27 @@ jobs:
         continue-on-error: true
         run: ${{ env.DOCKER_RUN }} ${{ steps.meta.outputs.tags }} "python -m pytest -vvv --color=yes --disable-warnings tests/test_train.py"
 
-      - name: Build and push Docker image
-        id: build-and-push
-        run: docker image push ${{ steps.meta.outputs.tags }}
-
-      - name: Build and push test failed Docker image
-        if: failure()
-        id: build-and-push-if-failed
-        # clone tag to _failed_tests and then push
-        run: docker tag ${{ steps.meta.outputs.tags }} ${{ steps.meta.outputs.tags }}_failed && docker image push ${{ steps.meta.outputs.tags }}_failed
-
+      - name: Build and push tested Docker image
+        id: build-and-push-tested
         uses: docker/build-push-action@v5        
         with:
           context: .
           file: ./Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BRANCH_NAME=${{ steps.extract_branch.outputs.branch }}         
+
+      - name: Build and push test failed Docker image
+        if: failure()
+        id: build-and-push-if-failed
+        uses: docker/build-push-action@v5        
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}_failed
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BRANCH_NAME=${{ steps.extract_branch.outputs.branch }}         
