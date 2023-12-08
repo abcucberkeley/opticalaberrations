@@ -185,6 +185,7 @@ jobs:
         
   container-test-job:
     needs: build
+    if: always()
     runs-on: self-hosted
     container: 
       image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'
