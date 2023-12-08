@@ -81,7 +81,13 @@ ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=$
 # RUN echo "branch=${BRANCH_NAME}" && git clone -b ${BRANCH_NAME} --filter=blob:none --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
 # WORKDIR /app/opticalaberrations
 
-COPY requirements.txt requirements.txt
+
+# git clone the repo, branch=develop, --filter=blob:none will only download the files in HEAD
+WORKDIR /app
+RUN echo "branch=${BRANCH_NAME}" && git clone -n -b ${BRANCH_NAME} --depth 1 https://github.com/abcucberkeley/opticalaberrations.git 
+WORKDIR /app/opticalaberrations
+RUN git checkout HEAD requirements.txt
+
 RUN pip install -r requirements.txt  --progress-bar off
 # # RUN echo "Running $(conda --version).  Time to update 'ml' environment with yml file. " && conda env update --file win_or_ubuntu_gpu.yml  && conda clean --all --yes
 
