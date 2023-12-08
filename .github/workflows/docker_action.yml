@@ -189,8 +189,9 @@ jobs:
     runs-on: self-hosted
     container: 
       image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'
-      env:
-        NODE_ENV: development
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
       ports:
         - 80
       options: --gpus all --name gha_$(git branch --show-current) --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864
@@ -198,7 +199,7 @@ jobs:
       run:
         shell: bash
     steps:
-
+      
       - name: Checkout repo in container
         uses: actions/checkout@v4
         with:
