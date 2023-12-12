@@ -3,8 +3,8 @@
 ENV=~/anaconda3/envs/ml/bin/python
 NODES='abc'
 
-xVOXEL=.097
-yVOXEL=.097
+xVOXEL=.125
+yVOXEL=.125
 zVOXEL=.200
 LAMBDA=.510
 NA=1.0
@@ -18,7 +18,7 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='aang_dataset'
+TITLE='big_highsnr_dataset'
 DATASET='test'
 
 MODE_DIST='pyramid'
@@ -32,8 +32,8 @@ if [ "$DATASET" = "train" ];then
   SAMPLES_PER_JOB=100
   SAMPLES_PER_BIN=400
   OBJS=(1 2 3 4 5)
-  mPH=($(seq 1 25000 250000))
-  xPH=($(seq 25000 25000 250000))
+  mPH=($(seq 100000 50000 550000))
+  xPH=($(seq 150000 50000 600000))
   amps1=($(seq 0 .01 .24))
   amps2=($(seq .01 .01 .25))
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))

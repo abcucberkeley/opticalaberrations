@@ -23,6 +23,7 @@ from astropy import convolution
 import tensorflow as tf
 from line_profiler_pycharm import profile
 
+import utils
 from wavefront import Wavefront
 from zernike import Zernike
 from synthetic import SyntheticPSF
@@ -229,6 +230,9 @@ def plot_embedding_pyramid(
                                 normed=True,
                                 meta=False,
                             )
+                            # psf /= np.sum(psf)
+                            # psf *= 200000
+                            # psf = utils.add_noise(psf)
 
                             emb = fourier_embeddings(
                                 psf,
