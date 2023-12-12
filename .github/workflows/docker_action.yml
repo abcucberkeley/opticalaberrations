@@ -130,7 +130,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: 'true'
-          submodules: 'true'
+          submodules: 'recursive'
 
       - name: pip list 
         run: pip list
