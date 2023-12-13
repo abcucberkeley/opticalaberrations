@@ -59,7 +59,7 @@ def test_remove_background_noise(kargs):
         y_voxel_size=kargs['lateral_voxel_size'],
         z_voxel_size=kargs['axial_voxel_size'],
     )
-    na_mask = samplepsfgen.na_mask()
+    na_mask = samplepsfgen.na_mask
 
     # Setup test images: "realsp" and "fourier"
     # real space image = a single voxel at the center of a volume.  This will create a uniform otf.

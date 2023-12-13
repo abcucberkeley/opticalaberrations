@@ -4,8 +4,8 @@
 
 SHAPE=64
 DZ=200
-DY=97
-DX=97
+DY=125
+DX=125
 DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
 NETWORK=opticalnet
@@ -13,7 +13,7 @@ MODES=15
 CLUSTER='lsf'
 DEFAULT='--positional_encoding_scheme default --fixed_precision --batch_size 1024 --lr 5e-4 --wd 5e-6 --opt adamw'
 
-SUBSET='big_highsnr_dataset'
+SUBSET='125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"
 else

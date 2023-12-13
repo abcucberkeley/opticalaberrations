@@ -32,8 +32,7 @@ except ImportError as e:
     from scipy.ndimage import rotate, map_coordinates
     logging.warning(f"Cupy not supported on your system: {e}")
 
-import preprocessing
-from preprocessing import resize_with_crop_or_pad
+from preprocessing import resize_with_crop_or_pad, measure_snr, measure_noise
 from utils import multiprocess, gaussian_kernel, fft, ifft, normalize_otf
 from vis import savesvg, plot_interference, plot_embeddings
 
@@ -245,7 +244,7 @@ def remove_interference_pattern(
     template_poi[1] = np.clip(template_poi[1], a_min=half_length, a_max=(psf.shape[1] - half_length) - 1)
     template_poi[2] = np.clip(template_poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
 
-    high_snr = preprocessing.measure_snr(psf) > 30  # SNR good enough for template
+    high_snr = measure_snr(psf) > 30  # SNR good enough for template
 
     if high_snr:
         # logger.info('Using template')
@@ -325,7 +324,7 @@ def remove_interference_pattern(
         beads[beads < .05] = 0.
         pois = np.array([[z, y, x] for z, y, x in zip(*np.nonzero(beads))])
 
-    noise = preprocessing.measure_noise(psf)
+    noise = measure_noise(psf)
     baseline = np.nanmedian(psf)
     good_psnr = np.zeros(pois.shape[0], dtype=bool)
     psnrs = np.zeros(pois.shape[0], dtype=float)

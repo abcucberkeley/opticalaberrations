@@ -23,10 +23,8 @@ from scipy.spatial import KDTree
 from numpy.lib.stride_tricks import sliding_window_view
 import matplotlib.patches as patches
 from line_profiler_pycharm import profile
-from skimage.filters import window, difference_of_gaussians
+from skimage.filters import window
 from tifffile import TiffFile
-from utils import round_to_even
-from synthetic import SyntheticPSF
 
 try:
     import cupy as cp
@@ -35,6 +33,7 @@ except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
 from vis import plot_mip, savesvg
+from utils import round_to_even
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -351,20 +350,20 @@ def remove_background_noise(
     elif method == 'difference_of_gaussians':
         image = dog(image, low_sigma=low_sigma, high_sigma=high_sigma, min_psnr=min_psnr)
 
-    elif method == 'fourier_filter':
-        logger.warning("Using hardcoded NA Mask for Fourier filter. Code should be updated to use actual NA Mask.")
-        na_mask = SyntheticPSF(
-            psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-            psf_shape=image.shape,
-        ).na_mask()
-
-        image = na_and_background_filter(
-            image,
-            low_sigma=low_sigma,
-            high_sigma=high_sigma,
-            na_mask=na_mask,
-            min_psnr=min_psnr
-        )
+    # elif method == 'fourier_filter':
+    #     logger.warning("Using hardcoded NA Mask for Fourier filter. Code should be updated to use actual NA Mask.")
+    #     na_mask = SyntheticPSF(
+    #         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+    #         psf_shape=image.shape,
+    #     ).na_mask
+    #
+    #     image = na_and_background_filter(
+    #         image,
+    #         low_sigma=low_sigma,
+    #         high_sigma=high_sigma,
+    #         na_mask=na_mask,
+    #         min_psnr=min_psnr
+    #     )
 
     else:
         raise Exception(f"Unknown method '{method}' for remove_background_noise functions.")

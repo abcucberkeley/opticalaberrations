@@ -120,8 +120,8 @@ def train_model(
     epochs: int = 5,
     wavelength: float = .510,
     psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-    x_voxel_size: float = .097,
-    y_voxel_size: float = .097,
+    x_voxel_size: float = .125,
+    y_voxel_size: float = .125,
     z_voxel_size: float = .2,
     modes: int = 15,
     pmodes: Optional[int] = None,
@@ -140,7 +140,7 @@ def train_model(
     steps_per_epoch: Optional[int] = None,
     stem: bool = False,
     mul: bool = False,
-    finetune: bool = False,
+    finetune: Optional[Path] = None,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
     network = network.lower()
@@ -271,7 +271,9 @@ def train_model(
             outdir.mkdir(exist_ok=True, parents=True)
 
     except Exception as e:
-        logger.warning(f"No model found in {outdir}; Creating a new model.")
+        logger.warning(f"No model found in {outdir}")
+        outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
+        outdir.mkdir(exist_ok=True, parents=True)
 
     if not restored:  # Build a new model
         if defocus_only:  # only predict LLS defocus offset
@@ -318,15 +320,18 @@ def train_model(
         else:
             raise Exception(f'Network "{network}" is unknown.')
 
-    if restored and not finetune:
-        logger.info(f"Continue training {model.name} restored from {model_path}")
+    if restored and finetune is None:
+        logger.info(f"Continue training {model.name} restored from {model_path} using {optimizer.get_config()}")
     else:
-        if finetune:
-            logger.info(f"Finetuning {model.name} using {optimizer.get_config()}")
+        if finetune is not None:
+            model = load(finetune)
+            logger.info(model.summary(line_length=125, expand_nested=True))
+            logger.info(f"Finetuning {model.name}; {optimizer.get_config()}")
+
         else:  # creating a new model
             model = model.build(input_shape=inputs)
-            logger.info(model.summary())
-            logger.info(optimizer.get_config())
+            logger.info(model.summary(line_length=125, expand_nested=True))
+            logger.info(f"Creating a new model; {optimizer.get_config()})")
 
         model.compile(
             optimizer=optimizer,
@@ -403,8 +408,8 @@ def eval_model(
     batch_size: int = 32,
     wavelength: float = .510,
     psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-    x_voxel_size: float = .097,
-    y_voxel_size: float = .097,
+    x_voxel_size: float = .125,
+    y_voxel_size: float = .125,
     z_voxel_size: float = .2,
     modes: int = 15,
     min_photons: int = 1,
@@ -498,11 +503,11 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--x_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
+        "--x_voxel_size", default=.125, type=float, help='lateral voxel size in microns for X'
     )
 
     train_parser.add_argument(
-        "--y_voxel_size", default=.097, type=float, help='lateral voxel size in microns for Y'
+        "--y_voxel_size", default=.125, type=float, help='lateral voxel size in microns for Y'
     )
 
     train_parser.add_argument(
@@ -664,6 +669,11 @@ def parse_args(args):
         help='evaluate on validation set'
     )
 
+    train_parser.add_argument(
+        "--finetune", default=None, type=Path,
+        help='evaluate on validation set'
+    )
+
     return train_parser.parse_known_args(args)[0]
 
 
@@ -761,6 +771,7 @@ def main(args=None):
                 positional_encoding_scheme=args.positional_encoding_scheme,
                 stem=args.stem,
                 fixed_dropout_depth=args.fixed_dropout_depth,
+                finetune=args.finetune,
             )
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")

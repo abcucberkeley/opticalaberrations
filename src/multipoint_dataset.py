@@ -277,7 +277,7 @@ def simulate_image(
             embeddings = np.squeeze(fourier_embeddings(
                 inputs=embeddings,
                 iotf=gen.iotf,
-                na_mask=gen.na_mask(),
+                na_mask=gen.na_mask,
                 embedding_option=e,
                 alpha_val=alpha_val,
                 phi_val=phi_val,
@@ -445,7 +445,7 @@ def create_synthetic_sample(
             )
         else:
             phi = Wavefront(
-                amplitudes=aberration.amplitudes,
+                amplitudes=aberration.amplitudes if template is None else template.amplitudes,
                 order=gen.order,
                 distribution=gen.distribution,
                 mode_weights=gen.mode_weights,
@@ -600,12 +600,12 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--x_voxel_size", default=.097, type=float,
+        "--x_voxel_size", default=.125, type=float,
         help='lateral voxel size in microns for X'
     )
 
     parser.add_argument(
-        "--y_voxel_size", default=.097, type=float,
+        "--y_voxel_size", default=.125, type=float,
         help='lateral voxel size in microns for Y'
     )
 

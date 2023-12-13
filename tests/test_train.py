@@ -30,8 +30,8 @@ def test_training_dataset(kargs):
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         lam_detection=.510,
         psf_shape=[64, 64, 64],
-        x_voxel_size=.097,
-        y_voxel_size=.097,
+        x_voxel_size=.125,
+        y_voxel_size=.125,
         z_voxel_size=.2,
     )
 
@@ -174,5 +174,5 @@ def test_finetune_zernike_model(kargs):
             batch_size=kargs['batch_size'],
             warmup=1,
             epochs=5,
-            finetune=True,
+            finetune=Path(f"{kargs['repo']}/models/tests/yumb_zernike_model"),
         )

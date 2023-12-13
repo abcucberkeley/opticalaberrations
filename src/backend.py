@@ -322,7 +322,7 @@ def preprocess(
         return fourier_embeddings(
             sample,
             iotf=iotf,
-            na_mask=modelpsfgen.na_mask(),
+            na_mask=modelpsfgen.na_mask,
             plot=plot if plot else None,
             no_phase=no_phase,
             remove_interference=True,
@@ -385,7 +385,7 @@ def preprocess(
         return rolling_fourier_embeddings(  # aka "large_fov"
             rois,
             iotf=iotf,
-            na_mask=modelpsfgen.na_mask(),
+            na_mask=modelpsfgen.na_mask,
             plot=plot,
             no_phase=no_phase,
             remove_interference=True,
@@ -459,7 +459,7 @@ def bootstrap_predict(
         model_inputs = fourier_embeddings(
             inputs,
             iotf=psfgen.iotf,
-            na_mask=psfgen.na_mask(),
+            na_mask=psfgen.na_mask,
             plot=plot,
             padsize=padsize,
             no_phase=no_phase,
@@ -786,7 +786,7 @@ def predict_rotation(
         inputs = fourier_embeddings(
             inputs,
             iotf=psfgen.iotf,
-            na_mask=psfgen.na_mask(),
+            na_mask=psfgen.na_mask,
             plot=plot,
             padsize=padsize,
             no_phase=no_phase,

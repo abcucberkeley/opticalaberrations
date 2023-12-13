@@ -779,7 +779,7 @@ def eval_ao_dataset(
 
     ipsf = samplepsfgen.ipsf
     results['iotf'] = np.abs(fft(ipsf))
-    results['na_mask'] = samplepsfgen.na_mask()
+    results['na_mask'] = samplepsfgen.na_mask
 
     vis.compare_ao_iterations(
         results=results,
