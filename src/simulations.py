@@ -216,7 +216,7 @@ def plot_embedding_pyramid(
 
     for nth_order in range(2, 11):
         for amp in tqdm(waves, file=sys.stdout):
-            title = f"{int(np.sign(amp))}x{str(amp.abs().round(3)).replace('0.', 'p')}"
+            title = f"{int(np.sign(amp))}x{str(np.abs(amp).round(3)).replace('0.', 'p')}"
 
             embeddings = {}
             for n in range(nth_order + 1):
@@ -257,7 +257,7 @@ def plot_embedding_pyramid(
                             continue
 
             for plane in trange(6):
-                outdir = Path(f'{datadir}/{embedding_option}/test/POI_{plane}')
+                outdir = Path(f'{datadir}/{embedding_option}/{nth_order}th/POI_{plane}')
                 outdir.mkdir(exist_ok=True, parents=True)
 
                 fig = plt.figure(figsize=(3 * nth_order, 2 * nth_order))
