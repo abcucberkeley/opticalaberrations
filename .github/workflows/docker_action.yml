@@ -63,10 +63,15 @@ jobs:
           rm -rf ./.??* || true
           ls -la ./
 
-      - name: Checkout
+      - name: Checkout single file
         uses: actions/checkout@v4
         with:
-          sparse-checkout: .
+          sparse-checkout: |
+            Dockerfile
+          sparse-checkout-cone-mode: false
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
