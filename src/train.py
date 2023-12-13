@@ -188,7 +188,7 @@ def train_model(
         with sample_writer.as_default():
             for s in range(10):
                 fig = None
-                for i, (img, y) in enumerate(train_data.take(5)):
+                for i, (img, y) in enumerate(train_data.shuffle(batch_size).take(5)):
 
                     if plot_patchfiy:
                         plot_patches(img=img, outdir=outdir, patch_size=patch_size)
@@ -223,7 +223,7 @@ def train_model(
                 tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
 
         train_data = train_data.cache()
-        train_data = train_data.shuffle(batch_size)
+        train_data = train_data.shuffle(batch_size*10, reshuffle_each_iteration=True)
         train_data = train_data.batch(batch_size)
         train_data = train_data.prefetch(buffer_size=tf.data.AUTOTUNE)
         steps_per_epoch = tf.data.experimental.cardinality(train_data).numpy()
@@ -451,7 +451,6 @@ def eval_model(
         )
 
         eval_data = eval_data.cache()
-        eval_data = eval_data.shuffle(batch_size)
         eval_data = eval_data.batch(batch_size)
         eval_data = eval_data.prefetch(buffer_size=tf.data.AUTOTUNE)
 

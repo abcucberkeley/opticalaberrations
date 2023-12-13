@@ -217,7 +217,8 @@ def load_dataset(
     max_amplitude=1.,
     photons_range=None,
     npoints_range=None,
-    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
+    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
+    shuffle=True,
 ):
     if not Path(datadir).exists():
         raise Exception(f"The 'datadir' does not exist: {datadir}")
@@ -259,6 +260,8 @@ def load_dataset(
         logger.info(f'.tif files selected ({samplelimit=}): {len(files)} files')
 
     dataset_size = len(files) * multiplier
+    if shuffle:
+        np.random.shuffle(files)
     ds = tf.data.Dataset.from_tensor_slices(files)
     ds = ds.repeat(multiplier)
 
