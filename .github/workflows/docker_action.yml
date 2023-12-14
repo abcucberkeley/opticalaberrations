@@ -30,7 +30,7 @@ jobs:
   container-cleanup-job:
     runs-on: self-hosted
     container:
-      image: ubuntu:latest
+      image: ghcr.io/catthehacker/ubuntu:act-22.04
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
