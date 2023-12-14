@@ -2105,10 +2105,10 @@ def otf_diagnosis(
 
         fattest_column = np.round(midpt[2] + G[2]*na_detection/refractive_index/4).astype(np.int32)
 
-        LateralXWFCrossSection = np.squeeze(otf[midpt[0],    midpt[1], :])               # linecut along x axis
-        LateralYWFCrossSection = np.squeeze(otf[midpt[0],    :,        midpt[2]])        # linecut along y axis
-        AxialWFCrossSection =    np.squeeze(otf[:,           midpt[1], midpt[2]])        # linecut along z axis
-        BowtieWFCrossSection =   np.squeeze(otf[:,           midpt[1], fattest_column])  # linecut along z axis at bowtie
+        LateralXWFCrossSection = np.squeeze(otf[midpt[0], midpt[1], :])               # line cut along x-axis
+        LateralYWFCrossSection = np.squeeze(otf[midpt[0],        :, midpt[2]])        # line cut along y-axis
+        AxialWFCrossSection =    np.squeeze(otf[:,        midpt[1], midpt[2]])        # line cut along z-axis
+        BowtieWFCrossSection =   np.squeeze(otf[:,        midpt[1], fattest_column])  # line cut along z-axis @ bowtie
 
         axes[0].semilogy(kx, LateralXWFCrossSection,  lw='.75', linestyle=linestyle, label=labels[i])
         axes[1].semilogy(kz, BowtieWFCrossSection,    lw='.75', linestyle=linestyle, label=labels[i])
@@ -2125,4 +2125,6 @@ def otf_diagnosis(
     axes[0].set_ylim(top=1, bottom=otf_floor)
     axes[1].set_ylim(top=1, bottom=otf_floor)
     axes[2].set_ylim(top=1, bottom=otf_floor)
-    savesvg(fig,f'{save_path}_otf_diagnosis.svg')
+    otf_diags_path = f'{save_path}_otf_diagnosis.svg'
+    savesvg(fig, otf_diags_path)
+    logger.info(f'OTF diagnosis saved to : {otf_diags_path.resolve()}')

@@ -15,6 +15,7 @@
 #   or as a one-liner:
 # docker run --rm -it --gpus all ml  "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"
 # docker run --rm -it --gpus all ghcr.io/abcucberkeley/opticalaberrations:develop "~/miniconda3/envs/ml/bin/python -m pytest -vvv --disable-warnings tests/test_ao.py"
+
 # to run on a ubuntu system:
 # install docker: https://docs.docker.com/engine/install/ubuntu/
 # set docker permissions for non-root: https://docs.docker.com/engine/install/linux-postinstall/ 
@@ -22,6 +23,7 @@
 # install github self-hosted runner: https://github.com/abcucberkeley/opticalaberrations/settings/actions/runners/new?arch=x64&os=linux
 # make github self-hosted runner as a service: https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service
 # docker system prune
+# container's user is different than github action's user, so change permissions of folder: sudo chmod 777 /home/mosaic/Desktop/actions-runner/_work -R
 
 # test tensorflow GPU:
 # python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"

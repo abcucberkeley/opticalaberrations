@@ -2162,7 +2162,7 @@ def phase_retrieval(
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.0,
     use_pyotf_zernikes: bool = False,
-    plot_otf_diagnosis: bool = False,
+    plot_otf_diagnosis: bool = True,
     RW_path: Path = Path(__file__).parent.parent / "calibration" / "PSF_RW_515em_128_128_101_100nmSteps_97nmXY.tif",
 ):
 
@@ -2272,7 +2272,7 @@ def phase_retrieval(
             dm_damping_scalar=dm_damping_scalar
         )
 
-    psf = psfgen.single_psf(pred, normed=True)
+    psf = psfgen.single_psf(pred, normed=True, )
     data_prepped = cp.asnumpy(data_prepped)
     pupil_mag = cp.asnumpy(pr_result.mag)
     imwrite(f"{img.with_suffix('')}_phase_retrieval_psf.tif", psf.astype(np.float32), compression='deflate', dtype=np.float32)
@@ -2307,8 +2307,8 @@ def phase_retrieval(
         model_result = cp.asnumpy(pr_result.model.PSFi)     # direct from PR. Has pupil magnitude *and* phase.
 
         vis.otf_diagnosis(
-            psfs=[data_prepped, hanser_pupil, RW, psf],
-            labels=["Experimental", "FT(Experimental Pupil)", "RW theory", 'psfgen'],
+            psfs=[data_prepped, hanser_pupil, RW],
+            labels=["Experimental", "FT(Experimental Pupil)", "RW theory"],
             save_path=img.with_suffix(''),
             lateral_voxel_size=lateral_voxel_size,
             axial_voxel_size=axial_voxel_size,

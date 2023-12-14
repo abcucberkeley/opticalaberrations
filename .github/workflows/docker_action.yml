@@ -27,7 +27,27 @@ env:
   DOCKER_RUN: docker run --name gha_$(git branch --show-current) --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
 
 jobs:
+  container-cleanup-job:
+    runs-on: self-hosted
+    container:
+      image: ubuntu:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 'Cleanup build folder'
+        run: |
+          ls -la ./
+          rm -rf ./* || true
+          rm -rf ./.??* || true
+          ls -la ./
+
   build:      
+    needs: container-cleanup-job
+    if: always()
     name: docker_image_build
     runs-on: self-hosted
     steps:
@@ -63,15 +83,16 @@ jobs:
           rm -rf ./.??* || true
           ls -la ./
 
-      - name: Checkout single file
+      # The repo gets volume mapped into the container automatically in container-test-job
+      - name: Checkout whole repo  
         uses: actions/checkout@v4
         with:
-          sparse-checkout: |
-            Dockerfile
-          sparse-checkout-cone-mode: false
+          lfs: 'true'
+          submodules: 'recursive'
+
       - name: List files in the repository
         run: |
-          ls ${{ github.workspace }}
+          ls -lhXR ${{ github.workspace }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -117,7 +138,7 @@ jobs:
     if: always()
     runs-on: self-hosted
     container: 
-      image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # pull image 'latest-tf' or 'develop'
+      image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # pull image 'latest-tf' or 'develop' that we just built
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -128,13 +149,13 @@ jobs:
       run:
         shell: bash
     steps:
-
-      - name: Checkout repo in container
-        uses: actions/checkout@v4
-        with:
-          lfs: 'true'
-          submodules: 'recursive'
-
+      - name: investigate 
+        run: |
+          pwd
+          whoami
+          id -u
+          ls -lhXR
+          
       - name: pip list 
         run: pip list
 
@@ -143,6 +164,9 @@ jobs:
               
       - name: Test TensorFlow
         run: python -m pytest -vvv --color=yes --disable-warnings tests/test_tensorflow.py
+
+      - name: Test Cupy
+        run: python -m pytest -vvv --color=yes --disable-warnings tests/test_cupy.py
 
       - name: Test IO
         run: python -m pytest -vvv --color=yes --disable-warnings tests/test_io.py
