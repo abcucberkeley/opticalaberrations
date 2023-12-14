@@ -3,8 +3,8 @@ import sys
 sys.path.append('.')
 sys.path.append('./src')
 sys.path.append('./tests')
-import tensorflow as tf
-
+import cupy as cp
+import numpy as np
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -13,9 +13,6 @@ import pytest
 
 @pytest.mark.run(order=1)
 def test_cupy(kargs):
-    import cupy as cp
-    import numpy as np
-
     # Create a NumPy array
     a = np.array([1, 2, 3])
 
