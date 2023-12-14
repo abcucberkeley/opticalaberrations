@@ -27,7 +27,27 @@ env:
   DOCKER_RUN: docker run --name gha_$(git branch --show-current) --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
 
 jobs:
+  container-cleanup-job:
+    runs-on: self-hosted
+    container:
+      image: ubuntu:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 'Cleanup build folder'
+        run: |
+          ls -la ./
+          rm -rf ./* || true
+          rm -rf ./.??* || true
+          ls -la ./
+
   build:      
+    needs: container-cleanup-job
+    if: always()
     name: docker_image_build
     runs-on: self-hosted
     steps:
