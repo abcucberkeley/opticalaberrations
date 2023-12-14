@@ -111,7 +111,8 @@ def simulate_psf(
     mean_background_offset=100,
     electrons_per_count: float = .22,
     quantum_efficiency: float = .82,
-    plot: bool = False
+    plot: bool = False,
+    preprocessing: bool = True,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
@@ -149,22 +150,30 @@ def simulate_psf(
         inputs /= np.max(inputs)
 
     if emb:
-        embeddings = prep_sample(
-            inputs,
-            sample_voxel_size=gen.voxel_size,
-            model_fov=gen.psf_fov,
-            remove_background=True,
-            normalize=normalize,
-            min_psnr=0,
-            plot=outdir/filename if plot else None
-        )
+        if preprocessing:
+            embeddings = prep_sample(
+                inputs,
+                sample_voxel_size=gen.voxel_size,
+                model_fov=gen.psf_fov,
+                remove_background=True,
+                normalize=normalize,
+                min_psnr=0,
+                plot=outdir/filename if plot else None
+            )
 
-        embeddings = np.squeeze(fourier_embeddings(
-            inputs=embeddings,
-            iotf=gen.iotf,
-            na_mask=gen.na_mask,
-            plot=outdir/filename if plot else None
-        ))
+            embeddings = np.squeeze(fourier_embeddings(
+                inputs=embeddings,
+                iotf=gen.iotf,
+                na_mask=gen.na_mask,
+                plot=outdir/filename if plot else None
+            ))
+        else:
+            embeddings = np.squeeze(fourier_embeddings(
+                inputs=inputs,
+                iotf=gen.iotf,
+                na_mask=gen.na_mask,
+                plot=outdir/filename if plot else None
+            ))
 
         save_synthetic_sample(
             outdir / filename,
