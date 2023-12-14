@@ -129,7 +129,13 @@ jobs:
       run:
         shell: bash
     steps:
-
+      - name: investigate
+        run: |
+          pwd
+          whoami
+          ls -la
+          id -u
+          
       - name: Checkout repo in container - plain
         uses: actions/checkout@v4
         with:
