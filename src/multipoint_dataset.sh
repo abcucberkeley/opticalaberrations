@@ -1,5 +1,6 @@
 #!/bin/bash
 
+HANDLER=lsf
 ENV=~/anaconda3/envs/ml/bin/python
 
 xVOXEL=.125
@@ -15,20 +16,37 @@ TIMELIMIT='1:00'
 SHAPE=64
 MAX_LLS_OFFSET=0
 RAND_VSIZE=false
+SKIP_PREPROCESSING=true
+USE_THEORETICAL_WIDEFIELD_SIMULATOR=true
 
 MODES=15
-TITLE='125nm_dataset'
+TITLE='fit_125nm_dataset'
 DATASET='train'
-
 MODE_DIST='pyramid'
-OUTDIR="/groups/betzig/betziglab/thayer/dataset/${TITLE}/${DATASET}"
+
+MODALITIES=(
+  "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
+#  "../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat"
+#  "widefield"
+#  "confocal"
+#  "2photon"
+)
+
+if [ $HANDLER = 'lsf' ];then
+  OUTDIR="/groups/betzig/betziglab/thayer/dataset/${TITLE}/${DATASET}"
+elif [ $HANDLER = 'slurm' ]; then
+  OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
+else
+  OUTDIR="~/dataset/${TITLE}/${DATASET}"
+fi
+
 LOGS="${OUTDIR}/logs"
 mkdir -p $OUTDIR
 mkdir -p $LOGS
 
 if [ "$DATASET" = "train" ];then  # 2M samples
   TYPE='--emb'
-  SAMPLES_PER_JOB=100
+  SAMPLES_PER_JOB=400
   SAMPLES_PER_BIN=400
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   OBJS=(1 2 3 4 5)  # 5 bins
@@ -73,10 +91,24 @@ do
       do
         for S in `seq 1 ${#SAMPLES[@]}`
         do
-            while [ $(bjobs -u $USER | wc -l) -gt 25000 ]
-            do
-              sleep 10s
-            done
+
+#            if [ $HANDLER = 'lsf' ];then
+#                while [ $(bjobs -u $USER | wc -l) -gt 25000 ]
+#                do
+#                  sleep 10s
+#                done
+#
+#            elif [ $HANDLER = 'slurm' ]; then
+#                while [ $(squeue -u $USER -h -t pending -r | wc -l) -gt 500 ]
+#                do
+#                  sleep 10s
+#                done
+#
+#            else
+#                sleep 10s
+#
+#            fi
+
 
             (( JOB_COUNTER=JOB_COUNTER+1 ))
 
@@ -109,6 +141,14 @@ do
             j="${j} --lam_detection ${LAMBDA}"
             j="${j} --cpu_workers ${CPUS}"
 
+            if $USE_THEORETICAL_WIDEFIELD_SIMULATOR; then
+              j="${j} --use_theoretical_widefield_simulator"
+            fi
+
+            if $SKIP_PREPROCESSING; then
+              j="${j} --skip_preprocessing"
+            fi
+
             if $RAND_VSIZE; then
               j="${j} --randomize_voxel_size"
             fi
@@ -119,25 +159,50 @@ do
             done
 
             if [ "$DATASET" = "train" ];then
-              for psf in "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat" #"../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat" widefield confocal 2photon
+              for psf in ${MODALITIES[@]}
               do
                 j="${j} --psf_type ${psf}"
               done
             fi
 
-            task="bsub"
-            #task="${task} -q local "
-            task="${task} -n ${CPUS}"
+            if [ $HANDLER = 'lsf' ];then
+                task="bsub"
+                #task="${task} -q local "
+                task="${task} -n ${CPUS}"
 
-            JOB="${TITLE}-${DATASET}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-photons${xPH[$PH-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
-            task="${task} -J ${JOB}"
+                JOB="${TITLE}-${DATASET}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-photons${xPH[$PH-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
+                task="${task} -J ${JOB}"
 
-            task="${task} -We ${TIMELIMIT}"
-            task="${task} -o ${LOGS}/${JOB}.log"
-            task="${task} \"${j}\""
+                task="${task} -We ${TIMELIMIT}"
+                task="${task} -o ${LOGS}/${JOB}.log"
+                task="${task} \"${j}\""
 
-            echo $task | bash
-            echo "$(bjobs -u $USER -sum)"
+                echo $task | bash
+                echo "$(bjobs -u $USER -sum)"
+
+            elif [ $HANDLER = 'slurm' ]; then
+                task="/usr/bin/sbatch"
+                task="${task} --qos=abc_normal --nice=1111111111"
+                task="${task} --partition=abc"
+
+                JOB="${TITLE}-${DATASET}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-photons${xPH[$PH-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
+                task="${task} --cpus-per-task=${CPUS}"
+                task="${task} --mem='${MEM}'"
+                task="${task} --job-name=${JOB}"
+                task="${task} --time=${TIMELIMIT}"
+                task="${task} --output=${LOGS}/${JOB}.log"
+                task="${task} --export=ALL"
+                task="${task} --wrap=\"${j}\""
+
+                echo $task | bash
+                echo "DGX : Running[$(squeue -u $USER -h -t running -r -p dgx | wc -l)], Pending[$(squeue -u $USER -h -t pending -r -p dgx | wc -l)]"
+                echo "A100: Running[$(squeue -u $USER -h -t running -r -p abc_a100 | wc -l)], Pending[$(squeue -u $USER -h -t pending -r -p abc_a100 | wc -l)]"
+                echo "ABC : Running[$(squeue -u $USER -h -t running -r -p abc | wc -l)], Pending[$(squeue -u $USER -h -t pending -r -p abc | wc -l)]"
+
+            else
+                echo $j | bash
+            fi
+
             printf "JOBS: [ %'d / %'d ] \n" $(($TOTAL_JOBS - $JOB_COUNTER)) $TOTAL_JOBS
             printf "SAMPLES: [ %'d / %'d ] \n" $((($TOTAL_JOBS - $JOB_COUNTER) * $SAMPLES_PER_JOB)) $TOTAL_SAMPLES
 

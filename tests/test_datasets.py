@@ -35,9 +35,23 @@ def get_synthetic_generator(kargs):
 
 
 @pytest.mark.run(order=1)
-def test_zernike_modes(kargs):
+def test_theoretical_widefield_simulator(kargs):
 
-    gen = get_synthetic_generator(kargs)
+    gen = SyntheticPSF(
+        signed=True,
+        rotate=True,
+        psf_shape=[64, 64, 64],
+        n_modes=kargs['num_modes'],
+        distribution='mixed',
+        mode_weights='pyramid',
+        psf_type=kargs['psf_type'],
+        lam_detection=kargs['wavelength'],
+        x_voxel_size=kargs['lateral_voxel_size'],
+        y_voxel_size=kargs['lateral_voxel_size'],
+        z_voxel_size=kargs['axial_voxel_size'],
+        use_theoretical_widefield_simulator=True,
+        skip_preprocessing_ideal_psf=False
+    )
 
     amplitude = .1
     zernikes = np.zeros(15)
@@ -45,10 +59,11 @@ def test_zernike_modes(kargs):
     for z in range(3, 15):  # zernikes from (3,..,14)
 
         if z == 4:  # skip defocus
-            continue
-
-        aberration = zernikes.copy()
-        aberration[z] = amplitude
+            z = 'ideal'
+            aberration = zernikes.copy()
+        else:
+            aberration = zernikes.copy()
+            aberration[z] = amplitude
 
         phi = Wavefront(
             amplitudes=aberration,
@@ -66,11 +81,11 @@ def test_zernike_modes(kargs):
 
         sample = psf_dataset.simulate_psf(
             filename=f'z{z}',
-            outdir=Path(f"{kargs['repo']}/dataset/zernikes/psfs"),
+            outdir=Path(f"{kargs['repo']}/dataset/theoretical_zernikes/psfs"),
             gen=gen,
             phi=phi,
             emb=False,
-            photons=100000,
+            photons=300000,
             noise=True,
             normalize=True,
             lls_defocus_offset=(0, 0)
@@ -80,21 +95,98 @@ def test_zernike_modes(kargs):
 
         embeddings = psf_dataset.simulate_psf(
             filename=f'z{z}',
-            outdir=Path(f"{kargs['repo']}/dataset/zernikes/embeddings"),
+            outdir=Path(f"{kargs['repo']}/dataset/theoretical_zernikes/embeddings"),
             gen=gen,
             phi=phi,
             emb=True,
-            photons=100000,
+            photons=300000,
             noise=True,
             normalize=True,
             lls_defocus_offset=(0, 0),
-            plot=True
+            plot=True,
+            skip_preprocessing=False
         )
 
         assert embeddings.shape == (6, gen.psf_shape[1], gen.psf_shape[2])
 
 
 @pytest.mark.run(order=2)
+def test_experimental_widefield_simulator(kargs):
+
+    gen = SyntheticPSF(
+        signed=True,
+        rotate=True,
+        psf_shape=[64, 64, 64],
+        n_modes=kargs['num_modes'],
+        distribution='mixed',
+        mode_weights='pyramid',
+        psf_type=kargs['psf_type'],
+        lam_detection=kargs['wavelength'],
+        x_voxel_size=kargs['lateral_voxel_size'],
+        y_voxel_size=kargs['lateral_voxel_size'],
+        z_voxel_size=kargs['axial_voxel_size'],
+        use_theoretical_widefield_simulator=False,
+        skip_preprocessing_ideal_psf=False
+    )
+
+    amplitude = .1
+    zernikes = np.zeros(15)
+
+    for z in range(3, 15):  # zernikes from (3,..,14)
+
+        if z == 4:  # skip defocus
+            z = 'ideal'
+            aberration = zernikes.copy()
+        else:
+            aberration = zernikes.copy()
+            aberration[z] = amplitude
+
+        phi = Wavefront(
+            amplitudes=aberration,
+            order=gen.order,
+            distribution=gen.distribution,
+            mode_weights=gen.mode_weights,
+            modes=gen.n_modes,
+            gamma=gen.gamma,
+            signed=gen.signed,
+            rotate=gen.rotate,
+            lam_detection=gen.lam_detection,
+        )
+
+        np.testing.assert_array_equal(phi.amplitudes, aberration)
+
+        sample = psf_dataset.simulate_psf(
+            filename=f'z{z}',
+            outdir=Path(f"{kargs['repo']}/dataset/experimental_zernikes/psfs"),
+            gen=gen,
+            phi=phi,
+            emb=False,
+            photons=300000,
+            noise=True,
+            normalize=True,
+            lls_defocus_offset=(0, 0)
+        )
+
+        assert sample.shape == gen.psf_shape
+
+        embeddings = psf_dataset.simulate_psf(
+            filename=f'z{z}',
+            outdir=Path(f"{kargs['repo']}/dataset/experimental_zernikes/embeddings"),
+            gen=gen,
+            phi=phi,
+            emb=True,
+            photons=300000,
+            noise=True,
+            normalize=True,
+            lls_defocus_offset=(0, 0),
+            plot=True,
+            skip_preprocessing=False
+        )
+
+        assert embeddings.shape == (6, gen.psf_shape[1], gen.psf_shape[2])
+
+
+@pytest.mark.run(order=3)
 def test_random_aberrated_psf(kargs):
 
     gen = get_synthetic_generator(kargs)
@@ -141,7 +233,7 @@ def test_random_aberrated_psf(kargs):
     assert embeddings.shape == (6, gen.psf_shape[1], gen.psf_shape[2])
 
 
-@pytest.mark.run(order=3)
+@pytest.mark.run(order=4)
 def test_random_defocused_psf(kargs):
     gen = get_synthetic_generator(kargs)
 
@@ -187,7 +279,7 @@ def test_random_defocused_psf(kargs):
     assert embeddings.shape == (6, gen.psf_shape[1], gen.psf_shape[2])
 
 
-@pytest.mark.run(order=4)
+@pytest.mark.run(order=5)
 def test_random_aberrated_defocused_psf(kargs):
     gen = get_synthetic_generator(kargs)
 
@@ -233,7 +325,7 @@ def test_random_aberrated_defocused_psf(kargs):
     assert embeddings.shape == (6, gen.psf_shape[1], gen.psf_shape[2])
 
 
-@pytest.mark.run(order=5)
+@pytest.mark.run(order=6)
 def test_psf_dataset(kargs):
     gen = get_synthetic_generator(kargs)
 
@@ -254,7 +346,7 @@ def test_psf_dataset(kargs):
     assert sample.shape == gen.psf_shape
 
 
-@pytest.mark.run(order=6)
+@pytest.mark.run(order=7)
 def test_multipoint_dataset(kargs):
     gen = get_synthetic_generator(kargs)
 
@@ -288,7 +380,7 @@ def test_multipoint_dataset(kargs):
     assert sample[kargs['psf_type']].shape == gen.psf_shape
 
 
-@pytest.mark.run(order=7)
+@pytest.mark.run(order=8)
 def test_multimodal_dataset(kargs):
 
     psf_types = [

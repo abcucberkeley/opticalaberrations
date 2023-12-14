@@ -207,7 +207,7 @@ def simulate_image(
     scale_by_maxcounts: Optional[int] = None,
     plot: bool = False,
     gtdir: Optional[Path] = None,
-    preprocessing: bool = True,
+    skip_preprocessing: bool = False,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
 
@@ -265,7 +265,7 @@ def simulate_image(
             odir = outdir/e
             odir.mkdir(exist_ok=True, parents=True)
 
-            if preprocessing:
+            if not skip_preprocessing:
                 processed = prep_sample(
                     inputs,
                     sample_voxel_size=gen.voxel_size,
@@ -377,6 +377,7 @@ def create_synthetic_sample(
     plot: bool = False,
     denoising_dataset: bool = False,
     uniform_background: int = 0,
+    skip_preprocessing: bool = False,
 ):
 
     aberration = Wavefront(
@@ -524,6 +525,7 @@ def create_synthetic_sample(
 
             except Exception as exc:
                 wavefronts[gen.psf_type] = phi
+
                 inputs[gen.psf_type] = simulate_image(
                     filename=filename,
                     reference=reference,
@@ -544,10 +546,12 @@ def create_synthetic_sample(
                     lls_defocus_offset=lls_defocus_offset,
                     scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
                     if gen.psf_type == 'widefield' else None,
-                    plot=plot
+                    plot=plot,
+                    skip_preprocessing=skip_preprocessing
                 )
         else:
             wavefronts[gen.psf_type] = phi
+
             inputs[gen.psf_type] = simulate_image(
                 filename=filename,
                 reference=reference,
@@ -569,6 +573,7 @@ def create_synthetic_sample(
                 scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
                 if gen.psf_type == 'widefield' else None,
                 plot=plot,
+                skip_preprocessing=skip_preprocessing
             )
 
     return inputs
@@ -765,6 +770,16 @@ def parse_args(args):
         help='optional toggle to create a dataset for training a denoising model'
     )
 
+    parser.add_argument(
+        '--use_theoretical_widefield_simulator', action='store_true',
+        help='optional toggle to use an experimental complex pupil to estimate amplitude attenuation (cosine factor)'
+    )
+
+    parser.add_argument(
+        '--skip_preprocessing', action='store_true',
+        help='optional toggle to skip preprocessing input data using the DoG filter'
+    )
+
     return parser.parse_args(args)
 
 
@@ -793,6 +808,8 @@ def main(args=None):
             z_voxel_size=args.z_voxel_size,
             refractive_index=args.refractive_index,
             na_detection=args.na_detection,
+            use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+            skip_preprocessing_ideal_psf=args.skip_preprocessing
         )
 
         # just for the widefield case
@@ -814,6 +831,8 @@ def main(args=None):
             gamma=generators[psf].gamma,
             refractive_index=generators[psf].refractive_index,
             na_detection=generators[psf].na_detection,
+            use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+            skip_preprocessing_ideal_psf=args.skip_preprocessing
         )
 
     sample = partial(
@@ -848,6 +867,7 @@ def main(args=None):
         plot=args.plot,
         denoising_dataset=args.denoising_dataset,
         uniform_background=args.uniform_background,
+        skip_preprocessing=args.skip_preprocessing
     )
     logger.info(f"Output folder: {Path(args.outdir).resolve()}")
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]

@@ -55,7 +55,8 @@ class SyntheticPSF:
             refractive_index=1.33,
             pupil_mag_file: Optional[Path] = Path(__file__).parent.parent.resolve() / "calibration" / "aang" / "PSF" / "510nm_mag.tif",
             cpu_workers=-1,
-            preprocess_ideal_psf: bool = True,
+            skip_preprocessing_ideal_psf: bool = False,
+            use_theoretical_widefield_simulator: bool = False,
     ):
         """
         Args:
@@ -100,7 +101,8 @@ class SyntheticPSF:
         self.amplitude_ranges = amplitude_ranges
         self.psf_type = psf_type
         self.pupil_mag_file = pupil_mag_file
-        self.preprocess_ideal_psf = preprocess_ideal_psf
+        self.skip_preprocessing_ideal_psf = skip_preprocessing_ideal_psf
+        self.use_theoretical_widefield_simulator = use_theoretical_widefield_simulator
 
         yumb_axial_support_index, yumb_lateral_support_index = self.calc_max_support_index(
             psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
@@ -145,7 +147,7 @@ class SyntheticPSF:
         self.na_mask = self.create_na_mask(ipsf=self.ipsf)
 
         # preprocess ideal PSF with DoG filter
-        if preprocess_ideal_psf:
+        if not skip_preprocessing_ideal_psf:
             self.ipsf = prep_sample(
                 self.ipsf,
                 sample_voxel_size=self.voxel_size,
@@ -311,7 +313,11 @@ class SyntheticPSF:
             # else:
             #     lls_defocus_offset = 0.
 
-        psf = self.psfgen.incoherent_psf(phi, lls_defocus_offset=lls_defocus_offset)
+        psf = self.psfgen.incoherent_psf(
+            phi,
+            lls_defocus_offset=lls_defocus_offset,
+            use_theoretical_widefield_simulator=self.use_theoretical_widefield_simulator
+        )
 
         if normed:
             psf /= np.max(psf)

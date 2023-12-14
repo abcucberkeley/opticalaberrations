@@ -280,9 +280,10 @@ class PsfGenerator3D:
             raise Exception(f"Unknown format for `lls_defocus_offset`: {offset}")
 
     @profile
-    def widefield_psf(self, wavefront) -> np.ndarray:
+    def theoretical_widefield_psf(self, wavefront) -> np.ndarray:
         """
-        Calculate 3D PSF for the given parameters in 'self', and the abberation in the Wavefront object 'wavefront'
+        Calculate 3D PSF without amplitude attenuation (cosine factor),
+        for a given aberration in the Wavefront object 'wavefront'
 
         Args:
             wavefront: Wavefront class
@@ -290,11 +291,58 @@ class PsfGenerator3D:
         Returns:
             psf: 3D np.ndarray
         """
-        # psf = np.abs(self.coherent_psf(wavefront)) ** 2
-        # psf = np.array([p / np.sum(p) for p in psf])
-        # psf = np.fft.fftshift(psf)
-        # psf /= np.max(psf)
+        kx = np.fft.fftfreq(self.Nx, self.dx)
+        ky = np.fft.fftfreq(self.Ny, self.dy)
 
+        idx = np.arange(self.Nz) - self.Nz // 2
+        kz = self.dz * idx
+
+        KZ3, KY3, KX3 = np.meshgrid(kz, ky, kx, indexing="ij")
+        KR3 = np.sqrt(KX3 ** 2 + KY3 ** 2)
+
+        # the cutoff in fourier domain
+        kmask3 = (KR3 <= self.kcut)
+        H = np.sqrt(1. * self.n ** 2 - KR3 ** 2 * self.lam_detection ** 2)
+
+        out_ind = np.isnan(H)
+        kprop = np.exp(-2.j * np.pi * KZ3 / self.lam_detection * H)
+        kprop[out_ind] = 0.
+
+        KY2, KX2 = np.meshgrid(ky, kx, indexing="ij")
+        KR2 = np.hypot(KX2, KY2)
+
+        self.kbase = kmask3 * kprop
+        self.krho = KR2 / self.kcut
+        self.kphi = np.arctan2(KY2, KX2)
+        self.kmask2 = (KR2 <= self.kcut)
+
+        phi = self.kmask2 * wavefront.phase(self.krho, self.kphi, normed=True, outside=None)
+        ku = self.kbase * np.exp(2.j * np.pi * phi / self.lam_detection)
+        res = np.fft.ifftn(ku, axes=(1, 2))
+        coherent_psf = np.fft.fftshift(res, axes=(0,))
+
+        psf = np.abs(coherent_psf) ** 2
+        psf = np.array([p / np.sum(p) for p in psf])
+        psf = np.fft.fftshift(psf)
+        psf /= np.max(psf)
+
+        if self.pyotf_gen.gpu:
+            psf = cp.asnumpy(psf)
+
+        return psf
+
+    @profile
+    def experimental_widefield_psf(self, wavefront) -> np.ndarray:
+        """
+        Calculate RW 3D PSF with an experimental complex pupil
+        for the given aberration in the Wavefront object 'wavefront'
+
+        Args:
+            wavefront: Wavefront class
+
+        Returns:
+            psf: 3D np.ndarray
+        """
         pupil = complex_pupil_array(
             dx=self.dx,
             nx=self.Nx,
@@ -315,12 +363,14 @@ class PsfGenerator3D:
         psf /= np.max(psf)
         if (self.Nz, self.Ny, self.Nx) != psf.shape:
             raise Exception(f'PSF sizes dont match. {self.Nz, self.Ny, self.Nx} vs {psf.shape=}')
+
         if self.pyotf_gen.gpu:
             psf = cp.asnumpy(psf)
+
         return psf
 
     @profile
-    def incoherent_psf(self, wavefront, lls_defocus_offset=None):
+    def incoherent_psf(self, wavefront, lls_defocus_offset=None, use_theoretical_widefield_simulator=False):
         """
         Returns the incoherent psf for a given wavefront
            (which is just the squared absolute value of the coherent one)
@@ -329,38 +379,44 @@ class PsfGenerator3D:
         Args:
             wavefront: Wavefront object
             lls_defocus_offset: the offset between the excitation and detection focal plan (microns)
+            use_theoretical_widefield_simulator: use an experimental complex pupil to estimate amplitude attenuation
         """
         ideal_wavefront = deepcopy(wavefront)
         ideal_wavefront.zernikes = {k: 0. for k, v in ideal_wavefront.zernikes.items()}  # set aberration to 0 for ideal
 
         # Initialize the total PSF with (aberrated) widefield detection PSF
-        _psf = self.widefield_psf(wavefront)
+        if use_theoretical_widefield_simulator:
+            widefield_psf = self.theoretical_widefield_psf(wavefront)
+        else:
+            widefield_psf = self.experimental_widefield_psf(wavefront)
 
         if self.lls_excitation_profile is not None:
 
             if lls_defocus_offset is not None and lls_defocus_offset != 0:
-                _psf *= self.defocus_excitation_profile(offset=lls_defocus_offset, desired_shape=_psf.shape[0])
+                _psf = widefield_psf * self.defocus_excitation_profile(
+                    offset=lls_defocus_offset,
+                    desired_shape=widefield_psf.shape[0]
+                )
             else:
-                _psf *= self.lls_excitation_profile
+                _psf = widefield_psf * self.lls_excitation_profile
 
         elif self.psf_type == 'widefield':
-            pass
+            _psf = widefield_psf
 
         elif self.psf_type == '2photon':
             # we only have one lamda defined in this class: self.lam_detection. That should already be set with .920
-            exc_psf = self.widefield_psf(wavefront)
-            _psf = exc_psf ** 2
+            _psf = widefield_psf ** 2
 
         elif self.psf_type == 'confocal':
             media_wavelength = 0.1
             lam_excitation = .488
             f = 1  # number of AUs
 
-            exc_psf = self.widefield_psf(wavefront)
+            exc_psf = widefield_psf
 
             eff_pixel_size = lam_excitation / self.n * media_wavelength       # microns per pixel
             au = 0.61 * (self.lam_detection / self.n) / self.na_detection   # airy radius in microns
-            w = _psf.shape[0] // 2
+            w = widefield_psf.shape[0] // 2
             lateral_extent = round_to_even(2 * w * self.dy / eff_pixel_size)
             axial_extent = 2 * w
 
@@ -391,7 +447,7 @@ class PsfGenerator3D:
             circ_func /= np.max(circ_func)
 
             det_psf = convolve_fft(
-                _psf,
+                widefield_psf,
                 circ_func,
                 allow_huge=True,
                 normalize_kernel=False,
