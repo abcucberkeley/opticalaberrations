@@ -145,6 +145,9 @@ jobs:
       - name: Test TensorFlow
         run: python -m pytest -vvv --color=yes --disable-warnings tests/test_tensorflow.py
 
+      - name: Test Cupy
+        run: python -m pytest -vvv --color=yes --disable-warnings tests/test_cupy.py
+
       - name: Test IO
         run: python -m pytest -vvv --color=yes --disable-warnings tests/test_io.py
 
