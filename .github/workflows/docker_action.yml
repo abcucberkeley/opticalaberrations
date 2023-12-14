@@ -63,13 +63,13 @@ jobs:
           rm -rf ./.??* || true
           ls -la ./
 
-      - name: Checkout single file
+      # The repo gets volume mapped into the container automatically in container-test-job
+      - name: Checkout whole repo  
         uses: actions/checkout@v4
         with:
-          sparse-checkout: |
-            Dockerfile
-          sparse-checkout-cone-mode: false
-          
+          lfs: 'true'
+          submodules: 'recursive'
+
       - name: List files in the repository
         run: |
           ls ${{ github.workspace }}
@@ -118,7 +118,7 @@ jobs:
     if: always()
     runs-on: self-hosted
     container: 
-      image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # pull image 'latest-tf' or 'develop'
+      image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # pull image 'latest-tf' or 'develop' that we just built
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -129,33 +129,12 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: investigate
+      - name: investigate 
         run: |
           pwd
           whoami
-          ls -la
+          ls -la -R
           id -u
-          
-      - name: Checkout repo in container - plain
-        uses: actions/checkout@v4
-        with:
-          lfs: 'false'
-          submodules: 'recursive'
-
-      - name: List files in the repository
-        run: |
-          ls -R ${{ github.workspace }}
-          
-      - name: Checkout repo in container
-        uses: actions/checkout@v4
-        with:
-          clean: 'false'
-          lfs: 'true'
-          submodules: 'recursive'
-
-      - name: List files in the repository
-        run: |
-          ls -R ${{ github.workspace }}
           
       - name: pip list 
         run: pip list
