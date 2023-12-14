@@ -18,7 +18,7 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 
 MODES=15
-TITLE='big_highsnr_dataset'
+TITLE='125nm_dataset'
 DATASET='test'
 
 MODE_DIST='pyramid'

@@ -72,7 +72,7 @@ class MaskedActivation(layers.Layer):
             z_voxel_size=self.z_voxel_size,
         )
 
-        mask = psfgen.na_mask()
+        mask = psfgen.na_mask
 
         if planes == 3:
             mask = np.stack([

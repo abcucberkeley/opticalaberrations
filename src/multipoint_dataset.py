@@ -207,6 +207,7 @@ def simulate_image(
     scale_by_maxcounts: Optional[int] = None,
     plot: bool = False,
     gtdir: Optional[Path] = None,
+    preprocessing: bool = True,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
 
@@ -264,25 +265,36 @@ def simulate_image(
             odir = outdir/e
             odir.mkdir(exist_ok=True, parents=True)
 
-            embeddings = prep_sample(
-                inputs,
-                sample_voxel_size=gen.voxel_size,
-                model_fov=gen.psf_fov,
-                remove_background=remove_background,
-                normalize=normalize,
-                min_psnr=0,
-                plot=odir/filename if plot else None,
-            )
+            if preprocessing:
+                processed = prep_sample(
+                    inputs,
+                    sample_voxel_size=gen.voxel_size,
+                    model_fov=gen.psf_fov,
+                    remove_background=remove_background,
+                    normalize=normalize,
+                    min_psnr=0,
+                    plot=odir/filename if plot else None,
+                )
 
-            embeddings = np.squeeze(fourier_embeddings(
-                inputs=embeddings,
-                iotf=gen.iotf,
-                na_mask=gen.na_mask(),
-                embedding_option=e,
-                alpha_val=alpha_val,
-                phi_val=phi_val,
-                plot=odir/filename if plot else None,
-            ))
+                embeddings = np.squeeze(fourier_embeddings(
+                    inputs=processed,
+                    iotf=gen.iotf,
+                    na_mask=gen.na_mask,
+                    embedding_option=e,
+                    alpha_val=alpha_val,
+                    phi_val=phi_val,
+                    plot=odir/filename if plot else None,
+                ))
+            else:
+                embeddings = np.squeeze(fourier_embeddings(
+                    inputs=inputs,
+                    iotf=gen.iotf,
+                    na_mask=gen.na_mask,
+                    embedding_option=e,
+                    alpha_val=alpha_val,
+                    phi_val=phi_val,
+                    plot=odir/filename if plot else None,
+                ))
 
             save_synthetic_sample(
                 odir/filename,
@@ -445,7 +457,7 @@ def create_synthetic_sample(
             )
         else:
             phi = Wavefront(
-                amplitudes=aberration.amplitudes,
+                amplitudes=aberration.amplitudes if template is None else template.amplitudes,
                 order=gen.order,
                 distribution=gen.distribution,
                 mode_weights=gen.mode_weights,
@@ -600,12 +612,12 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--x_voxel_size", default=.097, type=float,
+        "--x_voxel_size", default=.125, type=float,
         help='lateral voxel size in microns for X'
     )
 
     parser.add_argument(
-        "--y_voxel_size", default=.097, type=float,
+        "--y_voxel_size", default=.125, type=float,
         help='lateral voxel size in microns for Y'
     )
 

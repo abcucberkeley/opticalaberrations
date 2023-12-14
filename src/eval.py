@@ -2256,7 +2256,7 @@ def eval_modalities(
                     corrected_noisy_img /= np.max(corrected_noisy_img)
 
                     if amp == 0:
-                        imwrite(save_path / f'{z}_na_mask.tif', gen.na_mask().astype(np.float32), compression='deflate', dtype=np.float32)
+                        imwrite(save_path / f'{z}_na_mask.tif', gen.na_mask.astype(np.float32), compression='deflate', dtype=np.float32)
 
                     imwrite(save_path / f'{z}_input.tif', noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
 

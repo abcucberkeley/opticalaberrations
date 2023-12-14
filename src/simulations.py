@@ -28,6 +28,7 @@ from wavefront import Wavefront
 from zernike import Zernike
 from synthetic import SyntheticPSF
 from embeddings import fourier_embeddings
+from preprocessing import prep_sample
 
 
 logging.basicConfig(
@@ -153,8 +154,8 @@ def plot_embedding_pyramid(
         res=64,
         n_modes=60,
         wavelength=.510,
-        x_voxel_size=.097,
-        y_voxel_size=.097,
+        x_voxel_size=.125,
+        y_voxel_size=.125,
         z_voxel_size=.2,
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         datadir='../data/embeddings',
@@ -215,7 +216,7 @@ def plot_embedding_pyramid(
 
     for nth_order in range(2, 11):
         for amp in tqdm(waves, file=sys.stdout):
-            title = f"{int(np.sign(amp))}x0p{str(int(np.abs(amp*100).round(0)))}"
+            title = f"{int(np.sign(amp))}x{str(np.abs(amp).round(3)).replace('0.', 'p')}"
 
             embeddings = {}
             for n in range(nth_order + 1):
@@ -230,14 +231,23 @@ def plot_embedding_pyramid(
                                 normed=True,
                                 meta=False,
                             )
-                            # psf /= np.sum(psf)
-                            # psf *= 200000
-                            # psf = utils.add_noise(psf)
+                            psf /= np.sum(psf)
+                            psf *= 100000
+                            psf = utils.add_noise(psf)
+
+                            psf = prep_sample(
+                                psf,
+                                sample_voxel_size=gen.voxel_size,
+                                model_fov=gen.psf_fov,
+                                remove_background=True,
+                                normalize=True,
+                                min_psnr=0,
+                            )
 
                             emb = fourier_embeddings(
                                 psf,
                                 iotf=gen.iotf,
-                                na_mask=gen.na_mask(),
+                                na_mask=gen.na_mask,
                                 no_phase=False,
                                 remove_interference=False,
                                 embedding_option=embedding_option,
@@ -322,8 +332,8 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
             lam_detection=wavelength,
             amplitude_ranges=(0, 1),
             psf_shape=(32, 32, 32),
-            x_voxel_size=.097,
-            y_voxel_size=.097,
+            x_voxel_size=.125,
+            y_voxel_size=.125,
             z_voxel_size=.2,
             batch_size=batch_size,
             cpu_workers=-1,
@@ -566,8 +576,8 @@ def plot_embeddings(
         padsize=None,
         n_modes=55,
         wavelength=.510,
-        x_voxel_size=.097,
-        y_voxel_size=.097,
+        x_voxel_size=.125,
+        y_voxel_size=.125,
         z_voxel_size=.2,
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         savepath='../data/embeddings',
@@ -631,7 +641,7 @@ def plot_embeddings(
             emb = fourier_embeddings(
                 psf,
                 iotf=gen.iotf,
-                na_mask=gen.na_mask(),
+                na_mask=gen.na_mask,
                 no_phase=False,
                 remove_interference=False,
                 embedding_option=embedding_option,
@@ -679,8 +689,8 @@ def plot_rotations(
         padsize=None,
         n_modes=55,
         wavelength=.510,
-        x_voxel_size=.097,
-        y_voxel_size=.097,
+        x_voxel_size=.125,
+        y_voxel_size=.125,
         z_voxel_size=.2,
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         savepath='../data/rotations',
@@ -750,7 +760,7 @@ def plot_rotations(
             emb = fourier_embeddings(
                 psf,
                 iotf=gen.iotf,
-                na_mask=gen.na_mask(),
+                na_mask=gen.na_mask,
                 no_phase=False,
                 remove_interference=False,
                 embedding_option=embedding_option,
@@ -798,8 +808,8 @@ def plot_shapes_embeddings(
         padsize=None,
         shapes=5,
         wavelength=.510,
-        x_voxel_size=.097,
-        y_voxel_size=.097,
+        x_voxel_size=.125,
+        y_voxel_size=.125,
         z_voxel_size=.2,
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         savepath='../data/shapes_embeddings',
@@ -813,8 +823,8 @@ def plot_shapes_embeddings(
         padsize: Uh, doesn't get used here.  It will appear in the name of the folder path. Defaults to None.
         shapes: Number of puncta sizes to test. Defaults to 5 different sizes
         wavelength:   Defaults to .510 microns
-        x_voxel_size: Defaults to .097 microns
-        y_voxel_size: Defaults to .097 microns
+        x_voxel_size: Defaults to .125 microns
+        y_voxel_size: Defaults to .125 microns
         z_voxel_size: Defaults to .2   microns
         psf_type: Defaults to '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'.
         savepath: Defaults to '../data/shapes_embeddings'.
@@ -897,7 +907,7 @@ def plot_shapes_embeddings(
                 emb = fourier_embeddings(
                     inputs,
                     iotf=gen.iotf,
-                    na_mask=gen.na_mask(),
+                    na_mask=gen.na_mask,
                     no_phase=False,
                     remove_interference=False,
                     embedding_option=embedding_option,
@@ -1245,7 +1255,7 @@ def plot_dmodes(
     psf_slice(ax_xy, ax_xz, ax_yz, psf, label='PSF (MIP)')
     wavefront(ax_w, y_wave, label='Ground truth', levels=mticks)
 
-    otf = fourier_embeddings(psf, iotf=gen.iotf, na_mask=gen.na_mask())
+    otf = fourier_embeddings(psf, iotf=gen.iotf, na_mask=gen.na_mask)
     ax_xy = fig.add_subplot(gs[2, 0])
     ax_xz = fig.add_subplot(gs[2, 1])
     ax_yz = fig.add_subplot(gs[2, 2])
@@ -1261,7 +1271,7 @@ def plot_dmodes(
         phi = Wavefront(phi, order='ansi')
 
         psf = gen.single_psf(phi)
-        otf = fourier_embeddings(psf, iotf=gen.iotf, na_mask=gen.na_mask(),)
+        otf = fourier_embeddings(psf, iotf=gen.iotf, na_mask=gen.na_mask,)
         ax_xy = fig.add_subplot(gs[2+k, 0])
         ax_xz = fig.add_subplot(gs[2+k, 1])
         ax_yz = fig.add_subplot(gs[2+k, 2])

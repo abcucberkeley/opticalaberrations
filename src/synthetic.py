@@ -19,6 +19,7 @@ from typing import Optional
 
 from psf import PsfGenerator3D
 from wavefront import Wavefront
+from preprocessing import prep_sample
 from utils import randuniform, round_to_even, fft, normalize_otf
 
 logging.basicConfig(
@@ -52,9 +53,9 @@ class SyntheticPSF:
             na_detection=1.0,
             lam_detection=.510,
             refractive_index=1.33,
-            pupil_mag_file: Optional[Path] = Path(
-                __file__).parent.parent.resolve() / "calibration" / "aang" / "PSF" / "510nm_mag.tif",
-            cpu_workers=-1
+            pupil_mag_file: Optional[Path] = Path(__file__).parent.parent.resolve() / "calibration" / "aang" / "PSF" / "510nm_mag.tif",
+            cpu_workers=-1,
+            preprocess_ideal_psf: bool = True,
     ):
         """
         Args:
@@ -99,17 +100,16 @@ class SyntheticPSF:
         self.amplitude_ranges = amplitude_ranges
         self.psf_type = psf_type
         self.pupil_mag_file = pupil_mag_file
+        self.preprocess_ideal_psf = preprocess_ideal_psf
 
         yumb_axial_support_index, yumb_lateral_support_index = self.calc_max_support_index(
             psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
             wavelength=.510,
-            threshold=4e-3
         )
 
         axial_support_index, lateral_support_index = self.calc_max_support_index(
             psf_type=self.psf_type,
             wavelength=self.lam_detection,
-            threshold=4e-3
         )
 
         if axial_support_index != 0:
@@ -142,15 +142,28 @@ class SyntheticPSF:
 
         # ideal psf (theoretical, no noise)
         self.ipsf = self.theoretical_psf(normed=True)
+        self.na_mask = self.create_na_mask(ipsf=self.ipsf)
+
+        # preprocess ideal PSF with DoG filter
+        if preprocess_ideal_psf:
+            self.ipsf = prep_sample(
+                self.ipsf,
+                sample_voxel_size=self.voxel_size,
+                model_fov=self.psf_fov,
+                remove_background=True,
+                normalize=True,
+                min_psnr=0,
+            )
+
         self.iotf = fft(self.ipsf, padsize=None)
         self.iotf = normalize_otf(self.iotf)
+        self.iotf *= self.na_mask
 
     @profile
     def calc_max_support_index(
         self,
         psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         wavelength: float = .510,
-        threshold: float = 4e-3,
     ):
         """
         Find how much OTF support there is for this psf_type.  This is to be used only in a ratio to find how to
@@ -189,10 +202,8 @@ class SyntheticPSF:
         ipsf /= np.nanmax(ipsf)
 
         iotf = np.abs(fft(ipsf, padsize=None))
-        iotf /= np.nanmax(iotf)
-
-        iotf = np.where(iotf < threshold, iotf, 1.)
-        iotf = np.where(iotf >= threshold, iotf, 0.)
+        iotf = normalize_otf(iotf)
+        iotf *= self.create_na_mask(ipsf=ipsf)
 
         axial_support_index = next((i for i, z in enumerate(iotf[vxz[0], ym, vxz[1]]) if z == 0), 0)    # march until 0
         lateral_support_index = next((i for i, x in enumerate(iotf[zm, vxy[0], vxy[1]]) if x == 0), 0)  # march until 0
@@ -210,7 +221,7 @@ class SyntheticPSF:
 
         self.iotf = fft(self.ipsf, padsize=None)
         self.iotf = normalize_otf(self.iotf)
-        self.iotf *= self.na_mask()
+        self.iotf *= self.na_mask
 
     @profile
     def theoretical_psf(self, normed: bool = True):
@@ -240,7 +251,7 @@ class SyntheticPSF:
         return psf
 
     @profile
-    def na_mask(self, threshold: Optional[float] = 4e-3) -> np.ndarray:
+    def create_na_mask(self, ipsf: np.ndarray, threshold: Optional[float] = 8e-3) -> np.ndarray:
         """
         OTF Mask by binary thresholding ideal theoretical OTF
 
@@ -252,7 +263,7 @@ class SyntheticPSF:
 
         """
 
-        mask = np.abs(fft(self.ipsf, padsize=None))
+        mask = np.abs(fft(ipsf))
         mask /= np.nanmax(mask)
 
         if threshold is None:
