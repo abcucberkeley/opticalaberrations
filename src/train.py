@@ -23,13 +23,13 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.optimizers.experimental import AdamW
-from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping, BackupAndRestore
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping
 from tensorflow_addons.optimizers import LAMB
 
-from warmupcosinedecay import WarmupCosineDecay
-from callbacks import LRLogger
+from callbacks import LearningRateScheduler
 from callbacks import Defibrillator
 from callbacks import TensorBoardCallback
+from callbacks import LRLogger
 from backend import load
 
 import utils
@@ -37,6 +37,7 @@ import data_utils
 import opticalnet
 import baseline
 import otfnet
+import prototype
 import cli
 
 logging.basicConfig(
@@ -228,52 +229,25 @@ def train_model(
         train_data = train_data.prefetch(buffer_size=tf.data.AUTOTUNE)
         steps_per_epoch = tf.data.experimental.cardinality(train_data).numpy()
 
-        options = tf.data.Options()
-        options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-        train_data = train_data.with_options(options)
-
-    if fixedlr:
-        scheduler = lr
-        logger.info(f"Training steps: [{steps_per_epoch * epochs}]")
-    else:
-        warmup_steps = warmup * steps_per_epoch
-        decay_steps = (epochs - warmup) * steps_per_epoch
-        logger.info(f"Training steps [{steps_per_epoch * epochs}] = ({warmup_steps=}) + ({decay_steps=})")
-
-        scheduler = WarmupCosineDecay(
-            initial_learning_rate=0.,
-            decay_steps=decay_steps,
-            warmup_target=lr,
-            warmup_steps=warmup_steps,
-            alpha=.01,
-        )
-
     if opt == 'lamb':
-        optimizer = LAMB(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99, clipnorm=1.0)
-    elif opt == 'adamw':
-        optimizer = AdamW(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99, clipnorm=1.0)
+        opt = LAMB(learning_rate=lr, weight_decay=wd, beta_1=0.9, beta_2=0.99, clipnorm=1.0)
+    elif opt.lower() == 'adamw':
+        opt = AdamW(learning_rate=lr, weight_decay=wd)
     else:
-        optimizer = Adam(learning_rate=scheduler, clipnorm=1.0)
+        opt = Adam(learning_rate=lr)
 
     try:  # check if model already exists
-        model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent # sort models to get the latest checkpoint
+        model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent  # sort models to get the latest checkpoint
         model = load(model_path)
-        optimizer = model.optimizer
 
         if isinstance(model, tf.keras.Model):
             restored = True
-            network = str(model_path)
-            outdir = model_path
-            training_history = pd.read_csv(model_path / 'logbook.csv', header=0, index_col=0)
+            opt = model.optimizer
+            training_history = pd.read_csv(outdir / 'logbook.csv', header=0, index_col=0)
             logger.info(f"Training history: {training_history}")
-        else:
-            outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
-            outdir.mkdir(exist_ok=True, parents=True)
 
     except Exception as e:
         logger.warning(f"No model found in {outdir}")
-        outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
-        outdir.mkdir(exist_ok=True, parents=True)
 
     if not restored:  # Build a new model
         if defocus_only:  # only predict LLS defocus offset
@@ -283,7 +257,26 @@ def train_model(
         else:
             pmodes = modes if pmodes is None else pmodes
 
-        if network == 'opticalnet':
+        if network == 'prototype':
+            model = prototype.OpticalTransformer(
+                name='Prototype',
+                roi=roi,
+                stem=stem,
+                patches=patch_size,
+                modes=pmodes,
+                depth_scalar=depth_scalar,
+                width_scalar=width_scalar,
+                dropout_rate=dropout,
+                activation=activation,
+                mul=mul,
+                no_phase=no_phase,
+                positional_encoding_scheme=positional_encoding_scheme,
+                radial_encoding_period=radial_encoding_period,
+                radial_encoding_nth_order=radial_encoding_nth_order,
+                fixed_dropout_depth=fixed_dropout_depth,
+            )
+
+        elif network == 'opticalnet':
             model = opticalnet.OpticalTransformer(
                 name='OpticalNet',
                 roi=roi,
@@ -321,21 +314,21 @@ def train_model(
             raise Exception(f'Network "{network}" is unknown.')
 
     if restored and finetune is None:
-        logger.info(f"Continue training {model.name} restored from {model_path} using {optimizer.get_config()}")
+        logger.info(f"Continue training {model.name} restored from {model_path} using {opt.get_config()}")
     else:
         if finetune is not None:
             model = load(finetune)
             logger.info(model.summary(line_length=125, expand_nested=True))
-            logger.info(f"Finetuning {model.name}; {optimizer.get_config()}")
+            logger.info(f"Finetuning {model.name}; {opt.get_config()}")
 
         else:  # creating a new model
             model = model.build(input_shape=inputs)
             logger.info(model.summary(line_length=125, expand_nested=True))
-            logger.info(f"Creating a new model; {optimizer.get_config()})")
+            logger.info(f"Creating a new model; {opt.get_config()})")
 
         model.compile(
-            optimizer=optimizer,
-            loss=tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.SUM),
+            optimizer=opt,
+            loss=tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM),
             metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
         )
 
@@ -345,15 +338,19 @@ def train_model(
     )
 
     pb_checkpoints = ModelCheckpoint(
-        filepath=f"{outdir}",
+        filepath=outdir/"tf"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}-epoch{{epoch:03d}}",
         monitor="loss",
-        save_best_only=True,
         verbose=1,
+        save_best_only=True,
+        save_weights_only=False,
     )
 
-    backup = BackupAndRestore(
-        backup_dir=f"{outdir}",
-        delete_checkpoint=False,
+    h5_checkpoints = ModelCheckpoint(
+        filepath=outdir/"keras"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}-epoch{{epoch:03d}}.h5",
+        monitor="loss",
+        verbose=1,
+        save_best_only=True,
+        save_weights_only=False,
     )
 
     earlystopping = EarlyStopping(
@@ -379,6 +376,28 @@ def train_model(
 
     lrlogger = LRLogger()
 
+    if fixedlr:
+        lrscheduler = LearningRateScheduler(
+            initial_learning_rate=lr,
+            verbose=0,
+            fixed=True
+        )
+        logger.info(f"Training steps: [{steps_per_epoch * epochs}]")
+    else:
+        lrscheduler = LearningRateScheduler(
+            initial_learning_rate=lr,
+            weight_decay=wd,
+            decay_period=epochs,
+            warmup_epochs=0 if warmup is None else warmup,
+            alpha=.01,
+            decay_multiplier=2.,
+            decay=.9,
+            verbose=1,
+        )
+        warmup_steps = warmup * steps_per_epoch
+        decay_steps = (epochs - warmup) * steps_per_epoch
+        logger.info(f"Training steps [{steps_per_epoch * epochs}] = ({warmup_steps=}) + ({decay_steps=})")
+
     model.fit(
         train_data,
         steps_per_epoch=steps_per_epoch,
@@ -389,9 +408,9 @@ def train_model(
             tblogger,
             tensorboard,
             pb_checkpoints,
+            h5_checkpoints,
             earlystopping,
             defibrillator,
-            backup,
             lrlogger
         ],
     )
