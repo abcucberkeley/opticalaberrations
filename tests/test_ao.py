@@ -77,7 +77,7 @@ def test_predict_large_fov(kargs):
 
 @pytest.mark.run(order=4)
 def test_predict_folder(kargs):
-    test_folder = Path(f"{kargs['repo']}/dataset/zernikes/psfs")
+    test_folder = Path(f"{kargs['repo']}/dataset/experimental_zernikes/psfs")
     number_of_files = len(sorted(test_folder.glob(kargs['prediction_filename_pattern'])))
     logging.info(f"Pytest will assert that 'folder_predictions' has output shape of: "
                 f"(num_modes={kargs['num_modes']}, number_of_files={number_of_files})")                

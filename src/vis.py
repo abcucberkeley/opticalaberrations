@@ -2127,4 +2127,4 @@ def otf_diagnosis(
     axes[2].set_ylim(top=1, bottom=otf_floor)
     otf_diags_path = f'{save_path}_otf_diagnosis.svg'
     savesvg(fig, otf_diags_path)
-    logger.info(f'OTF diagnosis saved to : {otf_diags_path.resolve()}')
+    logger.info(f'OTF diagnosis saved to : {Path(otf_diags_path).resolve()}')
