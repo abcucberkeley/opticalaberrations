@@ -186,7 +186,7 @@ do
 
                 JOB="${TITLE}-${DATASET}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-photons${xPH[$PH-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
                 task="${task} --cpus-per-task=${CPUS}"
-                task="${task} --mem='${MEM}'"
+                task="${task} --mem='20G'"
                 task="${task} --job-name=${JOB}"
                 task="${task} --time=${TIMELIMIT}"
                 task="${task} --output=${LOGS}/${JOB}.log"
