@@ -1,6 +1,4 @@
 #!/bin/bash
-
-HANDLER=slurm
 ENV=~/anaconda3/envs/ml/bin/python
 
 xVOXEL=.125
@@ -23,6 +21,7 @@ MODES=15
 TITLE='125nm_dataset'
 DATASET='test'
 MODE_DIST='pyramid'
+HANDLER=slurm
 
 MODALITIES=(
   "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
