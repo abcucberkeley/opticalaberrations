@@ -26,7 +26,6 @@ from tensorflow.keras.optimizers.experimental import AdamW
 from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping
 from tensorflow_addons.optimizers import LAMB
 
-from callbacks import LearningRateScheduler
 from callbacks import Defibrillator
 from callbacks import TensorBoardCallback
 from callbacks import LRLogger
@@ -337,13 +336,13 @@ def train_model(
         append=True,
     )
 
-    pb_checkpoints = ModelCheckpoint(
-        filepath=outdir/"tf"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}-epoch{{epoch:03d}}",
-        monitor="loss",
-        verbose=1,
-        save_best_only=True,
-        save_weights_only=False,
-    )
+    # pb_checkpoints = ModelCheckpoint(
+    #     filepath=outdir/"tf"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}-epoch{{epoch:03d}}",
+    #     monitor="loss",
+    #     verbose=1,
+    #     save_best_only=True,
+    #     save_weights_only=False,
+    # )
 
     h5_checkpoints = ModelCheckpoint(
         filepath=outdir/"keras"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}-epoch{{epoch:03d}}.h5",
@@ -407,7 +406,7 @@ def train_model(
         callbacks=[
             tblogger,
             tensorboard,
-            pb_checkpoints,
+            # pb_checkpoints,
             h5_checkpoints,
             earlystopping,
             defibrillator,
