@@ -26,6 +26,7 @@ from tensorflow.keras.optimizers.experimental import AdamW
 from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping
 from tensorflow_addons.optimizers import LAMB
 
+from warmupcosinedecay import WarmupCosineDecay
 from callbacks import Defibrillator
 from callbacks import TensorBoardCallback
 from callbacks import LRLogger
@@ -228,12 +229,28 @@ def train_model(
         train_data = train_data.prefetch(buffer_size=tf.data.AUTOTUNE)
         steps_per_epoch = tf.data.experimental.cardinality(train_data).numpy()
 
-    if opt == 'lamb':
-        opt = LAMB(learning_rate=lr, weight_decay=wd, beta_1=0.9, beta_2=0.99, clipnorm=1.0)
-    elif opt.lower() == 'adamw':
-        opt = AdamW(learning_rate=lr, weight_decay=wd)
+    if fixedlr:
+        scheduler = lr
+        logger.info(f"Training steps: [{steps_per_epoch * epochs}]")
     else:
-        opt = Adam(learning_rate=lr)
+        warmup_steps = warmup * steps_per_epoch
+        decay_steps = (epochs - warmup) * steps_per_epoch
+        logger.info(f"Training steps [{steps_per_epoch * epochs}] = ({warmup_steps=}) + ({decay_steps=})")
+
+        scheduler = WarmupCosineDecay(
+            initial_learning_rate=0.,
+            decay_steps=decay_steps,
+            warmup_target=lr,
+            warmup_steps=warmup_steps,
+            alpha=.01,
+        )
+
+    if opt == 'lamb':
+        opt = LAMB(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99, clipnorm=1.0)
+    elif opt.lower() == 'adamw':
+        opt = AdamW(learning_rate=scheduler, weight_decay=wd)
+    else:
+        opt = Adam(learning_rate=scheduler)
 
     try:  # check if model already exists
         model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent  # sort models to get the latest checkpoint
@@ -336,13 +353,13 @@ def train_model(
         append=True,
     )
 
-    # pb_checkpoints = ModelCheckpoint(
-    #     filepath=outdir/"tf"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}-epoch{{epoch:03d}}",
-    #     monitor="loss",
-    #     verbose=1,
-    #     save_best_only=True,
-    #     save_weights_only=False,
-    # )
+    pb_checkpoints = ModelCheckpoint(
+        filepath=outdir/"tf",
+        monitor="loss",
+        verbose=1,
+        save_best_only=True,
+        save_weights_only=False,
+    )
 
     h5_checkpoints = ModelCheckpoint(
         filepath=outdir/"keras"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}-epoch{{epoch:03d}}.h5",
@@ -375,28 +392,6 @@ def train_model(
 
     lrlogger = LRLogger()
 
-    if fixedlr:
-        lrscheduler = LearningRateScheduler(
-            initial_learning_rate=lr,
-            verbose=0,
-            fixed=True
-        )
-        logger.info(f"Training steps: [{steps_per_epoch * epochs}]")
-    else:
-        lrscheduler = LearningRateScheduler(
-            initial_learning_rate=lr,
-            weight_decay=wd,
-            decay_period=epochs,
-            warmup_epochs=0 if warmup is None else warmup,
-            alpha=.01,
-            decay_multiplier=2.,
-            decay=.9,
-            verbose=1,
-        )
-        warmup_steps = warmup * steps_per_epoch
-        decay_steps = (epochs - warmup) * steps_per_epoch
-        logger.info(f"Training steps [{steps_per_epoch * epochs}] = ({warmup_steps=}) + ({decay_steps=})")
-
     model.fit(
         train_data,
         steps_per_epoch=steps_per_epoch,
@@ -406,7 +401,7 @@ def train_model(
         callbacks=[
             tblogger,
             tensorboard,
-            # pb_checkpoints,
+            pb_checkpoints,
             h5_checkpoints,
             earlystopping,
             defibrillator,
