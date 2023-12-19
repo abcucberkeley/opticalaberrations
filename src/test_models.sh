@@ -9,24 +9,23 @@ ROTATIONS='--digital_rotations'
 ITERS=1
 MAX=10000
 PRETRAINED="../pretrained_models/"
-DATASET="big_highsnr_dataset"
+DATASET="125nm_dataset"
 EVALSIGN="signed"
 NA=1.0
 ABC_A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
 CLUSTER=slurm
 TIMELIMIT='24:00:00'  #hh:mm:ss
+NETWORK='opticalnet'
 
 TRAINED_MODELS=(
-  "YuMB_lambda510-fixed-precision"
-  "YuMB_lambda510-default"
-  "YuMB_lambda510-adamw-amp"
   "YuMB_lambda510-lamb-amp"
+  "spatial_planes10"
 )
 
 
 for M in ${TRAINED_MODELS[@]}
 do
-  MODEL="$PRETRAINED/aang/opticalnet-$MODES-$M"
+  MODEL="$PRETRAINED/aang/$NETWORK-$MODES-$M"
 
   if [ "${M:0:4}" = YuMB ];then
     declare -a PSFS=(
