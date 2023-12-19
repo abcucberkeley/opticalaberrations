@@ -1,12 +1,12 @@
 #!/bin/bash
 
-DX=125
-DY=125
+DX=97
+DY=97
 DZ=200
 SHAPE=64
 MODES=15
 ROTATIONS='--digital_rotations'
-ITERS=1
+ITERS=3
 MAX=10000
 PRETRAINED="../pretrained_models/"
 DATASET="125nm_dataset"

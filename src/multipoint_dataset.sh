@@ -1,8 +1,8 @@
 #!/bin/bash
 ENV=~/anaconda3/envs/ml/bin/python
 
-xVOXEL=.125
-yVOXEL=.125
+xVOXEL=.097
+yVOXEL=.097
 zVOXEL=.200
 LAMBDA=.510
 NA=1.0
@@ -18,7 +18,7 @@ SKIP_PREPROCESSING=false
 USE_THEORETICAL_WIDEFIELD_SIMULATOR=false
 
 MODES=15
-TITLE='125nm_dataset'
+TITLE='97nm_dataset'
 DATASET='test'
 MODE_DIST='pyramid'
 HANDLER=slurm
