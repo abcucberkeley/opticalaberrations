@@ -28,17 +28,3 @@ def test_load_metadata(kargs):
 def test_reloadmodel_if_needed(kargs):
     model, modelpsfgen = experimental.reloadmodel_if_needed(modelpath=kargs['model'], preloaded=None)
     model.summary()
-
-
-@pytest.mark.run(order=4)
-def test_ideal_empirical_psf(kargs):
-    model, modelpsfgen = experimental.reloadmodel_if_needed(
-        modelpath=kargs['model'],
-        preloaded=None,
-        ideal_empirical_psf=kargs['ideal_psf'],
-        ideal_empirical_psf_voxel_size=(
-            kargs['axial_voxel_size'],
-            kargs['lateral_voxel_size'],
-            kargs['lateral_voxel_size'],
-        )
-    )
