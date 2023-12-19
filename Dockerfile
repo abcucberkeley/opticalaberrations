@@ -86,7 +86,7 @@ ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=$
 
 # git clone the repo, branch=develop, --filter=blob:none will only download the files in HEAD
 WORKDIR /docker_install
-RUN echo "branch=${BRANCH_NAME}" && git clone -n -b ${BRANCH_NAME} --depth 1 https://github.com/abcucberkeley/opticalaberrations.git 
+RUN echo "branch=${BRANCH_NAME}" && git clone -n -b ${BRANCH_NAME} --depth 1 --filter=blob:none https://github.com/abcucberkeley/opticalaberrations.git 
 WORKDIR /docker_install/opticalaberrations
 RUN git checkout HEAD requirements.txt
 
