@@ -186,3 +186,33 @@ jobs:
       - name: Test training
         continue-on-error: true
         run: python -m pytest -vvv --color=yes --disable-warnings tests/test_train.py
+
+  build-apptainer-container:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    container:
+        image: quay.io/singularity/singularity:latest
+        options: --privileged
+
+    name: Build Container
+    steps:
+
+      # The repo gets volume mapped into the container automatically in container-test-job
+      - name: Check out code for the container builds
+        uses: actions/checkout@v4
+        with:
+          lfs: 'true'
+          submodules: 'recursive'
+
+      - name: Build Container
+        run: |
+            singularity build container.sif docker://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+
+      - name: Login and Deploy Container
+        run: |
+            echo ${{ secrets.GITHUB_TOKEN }} | singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
+            singularity push container.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif
