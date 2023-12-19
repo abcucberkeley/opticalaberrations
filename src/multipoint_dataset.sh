@@ -1,6 +1,4 @@
 #!/bin/bash
-
-HANDLER=lsf
 ENV=~/anaconda3/envs/ml/bin/python
 
 xVOXEL=.125
@@ -16,13 +14,14 @@ TIMELIMIT='1:00'
 SHAPE=64
 MAX_LLS_OFFSET=0
 RAND_VSIZE=false
-SKIP_PREPROCESSING=true
-USE_THEORETICAL_WIDEFIELD_SIMULATOR=true
+SKIP_PREPROCESSING=false
+USE_THEORETICAL_WIDEFIELD_SIMULATOR=false
 
 MODES=15
-TITLE='fit_125nm_dataset'
-DATASET='train'
+TITLE='125nm_dataset'
+DATASET='test'
 MODE_DIST='pyramid'
+HANDLER=slurm
 
 MODALITIES=(
   "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
@@ -187,7 +186,7 @@ do
 
                 JOB="${TITLE}-${DATASET}-${MODES}-${DISTRIBUTIONS[$DIST-1]}-photons${xPH[$PH-1]}-amp${amps2[$AMP-1]}-objs${OBJS[$N-1]}-iter#${S}"
                 task="${task} --cpus-per-task=${CPUS}"
-                task="${task} --mem='${MEM}'"
+                task="${task} --mem='20G'"
                 task="${task} --job-name=${JOB}"
                 task="${task} --time=${TIMELIMIT}"
                 task="${task} --output=${LOGS}/${JOB}.log"

@@ -52,6 +52,7 @@ from utils import round_to_even
 
 from roi import ROI
 import opticalnet
+import prototype
 from warmupcosinedecay import WarmupCosineDecay
 
 
@@ -98,17 +99,6 @@ class DatasetGenerator:
 def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
     model_path = Path(model_path)
 
-    custom_objects = {
-        "ROI": ROI,
-        "Stem": opticalnet.Stem,
-        "Patchify": opticalnet.Patchify,
-        "Merge": opticalnet.Merge,
-        "PatchEncoder": opticalnet.PatchEncoder,
-        "MLP": opticalnet.MLP,
-        "Transformer": opticalnet.Transformer,
-        "WarmupCosineDecay": WarmupCosineDecay,
-    }
-
     if mosaic:
         if model_path.is_file() and model_path.suffix == '.h5':
             model_path = Path(model_path)
@@ -129,7 +119,30 @@ def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
             else:
                 model_path = str(list(model_path.rglob('*.h5'))[0])
 
-    return load_model(model_path, custom_objects=custom_objects)
+    try:
+        custom_objects = {
+            "ROI": ROI,
+            "Stem": opticalnet.Stem,
+            "Patchify": opticalnet.Patchify,
+            "Merge": opticalnet.Merge,
+            "PatchEncoder": opticalnet.PatchEncoder,
+            "MLP": opticalnet.MLP,
+            "Transformer": opticalnet.Transformer,
+            "WarmupCosineDecay": WarmupCosineDecay,
+        }
+        return load_model(model_path, custom_objects=custom_objects)
+    except TypeError as e:
+        custom_objects = {
+            "ROI": ROI,
+            "Stem": prototype.Stem,
+            "Patchify": prototype.Patchify,
+            "Merge": prototype.Merge,
+            "PatchEncoder": prototype.PatchEncoder,
+            "MLP": prototype.MLP,
+            "Transformer": prototype.Transformer,
+            "WarmupCosineDecay": WarmupCosineDecay,
+        }
+        return load_model(model_path, custom_objects=custom_objects)
 
 
 @profile

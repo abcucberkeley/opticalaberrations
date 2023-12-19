@@ -54,12 +54,7 @@ def get_available_resources(username, hostname, requested_partition='abc_a100'):
 
         if partition == requested_partition:
             available_cpus = total_cpus - allocated_cpus
-
-            # Remove once RMA is completed for missing A00 GPUs
-            if name == 'g0003.abc0' or name == 'g0006.abc0':
-                available_gpus = 3
-            else:
-                available_gpus = available_cpus // 4 if available_cpus != 0 else 0
+            available_gpus = available_cpus // 4 if available_cpus != 0 else 0
 
             resources[name] = {
                 "total_cpus": total_cpus,
