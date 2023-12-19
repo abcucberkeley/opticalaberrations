@@ -48,6 +48,9 @@ def parse_args(args):
     data_parser = subparsers.add_parser("check")
     data_parser.add_argument("datadir", type=Path, help="path to dataset dir")
 
+    data_parser = subparsers.add_parser("stats")
+    data_parser.add_argument("datadir", type=Path, help="path to dataset dir")
+
     return parser.parse_args(args)
 
 
@@ -94,6 +97,9 @@ def main(args=None):
 
     elif args.cmd == "check":
         data_utils.check_dataset(args.datadir)
+
+    elif args.cmd == "stats":
+        data_utils.dataset_statistics(args.datadir)
 
     else:
         logger.error("Error: unknown action!")
