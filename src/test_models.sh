@@ -1,7 +1,7 @@
 #!/bin/bash
 
-DX=97
-DY=97
+DX=125
+DY=125
 DZ=200
 SHAPE=64
 MODES=15
@@ -25,7 +25,7 @@ TRAINED_MODELS=(
 
 for M in ${TRAINED_MODELS[@]}
 do
-  MODEL="$PRETRAINED/aang/$NETWORK-$MODES-$M"
+  MODEL="$PRETRAINED/$NETWORK-$MODES-$M"
 
   if [ "${M:0:4}" = YuMB ];then
     declare -a PSFS=(
