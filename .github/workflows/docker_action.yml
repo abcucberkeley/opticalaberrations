@@ -27,26 +27,26 @@ env:
   # DOCKER_RUN: docker run --name gha_$(git branch --show-current) --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
 
 jobs:
-  # container-cleanup-job:
-  #   runs-on: self-hosted
-  #   container:
-  #     image: ghcr.io/catthehacker/ubuntu:act-22.04
-  #     credentials:
-  #       username: ${{ github.actor }}
-  #       password: ${{ secrets.GITHUB_TOKEN }}
-  #   defaults:
-  #     run:
-  #       shell: bash
-  #   steps:
-  #     - name: 'Cleanup build folder'
-  #       run: |
-  #         ls -la ./
-  #         rm -rf ./* || true
-  #         rm -rf ./.??* || true
-  #         ls -la ./
+  container-cleanup-job:
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/catthehacker/ubuntu:act-22.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 'Cleanup build folder'
+        run: |
+          ls -la ./
+          rm -rf ./* || true
+          rm -rf ./.??* || true
+          ls -la ./
 
   build:      
-    # needs: container-cleanup-job
+    needs: container-cleanup-job
     if: always()
     name: docker_image_build
     runs-on: self-hosted
@@ -132,7 +132,58 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BRANCH_NAME=${{ env.BRANCH }}    
-        
+
+  build-apptainer-container:
+    needs: build
+    if: always()
+    runs-on: self-hosted
+    # permissions:
+    #   contents: read
+    #   packages: write
+    # container:
+    #     image: quay.io/singularity/singularity:v4.0.1
+    #     options: --privileged
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        if: runner.environment != 'self-hosted' 
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove needed tools if set to "true" but frees about 6 GB
+          tool-cache: false
+          
+          # all of these default to true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Build Apptainer SIF
+        run: |
+          docker run \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v container.sif:/output \
+          --privileged -t --rm \
+          singularityware/docker2singularity \
+          ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+
+      # # The repo gets volume mapped into the container automatically in container-test-job
+      # - name: Check out code for the container builds
+      #   uses: actions/checkout@v4
+      #   with:
+      #     lfs: 'true'
+      #     submodules: 'recursive'
+
+      # - name: Build Container
+      #   run: |
+      #       singularity build container.sif docker://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+
+      - name: Login and Deploy Apptainer SIF
+        run: |
+            echo ${{ secrets.GITHUB_TOKEN }} | singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
+            singularity push container.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif
+            
   container-test-job:
     needs: build
     if: always()
@@ -186,53 +237,3 @@ jobs:
       - name: Test training
         continue-on-error: true
         run: python -m pytest -vvv --color=yes --disable-warnings tests/test_train.py
-
-  build-apptainer-container:
-    needs: build
-    runs-on: self-hosted
-    permissions:
-      contents: read
-      packages: write
-    # container:
-    #     image: quay.io/singularity/singularity:v4.0.1
-    #     options: --privileged
-    steps:
-      - name: Free Disk Space (Ubuntu)
-        if: runner.environment != 'self-hosted' 
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # this might remove needed tools if set to "true" but frees about 6 GB
-          tool-cache: false
-          
-          # all of these default to true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
-
-      - name: Build Apptainer SIF
-        run: |
-          docker run \
-          -v /var/run/docker.sock:/var/run/docker.sock \
-          -v container.sif:/output \
-          --privileged -t --rm \
-          singularityware/docker2singularity \
-          ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
-
-      # # The repo gets volume mapped into the container automatically in container-test-job
-      # - name: Check out code for the container builds
-      #   uses: actions/checkout@v4
-      #   with:
-      #     lfs: 'true'
-      #     submodules: 'recursive'
-
-      # - name: Build Container
-      #   run: |
-      #       singularity build container.sif docker://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
-
-      - name: Login and Deploy Apptainer SIF
-        run: |
-            echo ${{ secrets.GITHUB_TOKEN }} | singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
-            singularity push container.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif
