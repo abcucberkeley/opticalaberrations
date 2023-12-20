@@ -174,7 +174,7 @@ jobs:
     runs-on: self-hosted
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.head_ref || github.ref_name }}.sif
-      APPTAINER_PYTEST: apptainer exec --nv ${{ github.head_ref || github.ref_name }}.sif python -m pytest -vvv --color=yes --disable-warnings ${{ github.workspace }}/opticalaberrations
+      APPTAINER_PYTEST: apptainer exec --nv ${{ github.head_ref || github.ref_name }}.sif python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider ${{ github.workspace }}/opticalaberrations
     steps:
           
       - name: pip list 
@@ -221,7 +221,7 @@ jobs:
         - 80
       options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864
     env:
-      DOCKER_PYTEST: python -m pytest -vvv --color=yes --disable-warnings  -p no:cacheprovider
+      DOCKER_PYTEST: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider
     defaults:
       run:
         shell: bash
