@@ -89,17 +89,17 @@ do
 
         python manager.py $JOB \
         --task "$MODEL.h5 --num_beads 1 $CONFIG snrheatmap" \
-        --taskname $NA \
+        --taskname na_$NA \
         --name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
         python manager.py $JOB \
         --task "$MODEL.h5  $CONFIG densityheatmap" \
-        --taskname $NA \
+        --taskname na_$NA \
         --name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
         #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
         #--task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
-        #--taskname $NA \
+        #--taskname na_$NA \
         #--name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
       done
 
