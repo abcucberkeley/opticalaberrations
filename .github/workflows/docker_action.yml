@@ -193,9 +193,9 @@ jobs:
     permissions:
       contents: read
       packages: write
-    container:
-        image: quay.io/singularity/singularity:v4.0.1
-        options: --privileged
+    # container:
+    #     image: quay.io/singularity/singularity:v4.0.1
+    #     options: --privileged
     steps:
       - name: Build Apptainer SIF
         run: |
