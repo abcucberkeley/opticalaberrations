@@ -6,7 +6,7 @@ DZ=200
 SHAPE=64
 MODES=15
 ROTATIONS='--digital_rotations'
-ITERS=5
+ITERS=1
 MAX=10000
 OUTDIR='../evaluations'
 PRETRAINED="../pretrained_models/"
@@ -23,7 +23,7 @@ TRAINED_MODELS=(
   "YuMB_lambda510-lamb-amp_fit_125nm_dataset_2023-12-15-19-55-epoch422"
 )
 
-for DATASET in 97nm_dataset fit_97nm_dataset
+for DATASET in 97nm_dataset 97nm_dataset_no_prep fit_97nm_dataset fit_97nm_dataset_no_prep
 do
   for M in ${TRAINED_MODELS[@]}
   do

@@ -194,7 +194,6 @@ def simulate_image(
     emb: bool = True,
     noise: bool = True,
     normalize: bool = True,
-    remove_background: bool = True,
     random_crop: Any = None,
     embedding_option: Union[set, list, tuple] = { 'spatial_planes' },
     alpha_val: str = 'abs',
@@ -265,36 +264,25 @@ def simulate_image(
             odir = outdir/e
             odir.mkdir(exist_ok=True, parents=True)
 
-            if not skip_preprocessing:
-                processed = prep_sample(
-                    inputs,
-                    sample_voxel_size=gen.voxel_size,
-                    model_fov=gen.psf_fov,
-                    remove_background=remove_background,
-                    normalize=normalize,
-                    min_psnr=0,
-                    plot=odir/filename if plot else None,
-                )
+            processed = prep_sample(
+                inputs,
+                sample_voxel_size=gen.voxel_size,
+                model_fov=gen.psf_fov,
+                remove_background=False if skip_preprocessing else True,
+                normalize=normalize,
+                min_psnr=0,
+                plot=odir/filename if plot else None,
+            )
 
-                embeddings = np.squeeze(fourier_embeddings(
-                    inputs=processed,
-                    iotf=gen.iotf,
-                    na_mask=gen.na_mask,
-                    embedding_option=e,
-                    alpha_val=alpha_val,
-                    phi_val=phi_val,
-                    plot=odir/filename if plot else None,
-                ))
-            else:
-                embeddings = np.squeeze(fourier_embeddings(
-                    inputs=inputs,
-                    iotf=gen.iotf,
-                    na_mask=gen.na_mask,
-                    embedding_option=e,
-                    alpha_val=alpha_val,
-                    phi_val=phi_val,
-                    plot=odir/filename if plot else None,
-                ))
+            embeddings = np.squeeze(fourier_embeddings(
+                inputs=processed,
+                iotf=gen.iotf,
+                na_mask=gen.na_mask,
+                embedding_option=e,
+                alpha_val=alpha_val,
+                phi_val=phi_val,
+                plot=odir/filename if plot else None,
+            ))
 
             save_synthetic_sample(
                 odir/filename,

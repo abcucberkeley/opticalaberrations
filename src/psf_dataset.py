@@ -150,30 +150,22 @@ def simulate_psf(
         inputs /= np.max(inputs)
 
     if emb:
-        if not skip_preprocessing:
-            embeddings = prep_sample(
-                inputs,
-                sample_voxel_size=gen.voxel_size,
-                model_fov=gen.psf_fov,
-                remove_background=True,
-                normalize=normalize,
-                min_psnr=0,
-                plot=outdir/filename if plot else None
-            )
+        embeddings = prep_sample(
+            inputs,
+            sample_voxel_size=gen.voxel_size,
+            model_fov=gen.psf_fov,
+            remove_background=False if skip_preprocessing else True,
+            normalize=normalize,
+            min_psnr=0,
+            plot=outdir/filename if plot else None
+        )
 
-            embeddings = np.squeeze(fourier_embeddings(
-                inputs=embeddings,
-                iotf=gen.iotf,
-                na_mask=gen.na_mask,
-                plot=outdir/filename if plot else None
-            ))
-        else:
-            embeddings = np.squeeze(fourier_embeddings(
-                inputs=inputs,
-                iotf=gen.iotf,
-                na_mask=gen.na_mask,
-                plot=outdir/filename if plot else None
-            ))
+        embeddings = np.squeeze(fourier_embeddings(
+            inputs=embeddings,
+            iotf=gen.iotf,
+            na_mask=gen.na_mask,
+            plot=outdir/filename if plot else None
+        ))
 
         save_synthetic_sample(
             outdir / filename,
