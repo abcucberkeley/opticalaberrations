@@ -87,7 +87,7 @@ do
         fi
 
         for SKIP_REMOVE_BACKGROUND in '' '--skip_remove_background'; do
-            CONFIG=" $SKIP_REMOVE_BACKGROUND --outdir $OUTDIR/${DATASET}${SKIP_REMOVE_BACKGROUND} --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
+            CONFIG=" $SKIP_REMOVE_BACKGROUND --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
             python manager.py $JOB \
             --task "$MODEL.h5 --num_beads 1 $CONFIG snrheatmap" \
