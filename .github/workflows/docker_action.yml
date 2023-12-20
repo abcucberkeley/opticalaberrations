@@ -22,8 +22,7 @@ env:
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}  
   DO_SIGNING: ${{ false }}
-  BRANCH: ${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'
-  CONTAINER_NAME : gha_${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop' 
+  BRANCH: ${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'  
   # DOCKER_RUN: docker run --name gha_$(git branch --show-current) --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
 
 jobs:
@@ -115,7 +114,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
           labels: |
             org.opencontainers.image.title=OpticalNet_ubuntu
             org.opencontainers.image.description=Docker image for a transformer network to perform sensorless detection of aberrations in adaptive optics. https://github.com/abcucberkeley/opticalaberrations
@@ -133,70 +132,87 @@ jobs:
           build-args: |
             BRANCH_NAME=${{ env.BRANCH }}    
 
-  # build-apptainer-container:
-  #   needs: build
-  #   if: always()
-  #   runs-on: self-hosted
-  #   # permissions:
-  #   #   contents: read
-  #   #   packages: write
-  #   # container:
-  #   #     image: quay.io/singularity/singularity:v4.0.1
-  #   #     options: --privileged
-  #   steps:
-  #     - name: Free Disk Space (Ubuntu)
-  #       if: runner.environment != 'self-hosted' 
-  #       uses: jlumbroso/free-disk-space@main
-  #       with:
-  #         # this might remove needed tools if set to "true" but frees about 6 GB
-  #         tool-cache: false
-          
-  #         # all of these default to true
-  #         android: true
-  #         dotnet: true
-  #         haskell: true
-  #         large-packages: true
-  #         docker-images: true
-  #         swap-storage: true
-
-  #     - name: Build Apptainer SIF
-  #       run: |
-  #         docker run \
-  #         -v /var/run/docker.sock:/var/run/docker.sock \
-  #         -v $(pwd):/output \
-  #         --privileged -t --rm \
-  #         singularityware/docker2singularity \
-  #         ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
-
   push-apptainer-container:
     needs: build
     if: always()
     runs-on: self-hosted
-    container:
-        image: quay.io/singularity/singularity:v4.0.1
-        options: --privileged
     steps:
       - name: List files in the directory
         run: |
             ls -lhXR
 
-      - name: Build Apptainer SIF
+      # Login against a Docker registry except on PR
+      # https://github.com/docker/login-action
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}    # aka ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+                
+      - name: Pull latest docker
         run: |
-            singularity build container.sif docker://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+            docker pull docker://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
 
-      - name: Login and Deploy Apptainer SIF
+      - name: Build Apptainer from local docker image to a local .sif
         run: |
-            ls 
-            singularity registry login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} docker://ghcr.io 
+            apptainer build --nv --force ${{ github.head_ref || github.ref_name }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+
+      - name: Login and Push Apptainer SIF to github
+        run: |
+            ls *.si*         
             singularity registry login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io       
-            singularity push container.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif  
-            singularity push container.sif docker://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif
-
+            singularity push ${{ github.head_ref || github.ref_name }}.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif  
+            
       # singularity push container.sif oras://ghcr.io/abcucberkeley/opticalaberrations:develop_sif
       # singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
+
+  test-apptainer-container:
+    needs: push-apptainer-container
+    if: always()
+    runs-on: self-hosted
+    env: 
+      APPTAINER_RUN: apptainer exec --nv ${{ github.head_ref || github.ref_name }}.sif
+      APPTAINER_PYTEST: apptainer exec --nv ${{ github.head_ref || github.ref_name }}.sif python -m pytest -vvv --color=yes --disable-warnings ${{ github.workspace }}/opticalaberrations
+    steps:
+          
+      - name: pip list 
+        run: ${{ env.APPTAINER_RUN }} pip list
+
+      - name: 
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_io.py
+
+      - name: Test NVIDIA-SMI
+        run:  ${{ env.APPTAINER_RUN }} nvidia-smi
+              
+      - name: Test TensorFlow
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_tensorflow.py
+
+      - name: Test Cupy
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_cupy.py
+
+      - name: Test IO
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_io.py
+
+      - name: Test preprocessing
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_preprocessing.py
+
+      - name: Test embeddings
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_embeddings.py
+
+      - name: Test synthetic datasets
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_datasets.py
+
+      - name: Test AO  # requires test data generated by previous step: Test synthetic datasets
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_ao.py
+          
+      - name: Test training
+        continue-on-error: true
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_train.py
           
   container-test-job:
-    needs: push-apptainer-container
+    needs: test-apptainer-container
     if: always()
     runs-on: self-hosted
     container: 
