@@ -157,13 +157,13 @@ jobs:
 
       - name: Build Apptainer from local docker image we just pulled to a local .sif
         run: |
-            apptainer build --nv --force ${{ github.head_ref || github.ref_name }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+            apptainer build --nv --force ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
 
       - name: Login and Push Apptainer SIF to github
         run: |
             ls *.si*         
-            singularity registry login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io       
-            singularity push ${{ github.head_ref || github.ref_name }}.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif  
+            apptainer remote login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io       
+            apptainer push ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif  
             
       # singularity push container.sif oras://ghcr.io/abcucberkeley/opticalaberrations:develop_sif
       # singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
@@ -173,7 +173,7 @@ jobs:
     if: always()
     runs-on: self-hosted
     env: 
-      APPTAINER_RUN: apptainer exec --nv ${{ github.head_ref || github.ref_name }}.sif
+      APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif
       APPTAINER_PYTEST: apptainer exec --nv ${{ github.head_ref || github.ref_name }}.sif python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider ${{ github.workspace }}/opticalaberrations
     steps:
           
