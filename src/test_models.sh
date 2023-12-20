@@ -87,17 +87,17 @@ do
         fi
 
         for SKIP_REMOVE_BACKGROUND in '' '--skip_remove_background'; do
-            CONFIG=" $SKIP_REMOVE_BACKGROUND --outdir $OUTDIR/$DATASET-$SKIP_REMOVE_BACKGROUND --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
+            CONFIG=" $SKIP_REMOVE_BACKGROUND --outdir $OUTDIR/${DATASET}${SKIP_REMOVE_BACKGROUND} --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
             python manager.py $JOB \
             --task "$MODEL.h5 --num_beads 1 $CONFIG snrheatmap" \
             --taskname na_$NA \
-            --name $OUTDIR/$DATASET-$SKIP_REMOVE_BACKGROUND/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
+            --name $OUTDIR/${DATASET}${SKIP_REMOVE_BACKGROUND}/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
             python manager.py $JOB \
             --task "$MODEL.h5  $CONFIG densityheatmap" \
             --taskname na_$NA \
-            --name $OUTDIR/$DATASET-$SKIP_REMOVE_BACKGROUND/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
+            --name $OUTDIR/${DATASET}${SKIP_REMOVE_BACKGROUND}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
             #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
             #--task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
