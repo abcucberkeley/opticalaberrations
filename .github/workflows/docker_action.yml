@@ -133,59 +133,70 @@ jobs:
           build-args: |
             BRANCH_NAME=${{ env.BRANCH }}    
 
-  build-apptainer-container:
+  # build-apptainer-container:
+  #   needs: build
+  #   if: always()
+  #   runs-on: self-hosted
+  #   # permissions:
+  #   #   contents: read
+  #   #   packages: write
+  #   # container:
+  #   #     image: quay.io/singularity/singularity:v4.0.1
+  #   #     options: --privileged
+  #   steps:
+  #     - name: Free Disk Space (Ubuntu)
+  #       if: runner.environment != 'self-hosted' 
+  #       uses: jlumbroso/free-disk-space@main
+  #       with:
+  #         # this might remove needed tools if set to "true" but frees about 6 GB
+  #         tool-cache: false
+          
+  #         # all of these default to true
+  #         android: true
+  #         dotnet: true
+  #         haskell: true
+  #         large-packages: true
+  #         docker-images: true
+  #         swap-storage: true
+
+  #     - name: Build Apptainer SIF
+  #       run: |
+  #         docker run \
+  #         -v /var/run/docker.sock:/var/run/docker.sock \
+  #         -v $(pwd):/output \
+  #         --privileged -t --rm \
+  #         singularityware/docker2singularity \
+  #         ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+
+  push-apptainer-container:
     needs: build
     if: always()
     runs-on: self-hosted
-    # permissions:
-    #   contents: read
-    #   packages: write
-    # container:
-    #     image: quay.io/singularity/singularity:v4.0.1
-    #     options: --privileged
+    container:
+        image: quay.io/singularity/singularity:v4.0.1
+        options: --privileged
     steps:
-      - name: Free Disk Space (Ubuntu)
-        if: runner.environment != 'self-hosted' 
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # this might remove needed tools if set to "true" but frees about 6 GB
-          tool-cache: false
-          
-          # all of these default to true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
+      - name: List files in the directory
+        run: |
+            ls -lhXR
 
       - name: Build Apptainer SIF
         run: |
-          docker run \
-          -v /var/run/docker.sock:/var/run/docker.sock \
-          -v container.sif:/output \
-          --privileged -t --rm \
-          singularityware/docker2singularity \
-          ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
-
-      # # The repo gets volume mapped into the container automatically in container-test-job
-      # - name: Check out code for the container builds
-      #   uses: actions/checkout@v4
-      #   with:
-      #     lfs: 'true'
-      #     submodules: 'recursive'
-
-      # - name: Build Container
-      #   run: |
-      #       singularity build container.sif docker://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+            singularity build container.sif docker://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
 
       - name: Login and Deploy Apptainer SIF
         run: |
-            echo ${{ secrets.GITHUB_TOKEN }} | singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
-            singularity push container.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif
-            
+            ls 
+            singularity registry login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} docker://ghcr.io 
+            singularity registry login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io       
+            singularity push container.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif  
+            singularity push container.sif docker://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif
+
+      # singularity push container.sif oras://ghcr.io/abcucberkeley/opticalaberrations:develop_sif
+      # singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
+          
   container-test-job:
-    needs: build
+    needs: push-apptainer-container
     if: always()
     runs-on: self-hosted
     container: 
