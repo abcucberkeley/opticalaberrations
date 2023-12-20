@@ -1112,20 +1112,24 @@ def snrheatmap(
     skip_remove_background: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'snrheatmaps'
 
-    if psf_type is not None:
-        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+    if outdir == Path('../evaluations'):
+        savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'snrheatmaps'
 
-    if num_beads is not None:
-        savepath = savepath / f'beads-{num_beads}'
+        if psf_type is not None:
+            savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
+        if num_beads is not None:
+            savepath = savepath / f'beads-{num_beads}'
+        else:
+            savepath = savepath / 'beads'
+
+        if distribution != '/':
+            savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+        else:
+            savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
     else:
-        savepath = savepath / 'beads'
-
-    if distribution != '/':
-        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
-    else:
-        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+        savepath = outdir
 
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -1265,18 +1269,22 @@ def densityheatmap(
     skip_remove_background: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'densityheatmaps'
 
-    if psf_type is not None:
-        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+    if outdir == Path('../evaluations'):
+        savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'densityheatmaps'
 
-    if num_beads is not None:
-        savepath = savepath / f'beads-{num_beads}'
+        if psf_type is not None:
+            savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
 
-    if distribution != '/':
-        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+        if num_beads is not None:
+            savepath = savepath / f'beads-{num_beads}'
+
+        if distribution != '/':
+            savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+        else:
+            savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
     else:
-        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+        savepath = outdir
 
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -1363,15 +1371,19 @@ def iterheatmap(
     skip_remove_background: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'iterheatmaps'
 
-    if psf_type is not None:
-        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+    if outdir == Path('../evaluations'):
+        savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'iterheatmaps'
 
-    if distribution != '/':
-        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+        if psf_type is not None:
+            savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
+        if distribution != '/':
+            savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+        else:
+            savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
     else:
-        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+        savepath = outdir
 
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -2370,15 +2382,19 @@ def confidence_heatmap(
     skip_remove_background: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'confidence'
 
-    if psf_type is not None:
-        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+    if outdir == Path('../evaluations'):
+        savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'confidence'
 
-    if distribution != '/':
-        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+        if psf_type is not None:
+            savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
+        if distribution != '/':
+            savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+        else:
+            savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
     else:
-        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+        savepath = outdir
 
     savepath.mkdir(parents=True, exist_ok=True)
 
