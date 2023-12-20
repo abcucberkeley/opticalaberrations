@@ -187,10 +187,13 @@ jobs:
       - name: Login and Deploy Apptainer SIF
         run: |
             ls 
-            echo ${{ secrets.GITHUB_TOKEN }} | singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
-            singularity push container.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif
+            singularity registry login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} docker://ghcr.io 
+            singularity registry login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io       
+            singularity push container.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif  
+            singularity push container.sif docker://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif
 
       # singularity push container.sif oras://ghcr.io/abcucberkeley/opticalaberrations:develop_sif
+      # singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
           
   container-test-job:
     needs: push-apptainer-container
