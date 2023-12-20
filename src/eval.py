@@ -1106,7 +1106,7 @@ def snrheatmap(
     lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = outdir / modelpath.name / eval_sign / f'snrheatmaps'
+    savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'snrheatmaps'
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
@@ -1255,7 +1255,7 @@ def densityheatmap(
     lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = outdir / modelpath.name / eval_sign / f'densityheatmaps'
+    savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'densityheatmaps'
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
@@ -1351,7 +1351,7 @@ def iterheatmap(
     lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = outdir / modelpath.name / eval_sign / f'iterheatmaps'
+    savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'iterheatmaps'
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
@@ -2356,7 +2356,7 @@ def confidence_heatmap(
     lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = outdir / modelpath.name / eval_sign / f'confidence'
+    savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'confidence'
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
