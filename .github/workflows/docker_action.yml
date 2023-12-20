@@ -197,6 +197,21 @@ jobs:
     #     image: quay.io/singularity/singularity:v4.0.1
     #     options: --privileged
     steps:
+      - name: Free Disk Space (Ubuntu)
+        if: runner.environment != 'self-hosted' 
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove needed tools if set to "true" but frees about 6 GB
+          tool-cache: false
+          
+          # all of these default to true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: true
+
       - name: Build Apptainer SIF
         run: |
           docker run \
