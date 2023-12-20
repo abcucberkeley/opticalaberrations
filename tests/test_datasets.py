@@ -50,7 +50,7 @@ def test_theoretical_widefield_simulator(kargs):
         y_voxel_size=kargs['lateral_voxel_size'],
         z_voxel_size=kargs['axial_voxel_size'],
         use_theoretical_widefield_simulator=True,
-        skip_preprocessing_ideal_psf=False
+        skip_remove_background_ideal_psf=False
     )
 
     amplitude = .1
@@ -104,7 +104,7 @@ def test_theoretical_widefield_simulator(kargs):
             normalize=True,
             lls_defocus_offset=(0, 0),
             plot=True,
-            skip_preprocessing=False
+            skip_remove_background=False
         )
 
         assert embeddings.shape == (6, gen.psf_shape[1], gen.psf_shape[2])
@@ -126,7 +126,7 @@ def test_experimental_widefield_simulator(kargs):
         y_voxel_size=kargs['lateral_voxel_size'],
         z_voxel_size=kargs['axial_voxel_size'],
         use_theoretical_widefield_simulator=False,
-        skip_preprocessing_ideal_psf=False
+        skip_remove_background_ideal_psf=False
     )
 
     amplitude = .1
@@ -180,7 +180,7 @@ def test_experimental_widefield_simulator(kargs):
             normalize=True,
             lls_defocus_offset=(0, 0),
             plot=True,
-            skip_preprocessing=False
+            skip_remove_background=False
         )
 
         assert embeddings.shape == (6, gen.psf_shape[1], gen.psf_shape[2])

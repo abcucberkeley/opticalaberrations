@@ -112,7 +112,7 @@ def simulate_psf(
     electrons_per_count: float = .22,
     quantum_efficiency: float = .82,
     plot: bool = False,
-    skip_preprocessing: bool = False,
+    skip_remove_background: bool = False,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
@@ -154,7 +154,7 @@ def simulate_psf(
             inputs,
             sample_voxel_size=gen.voxel_size,
             model_fov=gen.psf_fov,
-            remove_background=False if skip_preprocessing else True,
+            remove_background=False if skip_remove_background else True,
             normalize=normalize,
             min_psnr=0,
             plot=outdir/filename if plot else None
@@ -223,7 +223,7 @@ def create_synthetic_sample(
     min_lls_defocus_offset: float = 0.,
     max_lls_defocus_offset: float = 0.,
     emb: bool = False,
-    skip_preprocessing: bool = False,
+    skip_remove_background: bool = False,
 ):
     outdir = savedir / rf"{re.sub(r'.*/lattice/', '', str(gen.psf_type)).split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
     outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
@@ -267,7 +267,7 @@ def create_synthetic_sample(
         photons=photons,
         noise=noise,
         normalize=normalize,
-        skip_preprocessing=skip_preprocessing,
+        skip_remove_background=skip_remove_background,
         lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset)
     )
 
@@ -415,7 +415,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        '--skip_preprocessing', action='store_true',
+        '--skip_remove_background', action='store_true',
         help='optional toggle to skip preprocessing input data using the DoG filter'
     )
 
@@ -446,7 +446,7 @@ def main(args=None):
         refractive_index=args.refractive_index,
         na_detection=args.na_detection,
         use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
-        skip_preprocessing_ideal_psf=args.skip_preprocessing
+        skip_remove_background_ideal_psf=args.skip_remove_background
     )
 
     sample = partial(
@@ -462,7 +462,7 @@ def main(args=None):
         max_lls_defocus_offset=args.max_lls_defocus_offset,
         min_photons=args.min_photons,
         max_photons=args.max_photons,
-        skip_preprocessing=args.skip_preprocessing
+        skip_remove_background=args.skip_remove_background
     )
 
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]

@@ -14,11 +14,11 @@ TIMELIMIT='1:00'
 SHAPE=64
 MAX_LLS_OFFSET=0
 RAND_VSIZE=false
-SKIP_PREPROCESSING=true
-USE_THEORETICAL_WIDEFIELD_SIMULATOR=true
+SKIP_REMOVE_BACKGROUND=false
+USE_THEORETICAL_WIDEFIELD_SIMULATOR=false
 
 MODES=15
-TITLE='fit_97nm_dataset_no_prep'
+TITLE='97nm_dataset'
 DATASET='test'
 MODE_DIST='pyramid'
 HANDLER=slurm
@@ -144,8 +144,8 @@ do
               j="${j} --use_theoretical_widefield_simulator"
             fi
 
-            if $SKIP_PREPROCESSING; then
-              j="${j} --skip_preprocessing"
+            if $SKIP_REMOVE_BACKGROUND; then
+              j="${j} --skip_remove_background"
             fi
 
             if $RAND_VSIZE; then

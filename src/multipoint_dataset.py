@@ -206,7 +206,7 @@ def simulate_image(
     scale_by_maxcounts: Optional[int] = None,
     plot: bool = False,
     gtdir: Optional[Path] = None,
-    skip_preprocessing: bool = False,
+    skip_remove_background: bool = False,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
 
@@ -268,7 +268,7 @@ def simulate_image(
                 inputs,
                 sample_voxel_size=gen.voxel_size,
                 model_fov=gen.psf_fov,
-                remove_background=False if skip_preprocessing else True,
+                remove_background=False if skip_remove_background else True,
                 normalize=normalize,
                 min_psnr=0,
                 plot=odir/filename if plot else None,
@@ -365,7 +365,7 @@ def create_synthetic_sample(
     plot: bool = False,
     denoising_dataset: bool = False,
     uniform_background: int = 0,
-    skip_preprocessing: bool = False,
+    skip_remove_background: bool = False,
 ):
 
     aberration = Wavefront(
@@ -535,7 +535,7 @@ def create_synthetic_sample(
                     scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
                     if gen.psf_type == 'widefield' else None,
                     plot=plot,
-                    skip_preprocessing=skip_preprocessing
+                    skip_remove_background=skip_remove_background
                 )
         else:
             wavefronts[gen.psf_type] = phi
@@ -561,7 +561,7 @@ def create_synthetic_sample(
                 scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
                 if gen.psf_type == 'widefield' else None,
                 plot=plot,
-                skip_preprocessing=skip_preprocessing
+                skip_remove_background=skip_remove_background
             )
 
     return inputs
@@ -764,7 +764,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        '--skip_preprocessing', action='store_true',
+        '--skip_remove_background', action='store_true',
         help='optional toggle to skip preprocessing input data using the DoG filter'
     )
 
@@ -797,7 +797,7 @@ def main(args=None):
             refractive_index=args.refractive_index,
             na_detection=args.na_detection,
             use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
-            skip_preprocessing_ideal_psf=args.skip_preprocessing
+            skip_remove_background_ideal_psf=args.skip_remove_background
         )
 
         # just for the widefield case
@@ -820,7 +820,7 @@ def main(args=None):
             refractive_index=generators[psf].refractive_index,
             na_detection=generators[psf].na_detection,
             use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
-            skip_preprocessing_ideal_psf=args.skip_preprocessing
+            skip_remove_background_ideal_psf=args.skip_remove_background
         )
 
     sample = partial(
@@ -855,7 +855,7 @@ def main(args=None):
         plot=args.plot,
         denoising_dataset=args.denoising_dataset,
         uniform_background=args.uniform_background,
-        skip_preprocessing=args.skip_preprocessing
+        skip_remove_background=args.skip_remove_background
     )
     logger.info(f"Output folder: {Path(args.outdir).resolve()}")
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]

@@ -9,7 +9,7 @@ ROTATIONS='--digital_rotations'
 ITERS=1
 MAX=10000
 OUTDIR='../evaluations'
-PRETRAINED="../pretrained_models/"
+PRETRAINED="../pretrained_models"
 DATASET="97nm_dataset"
 EVALSIGN="signed"
 NA=1.0
@@ -17,13 +17,14 @@ ABC_A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
 CLUSTER=slurm
 TIMELIMIT='24:00:00'  #hh:mm:ss
 NETWORK='prototype'
+SKIP_REMOVE_BACKGROUND=false
 
 TRAINED_MODELS=(
   "YuMB_lambda510-lamb-amp_125nm_dataset_2023-12-18-14-36-epoch162"
   "YuMB_lambda510-lamb-amp_fit_125nm_dataset_2023-12-15-19-55-epoch422"
 )
 
-for DATASET in 97nm_dataset 97nm_dataset_no_prep fit_97nm_dataset fit_97nm_dataset_no_prep
+for DATASET in 97nm_dataset fit_97nm_dataset
 do
   for M in ${TRAINED_MODELS[@]}
   do
@@ -85,22 +86,25 @@ do
           JOB="${CLUSTER} test.py --timelimit $TIMELIMIT --dependency singleton --partition gpu_a100 --cpus 8 --gpus 4"
         fi
 
-        CONFIG=" --outdir $OUTDIR/$DATASET --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
+        for SKIP_REMOVE_BACKGROUND in '' '--skip_remove_background'; do
+            CONFIG=" $SKIP_REMOVE_BACKGROUND --outdir $OUTDIR/$DATASET-$SKIP_REMOVE_BACKGROUND --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
-        python manager.py $JOB \
-        --task "$MODEL.h5 --num_beads 1 $CONFIG snrheatmap" \
-        --taskname na_$NA \
-        --name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
+            python manager.py $JOB \
+            --task "$MODEL.h5 --num_beads 1 $CONFIG snrheatmap" \
+            --taskname na_$NA \
+            --name $OUTDIR/$DATASET-$SKIP_REMOVE_BACKGROUND/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
-        python manager.py $JOB \
-        --task "$MODEL.h5  $CONFIG densityheatmap" \
-        --taskname na_$NA \
-        --name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
+            python manager.py $JOB \
+            --task "$MODEL.h5  $CONFIG densityheatmap" \
+            --taskname na_$NA \
+            --name $OUTDIR/$DATASET-$SKIP_REMOVE_BACKGROUND/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
-        #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
-        #--task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
-        #--taskname na_$NA \
-        #--name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
+            #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
+            #--task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
+            #--taskname na_$NA \
+            #--name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
+        done
+
       done
 
       echo '----------------'

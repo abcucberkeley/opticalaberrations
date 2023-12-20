@@ -118,6 +118,11 @@ def parse_args(args):
         help='detection wavelength in microns'
     )
 
+    parser.add_argument(
+        '--skip_remove_background', action='store_true',
+        help='optional toggle to skip preprocessing input data using the DoG filter'
+    )
+
     return parser.parse_args(args)
 
 
@@ -211,7 +216,8 @@ def main(args=None):
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
                 lam_detection=args.wavelength,
-                num_beads=args.num_beads
+                num_beads=args.num_beads,
+                skip_remove_background=args.skip_remove_background
             )
         elif args.target == 'confidence_heatmap':
             savepath = eval.confidence_heatmap(
@@ -228,7 +234,8 @@ def main(args=None):
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
-                lam_detection=args.wavelength
+                lam_detection=args.wavelength,
+                skip_remove_background=args.skip_remove_background
             )
         elif args.target == 'densityheatmap':
             savepath = eval.densityheatmap(
@@ -247,7 +254,8 @@ def main(args=None):
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
                 lam_detection=args.wavelength,
-                num_beads=args.num_beads
+                num_beads=args.num_beads,
+                skip_remove_background=args.skip_remove_background
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
@@ -265,7 +273,8 @@ def main(args=None):
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
-                lam_detection=args.wavelength
+                lam_detection=args.wavelength,
+                skip_remove_background=args.skip_remove_background
             )
 
         if savepath is not None:

@@ -326,7 +326,8 @@ def iter_evaluate(
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
-    preprocess: bool = False
+    preprocess: bool = False,
+    skip_remove_background: bool = False
 ):
     """
     Gathers the set of .tif files that meet the input criteria.
@@ -417,6 +418,7 @@ def iter_evaluate(
         min_psnr=0,
         skip_prep_sample=False,
         preprocessed=True if preprocess else False,
+        remove_background=False if skip_remove_background else True,
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
@@ -1107,6 +1109,7 @@ def snrheatmap(
     psf_type: Optional[str] = None,
     num_beads: Optional[int] = None,
     lam_detection: Optional[float] = .510,
+    skip_remove_background: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'snrheatmaps'
@@ -1144,7 +1147,8 @@ def snrheatmap(
             plot=plot,
             plot_rotations=plot_rotations,
             psf_type=psf_type,
-            lam_detection=lam_detection
+            lam_detection=lam_detection,
+            skip_remove_background=skip_remove_background
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -1258,6 +1262,7 @@ def densityheatmap(
     photons_range: Optional[tuple] = None,
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
+    skip_remove_background: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'densityheatmaps'
@@ -1294,7 +1299,8 @@ def densityheatmap(
             plot=plot,
             plot_rotations=plot_rotations,
             psf_type=psf_type,
-            lam_detection=lam_detection
+            lam_detection=lam_detection,
+            skip_remove_background=skip_remove_background
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -1354,6 +1360,7 @@ def iterheatmap(
     agg: str = 'median',
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
+    skip_remove_background: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'iterheatmaps'
@@ -1391,7 +1398,8 @@ def iterheatmap(
             plot=plot,
             plot_rotations=plot_rotations,
             psf_type=psf_type,
-            lam_detection=lam_detection
+            lam_detection=lam_detection,
+            skip_remove_background=skip_remove_background
         )
 
     max_iter = df['iter_num'].max()
@@ -2359,6 +2367,7 @@ def confidence_heatmap(
     agg: str = 'median',
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
+    skip_remove_background: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
     savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'confidence'
@@ -2391,7 +2400,8 @@ def confidence_heatmap(
             plot=plot,
             plot_rotations=plot_rotations,
             psf_type=psf_type,
-            lam_detection=lam_detection
+            lam_detection=lam_detection,
+            skip_remove_background=skip_remove_background
         )
 
     df = df[df['iter_num'] == iter_num]
