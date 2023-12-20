@@ -484,6 +484,7 @@ def plot_heatmap_p2v(
     kde_color='grey',
     cdf_color='k',
     hist_color='lightgrey',
+    sci=False
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -964,7 +965,9 @@ def plot_heatmap_p2v(
     elif label == 'Number of iterations':
         ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
 
-    ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0), useMathText=True)
+    if sci:
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0), useMathText=True)
+
     ax.set_xlabel(label)
     ax.set_xlim(lims)
 
@@ -1198,6 +1201,7 @@ def snrheatmap(
                 savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{agg}"),
                 label=label,
                 hist_col='residuals',
+                sci=True,
                 lims=lims,
                 agg=agg
             )
@@ -1224,6 +1228,7 @@ def snrheatmap(
                         savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}_{agg}"),
                         label=label,
                         color_label='Standard deviation',
+                        sci=True,
                         hist_col=c,
                         lims=lims,
                         agg=agg
