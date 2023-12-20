@@ -31,7 +31,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--outdir", default="../models", type=Path, help='path to save eval'
+        "--outdir", default="../evaluations", type=Path, help='path to save eval'
     )
 
     parser.add_argument(
@@ -188,40 +188,6 @@ def main(args=None):
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
             )
-        elif args.target == 'snrheatmap':
-            savepath = eval.snrheatmap(
-                iter_num=args.niter,
-                modelpath=args.model,
-                datadir=args.datadir,
-                distribution=args.dist,
-                samplelimit=args.n_samples,
-                na=args.na,
-                batch_size=batch_size,
-                eval_sign=args.eval_sign,
-                digital_rotations=args.digital_rotations,
-                plot=args.plot,
-                plot_rotations=args.plot_rotations,
-                psf_type=args.psf_type,
-                lam_detection=args.wavelength,
-                num_beads=args.num_beads
-            )
-        elif args.target == 'eval_folder':
-            savepath = eval.predict_folder(
-                iter_num=args.niter,
-                modelpath=args.model,
-                datadir=args.datadir,
-                distribution=args.dist,
-                samplelimit=args.n_samples,
-                na=args.na,
-                batch_size=batch_size,
-                eval_sign=args.eval_sign,
-                digital_rotations=args.digital_rotations,
-                plot=args.plot,
-                plot_rotations=args.plot_rotations,
-                psf_type=args.psf_type,
-                lam_detection=args.wavelength,
-                num_beads=args.num_beads
-            )
         elif args.target == "confidence":
             savepath = eval.eval_confidence(
                 model=args.model,
@@ -229,11 +195,30 @@ def main(args=None):
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
             )
+        elif args.target == 'snrheatmap':
+            savepath = eval.snrheatmap(
+                iter_num=args.niter,
+                modelpath=args.model,
+                datadir=args.datadir,
+                outdir=args.outdir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=batch_size,
+                eval_sign=args.eval_sign,
+                digital_rotations=args.digital_rotations,
+                plot=args.plot,
+                plot_rotations=args.plot_rotations,
+                psf_type=args.psf_type,
+                lam_detection=args.wavelength,
+                num_beads=args.num_beads
+            )
         elif args.target == 'confidence_heatmap':
             savepath = eval.confidence_heatmap(
                 iter_num=args.niter,
                 modelpath=args.model,
                 datadir=args.datadir,
+                outdir=args.outdir,
                 distribution=args.dist,
                 samplelimit=args.n_samples,
                 na=args.na,
@@ -250,6 +235,7 @@ def main(args=None):
                 iter_num=args.niter,
                 modelpath=args.model,
                 datadir=args.datadir,
+                outdir=args.outdir,
                 distribution=args.dist,
                 samplelimit=args.n_samples,
                 na=args.na,
@@ -268,6 +254,7 @@ def main(args=None):
                 iter_num=args.niter,
                 modelpath=args.model,
                 datadir=args.datadir,
+                outdir=args.outdir,
                 distribution=args.dist,
                 samplelimit=args.n_samples,
                 na=args.na,

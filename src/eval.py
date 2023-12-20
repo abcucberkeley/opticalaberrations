@@ -1090,6 +1090,7 @@ def plot_heatmap_umRMS(
 def snrheatmap(
     modelpath: Path,
     datadir: Path,
+    outdir: Path,
     iter_num: int = 1,
     distribution: str = '/',
     samplelimit: Any = None,
@@ -1105,7 +1106,7 @@ def snrheatmap(
     lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = modelpath.with_suffix('') / eval_sign / f'snrheatmaps'
+    savepath = outdir / modelpath.name / eval_sign / f'snrheatmaps'
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
@@ -1115,12 +1116,12 @@ def snrheatmap(
     else:
         savepath = savepath / 'beads'
 
-    savepath.mkdir(parents=True, exist_ok=True)
-
     if distribution != '/':
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    savepath.mkdir(parents=True, exist_ok=True)
 
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0)
@@ -1234,152 +1235,10 @@ def snrheatmap(
 
 
 @profile
-def predict_folder(
-    modelpath: Path,
-    datadir: Path,
-    iter_num: int = 0,
-    distribution: str = '/',
-    samplelimit: Any = None,
-    na: float = 1.0,
-    batch_size: int = 100,
-    eval_sign: str = 'signed',
-    digital_rotations: bool = False,
-    plot: Any = None,
-    plot_rotations: bool = False,
-    agg: str = 'median',
-    psf_type: Optional[str] = None,
-    num_beads: Optional[int] = None,
-    lam_detection: Optional[float] = .510,
-    photons_range: Any = None,
-    npoints_range: Any = None,
-):
-    if not datadir.exists():
-        raise Exception(f'Datadirectory does not exist : {datadir}')
-
-    modelspecs = backend.load_metadata(modelpath)
-    # put prediction results into a new folder (based on model path, etc) so we can eval multiple models if we wanted to.
-    savepath = modelpath.with_suffix('') / eval_sign / f'predictfolder'
-
-    if psf_type is not None:
-        savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
-
-    if num_beads is not None:
-        savepath = savepath / f'beads-{num_beads}'
-    else:
-        savepath = savepath / 'beads'
-
-    savepath.mkdir(parents=True, exist_ok=True)
-
-    if distribution != '/':
-        savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
-    else:
-        savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
-
-    model = backend.load(modelpath)
-
-    gen = backend.load_metadata(
-        modelpath,
-        signed=True,
-        rotate=False,
-        batch_size=batch_size,
-        psf_shape=3 * [model.input_shape[2]],
-        psf_type=psf_type,
-        lam_detection=lam_detection,
-    )
-
-    # Setup the dataframe with file paths and info we want to eval
-    results = collect_data(
-        datapath=datadir,
-        model=model,
-        samplelimit=samplelimit,
-        distribution=distribution,
-        photons_range=photons_range,
-        npoints_range=npoints_range,
-        psf_type=gen.psf_type,
-        lam_detection=gen.lam_detection
-    )
-
-    prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
-    confidence_cols = [col for col in results.columns if col.endswith('_confidence')]
-    ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
-    residual_cols = [col for col in results.columns if col.endswith('_residual')]
-    previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
-
-    current = previous.copy()
-    current['iter_num'] = iter_num
-    paths = results.file.values
-    current['file'] = paths
-    current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
-
-    predictions, stdevs = backend.predict_files(
-        paths=paths,
-        outdir=savepath,
-        model=model,
-        modelpsfgen=gen,
-        samplepsfgen=None,
-        dm_calibration=None,
-        dm_state=None,
-        batch_size=batch_size,
-        fov_is_small=True,
-        plot=plot,
-        plot_rotations=plot_rotations,
-        cpu_workers=8,
-        min_psnr=0,
-    )
-    current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
-    current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
-    current[ground_truth_cols] = previous[residual_cols]
-
-    if eval_sign == 'positive_only':
-        current[prediction_cols] = current[prediction_cols].abs()
-        current[ground_truth_cols] = current[ground_truth_cols].abs()
-
-    current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
-
-    # compute residuals for each sample
-    current['residuals'] = current.apply(
-        lambda row: Wavefront(row[residual_cols].values, lam_detection=gen.lam_detection).peak2valley(na=na),
-        axis=1
-    )
-
-    current['residuals_umRMS'] = current.apply(
-        lambda row: np.linalg.norm(row[residual_cols].values),
-        axis=1
-    )
-
-    primary_modes = current[prediction_cols].idxmax(axis=1).replace(r'_prediction', r'_confidence', regex=True)
-    current['confidence'] = [
-        utils.microns2waves(current.loc[i, primary_modes[i]], wavelength=gen.lam_detection)
-        for i in primary_modes.index.values
-    ]
-
-    current['confidence_sum'] = current.apply(
-        lambda row: utils.microns2waves(np.sum(row[confidence_cols].values), wavelength=gen.lam_detection),
-        axis=1
-    )
-
-    current['confidence_umRMS'] = current.apply(
-        lambda row: np.linalg.norm(row[confidence_cols].values),
-        axis=1
-    )
-
-    results = pd.concat([results, current], ignore_index=True, sort=False)
-
-    if savepath is not None:
-        try:
-            results.to_csv(f'{savepath}_predictions.csv')
-        except PermissionError:
-            savepath = f'{savepath}_x'
-            results.to_csv(f'{savepath}_predictions.csv')
-        logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
-
-    return results
-
-
-@profile
 def densityheatmap(
     modelpath: Path,
     datadir: Path,
+    outdir: Path,
     iter_num: int = 1,
     distribution: str = '/',
     na: float = 1.0,
@@ -1396,8 +1255,7 @@ def densityheatmap(
     lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
-
-    savepath = modelpath.with_suffix('') / eval_sign / f'densityheatmaps'
+    savepath = outdir / modelpath.name / eval_sign / f'densityheatmaps'
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
@@ -1405,12 +1263,12 @@ def densityheatmap(
     if num_beads is not None:
         savepath = savepath / f'beads-{num_beads}'
 
-    savepath.mkdir(parents=True, exist_ok=True)
-
     if distribution != '/':
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    savepath.mkdir(parents=True, exist_ok=True)
 
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0)
@@ -1476,6 +1334,7 @@ def densityheatmap(
 def iterheatmap(
     modelpath: Path,
     datadir: Path,  # folder or _predictions.csv file
+    outdir: Path,
     iter_num: int = 5,
     distribution: str = '/',
     samplelimit: Any = None,
@@ -1492,17 +1351,17 @@ def iterheatmap(
     lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = modelpath.with_suffix('') / eval_sign / f'iterheatmaps'
+    savepath = outdir / modelpath.name / eval_sign / f'iterheatmaps'
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
-
-    savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    savepath.mkdir(parents=True, exist_ok=True)
 
     logger.info(f'Save path = {savepath.resolve()}')
     if datadir.suffix == '.csv':
@@ -2482,6 +2341,7 @@ def eval_confidence(
 def confidence_heatmap(
     modelpath: Path,
     datadir: Path,
+    outdir: Path,
     iter_num: int = 1,
     distribution: str = '/',
     samplelimit: Any = None,
@@ -2496,17 +2356,17 @@ def confidence_heatmap(
     lam_detection: Optional[float] = .510,
 ):
     modelspecs = backend.load_metadata(modelpath)
-    savepath = modelpath.with_suffix('') / eval_sign / f'confidence'
+    savepath = outdir / modelpath.name / eval_sign / f'confidence'
 
     if psf_type is not None:
         savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
-
-    savepath.mkdir(parents=True, exist_ok=True)
 
     if distribution != '/':
         savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
     else:
         savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+
+    savepath.mkdir(parents=True, exist_ok=True)
 
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0)
