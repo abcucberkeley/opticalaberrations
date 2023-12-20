@@ -27,26 +27,26 @@ env:
   # DOCKER_RUN: docker run --name gha_$(git branch --show-current) --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
 
 jobs:
-  container-cleanup-job:
-    runs-on: self-hosted
-    container:
-      image: ghcr.io/catthehacker/ubuntu:act-22.04
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: 'Cleanup build folder'
-        run: |
-          ls -la ./
-          rm -rf ./* || true
-          rm -rf ./.??* || true
-          ls -la ./
+  # container-cleanup-job:
+  #   runs-on: self-hosted
+  #   container:
+  #     image: ghcr.io/catthehacker/ubuntu:act-22.04
+  #     credentials:
+  #       username: ${{ github.actor }}
+  #       password: ${{ secrets.GITHUB_TOKEN }}
+  #   defaults:
+  #     run:
+  #       shell: bash
+  #   steps:
+  #     - name: 'Cleanup build folder'
+  #       run: |
+  #         ls -la ./
+  #         rm -rf ./* || true
+  #         rm -rf ./.??* || true
+  #         ls -la ./
 
   build:      
-    needs: container-cleanup-job
+    # needs: container-cleanup-job
     if: always()
     name: docker_image_build
     runs-on: self-hosted
@@ -76,12 +76,12 @@ jobs:
           echo "The GitHub Actor's username is: $GITHUB_ACTOR"
           echo "GitHub SHA: $GITHUB_SHA"
           
-      - name: 'Cleanup build folder'
-        run: |
-          ls -la ./
-          rm -rf ./* || true
-          rm -rf ./.??* || true
-          ls -la ./
+      # - name: 'Cleanup build folder'
+      #   run: |
+      #     ls -la ./
+      #     rm -rf ./* || true
+      #     rm -rf ./.??* || true
+      #     ls -la ./
 
       # The repo gets volume mapped into the container automatically in container-test-job
       - name: Checkout whole repo  
@@ -189,7 +189,7 @@ jobs:
 
   build-apptainer-container:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     permissions:
       contents: read
       packages: write
