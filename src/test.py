@@ -123,6 +123,11 @@ def parse_args(args):
         help='optional toggle to skip preprocessing input data using the DoG filter'
     )
 
+    parser.add_argument(
+        '--use_theoretical_widefield_simulator', action='store_true',
+        help='optional toggle to calculate 3D PSF without amplitude attenuation (cosine factor)'
+    )
+
     return parser.parse_args(args)
 
 
@@ -217,7 +222,8 @@ def main(args=None):
                 psf_type=args.psf_type,
                 lam_detection=args.wavelength,
                 num_beads=args.num_beads,
-                skip_remove_background=args.skip_remove_background
+                skip_remove_background=args.skip_remove_background,
+                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
             )
         elif args.target == 'confidence_heatmap':
             savepath = eval.confidence_heatmap(
@@ -235,7 +241,8 @@ def main(args=None):
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
                 lam_detection=args.wavelength,
-                skip_remove_background=args.skip_remove_background
+                skip_remove_background=args.skip_remove_background,
+                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
             )
         elif args.target == 'densityheatmap':
             savepath = eval.densityheatmap(
@@ -255,7 +262,8 @@ def main(args=None):
                 psf_type=args.psf_type,
                 lam_detection=args.wavelength,
                 num_beads=args.num_beads,
-                skip_remove_background=args.skip_remove_background
+                skip_remove_background=args.skip_remove_background,
+                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
@@ -274,7 +282,8 @@ def main(args=None):
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
                 lam_detection=args.wavelength,
-                skip_remove_background=args.skip_remove_background
+                skip_remove_background=args.skip_remove_background,
+                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator
             )
 
         if savepath is not None:

@@ -327,7 +327,8 @@ def iter_evaluate(
     lam_detection: Optional[float] = .510,
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
     preprocess: bool = False,
-    skip_remove_background: bool = False
+    skip_remove_background: bool = False,
+    use_theoretical_widefield_simulator: bool = False,
 ):
     """
     Gathers the set of .tif files that meet the input criteria.
@@ -348,6 +349,8 @@ def iter_evaluate(
         psf_shape=3 * [model.input_shape[2]],
         psf_type=psf_type,
         lam_detection=lam_detection,
+        skip_remove_background_ideal_psf=skip_remove_background,
+        use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
     )
 
     if Path(f'{savepath}_predictions.csv').exists():
@@ -1109,7 +1112,8 @@ def snrheatmap(
     psf_type: Optional[str] = None,
     num_beads: Optional[int] = None,
     lam_detection: Optional[float] = .510,
-    skip_remove_background: bool = False
+    skip_remove_background: bool = False,
+    use_theoretical_widefield_simulator: bool = False,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1152,7 +1156,8 @@ def snrheatmap(
             plot_rotations=plot_rotations,
             psf_type=psf_type,
             lam_detection=lam_detection,
-            skip_remove_background=skip_remove_background
+            skip_remove_background=skip_remove_background,
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -1266,7 +1271,8 @@ def densityheatmap(
     photons_range: Optional[tuple] = None,
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
-    skip_remove_background: bool = False
+    skip_remove_background: bool = False,
+    use_theoretical_widefield_simulator: bool = False,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1308,7 +1314,8 @@ def densityheatmap(
             plot_rotations=plot_rotations,
             psf_type=psf_type,
             lam_detection=lam_detection,
-            skip_remove_background=skip_remove_background
+            skip_remove_background=skip_remove_background,
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -1368,7 +1375,8 @@ def iterheatmap(
     agg: str = 'median',
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
-    skip_remove_background: bool = False
+    skip_remove_background: bool = False,
+    use_theoretical_widefield_simulator: bool = False,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1411,7 +1419,8 @@ def iterheatmap(
             plot_rotations=plot_rotations,
             psf_type=psf_type,
             lam_detection=lam_detection,
-            skip_remove_background=skip_remove_background
+            skip_remove_background=skip_remove_background,
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator
         )
 
     max_iter = df['iter_num'].max()
@@ -2379,7 +2388,8 @@ def confidence_heatmap(
     agg: str = 'median',
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
-    skip_remove_background: bool = False
+    skip_remove_background: bool = False,
+    use_theoretical_widefield_simulator: bool = False,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -2417,7 +2427,8 @@ def confidence_heatmap(
             plot_rotations=plot_rotations,
             psf_type=psf_type,
             lam_detection=lam_detection,
-            skip_remove_background=skip_remove_background
+            skip_remove_background=skip_remove_background,
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
         )
 
     df = df[df['iter_num'] == iter_num]

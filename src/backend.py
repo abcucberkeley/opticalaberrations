@@ -207,7 +207,9 @@ def save_metadata(
         y_voxel_size: float,
         z_voxel_size: float,
         n_modes: int,
-        embedding_option: str = 'spatial_planes'
+        embedding_option: str = 'spatial_planes',
+        skip_remove_background: bool = False,
+        use_theoretical_widefield_simulator: bool = False,
 ):
     def add_param(h5file, name, data):
         try:
@@ -245,6 +247,8 @@ def save_metadata(
         add_param(file, name='y_voxel_size', data=y_voxel_size)
         add_param(file, name='z_voxel_size', data=z_voxel_size)
         add_param(file, name='embedding_option', data=embedding_option)
+        add_param(file, name='skip_remove_background', data=skip_remove_background)
+        add_param(file, name='use_theoretical_widefield_simulator', data=use_theoretical_widefield_simulator)
 
         if (isinstance(psf_type, Path) or isinstance(psf_type, str)) and Path(psf_type).exists():
             with h5py.File(psf_type, 'r+') as f:

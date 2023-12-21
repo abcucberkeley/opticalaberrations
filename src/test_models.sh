@@ -20,8 +20,8 @@ NETWORK='prototype'
 SKIP_REMOVE_BACKGROUND=false
 
 TRAINED_MODELS=(
-  "YuMB_lambda510-lamb-amp_125nm_dataset_2023-12-18-14-36-epoch162"
-  "YuMB_lambda510-lamb-amp_fit_125nm_dataset_2023-12-15-19-55-epoch422"
+  "YuMB_lambda510-lamb-amp_125nm_dataset_2023-12-18-14-36-epoch259"
+  "YuMB_lambda510-lamb-amp_fit_125nm_dataset_2023-12-18-14-38-epoch259"
 )
 
 for DATASET in 97nm_dataset fit_97nm_dataset
