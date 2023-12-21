@@ -16,6 +16,12 @@ on:
       - 'develop'
       - 'releases/**'
 
+# only allow one copy of this workflow to run at a time (the group specified by workflow name)
+# cancel current workflows if they are running, so that we just run the latest queue'd.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
