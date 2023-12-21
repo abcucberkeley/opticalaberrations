@@ -26,10 +26,10 @@ env:
   # DOCKER_RUN: docker run --name gha_$(git branch --show-current) --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 
 
 jobs:
-  container-cleanup-job:
+  cleanup-job:
     runs-on: self-hosted
     container:
-      image: ghcr.io/catthehacker/ubuntu:act-22.04
+      image: docker:git
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -45,10 +45,13 @@ jobs:
           ls -la ./
 
   build:      
-    needs: container-cleanup-job
+    needs: cleanup-job
     if: always()
     name: docker_image_build
     runs-on: self-hosted
+    container:
+      image: docker:git
+      options: --user 1000
     steps:
       - name: Dump GitHub context
         env:
@@ -82,7 +85,7 @@ jobs:
       #     rm -rf ./.??* || true
       #     ls -la ./
 
-      # The repo gets volume mapped into the container automatically in container-test-job
+      # The repo gets volume mapped into the container automatically in test-docker
       - name: Checkout whole repo  
         uses: actions/checkout@v4
         with:
@@ -132,7 +135,7 @@ jobs:
           build-args: |
             BRANCH_NAME=${{ env.BRANCH }}    
 
-  push-apptainer-container:
+  push-apptainer:
     needs: build
     if: always()
     runs-on: self-hosted
@@ -168,13 +171,13 @@ jobs:
       # singularity push container.sif oras://ghcr.io/abcucberkeley/opticalaberrations:develop_sif
       # singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
 
-  test-apptainer-container:
-    needs: push-apptainer-container
+  test-apptainer:
+    needs: push-apptainer
     if: always()
     runs-on: self-hosted
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif
-      APPTAINER_PYTEST: apptainer exec --nv ${{ github.head_ref || github.ref_name }}.sif python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider ${{ github.workspace }}/opticalaberrations
+      APPTAINER_PYTEST: apptainer exec --nv ${{ github.head_ref || github.ref_name }}.sif python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider ${{ github.workspace }}
     steps:
           
       - name: pip list 
@@ -208,8 +211,8 @@ jobs:
         continue-on-error: true
         run: ${{ env.APPTAINER_PYTEST }}/tests/test_train.py
           
-  container-test-job:
-    needs: test-apptainer-container
+  test-docker:
+    needs: test-apptainer
     if: always()
     runs-on: self-hosted
     container: 
@@ -219,7 +222,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
       ports:
         - 80
-      options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864
+      options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864 --user 1000
     env:
       DOCKER_PYTEST: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider
     defaults:
