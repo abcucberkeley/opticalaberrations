@@ -272,6 +272,7 @@ def simulate_image(
                 normalize=normalize,
                 min_psnr=0,
                 plot=odir/filename if plot else None,
+                na_mask=gen.na_mask
             )
 
             embeddings = np.squeeze(fourier_embeddings(

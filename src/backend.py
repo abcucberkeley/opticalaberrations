@@ -334,6 +334,7 @@ def preprocess(
                 read_noise_bias=read_noise_bias,
                 min_psnr=min_psnr,
                 plot=plot if plot else None,
+                na_mask=samplepsfgen.na_mask
             )
 
         return fourier_embeddings(
@@ -391,6 +392,7 @@ def preprocess(
                 remove_background=remove_background,
                 normalize=normalize,
                 read_noise_bias=read_noise_bias,
+                na_mask=samplepsfgen.na_mask
             )
 
             rois = utils.multiprocess(func=prep, jobs=rois,

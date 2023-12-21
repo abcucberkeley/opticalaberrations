@@ -312,10 +312,11 @@ def dog(
 def remove_background_noise(
         image,
         read_noise_bias: float = 5,
-        method: str = 'difference_of_gaussians',  # 'difference_of_gaussians',  fourier_filter
+        method: str = 'fourier_filter',  # 'difference_of_gaussians', fourier_filter
         high_sigma: float = 3.0,
         low_sigma: float = 0.7,
         min_psnr: int = 5,
+        na_mask: Optional[np.ndarray] = None
 ) -> np.ndarray:
     """ Remove background noise from a given image volume.
         Difference of gaussians (DoG) works best via bandpass (reject past nyquist, reject
@@ -347,23 +348,23 @@ def remove_background_noise(
         mode = int(mode[0]) if isinstance(mode, (list, tuple, np.ndarray)) else int(mode)
         image -= mode + read_noise_bias
 
-    elif method == 'difference_of_gaussians':
+    elif method == 'difference_of_gaussians' or method == 'dog':
         image = dog(image, low_sigma=low_sigma, high_sigma=high_sigma, min_psnr=min_psnr)
 
-    # elif method == 'fourier_filter':
-    #     logger.warning("Using hardcoded NA Mask for Fourier filter. Code should be updated to use actual NA Mask.")
-    #     na_mask = SyntheticPSF(
-    #         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-    #         psf_shape=image.shape,
-    #     ).na_mask
-    #
-    #     image = na_and_background_filter(
-    #         image,
-    #         low_sigma=low_sigma,
-    #         high_sigma=high_sigma,
-    #         na_mask=na_mask,
-    #         min_psnr=min_psnr
-    #     )
+    elif method == 'fourier_filter':
+        if na_mask is None:
+            raise ValueError("NA mask is None")
+
+        if image.shape != na_mask.shape:
+            na_mask = resize_with_crop_or_pad(na_mask, crop_shape=image.shape)
+
+        image = na_and_background_filter(
+            image,
+            low_sigma=low_sigma,
+            high_sigma=high_sigma,
+            na_mask=na_mask,
+            min_psnr=min_psnr
+        )
 
     else:
         raise Exception(f"Unknown method '{method}' for remove_background_noise functions.")
@@ -406,7 +407,9 @@ def prep_sample(
     read_noise_bias: float = 5,
     plot: Any = None,
     min_psnr: int = 5,
-    expand_dims: bool = True
+    expand_dims: bool = True,
+    na_mask: Optional[np.ndarray] = None,
+    remove_background_noise_method: str = 'fourier_filter',
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
         
@@ -480,7 +483,13 @@ def prep_sample(
         axes[0, 1].set_title(f"PSNR: {measure_snr(sample)}")
 
     if remove_background:
-        sample = remove_background_noise(sample, read_noise_bias=read_noise_bias, min_psnr=min_psnr)
+        sample = remove_background_noise(
+            sample,
+            read_noise_bias=read_noise_bias,
+            min_psnr=min_psnr,
+            na_mask=na_mask,
+            method=remove_background_noise_method
+        )
         psnr = measure_snr(sample)
     else:
         psnr = measure_snr(sample)
@@ -495,7 +504,7 @@ def prep_sample(
             yz=axes[1, 2],
             dxy=sample_voxel_size[-1],
             dz=sample_voxel_size[0],
-            label=r'DoG [$\gamma$=.5]'
+            label=r'Fourier Filter [$\gamma$=.5]'
         )
 
     if model_fov is not None:

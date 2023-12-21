@@ -54,6 +54,8 @@ class Preloadedmodelclass:
                         model_fov=self.modelpsfgen.psf_fov,
                         sample_voxel_size=ideal_empirical_psf_voxel_size,
                         remove_background=True,
-                        normalize=True)
+                        normalize=True,
+                        na_mask=self.modelpsfgen.na_mask
+                    )
 
             self.modelpsfgen.update_ideal_psf_with_empirical(ideal_empirical_preprocessed_psf)

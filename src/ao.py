@@ -1032,6 +1032,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     plot=None,
                     normalize=False,
                     min_psnr=0,
+                    remove_background_noise_method='dog'
                 )
 
             elif args.func == 'fourier_snr':
@@ -1042,7 +1043,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     return_psnr=True,
                     plot=None,
                     normalize=False,
-                    min_psnr=0
+                    min_psnr=0,
+                    remove_background_noise_method='dog'
                 )
                 measure_fourier_snr(sample, psnr=psnr, plot=args.input.with_suffix('.svg'))
 
@@ -1056,7 +1058,8 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
                     read_noise_bias=args.read_noise_bias,
                     normalize=args.normalize,
                     plot=args.input.with_suffix('') if args.plot else None,
-                    min_psnr=args.min_psnr
+                    min_psnr=args.min_psnr,
+                    remove_background_noise_method='dog'
                 )
 
             elif args.func == 'embeddings':

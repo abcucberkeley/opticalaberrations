@@ -354,7 +354,8 @@ def eval_mode(
             normalize=normalize,
             remove_background=remove_background,
             windowing=False,
-            sample_voxel_size=predictions_settings['sample_voxel_size']
+            sample_voxel_size=predictions_settings['sample_voxel_size'],
+            na_mask=gen.na_mask
         )
 
         psfgen = backend.load_metadata(
@@ -533,24 +534,25 @@ def eval_dataset(
             if prediction_path is None: logger.warning(f'Prediction not found for: {file.name}')
 
             ml_img = backend.load_sample(file)
-            ml_img -= 100
-            ml_img = preprocessing.prep_sample(
-                ml_img,
-                normalize=True,
-                remove_background=False,
-                windowing=False,
-                sample_voxel_size=predictions_settings['sample_voxel_size']
-            )
+            # ml_img -= 100
+            # ml_img = preprocessing.prep_sample(
+            #     ml_img,
+            #     normalize=True,
+            #     remove_background=False,
+            #     windowing=False,
+            #     sample_voxel_size=predictions_settings['sample_voxel_size'],
+            #     na_mask=gen.na_mask
+            # )
 
             pr_img = backend.load_sample(pr_path)
-            pr_img -= 100
-            pr_img = preprocessing.prep_sample(
-                pr_img,
-                normalize=True,
-                remove_background=True,
-                windowing=False,
-                sample_voxel_size=predictions_settings['sample_voxel_size']
-            )
+            # pr_img -= 100
+            # pr_img = preprocessing.prep_sample(
+            #     pr_img,
+            #     normalize=True,
+            #     remove_background=True,
+            #     windowing=False,
+            #     sample_voxel_size=predictions_settings['sample_voxel_size']
+            # )
 
             if prediction_path is not None:
                 p = pd.read_csv(prediction_path)
@@ -691,14 +693,13 @@ def eval_ao_dataset(
 
         ml_img = backend.load_sample(file)
         ml_img -= 100
-
-        ml_img = preprocessing.prep_sample(
-            ml_img,
-            normalize=True,
-            remove_background=False,
-            windowing=False,
-            sample_voxel_size=predictions_settings['sample_voxel_size']
-        )
+        # ml_img = preprocessing.prep_sample(
+        #     ml_img,
+        #     normalize=True,
+        #     remove_background=False,
+        #     windowing=False,
+        #     sample_voxel_size=predictions_settings['sample_voxel_size']
+        # )
 
         results[iter_num] = dict(
             ml_img=ml_img,
@@ -713,13 +714,13 @@ def eval_ao_dataset(
     noao = sorted(datadir.glob('NoAO*CamA*.tif'))[-1]
     noao_img = backend.load_sample(noao)
     noao_img -= 100
-    noao_img = preprocessing.prep_sample(
-        noao_img,
-        normalize=True,
-        remove_background=False,
-        windowing=False,
-        sample_voxel_size=predictions_settings['sample_voxel_size']
-    )
+    # noao_img = preprocessing.prep_sample(
+    #     noao_img,
+    #     normalize=True,
+    #     remove_background=False,
+    #     windowing=False,
+    #     sample_voxel_size=predictions_settings['sample_voxel_size']
+    # )
 
     prediction_path = sorted(mldir.glob(f'NoAO*{postfix}'))[-1]
     p = pd.read_csv(prediction_path)
@@ -749,23 +750,23 @@ def eval_ao_dataset(
     ml_img = backend.load_sample(sorted(datadir.glob('MLAO*CamA*.tif'))[-1])
     ml_img -= 100
 
-    results['ml_img'] = preprocessing.prep_sample(
-        ml_img,
-        normalize=True,
-        remove_background=False,
-        windowing=False,
-        sample_voxel_size=predictions_settings['sample_voxel_size']
-    )
+    # results['ml_img'] = preprocessing.prep_sample(
+    #     ml_img,
+    #     normalize=True,
+    #     remove_background=False,
+    #     windowing=False,
+    #     sample_voxel_size=predictions_settings['sample_voxel_size']
+    # )
 
     gt_img = backend.load_sample(sorted(datadir.glob('SHAO*CamA*.tif'))[-1])
     gt_img -= 100
-    results['gt_img'] = preprocessing.prep_sample(
-        gt_img,
-        normalize=True,
-        remove_background=False,
-        windowing=False,
-        sample_voxel_size=predictions_settings['sample_voxel_size']
-    )
+    # results['gt_img'] = preprocessing.prep_sample(
+    #     gt_img,
+    #     normalize=True,
+    #     remove_background=False,
+    #     windowing=False,
+    #     sample_voxel_size=predictions_settings['sample_voxel_size']
+    # )
 
     samplepsfgen = SyntheticPSF(
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
@@ -853,29 +854,32 @@ def plot_dataset_mips(datadir: Path):
             logger.warning(f'Prediction not found for: {file.name}')
             continue
 
-        noao_img = preprocessing.prep_sample(
-            backend.load_sample(noao_path),
-            normalize=True,
-            remove_background=True,
-            windowing=False,
-            sample_voxel_size=predictions_settings['sample_voxel_size']
-        )
+        noao_img = backend.load_sample(noao_path)
+        # noao_img = preprocessing.prep_sample(
+        #     noao_img,
+        #     normalize=True,
+        #     remove_background=True,
+        #     windowing=False,
+        #     sample_voxel_size=predictions_settings['sample_voxel_size']
+        # )
 
-        ml_img = preprocessing.prep_sample(
-            backend.load_sample(prediction_path),
-            normalize=True,
-            remove_background=True,
-            windowing=False,
-            sample_voxel_size=predictions_settings['sample_voxel_size']
-        )
+        ml_img = backend.load_sample(prediction_path)
+        # ml_img = preprocessing.prep_sample(
+        #     ml_img,
+        #     normalize=True,
+        #     remove_background=True,
+        #     windowing=False,
+        #     sample_voxel_size=predictions_settings['sample_voxel_size']
+        # )
 
-        gt_img = preprocessing.prep_sample(
-            backend.load_sample(sh_path),
-            normalize=True,
-            remove_background=True,
-            windowing=False,
-            sample_voxel_size=predictions_settings['sample_voxel_size']
-        )
+        gt_img = backend.load_sample(sh_path)
+        # gt_img = preprocessing.prep_sample(
+        #     gt_img,
+        #     normalize=True,
+        #     remove_background=True,
+        #     windowing=False,
+        #     sample_voxel_size=predictions_settings['sample_voxel_size']
+        # )
 
         vis.compare_mips(
             results=dict(
@@ -904,6 +908,7 @@ def eval_bleaching_rate(datadir: Path):
             remove_background=True,
             plot=None,
             normalize=False,
+            remove_background_noise_method='dog'
         )
 
         imin = np.nanmin(img)

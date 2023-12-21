@@ -2168,7 +2168,8 @@ def eval_modalities(
                         sample_voxel_size=gen.voxel_size,
                         remove_background=True,
                         normalize=True,
-                        min_psnr=0
+                        min_psnr=0,
+                        na_mask=gen.na_mask
                     )
 
                     processed_corrected = backend.prep_sample(
@@ -2177,7 +2178,8 @@ def eval_modalities(
                         sample_voxel_size=gen.voxel_size,
                         remove_background=True,
                         normalize=True,
-                        min_psnr=0
+                        min_psnr=0,
+                        na_mask=gen.na_mask
                     )
 
                     vis.diagnostic_assessment(

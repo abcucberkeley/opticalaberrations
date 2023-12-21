@@ -105,7 +105,8 @@ def reloadmodel_if_needed(
                     sample_voxel_size=ideal_empirical_psf_voxel_size,
                     remove_background=True,
                     normalize=True,
-                    min_psnr=0
+                    min_psnr=0,
+                    na_mask=preloaded.modelpsfgen.na_mask
                 )
 
         preloaded.modelpsfgen.update_ideal_psf_with_empirical(ideal_empirical_preprocessed_psf)
@@ -168,14 +169,6 @@ def generate_embeddings(
     )
 
     sample = backend.load_sample(file)
-    psnr = prep_sample(
-        sample,
-        return_psnr=True,
-        remove_background=True,
-        normalize=False,
-        min_psnr=0
-    )
-    logger.info(f"Sample: {sample.shape}")
 
     samplepsfgen = SyntheticPSF(
         psf_type=modelpsfgen.psf_type,
@@ -391,18 +384,11 @@ def predict_sample(
 
     logger.info(f"Loading file: {img.name}")
     sample = backend.load_sample(img)
-    psnr = prep_sample(
-        sample,
-        return_psnr=True,
-        remove_background=True,
-        normalize=False,
-        min_psnr=0
-    )
     logger.info(f"Sample: {sample.shape}")
 
     samplepsfgen = SyntheticPSF(
         psf_type=preloadedpsfgen.psf_type,
-        psf_shape=preloadedpsfgen.psf_shape,
+        psf_shape=sample.shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
@@ -503,7 +489,6 @@ def predict_sample(
             ideal_empirical_psf=str(ideal_empirical_psf),
             lls_defocus=float(lls_defocus),
             zernikes=list(coefficients),
-            psnr=float(psnr),
             psf_type=str(preloadedpsfgen.psf_type),
         )
 
@@ -570,13 +555,6 @@ def predict_large_fov(
     no_phase = True if preloadedmodel.input_shape[1] == 3 else False
 
     sample = backend.load_sample(img)
-    psnr = prep_sample(
-        sample,
-        return_psnr=True,
-        remove_background=True,
-        normalize=False,
-        min_psnr=0
-    )
     logger.info(f"Sample: {sample.shape}")
 
     samplepsfgen = SyntheticPSF(
@@ -669,7 +647,6 @@ def predict_large_fov(
             ideal_empirical_psf=str(ideal_empirical_psf),
             lls_defocus=float(lls_defocus),
             zernikes=list(coefficients),
-            psnr=float(psnr),
             psf_type=str(preloadedpsfgen.psf_type),
         )
 
@@ -906,13 +883,6 @@ def predict_tiles(
     logger.info(f"Loading file: {img.name}")
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
-    psnr = prep_sample(
-        sample,
-        return_psnr=True,
-        remove_background=True,
-        normalize=False,
-        min_psnr=0
-    )
 
     if any(np.array(shifting) != 0):
         sample = shift(sample, shift=(-1*shifting[0], -1*shifting[1], -1*shifting[2]))
@@ -941,7 +911,8 @@ def predict_tiles(
             sample_voxel_size=samplepsfgen.voxel_size,
             remove_background=True,
             normalize=True,
-            min_psnr=min_psnr
+            min_psnr=min_psnr,
+            na_mask=samplepsfgen.na_mask
         )
     else:
         prep = partial(
@@ -949,7 +920,8 @@ def predict_tiles(
             sample_voxel_size=samplepsfgen.voxel_size,
             remove_background=True,
             normalize=True,
-            min_psnr=min_psnr
+            min_psnr=min_psnr,
+            na_mask=samplepsfgen.na_mask
         )
 
     # obtain each tile and save to .tif.
@@ -988,7 +960,6 @@ def predict_tiles(
             ztiles=int(ztiles),
             ytiles=int(nrows),
             xtiles=int(ncols),
-            psnr=float(psnr),
             dm_calibration=str(dm_calibration),
             psf_type=str(preloadedpsfgen.psf_type),
         )
@@ -1098,7 +1069,8 @@ def predict_folder(
             remove_background=True,
             normalize=True,
             min_psnr=min_psnr,
-            expand_dims=False
+            expand_dims=False,
+            na_mask=samplepsfgen.na_mask
         )
     else:
         prep = partial(
@@ -1107,7 +1079,8 @@ def predict_folder(
             remove_background=True,
             normalize=True,
             min_psnr=min_psnr,
-            expand_dims=False
+            expand_dims=False,
+            na_mask=samplepsfgen.na_mask
         )
 
     files = {}

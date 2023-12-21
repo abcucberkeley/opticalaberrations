@@ -1111,7 +1111,6 @@ def measure_fourier_snr(
     from synthetic import SyntheticPSF
     samplepsfgen = SyntheticPSF(
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-        snr=psnr,
         psf_shape=a.shape,
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,

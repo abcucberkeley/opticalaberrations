@@ -31,6 +31,7 @@ def test_psnr(kargs):
         return_psnr=True,
         plot=None,
         normalize=False,
+        remove_background_noise_method='dog'
     )
     assert math.isclose(psnr, 30, rel_tol=1)
 
@@ -131,6 +132,7 @@ def test_preprocessing(kargs):
         remove_background=True,
         normalize=True,
         plot=kargs['inputs'].with_suffix('') if kargs['plot'] else None,
+        remove_background_noise_method='dog'
     )
     assert sample.shape == kargs['input_shape']
 

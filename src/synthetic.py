@@ -155,6 +155,7 @@ class SyntheticPSF:
                 remove_background=True,
                 normalize=True,
                 min_psnr=0,
+                na_mask=self.na_mask
             )
 
         self.iotf = fft(self.ipsf, padsize=None)

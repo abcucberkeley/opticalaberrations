@@ -157,7 +157,8 @@ def simulate_psf(
             remove_background=False if skip_remove_background else True,
             normalize=normalize,
             min_psnr=0,
-            plot=outdir/filename if plot else None
+            plot=outdir/filename if plot else None,
+            na_mask=gen.na_mask
         )
 
         embeddings = np.squeeze(fourier_embeddings(

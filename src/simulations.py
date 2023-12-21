@@ -242,6 +242,7 @@ def plot_embedding_pyramid(
                                 remove_background=True,
                                 normalize=True,
                                 min_psnr=0,
+                                na_mask=gen.na_mask
                             )
 
                             emb = fourier_embeddings(
