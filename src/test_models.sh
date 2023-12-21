@@ -86,13 +86,13 @@ do
         fi
 
         for SIM in '' '--use_theoretical_widefield_simulator'; do
-          for PREP in '' '--skip_remove_background'; do
+          for PREP in '--skip_remove_background'; do
               CONFIG=" $SIM $PREP --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
               python manager.py $JOB \
               --task "$MODEL.h5 --num_beads 1 $CONFIG snrheatmap" \
               --taskname na_$NA \
-              --name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
+              --name $OUTDIR/${DATASET}${SIM}${PREP}-fourier_filter/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
               #python manager.py $JOB \
               #--task "$MODEL.h5  $CONFIG densityheatmap" \
