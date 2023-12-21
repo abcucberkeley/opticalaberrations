@@ -99,6 +99,10 @@ jobs:
         run: |
           ls -lhXR ${{ github.workspace }}
 
+      - name: Set file permissions in the repository
+        run: |
+          chmod -R 777 ${{ github.workspace }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -140,7 +144,6 @@ jobs:
 
   test-docker:
     needs: build-docker
-    if: always()
     runs-on: self-hosted
     container: 
       image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # pull image 'latest-tf' or 'develop' that we just built
@@ -197,7 +200,6 @@ jobs:
         
   build-apptainer:
     needs: build-docker
-    if: always()
     runs-on: self-hosted
     steps:
       - name: List files in the directory
@@ -233,7 +235,6 @@ jobs:
 
   test-apptainer:
     needs: [build-apptainer, test-docker] # need to wait for test-docker to finish otherwise GPU will be utilized.
-    if: always()
     runs-on: self-hosted
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif
