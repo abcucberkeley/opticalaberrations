@@ -29,7 +29,7 @@ jobs:
   cleanup-job:
     runs-on: self-hosted
     container:
-      image: docker:git
+      image: ghcr.io/catthehacker/ubuntu:act-22.04
     defaults:
       run:
         shell: bash
