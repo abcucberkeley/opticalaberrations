@@ -1,77 +1,1252 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "phase_retrieval",
-            "type": "python",
-            "request": "launch",
-            "module": "ao",
-            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\src",
-            "args": [
-                "phase_retrieval",                
-                "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\examples\\LabVIEW\\Measurement_510nm.tif",
-                "U:\\Data\\20221003_Korra_TestForThayer\\20230201\\empirical\\calibration.csv",
-                "--current_dm=C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\examples\\DM_State_510nm.csv",
-                "--dm_damping_scalar=1.0",
-                "--wavelength=0.51",
-                "--lateral_voxel_size=0.097",
-                "--axial_voxel_size=0.2",
-                "--prediction_threshold=0.00",
-                "--num_iterations=150",
-                "--plot",                
-            ],
-            "justMyCode": true
-        },
-        {
-            "name": "ao.py",
-            "type": "python",
-            "request": "launch",
-            "module": "ao",
-            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\src",
-            "args": [
-                "predict_sample",                
-                "..\\pretrained_models\\z55_modes\\lattice_yumb\\x108-y108-z200\\opticaltransformer.h5",
-                "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\examples\\LabVIEW\\Measurement_510nm.tif",
-                "..\\examples\\Zernike_Korra_Bax273.csv",
-                "--current_dm=None",
-                "--dm_damping_scalar=1.0",
-                "--wavelength=0.51",
-                "--lateral_voxel_size=0.097",
-                "--axial_voxel_size=0.2",
-                "--prediction_threshold=0.0",
-                "--freq_strength_threshold=0.01",
-                "--sign_threshold=0.9",
-                "--num_predictions=10",
-                "--batch_size=256",
-                "--prev=None",
-                "--plot",
-                "--ideal_empirical_psf=C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\examples\\LabVIEW\\Measurement_510nm.tif"
-            ],
-            "justMyCode": true
-        },
-        {
-            "name": "test_ao.py",
-            "type": "python",
-            "request": "launch",
-            "program": "tests\\test_ao.py",
-            "console": "integratedTerminal",
-            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations",
-            "justMyCode": true
-        },
-        {
-            "name": "data.py",
-            "type": "python",
-            "request": "launch",
-            "program": "data.py",
-            "console": "integratedTerminal",
-            "cwd": "C:\\SPIM\\Common\\Calculations\\Python\\Phase Retrieval ML\\opticalaberrations\\src",
-            "args": [
-                "dist"
-            ],
-            "justMyCode": true
-        }
-    ]
+  "configurations": [
+    {
+      "type": "python",
+      "name": "aggregate_rois",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "aggregate_predictions",
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "../examples/LabVIEW/Measurement_510nm_rois_predictions.csv",
+        "../calibration/aang/15_mode_calibration.csv",
+        "--current_dm",
+        "None",
+        "--dm_damping_scalar",
+        "1.",
+        "--prediction_threshold",
+        "0.",
+        "--majority_threshold",
+        "0.5",
+        "--min_percentile",
+        "1",
+        "--max_percentile",
+        "99",
+        "--aggregation_rule",
+        "mean",
+        "--lateral_voxel_size",
+        "0.097",
+        "--axial_voxel_size",
+        "0.2",
+        "--wavelength",
+        "0.51",
+        "--plot"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "aggregate_tiles",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "aggregate_predictions",
+        "$USER_HOME$/nvme2/Data/TestsForThayer/decon_test/exp5_newfish_before_cropped_tiles_predictions.csv",
+        "../calibration/aang/15_mode_calibration.csv",
+        "--current_dm",
+        "None",
+        "--aggregation_rule",
+        "median",
+        "--plot"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "calibrate_dm",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "calibrate_dm",
+        "U:\\Data\\TestsForThayer\\20230620_recheck_DM_cal\\Check_DM_cal",
+        "C:\\AangSettings\\PhaseRetrival\\PR_outputs\\PSF\\Zernike_Aang_Bax272.csv"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "dm"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "check",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/data.py",
+      "console": "integratedTerminal",
+      "args": [
+        "data",
+        "../dataset/train/YuMB_lambda510/z200-y108-x108/z64-y64-x64/z15/"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "datasets"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "cocoa",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/benchmark.py",
+      "console": "integratedTerminal",
+      "args": [
+        "cocoa",
+        "${workspaceFolder}/examples/_summary/test.tif",
+        "--plot",
+        "--lateral_voxel_size",
+        ".097",
+        "--axial_voxel_size",
+        ".2",
+        "--na",
+        "1.",
+        "--psf_type",
+        "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "benchmark"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "combine_tiles",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "combine_tiles",
+        "U:\\Data\\TestsForThayer\\20230817_ap2\\exp2\\rotated\\before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0050565672msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_corrected_actuators.csv",
+        "--corrections",
+        "",
+        "U:\\Data\\TestsForThayer\\20230817_ap2\\exp2\\rotated\\before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0050565672msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif",
+        "--corrections",
+        "",
+        "U:\\Data\\TestsForThayer\\20230817_ap2\\exp2\\rotated\\after_threestacks_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0050803886msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif",
+        "--corrections",
+        "",
+        "U:\\Data\\TestsForThayer\\20230817_ap2\\exp2\\rotated\\after_threestacks_Iter_0000_CamA_ch0_CAM1_stack0001_488nm_0039511msec_0050843397msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif",
+        "--corrections",
+        "",
+        "U:\\Data\\TestsForThayer\\20230817_ap2\\exp2\\rotated\\after_threestacks_Iter_0000_CamA_ch0_CAM1_stack0002_488nm_0079022msec_0050882908msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "compare",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/benchmark.py",
+      "console": "integratedTerminal",
+      "args": [
+        "compare",
+        "../",
+        "--model_codename",
+        "PatchID",
+        "--model_predictions",
+        "$USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-nostem/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv",
+        "--model_codename",
+        "RotationalSymmetryP1",
+        "--model_predictions",
+        "$USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-rotational-symmetry-p1/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv",
+        "--model_codename",
+        "RotationalSymmetryP4",
+        "--model_predictions",
+        "$USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-rotational-symmetry-p4/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv",
+        "--model_codename",
+        "RotationalSymmetryP16",
+        "--model_predictions",
+        "$USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-rotational-symmetry-p16/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv",
+        "--model_codename",
+        "PowerDecomposition",
+        "--model_predictions",
+        "$USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-power-decomposition-4p16/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv",
+        "--model_codename",
+        "FourierDecomposition",
+        "--model_predictions",
+        "$USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-fourier-decomposition-p16/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv",
+        "--model_codename",
+        "ZernikePolynomials4",
+        "--model_predictions",
+        "$USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-zernike-polynomials-4/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv",
+        "--model_codename",
+        "ZernikePolynomials10",
+        "--model_predictions",
+        "$USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-zernike-polynomials-10/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv",
+        "--model_codename",
+        "SpatialPlanes10",
+        "--model_predictions",
+        "$USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-spatial_planes10/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "benchmark"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "confidence",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/test.py",
+      "console": "integratedTerminal",
+      "args": [
+        "../pretrained_models/rotations",
+        "--eval_sign",
+        "signed",
+        "--digital_rotations",
+        "confidence"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "eval"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "confidence_heatmap",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/test.py",
+      "console": "integratedTerminal",
+      "args": [
+        "../pretrained_models/opticalnet-15-YuMB_lambda510.h5",
+        "--datadir",
+        "../dataset/test/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/",
+        "--na",
+        "1.0",
+        "--batch_size",
+        "256",
+        "--eval_sign",
+        "signed",
+        "--digital_rotations",
+        "--niter",
+        "1",
+        "--psf_type",
+        "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat",
+        "confidence_heatmap"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "eval"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "decon_tiles_cocoa",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "decon",
+        "\"C:\\Users\\milkied10\\Desktop\\20230831_fish_exp7_notocord\\rotated\\before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0070238886msecAbs_-01x_-01y_-01z_0000t_tiles_predictions.csv\"",
+        "--iters",
+        "30",
+        "--task",
+        "decon",
+        "--decon_tile"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "densityheatmap",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/test.py",
+      "console": "integratedTerminal",
+      "args": [
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "--datadir",
+        "../dataset/test/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/",
+        "--digital_rotations",
+        "--eval_sign",
+        "signed",
+        "densityheatmap"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "eval"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "distributions",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/data.py",
+      "console": "integratedTerminal",
+      "args": [
+        "dist"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "datasets"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "embeddings",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "embeddings",
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "../examples/LabVIEW/Measurement_510nm.tif",
+        "--wavelength",
+        "0.51",
+        "--lateral_voxel_size",
+        "0.097",
+        "--axial_voxel_size",
+        "0.2",
+        "--plot",
+        "--match_model_fov"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "embeddings_planes",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/data.py",
+      "console": "integratedTerminal",
+      "args": [
+        "embeddings"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "utils"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "embeddings_pyramid",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/data.py",
+      "console": "integratedTerminal",
+      "args": [
+        "embeddings_pyramid"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "utils"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "eval-background",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/test.py",
+      "console": "integratedTerminal",
+      "args": [
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "--eval_sign",
+        "signed",
+        "--digital_rotations",
+        "--batch_size",
+        "256",
+        "background"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "eval"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "eval-object_sizes",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/test.py",
+      "console": "integratedTerminal",
+      "args": [
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "--eval_sign",
+        "signed",
+        "--digital_rotations",
+        "--batch_size",
+        "256",
+        "sizes"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "eval"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "eval",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/train.py",
+      "console": "integratedTerminal",
+      "args": [
+        "--eval",
+        "--network",
+        "\"C:\\SPIM\\Common\\Calculations\\Python\\Phase",
+        "Retrieval",
+        "ML\\opticalaberrations\\pretrained_models\\lattice_yumb_x108um_y108um_z200um\\2023-12-15-19-55-epoch229.h5\"",
+        "--batch_size",
+        "96",
+        "--dataset",
+        "\"C:\\SPIM\\Common\\Calculations\\Python\\Phase",
+        "Retrieval",
+        "ML\\opticalaberrations\\dataset\\fit_125_data\\YuMB_lambda510\\z200-y125-x125\\z64-y64-x64\\z15\""
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "utils"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "evalmodes",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/test.py",
+      "console": "integratedTerminal",
+      "args": [
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "--eval_sign",
+        "signed",
+        "--digital_rotations",
+        "modes"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "eval"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "eval_ao_dataset",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "eval_ao_dataset",
+        "$USER_HOME$/nvme2/Data/TestsForThayer/20230413_ap2_mNG_memHalo_75-80hpf_SH_vs_ML_addedaberr/fov14_abbadded/"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "eval_bleaching_rate",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "eval_bleaching_rate",
+        "$USER_HOME$/nvme2/Data/TestsForThayer/20230329/SH_bleach_fov9/"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "eval_dataset",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "eval_dataset",
+        "$USER_HOME$/nvme2/Data/TestsForThayer/20230224_beads_15model/manybeads/",
+        "--precomputed"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "eval_dm",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "eval_dm",
+        "U:\\Data\\20221003_Korra_TestForThayer\\20230228\\45_DM_cal"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "dm"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "eval_mode",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "eval_mode",
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "$USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_lightsheet_ansi_z07_n03_m-1_amp0p1_single.tif",
+        "$USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_widefield_ansi_z07_n03_m-1_amp0p1_single_matlab_pupil_waves.tif",
+        "$USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_lightsheet_ansi_z07_n03_m-1_amp0p1_single_sample_predictions_zernike_coefficients.csv"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "fourier_snr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "fourier_snr",
+        "../examples/LabVIEW/lightsheet.tif"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "iterheatmap",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/test.py",
+      "console": "integratedTerminal",
+      "args": [
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "--datadir",
+        "V:\\thayer\\dataset\\eval_dataset\\test\\x108-y108-z200\\i64\\z15\\mixed",
+        "--na",
+        "1.0",
+        "--eval_sign",
+        "signed",
+        "--photons_min",
+        "4e5",
+        "--photons_max",
+        "8e5",
+        "--digital_rotations",
+        "--batch_size",
+        "512",
+        "--n_samples",
+        "4096",
+        "--niter",
+        "10",
+        "--cluster",
+        "iterheatmap"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "eval"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "metadata",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/config.py",
+      "console": "integratedTerminal",
+      "args": [
+        "\"C:\\SPIM\\Common\\Calculations\\Python\\Phase",
+        "Retrieval",
+        "ML\\opticalaberrations\\pretrained_models\\lattice_yumb_x108um_y108um_z200um\\2023-12-15-19-55-epoch229.h5\"",
+        "--psf_type",
+        "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat",
+        "--n_modes",
+        "15",
+        "--wavelength",
+        ".510",
+        "--x_voxel_size",
+        ".125",
+        "--y_voxel_size",
+        ".125",
+        "--z_voxel_size",
+        ".2",
+        "--embedding_option",
+        "spatial_planes",
+        "metadata"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "utils"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "modalities",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/test.py",
+      "console": "integratedTerminal",
+      "args": [
+        "../pretrained_models/opticalnet-15-YuMB_lambda510.h5",
+        "--eval_sign",
+        "signed",
+        "--digital_rotations",
+        "modalities"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "eval"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "multipoint_dataset",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/multipoint_dataset.py",
+      "console": "integratedTerminal",
+      "args": [
+        "--outdir",
+        "../dataset/aang",
+        "--emb",
+        "--npoints",
+        "10",
+        "--alpha_val",
+        "abs",
+        "--phi_val",
+        "angle",
+        "--dist",
+        "mixed",
+        "--mode_dist",
+        "pyramid",
+        "--iters",
+        "10",
+        "--signed",
+        "--rotate",
+        "--noise",
+        "--normalize",
+        "--modes",
+        "15",
+        "--input_shape",
+        "64",
+        "--min_photons",
+        "10000",
+        "--max_photons",
+        "50000",
+        "--min_amplitude",
+        "0.1",
+        "--max_amplitude",
+        "0.2",
+        "--min_lls_defocus_offset",
+        "-0",
+        "--max_lls_defocus_offset",
+        "0",
+        "--filename",
+        "1",
+        "--x_voxel_size",
+        ".097",
+        "--y_voxel_size",
+        ".097",
+        "--z_voxel_size",
+        ".200",
+        "--na_detection",
+        "1.0",
+        "--fill_radius",
+        "0.66",
+        "--lam_detection",
+        ".510",
+        "--cpu_workers",
+        "1",
+        "--embedding_option",
+        "spatial_planes",
+        "--override",
+        "--plot"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "datasets"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "optimize",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/config.py",
+      "console": "integratedTerminal",
+      "args": [
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15/model",
+        "--modelformat",
+        "trt",
+        "optimize"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "utils"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "phasenet",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/benchmark.py",
+      "console": "integratedTerminal",
+      "args": [
+        "phasenet",
+        "../examples/single/single.tif",
+        "--plot"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "benchmark"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "phasenet_heatmap",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/benchmark.py",
+      "console": "integratedTerminal",
+      "args": [
+        "phasenet_heatmap",
+        "$USER_HOME$/nvme/thayer/opticalaberrations/src/phasenet_repo/signed/psf/na_1.0_predictions.csv",
+        "--no_bead",
+        "--n_samples",
+        "10000",
+        "--na",
+        "1.0",
+        "--eval_sign",
+        "signed"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "benchmark"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "phase_retrieval",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "phase_retrieval",
+        "../calibration/aang/PSF/WF_150ms.tif",
+        "../calibration/aang/Zernike_Aang_Bax272.csv",
+        "--current_dm",
+        "None",
+        "--dm_damping_scalar",
+        "1.0",
+        "--wavelength",
+        "0.51",
+        "--lateral_voxel_size",
+        "0.097",
+        "--axial_voxel_size",
+        "0.097",
+        "--prediction_threshold",
+        "0.0",
+        "--plot",
+        "--use_pyotf_zernikes"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "plot_bleaching_rate",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "plot_bleaching_rate",
+        "$USER_HOME$/nvme2/Data/TestsForThayer/20230329/BleachingRatesExp"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "plot_dataset_mips",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "plot_dataset_mips",
+        "$USER_HOME$/nvme2/Data/TestsForThayer/20230324_fish2/ML_SH_test_15/"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "predict_folder",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "predict_folder",
+        "\"C:\\SPIM\\Common\\Calculations\\Python\\Phase",
+        "Retrieval",
+        "ML\\opticalaberrations\\pretrained_models\\lattice_yumb_x108um_y108um_z200um\\2023-12-15-19-55-epoch229.h5\"",
+        "\"C:\\SPIM\\Common\\Calculations\\Python\\Phase",
+        "Retrieval",
+        "ML\\opticalaberrations\\dataset\\theoretical_zernikes\\psfs\"",
+        "../calibration/aang/15_mode_calibration.csv",
+        "--current_dm",
+        "None",
+        "--wavelength",
+        "0.51",
+        "--lateral_voxel_size",
+        "0.097",
+        "--axial_voxel_size",
+        "0.2",
+        "--freq_strength_threshold",
+        "0.01",
+        "--batch_size",
+        "96",
+        "--prev",
+        "None",
+        "--plot",
+        "--plot_rotations"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "predict_large_fov",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "predict_large_fov",
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "${workspaceFolder}/examples/_summary/test.tif",
+        "../calibration/aang/15_mode_calibration.csv",
+        "--current_dm",
+        "None",
+        "--dm_damping_scalar",
+        "1.0",
+        "--wavelength",
+        "0.51",
+        "--lateral_voxel_size",
+        "0.097",
+        "--axial_voxel_size",
+        "0.2",
+        "--prediction_threshold",
+        "0",
+        "--freq_strength_threshold",
+        "0.01",
+        "--sign_threshold",
+        "0.9",
+        "--num_predictions",
+        "1",
+        "--batch_size",
+        "512",
+        "--prev",
+        "None",
+        "--plot",
+        "--plot_rotations"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "predict_rois",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "predict_rois",
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "../examples/LabVIEW/Measurement_510nm.tif",
+        "../examples/LabVIEW/results/Detection3D.mat",
+        "../calibration/aang/15_mode_calibration.csv",
+        "--current_dm",
+        "None",
+        "--num_rois",
+        "10",
+        "--min_intensity",
+        "200",
+        "--minimum_distance",
+        "0.5",
+        "--wavelength",
+        "0.51",
+        "--lateral_voxel_size",
+        "0.097",
+        "--axial_voxel_size",
+        "0.2",
+        "--window_size",
+        "64",
+        "--prediction_threshold",
+        "0.",
+        "--freq_strength_threshold",
+        "0.01",
+        "--batch_size",
+        "512",
+        "--prev",
+        "None",
+        "--plot",
+        "--plot_rotations"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "predict_sample",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "predict_sample",
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "${workspaceFolder}/dataset/fit_125_data/YuMB_lambda510/z200-y125-x125/z64-y64-x64/z15/single/photons_550000-600000/amp_p11-p12/npoints_1/spatial_planes/1_realspace.tif",
+        "../calibration/aang/15_mode_calibration.csv",
+        "--current_dm",
+        "None",
+        "--dm_damping_scalar",
+        "1.0",
+        "--wavelength",
+        "0.51",
+        "--lateral_voxel_size",
+        "0.097",
+        "--axial_voxel_size",
+        "0.2",
+        "--prediction_threshold",
+        "0.",
+        "--batch_size",
+        "96",
+        "--prev",
+        "None",
+        "--plot",
+        "--plot_rotations"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "predict_tiles",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "predict_tiles",
+        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "../examples/test/test.tif",
+        "../calibration/aang/15_mode_calibration.csv",
+        "--current_dm",
+        "None",
+        "--wavelength",
+        "0.51",
+        "--lateral_voxel_size",
+        "0.097",
+        "--axial_voxel_size",
+        "0.2",
+        "--window_size",
+        "64-64-64",
+        "--freq_strength_threshold",
+        "0.01",
+        "--batch_size",
+        "400",
+        "--prev",
+        "None"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "preprocessing",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "preprocessing",
+        "../examples/LabVIEW/Measurement_510nm_tiles/z0-y0-x0.tif",
+        "--lateral_voxel_size",
+        "0.097",
+        "--axial_voxel_size",
+        "0.2",
+        "--normalize",
+        "--remove_background",
+        "--plot"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "psf_dataset",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/psf_dataset.py",
+      "console": "integratedTerminal",
+      "args": [
+        "--input_shape",
+        "64",
+        "--dist",
+        "mixed",
+        "--modes",
+        "15",
+        "--signed",
+        "--noise",
+        "--norm",
+        "--rotate",
+        "--iter",
+        "100",
+        "--min_lls_defocus_offset",
+        "1",
+        "--max_lls_defocus_offset",
+        "2",
+        "--min_amplitude",
+        "0.",
+        "--max_amplitude",
+        "0.15",
+        "--x_voxel_size",
+        ".097",
+        "--y_voxel_size",
+        ".097",
+        "--z_voxel_size",
+        ".2",
+        "--lam_detection",
+        ".510",
+        "--min_photons",
+        "50000",
+        "--max_photons",
+        "100000",
+        "--psf_type",
+        "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat",
+        "--emb",
+        "--cpu_workers",
+        "-1"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "datasets"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "psnr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/ao.py",
+      "console": "integratedTerminal",
+      "args": [
+        "psnr",
+        "../examples/LabVIEW/Measurement_510nm.tif"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "ao"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "random_samples",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/test.py",
+      "console": "integratedTerminal",
+      "args": [
+        "${workspaceFolder}/pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "--eval_sign",
+        "signed",
+        "--digital_rotations",
+        "random"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "eval"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "rotations",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/data.py",
+      "console": "integratedTerminal",
+      "args": [
+        "rotations"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "utils"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "shapes_embeddings",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/data.py",
+      "console": "integratedTerminal",
+      "args": [
+        "shapes_embeddings"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "utils"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "snrheatmap",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/test.py",
+      "console": "integratedTerminal",
+      "args": [
+        "../pretrained_models/opticalnet-15-YuMB_lambda510-nostem.h5",
+        "--datadir",
+        "../dataset/test/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/",
+        "--na",
+        "1.0",
+        "--batch_size",
+        "256",
+        "--eval_sign",
+        "signed",
+        "--digital_rotations",
+        "--niter",
+        "1",
+        "--psf_type",
+        "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat",
+        "snrheatmap"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "eval"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "stats",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/data.py",
+      "console": "integratedTerminal",
+      "args": [
+        "stats",
+        "\"C:\\SPIM\\Common\\Calculations\\Python\\Phase",
+        "Retrieval",
+        "ML\\opticalaberrations\\dataset\\fit_125\\YuMB_lambda510\\z200-y125-x125\\z64-y64-x64\\z15\\powerlaw_gamma_0p75\""
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "datasets"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "train",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/train.py",
+      "console": "integratedTerminal",
+      "args": [
+        "--batch_size",
+        "64",
+        "--modes",
+        "15",
+        "--network",
+        "opticalnet",
+        "--epochs",
+        "25",
+        "--warmup",
+        "5",
+        "--outdir",
+        "../models/opticalnet",
+        "--dataset",
+        "../dataset/fit_125",
+        "--finetune",
+        "\"C:\\SPIM\\Common\\Calculations\\Python\\Phase",
+        "Retrieval",
+        "ML\\opticalaberrations\\pretrained_models\\lattice_yumb_x108um_y108um_z200um\\opticalnet-15-YuMB_lambda510-lamb-amp-single\""
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "utils"
+      },
+      "cwd": "${workspaceFolder}/src"
+    },
+    {
+      "type": "python",
+      "name": "zernikes",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/data.py",
+      "console": "integratedTerminal",
+      "args": [
+        "zernikes_pyramid"
+      ],
+      "presentation": {
+        "hidden": false,
+        "group": "utils"
+      },
+      "cwd": "${workspaceFolder}/src"
+    }
+  ]
 }
