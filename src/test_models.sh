@@ -24,10 +24,8 @@ TRAINED_MODELS=(
   "YuMB_lambda510-lamb-amp_fit_125nm_dataset_2023-12-18-14-38-epoch259"
 )
 
-for DATASET in 97nm_dataset fit_97nm_dataset
+for M in ${TRAINED_MODELS[@]}
 do
-  for M in ${TRAINED_MODELS[@]}
-  do
     MODEL="$PRETRAINED/$NETWORK-$MODES-$M"
 
     if [ "${M:0:4}" = YuMB ];then
@@ -68,6 +66,7 @@ do
       PSF_TYPE=$2
 
       echo Eval $M on $PTYPE
+      echo
 
       if [ $PTYPE = '2photon' ];then
         LAM=.920
@@ -86,28 +85,31 @@ do
           JOB="${CLUSTER} test.py --timelimit $TIMELIMIT --dependency singleton --partition gpu_a100 --cpus 8 --gpus 4"
         fi
 
-        for SKIP_REMOVE_BACKGROUND in '' '--skip_remove_background'; do
-            CONFIG=" $SKIP_REMOVE_BACKGROUND --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
+        for SIM in '' '--use_theoretical_widefield_simulator'; do
+          for PREP in '' '--skip_remove_background'; do
+              CONFIG=" $SIM $PREP --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
-            python manager.py $JOB \
-            --task "$MODEL.h5 --num_beads 1 $CONFIG snrheatmap" \
-            --taskname na_$NA \
-            --name $OUTDIR/${DATASET}${SKIP_REMOVE_BACKGROUND}/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
+              python manager.py $JOB \
+              --task "$MODEL.h5 --num_beads 1 $CONFIG snrheatmap" \
+              --taskname na_$NA \
+              --name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
-            python manager.py $JOB \
-            --task "$MODEL.h5  $CONFIG densityheatmap" \
-            --taskname na_$NA \
-            --name $OUTDIR/${DATASET}${SKIP_REMOVE_BACKGROUND}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
+              #python manager.py $JOB \
+              #--task "$MODEL.h5  $CONFIG densityheatmap" \
+              #--taskname na_$NA \
+              #--name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
-            #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
-            #--task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
-            #--taskname na_$NA \
-            #--name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
+              #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
+              #--task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
+              #--taskname na_$NA \
+              #--name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
+              echo
+          done
         done
-
       done
 
       echo '----------------'
+      echo
 
     done
 
@@ -134,7 +136,7 @@ do
   #  --name $MODEL/$EVALSIGN/modalities
 
   done
-done
+
 
 #python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem $MEM --cpus $CPUS --gpus $GPUS \
 #--task "phasenet_heatmap $DATA --no_beads --n_samples $MAX --eval_sign $EVALSIGN" \
