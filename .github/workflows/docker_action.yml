@@ -30,9 +30,6 @@ jobs:
     runs-on: self-hosted
     container:
       image: docker:git
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     defaults:
       run:
         shell: bash
@@ -49,9 +46,9 @@ jobs:
     if: always()
     name: docker_image_build
     runs-on: self-hosted
-    container:
-      image: docker:git
-      options: --user 1000
+    # container:
+    #   image: docker:git
+    #   options: --user 1000
     steps:
       - name: Dump GitHub context
         env:
