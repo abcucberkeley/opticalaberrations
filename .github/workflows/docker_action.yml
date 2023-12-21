@@ -159,7 +159,7 @@ jobs:
       - name: investigate 
         run: |
           pwd
-          whoami
+          id
           id -u
           ls -lhXR
           
