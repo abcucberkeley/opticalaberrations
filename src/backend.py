@@ -103,22 +103,23 @@ def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
         if model_path.is_file() and model_path.suffix == '.h5':
             model_path = Path(model_path)
         else:
-            model_path = Path(list(model_path.rglob('*.h5'))[0])
+            model_path = Path(sorted(model_path.rglob('*.h5'), reverse=True)[0])
     else:
         try:
             '''.pb format'''
             if model_path.is_file() and model_path.suffix == '.pb':
                 model_path = str(model_path.parent)
             else:
-                model_path = str(list(model_path.rglob('saved_model.pb'))[0].parent)
+                model_path = str(sorted(model_path.rglob('saved_model.pb'), reverse=True)[0].parent)
 
         except IndexError or FileNotFoundError or OSError:
             '''.h5/hdf5 format'''
             if model_path.is_file() and model_path.suffix == '.h5':
                 model_path = str(model_path)
             else:
-                model_path = str(list(model_path.rglob('*.h5'))[0])
+                model_path = str(sorted(model_path.rglob('*.h5'), reverse=True)[0])
 
+    logger.info(f"Loading {model_path}")
     try:
         custom_objects = {
             "ROI": ROI,

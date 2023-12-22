@@ -88,6 +88,7 @@ def test_zernike_model(kargs):
 
     with strategy.scope():
         train.train_model(
+            network='prototype',
             dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
             outdir=outdir,
             psf_type=kargs['psf_type'],
@@ -125,6 +126,7 @@ def test_defocus_model(kargs):
 
     with strategy.scope():
         train.train_model(
+            network='prototype',
             dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
             outdir=outdir,
             psf_type=kargs['psf_type'],
@@ -164,6 +166,7 @@ def test_zernike_defocus_model(kargs):
 
     with strategy.scope():
         train.train_model(
+            network='prototype',
             dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
             outdir=outdir,
             psf_type=kargs['psf_type'],
@@ -202,6 +205,7 @@ def test_finetune_zernike_model(kargs):
 
     with strategy.scope():
         train.train_model(
+            network='prototype',
             dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
             outdir=outdir,
             psf_type=kargs['psf_type'],

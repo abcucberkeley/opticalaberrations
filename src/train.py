@@ -333,7 +333,7 @@ def train_model(
         logger.info(f"Continue training {model.name} restored from {model_path} using {opt.get_config()}")
     else:
         if finetune is not None:
-            model = load(finetune)
+            model = load(finetune/"keras")
             logger.info(model.summary(line_length=125, expand_nested=True))
             logger.info(f"Finetuning {model.name}; {opt.get_config()}")
 
