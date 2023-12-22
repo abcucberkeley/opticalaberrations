@@ -10,6 +10,7 @@ warnings.filterwarnings("ignore")
 
 import pytest
 import tensorflow as tf
+import shutil
 from pathlib import Path
 
 from src import train
@@ -28,11 +29,11 @@ def test_training_dataset(kargs):
         signed=True,
         rotate=True,
         psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-        lam_detection=.510,
+        lam_detection=kargs['wavelength'],
         psf_shape=[64, 64, 64],
-        x_voxel_size=.125,
-        y_voxel_size=.125,
-        z_voxel_size=.2,
+        x_voxel_size=kargs['lateral_voxel_size'],
+        y_voxel_size=kargs['lateral_voxel_size'],
+        z_voxel_size=kargs['axial_voxel_size'],
     )
 
     for i in range(5):
@@ -74,18 +75,28 @@ def test_zernike_model(kargs):
 
     gpu_workers = strategy.num_replicas_in_sync
     logging.info(f'Number of active GPUs: {gpu_workers}')
+    
+    subfolder = (f"z{int(kargs['axial_voxel_size']*1000)}-"
+                 f"y{int(kargs['lateral_voxel_size']*1000)}-"
+                 f"x{int(kargs['lateral_voxel_size']*1000)}")
+    print(f"\n{subfolder=}\n")
+
+    # clean out existing model
+    outdir = Path(f"{kargs['repo']}/models/pytests/yumb_zernike_model")
+    if outdir.exists() and outdir.is_dir():
+        shutil.rmtree(outdir)
 
     with strategy.scope():
         train.train_model(
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/"),
-            outdir=Path(f"{kargs['repo']}/models/tests/yumb_zernike_model"),
+            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
+            outdir=outdir,
             psf_type=kargs['psf_type'],
             x_voxel_size=kargs['lateral_voxel_size'],
             y_voxel_size=kargs['lateral_voxel_size'],
             z_voxel_size=kargs['axial_voxel_size'],
             modes=kargs['num_modes'],
             wavelength=kargs['wavelength'],
-            batch_size=kargs['batch_size'],
+            batch_size=kargs['batch_size']//3,
             warmup=1,
             epochs=5,
         )
@@ -103,17 +114,26 @@ def test_defocus_model(kargs):
     gpu_workers = strategy.num_replicas_in_sync
     logging.info(f'Number of active GPUs: {gpu_workers}')
 
+    subfolder = (f"z{int(kargs['axial_voxel_size']*1000)}-"
+                 f"y{int(kargs['lateral_voxel_size']*1000)}-"
+                 f"x{int(kargs['lateral_voxel_size']*1000)}")
+
+    # clean out existing model
+    outdir = Path(f"{kargs['repo']}/models/pytests/yumb_defocus_model")
+    if outdir.exists() and outdir.is_dir():
+        shutil.rmtree(outdir)
+
     with strategy.scope():
         train.train_model(
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/"),
-            outdir=Path(f"{kargs['repo']}/models/tests/yumb_defocus_model"),
+            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
+            outdir=outdir,
             psf_type=kargs['psf_type'],
             x_voxel_size=kargs['lateral_voxel_size'],
             y_voxel_size=kargs['lateral_voxel_size'],
             z_voxel_size=kargs['axial_voxel_size'],
             modes=kargs['num_modes'],
             wavelength=kargs['wavelength'],
-            batch_size=kargs['batch_size'],
+            batch_size=kargs['batch_size']//3,
             warmup=1,
             epochs=5,
             defocus_only=True,
@@ -132,17 +152,27 @@ def test_zernike_defocus_model(kargs):
     gpu_workers = strategy.num_replicas_in_sync
     logging.info(f'Number of active GPUs: {gpu_workers}')
 
+    subfolder = (f"z{int(kargs['axial_voxel_size']*1000)}-"
+                 f"y{int(kargs['lateral_voxel_size']*1000)}-"
+                 f"x{int(kargs['lateral_voxel_size']*1000)}")
+
+    # clean out existing model
+    outdir = Path(f"{kargs['repo']}/models/pytests/yumb_zern_defocus_model")
+    if outdir.exists() and outdir.is_dir():
+        shutil.rmtree(outdir)
+
+
     with strategy.scope():
         train.train_model(
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/"),
-            outdir=Path(f"{kargs['repo']}/models/tests/yumb_zernike_defocus_model"),
+            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
+            outdir=outdir,
             psf_type=kargs['psf_type'],
             x_voxel_size=kargs['lateral_voxel_size'],
             y_voxel_size=kargs['lateral_voxel_size'],
             z_voxel_size=kargs['axial_voxel_size'],
             modes=kargs['num_modes'],
             wavelength=kargs['wavelength'],
-            batch_size=kargs['batch_size'],
+            batch_size=kargs['batch_size']//3,
             warmup=1,
             epochs=5,
             lls_defocus=True,
@@ -161,17 +191,26 @@ def test_finetune_zernike_model(kargs):
     gpu_workers = strategy.num_replicas_in_sync
     logging.info(f'Number of active GPUs: {gpu_workers}')
 
+    subfolder = (f"z{int(kargs['axial_voxel_size']*1000)}-"
+                 f"y{int(kargs['lateral_voxel_size']*1000)}-"
+                 f"x{int(kargs['lateral_voxel_size']*1000)}")
+
+    # clean out existing model
+    outdir = Path(f"{kargs['repo']}/models/pytests/yumb_zernike_model_finetuned")
+    if outdir.exists() and outdir.is_dir():
+        shutil.rmtree(outdir)
+
     with strategy.scope():
         train.train_model(
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/"),
-            outdir=Path(f"{kargs['repo']}/models/tests/yumb_zernike_model"),
+            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
+            outdir=outdir,
             psf_type=kargs['psf_type'],
             x_voxel_size=kargs['lateral_voxel_size'],
             y_voxel_size=kargs['lateral_voxel_size'],
             z_voxel_size=kargs['axial_voxel_size'],
             modes=kargs['num_modes'],
             wavelength=kargs['wavelength'],
-            batch_size=kargs['batch_size'],
+            batch_size=kargs['batch_size']//3,
             warmup=1,
             epochs=5,
             finetune=Path(f"{kargs['repo']}/models/tests/yumb_zernike_model"),
