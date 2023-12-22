@@ -21,7 +21,7 @@ zVOXEL=.200
 TITLE='fourier_filter_125nm_dataset'
 DATASET='train'
 MODE_DIST='pyramid'
-HANDLER=slurm
+HANDLER=lsf
 
 MODALITIES=(
   "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
