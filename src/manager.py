@@ -264,7 +264,7 @@ def main(args=None):
         sjob += f' -q {args.partition}'
 
         if args.gpus > 0:
-            if args.partition == 'gpu_a100':
+            if args.partition == 'gpu_a100' or args.partition == 'gpu_h100':
                 sjob += f' -gpu "num={args.gpus}:nvlink=yes"'
             else:
                 sjob += f' -gpu "num={args.gpus}"'
