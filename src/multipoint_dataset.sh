@@ -1,9 +1,6 @@
 #!/bin/bash
 ENV=~/anaconda3/envs/ml/bin/python
 
-xVOXEL=.097
-yVOXEL=.097
-zVOXEL=.200
 LAMBDA=.510
 NA=1.0
 ALPHA='abs'
@@ -18,10 +15,13 @@ SKIP_REMOVE_BACKGROUND=false
 USE_THEORETICAL_WIDEFIELD_SIMULATOR=false
 
 MODES=15
-TITLE='97nm_dataset'
-DATASET='test'
+xVOXEL=.125
+yVOXEL=.125
+zVOXEL=.200
+TITLE='fourier_filter_125nm_dataset'
+DATASET='train'
 MODE_DIST='pyramid'
-HANDLER=slurm
+HANDLER=lsf
 
 MODALITIES=(
   "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
@@ -49,8 +49,8 @@ if [ "$DATASET" = "train" ];then  # 2M samples
   SAMPLES_PER_BIN=400
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   OBJS=(1 2 3 4 5)  # 5 bins
-  mPH=($(seq 100000 50000 550000)) # 10 bins
-  xPH=($(seq 150000 50000 600000))
+  mPH=($(seq 50000 25000 275000)) # 10 bins
+  xPH=($(seq 75000 25000 300000))
   amps1=($(seq 0 .01 .24))  # 25 bins
   amps2=($(seq .01 .01 .25))
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet) # 4 bins

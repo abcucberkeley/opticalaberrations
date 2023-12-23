@@ -226,6 +226,7 @@ def load_dataset(
     npoints_range=None,
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
     shuffle=True,
+    cpu_workers: int = -1,
 ):
     if not Path(datadir).exists():
         raise Exception(f"The 'datadir' does not exist: {datadir}")
@@ -250,7 +251,7 @@ def load_dataset(
     files = multiprocess(
         func=check,
         jobs=candidate_files,
-        cores=-1,
+        cores=cpu_workers,
         desc='Loading dataset hashtable',
         unit=' .tif candidates checked'
     )
@@ -323,7 +324,8 @@ def collect_dataset(
     iotf=None,
     metadata=False,
     lls_defocus: bool = False,
-    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
+    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
+    cpu_workers: int = -1,
 ):
     """
     Returns:
@@ -369,7 +371,8 @@ def collect_dataset(
             max_amplitude=max_amplitude,
             photons_range=photons_range,
             npoints_range=npoints_range,
-            filename_pattern=filename_pattern
+            filename_pattern=filename_pattern,
+            cpu_workers=cpu_workers
         )
 
         train = train_data.map(lambda x: tf.py_function(load, [x], dtypes))
@@ -395,7 +398,8 @@ def collect_dataset(
             max_amplitude=max_amplitude,
             photons_range=photons_range,
             npoints_range=npoints_range,
-            filename_pattern=filename_pattern
+            filename_pattern=filename_pattern,
+            cpu_workers=cpu_workers,
         ) # TF dataset
 
         data = data.map(lambda x: tf.py_function(load, [x], dtypes)) # TFdataset -> img & zern or -> metadata df

@@ -142,6 +142,7 @@ def train_model(
     stem: bool = False,
     mul: bool = False,
     finetune: Optional[Path] = None,
+    cpu_workers: int = -1,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
     network = network.lower()
@@ -168,7 +169,7 @@ def train_model(
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
             refractive_index=refractive_index,
-            cpu_workers=-1
+            cpu_workers=cpu_workers
         )
         train_data = data_utils.create_dataset(config)
     else:
@@ -182,7 +183,8 @@ def train_model(
             max_amplitude=max_amplitude,
             no_phase=no_phase,
             lls_defocus=lls_defocus,
-            photons_range=(min_photons, max_photons)
+            photons_range=(min_photons, max_photons),
+            cpu_workers=cpu_workers
         )
 
         sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
@@ -619,7 +621,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+        "--cpu_workers", default=8, type=int, help='number of CPU cores to use'
     )
 
     train_parser.add_argument(
@@ -785,6 +787,7 @@ def main(args=None):
                 stem=args.stem,
                 fixed_dropout_depth=args.fixed_dropout_depth,
                 finetune=args.finetune,
+                cpu_workers=args.cpu_workers
             )
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
