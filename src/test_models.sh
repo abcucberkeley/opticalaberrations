@@ -6,7 +6,7 @@ DZ=200
 SHAPE=64
 MODES=15
 ROTATIONS='--digital_rotations'
-ITERS=1
+ITERS=5
 MAX=10000
 OUTDIR='../evaluations'
 PRETRAINED="../pretrained_models"
@@ -20,8 +20,7 @@ NETWORK='prototype'
 SKIP_REMOVE_BACKGROUND=false
 
 TRAINED_MODELS=(
-  "YuMB_lambda510-lamb-amp_125nm_dataset_2023-12-18-14-36-epoch259"
-  "YuMB_lambda510-lamb-amp_fit_125nm_dataset_2023-12-18-14-38-epoch259"
+  "YuMB_lambda510-lamb-amp"
 )
 
 for M in ${TRAINED_MODELS[@]}
@@ -86,7 +85,7 @@ do
         fi
 
         for SIM in '' '--use_theoretical_widefield_simulator'; do
-          for PREP in '--skip_remove_background'; do
+          for PREP in ''; do #'--skip_remove_background'; do
               CONFIG=" $SIM $PREP --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
               python manager.py $JOB \
