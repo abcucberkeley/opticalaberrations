@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="embeddings" type="PythonConfigurationType" factoryName="Python" folderName="utils">
+  <configuration default="false" name="embeddings" type="PythonConfigurationType" factoryName="Python" folderName="ao">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -12,8 +12,8 @@
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/data.py" />
-    <option name="PARAMETERS" value="embeddings" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
+    <option name="PARAMETERS" value="embeddings ../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5 ../examples/LabVIEW/Measurement_510nm.tif --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --plot --match_model_fov" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

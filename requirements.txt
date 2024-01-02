@@ -1,0 +1,15 @@
+astropy 
+seaborn
+scikit-image
+scikit-spatial
+pytest
+ujson
+zarr
+pycudadecon
+dphtools
+csbdeep
+line-profiler
+line-profiler-pycharm
+tifffile==2023.9.18
+imagecodecs==2023.9.18
+nvitop

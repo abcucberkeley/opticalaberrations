@@ -1,27 +1,39 @@
 import matplotlib
 matplotlib.use('Agg')
 
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
+
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Sequence, Union
+from functools import partial
+from typing import Any, Sequence, Union, Optional
 import numpy as np
 from scipy import stats as st
+from scipy.ndimage import gaussian_filter
 import pandas as pd
 import seaborn as sns
 import zarr
 import h5py
-import matplotlib.colors as mcolors
-from matplotlib import gridspec
-from tifffile import imread, imsave
-from skimage import transform
+import scipy.io
+from tqdm.contrib import itertools
+from tifffile import imread, imwrite
 from scipy.spatial import KDTree
 from numpy.lib.stride_tricks import sliding_window_view
-import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from matplotlib.ticker import FormatStrFormatter
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from line_profiler_pycharm import profile
+from skimage.filters import window
+from tifffile import TiffFile
+
+try:
+    import cupy as cp
+    from cupyx.scipy.ndimage import gaussian_filter as cp_gaussian_filter
+except ImportError as e:
+    logging.warning(f"Cupy not supported on your system: {e}")
+
+from vis import plot_mip, savesvg
+from utils import round_to_even
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -32,20 +44,37 @@ logger = logging.getLogger(__name__)
 
 
 @profile
-def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
+def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float32:
+    """ Return estimated noise """
+    noise = np.nanstd(a, axis=axis)
+    return noise
+
+
+@profile
+def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> int:
+    """ Return estimated signal-to-noise ratio or inf if the given image has no noise """
+
+    signal = np.nanmax(a, axis=axis) - np.nanmedian(a, axis=axis)
+    noise = measure_noise(a, axis=axis)
+    return int(np.round(np.where(noise == 0, 0, signal/noise), 0))
+
+
+@profile
+def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 'reflect', **kwargs):
     """Crops or pads array.  Output will have dimensions "crop_shape". No interpolation. Padding type
     can be customized with **kwargs, like "reflect" to get mirror pad.
 
     Args:
-        psf (np.array): N-dim array
+        img (np.array): N-dim array
         crop_shape (Sequence): desired output dimensions
+        mode: mode to use for padding
         **kwargs: arguments to pass to np.pad
 
     Returns:
         N-dim array with desired output shape
     """
     rank = len(crop_shape)
-    psf_shape = psf.shape[1:-1] if len(psf.shape) == 5 else psf.shape
+    psf_shape = img.shape[1:-1] if len(img.shape) == 5 else img.shape
     index = [[0, psf_shape[d]] for d in range(rank)]
     pad = [[0, 0] for _ in range(rank)]
     slicer = [slice(None)] * rank
@@ -60,204 +89,481 @@ def resize_with_crop_or_pad(psf: np.array, crop_shape: Sequence, **kwargs):
 
         slicer[i] = slice(index[i][0], index[i][1])
 
-    if len(psf.shape) == 5:
-        if psf.shape[0] != 1:
-            return np.array([np.pad(s[slicer], pad, **kwargs) for s in np.squeeze(psf)])[..., np.newaxis]
+    if len(img.shape) == 5:
+        if img.shape[0] != 1:
+            padded = np.array([np.pad(s[slicer], pad, mode=mode, **kwargs) for s in np.squeeze(img)])[..., np.newaxis]
         else:
-            return np.pad(np.squeeze(psf)[slicer], pad, **kwargs)[np.newaxis, ..., np.newaxis]
+            padded = np.pad(np.squeeze(img)[slicer], pad, mode=mode, **kwargs)[np.newaxis, ..., np.newaxis]
     else:
-        return np.pad(psf[tuple(slicer)], pad, **kwargs)
+        padded = np.pad(img[tuple(slicer)], pad, mode=mode, **kwargs)
+
+    pad_width = 1 - np.array(img.shape) / np.array(crop_shape)
+    pad_width = np.clip(pad_width*2, 0, 1)
+
+    if all(pad_width == 0):
+        return padded
+    else:
+        window_z = window(('tukey', pad_width[0]), padded.shape[0])**2
+        # window_y = window(('tukey', pad_width[1]), padded.shape[1])
+        # window_x = window(('tukey', pad_width[2]), padded.shape[2])
+        # zv, yv, xv = np.meshgrid(window_z, window_y, window_x, indexing='ij', copy=True)
+        if isinstance(padded, np.ndarray):
+            pass
+        else:
+            window_z = cp.array(window_z)  # GPU array
+        padded *= window_z[..., np.newaxis, np.newaxis]
+        return padded
+
+
+def na_and_background_filter(
+    image: np.ndarray,
+    na_mask: np.ndarray,  # light sheet NA mask
+    low_sigma: float,
+    high_sigma: Union[float] = None,
+    mode: str = 'nearest',
+    cval: int = 0,
+    truncate: float = 4.0,
+    min_psnr: int = 5,
+):
+    """
+    Use the sample API as dog filter.
+    Args:
+        image:
+        samplepsfgen:
+        low_sigma:
+        high_sigma:
+        mode:
+        cval:
+        truncate:
+        min_psnr:
+
+    Returns:
+
+    """
+    fourier = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(image)))
+    fourier[na_mask == 0] = 0
+    im1 = np.real(np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(fourier))))  # needs to be 'real' not abs in this case
+
+    spatial_dims = image.ndim
+
+    dtype = np.float32
+    low_sigma = np.array(low_sigma, dtype=dtype, ndmin=1)
+    if high_sigma is None:
+        high_sigma = low_sigma * 1.6
+    else:
+        high_sigma = np.array(high_sigma, dtype=dtype, ndmin=1)
+
+    if len(high_sigma) != 1 and len(high_sigma) != spatial_dims:
+        raise ValueError('high_sigma must have length equal to number of spatial dimensions of input')
+
+    high_sigma = high_sigma * np.ones(spatial_dims, dtype=dtype)
+
+    im2 = np.empty_like(image, dtype=dtype)  # need to supply gauss filter output with the data type we want
+    if isinstance(image, np.ndarray):
+        # CPU only.  Call scipy function
+        im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
+    else:
+        im2 = cp_gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
+
+    return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=dtype)
+
+
+def combine_filtered_imgs(
+    original_image: np.ndarray,
+    im1_sharper: np.ndarray,
+    im2_low_freqs_to_subtract: np.ndarray,
+    min_psnr: int,
+    dtype
+) -> np.ndarray:
+    """
+    Combines the two filters (real space images) to produce filtered_img = (im1 - im2) - noise.
+    Uses std_dev(im2) to determine if image is spare (we can increase background subtraction by noise) or dense
+
+    Args:
+        original_image: Raw data
+        im1_sharper: Raw_data with highest frequencies removed
+        im2_low_freqs_to_subtract: Just lowest frequencies (aka the non-uniform background to be subtracted)
+        min_psnr:
+        dtype:
+
+    Returns:
+        filtered_img : 3D cupy or numpy array
+
+    """
+    mask = tukey_window(np.ones_like(original_image, dtype=dtype))  # GPU or CPU array
+    mask[mask < .9] = np.nan
+
+    mask[mask >= .9] = 1
+    # if blurred shows little std deviation: this is sparse, will want to more aggressively subtract
+    if np.std(im2_low_freqs_to_subtract[mask == 1]) < 3:
+        snr = measure_snr(original_image * mask)
+        if snr > min_psnr:  # sparse, yet SNR of original image is good
+            noise = np.std(original_image - im2_low_freqs_to_subtract)  # increase the bkgrd subtraction by the noise
+            return im1_sharper - (im2_low_freqs_to_subtract + noise)
+        else:  # sparse, and SNR of original image is poor
+            logger.warning(f"Dropping sparse image for poor SNR {snr} < {min_psnr}")
+            return np.zeros_like(original_image)  # return zeros
+
+    else:  # This is a dense image
+        filtered_img = im1_sharper - im2_low_freqs_to_subtract
+        snr = measure_snr(filtered_img)
+        if snr < min_psnr:  # SNR poor
+            logger.warning(f"Dropping  dense image for poor SNR {snr} < {min_psnr}")
+            return np.zeros_like(original_image)  # return zeros
+        else:
+            return filtered_img  # SNR good. Return filtered image.
+
+
+def dog(
+    image: np.ndarray,
+    min_psnr: int,
+    low_sigma: float,
+    high_sigma: Union[float] = None,
+    mode: str = 'nearest',
+    cval: int = 0,
+    truncate: float = 4.0,
+):
+    """
+    Image is a cp.ndarray, processing is performed on GPU, otherwise CPU
+
+    Find features between ``low_sigma`` and ``high_sigma`` in size.
+    This function uses the Difference of Gaussians method for applying
+    band-pass filters to multi-dimensional arrays. The input array is
+    blurred with two Gaussian kernels of differing sigmas to produce two
+    intermediate, filtered images. The more-blurred image is then subtracted
+    from the less-blurred image. The final output image will therefore have
+    had high-frequency components attenuated by the smaller-sigma Gaussian, and
+    low frequency components will have been removed due to their presence in
+    the more-blurred intermediate.
+
+    Args:
+        image: ndarray
+            Input array to filter.
+        low_sigma: scalar or sequence of scalars
+            Standard deviation(s) for the Gaussian kernel with the smaller sigmas
+            across all axes. The standard deviations are given for each axis as a
+            sequence, or as a single number, in which case the single number is
+            used as the standard deviation value for all axes.
+        high_sigma: scalar or sequence of scalars, optional (default is None)
+            Standard deviation(s) for the Gaussian kernel with the larger sigmas
+            across all axes. The standard deviations are given for each axis as a
+            sequence, or as a single number, in which case the single number is
+            used as the standard deviation value for all axes. If None is given
+            (default), sigmas for all axes are calculated as 1.6 * low_sigma.
+        mode: {'reflect', 'constant', 'nearest', 'mirror', 'wrap'}, optional
+            The ``mode`` parameter determines how the array borders are
+            handled, where ``cval`` is the value when mode is equal to
+            'constant'. Default is 'nearest'.
+        cval: scalar, optional
+            Value to fill past edges of input if ``mode`` is 'constant'. Default
+            is 0.0
+        truncate: float, optional (default is 4.0)
+            Truncate the filter at this many standard deviations.
+        min_psnr: if SNR is poor, the image returned will be all zeros..
+
+    Returns:
+        filtered_image : ndarray
+    """
+
+    # CPU or GPU version
+    spatial_dims = image.ndim
+
+    np_dtype = np.float32
+
+    low_sigma = np.array(low_sigma, dtype=np_dtype, ndmin=1)
+    if high_sigma is None:
+        high_sigma = low_sigma * 1.6
+    else:
+        high_sigma = np.array(high_sigma, dtype=np_dtype, ndmin=1)
+
+    if len(low_sigma) != 1 and len(low_sigma) != spatial_dims:
+        raise ValueError('low_sigma must have length equal to number of spatial dimensions of input')
+
+    if len(high_sigma) != 1 and len(high_sigma) != spatial_dims:
+        raise ValueError('high_sigma must have length equal to number of spatial dimensions of input')
+
+    low_sigma = low_sigma * np.ones(spatial_dims, dtype=np_dtype)
+    high_sigma = high_sigma * np.ones(spatial_dims, dtype=np_dtype)
+
+    if any(high_sigma < low_sigma):
+        raise ValueError('high_sigma must be equal to or larger than low_sigma for all axes')
+
+    im1 = np.empty_like(image, dtype=np_dtype)  # need to supply gauss filter output with the data type we want
+    im2 = np.empty_like(image, dtype=np_dtype)  # need to supply gauss filter output with the data type we want
+    if isinstance(image, np.ndarray):
+        # CPU only.  Call scipy function
+        if all(low_sigma) > 0:
+            im1 = gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=im1)  # sharper
+        else:
+            im1 = np.zeros_like(image, dtype=np_dtype)
+        im2 = gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
+    else:
+        # GPU only.  Call cupy function
+        if all(low_sigma) > 0:
+            im1 = cp_gaussian_filter(image, low_sigma, mode=mode, cval=cval, truncate=truncate, output=im1)  # sharper
+        else:
+            im1 = np.zeros_like(image, dtype=np_dtype)
+        im2 = cp_gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
+
+    return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=np_dtype)
 
 
 @profile
-def resize(
-    vol,
-    voxel_size: Sequence,
-    sample_voxel_size: Sequence = (.1, .1, .1),
-    minimum_shape: tuple = (64, 64, 64),
-    debug: Any = None
-):
-    """ Up/down-scales volume to output voxel size using 3rd order interpolation. 
-    Output volume is padded if array has fewer voxels than "minimum_shape". 
+def remove_background_noise(
+        image,
+        read_noise_bias: float = 5,
+        method: str = 'fourier_filter',  # 'difference_of_gaussians', fourier_filter
+        high_sigma: float = 3.0,
+        low_sigma: float = 0.7,
+        min_psnr: int = 5,
+        na_mask: Optional[np.ndarray] = None
+) -> np.ndarray:
+    """ Remove background noise from a given image volume.
+        Difference of gaussians (DoG) works best via bandpass (reject past nyquist, reject
+        non-uniform DC/background/scattering).
+        Runs on GPU.
+        Also checks if sparse, returns zeros if filtered image doesn't have enough signal.
 
     Args:
-        vol (_type_): 3D volume
-        voxel_size (3 element Sequence): Output voxel size
-        sample_voxel_size (3 element Sequence, optional): Input voxel size. Defaults to (.1, .1, .1).
-        minimum_shape (tuple, optional): Pad array if vol (after resizing) is too small. Defaults to (64, 64, 64).
-        debug : "True" to show figure, "not None" will write {debug}_rescaling.svg file. Defaults to None.
+        image (np.ndarray or cp.ndarray): 3D image volume
+        read_noise_bias (float, optional): When method="mode", empty pixels will still be non-zero due to read noise of camera.
+            This value increases the amount subtracted to put empty pixels at zero. Defaults to 5.
+        method (str, optional): method for background subtraction. Defaults to 'difference_of_gaussians'.
+        high_sigma: Sets threshold for removing low frequencies (i.e. non-uniform bkgrd)
+        low_sigma:  Sets threshold for removing high frequencies (i.e. beyond OTF support)
+        min_psnr: Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold
+
+    Returns:
+        _type_: cp.ndarray or np.ndarray
     """
-    def plot(cls, img):
-        if img.shape[0] == 6:
-            vmin, vmax, vcenter, step = 0, 2, 1, .1
-            highcmap = plt.get_cmap('YlOrRd', 256)
-            lowcmap = plt.get_cmap('YlGnBu_r', 256)
-            low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-            high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-            cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-            cmap = mcolors.ListedColormap(cmap)
 
-            for i in range(3):
-                inner = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=cls[i], wspace=0.1, hspace=0.1)
-                ax = fig.add_subplot(inner[0])
-                m = ax.imshow(img[i], cmap=cmap, vmin=vmin, vmax=vmax)
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_xlabel(r'$\alpha = |\tau| / |\hat{\tau}|$')
-                ax = fig.add_subplot(inner[1])
-                ax.imshow(img[i + 3], cmap='coolwarm', vmin=vmin, vmax=vmax)
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.set_xlabel(r'$\varphi = \angle \tau$')
-                cls[i].axis('off')
-        else:
-            m = cls[0].imshow(np.max(img, axis=0)**.5, cmap='hot', vmin=0, vmax=1)
-            cls[1].imshow(np.max(img, axis=1)**.5, cmap='hot', vmin=0, vmax=1)
-            cls[2].imshow(np.max(img, axis=2)**.5, cmap='hot', vmin=0, vmax=1)
-            # m = cls[0].imshow(img[img.shape[0] // 2, :, :]**.5, cmap='hot', vmin=0, vmax=1)
-            # cls[1].imshow(img[:, img.shape[1] // 2, :]**.5, cmap='hot', vmin=0, vmax=1)
-            # cls[2].imshow(img[:, :, img.shape[2] // 2]**.5, cmap='hot', vmin=0, vmax=1)
+    try:
+        if not isinstance(image, cp.ndarray):
+            image = cp.array(image)
+    except Exception:
+        logger.warning(f"No CUDA-capable device is detected. 'image' will be type {type(image)}")
 
-        cax = inset_axes(cls[2], width="10%", height="100%", loc='center right', borderpad=-2)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+    if method == 'mode':
+        mode = st.mode(image, axis=None).mode
+        mode = int(mode[0]) if isinstance(mode, (list, tuple, np.ndarray)) else int(mode)
+        image -= mode + read_noise_bias
 
-    resampled_vol = transform.rescale(
-        vol,
-        (
-            sample_voxel_size[0] / voxel_size[0],
-            sample_voxel_size[1] / voxel_size[1],
-            sample_voxel_size[2] / voxel_size[2],
-        ),
-        order=3,
-        anti_aliasing=True,
-    )
+    elif method == 'difference_of_gaussians' or method == 'dog':
+        image = dog(image, low_sigma=low_sigma, high_sigma=high_sigma, min_psnr=min_psnr)
 
-    mode = np.abs(st.mode(resampled_vol, axis=None).mode[0])
-    resized_vol = resize_with_crop_or_pad(
-        resampled_vol,
-        crop_shape=[s if s >= m else m for s, m in zip(resampled_vol.shape, minimum_shape)],
-        constant_values=mode
-    )
+    elif method == 'fourier_filter':
+        if na_mask is None:
+            raise ValueError("NA mask is None")
 
-    if debug is not None:
-        debug = Path(debug)
-        if debug.is_dir():
-            debug.mkdir(parents=True, exist_ok=True)
+        if image.shape != na_mask.shape:
+            na_mask = resize_with_crop_or_pad(na_mask, crop_shape=image.shape)
 
-        fig, axes = plt.subplots(3, 3, figsize=(11, 11))
+        image = na_and_background_filter(
+            image,
+            low_sigma=low_sigma,
+            high_sigma=high_sigma,
+            na_mask=na_mask,
+            min_psnr=min_psnr
+        )
 
-        axes[0, 1].set_title(f"{str(vol.shape)} @ {sample_voxel_size}")
-        axes[0, 0].set_ylabel('Input (MIP)')
-        plot(axes[0, :], vol)
+    else:
+        raise Exception(f"Unknown method '{method}' for remove_background_noise functions.")
 
-        axes[1, 1].set_title(f"{str(resampled_vol.shape)} @ {voxel_size}")
-        axes[1, 0].set_ylabel('Resampled (MIP)')
-        plot(axes[1, :], resampled_vol)
-        imsave(f'{debug}_resampled_psf.tif', resampled_vol)
+    image[image < 0] = 0
 
-        axes[2, 1].set_title(str(resized_vol.shape))
-        axes[2, 0].set_ylabel('Resized (MIP)')
-        plot(axes[2, :], resized_vol)
-        imsave(f'{debug}_resized_psf.tif', resized_vol)
+    return image
 
-        if debug == True:
-            plt.show()
-        else:
-            plt.savefig(f'{debug}_rescaling.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-    return resized_vol
+def tukey_window(image: np.ndarray, alpha: float = .5):
+    """
+        To avoid boundary effects (cross in OTF), a tukey window is applied so that the edges of the volume go to zero.
+        Args:
+            image: input image
+            alpha: the fraction of the window inside the cosine tapered region
+                1.0 = Hann, 0.0 = rect window
+    """
+
+    # Nominally we would use a 3D window, but that would create a spherical mask inscribing the volume bounds.
+    # That will cut a lot of data, we can do better by using cylindrical mask, because we don't use
+    # an XZ or YZ projection of the FFT.
+    w = window(('tukey', alpha), image.shape[1:])  # 2D window (basically an inscribed circle in X, Y)
+    if isinstance(image, np.ndarray):
+        pass
+    else:
+        w = cp.array(w)  # make this a GPU array.
+    image *= w[np.newaxis, ...]   # apply 2D window over 3D volume as a cylinder
+    return image
 
 
 @profile
 def prep_sample(
-    sample: np.array,
-    sample_voxel_size: tuple,
-    model_voxel_size: tuple,
-    debug: Any = None,
-    remove_background: bool = True,
+    sample: Union[np.array, Path],
+    return_psnr: bool = False,
     normalize: bool = True,
-    background_mode_offset: int = 0
+    windowing: bool = True,
+    sample_voxel_size: tuple = (.2, .097, .097),
+    model_fov: Any = None,
+    remove_background: bool = True,
+    read_noise_bias: float = 5,
+    plot: Any = None,
+    min_psnr: int = 5,
+    expand_dims: bool = True,
+    na_mask: Optional[np.ndarray] = None,
+    remove_background_noise_method: str = 'fourier_filter',
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
-
-    Background subtraction (mode of voxels below 99th percentile + background_mode_offset)
-    Normalization to 0-1
-    Resample to model_voxel_size
-    Transpose
+        
+        (Converts to 32bit cupy float)
+        
+        -Background subtraction (via Difference of gaussians)
+        -Crop (or mirror pad) to iPSF FOV's size in microns (if model FOV is given)
+        -Tukey window
+        -Normalization to 0-1
+        
+        Return 32bit numpy float
 
     Args:
-        sample (np.array): Input 3D array (or series of 3D arrays)
-        sample_voxel_size (tuple): 
-        model_voxel_size (tuple): 
-        debug (Any, optional): plot or save .svg's. Defaults to None.
-        remove_background (bool, optional): Defaults to True.
-        normalize (bool, optional): Defaults to True.
-        background_mode_offset (int, optional): >0 gives more aggressive background subtraction. Defaults to 0.
+        sample: Input 3D array (or series of 3D arrays)
+        return_psnr: return estimated psnr instead of the image
+        sample_voxel_size: voxel size for the given input image (z, y, x)
+        model_fov: optional sample range to match what the model was trained on
+        plot: plot or save .svg's
+        remove_background: subtract background.
+        normalize: scale values between 0 and 1.
+        read_noise_bias: bias offset for camera noise
+        windowing: optional toggle to apply to mask the input with a window to avoid boundary effects
+        min_psnr: Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold
 
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
-    if len(np.squeeze(sample).shape) == 4:
-        samples = []
-        for i in range(sample.shape[0]):
-            s = sample[i]
+    sample_path = ''
+    if isinstance(sample, Path):
+        sample_path = sample.name
+        with TiffFile(sample) as tif:
+            sample = tif.asarray()
 
-            if remove_background:
-                mode = int(st.mode(s[s < np.quantile(s, .99)], axis=None).mode[0])
-                s -= mode + background_mode_offset
-                s[s < 0] = 0
+        if expand_dims:
+            sample = np.expand_dims(sample, axis=-1)
 
-            if normalize:
-                s /= np.nanmax(s)
+    # convert to 32bit cupy if available
+    try:
+        sample = cp.array(sample, dtype=cp.float32)
+    except:
+        pass
 
-            if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-                s = resize(
-                    s,
-                    sample_voxel_size=sample_voxel_size,
-                    voxel_size=model_voxel_size,
-                    debug=debug/f"{i}_preprocessing" if debug is not None else None
-                )
-            s = s.transpose(0, 2, 1)
-            samples.append(s)
+    if plot is not None:
+        plt.rcParams.update({
+            'font.size': 10,
+            'axes.titlesize': 12,
+            'axes.labelsize': 12,
+            'xtick.labelsize': 10,
+            'ytick.labelsize': 10,
+        })
+        plot = Path(plot)
+        if plot.is_dir(): plot.mkdir(parents=True, exist_ok=True)
 
-        return np.array(samples)
+        fig, axes = plt.subplots(3, ncols=3, figsize=(10, 10))
 
+        plot_mip(
+            vol=sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample),
+            xy=axes[0, 0],
+            xz=axes[0, 1],
+            yz=axes[0, 2],
+            dxy=sample_voxel_size[-1],
+            dz=sample_voxel_size[0],
+            label=r'Input (MIP) [$\gamma$=.5]'
+        )
+
+        axes[0, 0].set_title(
+            f'${int(sample_voxel_size[0]*1000)}^Z$, '
+            f'${int(sample_voxel_size[1]*1000)}^Y$, '
+            f'${int(sample_voxel_size[2]*1000)}^X$ (nm)'
+        )
+        axes[0, 1].set_title(f"PSNR: {measure_snr(sample)}")
+
+    if remove_background:
+        sample = remove_background_noise(
+            sample,
+            read_noise_bias=read_noise_bias,
+            min_psnr=min_psnr,
+            na_mask=na_mask,
+            method=remove_background_noise_method
+        )
+        psnr = measure_snr(sample)
     else:
-        if remove_background:
-            mode = int(st.mode(sample[sample < np.quantile(sample, .99)], axis=None).mode[0])
-            sample -= mode + background_mode_offset
-            sample[sample < 0] = 0
+        psnr = measure_snr(sample)
 
-        if normalize:
-            sample /= np.nanmax(sample)
+    if plot is not None:
+        axes[1, 1].set_title(f"PSNR: {psnr}")
 
-        if not all(s1 == s2 for s1, s2 in zip(sample_voxel_size, model_voxel_size)):
-            sample = resize(
+        plot_mip(
+            vol=sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample),
+            xy=axes[1, 0],
+            xz=axes[1, 1],
+            yz=axes[1, 2],
+            dxy=sample_voxel_size[-1],
+            dz=sample_voxel_size[0],
+            label=r'Fourier Filter [$\gamma$=.5]'
+        )
+
+    if model_fov is not None:
+        # match the sample's FOV to the iPSF FOV. This will make equal pixel spacing in the OTFs.
+        number_of_desired_sample_pixels = (
+            round_to_even(model_fov[0] / sample_voxel_size[0]),
+            round_to_even(model_fov[1] / sample_voxel_size[1]),
+            round_to_even(model_fov[2] / sample_voxel_size[2]),
+        )
+
+        if not all(s1 == s2 for s1, s2 in zip(number_of_desired_sample_pixels, sample.shape)):
+            sample = resize_with_crop_or_pad(
                 sample,
-                sample_voxel_size=sample_voxel_size,
-                voxel_size=model_voxel_size,
-                debug=debug
+                crop_shape=number_of_desired_sample_pixels
             )
 
-        sample = sample.transpose(0, 2, 1)
-        return sample
+    if windowing:
+        sample = tukey_window(sample)
+
+    if normalize:  # safe division to not get nans for blank images
+        denominator = np.max(sample)
+        if denominator != 0:
+            sample /= denominator
+
+    if plot is not None:
+        plot_mip(
+            vol=sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample),
+            xy=axes[-1, 0],
+            xz=axes[-1, 1],
+            yz=axes[-1, 2],
+            dxy=sample_voxel_size[-1],
+            dz=sample_voxel_size[0],
+            label=r'Processed [$\gamma$=.5]'
+        )
+        savesvg(fig, f'{plot}_preprocessing.svg')
+
+    if return_psnr:
+        logger.info(f"PSNR: {psnr:4}   {sample_path}")
+        return psnr
+    else:
+        return sample.astype(np.float32) if isinstance(sample, np.ndarray) else cp.asnumpy(sample).astype(np.float32)
 
 
 @profile
 def find_roi(
     path: Union[Path, np.array],
+    savepath: Path,
     window_size: tuple = (64, 64, 64),
     plot: Any = None,
-    num_peaks: Any = None,
+    num_rois: Any = None,
     min_dist: Any = 1,
     max_dist: Any = None,
     min_intensity: Any = 100,
-    peaks: Any = None,
+    pois: Any = None,
     max_neighbor: int = 5,
-    voxel_size: tuple = (.200, .108, .108),
-    savepath: Any = None,
+    voxel_size: tuple = (.200, .097, .097),
+    timestamp: int = 17
 ):
+    savepath.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
@@ -271,24 +577,41 @@ def find_roi(
     if isinstance(path, (np.ndarray, np.generic)):
         dataset = path
     elif path.suffix == '.tif':
-        dataset = imread(path).astype(np.float)
-        logger.info(f"Sample: {dataset.shape}")
+        dataset = imread(path).astype(np.float32)
     elif path.suffix == '.zarr':
         dataset = zarr.open_array(str(path), mode='r', order='F')
-        logger.info(f"Sample: {dataset.shape}")
     else:
         logger.error(f"Unknown file format: {path.name}")
         return
 
-    if isinstance(peaks, str) or isinstance(peaks, Path):
-        with h5py.File(peaks, 'r') as file:
+    if isinstance(pois, str) or isinstance(pois, Path):
+        try:
+            with h5py.File(pois, 'r') as file:
+                file = file.get('frameInfo')
+                pois = pd.DataFrame(
+                    np.hstack((file['x'], file['y'], file['z'], file['A'], file['c'], file['isPSF'])),
+                    columns=['x', 'y', 'z', 'A', 'c', 'isPSF']
+                ).round(0).astype(int)
+        except OSError:
+            file = scipy.io.loadmat(pois)
             file = file.get('frameInfo')
-            peaks = pd.DataFrame(
-                np.hstack((file['x'], file['y'], file['z'], file['A'])),
-                columns=['x', 'y', 'z', 'A']
+            pois = pd.DataFrame(
+                np.vstack((
+                    file['x'][0][timestamp+1][0],
+                    file['y'][0][timestamp+1][0],
+                    file['z'][0][timestamp+1][0],
+                    file['A'][0][timestamp+1][0],
+                    file['c'][0][timestamp+1][0],
+                    file['isPSF'][0][timestamp+1][0],
+                )).T,
+                columns=['x', 'y', 'z', 'A', 'c', 'isPSF']
             ).round(0).astype(int)
 
-    points = peaks[['z', 'y', 'x']].values
+        # index by zero like every other good language (stupid, matlab!)
+        pois[['z', 'y', 'x']] -= 1
+
+    pois = pois[pois['isPSF'] == 1]
+    points = pois[['z', 'y', 'x']].values
     scaled_peaks = np.zeros_like(points)
     scaled_peaks[:, 0] = points[:, 0] * voxel_size[0]
     scaled_peaks[:, 1] = points[:, 1] * voxel_size[1]
@@ -298,23 +621,23 @@ def find_roi(
     dist, idx = kd.query(scaled_peaks, k=11, workers=-1)
     for n in range(1, 11):
         if n == 1:
-            peaks[f'dist'] = dist[:, n]
+            pois[f'dist'] = dist[:, n]
         else:
-            peaks[f'dist_{n}'] = dist[:, n]
+            pois[f'dist_{n}'] = dist[:, n]
 
     # filter out points too close to the edge
-    lzedge = peaks['z'] >= window_size[0]//4
-    hzedge = peaks['z'] <= dataset.shape[0] - window_size[0]//4
-    lyedge = peaks['y'] >= window_size[1]//4
-    hyedge = peaks['y'] <= dataset.shape[1] - window_size[1]//4
-    lxedge = peaks['x'] >= window_size[2]//4
-    hxedge = peaks['x'] <= dataset.shape[2] - window_size[2]//4
-    peaks = peaks[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
+    lzedge = pois['z'] >= window_size[0]//4
+    hzedge = pois['z'] <= dataset.shape[0] - window_size[0]//4
+    lyedge = pois['y'] >= window_size[1]//4
+    hyedge = pois['y'] <= dataset.shape[1] - window_size[1]//4
+    lxedge = pois['x'] >= window_size[2]//4
+    hxedge = pois['x'] <= dataset.shape[2] - window_size[2]//4
+    pois = pois[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="C0")
-        sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
+        sns.scatterplot(ax=axes[0], x=pois['dist'], y=pois['A'], s=5, color="C0")
+        sns.kdeplot(ax=axes[0], x=pois['dist'], y=pois['A'], levels=5, color="grey", linewidths=1)
         axes[0].set_ylabel('Intensity')
         axes[0].set_xlabel('Distance (microns)')
         axes[0].set_yscale('log')
@@ -322,7 +645,7 @@ def find_roi(
         axes[0].set_xlim(0, None)
         axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        x = np.sort(peaks['dist'])
+        x = np.sort(pois['dist'])
         y = np.arange(len(x)) / float(len(x))
         axes[1].plot(x, y, color='dimgrey')
         axes[1].set_xlabel('Distance (microns)')
@@ -330,39 +653,37 @@ def find_roi(
         axes[1].set_xlim(0, None)
         axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
+        sns.histplot(ax=axes[2], data=pois, x="dist", kde=True)
         axes[2].set_xlabel('Distance')
         axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        plt.tight_layout()
-        plt.savefig(f'{plot}_detected_points.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+        savesvg(fig, f'{plot}_detected_points.svg')
 
     if min_dist is not None:
-        peaks = peaks[peaks['dist'] >= min_dist]
+        pois = pois[pois['dist'] >= min_dist]
 
     if max_dist is not None:
-        peaks = peaks[peaks['dist'] <= max_dist]
+        pois = pois[pois['dist'] <= max_dist]
 
     if min_intensity is not None:
-        peaks = peaks[peaks['A'] >= min_intensity]
+        pois = pois[pois['A'] >= min_intensity]
 
-    neighbors = peaks.columns[peaks.columns.str.startswith('dist')].tolist()
+    neighbors = pois.columns[pois.columns.str.startswith('dist')].tolist()
     min_dist = np.min(window_size)*np.min(voxel_size)
-    peaks['neighbors'] = peaks[peaks[neighbors] <= min_dist].count(axis=1)
-    peaks.sort_values(by=['neighbors', 'dist', 'A'], ascending=[True, False, False], inplace=True)
-    peaks = peaks[peaks['neighbors'] <= max_neighbor]
+    pois['neighbors'] = pois[pois[neighbors] <= min_dist].count(axis=1)
+    pois.sort_values(by=['neighbors', 'dist', 'A'], ascending=[True, False, False], inplace=True)
+    pois = pois[pois['neighbors'] <= max_neighbor]
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], s=5, color="C0")
-        sns.kdeplot(ax=axes[0], x=peaks['dist'], y=peaks['A'], levels=5, color="grey", linewidths=1)
+        sns.scatterplot(ax=axes[0], x=pois['dist'], y=pois['A'], s=5, color="C0")
+        sns.kdeplot(ax=axes[0], x=pois['dist'], y=pois['A'], levels=5, color="grey", linewidths=1)
         axes[0].set_ylabel('Intensity')
         axes[0].set_xlabel('Distance')
         axes[0].set_xlim(0, None)
         axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        x = np.sort(peaks['dist'])
+        x = np.sort(pois['dist'])
         y = np.arange(len(x)) / float(len(x))
         axes[1].plot(x, y, color='dimgrey')
         axes[1].set_xlabel('Distance')
@@ -370,19 +691,17 @@ def find_roi(
         axes[1].set_xlim(0, None)
         axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        sns.histplot(ax=axes[2], data=peaks, x="dist", kde=True)
+        sns.histplot(ax=axes[2], data=pois, x="dist", kde=True)
         axes[2].set_xlabel('Distance')
         axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        savesvg(fig, f'{plot}_selected_points.svg')
 
-        plt.tight_layout()
-        plt.savefig(f'{plot}_selected_points.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
 
-    peaks = peaks.head(num_peaks)
-    peaks.to_csv(f"{plot}_stats.csv")
+    pois = pois.head(num_rois)
+    pois.to_csv(f"{plot}_stats.csv")
 
-    logger.info(f"Predicted points of interest")
-    peaks = peaks[['z', 'y', 'x']].values[:num_peaks]
+    pois = pois[['z', 'y', 'x']].values[:num_rois]
     widths = [w // 2 for w in window_size]
 
     if plot:
@@ -394,11 +713,11 @@ def find_roi(
                 cmap='Greys_r',
             )
 
-            for p in range(peaks.shape[0]):
+            for p in range(pois.shape[0]):
                 if ax == 0:
-                    axes[ax].plot(peaks[p, 2], peaks[p, 1], marker='.', ls='', color=f'C{p}')
+                    axes[ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
                     axes[ax].add_patch(patches.Rectangle(
-                        xy=(peaks[p, 2] - window_size[2] // 2, peaks[p, 1] - window_size[1] // 2),
+                        xy=(pois[p, 2] - window_size[2] // 2, pois[p, 1] - window_size[1] // 2),
                         width=window_size[1],
                         height=window_size[2],
                         fill=None,
@@ -407,9 +726,9 @@ def find_roi(
                     ))
                     axes[ax].set_title('XY')
                 elif ax == 1:
-                    axes[ax].plot(peaks[p, 2], peaks[p, 0], marker='.', ls='', color=f'C{p}')
+                    axes[ax].plot(pois[p, 2], pois[p, 0], marker='.', ls='', color=f'C{p}')
                     axes[ax].add_patch(patches.Rectangle(
-                        xy=(peaks[p, 2] - window_size[2] // 2, peaks[p, 0] - window_size[0] // 2),
+                        xy=(pois[p, 2] - window_size[2] // 2, pois[p, 0] - window_size[0] // 2),
                         width=window_size[1],
                         height=window_size[2],
                         fill=None,
@@ -417,41 +736,49 @@ def find_roi(
                         alpha=1
                     ))
                     axes[ax].set_title('XZ')
-
-        plt.tight_layout()
-        plt.savefig(f'{plot}_mips.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
+        savesvg(fig, f'{plot}_mips.svg')
 
     rois = []
-    logger.info(f"Locating ROIs: {[peaks.shape[0]]}")
-    for p in range(peaks.shape[0]):
+    ztiles = 1
+    ncols = int(np.ceil(len(pois) / 5))
+    nrows = int(np.ceil(len(pois) / ncols))
+
+    for p, (z, y, x) in enumerate(itertools.product(
+        range(ztiles), range(nrows), range(ncols),
+        desc=f"Locating tiles: {[pois.shape[0]]}",
+        file=sys.stdout
+    )):
         start = [
-            peaks[p, s] - widths[s] if peaks[p, s] >= widths[s] else 0
+            pois[p, s] - widths[s] if pois[p, s] >= widths[s] else 0
             for s in range(3)
         ]
         end = [
-            peaks[p, s] + widths[s] if peaks[p, s] + widths[s] < dataset.shape[s] else dataset.shape[s]
+            pois[p, s] + widths[s] if pois[p, s] + widths[s] < dataset.shape[s] else dataset.shape[s]
             for s in range(3)
         ]
         r = dataset[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
 
         if r.size != 0:
-            r = resize_with_crop_or_pad(r, crop_shape=window_size)
-            rois.append(r)
+            tile = f"z{0}-y{y}-x{x}"
+            imwrite(savepath / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
+            rois.append(savepath / f"{tile}.tif")
 
-            if savepath is not None:
-                savepath.mkdir(parents=True, exist_ok=True)
-                imsave(savepath / f"roi_{p:02}.tif", r)
-
-    return rois
+    return np.array(rois), ztiles, nrows, ncols
 
 
 @profile
 def get_tiles(
     path: Union[Path, np.array],
+    savepath: Path,
     window_size: tuple = (64, 64, 64),
-    strides: int = 64,
-    savepath: Any = None,
+    strides: Optional[tuple] = None,
+    save_files: bool = True,
+    save_file_type: str = '.tif',
+    prep: Optional[partial] = None,
+    plot: bool = False
 ):
+    savepath.mkdir(parents=True, exist_ok=True)
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -464,25 +791,84 @@ def get_tiles(
     if isinstance(path, (np.ndarray, np.generic)):
         dataset = path
     elif path.suffix == '.tif':
-        dataset = imread(path).astype(np.float)
-        logger.info(f"Sample: {dataset.shape}")
+        dataset = imread(path).astype(np.float32)
     elif path.suffix == '.zarr':
         dataset = zarr.open_array(str(path), mode='r', order='F')
-        logger.info(f"Sample: {dataset.shape}")
     else:
         logger.error(f"Unknown file format: {path.name}")
         return
 
-    logger.info(f"Sample: {[dataset.shape]}")
-    windows = sliding_window_view(dataset, window_shape=window_size)[::strides, ::strides, ::strides]
-    zplanes, nrows, ncols = windows.shape[:3]
+    if strides is None:
+        strides = window_size
+
+    windows = sliding_window_view(dataset, window_shape=window_size)[::strides[0], ::strides[1], ::strides[2]]
+    ztiles, nrows, ncols = windows.shape[:3]
     windows = np.reshape(windows, (-1, *window_size))
 
-    logger.info(f"Locating ROIs: {[windows.shape[0]]}")
+    tiles = {}
+    for i, (z, y, x) in enumerate(itertools.product(
+        range(ztiles), range(nrows), range(ncols),
+        desc=f"Locating tiles: {[windows.shape[0]]}",
+        bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
+        unit=' tile',
+        file=sys.stdout
+    )):
+        name = f"z{z}-y{y}-x{x}"
 
-    if savepath is not None:
-        savepath.mkdir(parents=True, exist_ok=True)
-        for i, w in enumerate(windows):
-            imsave(savepath/f"roi_{i:02}.tif", w)
+        if prep is not None:
+            w = prep(windows[i],  plot=savepath / f"{name}" if plot else None)
+        else:
+            w = windows[i]
 
-    return windows, zplanes, nrows, ncols
+        if np.all(w == 0):
+            tiles[name] = dict(
+                path=savepath / f"{name}.tif",
+                ignored=True,
+            )
+        else:
+            if save_files:
+                if save_file_type == '.npy':
+                    np.save(savepath / f"{name}.npy", w)
+                if save_file_type == '.npz':
+                    np.savez_compressed(savepath / f"{name}.npz", w)
+                else:
+                    imwrite(savepath / f"{name}.tif", w, compression='deflate', dtype=np.float32)
+
+
+            tiles[name] = dict(
+                path=savepath / f"{name}{save_file_type}",
+                ignored=False,
+            )
+
+    tiles = pd.DataFrame.from_dict(tiles, orient='index')
+    return tiles, ztiles, nrows, ncols
+
+
+def optimal_rolling_strides(model_psf_fov, sample_voxel_size, sample_shape):
+    model_window_size = (
+        round_to_even(model_psf_fov[0] / sample_voxel_size[0]),
+        round_to_even(model_psf_fov[1] / sample_voxel_size[1]),
+        round_to_even(model_psf_fov[2] / sample_voxel_size[2]),
+    )  # number of sample voxels that make up a model psf.
+
+    model_window_size = np.minimum(model_window_size, sample_shape)
+    number_of_rois = np.ceil(sample_shape / model_window_size)
+    strides = np.floor((sample_shape - model_window_size) / (number_of_rois - 1))
+    idx = np.where(np.isnan(strides))[0]
+    strides[idx] = model_window_size[idx]
+    strides = strides.astype(int)
+
+    min_strides = np.ceil(model_window_size * 0.66).astype(np.int32)
+    # throwaway = sample_shape - ((np.array(number_of_rois) - 1) * strides + model_window_size)
+
+    if any(strides < min_strides): # if strides overlap too much with model window
+        number_of_rois -= (strides < min_strides).astype(np.int32)    # choose one less roi and recompute
+        strides = np.floor((sample_shape - model_window_size) / (number_of_rois - 1))
+        idx = np.where(np.isnan(strides))[0]
+        strides[idx] = model_window_size[idx]
+        strides = strides.astype(int)
+
+    if any(strides < min_strides):
+        raise Exception(f'Your strides {strides} overlap too much. '
+                        f'Make window size larger so strides are > 2/3 of Model window size {min_strides}')
+    return strides

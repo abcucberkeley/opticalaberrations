@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="evalmodes" type="PythonConfigurationType" factoryName="Python" folderName="tests">
+  <configuration default="false" name="evalmodes" type="PythonConfigurationType" factoryName="Python" folderName="eval">
     <module name="opticalaberrations" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
@@ -13,7 +13,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/test.py" />
-    <option name="PARAMETERS" value="../pretrained_models/opticalnet/lattice_yumb_x108um_y108um_z200um/z15/spatial_planes.h5 --eval_sign 'positive_only' modes" />
+    <option name="PARAMETERS" value="../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5 --eval_sign signed --digital_rotations modes" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

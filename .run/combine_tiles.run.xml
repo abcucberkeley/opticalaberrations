@@ -1,0 +1,24 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="combine_tiles" type="PythonConfigurationType" factoryName="Python" folderName="ao">
+    <module name="opticalaberrations" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+    </envs>
+    <option name="SDK_HOME" value="" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+    <option name="IS_MODULE_SDK" value="true" />
+    <option name="ADD_CONTENT_ROOTS" value="true" />
+    <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
+    <option name="PARAMETERS" value="combine_tiles U:\Data\TestsForThayer\20230817_ap2\exp2\rotated\before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0050565672msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_corrected_actuators.csv --corrections  U:\Data\TestsForThayer\20230817_ap2\exp2\rotated\before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0050565672msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif --corrections  U:\Data\TestsForThayer\20230817_ap2\exp2\rotated\after_threestacks_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0050803886msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif --corrections  U:\Data\TestsForThayer\20230817_ap2\exp2\rotated\after_threestacks_Iter_0000_CamA_ch0_CAM1_stack0001_488nm_0039511msec_0050843397msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif --corrections  U:\Data\TestsForThayer\20230817_ap2\exp2\rotated\after_threestacks_Iter_0000_CamA_ch0_CAM1_stack0002_488nm_0079022msec_0050882908msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif" />
+    <option name="SHOW_COMMAND_LINE" value="false" />
+    <option name="EMULATE_TERMINAL" value="false" />
+    <option name="MODULE_MODE" value="false" />
+    <option name="REDIRECT_INPUT" value="false" />
+    <option name="INPUT_FILE" value="" />
+    <method v="2" />
+  </configuration>
+</component>

@@ -1,43 +1,44 @@
 import matplotlib
 matplotlib.use('Agg')
 
-import numexpr
-numexpr.set_num_threads(numexpr.detect_number_of_cores())
+import matplotlib.pyplot as plt
+plt.set_loglevel('error')
+
+import os, platform
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+import warnings
+warnings.filterwarnings("ignore")
 
 import logging
 import sys
 import h5py
-from datetime import datetime
+
 from pathlib import Path
-from pprint import pprint
-from typing import Any, Union
+from typing import Any, Union, Optional, Callable
+from itertools import repeat
 from functools import partial
 from line_profiler_pycharm import profile
+from tifffile import imwrite
 
 import pandas as pd
 from skimage.restoration import richardson_lucy
-from skimage.transform import rotate
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from numpy.lib.stride_tricks import sliding_window_view
 import numpy as np
 import scipy as sp
+from tqdm import tqdm
 
 import tensorflow as tf
-from tensorflow.keras.models import load_model
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.optimizers import SGD
-from tensorflow_addons.optimizers import AdamW
-from tensorflow_addons.optimizers import SGDW
+from tensorflow.keras.models import load_model, save_model
+from tensorflow_addons.optimizers import AdamW, LAMB  # keep for old models trained with TF2.5
 
-from tensorflow.keras.callbacks import CSVLogger
-from tensorflow.keras.callbacks import ModelCheckpoint
-from tensorflow.keras.callbacks import LambdaCallback
-from tensorflow.keras.callbacks import EarlyStopping
-from callbacks import Defibrillator
-from callbacks import LearningRateScheduler
-from callbacks import TensorBoardCallback
-from skimage.feature import peak_local_max
+import psutil
+import multiprocessing as mp
+if platform.system() != "Windows":
+    from dask_cuda import LocalCUDACluster  # Only Linux is supported by Dask-CUDA at this time
+
+from dask.distributed import LocalCluster, Client, progress
+mp.set_start_method('spawn', force=True)
 
 import utils
 import vis
@@ -45,20 +46,15 @@ import data_utils
 
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
+from embeddings import fourier_embeddings, rolling_fourier_embeddings
+from preprocessing import prep_sample
+from utils import round_to_even
 
-from tensorflow.keras import Model
-from phasenet import PhaseNet
-
-from stem import Stem
-from activation import MaskedActivation
-from depthwiseconv import DepthwiseConv3D
-from spatial import SpatialAttention
 from roi import ROI
 import opticalnet
-import opticalresnet
-import opticaltransformer
-import baseline
-import otfnet
+import prototype
+from warmupcosinedecay import WarmupCosineDecay
+
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -69,78 +65,62 @@ logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
 
 
-@profile
-def load_metadata(
-        model_path: Path,
-        psf_shape: Union[tuple, list] = (64, 64, 64),
-        psf_type=None,
-        n_modes=None,
-        z_voxel_size=None,
-        **kwargs
-):
-    """ The model .h5, HDF5 file, is also used to store metadata parameters (wavelength, x_voxel_size, etc) that 
-    the model was trained with.  The metadata is read from file and is returned within the returned SyntheticPSF class.
+class DatasetGenerator:
+    def __init__(self, paths: np.ndarray, load_preprocess_func: Callable):
+        self.paths = paths
+        self.load_preprocess_func = load_preprocess_func
+        self.gpus = len(tf.config.list_physical_devices('GPU'))
 
-    Args:
-        model_path (Path): path to .h5 model, or path to the containing folder.
-        psf_shape (Union[tuple, list], optional): dimensions of the SyntheticPSF to return. Defaults to (64, 64, 64).
-        psf_type (str, optional): "widefield" or "confocal". Defaults to None which reads the value from the .h5 file.
-        n_modes (int, optional): # of Zernike modes to describe abberation. Defaults to None which reads the value from the .h5 file.
-        z_voxel_size (float, optional):  Defaults to None which reads the value from the .h5 file.
-        **kwargs:  Get passed into SyntheticPSF generator.
+        if self.gpus >= 1 and platform.system() != 'Windows':
+            self.client = Client(LocalCUDACluster(
+                CUDA_VISIBLE_DEVICES=np.arange(self.gpus),
+                threads_per_worker=1
+            ))
+        else:
+            self.client = Client(LocalCluster(
+                n_workers=psutil.cpu_count(logical=False)
+            ))
 
-    Returns:
-        SyntheticPSF class: ideal PSF that the model was trained on.
-    """
-    # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
-    if not model_path.suffix == '.h5':       
-        model_path = list(model_path.rglob('*.h5'))[0]  # locate the model if the parent folder path is given
+    def __len__(self):
+        return self.paths.shape[0]
 
-    with h5py.File(model_path, 'r') as file:
+    def __getitem__(self, idx):
+        x = self.paths[idx]
+        x = self.client.submit(self.load_preprocess_func, x)
+        x = x.result()
+        return x
 
-        try:
-            embedding_option = str(file.get('embedding_option').asstr()[()]).strip("\'").strip('\"')
-        except Exception:
-            embedding_option = 'principle_planes'
-
-        psfgen = SyntheticPSF(
-            psf_type=np.array(file.get('psf_type')[:]) if psf_type is None else psf_type,
-            psf_shape=psf_shape,
-            n_modes=int(file.get('n_modes')[()]) if n_modes is None else n_modes,
-            lam_detection=float(file.get('wavelength')[()]),
-            x_voxel_size=float(file.get('x_voxel_size')[()]),
-            y_voxel_size=float(file.get('y_voxel_size')[()]),
-            z_voxel_size=float(file.get('z_voxel_size')[()]) if z_voxel_size is None else z_voxel_size,
-            embedding_option=embedding_option,
-            **kwargs
-        )
-    return psfgen
+    def __call__(self):
+        for i in range(self.__len__()):
+            yield self.__getitem__(i)
 
 
 @profile
-def load(model_path: Path, mosaic=False):
+def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
     model_path = Path(model_path)
 
-    if 'transformer' in str(model_path):
-        custom_objects = {
-            "ROI": ROI,
-            "Stem": opticaltransformer.Stem,
-            "Patchify": opticaltransformer.Patchify,
-            "Merge": opticaltransformer.Merge,
-            "PatchEncoder": opticaltransformer.PatchEncoder,
-            "MLP": opticaltransformer.MLP,
-            "Transformer": opticaltransformer.Transformer,
-        }
-    elif 'resnet' in str(model_path):
-        custom_objects = {
-            "Stem": Stem,
-            "MaskedActivation": MaskedActivation,
-            "SpatialAttention": SpatialAttention,
-            "DepthwiseConv3D": DepthwiseConv3D,
-            "CAB": opticalresnet.CAB,
-            "TB": opticalresnet.TB,
-        }
+    if mosaic:
+        if model_path.is_file() and model_path.suffix == '.h5':
+            model_path = Path(model_path)
+        else:
+            model_path = Path(sorted(model_path.rglob('*.h5'), reverse=True)[0])
     else:
+        try:
+            '''.pb format'''
+            if model_path.is_file() and model_path.suffix == '.pb':
+                model_path = str(model_path.parent)
+            else:
+                model_path = str(sorted(model_path.rglob('saved_model.pb'), reverse=True)[0].parent)
+
+        except IndexError or FileNotFoundError or OSError:
+            '''.h5/hdf5 format'''
+            if model_path.is_file() and model_path.suffix == '.h5':
+                model_path = str(model_path)
+            else:
+                model_path = str(sorted(model_path.rglob('*.h5'), reverse=True)[0])
+
+    logger.info(f"Loading {model_path}")
+    try:
         custom_objects = {
             "ROI": ROI,
             "Stem": opticalnet.Stem,
@@ -149,60 +129,316 @@ def load(model_path: Path, mosaic=False):
             "PatchEncoder": opticalnet.PatchEncoder,
             "MLP": opticalnet.MLP,
             "Transformer": opticalnet.Transformer,
+            "WarmupCosineDecay": WarmupCosineDecay,
         }
+        return load_model(model_path, custom_objects=custom_objects)
+    except TypeError as e:
+        custom_objects = {
+            "ROI": ROI,
+            "Stem": prototype.Stem,
+            "Patchify": prototype.Patchify,
+            "Merge": prototype.Merge,
+            "PatchEncoder": prototype.PatchEncoder,
+            "MLP": prototype.MLP,
+            "Transformer": prototype.Transformer,
+            "WarmupCosineDecay": WarmupCosineDecay,
+        }
+        return load_model(model_path, custom_objects=custom_objects)
 
-    if mosaic:
-        if model_path.is_file() and model_path.suffix == '.h5':
-            model_path = Path(model_path)
-        else:
-            model_path = Path(list(model_path.rglob('*.h5'))[0])
 
-        model = load_model(model_path, custom_objects=custom_objects)
-        return model
+@profile
+def load_metadata(
+        model_path: Path,
+        psf_shape: Union[tuple, list] = (64, 64, 64),
+        psf_type=None,
+        n_modes=None,
+        x_voxel_size=None,
+        y_voxel_size=None,
+        z_voxel_size=None,
+        lam_detection=None,
+        **kwargs
+):
+    """ The model .h5, HDF5 file, is also used to store metadata parameters (wavelength, x_voxel_size, etc) that
+    the model was trained with.  The metadata is read from file and is returned within the returned SyntheticPSF class.
 
-    else:
+    Args:
+        model_path (Path): path to .h5 model, or path to the containing folder.
+        psf_shape (Union[tuple, list], optional): dimensions of the SyntheticPSF to return. Defaults to (64, 64, 64).
+        psf_type (str, optional): codename or path for the PSF type eg. "widefield". Defaults to None which reads the value from the .h5 file.
+        n_modes (int, optional): # of Zernike modes to describe aberration. Defaults to None which reads the value from the .h5 file.
+        z_voxel_size (float, optional):  Defaults to None which reads the value from the .h5 file.
+        **kwargs:  Get passed into SyntheticPSF generator.
+
+    Returns:
+        SyntheticPSF class: ideal PSF that the model was trained on.
+    """
+    if not isinstance(model_path, Path):
+        model_path = Path(model_path)
+
+    # print(f"my suffix = {model_path.suffix}, my model = {model_path}")
+    if not model_path.suffix == '.h5':
+        model_path = list(model_path.rglob('*.h5'))[0]  # locate the model if the parent folder path is given
+
+    with h5py.File(model_path, 'r') as file:
+
         try:
-            try:
-                '''.pb format'''
-                if model_path.is_file() and model_path.suffix == '.pb':
-                    return load_model(str(model_path.parent))
-                else:
-                    return load_model(str(list(model_path.rglob('saved_model.pb'))[0].parent))
+            embedding_option = str(file.get('embedding_option')[()]).strip("b'").strip("\'").strip('\"')
+        except Exception:
+            embedding_option = 'spatial_planes'
 
-            except IndexError or FileNotFoundError or OSError:
-                '''.h5/hdf5 format'''
-                if model_path.is_file() and model_path.suffix == '.h5':
-                    model_path = str(model_path)
-                else:
-                    model_path = str(list(model_path.rglob('*.h5'))[0])
+        psfgen = SyntheticPSF(
+            psf_type=str(file.get('psf_type')[()]).strip("b'").strip("\'").strip('\"') if psf_type is None else psf_type,
+            psf_shape=psf_shape,
+            n_modes=int(file.get('n_modes')[()]) if n_modes is None else n_modes,
+            lam_detection=float(file.get('wavelength')[()]) if lam_detection is None else lam_detection,
+            x_voxel_size=float(file.get('x_voxel_size')[()]) if x_voxel_size is None else x_voxel_size,
+            y_voxel_size=float(file.get('y_voxel_size')[()]) if y_voxel_size is None else y_voxel_size,
+            z_voxel_size=float(file.get('z_voxel_size')[()]) if z_voxel_size is None else z_voxel_size,
+            embedding_option=embedding_option,
+            **kwargs
+        )
+    return psfgen
 
-                model = load_model(model_path, custom_objects=custom_objects)
-                return model
+
+def save_metadata(
+        filepath: Path,
+        wavelength: float,
+        psf_type: str,
+        x_voxel_size: float,
+        y_voxel_size: float,
+        z_voxel_size: float,
+        n_modes: int,
+        embedding_option: str = 'spatial_planes',
+        skip_remove_background: bool = False,
+        use_theoretical_widefield_simulator: bool = False,
+):
+    def add_param(h5file, name, data):
+        try:
+            if name not in h5file.keys():
+                h5file.create_dataset(name, data=data)
+            else:
+                del h5file[name]
+                h5file.create_dataset(name, data=data)
+
+            if isinstance(data, str):
+                if h5file.get(name)[()] == data:
+                    logger.info(f"`{name}` : {data}")
+                elif h5file.get(name)[()] == bytes(data, 'ASCII'):
+                    logger.info(f"`{name}` : {data}")
+                else:
+                    logger.error(f"{name} has value of {h5file.get(name)[()]}, but we wanted '{data}'")
+            else:
+                assert np.allclose(h5file.get(name)[()], data), f"Failed to write {name}"
+                logger.info(f"`{name}`: {h5file.get(name)[()]}")
 
         except Exception as e:
-            logger.exception(e)
-            exit()
+            logger.error(e)
+
+    try:
+        file = filepath if str(filepath).endswith('.h5') else list(filepath.rglob('*.h5'))[0]
+    except IndexError:
+        model = load(filepath)
+        file = Path(f"{filepath}.h5")
+        save_model(model, file, save_format='h5')
+
+    with h5py.File(file, 'r+') as file:
+        add_param(file, name='n_modes', data=n_modes)
+        add_param(file, name='wavelength', data=wavelength)
+        add_param(file, name='x_voxel_size', data=x_voxel_size)
+        add_param(file, name='y_voxel_size', data=y_voxel_size)
+        add_param(file, name='z_voxel_size', data=z_voxel_size)
+        add_param(file, name='embedding_option', data=embedding_option)
+        add_param(file, name='skip_remove_background', data=skip_remove_background)
+        add_param(file, name='use_theoretical_widefield_simulator', data=use_theoretical_widefield_simulator)
+
+        if (isinstance(psf_type, Path) or isinstance(psf_type, str)) and Path(psf_type).exists():
+            with h5py.File(psf_type, 'r+') as f:
+                add_param(file, name='psf_type', data=psf_type)
+                add_param(file, name='lls_excitation_profile', data=f.get('DitheredxzPSFCrossSection')[:, 0])
+        else:
+            add_param(file, name='psf_type', data=psf_type)
+            add_param(file, name='lls_excitation_profile', data=[])
+
+    logger.info(f"Saved model with additional metadata: {filepath.resolve()}")
+
+
+@profile
+def load_sample(data: Union[tf.Tensor, Path, str, np.ndarray]):
+    if isinstance(data, np.ndarray):
+        img = data.astype(np.float32)
+
+    elif isinstance(data, bytes):
+        data = Path(str(data, "utf-8"))
+        img = data_utils.get_image(data)
+
+    elif isinstance(data, tf.Tensor):
+        path = Path(str(data.numpy(), "utf-8"))
+        img = data_utils.get_image(path)
+
+    else:
+        path = Path(str(data))
+        img = data_utils.get_image(path)
+
+    return np.squeeze(img)
+
+
+def preprocess(
+    file: Union[tf.Tensor, Path, str],
+    modelpsfgen: SyntheticPSF,
+    samplepsfgen: Optional[SyntheticPSF] = None,
+    freq_strength_threshold: float = .01,
+    digital_rotations: Optional[int] = 361,
+    remove_background: bool = True,
+    read_noise_bias: float = 5,
+    normalize: bool = True,
+    plot: Any = None,
+    no_phase: bool = False,
+    fov_is_small: bool = True,
+    rolling_strides: Optional[tuple] = None,
+    skip_prep_sample: bool = False,
+    min_psnr: int = 10,
+    object_gaussian_kernel_width: float = 0  # to simulate ideal OTF for objects bigger than diffraction limit
+):
+    if samplepsfgen is None:
+        samplepsfgen = modelpsfgen
+
+    if isinstance(file, tf.Tensor):
+        file = Path(str(file.numpy(), "utf-8"))
+
+    if isinstance(plot, bool) and plot:
+        plot = file.with_suffix('')
+
+    sample = load_sample(file)
+
+    if object_gaussian_kernel_width != 0:
+        gaussian_sigma = object_gaussian_kernel_width / (2 * np.sqrt(2*np.log(2)))  # convert from FWHM to std dev
+        kernel = utils.gaussian_kernel(kernlen=(21, 21, 21), std=gaussian_sigma)
+        ipsf = utils.fftconvolution(sample=modelpsfgen.ipsf, kernel=kernel).astype(np.float32)
+        ipsf /= np.max(ipsf)
+        if plot:
+            imwrite(f"{plot.with_suffix('')}_ipsf.tif", ipsf, compression='deflate', dtype=np.float32)
+        iotf = utils.fft(ipsf)
+        iotf = utils.normalize_otf(iotf)
+
+    else:
+        iotf = modelpsfgen.iotf
+
+    if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
+
+        if not skip_prep_sample:
+            sample = prep_sample(
+                sample,
+                model_fov=modelpsfgen.psf_fov,              # this is what we will crop to
+                sample_voxel_size=samplepsfgen.voxel_size,
+                remove_background=remove_background,
+                normalize=normalize,
+                read_noise_bias=read_noise_bias,
+                min_psnr=min_psnr,
+                plot=plot if plot else None,
+                na_mask=samplepsfgen.na_mask
+            )
+
+        return fourier_embeddings(
+            sample,
+            iotf=iotf,
+            na_mask=modelpsfgen.na_mask,
+            plot=plot if plot else None,
+            no_phase=no_phase,
+            remove_interference=True,
+            embedding_option=modelpsfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
+            model_psf_shape=modelpsfgen.psf_shape
+        ).astype(np.float32)
+
+    else:  # at least one tile fov dimension is larger than model fov
+        model_window_size = (
+            round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
+            round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
+            round_to_even(modelpsfgen.psf_fov[2] / samplepsfgen.voxel_size[2]),
+        )   # number of sample voxels that make up a model psf.
+
+        model_window_size = np.minimum(model_window_size, sample.shape)
+
+        # how many non-overlapping rois can we split this tile fov into (round down)
+        rois = sliding_window_view(
+            sample,
+            window_shape=model_window_size
+        )   # stride = 1.
+
+        # decimate from all available windows to the stride we want (either rolling_strides or model_window_size)
+        if rolling_strides is not None:
+            strides = rolling_strides
+        else:
+            strides = model_window_size
+
+        rois = rois[
+           ::strides[0],
+           ::strides[1],
+           ::strides[2]
+        ]
+
+        throwaway = np.array(sample.shape) - ((np.array(rois.shape[:3])-1) * strides + rois.shape[-3:])
+        if any(throwaway > (np.array(sample.shape) / 4)):
+            raise Exception(f'You are throwing away {throwaway} voxels out of {sample.shape}, with stride length'
+                            f'{strides}. Change rolling_strides.')
+
+        ztiles, nrows, ncols = rois.shape[:3]
+        rois = np.reshape(rois, (-1, *model_window_size))
+
+        if not skip_prep_sample:
+            prep = partial(
+                prep_sample,
+                sample_voxel_size=samplepsfgen.voxel_size,
+                remove_background=remove_background,
+                normalize=normalize,
+                read_noise_bias=read_noise_bias,
+                na_mask=samplepsfgen.na_mask
+            )
+
+            rois = utils.multiprocess(func=prep, jobs=rois,
+                                      desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
+                                           f'roi size, {rois.shape[-3:]}, '
+                                           f'stride length {strides}, '
+                                           f'throwing away {throwaway} voxels')
+
+        return rolling_fourier_embeddings(  # aka "large_fov"
+            rois,
+            iotf=iotf,
+            na_mask=modelpsfgen.na_mask,
+            plot=plot,
+            no_phase=no_phase,
+            remove_interference=True,
+            embedding_option=modelpsfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
+            model_psf_shape=modelpsfgen.psf_shape,
+            nrows=nrows,
+            ncols=ncols,
+            ztiles=ztiles
+        ).astype(np.float32)
 
 
 @profile
 def bootstrap_predict(
-    model: tf.keras.Model,
-    inputs: np.array,
-    psfgen: SyntheticPSF,
-    batch_size: int = 1,
-    n_samples: int = 10,
-    no_phase: bool = False,
-    padsize: Any = None,
-    alpha_val: str = 'abs',
-    phi_val: str = 'angle',
-    peaks: Any = None,
-    remove_interference: bool = True,
-    ignore_modes: list = (0, 1, 2, 4),
-    threshold: float = 0.05,
-    freq_strength_threshold: float = .01,
-    verbose: bool = True,
-    plot: Any = None,
-    desc: str = 'MiniBatch-probabilistic-predictions',
+        model: tf.keras.Model,
+        inputs: np.array,
+        psfgen: SyntheticPSF,
+        batch_size: int = 512,
+        n_samples: int = 1,
+        no_phase: bool = False,
+        padsize: Any = None,
+        alpha_val: str = 'abs',
+        phi_val: str = 'angle',
+        pois: Any = None,
+        remove_interference: bool = True,
+        ignore_modes: list = (0, 1, 2, 4),
+        threshold: float = 0.,
+        freq_strength_threshold: float = .01,
+        verbose: int = 1,
+        plot: Any = None,
+        desc: str = 'MiniBatch-probabilistic-predictions',
+        cpu_workers: int = 1
 ):
     """
     Average predictions and compute stdev
@@ -219,7 +455,7 @@ def bootstrap_predict(
         alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
         phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
         remove_interference: a toggle to normalize out the interference pattern from the OTF
-        peaks: masked array of the peaks of interest to compute the interference pattern
+        pois: masked array of the peaks of interest to compute the interference pattern
         threshold: set predictions below threshold to zero (wavelength)
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
         desc: test to display for the progressbar
@@ -240,33 +476,37 @@ def bootstrap_predict(
         emb = model.input_shape[1] == inputs.shape[1]
 
     if not emb:
-        logger.info(f"Generating embeddings")
-        generate_fourier_embeddings = partial(
-            psfgen.embedding,
+        model_inputs = fourier_embeddings(
+            inputs,
+            iotf=psfgen.iotf,
+            na_mask=psfgen.na_mask,
             plot=plot,
             padsize=padsize,
             no_phase=no_phase,
             alpha_val=alpha_val,
             phi_val=phi_val,
-            peaks=peaks,
+            pois=pois,
             remove_interference=remove_interference,
             embedding_option=psfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
-        )
-        model_inputs = utils.multiprocess(generate_fourier_embeddings, inputs, cores=-1)
-        model_inputs = np.stack(model_inputs, axis=0)
+        )  # (nx361, 6, 64, 64, 1) n=# of samples (e.g. # of image vols)
     else:
         # pass raw PSFs to the model
         model_inputs = inputs
 
+    logger.info(f"Checking for invalid inputs")
     model_inputs = np.nan_to_num(model_inputs, nan=0, posinf=0, neginf=0)
     model_inputs = model_inputs[..., np.newaxis] if model_inputs.shape[-1] != 1 else model_inputs
     features = np.array([np.count_nonzero(s) for s in inputs])
 
     logger.info(f"[BS={batch_size}, n={n_samples}] {desc}")
-    gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples)
-    preds = model.predict(gen, batch_size=batch_size, verbose=verbose)
-    preds[:, ignore_modes] = 0.
+    # batch_size is over number of samples (e.g. # of image vols)
+    gen = tf.data.Dataset.from_tensor_slices(model_inputs).batch(batch_size).repeat(n_samples)  # (None, 6, 64, 64, 1)
+    preds = model.predict(gen, verbose=verbose)
+
+    if preds.shape[1] > 1:
+        preds[:, ignore_modes] = 0.
+
     preds[np.abs(preds) <= threshold] = 0.
     preds = np.stack(np.split(preds, n_samples), axis=-1)
 
@@ -284,14 +524,18 @@ def bootstrap_predict(
 
 @profile
 def eval_rotation(
-    init_preds: np.ndarray,
-    rotations: np.ndarray,
-    psfgen: SyntheticPSF,
-    threshold: float = 0.01,
-    plot: Any = None,
+        init_preds: np.ndarray,
+        rotations: Union[int, np.ndarray],
+        psfgen: SyntheticPSF,
+        save_path: Path,
+        plot: Any = None,
+        threshold: float = 0.,
+        no_phase: bool = False,
+        confidence_threshold: float = .02,
+        minimum_fraction_of_kept_points: float = 0.45,
 ):
-    """
-        We can think of the mode and its twin as the X and Y basis, and the abberation being a
+    """  # order matters future thayer (predict_dataset)
+        We can think of the mode and its twin as the X and Y basis, and the aberration being a
         vector on this coordinate system. A problem occurs when the ground truth vector lies near
         where one of the vectors flips sign (and the model was trained to only respond with positive
         values for that vector).  Either a discontinuity or a degeneracy occurs in this area leading to
@@ -312,21 +556,11 @@ def eval_rotation(
             plot: optional toggle to visualize embeddings
     """
 
-    plt.style.use("default")
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
     def cart2pol(x, y):
-        """Convert cartesian (x, y) to polar (rho, phi)
+        """Convert cartesian (x, y) to polar (rho, phi_in_radians)
         """
         rho = np.sqrt(x ** 2 + y ** 2)
-        phi = np.arctan2(y, x)
+        phi = np.arctan2(y, x)  # Note role reversal: the "y-coordinate" is 1st parameter, the "x-coordinate" is 2nd.
         return (rho, phi)
 
     def pol2cart(rho, phi):
@@ -337,150 +571,209 @@ def eval_rotation(
         return (x, y)
 
     def linear_fit_fixed_slope(x, y, m):
-        return np.mean(y - m*x)
+        return np.mean(y - m * x)
 
     threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
+
+    if isinstance(rotations, int):
+        rotations = np.linspace(0, 360, rotations)
 
     preds = np.zeros(psfgen.n_modes)
     stdevs = np.zeros(psfgen.n_modes)
     wavefront = Wavefront(preds)
-
-    if plot is not None:
-        fig = plt.figure(figsize=(15, 20))
-        plt.subplots_adjust(hspace=0.1)
-        gs = fig.add_gridspec(len(wavefront.twins.keys()), 2)
+    results = []
 
     for row, (mode, twin) in enumerate(wavefront.twins.items()):
+        df = pd.DataFrame(rotations, columns=['angle'])
+        df['mode'] = mode.index_ansi
+        df['twin'] = mode.index_ansi if twin is None else twin.index_ansi
+
+        df['init_pred_mode'] = init_preds[:, mode.index_ansi]
+        df['init_pred_twin'] = init_preds[:, mode.index_ansi] if twin is None else init_preds[:, twin.index_ansi]
+
         if twin is not None:
-            magnitude, phiangle = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
+            # the Zernike modes have m periods per 2pi. xdata is now the Twin angle
+            rhos, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
 
-            if np.mean(magnitude) > threshold:
-                # the Zernike modes have m periods per 2pi. xdata is now the Twin angle
-                xdata = rotations * np.abs(mode.m)
-                rhos, ydata = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
-                ydata = np.degrees(ydata)
-                rho = rhos[np.argmin(np.abs(ydata))]
+            xdata = rotations * np.abs(mode.m)
+            df['twin_angle'] = xdata
 
-                # exclude points near discontinuities (-90, +90, 450,..) based upon fit
-                data_mask = np.ones(xdata.shape[0], dtype=bool)
-                data_mask[(init_preds[:, mode.index_ansi] < rho/5) * (rho > threshold)] = 0.
-                data_mask[rhos < rho/2] = 0.    # exclude if rho is unusually small (which can lead to small, but dominant primary mode near discontinuity)
-                xdata = xdata[data_mask]
-                ydata = ydata[data_mask]
-                offset = ydata[0]
-                ydata = np.unwrap(ydata, period=180)
-                ydata = ((ydata - offset - xdata) + 90) % 180 - 90 + offset + xdata
+            ydata = np.degrees(ydata) #% 180 # so now agnostic to direction
 
-                m = 1
-                b = linear_fit_fixed_slope(xdata, ydata, m)  # refit without bad data points
-                fit = m * xdata + b
+            rho = rhos[np.argmin(np.abs(ydata))]
+            std_rho = np.std(rhos).round(3)
+            df['rhos'] = rhos
 
-                mse = np.mean(np.square(fit-ydata))
-                if mse > 700:
-                    # reject if it doesn't show rotation that matches within +/- 26deg, equivalent to +/- 0.005 um on a 0.01 um mode.
-                    rho = 0
+            # if spatial model: exclude points near discontinuities (-90, +90, 450,..) based upon fit
+            data_mask = np.ones(xdata.shape[0], dtype=bool)
 
-                twin_angle = b   # evaluate the curve fit when there is no digital rotation.
-                preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(twin_angle))
-                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = np.std(rhos[data_mask]), np.std(rhos[data_mask])
+            if no_phase:
+                data_mask[
+                    np.abs(init_preds[:, mode.index_ansi] / rho) < np.cos(np.radians(70)) * (rho > threshold)
+                ] = 0.
 
-                if plot is not None:
-                    ax = fig.add_subplot(gs[row, 0])
-                    fit_ax = fig.add_subplot(gs[row, 1])
+            # exclude if rho is unusually small
+            # (which can lead to small, but dominant primary mode near discontinuity)
+            data_mask[rhos < np.mean(rhos) - np.std(rhos)] = 0.
+            df['valid_points'] = np.ones(xdata.shape[0], dtype=bool)  # data_mask
 
-                    ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
-                    ax.plot(rotations, init_preds[:, twin.index_ansi], ':', label=f"m{twin.index_ansi}")
+            xdata_masked = xdata[data_mask]
+            ydata_masked = ydata[data_mask]
+            offset = ydata_masked[0]
+            ydata_masked = np.unwrap(ydata_masked, period=180)
+            # put start between -90 and +90
+            ydata_masked = ((ydata_masked - offset - xdata_masked) + 90) % 180 - 90 + offset + xdata_masked
 
-                    ax.set_xlim(0, 360)
-                    ax.set_xticks(range(0, 405, 45))
-                    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                    ax.set_ylim(-np.max(rhos), np.max(rhos))
-                    ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
-                    ax.set_ylabel('Amplitude ($\mu$m RMS)')
-                    ax.set_xlabel('Digital rotation (deg)')
+            m = 1
+            b = linear_fit_fixed_slope(xdata_masked, ydata_masked, m)  # refit without bad data points
+            fit = m * xdata + b
+            fit_p180 = m * xdata + (b + 180)
 
-                    title_color = 'g' if rho > 0 else 'r'
-                    fit_ax.plot(xdata, m * xdata + b, color=title_color, lw='.75')
-                    fit_ax.scatter(xdata, ydata, s=2, color='grey')
-                    
-                    fit_ax.set_title(
-                        f'm{mode.index_ansi}={preds[mode.index_ansi]:.3f}, m{twin.index_ansi}={preds[twin.index_ansi]:.3f}'
-                        f' [$b$={twin_angle:.1f}$^\circ$  $\\rho$={rho:.3f} $\mu$RMS   MSE={mse:.0f}]',
-                        color=title_color
-                    )
+            number_of_wraps = (fit - ydata) // 180
+            below = ydata + (number_of_wraps * 180)
+            above = ydata + ((number_of_wraps+1) * 180)
+            ydata = above
+            below_is_better = np.abs(fit-below) < np.abs(fit-above)
+            ydata[below_is_better] = below[below_is_better]
 
-                    fit_ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                    fit_ax.set_ylabel('Predicted Twin angle (deg)')
-                    fit_ax.set_xlabel('Digitially rotated Twin angle (deg)')
-                    fit_ax.set_xticks(range(0, int(np.max(xdata)), 90))
-                    fit_ax.set_yticks(np.insert(np.arange(-90, np.max(ydata), 180), 0, 0))
-                    fit_ax.set_xlim(0, 360 * np.abs(mode.m))
-     
-                    ax.scatter(rotations[~data_mask], rhos[~data_mask], s=1.5, color='pink', zorder=3)
-                    ax.scatter(rotations[data_mask], rhos[data_mask], s=1.5, color='black', zorder=3)
+            junk, twin_angles = cart2pol(init_preds[:, mode.index_ansi], init_preds[:, twin.index_ansi])
+            twin_angles = np.degrees(twin_angles)
+            leave_sign_votes_for = np.abs(angle_diff(twin_angles, fit)) < np.abs(angle_diff(twin_angles, fit_p180))
+            leave_sign_votes_for = np.sum(leave_sign_votes_for[data_mask].astype(int))
+            leave_sign_votes_against = len(twin_angles[data_mask]) - leave_sign_votes_for
+
+            if leave_sign_votes_for > leave_sign_votes_against:
+                fitted_twin_angle_b = b  # evaluate the curve fit when there is no digital rotation.
+                df['swapped_sign'] = False
             else:
-                preds[mode.index_ansi] = 0
-                preds[twin.index_ansi] = 0
+                fitted_twin_angle_b = (b + 180) % 360  # evaluate the curve fit when there is no digital rotation.
+                df['swapped_sign'] = True
 
-                if plot is not None:
-                    ax = fig.add_subplot(gs[row, 0])
-                    ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}")
-                    ax.plot(rotations, init_preds[:, twin.index_ansi], ':', label=f"m{twin.index_ansi}")
+            df['pred_twin_angle'] = ydata
+            df['fitted_twin_angle'] = m * df['twin_angle'] + b
+            df['fitted_twin_angle_b'] = fitted_twin_angle_b
 
-                    ax.set_xlim(0, 360)
-                    ax.set_xticks(range(0, 405, 45))
-                    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                    ax.set_ylim(np.min(init_preds), np.max(init_preds))
-                    ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
-                    ax.set_ylabel('Amplitude ($\mu$ RMS)')
-                    ax.set_xlabel('Digital rotation (deg)')
+            squared_error = np.square(fit - ydata)
+            mse = np.mean(squared_error)
+            if mse > 700:
+                # reject if it doesn't show rotation that matches within +/- 26deg,
+                # equivalent to +/- 0.005 um on a 0.01 um mode.
+                rho = 0
+                confident = all(rhos < confidence_threshold) # either confident zero or unconfident
+            else:
+                rho = np.mean(rhos[squared_error < 700])
+                confident = rho / std_rho > 1 # is SNR above 1? # either confident-A or unconfident
 
-        else:
-            # mode has m=0 (spherical,...), or twin isn't within the 55 modes.
-            rho = np.median(init_preds[:, mode.index_ansi])
-            rho *= np.abs(rho) > threshold  # make sure it's above threshold, or else set to zero.
-            preds[mode.index_ansi] = rho
-            stdevs[mode.index_ansi] = np.std(init_preds[:, mode.index_ansi])
+            df['mse'] = mse
 
-            if plot is not None:
-                ax = fig.add_subplot(gs[row, 0])
-                ax.plot(rotations, init_preds[:, mode.index_ansi], label=f"m{mode.index_ansi}={rho:.3f}")
 
-                ax.set_xlim(0, 360)
-                ax.set_xticks(range(0, 405, 45))
-                ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-                ax.set_ylim(np.min(init_preds), np.max(init_preds))
-                ax.legend(frameon=False, ncol=2, loc='upper center', bbox_to_anchor=(.5, 1.15))
-                ax.set_ylabel('Amplitude ($\mu$ RMS)')
-                ax.set_xlabel('Digital rotation (deg)')
+            """
+                rho is already set to zero if `fraction_of_kept_points` and/or `mse` are bad
+                                    prediction  stdev
+                confident-A         p           s (small)
+                confident-Z         0           s (small)
+                unconfident         0           0
+            """
+
+            if np.allclose(rhos, rhos[0], atol=0.0001):  # blank image (unconfident)
+                preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
+                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
+                confident = 0.
+            elif confident and rho > 0:  # confident-A
+                preds[mode.index_ansi], preds[twin.index_ansi] = pol2cart(rho, np.radians(fitted_twin_angle_b))
+                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = std_rho, std_rho
+            elif confident and rho == 0:  # confident-Z
+                preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
+                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = std_rho, std_rho
+            else:  # unconfident
+                preds[mode.index_ansi], preds[twin.index_ansi] = 0., 0.
+                stdevs[mode.index_ansi], stdevs[twin.index_ansi] = 0., 0.
+
+        else:  # mode has m=0 (spherical,...), or twin isn't within the 55 modes.
+
+            rhos = init_preds[:, mode.index_ansi]
+            std_rho = np.std(rhos)
+
+            if np.allclose(rhos, rhos[0], atol=0.0001):  # blank image (unconfident)
+                preds[mode.index_ansi] = 0.
+                stdevs[mode.index_ansi] = 0.
+                rhos = np.zeros_like(rhos)
+                confident = 0.
+            else:
+                rho = np.median(rhos)
+                rho *= np.abs(rho) > threshold  # keep it if it's above threshold, or else set to zero.
+
+                if all(np.abs(rhos) < confidence_threshold):
+                    confident = 1
+                    rho = 0  # confident-Z
+                else:
+                    confident = np.abs(rho) / std_rho > 1  # is SNR above 1?
+
+                if confident and np.abs(rho) > 0:  # confident-A
+                    preds[mode.index_ansi] = rho
+                    stdevs[mode.index_ansi] = std_rho
+                elif confident and rho == 0:  # confident-Z
+                    preds[mode.index_ansi] = 0.
+                    stdevs[mode.index_ansi] = std_rho
+                else:  # unconfident
+                    preds[mode.index_ansi] = 0.
+                    stdevs[mode.index_ansi] = 0.
+
+            df['rhos'] = rhos
+            df['valid_points'] = 1
+            df['twin_angle'] = np.nan
+            df['pred_twin_angle'] = np.nan
+            df['fitted_twin_angle'] = np.nan
+            df['mse'] = np.nan
+
+
+        df['confident'] = confident
+        df['aggr_rho'] = rho
+        df['aggr_mode_amp'] = preds[mode.index_ansi]
+        df['aggr_twin_amp'] = np.nan if twin is None else preds[twin.index_ansi]
+        df['aggr_std_dev'] = std_rho
+        df['aggr_twin_std_dev'] = np.nan if twin is None else std_rho
+
+        results.append(df)
+
+    results = pd.concat(results, ignore_index=True)
+    try:
+        results.to_csv(Path(f'{save_path}_rotations.csv'))
+    except PermissionError:
+        logger.error(f'Permission denied: {save_path.resolve()}_rotations.csv')
 
     if plot is not None:
-        plt.tight_layout()
-        plt.savefig(f'{plot}_rotations.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        vis.plot_rotations(Path(f'{plot}_rotations.csv'))
 
     return preds, stdevs
 
 
+def angle_diff(a, b):
+    return np.degrees(np.arctan2(np.sin(np.radians(a - b)), np.cos(np.radians(a - b))))
+
+
 @profile
 def predict_rotation(
-    model: tf.keras.Model,
-    inputs: np.array,
-    psfgen: SyntheticPSF,
-    batch_size: int = 1,
-    n_samples: int = 1,
-    no_phase: bool = False,
-    padsize: Any = None,
-    alpha_val: str = 'abs',
-    phi_val: str = 'angle',
-    peaks: Any = None,
-    ignore_modes: list = (0, 1, 2, 4),
-    threshold: float = 0.05,
-    freq_strength_threshold: float = .01,
-    verbose: bool = True,
-    plot: Any = None,
-    remove_interference: bool = True,
-    desc: str = 'Predict-rotations',
-    rotations: np.ndarray = np.arange(0, 360+1, 1).astype(int)
+        model: tf.keras.Model,
+        inputs: np.ndarray,
+        psfgen: SyntheticPSF,
+        save_path: Path,
+        batch_size: int = 128,
+        no_phase: bool = False,
+        padsize: Any = None,
+        alpha_val: str = 'abs',
+        phi_val: str = 'angle',
+        pois: Any = None,
+        ignore_modes: list = (0, 1, 2, 4),
+        threshold: float = 0.,
+        freq_strength_threshold: float = .01,
+        plot: Any = None,
+        plot_rotations: Any = None,
+        remove_interference: bool = True,
+        desc: str = 'Predict-rotations',
+        confidence_threshold: float = .02,
+        digital_rotations: Optional[int] = 361,
+        cpu_workers: int = -1,
 ):
     """
     Predict the fraction of the amplitude to be assigned each pair of modes (ie. mode & twin).
@@ -489,14 +782,13 @@ def predict_rotation(
         model: pre-trained keras model. Model must be trained with XY embeddings only so that we can rotate them.
         inputs: encoded tokens to be processed. (e.g. input images)
         psfgen: Synthetic PSF object
-        n_samples: number of predictions of average
         batch_size: number of samples per batch
         no_phase: ignore/drop the phase component of the FFT
         padsize: pad the input to the desired size for the FFT
         alpha_val: use absolute values of the FFT `abs`, or the real portion `real`.
         phi_val: use the FFT phase in unwrapped radians `angle`, or the imaginary portion `imag`.
         remove_interference: a toggle to normalize out the interference pattern from the OTF
-        peaks: masked array of the peaks of interest to compute the interference pattern
+        pois: masked array of the peaks of interest to compute the interference pattern
         threshold: set predictions below threshold to zero (wavelength)
         freq_strength_threshold: threshold to filter out frequencies below given threshold (percentage to peak)
         threshold: set predictions below threshold to zero (wavelength)
@@ -504,60 +796,86 @@ def predict_rotation(
         desc: test to display for the progressbar
         plot: optional toggle to visualize embeddings
     """
-    generate_fourier_embeddings = partial(
-        psfgen.embedding,
-        plot=plot,
-        padsize=padsize,
-        no_phase=no_phase,
-        alpha_val=alpha_val,
-        phi_val=phi_val,
-        peaks=peaks,
-        remove_interference=remove_interference,
-        embedding_option=psfgen.embedding_option,
-        freq_strength_threshold=freq_strength_threshold,
-    )
-    embeddings = np.array(utils.multiprocess(generate_fourier_embeddings, inputs, cores=-1))
+    # check z-axis to compute embeddings for fourier models
+    if len(inputs.shape) == 3:
+        emb = model.input_shape[1] == inputs.shape[0]
+    else:
+        emb = model.input_shape[1] == inputs.shape[1]
 
-    rotated_embs = []
-    for emb in embeddings:
-        for angle in rotations:
-            rotated_embs.append(np.array([rotate(plane, angle=angle) for plane in emb]))
-    rotated_embs = np.array(rotated_embs)
+    if not emb:
+        inputs = fourier_embeddings(
+            inputs,
+            iotf=psfgen.iotf,
+            na_mask=psfgen.na_mask,
+            plot=plot,
+            padsize=padsize,
+            no_phase=no_phase,
+            alpha_val=alpha_val,
+            phi_val=phi_val,
+            pois=pois,
+            remove_interference=remove_interference,
+            embedding_option=psfgen.embedding_option,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations
+        )  # inputs.shape = (361 rotations, 6 embeddings, 64, 64, 1)
 
     init_preds, stdev = bootstrap_predict(
         model,
-        rotated_embs,
+        inputs,
         psfgen=psfgen,
         batch_size=batch_size,
-        n_samples=n_samples,
-        no_phase=True,
+        n_samples=1,
+        no_phase=no_phase,
         threshold=0.,
         ignore_modes=ignore_modes,
         plot=plot,
-        verbose=verbose,
-        desc=desc
+        desc=desc,
+        cpu_workers=cpu_workers
     )
 
     eval_mode_rotations = partial(
         eval_rotation,
-        rotations=rotations,
+        rotations=digital_rotations,
         psfgen=psfgen,
         threshold=threshold,
-        plot=plot,
+        plot=plot_rotations,
+        no_phase=no_phase,
+        confidence_threshold=confidence_threshold,
+        save_path=save_path,
     )
 
-    init_preds = np.stack(np.split(init_preds, inputs.shape[0]), axis=0)
-    jobs = np.array([list(zip(*j)) for j in utils.multiprocess(eval_mode_rotations, init_preds, cores=-1)])
-    preds, stdev = jobs[..., 0], jobs[..., -1]
-    return preds, stdev
+    init_preds = np.stack(np.split(init_preds, digital_rotations), axis=1)
+
+    if init_preds.shape[-1] > 1:
+
+        jobs = utils.multiprocess(
+            jobs=init_preds,
+            func=eval_mode_rotations,
+            cores=cpu_workers,
+            desc="Evaluate predictions"
+        )
+        jobs = np.array([list(zip(*j)) for j in jobs])
+        preds, stdev = jobs[..., 0], jobs[..., -1]
+
+        if init_preds.shape[-1] == psfgen.n_modes:
+            return preds, stdev
+        else:
+            lls_defocus = np.mean(init_preds[:, -1])
+            return preds, stdev, lls_defocus
+
+    else:
+        preds = np.zeros(psfgen.n_modes)
+        stdev = np.zeros(psfgen.n_modes)
+        lls_defocus = np.mean(init_preds)
+        return preds, stdev, lls_defocus
 
 
 @profile
 def predict_sign(
-    init_preds: np.ndarray,
-    followup_preds: np.ndarray,
-    sign_threshold: float = .99,
-    plot: Any = None,
+        init_preds: np.ndarray,
+        followup_preds: np.ndarray,
+        sign_threshold: float = .99,
+        plot: Any = None,
 ):
     def pct_change(cur, prev):
         cur = np.abs(cur)
@@ -565,7 +883,7 @@ def predict_sign(
 
         if np.array_equal(cur, prev):
             return np.zeros_like(prev)
-        pct = ((cur - prev) / (prev+1e-6)) * 100.0
+        pct = ((cur - prev) / (prev + 1e-6)) * 100.0
         pct[pct > 100] = 100
         pct[pct < -100] = -100
         return pct
@@ -618,7 +936,7 @@ def predict_sign(
             percent_changes_error = np.std(pchange, axis=0)
 
         plt.style.use("default")
-        vis.plot_sign_correction(
+        vis.sign_correction(
             init_preds_wave,
             init_preds_wave_error,
             followup_preds_wave,
@@ -631,7 +949,7 @@ def predict_sign(
         )
 
         plt.style.use("dark_background")
-        vis.plot_sign_correction(
+        vis.sign_correction(
             init_preds_wave,
             init_preds_wave_error,
             followup_preds_wave,
@@ -648,23 +966,22 @@ def predict_sign(
 
 @profile
 def dual_stage_prediction(
-    model: tf.keras.Model,
-    inputs: np.array,
-    gen: SyntheticPSF,
-    modelgen: SyntheticPSF,
-    plot: Any = None,
-    verbose: bool = False,
-    threshold: float = 0.,
-    freq_strength_threshold: float = .01,
-    sign_threshold: float = .9,
-    n_samples: int = 1,
-    batch_size: int = 1,
-    ignore_modes: list = (0, 1, 2, 4),
-    prev_pred: Any = None,
-    estimate_sign_with_decon: bool = False,
-    decon_iters: int = 5
+        model: tf.keras.Model,
+        inputs: np.array,
+        gen: SyntheticPSF,
+        modelgen: SyntheticPSF,
+        plot: Any = None,
+        verbose: bool = False,
+        threshold: float = 0.,
+        freq_strength_threshold: float = .01,
+        sign_threshold: float = .9,
+        n_samples: int = 1,
+        batch_size: int = 1,
+        ignore_modes: list = (0, 1, 2, 4),
+        prev_pred: Any = None,
+        estimate_sign_with_decon: bool = False,
+        decon_iters: int = 5
 ):
-
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -677,24 +994,29 @@ def dual_stage_prediction(
 
     prev_pred = None if (prev_pred is None or str(prev_pred) == 'None') else prev_pred
 
-    init_preds, stdev = predict_rotation(
+    res = predict_rotation(
         model,
         inputs,
         psfgen=modelgen,
-        n_samples=n_samples,
         no_phase=True,
         verbose=verbose,
         batch_size=batch_size,
         threshold=threshold,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
-        plot=plot
+        plot=plot,
+        plot_rotations=plot,
     )
+
+    try:
+        init_preds, stdev = res
+    except ValueError:
+        init_preds, stdev, lls_defocus = res
 
     if estimate_sign_with_decon:
         logger.info(f"Estimating signs w/ Decon")
         abrs = range(init_preds.shape[0]) if len(init_preds.shape) > 1 else range(1)
-        make_psf = partial(gen.single_psf, normed=True, noise=False)
+        make_psf = partial(gen.single_psf, normed=True)
         psfs = np.stack(gen.batch(
             make_psf,
             [Wavefront(init_preds[i], lam_detection=gen.lam_detection) for i in abrs]
@@ -708,11 +1030,10 @@ def dual_stage_prediction(
         else:
             followup_inputs = followup_inputs[..., np.newaxis]
 
-        followup_preds, stdev = predict_rotation(
+        res = predict_rotation(
             model,
             followup_inputs,
             psfgen=modelgen,
-            n_samples=n_samples,
             no_phase=True,
             verbose=False,
             batch_size=batch_size,
@@ -720,6 +1041,11 @@ def dual_stage_prediction(
             ignore_modes=ignore_modes,
             freq_strength_threshold=freq_strength_threshold,
         )
+
+        try:
+            followup_preds, stdev = res
+        except ValueError:
+            followup_preds, stdev, lls_defocus = res
 
         preds, pchanges = predict_sign(
             init_preds=init_preds,
@@ -748,884 +1074,230 @@ def dual_stage_prediction(
 
 
 @profile
-def evaluate(
-    model: tf.keras.Model,
-    inputs: np.array,
-    gen: SyntheticPSF,
-    ys: np.array,
-    psnr: int,
-    batch_size: int,
-    reference: Any = None,
-    plot: Any = None,
-    threshold: float = 0.01,
-    eval_sign: str = 'positive_only',
-):
-    if isinstance(inputs, tf.Tensor):
-        inputs = inputs.numpy()
-
-    if isinstance(ys, tf.Tensor):
-        ys = ys.numpy()
-
-    if len(ys.shape) == 1:
-        ys = ys[np.newaxis, :]
-
-    if eval_sign == 'positive_only':
-        ys = np.abs(ys)
-
-        preds, stdev = bootstrap_predict(
-            model,
-            inputs,
-            psfgen=gen,
-            batch_size=batch_size,
-            n_samples=1,
-            no_phase=True,
-            threshold=threshold,
-            plot=plot
-        )
-        if len(preds.shape) > 1:
-            preds = np.abs(preds)[:, :ys.shape[-1]]
-        else:
-            preds = np.abs(preds)[np.newaxis, :ys.shape[-1]]
-
-    elif eval_sign == 'dual_stage':
-
-        init_preds, stds = predict_rotation(
-            model=model,
-            inputs=inputs,
-            psfgen=gen,
-            no_phase=True,
-            batch_size=batch_size,
-            n_samples=1,
-            threshold=threshold,
-            plot=plot
-        )
-
-        if len(init_preds.shape) > 1:
-            init_preds = init_preds[:, :ys.shape[-1]]
-        else:
-            init_preds = init_preds[np.newaxis, :ys.shape[-1]]
-
-        threshold = utils.waves2microns(threshold, wavelength=gen.lam_detection)
-        ps = init_preds.copy()
-        ps[ps > .1] = .1
-        ps[ps < -.1] = -.1
-        res = ys - ps
-        followup_inputs = np.zeros_like(inputs)
-
-        if reference is not None:
-            for i in range(inputs.shape[0]):
-                wavefront = Wavefront(
-                    res[i],
-                    modes=gen.n_modes,
-                    rotate=False,
-                    lam_detection=gen.lam_detection,
-                )
-                psf = gen.single_psf(
-                    wavefront,
-                    normed=True,
-                    noise=False,
-                    meta=False
-                )
-
-                fi = utils.fftconvolution(kernel=psf, sample=reference)
-                fi *= psnr ** 2
-                rand_noise = gen._random_noise(image=fi, mean=0, sigma=gen.sigma_background_noise)
-                fi += rand_noise
-                fi /= np.max(fi)
-                followup_inputs[i] = fi[..., np.newaxis]
-
-        # plt.style.use("default")
-        # vis.plot_sign_eval(
-        #     inputs=inputs,
-        #     followup_inputs=followup_inputs,
-        #     savepath=f'{plot}_sign_eval'
-        # )
-        #
-        # plt.style.use("dark_background")
-        # vis.plot_sign_eval(
-        #     inputs=inputs,
-        #     followup_inputs=followup_inputs,
-        #     savepath=f'{plot}_sign_eval_db'
-        # )
-
-        followup_preds, stds = predict_rotation(
-            model=model,
-            inputs=followup_inputs,
-            psfgen=gen,
-            no_phase=True,
-            batch_size=batch_size,
-            n_samples=1,
-            threshold=threshold,
-            plot=f"{plot}_followup"
-        )
-
-        if len(followup_preds.shape) > 1:
-            followup_preds = followup_preds[:, :ys.shape[-1]]
-        else:
-            followup_preds = followup_preds[np.newaxis, :ys.shape[-1]]
-
-        preds, pchanges = predict_sign(
-            init_preds=init_preds,
-            followup_preds=followup_preds,
-            plot=plot
-        )
-
-    else:
-        preds, stdev = bootstrap_predict(
-            model,
-            inputs,
-            psfgen=gen,
-            batch_size=batch_size,
-            n_samples=1,
-            no_phase=False,
-            threshold=threshold,
-            plot=plot
-        )
-
-        if len(preds.shape) > 1:
-            preds = preds[:, :ys.shape[-1]]
-        else:
-            preds = preds[np.newaxis, :ys.shape[-1]]
-
-    residuals = ys - preds
-    return residuals, ys, preds
-
-
-def deconstruct(
-        model: Path,
+def predict_dataset(
+        model: Union[tf.keras.Model, Path],
+        inputs: tf.data.Dataset,
+        psfgen: SyntheticPSF,
+        save_path: list,
+        batch_size: int = 128,
+        ignore_modes: list = (0, 1, 2, 4),
+        threshold: float = 0.,
+        confidence_threshold: float = .02,
+        verbose: int = 1,
+        desc: str = 'MiniBatch-probabilistic-predictions',
+        digital_rotations: Optional[int] = None,
+        plot_rotations: Any = None,
+        pool: Optional[mp.Pool] = None,
         cpu_workers: int = -1,
-        x_voxel_size: float = .15,
-        y_voxel_size: float = .15,
-        z_voxel_size: float = .6,
-        wavelength: float = .605,
-        eval_distribution: str = 'powerlaw'
 ):
-    m = load(model)
-    m.summary()
+    """
+    Average predictions and compute stdev
 
-    modes = m.layers[-1].output_shape[-1]
-    input_shape = m.layers[0].input_shape[0][1:-1]
+    Args:
+        model: pre-trained keras model
+        inputs: encoded tokens to be processed
+        psfgen: Synthetic PSF object
+        ignore_modes: list of modes to ignore
+        batch_size: number of samples per batch
+        threshold: set predictions below threshold to zero (wavelength)
+        desc: test to display for the progressbar
+        verbose: a toggle for progress bar
+        digital_rotations: an array of digital rotations to apply to evaluate model's confidence
+        plot_rotations: optional toggle to plot digital rotations
 
-    for i in range(6):
-        psfargs = dict(
-            snr=100,
-            n_modes=modes,
-            distribution=eval_distribution,
-            lam_detection=wavelength,
-            amplitude_ranges=((.05*i), (.05*(i+1))),
-            psf_shape=3 * [input_shape[-1]],
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            batch_size=1,
-            cpu_workers=cpu_workers,
-        )
-        gen = SyntheticPSF(**psfargs)
-        psf, y, psnr, maxcounts = next(gen.generator(debug=True))
-        p, std = bootstrap_predict(m, psfgen=gen, inputs=psf, batch_size=1)
+    Returns:
+        average prediction, stdev
+    """
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
 
-        p = Wavefront(p, lam_detection=wavelength)
-        logger.info('Prediction')
-        pprint(p.zernikes)
+    if isinstance(model, Path):
+        model = load(model)
 
-        logger.info('GT')
-        y = Wavefront(y, lam_detection=wavelength)
-        pprint(y.zernikes)
+    no_phase = True if model.input_shape[1] == 3 else False
+    threshold = utils.waves2microns(threshold, wavelength=psfgen.lam_detection)
+    ignore_modes = list(map(int, ignore_modes))
+    logger.info(f"Ignoring modes: {ignore_modes}")
+    logger.info(desc)
 
-        diff = Wavefront(y - p, lam_detection=wavelength)
-        p_psf = gen.single_psf(p)
-        gt_psf = gen.single_psf(y)
-        corrected_psf = gen.single_psf(diff)
+    if digital_rotations is not None:
+        inputs = inputs.map(lambda x: tf.reshape(x, shape=(-1, *model.input_shape[1:]))).unbatch()
+        inputs = inputs.with_options(options).batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    else:
+        inputs = inputs.with_options(options).batch(batch_size).prefetch(tf.data.AUTOTUNE)
 
-        psf = np.squeeze(psf[0], axis=-1)
-        save_path = Path(f'{model}/deconstruct/{eval_distribution}/')
-        save_path.mkdir(exist_ok=True, parents=True)
+    preds = model.predict(inputs, verbose=verbose)
+    preds[:, ignore_modes] = 0.
+    preds[np.abs(preds) <= threshold] = 0.
 
-        vis.diagnostic_assessment(
-            psf=psf,
-            gt_psf=gt_psf,
-            predicted_psf=p_psf,
-            corrected_psf=corrected_psf,
-            psnr=psnr,
-            maxcounts=maxcounts,
-            y=y,
-            pred=p,
-            save_path=save_path / f'{i}',
-            display=False
-        )
+    if digital_rotations is not None:
+        with pool if pool is not None else mp.Pool(processes=cpu_workers if cpu_workers > 0 else mp.cpu_count()) as p:
+            preds = np.array(np.split(preds, len(save_path)))
+            jobs = list(tqdm(
+                p.starmap(
+                    eval_rotation,  # order matters future thayer
+                    zip(
+                        preds,                               # init_preds
+                        repeat(digital_rotations),                      # rotations
+                        repeat(psfgen),                                 # psfgen
+                        save_path,                                      # save_path
+                        save_path if plot_rotations else repeat(None),  # plot
+                        repeat(threshold),                              # threshold
+                        repeat(no_phase),                               # no_phase
+                        repeat(confidence_threshold),                   # confidence_threshold
+                    ),
+                ),
+                total=len(save_path),
+                desc="Evaluate predictions",
+                unit=' evals',
+                bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
+                file=sys.stdout,
+            ))
 
-        vis.plot_dmodes(
-            psf=psf,
-            gen=gen,
-            y=y,
-            pred=p,
-            save_path=save_path / f'{i}_dmodes',
-        )
+        jobs = np.array([list(zip(*j)) for j in jobs])
+        preds, std = jobs[..., 0], jobs[..., -1]
+        return preds, std
+
+    else:
+        return preds, np.zeros_like(preds)
 
 
-def save_metadata(
-    filepath: Path,
-    wavelength: float,
-    psf_type: str,
-    x_voxel_size: float,
-    y_voxel_size: float,
-    z_voxel_size: float,
-    n_modes: int,
-    embedding_option: str = 'principle_planes'
+@profile
+def predict_files(
+    paths: np.ndarray,
+    outdir: Path,
+    model: tf.keras.Model,
+    modelpsfgen: SyntheticPSF,
+    samplepsfgen: Optional[SyntheticPSF] = None,
+    dm_calibration: Optional[Union[Path, str]] = None,
+    dm_state: Optional[Union[Path, str, np.array]] = None,
+    wavelength: float = .510,
+    ignore_modes: list = (0, 1, 2, 4),
+    prediction_threshold: float = 0.,
+    freq_strength_threshold: float = .01,
+    confidence_threshold: float = .02,
+    batch_size: int = 1,
+    digital_rotations: Optional[int] = 361,
+    rolling_strides: Optional[tuple] = None,
+    fov_is_small: bool = True,
+    plot: bool = False,
+    plot_rotations: bool = False,
+    skip_prep_sample: bool = False,
+    preprocessed: bool = False,
+    remove_background: bool = True,
+    cpu_workers: int = -1,
+    template: Optional[pd.DataFrame] = None,
+    pool: Optional[mp.Pool] = None,
+    min_psnr: int = 5,
+    object_gaussian_kernel_width: float = 0
 ):
-    def add_param(h5file, name, data):
-        try:
-            if name not in h5file.keys():
-                h5file.create_dataset(name, data=data)
-            else:
-                del h5file[name]
-                h5file.create_dataset(name, data=data)
 
-            if isinstance(data, str):
-                assert h5file.get(name).asstr()[()] == data, f"Failed to write {name}"
-            else:
-                assert np.allclose(h5file.get(name)[()], data), f"Failed to write {name}"
+    if preprocessed:
+        inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
+        inputs = inputs.map(
+            lambda x: tf.py_function(
+                load_sample,
+                inp=[x],
+                Tout=tf.float32,
+            ),
+            num_parallel_calls=tf.data.AUTOTUNE,
+            deterministic=True,
+        )
+    else:
+        generate_fourier_embeddings = partial(
+            preprocess,
+            modelpsfgen=modelpsfgen,
+            samplepsfgen=samplepsfgen,
+            freq_strength_threshold=freq_strength_threshold,
+            digital_rotations=digital_rotations,
+            plot=plot,
+            no_phase=True if model.input_shape[1] == 3 else False,
+            remove_background=remove_background,
+            normalize=True,
+            fov_is_small=fov_is_small,
+            rolling_strides=rolling_strides,
+            skip_prep_sample=skip_prep_sample,
+            min_psnr=min_psnr,
+            object_gaussian_kernel_width=object_gaussian_kernel_width
+        )
 
-            logger.info(f"`{name}`: {h5file.get(name)[()]}")
+        # inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
+        #
+        # inputs = inputs.map(
+        #     lambda x: tf.py_function(
+        #         generate_fourier_embeddings,
+        #         inp=[x],
+        #         Tout=tf.float32,
+        #     ),
+        #     num_parallel_calls=tf.data.AUTOTUNE,
+        #     deterministic=True,
+        # )
 
-        except Exception as e:
-            logger.error(e)
+        inputs = tf.data.Dataset.from_generator(
+            DatasetGenerator(paths=paths, load_preprocess_func=generate_fourier_embeddings),
+            output_types=(tf.float32),
+            output_shapes=(digital_rotations, *model.input_shape[1:])
+        )
 
-    file = filepath if str(filepath).endswith('.h5') else list(filepath.rglob('*.h5'))[0]
-    with h5py.File(file, 'r+') as file:
-        add_param(file, name='n_modes', data=n_modes)
-        add_param(file, name='wavelength', data=wavelength)
-        add_param(file, name='x_voxel_size', data=x_voxel_size)
-        add_param(file, name='y_voxel_size', data=y_voxel_size)
-        add_param(file, name='z_voxel_size', data=z_voxel_size)
-        add_param(file, name='embedding_option', data=embedding_option)
+    num_predictions = paths.shape[0] * digital_rotations if digital_rotations else paths.shape[0]
 
-        if isinstance(psf_type, str) or isinstance(psf_type, Path):
-            with h5py.File(psf_type, 'r+') as f:
-                add_param(file, name='psf_type', data=f.get('DitheredxzPSFCrossSection')[:, 0])
+    desc = ' '.join([
+        f"[{paths.shape[0]} ROIs] x [{digital_rotations} Rotations] =",
+        f"{num_predictions} predictions,",
+        f"requires {int(np.ceil(num_predictions / batch_size))} inference batches ({batch_size=}).",
+        # f"emb={6 * 64 * 64 * batch_size * digital_rotations if digital_rotations else 1 * 32 / 8 / 1e6:.2f} MB/batch.",
+    ])
 
-
-def kernels(modelpath: Path, activation='relu'):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'axes.autolimit_mode': 'round_numbers'
-    })
-
-    def factorization(n):
-        """Calculates kernel grid dimensions."""
-        for i in range(int(np.sqrt(float(n))), 0, -1):
-            if n % i == 0:
-                return i, n // i
-
-    logger.info(f"Model: {modelpath}")
-    model = load(modelpath)
-    layers = [layer for layer in model.layers if str(layer.name).startswith('conv')]
-
-    if isinstance(activation, str):
-        activation = tf.keras.layers.Activation(activation)
-
-    logger.info("Plotting learned kernels")
-    for i, layer in enumerate(layers):
-        fig, ax = plt.subplots(figsize=(8, 11))
-        grid, biases = layer.get_weights()
-        logger.info(f"Layer [{layer.name}]: {layer.output_shape}, {grid.shape}")
-
-        grid = activation(grid)
-        grid = np.squeeze(grid, axis=0)
-
-        with tf.name_scope(layer.name):
-            low, high = tf.reduce_min(grid), tf.reduce_max(grid)
-            grid = (grid - low) / (high - low)
-            grid = tf.pad(grid, ((1, 1), (1, 1), (0, 0), (0, 0)))
-
-            r, c, chan_in, chan_out = grid.shape
-            grid_r, grid_c = factorization(chan_out)
-
-            grid = tf.transpose(grid, (3, 0, 1, 2))
-            grid = tf.reshape(grid, tf.stack([grid_c, r * grid_r, c, chan_in]))
-            grid = tf.transpose(grid, (0, 2, 1, 3))
-            grid = tf.reshape(grid, tf.stack([1, c * grid_c, r * grid_r, chan_in]))
-            grid = tf.transpose(grid, (0, 2, 1, 3))
-
-            while grid.shape[3] > 4:
-                a, b = tf.split(grid, 2, axis=3)
-                grid = tf.concat([a, b], axis=0)
-
-            _, a, b, channels = grid.shape
-            if channels == 2:
-                grid = tf.concat([grid, tf.zeros((1, a, b, 1))], axis=3)
-
-        img = grid[-1, :, :, 0]
-        ax.imshow(img)
-        ax.set_aspect('equal')
-        ax.axis('off')
-
-        plt.savefig(f'{modelpath}/kernels_{layer.name}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-
-def featuremaps(
-        modelpath: Path,
-        amplitude_range: float,
-        wavelength: float,
-        psf_type: str,
-        x_voxel_size: float,
-        y_voxel_size: float,
-        z_voxel_size: float,
-        cpu_workers: int,
-        psnr: int,
-):
-    plt.rcParams.update({
-        'font.size': 25,
-        'axes.titlesize': 30,
-        'xtick.labelsize': 20,
-        'ytick.labelsize': 20,
-        'legend.fontsize': 20,
-    })
-
-    logger.info(f"Models: {modelpath}")
-    model = load(modelpath)
-
-    input_shape = model.layers[1].output_shape[1:-1]
-    modes = model.layers[-1].output_shape[-1]
-    model = Model(
-        inputs=model.input,
-        outputs=[layer.output for layer in model.layers],
-    )
-    phi = np.zeros(modes)
-    phi[10] = amplitude_range
-    amplitude_range = Wavefront(phi, lam_detection=wavelength)
-
-    psfargs = dict(
-        n_modes=modes,
-        psf_type=psf_type,
-        psf_shape=3 * [input_shape[1]],
-        distribution='single',
-        lam_detection=wavelength,
-        amplitude_ranges=amplitude_range,
-        x_voxel_size=x_voxel_size,
-        y_voxel_size=y_voxel_size,
-        z_voxel_size=z_voxel_size,
-        batch_size=1,
-        snr=psnr,
+    preds, std = predict_dataset(
+        model,
+        inputs=inputs,
+        psfgen=modelpsfgen,
+        batch_size=batch_size,
+        ignore_modes=ignore_modes,
+        threshold=prediction_threshold,
+        save_path=[f.with_suffix('') for f in paths],
+        plot_rotations=plot_rotations,
+        digital_rotations=digital_rotations,
+        confidence_threshold=confidence_threshold,
+        desc=desc,
         cpu_workers=cpu_workers,
+        pool=None,  # let the "eval_tiles" pool spawn just before predict is called
     )
-    gen = SyntheticPSF(**psfargs)
 
-    if input_shape[0] == 3 or input_shape[0] == 6:
-        inputs = gen.single_otf(
-            amplitude_range,
-            normed=True,
-            noise=True,
-            na_mask=True,
-            ratio=True,
-        )
+    if template is not None:
+        tile_names = [f.stem for f in paths]
+        predictions = pd.DataFrame(np.zeros((preds.shape[1], template.shape[1])), columns=template.columns)
+        predictions[tile_names] = preds.T
+
+        stdevs = pd.DataFrame(np.zeros((std.shape[1], template.shape[1])), columns=template.columns)
+        stdevs[tile_names] = std.T
+
     else:
-        inputs = gen.single_psf(amplitude_range, normed=True, noise=True)
-
-    inputs = np.expand_dims(np.stack(inputs, axis=0), 0)
-    inputs = np.expand_dims(np.stack(inputs, axis=0), -1)
-
-    layers = [layer.name for layer in model.layers[1:25]]
-    maps = model.predict(inputs)[1:25]
-    nrows = sum([1 for fmap in maps if len(fmap.shape[1:]) >= 3])
-
-    fig = plt.figure(figsize=(150, 600))
-    gs = fig.add_gridspec((nrows * input_shape[0]) + 1, 8)
-
-    i = 0
-    logger.info('Plotting featuremaps...')
-    for name, fmap in zip(layers, maps):
-        logger.info(f"Layer {name}: {fmap.shape}")
-        fmap = fmap[0]
-
-        if fmap.ndim < 2:
-            continue
-
-        if layers[0] == 'patchify':
-            patches = fmap.shape[-2]
-            features = fmap.shape[-1]
-            fmap_size = patches // int(np.sqrt(maps[0].shape[-2]))
-            fmap = np.reshape(fmap, (fmap.shape[0], fmap_size, fmap_size, features))
-
-        if len(fmap.shape) == 4:
-            if input_shape[0] == 3 or input_shape[0] == 6:
-
-                i += 1
-                features = fmap.shape[-1]
-                window = fmap.shape[1], fmap.shape[2]
-                grid = np.zeros((window[0] * input_shape[0], window[1] * features))
-
-                for j in range(input_shape[0]):
-                    for f in range(features):
-                        vol = fmap[j, :, :, f]
-                        grid[
-                            j * window[0]:(j + 1) * window[0],
-                            f * window[1]:(f + 1) * window[1]
-                        ] = vol
-
-                space = grid.flatten()
-                vmin = np.nanquantile(space, .02)
-                vmax = np.nanquantile(space, .98)
-                vcenter = (vmin + vmax)/2
-                step = .01
-
-                highcmap = plt.get_cmap('YlOrRd', 256)
-                lowcmap = plt.get_cmap('terrain', 256)
-                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-                cmap = mcolors.ListedColormap(cmap)
-
-                ax = fig.add_subplot(gs[i, :])
-                ax.set_title(f"{name.upper()} {fmap.shape}")
-                m = ax.imshow(grid, cmap=cmap, vmin=vmin, vmax=vmax)
-                ax.set_aspect('equal')
-                ax.axis('off')
-
-                cax = inset_axes(ax, width="1%", height="100%", loc='center right', borderpad=-3)
-                cb = plt.colorbar(m, cax=cax)
-                cax.yaxis.set_label_position("right")
-            else:
-                for j in range(3):
-                    i += 1
-                    features = fmap.shape[-1]
-                    if j == 0:
-                        window = fmap.shape[1], fmap.shape[2]
-                    elif j == 1:
-                        window = fmap.shape[0], fmap.shape[2]
-                    else:
-                        window = fmap.shape[0], fmap.shape[1]
-
-                    grid = np.zeros((window[0], window[1] * features))
-
-                    for f in range(features):
-                        vol = np.max(fmap[:, :, :, f], axis=j)
-                        grid[:, f * window[1]:(f + 1) * window[1]] = vol
-
-                    ax = fig.add_subplot(gs[i, :])
-
-                    if j == 0:
-                        ax.set_title(f"{name.upper()} {fmap.shape}")
-
-                    ax.imshow(grid, cmap='hot', vmin=0, vmax=1)
-                    ax.set_aspect('equal')
-                    ax.axis('off')
-        else:
-            i += 1
-            features = fmap.shape[-1]
-            window = fmap.shape[0], fmap.shape[1]
-            grid = np.zeros((window[0], window[1] * features))
-
-            for f in range(features):
-                vol = fmap[:, :, f]
-                # vol = (vol - vol.min()) / (vol.max() - vol.min())
-                grid[:, f * window[1]:(f + 1) * window[1]] = vol
-
-            # from tifffile import imsave
-            # imsave(f'{modelpath}/{name.upper()}_{i}.tif', grid)
-
-            ax = fig.add_subplot(gs[i, :])
-            ax.set_title(f"{name.upper()} {fmap.shape}")
-            m = ax.imshow(grid, cmap='Spectral_r')
-            ax.set_aspect('equal')
-            ax.axis('off')
-
-            cax = inset_axes(ax, width="1%", height="100%", loc='center right', borderpad=-3)
-            cb = plt.colorbar(m, cax=cax)
-            cax.yaxis.set_label_position("right")
-
-    plt.subplots_adjust(top=0.95, right=0.95, wspace=.2)
-    plt.savefig(f'{modelpath}/featuremaps.pdf', bbox_inches='tight', pad_inches=.25)
-    return fig
-
-
-def train(
-        dataset: Path,
-        outdir: Path,
-        network: str,
-        distribution: str,
-        embedding: str,
-        samplelimit: int,
-        max_amplitude: float,
-        input_shape: int,
-        batch_size: int,
-        patch_size: list,
-        steps_per_epoch: int,
-        depth_scalar: int,
-        width_scalar: int,
-        activation: str,
-        fixedlr: bool,
-        opt: str,
-        lr: float,
-        wd: float,
-        warmup: int,
-        decay_period: int,
-        wavelength: float,
-        psf_type: str,
-        x_voxel_size: float,
-        y_voxel_size: float,
-        z_voxel_size: float,
-        modes: int,
-        pmodes: int,
-        min_psnr: int,
-        max_psnr: int,
-        epochs: int,
-        mul: bool,
-        roi: Any = None,
-        refractive_index: float = 1.33,
-        no_phase: bool = False,
-        plot_patches: bool = False
-):
-    network = network.lower()
-    opt = opt.lower()
-    restored = False
-
-    if isinstance(psf_type, str) or isinstance(psf_type, Path):
-        with h5py.File(psf_type, 'r') as file:
-            psf_type = file.get('DitheredxzPSFCrossSection')[:, 0]
-
-    if network == 'opticalnet':
-        model = opticalnet.OpticalTransformer(
-            name='OpticalNet',
-            roi=roi,
-            patches=patch_size,
-            modes=pmodes,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            activation=activation,
-            mul=mul,
-            no_phase=no_phase
-        )
-
-    elif network == 'opticaltransformer':
-        model = opticaltransformer.OpticalTransformer(
-            name='OpticalTransformer',
-            roi=roi,
-            patches=patch_size,
-            modes=pmodes,
-            na_det=1.0,
-            refractive_index=refractive_index,
-            psf_type=psf_type,
-            lambda_det=wavelength,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            mask_shape=input_shape,
-            activation=activation,
-            mul=mul,
-            no_phase=no_phase
-        )
-    elif network == 'opticalresnet':
-        model = opticalresnet.OpticalResNet(
-            name='OpticalResNet',
-            modes=pmodes,
-            na_det=1.0,
-            refractive_index=refractive_index,
-            lambda_det=wavelength,
-            psf_type=psf_type,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            mask_shape=input_shape,
-            activation=activation,
-            mul=mul,
-            no_phase=no_phase
-        )
-    elif network == 'baseline':
-        model = baseline.Baseline(
-            name='Baseline',
-            modes=pmodes,
-            depth_scalar=depth_scalar,
-            width_scalar=width_scalar,
-            activation=activation,
-        )
-    elif network == 'otfnet':
-        model = otfnet.OTFNet(
-            name='OTFNet',
-            modes=pmodes
-        )
-    elif network == 'phasenet':
-        model = PhaseNet(
-            name='PhaseNet',
-            modes=pmodes
-        )
-    else:
-        model = load(Path(network))
-        checkpoint = tf.train.Checkpoint(model)
-        status = checkpoint.restore(network)
-
-        if status:
-            logger.info(f"Restored from {network}")
-            restored = True
-        else:
-            logger.info("Initializing from scratch")
-
-    if network == 'phasenet':
-        inputs = (input_shape, input_shape, input_shape, 1)
-        lr = .0003
-        opt = Adam(learning_rate=lr)
-        loss = 'mse'
-    else:
-        if network == 'baseline':
-            inputs = (input_shape, input_shape, input_shape, 1)
-        else:
-            inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
-
-        loss = tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM)
-
-        """
-            Adam: A Method for Stochastic Optimization: httpsz://arxiv.org/pdf/1412.6980
-            SGDR: Stochastic Gradient Descent with Warm Restarts: https://arxiv.org/pdf/1608.03983
-            Decoupled weight decay regularization: https://arxiv.org/pdf/1711.05101 
-        """
-        if opt.lower() == 'adam':
-            opt = Adam(learning_rate=lr)
-        elif opt == 'sgd':
-            opt = SGD(learning_rate=lr, momentum=0.9)
-        elif opt.lower() == 'adamw':
-            opt = AdamW(learning_rate=lr, weight_decay=wd)
-        elif opt == 'sgdw':
-            opt = SGDW(learning_rate=lr, weight_decay=wd, momentum=0.9)
-        else:
-            raise ValueError(f'Unknown optimizer `{opt}`')
-
-    if not restored:
-        model = model.build(input_shape=inputs)
-        model.compile(
-            optimizer=opt,
-            loss=loss,
-            metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
-        )
-
-    outdir = outdir / f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}"
-    outdir.mkdir(exist_ok=True, parents=True)
-    logger.info(model.summary())
-
-    tblogger = CSVLogger(
-        f"{outdir}/logbook.csv",
-        append=True,
-    )
-
-    pb_checkpoints = ModelCheckpoint(
-        filepath=f"{outdir}",
-        monitor="loss",
-        save_best_only=True,
-        verbose=1,
-    )
-
-    h5_checkpoints = ModelCheckpoint(
-        filepath=f"{outdir}.h5",
-        monitor="loss",
-        save_best_only=True,
-        verbose=1,
-    )
-
-    earlystopping = EarlyStopping(
-        monitor='loss',
-        min_delta=0,
-        patience=50,
-        verbose=1,
-        mode='auto',
-        restore_best_weights=True
-    )
-
-    defibrillator = Defibrillator(
-        monitor='loss',
-        patience=20,
-        verbose=1,
-    )
-
-    features = LambdaCallback(
-        on_epoch_end=lambda epoch, logs: featuremaps(
-            modelpath=outdir,
-            amplitude_range=.3,
-            wavelength=wavelength,
-            psf_type=psf_type,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            cpu_workers=-1,
-            psnr=100,
-        ) if epoch % 50 == 0 else epoch
-    )
-
-    tensorboard = TensorBoardCallback(
-        log_dir=outdir,
-        histogram_freq=1,
-        profile_batch=100000000
-    )
-
-    if fixedlr:
-        lrscheduler = LearningRateScheduler(
-            initial_learning_rate=lr,
-            verbose=0,
-            fixed=True
-        )
-    else:
-        lrscheduler = LearningRateScheduler(
-            initial_learning_rate=lr,
-            weight_decay=wd,
-            decay_period=epochs if decay_period is None else decay_period,
-            warmup_epochs=0 if warmup is None else warmup,
-            alpha=.01,
-            decay_multiplier=2.,
-            decay=.9,
-            verbose=1,
-        )
-
-    if dataset is None:
-
-        config = dict(
-            psf_type=psf_type,
-            psf_shape=inputs,
-            snr=(min_psnr, max_psnr),
-            n_modes=modes,
-            distribution=distribution,
-            embedding_option=embedding,
-            amplitude_ranges=(-max_amplitude, max_amplitude),
-            lam_detection=wavelength,
-            batch_size=batch_size,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            cpu_workers=-1
-        )
-
-        train_data = data_utils.create_dataset(config)
-        training_steps = steps_per_epoch
-    else:
-        train_data = data_utils.collect_dataset(
-            dataset,
-            modes=modes,
-            distribution=distribution,
-            embedding=embedding,
-            samplelimit=samplelimit,
-            max_amplitude=max_amplitude,
-            no_phase=no_phase,
-            snr_range=(min_psnr, max_psnr)
-        )
-
-        sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
-        with sample_writer.as_default():
-            for s in range(10):
-                fig = None
-                for i, (img, y) in enumerate(train_data.shuffle(1000).take(5)):
-                    img = np.squeeze(img, axis=-1)
-
-                    if fig is None:
-                        fig, axes = plt.subplots(5, img.shape[0], figsize=(8, 8))
-
-                    for k in range(img.shape[0]):
-                        if k > 2:
-                            mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=-.5, vmax=.5)
-                        else:
-                            malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
-
-                        axes[i, k].axis('off')
-
-                    if img.shape[0] > 3:
-                        cax = inset_axes(axes[i, 0], width="10%", height="100%", loc='center left', borderpad=-3)
-                        cb = plt.colorbar(malpha, cax=cax)
-                        cax.yaxis.set_label_position("left")
-
-                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                        cb = plt.colorbar(mphi, cax=cax)
-                        cax.yaxis.set_label_position("right")
-
-                    else:
-                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                        cb = plt.colorbar(malpha, cax=cax)
-                        cax.yaxis.set_label_position("right")
-
-                tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
-
-        def configure_for_performance(ds):
-            ds = ds.cache()
-            ds = ds.shuffle(batch_size)
-            ds = ds.batch(batch_size)
-            ds = ds.prefetch(buffer_size=tf.data.AUTOTUNE)
-            return ds
-
-        train_data = configure_for_performance(train_data)
-        training_steps = tf.data.experimental.cardinality(train_data).numpy()
-
-    for img, y in train_data.shuffle(buffer_size=100).take(1):
-        logger.info(f"Batch size: {batch_size}")
-        logger.info(f"Training steps: [{training_steps}] {img.numpy().shape}")
-
-        if plot_patches:
-            for k, label in enumerate(['xy', 'xz', 'yz']):
-                img = np.expand_dims(img[0], axis=0)
-                original = np.squeeze(img[0, k])
-
-                vmin = np.min(original)
-                vmax = np.max(original)
-                vcenter = (vmin + vmax) / 2
-                step = .01
-
-                highcmap = plt.get_cmap('YlOrRd', 256)
-                lowcmap = plt.get_cmap('YlGnBu_r', 256)
-                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-                cmap = mcolors.ListedColormap(cmap)
-
-                plt.figure(figsize=(4, 4))
-                plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
-                plt.axis("off")
-                plt.title('Original')
-                plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-                for p in patch_size:
-                    patches = opticalnet.Patchify(patch_size=p)(img)
-                    merged = opticalnet.Merge(patch_size=p)(patches)
-
-                    patches = patches[0, k]
-                    merged = np.squeeze(merged[0, k])
-
-                    plt.figure(figsize=(4, 4))
-                    plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
-                    plt.axis("off")
-                    plt.title('Merged')
-                    plt.savefig(f'{outdir}/{label}_merged.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-                    n = int(np.sqrt(patches.shape[0]))
-                    plt.figure(figsize=(4, 4))
-                    plt.title('Patches')
-                    for i, patch in enumerate(patches):
-                        ax = plt.subplot(n, n, i + 1)
-                        patch_img = tf.reshape(patch, (p, p)).numpy()
-                        ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
-                        ax.axis("off")
-
-                    plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-    try:
-        model.fit(
-            train_data,
-            steps_per_epoch=training_steps,
-            epochs=epochs,
-            verbose=2,
-            shuffle=True,
-            callbacks=[
-                tblogger,
-                tensorboard,
-                pb_checkpoints,
-                h5_checkpoints,
-                earlystopping,
-                defibrillator,
-                lrscheduler,
-            ],
-        )
-    except tf.errors.ResourceExhaustedError as e:
-        logger.error(e)
-        sys.exit(1)
+        tile_names = [f.stem for f in paths]
+        predictions = pd.DataFrame(preds.T, columns=tile_names)
+        stdevs = pd.DataFrame(std.T, columns=tile_names)
+
+    if dm_calibration is not None:
+        zernikies_to_actuators = partial(utils.zernikies_to_actuators, dm_calibration=dm_calibration, dm_state=dm_state)
+        actuators = predictions.apply(lambda x: zernikies_to_actuators(x), axis=0)
+
+        actuators.index.name = 'actuators'
+        actuators.to_csv(f"{outdir}_predictions_corrected_actuators.csv")
+
+    predictions['mean'] = predictions[tile_names].mean(axis=1)
+    predictions['median'] = predictions[tile_names].median(axis=1)
+    predictions['min'] = predictions[tile_names].min(axis=1)
+    predictions['max'] = predictions[tile_names].max(axis=1)
+    predictions['std'] = predictions[tile_names].std(axis=1)
+    predictions.index.name = 'ansi'
+    predictions.to_csv(f"{outdir}_predictions.csv")
+
+    stdevs['mean'] = stdevs[tile_names].mean(axis=1)
+    stdevs['median'] = stdevs[tile_names].median(axis=1)
+    stdevs['min'] = stdevs[tile_names].min(axis=1)
+    stdevs['max'] = stdevs[tile_names].max(axis=1)
+    stdevs['std'] = stdevs[tile_names].std(axis=1)
+    stdevs.index.name = 'ansi'
+    stdevs.to_csv(f"{outdir}_stdevs.csv")
+
+    return predictions, stdevs

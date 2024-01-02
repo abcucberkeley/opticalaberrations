@@ -1,9 +1,6 @@
 #!/bin/bash
 
 echo "Starting sbatch script at: `date`"
-echo "Host:            ${SLURMD_NODENAME}"
-echo "Assigned nodes:  ${SLURM_JOB_NODELIST}"
-echo "Job ID:          ${SLURM_JOBID}"
 echo "Profiler:        ${PROFILER}"
 echo "Env:             ${PYTHON}"
 echo "Script:          ${SCRIPT}"

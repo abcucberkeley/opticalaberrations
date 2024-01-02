@@ -4,6 +4,7 @@ import logging
 import tensorflow as tf
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.callbacks import TensorBoard
+from tensorflow.keras.optimizers.schedules import LearningRateSchedule
 from tensorflow.keras import backend
 
 logging.basicConfig(
@@ -35,10 +36,25 @@ class TensorBoardCallback(TensorBoard):
         return logs
 
 
+class LRLogger(Callback):
+    def __init__(self):
+        super(LRLogger, self).__init__()
+
+    def on_epoch_begin(self, epoch, logs=None):
+        attrs = vars(self.model.optimizer)
+
+        lr_schedule = getattr(self.model.optimizer, 'learning_rate', 0.)
+        if isinstance(lr_schedule, LearningRateSchedule):
+            lr_schedule = lr_schedule(self.model.optimizer.iterations)
+
+        logger.info(lr_schedule)
+        # logger.info('\n'.join("%s: %s" % item for item in attrs.items()))
+
+
 class Defibrillator(Callback):
     def __init__(
         self,
-        monitor: str = 'val_loss',
+        monitor: str = 'loss',
         mode: str = 'auto',
         min_delta: int = 0,
         patience: int = 0,

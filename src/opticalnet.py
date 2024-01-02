@@ -2,10 +2,12 @@ import logging
 import sys
 from abc import ABC
 
+
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
 from tensorflow.keras import layers
+
 from base import Base
 from roi import ROI
 
@@ -53,18 +55,23 @@ class Stem(layers.Layer):
         return config
 
     def call(self, inputs, training=True, **kwargs):
-        alpha = self.conv(inputs[:, :3])
-        alpha = self.act(alpha)
 
-        if self.no_phase:
-            return alpha
+        if self.mul:
+            emb = layers.multiply([inputs[:, :3], inputs[:, 3:]])
+            emb = self.conv(emb)
+            emb = self.act(emb)
+            return emb
         else:
-            phi = self.conv(inputs[:, 3:])
-            phi = self.act(phi)
+            if self.no_phase:
+                alpha = self.conv(inputs[:, :3])
+                alpha = self.act(alpha)
+                return alpha
+            else:  # two independent kernels for alpha and phi
+                alpha = self.conv(inputs[:, :3])
+                alpha = self.act(alpha)
 
-            if self.mul:
-                return layers.multiply([alpha, phi])
-            else:
+                phi = self.conv(inputs[:, 3:])
+                phi = self.act(phi)
                 return layers.concatenate([alpha, phi], axis=1)
 
 
@@ -85,12 +92,12 @@ class Patchify(layers.Layer):
         return config
 
     def call(self, inputs, training=True, **kwargs):
-        patches = tf.extract_volume_patches(
-            inputs,
-            ksizes=(1, 1, self.patch_size, self.patch_size, 1),
-            strides=(1, 1, self.patch_size, self.patch_size, 1),
-            padding="VALID",
-        )
+        planes = []
+        for ax in range(inputs.shape[1]):
+            i = tf.nn.space_to_depth(inputs[:, ax], self.patch_size)
+            planes.append(i)
+        patches = tf.stack(planes, axis=1)
+
         patches = self.ln(patches)
         patches = layers.Reshape((inputs.shape[1], -1, patches.shape[-1]))(patches)
         return patches
@@ -132,9 +139,12 @@ class PatchEncoder(layers.Layer):
         super().__init__(**kwargs)
         self.num_patches = num_patches
         self.embedding_size = embedding_size
+
         self.project = layers.Dense(self.embedding_size)
-        self.embedding = layers.Embedding(
-            input_dim=self.num_patches, output_dim=self.embedding_size
+        self.radial_embedding = layers.Dense(self.embedding_size)
+        self.positional_embedding = layers.Embedding(
+            input_dim=self.num_patches,
+            output_dim=self.embedding_size
         )
 
     def build(self, input_shape):
@@ -148,17 +158,85 @@ class PatchEncoder(layers.Layer):
         })
         return config
 
-    def _positional_embedding(self, inputs):
+    def _calc_radius(self):
+        grid_size = int(np.sqrt(self.num_patches))
+        d = np.linspace(-1+1/grid_size, 1-1/grid_size, grid_size, dtype=np.float32)
+        ygrid, xgrid = np.meshgrid(d, d, indexing='ij')
+        r = np.sqrt(ygrid.flatten()**2 + xgrid.flatten()**2)
+        theta = np.arctan2(ygrid.flatten(), xgrid.flatten())
+        return r.astype(np.float32), theta.astype(np.float32)
+
+    def _positional_encoding(self, inputs):
         pos = tf.range(start=0, limit=self.num_patches, delta=1)
 
         emb = []
         for i in range(inputs.shape[1]):
-            emb.append(self.embedding(pos))
+            emb.append(self.positional_embedding(pos))
 
         return tf.stack(emb, axis=0)
 
-    def call(self, inputs, training=True, **kwargs):
-        return self.project(inputs) + self._positional_embedding(inputs)
+    def _radial_positional_encoding(
+        self,
+        inputs,
+        periods: int = 1,
+        zernike_nth_order: int = 4,
+        scheme: str = 'rotational_symmetry'
+    ):
+        r, theta = self._calc_radius()
+        r = tf.constant(r, dtype=tf.float32)
+        theta = tf.constant(theta, dtype=tf.float32)
+
+        if scheme == 'fourier_decomposition':
+            encodings = [r]
+            for p in range(1, periods+1):
+                encodings.append(tf.sin(p * r))
+                encodings.append(tf.cos(p * r))
+                encodings.append(tf.sin(p * theta))
+                encodings.append(tf.cos(p * theta))
+
+        elif scheme == 'power_decomposition':
+            encodings = []
+            for n in range(1, zernike_nth_order+1):
+                encodings.append(tf.pow(r, n))
+
+            for p in range(1, periods+1):
+                encodings.append(tf.sin(p * theta))
+                encodings.append(tf.cos(p * theta))
+
+        else:
+            encodings = [r]
+            for p in range(1, periods+1):
+                encodings.append(tf.sin(p * theta))
+                encodings.append(tf.cos(p * theta))
+
+        pos = tf.stack(encodings, axis=-1)
+
+        emb = []
+        for i in range(inputs.shape[1]):
+            emb.append(self.radial_embedding(pos))
+
+        return tf.stack(emb, axis=0)
+
+    def call(
+        self,
+        inputs,
+        training=True,
+        radial_encoding=False,
+        periods=1,
+        zernike_nth_order=4,
+        scheme='rotational_symmetry',
+        **kwargs
+    ):
+
+        if radial_encoding:
+            return self.project(inputs) + self._radial_positional_encoding(
+                inputs,
+                periods=periods,
+                scheme=scheme,
+                zernike_nth_order=zernike_nth_order,
+            )
+        else:
+            return self.project(inputs) + self._positional_encoding(inputs)
 
 
 class MLP(layers.Layer):
@@ -177,8 +255,9 @@ class MLP(layers.Layer):
     def build(self, input_shape):
         super(MLP, self).build(input_shape)
         self.expand = layers.Dense(int(self.expand_rate * input_shape[-1]), activation=self.activation)
-        self.proj = layers.Dense(input_shape[-1], activation=self.activation)
-        self.dropout = layers.Dropout(self.dropout_rate)
+        self.proj = layers.Dense(input_shape[-1])
+        self.dropout1 = layers.Dropout(self.dropout_rate)
+        self.dropout2 = layers.Dropout(self.dropout_rate)
 
     def get_config(self):
         config = super(MLP, self).get_config()
@@ -191,9 +270,9 @@ class MLP(layers.Layer):
 
     def call(self, inputs, training=True, **kwargs):
         x = self.expand(inputs)
-        x = self.dropout(x)
+        x = self.dropout1(x)
         x = self.proj(x)
-        x = self.dropout(x)
+        x = self.dropout2(x)
         return x
 
 
@@ -204,6 +283,7 @@ class Transformer(layers.Layer):
         dims,
         activation,
         dropout_rate,
+        expand_rate=4,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -211,16 +291,17 @@ class Transformer(layers.Layer):
         self.dims = dims
         self.activation = activation
         self.dropout_rate = dropout_rate
+        self.expand_rate = expand_rate
 
         self.drop_path = tfa.layers.StochasticDepth(survival_probability=1-dropout_rate)
         self.ln = layers.LayerNormalization(axis=-1, epsilon=1e-6)
-        self.mha = layers.MultiHeadAttention(
+        self.msa = layers.MultiHeadAttention(
             num_heads=self.heads,
             key_dim=self.dims,
             dropout=self.dropout_rate
         )
         self.mlp = MLP(
-            expand_rate=4,
+            expand_rate=self.expand_rate,
             dropout_rate=self.dropout_rate,
             activation=self.activation
         )
@@ -234,14 +315,16 @@ class Transformer(layers.Layer):
             "heads": self.heads,
             "dims": self.dims,
             "dropout_rate": self.dropout_rate,
+            "expand_rate": self.expand_rate,
             "activation": self.activation,
         })
         return config
 
     def call(self, inputs, training=True, **kwargs):
+
         ln1 = self.ln(inputs)
-        att = self.mha(ln1, ln1)
-        s1 = self.drop_path([att, inputs])
+        att = self.msa(ln1, ln1)
+        s1 = self.drop_path([inputs, att])
 
         ln2 = self.ln(s1)
         s2 = self.mlp(ln2)
@@ -258,14 +341,21 @@ class OpticalTransformer(Base, ABC):
             depth_scalar=1.0,
             width_scalar=1.0,
             activation='gelu',
-            dropout_rate=0.05,
+            dropout_rate=0.1,
+            expand_rate=4,
             rho=.05,
             mul=False,
             no_phase=False,
+            radial_encoding_period=1,
+            positional_encoding_scheme='default',
+            radial_encoding_nth_order=4,
+            fixed_dropout_depth=False,
+            stem=False,
             **kwargs
     ):
         super().__init__(**kwargs)
         self.roi = roi
+        self.stem = stem
         self.patches = patches
         self.heads = heads
         self.repeats = repeats
@@ -273,60 +363,21 @@ class OpticalTransformer(Base, ABC):
         self.width_scalar = width_scalar
         self.activation = activation
         self.dropout_rate = dropout_rate
+        self.expand_rate = expand_rate
         self.avg = layers.GlobalAvgPool2D()
         self.rho = rho
         self.mul = mul
         self.no_phase = no_phase
+        self.radial_encoding_period = radial_encoding_period
+        self.positional_encoding_scheme = positional_encoding_scheme
+        self.radial_encoding_nth_order = radial_encoding_nth_order
+        self.fixed_dropout_depth = fixed_dropout_depth
 
     def _calc_channels(self, channels, width_scalar):
         return int(tf.math.ceil(width_scalar * channels))
 
     def _calc_repeats(self, repeats, depth_scalar):
         return int(tf.math.ceil(depth_scalar * repeats))
-
-    def sharpness_aware_minimization(self, data, rho=0.05, eps=1e-12):
-        """
-            Sharpness-Aware-Minimization (SAM): https://openreview.net/pdf?id=6Tm1mposlrM
-            https://github.com/Jannoshh/simple-sam
-        """
-        if len(data) == 3:
-            x, y, sample_weight = data
-        else:
-            sample_weight = None
-            x, y = data
-
-        with tf.GradientTape() as tape:
-            y_pred = self(x, training=True)
-            loss = self.compiled_loss(y, y_pred, sample_weight=sample_weight, regularization_losses=self.losses)
-
-        # Compute gradients
-        trainable_vars = self.trainable_variables
-        gradients = tape.gradient(loss, trainable_vars)
-
-        # first step
-        e_ws = []
-        grad_norm = tf.linalg.global_norm(gradients)
-        ew_multiplier = rho / (grad_norm + eps)
-        for i in range(len(trainable_vars)):
-            e_w = tf.math.multiply(gradients[i], ew_multiplier)
-            trainable_vars[i].assign_add(e_w)
-            e_ws.append(e_w)
-
-        with tf.GradientTape() as tape:
-            y_pred = self(x, training=True)
-            loss = self.compiled_loss(y, y_pred, sample_weight=sample_weight, regularization_losses=self.losses)
-
-        trainable_vars = self.trainable_variables
-        gradients = tape.gradient(loss, trainable_vars)
-
-        for i in range(len(trainable_vars)):
-            trainable_vars[i].assign_sub(e_ws[i])
-        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
-        self.compiled_metrics.update_state(y, y_pred, sample_weight=sample_weight)
-        return {m.name: m.result() for m in self.metrics}
-
-    def train_step(self, data):
-        return self.sharpness_aware_minimization(data)
 
     def transitional_block(self, inputs, img_shape, patch_size, expansion=1, org_patch_size=None):
         if org_patch_size is not None:
@@ -335,18 +386,27 @@ class OpticalTransformer(Base, ABC):
         m = Patchify(patch_size=patch_size)(inputs)
         m = PatchEncoder(
             num_patches=(img_shape//patch_size) ** 2,
-            embedding_size=self._calc_channels(m.shape[-1], width_scalar=self.width_scalar),
-        )(m)
+            embedding_size=self._calc_channels(patch_size**2, width_scalar=self.width_scalar),
+        )(
+            m,
+            radial_encoding=True if self.positional_encoding_scheme != 'default' else False,
+            periods=self.radial_encoding_period,
+            scheme=self.positional_encoding_scheme,
+            zernike_nth_order=self.radial_encoding_nth_order
+        )
         return m
 
     def call(self, inputs, training=True, **kwargs):
 
-        m = Stem(
-            kernel_size=7,
-            activation=self.activation,
-            no_phase=self.no_phase,
-            mul=self.mul,
-        )(inputs)
+        if self.stem:
+            m = Stem(
+                kernel_size=7,
+                activation=self.activation,
+                no_phase=self.no_phase,
+                mul=self.mul,
+            )(inputs)
+        else:
+            m = inputs
 
         if self.roi is not None:
             m = ROI(crop_shape=self.roi)(m)
@@ -366,6 +426,7 @@ class OpticalTransformer(Base, ABC):
                     dims=64,
                     activation=self.activation,
                     dropout_rate=self.dropout_rate/(i+1),
+                    expand_rate=self.expand_rate,
                 )(m)
             m = layers.add([res, m])
 

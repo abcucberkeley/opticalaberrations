@@ -4,5 +4,9 @@
 			"path": "."
 		}
 	],
-	"settings": {}
+	"settings": {
+		"github-actions.workflows.pinned.workflows": [
+			".github/workflows/docker_action.yml"
+		]
+	}
 }

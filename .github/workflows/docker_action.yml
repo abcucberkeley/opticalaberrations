@@ -1,0 +1,270 @@
+# docker_action.yml
+name: Docker-ubuntu-build
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'develop'
+      - 'releases/**'
+      - 'latest-tf'
+    tags:
+      - '*'
+  pull_request:
+    branches:
+      - 'main'
+      - 'develop'
+      - 'releases/**'
+
+# only allow one copy of this workflow to run at a time (the group specified by workflow name)
+# cancel current workflows if they are running, so that we just run the latest queue'd.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}  
+  DO_SIGNING: ${{ false }}
+  BRANCH: ${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'  
+
+jobs:
+  cleanup-job:
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/catthehacker/ubuntu:act-22.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 'Cleanup build folder'
+        run: |
+          ls -la ./
+          rm -rf ./* || true
+          rm -rf ./.??* || true
+          ls -la ./
+
+  build-docker:      
+    needs: cleanup-job
+    if: always()
+    name: docker_image_build
+    runs-on: self-hosted
+    # container:
+    #   image: docker:git
+    #   options: --user 1000
+    steps:
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+      - name: Dump job context
+        env:
+          JOB_CONTEXT: ${{ toJson(job) }}
+        run: echo "$JOB_CONTEXT"
+      - name: Dump steps context
+        env:
+          STEPS_CONTEXT: ${{ toJson(steps) }}
+        run: echo "$STEPS_CONTEXT"
+      - name: Dump runner context
+        env:
+          RUNNER_CONTEXT: ${{ toJson(runner) }}
+        run: echo "$RUNNER_CONTEXT"
+
+      - name: Show default environment variables
+        run: |
+          echo "The job_id is: $GITHUB_JOB"   # reference the default environment variables
+          echo "The id of this action is: $GITHUB_ACTION"   # reference the default environment variables
+          echo "The run id is: $GITHUB_RUN_ID"
+          echo "The GitHub Actor's username is: $GITHUB_ACTOR"
+          echo "GitHub SHA: $GITHUB_SHA"
+          
+      # - name: 'Cleanup build folder'
+      #   run: |
+      #     ls -la ./
+      #     rm -rf ./* || true
+      #     rm -rf ./.??* || true
+      #     ls -la ./
+
+      # The repo gets volume mapped into the container automatically in test-docker
+      - name: Checkout whole repo  
+        uses: actions/checkout@v4
+        with:
+          lfs: 'true'
+          submodules: 'recursive'
+
+      - name: List files in the repository
+        run: |
+          ls -lhXR ${{ github.workspace }}
+
+      - name: Set file permissions in the repository
+        run: |
+          chmod -R 777 ${{ github.workspace }}
+          ls -lhXR ${{ github.workspace }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker 
+
+      # Login against a Docker registry except on PR
+      # https://github.com/docker/login-action
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}    # aka ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Extract metadata (tags, labels) for Docker
+      # https://github.com/docker/metadata-action
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          labels: |
+            org.opencontainers.image.title=OpticalNet_ubuntu
+            org.opencontainers.image.description=Docker image for a transformer network to perform sensorless detection of aberrations in adaptive optics. https://github.com/abcucberkeley/opticalaberrations
+            org.opencontainers.image.vendor=Advanced Bioimaging Center at UC Berkeley and Janelia Research Campus
+
+      - name: Build and push Docker image
+        id: build-and-push
+        uses: docker/build-push-action@v5        
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BRANCH_NAME=${{ env.BRANCH }}    
+        
+  build-apptainer:
+    needs: build-docker
+    runs-on: self-hosted
+    steps:
+      - name: List files in the directory
+        run: |
+            ls -lhXR
+
+      # Login against a Docker registry except on PR
+      # https://github.com/docker/login-action
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}    # aka ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+                
+      - name: Pull latest docker
+        run: |
+            docker pull ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+
+      - name: Build Apptainer from local docker image we just pulled to a local .sif
+        run: |
+            apptainer build --nv --force ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+
+      - name: Login and Push Apptainer SIF to github
+        run: |
+            ls *.si*         
+            apptainer remote login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io       
+            apptainer push ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif  
+            
+      # singularity push container.sif oras://ghcr.io/abcucberkeley/opticalaberrations:develop_sif
+      # singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
+
+  test-apptainer:
+    needs: build-apptainer # need to wait for test-docker to finish otherwise GPU will be utilized.
+    runs-on: self-hosted
+    env: 
+      APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif
+      APPTAINER_PYTEST: apptainer exec --nv ${{ github.head_ref || github.ref_name }}.sif python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider ${{ github.workspace }}
+    steps:
+          
+      - name: pip list 
+        run: ${{ env.APPTAINER_RUN }} pip list
+
+      - name: Test NVIDIA-SMI
+        run:  ${{ env.APPTAINER_RUN }} nvidia-smi
+              
+      - name: Test TensorFlow
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_tensorflow.py
+
+      - name: Test Cupy
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_cupy.py
+
+      - name: Test IO
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_io.py
+
+      - name: Test preprocessing
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_preprocessing.py
+
+      - name: Test embeddings
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_embeddings.py
+
+      - name: Test synthetic datasets
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_datasets.py
+
+      - name: Test AO  # requires test data generated by previous step: Test synthetic datasets
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_ao.py
+          
+      - name: Test training
+        run: ${{ env.APPTAINER_PYTEST }}/tests/test_train.py
+        
+  test-docker:
+    needs: [build-docker, test-apptainer]
+    if: always()
+    runs-on: self-hosted
+    container: 
+      image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # pull image 'latest-tf' or 'develop' that we just built
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      ports:
+        - 80
+      options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: investigate 
+        run: |
+          pwd
+          id
+          id -u
+          ls -lhXR
+          
+      - name: pip list 
+        run: pip list
+
+      - name: Test NVIDIA-SMI
+        run:  nvidia-smi
+              
+      - name: Test TensorFlow
+        run: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider tests/test_tensorflow.py
+
+      - name: Test Cupy
+        run: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider tests/test_cupy.py
+
+      - name: Test IO
+        run: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider tests/test_io.py
+
+      - name: Test preprocessing
+        run: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider tests/test_preprocessing.py
+
+      - name: Test embeddings
+        run: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider tests/test_embeddings.py
+
+      - name: Test synthetic datasets
+        run: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider tests/test_datasets.py
+
+      - name: Test AO  # requires test data generated by previous step: Test synthetic datasets
+        run: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider tests/test_ao.py
+          
+      - name: Test training        
+        run: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider tests/test_train.py
+ 

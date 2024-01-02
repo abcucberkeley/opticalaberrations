@@ -7,7 +7,7 @@ All rights reserved.
 import logging
 import sys
 from functools import lru_cache
-
+from cachetools import cached, LRUCache, keys
 import numpy as np
 from scipy.special import binom
 
@@ -43,7 +43,16 @@ def nm_normalization(n, m):
     return np.sqrt((1. + (m == 0)) / (2. * n + 2))
 
 
-def nm_polynomial(n, m, rho, theta, normed=True):
+def customhashkey(*args, rho=np.array([]), theta=np.array([]), **kwargs):
+    key = keys.hashkey(*args, **kwargs)  # hash the hashable arguments.
+    key += tuple(theta.shape)
+    midpoint = np.array(rho.shape) // 2
+    key += (rho[tuple(midpoint + 1)], rho[tuple(midpoint)])
+    return key
+
+
+@cached(LRUCache(maxsize=128), key=customhashkey)
+def nm_polynomial(n, m, rho=np.array([]), theta=np.array([]), normed=True):
     """returns the zernike polyonimal by classical n,m enumeration
 
     if normed=True, then they form an orthonormal system
@@ -96,7 +105,7 @@ def nm_polynomial(n, m, rho, theta, normed=True):
         return prefac * radial * np.sin(m0 * theta)
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=1)
 def rho_theta(size):
     r = np.linspace(-1, 1, size)
     X, Y = np.meshgrid(r, r, indexing='ij')
@@ -105,10 +114,10 @@ def rho_theta(size):
     return rho, theta
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=1)
 def outside_mask(size):
     rho, theta = rho_theta(size)
-    return nm_polynomial(0, 0, rho, theta, normed=False) < 1
+    return nm_polynomial(n=0, m=0, rho=rho, theta=theta, normed=False) < 1
 
 
 class Zernike:
@@ -127,9 +136,9 @@ class Zernike:
         super().__setattr__('_mutable', True)
 
         if isinstance(index, (list, tuple)) and len(index) == 2:
-            self.n, self.m = int(index[0]), int(index[1])
+            n, m = int(index[0]), int(index[1])
 
-            if (self.n, self.m) not in self._nm_pairs:
+            if (n, m) not in self._nm_pairs:
                 raise ValueError(
                     "Your input for index is list/tuple : Could not identify the n,m order of Zernike polynomial"
                 )
@@ -147,7 +156,7 @@ class Zernike:
                         "Your input for index is int and input for Zernike nomenclature is "
                         "Noll: Could not identify the Zernike polynomial with this index"
                     )
-                self.n, self.m = self._noll_to_nm[index]
+                n, m = self._noll_to_nm[index]
 
             elif order == 'ansi':
                 if index not in self._ansi_to_nm:
@@ -155,14 +164,16 @@ class Zernike:
                         "Your input for index is int and input for Zernike nomenclature is "
                         "ANSI: Could not identify the Zernike polynomial with this index"
                     )
-                self.n, self.m = self._ansi_to_nm[index]
+                n, m = self._ansi_to_nm[index]
         else:
             logging.error(ValueError("Could not identify your index input, we accept strings, lists and tuples only"))
 
-        self.index_noll = nm_to_noll(self.n, self.m)
-        self.index_ansi = nm_to_ansi(self.n, self.m)
+        self.n, self.m = n, m
+        self.index_noll = nm_to_noll(n, m)
+        self.index_ansi = nm_to_ansi(n, m)
         self._mutable = False
 
+    @lru_cache(maxsize=55)
     def polynomial(self, size, normed=True, outside=np.nan):
         """
             For visualization of Zernike polynomial on a disc of unit radius
@@ -195,10 +206,10 @@ class Zernike:
         np.isscalar(normed) or logging.error(ValueError())
         outside is None or np.isscalar(outside) or logging.error(
             ValueError("Only scalar constant value for outside is accepted"))
-        w = nm_polynomial(self.n, self.m, rho, theta, normed=bool(normed))
+        w = nm_polynomial(n=self.n, m=self.m, rho=rho, theta=theta, normed=bool(normed))
 
         if outside is not None:
-            w[nm_polynomial(0, 0, rho, theta, normed=False) < 1] = outside
+            w[nm_polynomial(n=0, m=0, rho=rho, theta=theta, normed=False) < 1] = outside
         return w
 
     def __hash__(self):

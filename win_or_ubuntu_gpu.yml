@@ -1,0 +1,41 @@
+name: ml
+channels:
+  - conda-forge
+  - defaults
+
+# versions for python, tensorflow-gpu, and 
+# dask-cuda are pinned to version present in 
+# the NVIDIA container (nvcr.io/nvidia/tensorflow:22.12-tf2-py3)
+# and some are present in Dockerfile.
+
+# tifffile and imagecodecs had bug in later version,
+# and needed to be pinned
+dependencies:
+  - python=3.10 
+  - cryptography
+  - dask-cuda=22.12
+  - matplotlib 
+  - astropy 
+  - seaborn 
+  - numpy
+  - scipy
+  - scikit-image 
+  - scikit-learn
+  - scikit-spatial 
+  - tensorflow-gpu=2.10
+  - pandas
+  - ipython
+  - pytest
+  - ujson
+  - zarr
+  - pycudadecon
+  - pip
+  - pip:
+      - tensorflow_addons
+      - dphtools
+      - csbdeep
+      - cupy-cuda11x
+      - line-profiler
+      - line-profiler-pycharm
+      - tifffile==2023.9.18
+      - imagecodecs==2023.9.18 

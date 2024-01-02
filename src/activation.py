@@ -24,8 +24,8 @@ class MaskedActivation(layers.Layer):
         na_det=1.0,
         psf_type='widefield',
         lambda_det=.510,
-        x_voxel_size=.108,
-        y_voxel_size=.108,
+        x_voxel_size=.097,
+        y_voxel_size=.097,
         z_voxel_size=.2,
         refractive_index=1.33,
         **kwargs
@@ -70,10 +70,9 @@ class MaskedActivation(layers.Layer):
             x_voxel_size=self.x_voxel_size,
             y_voxel_size=self.y_voxel_size,
             z_voxel_size=self.z_voxel_size,
-            snr=1000,
         )
 
-        mask = psfgen.na_mask()
+        mask = psfgen.na_mask
 
         if planes == 3:
             mask = np.stack([
