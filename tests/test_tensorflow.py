@@ -13,6 +13,10 @@ import pytest
 
 @pytest.mark.run(order=1)
 def test_tensorflow(kargs):
+
+    logging.info(f'TensorFlow version = {tf.version.VERSION}')
+    print(f'\n\nTensorFlow version = {tf.version.VERSION}\n')
+
     physical_devices = tf.config.list_physical_devices('GPU')
 
     strategy = tf.distribute.MirroredStrategy(
