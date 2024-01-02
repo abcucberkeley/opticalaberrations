@@ -1,16 +1,12 @@
+# import pip
+# pip.main(['install', 'onnx'])
+# pip.main(['install', 'tf2onnx'])
+# pip.main(['install', 'onnxruntime-gpu'])
+
+
 import logging
-import sys
-import time
 from pathlib import Path
-import tensorflow as tf
 import cli
-
-
-logging.basicConfig(
-    stream=sys.stdout,
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
 
 
 def parse_args(args):
@@ -40,11 +36,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--x_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
+        "--x_voxel_size", default=.125, type=float, help='lateral voxel size in microns for X'
     )
 
     parser.add_argument(
-        "--y_voxel_size", default=.097, type=float, help='lateral voxel size in microns for Y'
+        "--y_voxel_size", default=.125, type=float, help='lateral voxel size in microns for Y'
     )
 
     parser.add_argument(
@@ -64,20 +60,25 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--modelformat", default='trt', help="type of the desired model"
+        "--modelformat", default='tftrt', help="type of the desired model"
+    )
+
+    parser.add_argument(
+        '--skip_remove_background', action='store_true',
+        help='optional toggle to skip preprocessing input data using the DoG filter'
+    )
+
+    parser.add_argument(
+        '--use_theoretical_widefield_simulator', action='store_true',
+        help='optional toggle to calculate 3D PSF without amplitude attenuation (cosine factor)'
     )
 
     return parser.parse_args(args)
 
 
 def main(args=None):
-    timeit = time.time()
     args = parse_args(args)
     logging.info(args)
-
-    physical_devices = tf.config.list_physical_devices('GPU')
-    for gpu_instance in physical_devices:
-        tf.config.experimental.set_memory_growth(gpu_instance, True)
 
     if args.target == "metadata":
 
@@ -90,8 +91,11 @@ def main(args=None):
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
             z_voxel_size=args.z_voxel_size,
-            embedding_option=args.embedding_option
+            embedding_option=args.embedding_option,
+            skip_remove_background=args.skip_remove_background,
+            use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator
         )
+
     elif args.target == "optimize":
 
         import convert
@@ -99,10 +103,9 @@ def main(args=None):
             model_path=args.model,
             modelformat=args.modelformat
         )
-    else:
-        print("Error: unknown action!")
 
-    print(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+    else:
+        logging.error("Error: unknown action!")
 
 
 if __name__ == "__main__":
