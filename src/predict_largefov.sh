@@ -4,7 +4,7 @@ cd $PWD
 datadir=$1
 env=~/anaconda3/envs/ml/bin/python
 calibration="../calibration/aang/15_mode_calibration.csv"
-model="../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5"
+model="../pretrained_models/opticalnet-15-YuMB-lambda510.h5"
 current_dm="None"
 script="ao.py"
 

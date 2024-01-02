@@ -477,7 +477,7 @@ def eval_dataset(
 
         if not model.exists():
             filename = str(model).split('\\')[-1]
-            model = Path(f"../pretrained_models/lattice_yumb_x108um_y108um_z200um/{filename}")
+            model = Path(f"../pretrained_models/{filename}")
 
         pool = mp.Pool(processes=mp.cpu_count())
         MLresultsdir = Path(datadir / 'MLResults')
@@ -647,7 +647,7 @@ def eval_ao_dataset(
 
         if not model.exists():
             filename = str(model).split('\\')[-1]
-            model = Path(f"../pretrained_models/lattice_yumb_x108um_y108um_z200um/{filename}")
+            model = Path(f"../pretrained_models/{filename}")
 
         logger.info(model)
 
@@ -801,7 +801,7 @@ def plot_dataset_mips(datadir: Path):
 
         if not model.exists():
             filename = str(model).split('\\')[-1]
-            model = Path(f"../pretrained_models/lattice_yumb_x108um_y108um_z200um/{filename}")
+            model = Path(f"../pretrained_models/{filename}")
 
         logger.info(model)
 

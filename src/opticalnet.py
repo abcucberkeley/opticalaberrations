@@ -5,8 +5,8 @@ from abc import ABC
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_addons as tfa
 from tensorflow.keras import layers
+from scipy.special import binom
 
 from base import Base
 from roi import ROI
@@ -54,7 +54,7 @@ class Stem(layers.Layer):
         })
         return config
 
-    def call(self, inputs, training=True, **kwargs):
+    def call(self, inputs, **kwargs):
 
         if self.mul:
             emb = layers.multiply([inputs[:, :3], inputs[:, 3:]])
@@ -79,7 +79,7 @@ class Patchify(layers.Layer):
     def __init__(self, patch_size, **kwargs):
         super().__init__(**kwargs)
         self.patch_size = patch_size
-        self.ln = layers.LayerNormalization(axis=-1, epsilon=1e-6)
+        self.prenorm = layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
     def build(self, input_shape):
         super(Patchify, self).build(input_shape)
@@ -91,14 +91,14 @@ class Patchify(layers.Layer):
         })
         return config
 
-    def call(self, inputs, training=True, **kwargs):
+    def call(self, inputs, **kwargs):
         planes = []
         for ax in range(inputs.shape[1]):
             i = tf.nn.space_to_depth(inputs[:, ax], self.patch_size)
             planes.append(i)
         patches = tf.stack(planes, axis=1)
 
-        patches = self.ln(patches)
+        patches = self.prenorm(patches)
         patches = layers.Reshape((inputs.shape[1], -1, patches.shape[-1]))(patches)
         return patches
 
@@ -120,7 +120,7 @@ class Merge(layers.Layer):
         })
         return config
 
-    def call(self, inputs, training=True, **kwargs):
+    def call(self, inputs, **kwargs):
         planes = []
         d, n, p = inputs.shape[1], inputs.shape[-2], inputs.shape[-1]//self.expansion
         s = int(np.sqrt(n))
@@ -135,14 +135,25 @@ class Merge(layers.Layer):
 
 
 class PatchEncoder(layers.Layer):
-    def __init__(self, num_patches, embedding_size, **kwargs):
+    def __init__(
+            self,
+            num_patches,
+            embedding_size,
+            positional_encoding_scheme='default',
+            radial_encoding_periods=1,
+            radial_encoding_nth_order=4,
+            **kwargs
+    ):
         super().__init__(**kwargs)
         self.num_patches = num_patches
         self.embedding_size = embedding_size
+        self.positional_encoding_scheme = positional_encoding_scheme
+        self.radial_encoding_periods = radial_encoding_periods
+        self.radial_encoding_nth_order = radial_encoding_nth_order
 
-        self.project = layers.Dense(self.embedding_size)
-        self.radial_embedding = layers.Dense(self.embedding_size)
-        self.positional_embedding = layers.Embedding(
+        self.project_layer = layers.Dense(self.embedding_size)
+        self.radial_embedding_layer = layers.Dense(self.embedding_size)
+        self.positional_embedding_layer = layers.Embedding(
             input_dim=self.num_patches,
             output_dim=self.embedding_size
         )
@@ -155,6 +166,9 @@ class PatchEncoder(layers.Layer):
         config.update({
             "num_patches": self.num_patches,
             "embedding_size": self.embedding_size,
+            "positional_encoding_scheme": self.positional_encoding_scheme,
+            "radial_encoding_periods": self.radial_encoding_periods,
+            "radial_encoding_nth_order": self.radial_encoding_nth_order,
         })
         return config
 
@@ -166,77 +180,142 @@ class PatchEncoder(layers.Layer):
         theta = np.arctan2(ygrid.flatten(), xgrid.flatten())
         return r.astype(np.float32), theta.astype(np.float32)
 
-    def _positional_encoding(self, inputs):
-        pos = tf.range(start=0, limit=self.num_patches, delta=1)
+    def _nm_polynomial(self, n, m, rho, theta, normed=True):
+        def _nm_normalization(n, m):
+            """ return orthonormal zernike """
+            return np.sqrt((1. + (m == 0)) / (2. * n + 2))
 
-        emb = []
-        for i in range(inputs.shape[1]):
-            emb.append(self.positional_embedding(pos))
+        if (n - m) % 2 == 1:
+            poly = 0 * rho + 0 * theta
+            return poly.astype(np.float32)
 
-        return tf.stack(emb, axis=0)
+        radial = 0
+        m0 = abs(m)
 
-    def _radial_positional_encoding(
-        self,
-        inputs,
-        periods: int = 1,
-        zernike_nth_order: int = 4,
-        scheme: str = 'rotational_symmetry'
-    ):
+        for k in range((n - m0) // 2 + 1):
+            a = binom(n - k, k)
+            b = binom(n - 2 * k, (n - m0) // 2 - k)
+            radial += (-1.) ** k * a * b * rho ** (n - 2 * k)
+
+        # no clipping needed here
+        # radial *= (rho <= 1.)
+
+        if normed:  # return orthonormal zernike
+            prefac = 1. / _nm_normalization(n, m)
+        else:
+            prefac = 1.
+
+        if m >= 0:
+            poly = prefac * radial * np.cos(m0 * theta)
+        else:
+            poly = prefac * radial * np.sin(m0 * theta)
+
+        return poly.astype(np.float32)
+
+    def _zernike_polynomials(self, radial_encoding_nth_order=4):
+        r, theta = self._calc_radius()
+        nm_pairs = set((n, m) for n in range(radial_encoding_nth_order + 1) for m in range(-n, n + 1, 2))
+        polynomials = np.zeros((r.shape[0], len(nm_pairs)), dtype=np.float32)
+
+        for i, (pr, pt) in enumerate(zip(r, theta)):
+            for j, (n, m) in enumerate(nm_pairs):
+                polynomials[i, j] = self._nm_polynomial(n=n, m=m, rho=pr, theta=pt, normed=True)
+
+        return tf.constant(polynomials)
+
+    def _fourier_decomposition(self, periods=1):
         r, theta = self._calc_radius()
         r = tf.constant(r, dtype=tf.float32)
         theta = tf.constant(theta, dtype=tf.float32)
 
-        if scheme == 'fourier_decomposition':
-            encodings = [r]
-            for p in range(1, periods+1):
-                encodings.append(tf.sin(p * r))
-                encodings.append(tf.cos(p * r))
-                encodings.append(tf.sin(p * theta))
-                encodings.append(tf.cos(p * theta))
+        encodings = [r]
+        for p in range(1, periods + 1):
+            encodings.append(tf.sin(p * r))
+            encodings.append(tf.cos(p * r))
+            encodings.append(tf.sin(p * theta))
+            encodings.append(tf.cos(p * theta))
+
+        return tf.stack(encodings, axis=-1)
+
+    def _power_decomposition(self, periods=1, radial_encoding_nth_order=4):
+        r, theta = self._calc_radius()
+        r = tf.constant(r, dtype=tf.float32)
+        theta = tf.constant(theta, dtype=tf.float32)
+
+        encodings = []
+        for n in range(1, radial_encoding_nth_order + 1):
+            encodings.append(tf.pow(r, n))
+
+        for p in range(1, periods + 1):
+            encodings.append(tf.sin(p * theta))
+            encodings.append(tf.cos(p * theta))
+
+        return tf.stack(encodings, axis=-1)
+
+    def _rotational_symmetry(self, periods=1):
+        r, theta = self._calc_radius()
+        r = tf.constant(r, dtype=tf.float32)
+        theta = tf.constant(theta, dtype=tf.float32)
+
+        encodings = [r]
+        for p in range(1, periods + 1):
+            encodings.append(tf.sin(p * theta))
+            encodings.append(tf.cos(p * theta))
+
+        return tf.stack(encodings, axis=-1)
+
+    def _patch_number(self):
+        return tf.range(start=0, limit=self.num_patches, delta=1)
+
+    def positional_encoding(self, inputs, scheme, periods, radial_encoding_nth_order):
+
+        if scheme == 'rotational_symmetry' or scheme == 'rot_sym':
+            pos = self._rotational_symmetry(periods=periods)
+
+        elif scheme == 'fourier_decomposition':
+            pos = self._fourier_decomposition(periods=periods)
 
         elif scheme == 'power_decomposition':
-            encodings = []
-            for n in range(1, zernike_nth_order+1):
-                encodings.append(tf.pow(r, n))
+            pos = self._power_decomposition(periods=periods, radial_encoding_nth_order=radial_encoding_nth_order)
 
-            for p in range(1, periods+1):
-                encodings.append(tf.sin(p * theta))
-                encodings.append(tf.cos(p * theta))
+        elif scheme == 'zernike_polynomials':
+            pos = self._zernike_polynomials(radial_encoding_nth_order=radial_encoding_nth_order)
 
         else:
-            encodings = [r]
-            for p in range(1, periods+1):
-                encodings.append(tf.sin(p * theta))
-                encodings.append(tf.cos(p * theta))
-
-        pos = tf.stack(encodings, axis=-1)
+            pos = self._patch_number()
 
         emb = []
-        for i in range(inputs.shape[1]):
-            emb.append(self.radial_embedding(pos))
+        for _ in range(inputs.shape[1]):
+            if scheme is None or scheme == 'default':
+                emb.append(self.positional_embedding_layer(pos))
+            else:
+                emb.append(self.radial_embedding_layer(pos))
 
         return tf.stack(emb, axis=0)
 
     def call(
         self,
         inputs,
-        training=True,
-        radial_encoding=False,
-        periods=1,
-        zernike_nth_order=4,
-        scheme='rotational_symmetry',
+        periods=None,
+        zernike_nth_order=None,
+        scheme=None,
         **kwargs
     ):
+        linear_projections = self.project_layer(inputs)
 
-        if radial_encoding:
-            return self.project(inputs) + self._radial_positional_encoding(
-                inputs,
-                periods=periods,
-                scheme=scheme,
-                zernike_nth_order=zernike_nth_order,
-            )
-        else:
-            return self.project(inputs) + self._positional_encoding(inputs)
+        if scheme is not None:
+            self.positional_encoding_scheme = scheme
+            self.radial_encoding_periods = periods
+            self.radial_encoding_nth_order = zernike_nth_order
+
+        positional_embeddings = self.positional_encoding(
+            inputs,
+            scheme=self.positional_encoding_scheme,
+            periods=self.radial_encoding_periods,
+            radial_encoding_nth_order=self.radial_encoding_nth_order,
+        )
+
+        return linear_projections + positional_embeddings
 
 
 class MLP(layers.Layer):
@@ -268,7 +347,7 @@ class MLP(layers.Layer):
         })
         return config
 
-    def call(self, inputs, training=True, **kwargs):
+    def call(self, inputs, **kwargs):
         x = self.expand(inputs)
         x = self.dropout1(x)
         x = self.proj(x)
@@ -293,8 +372,9 @@ class Transformer(layers.Layer):
         self.dropout_rate = dropout_rate
         self.expand_rate = expand_rate
 
-        self.drop_path = tfa.layers.StochasticDepth(survival_probability=1-dropout_rate)
-        self.ln = layers.LayerNormalization(axis=-1, epsilon=1e-6)
+        self.dropout = layers.Dropout(self.dropout_rate)
+        self.prenorm1 = layers.LayerNormalization(axis=-1, epsilon=1e-6)
+        self.prenorm2 = layers.LayerNormalization(axis=-1, epsilon=1e-6)
         self.msa = layers.MultiHeadAttention(
             num_heads=self.heads,
             key_dim=self.dims,
@@ -320,15 +400,15 @@ class Transformer(layers.Layer):
         })
         return config
 
-    def call(self, inputs, training=True, **kwargs):
-
-        ln1 = self.ln(inputs)
+    def call(self, inputs, **kwargs):
+        ln1 = self.prenorm1(inputs)
         att = self.msa(ln1, ln1)
-        s1 = self.drop_path([inputs, att])
+        att = self.dropout(att)
+        s1 = layers.Add()([inputs, att])
 
-        ln2 = self.ln(s1)
+        ln2 = self.prenorm2(s1)
         s2 = self.mlp(ln2)
-        return self.drop_path([s1, s2])
+        return layers.Add()([s1, s2])
 
 
 class OpticalTransformer(Base, ABC):
@@ -384,19 +464,17 @@ class OpticalTransformer(Base, ABC):
             inputs = Merge(patch_size=org_patch_size, expansion=expansion)(inputs)
 
         m = Patchify(patch_size=patch_size)(inputs)
+
         m = PatchEncoder(
             num_patches=(img_shape//patch_size) ** 2,
             embedding_size=self._calc_channels(patch_size**2, width_scalar=self.width_scalar),
-        )(
-            m,
-            radial_encoding=True if self.positional_encoding_scheme != 'default' else False,
-            periods=self.radial_encoding_period,
-            scheme=self.positional_encoding_scheme,
-            zernike_nth_order=self.radial_encoding_nth_order
-        )
+            positional_encoding_scheme=self.positional_encoding_scheme,
+            radial_encoding_periods=self.radial_encoding_period,
+            radial_encoding_nth_order=self.radial_encoding_nth_order
+        )(m)
         return m
 
-    def call(self, inputs, training=True, **kwargs):
+    def call(self, inputs, **kwargs):
 
         if self.stem:
             m = Stem(
@@ -420,12 +498,17 @@ class OpticalTransformer(Base, ABC):
             )
 
             res = m
-            for _ in range(self._calc_repeats(r, depth_scalar=self.depth_scalar)):
+            for j in range(self._calc_repeats(r, depth_scalar=self.depth_scalar)):
+                if self.fixed_dropout_depth:
+                    dropout_rate = self.dropout_rate
+                else:
+                    dropout_rate = self.dropout_rate * (i + 1) / sum(self.repeats)
+
                 m = Transformer(
                     heads=self._calc_channels(h, width_scalar=self.width_scalar),
                     dims=64,
                     activation=self.activation,
-                    dropout_rate=self.dropout_rate/(i+1),
+                    dropout_rate=dropout_rate,
                     expand_rate=self.expand_rate,
                 )(m)
             m = layers.add([res, m])
