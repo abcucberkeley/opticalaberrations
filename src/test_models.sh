@@ -16,7 +16,7 @@ NA=1.0
 ABC_A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
 CLUSTER=slurm
 TIMELIMIT='24:00:00'  #hh:mm:ss
-NETWORK='prototype'
+NETWORK='opticalnet'
 SKIP_REMOVE_BACKGROUND=false
 
 TRAINED_MODELS=(
