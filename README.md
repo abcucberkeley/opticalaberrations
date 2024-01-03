@@ -25,30 +25,59 @@
 
 ![zernike_pyramid](examples/zernikes/10th_zernike_pyramid.png)
 
-## Installation
-
-We recommend using Anaconda
-(<https://docs.anaconda.com/anaconda/install/index.html>)
-to install the required packages for running our models.
-
-> **Note:** Please make sure you have Git LFS installed to download our pretrained models:
-<https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage>
-
-Once you have Anaconda installed on your system, clone the repo using the following commands:
-
-```shell
-git clone -b develop --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
+## Quick Start
+```powershell
+# run from Linux terminal or Windows Powershell terminal
+docker run --rm -it --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864  ghcr.io/abcucberkeley/opticalaberrations:develop /bin/bash 
 ```
->...to later update to the latest, greatest
->```shell
->git pull --recurse-submodules
->```
+Once the container's interactive terminal appears, run :
+```shell
+# clone repo inside container and change to /src directory using alias commands
+cloneit && repo
+```
+```shell
+# run predict sample on the example 'single.tif'
+python ao.py predict_sample ../pretrained_models/opticalnet-15-YuMB-lambda510.h5 ../examples/single/single.tif ../calibration/aang/15_mode_calibration.csv --current_dm None --dm_damping_scalar 1.0 --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --prediction_threshold 0. --batch_size 96 --prev None --plot --plot_rotations
+```
+
+
+## Full Installation
+
+### Git Clone repository to your host system
+```shell
+# Please make sure you have Git LFS installed to download our pretrained models
+git clone -b develop --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git
+# ...to later update to the latest, greatest
+git pull --recurse-submodules
+```
+
+### Docker [images](https://github.com/abcucberkeley/opticalaberrations/pkgs/container/opticalaberrations)
+```shell
+# our prebuilt image with Python, TensorFlow, and all packages installed for you.
+docker pull ghcr.io/abcucberkeley/opticalaberrations:develop
+```
+
+### VSCode
+We recommend developing using [VSCode](https://code.visualstudio.com/download) and our provided Dev Container.
+1. Run VSCode and open the folder where you cloned the repository (```opticalaberrations```).  
+2. A window will appear offering to open this in the detected ```workspace```, then to ```Reopen in DevContainer```.  Click yes, and wait for the Dev Container to start.
+3. Select the Python Interpreter (in the container) by clicking in the the bottom right status bar.
+4. Now check if your install is working:
+5. Select the "Tests" icon on the Extensions sidebar, instruct *pytest* (not *unittest*) to find the tests in \tests, and run the tests.  These will  and mirrors the tests Github runs [here](https://github.com/abcucberkeley/opticalaberrations/actions).
+6. Select the "Run" icon and choose a mode to run in.
+7. The code will execute in the container's python interpreter, the repo files on your host are mounted to the container.  If you want to execute on other files, you will need to move them to a folder in the repo or [mount their locations to the container](https://code.visualstudio.com/docs/devcontainers/containers).
+
+### Anaconda
+A legacy install method is to use conda
+(<https://docs.anaconda.com/anaconda/install/index.html>)
+to install the required packages for running our models.  This is not currently tested.
+
 
 Create a new `conda` environment using the following commands (will create an environment named "ml"):
 
 | System  | Requirements                 |
 |---------|------------------------------|
-| Ubuntu  | [`ubuntu.yml`](ubuntu.yml)     |
+| Ubuntu  | [`ubuntu.yml`](ubuntu.yml)   |
 | Windows | [`windows.yml`](windows.yml) |
 
 ```shell
@@ -56,25 +85,6 @@ Create a new `conda` environment using the following commands (will create an en
 cd opticalaberrations
 conda env create -f ubuntu.yml
 conda activate ml
-```
-```shell
-# Windows via .yml
-cd opticalaberrations
-conda env create -f windows.yml
-conda activate ml
-```
->....to later update to the latest packages in `*.yml`:
->
->```shell
->conda env update --file ***.yml 
->```
-
-```shell
-# Windows via conda and pip.  If you abscond from installing from the .yml file, you may try this at your own risk:
-conda create python=3.10 cudatoolkit=11.2 cudnn=8.1.0  matplotlib astropy seaborn numpy scikit-image scikit-learn scikit-spatial pandas ipython pytest ujson zarr conda pycudadecon -c conda-forge -n ml --yes
-conda activate ml
-pip install tensorflow==2.10 keras==2.10 
-pip install cupy-cuda11x tensorflow_addons dphtools csbdeep line-profiler line-profiler-pycharm tifffile==2023.9.18 imagecodecs==2023.9.18 
 ```
 
 ### Pre-trained models

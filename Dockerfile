@@ -5,7 +5,7 @@
 # docker rm -f ml_cont ; docker build . -t ml --build-arg BRANCH_NAME=$(git branch --show-current) ; docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864  -v ${PWD}:/app/opticalaberrations --workdir /app/opticalaberrations ml  "python -m pytest -vvv --disable-warnings tests/test_tensorflow.py"
 
 #   or use already a prebuilt Docker Image:
-# docker run --rm -it --gpus all -v ${PWD}:/app/opticalaberrations  ghcr.io/abcucberkeley/opticalaberrations:develop  
+# docker run --rm -it --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v ${PWD}:/app/opticalaberrations  ghcr.io/abcucberkeley/opticalaberrations:develop   /bin/bash
 
 # to run on a ubuntu system:
 # install docker: https://docs.docker.com/engine/install/ubuntu/

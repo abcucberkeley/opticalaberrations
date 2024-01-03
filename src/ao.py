@@ -12,6 +12,7 @@ import pandas as pd
 import tensorflow as tf
 from pathlib import Path
 import re
+# import docker
 
 import cli
 import experimental
@@ -22,6 +23,15 @@ from backend import load_sample
 from preprocessing import prep_sample
 from preloaded import Preloadedmodelclass
 from embeddings import measure_fourier_snr
+
+def get_active_branch_name(head_dir):
+
+    head_dir = Path(head_dir) / ".git" / "HEAD"
+    with head_dir.open("r") as f: content = f.read().splitlines()
+
+    for line in content:
+        if line[0:4] == "ref:":
+            return line.partition("refs/heads/")[2]
 
 
 def parse_args(args):
@@ -54,6 +64,10 @@ def parse_args(args):
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
+    deskew.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
 
     psnr = subparsers.add_parser("psnr")
     psnr.add_argument("input", type=Path, help="path to input .tif file")
@@ -67,6 +81,10 @@ def parse_args(args):
     fourier_snr.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    fourier_snr.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
     )
 
     preprocessing = subparsers.add_parser("preprocessing")
@@ -95,6 +113,10 @@ def parse_args(args):
     preprocessing.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    preprocessing.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
     )
     preprocessing.add_argument(
         "--min_psnr", default=5, type=int,
@@ -134,6 +156,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     embeddings.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
+    embeddings.add_argument(
         "--psf_type", default=None, type=str,
         help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
              '(Default: None; to keep default mode used during training)'
@@ -155,6 +181,10 @@ def parse_args(args):
     detect_rois.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    detect_rois.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
     )
 
     predict_sample = subparsers.add_parser("predict_sample")
@@ -237,6 +267,10 @@ def parse_args(args):
     predict_sample.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    predict_sample.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
     )
     predict_sample.add_argument(
         "--digital_rotations", default=361, type=int,
@@ -336,6 +370,10 @@ def parse_args(args):
     predict_large_fov.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    predict_large_fov.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
     )
     predict_large_fov.add_argument(
         "--digital_rotations", default=361, type=int,
@@ -445,6 +483,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     predict_rois.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
+    predict_rois.add_argument(
         "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
     )
@@ -538,6 +580,10 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    predict_tiles.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
     )
     predict_tiles.add_argument(
         "--digital_rotations", default=361, type=int,
@@ -639,6 +685,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     predict_folder.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
+    predict_folder.add_argument(
         "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
     )
@@ -710,6 +760,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     aggregate_predictions.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
+    aggregate_predictions.add_argument(
         "--psf_type", default=None, type=str,
         help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
              '(Default: None; to keep default mode used during training)'
@@ -740,6 +794,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     decon.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
+    decon.add_argument(
         "--only_use_ideal_psf", action='store_true',
         help='a toggle to run only decon with the ideal psf'
     )
@@ -758,6 +816,10 @@ def parse_args(args):
     combine_tiles.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    combine_tiles.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
     )
 
     phase_retrieval = subparsers.add_parser("phase_retrieval")
@@ -816,6 +878,10 @@ def parse_args(args):
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
+    phase_retrieval.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
 
     eval_dm = subparsers.add_parser("eval_dm")
     eval_dm.add_argument("datadir", type=Path, help="path to dataset directory")
@@ -825,6 +891,10 @@ def parse_args(args):
     eval_dm.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    eval_dm.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
     )
 
     calibrate_dm = subparsers.add_parser("calibrate_dm")
@@ -840,6 +910,10 @@ def parse_args(args):
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
+    calibrate_dm.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
 
     eval_mode = subparsers.add_parser("eval_mode")
     eval_mode.add_argument("model_path", type=Path, help="path to pretrained tensorflow model (.h5)")
@@ -854,6 +928,10 @@ def parse_args(args):
     eval_mode.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    eval_mode.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
     )
 
     eval_dataset = subparsers.add_parser(
@@ -874,6 +952,10 @@ def parse_args(args):
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
+    eval_dataset.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
 
     eval_ao_dataset = subparsers.add_parser(
         "eval_ao_dataset",
@@ -890,6 +972,10 @@ def parse_args(args):
     eval_ao_dataset.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    eval_ao_dataset.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
     )
 
     plot_dataset_mips = subparsers.add_parser(
@@ -987,6 +1073,32 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
         sjob += f"{cluster_env} {script} {flags}"
         logger.info(sjob)
         subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
+
+    elif args.docker:
+
+        container_repo = "/app/opticalaberrations"  # location of repo in the container
+        local_repo = Path(__file__).parent.parent  # location of repo in host
+        branch_name = get_active_branch_name(local_repo)
+
+        flags = ' '.join(command_flags)
+        flags = re.sub(pattern=' --docker', repl='', string=flags)  # remove flag
+        flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
+        flags = flags.replace("..", container_repo)  # regex stinks at replacing ".."
+        flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
+        flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
+
+        flags = re.sub(pattern=local_repo.as_posix(), repl=container_repo, string=flags)
+
+        docker_run = "docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --name opt_net"
+        docker_mount = f'-v "{local_repo}":{container_repo}'
+        docker_image = f"ghcr.io/abcucberkeley/opticalaberrations:{branch_name}"
+        docker_job = f'{docker_run} --workdir {container_repo}/src {docker_mount} {docker_image} "python ao.py {flags}"'
+        logger.info(f"Docker job: \n{docker_job}\n")
+        subprocess.run(docker_job, shell=True)
 
     else:
         if os.environ.get('SLURM_JOB_ID') is not None:
