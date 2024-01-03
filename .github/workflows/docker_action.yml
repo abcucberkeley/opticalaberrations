@@ -166,7 +166,7 @@ jobs:
       # singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
 
   test-apptainer:
-    needs: build-apptainer # need to wait for test-docker to finish otherwise GPU will be utilized.
+    needs: build-apptainer 
     runs-on: self-hosted
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif
@@ -210,7 +210,7 @@ jobs:
         run: ${{ env.APPTAINER_PYTEST }}/tests/test_train.py
         
   test-docker:
-    needs: [build-docker, test-apptainer]
+    needs: build-docker
     if: always()
     runs-on: self-hosted
     container: 
