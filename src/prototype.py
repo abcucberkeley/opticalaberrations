@@ -5,7 +5,7 @@ from abc import ABC
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import layers
+from tensorflow.keras import layers, Sequential
 from scipy.special import binom
 
 from base import Base
@@ -79,6 +79,22 @@ class Patchify(layers.Layer):
     def __init__(self, patch_size, **kwargs):
         super().__init__(**kwargs)
         self.patch_size = patch_size
+        # self.projection = Sequential(
+        #     [
+        #         layers.Conv3D(
+        #             filters=self.patch_size**2,
+        #             kernel_size=(1, self.patch_size, self.patch_size),
+        #             strides=(1, self.patch_size, self.patch_size),
+        #             padding="VALID",
+        #             name="conv_projection",
+        #         ),
+        #         layers.Reshape(
+        #             target_shape=(-1, self.num_patches, self.patch_size**2),
+        #             name="flatten_projection",
+        #         ),
+        #     ],
+        #     name="projection",
+        # )
         self.prenorm = layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
     def build(self, input_shape):
@@ -460,13 +476,15 @@ class OpticalTransformer(Base, ABC):
         return int(tf.math.ceil(depth_scalar * repeats))
 
     def transitional_block(self, inputs, img_shape, patch_size, expansion=1, org_patch_size=None):
+        num_patches = (img_shape//patch_size) ** 2
+        
         if org_patch_size is not None:
             inputs = Merge(patch_size=org_patch_size, expansion=expansion)(inputs)
 
         m = Patchify(patch_size=patch_size)(inputs)
 
         m = PatchEncoder(
-            num_patches=(img_shape//patch_size) ** 2,
+            num_patches=num_patches,
             embedding_size=self._calc_channels(patch_size**2, width_scalar=self.width_scalar),
             positional_encoding_scheme=self.positional_encoding_scheme,
             radial_encoding_periods=self.radial_encoding_period,

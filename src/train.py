@@ -184,7 +184,8 @@ def train_model(
             no_phase=no_phase,
             lls_defocus=lls_defocus,
             photons_range=(min_photons, max_photons),
-            cpu_workers=cpu_workers
+            cpu_workers=cpu_workers,
+            model_input_shape=inputs
         )
 
         sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
@@ -467,7 +468,8 @@ def eval_model(
             max_amplitude=max_amplitude,
             no_phase=no_phase,
             lls_defocus=lls_defocus,
-            photons_range=(min_photons, max_photons)
+            photons_range=(min_photons, max_photons),
+            model_input_shape=inputs
         )
 
         eval_data = eval_data.cache()
