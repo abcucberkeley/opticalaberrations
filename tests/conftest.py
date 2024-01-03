@@ -9,7 +9,7 @@ def kargs():
     repo = Path.cwd()
     num_modes = 15
     input_shape = (256, 256, 256)   # z-y-x
-    window_size = (128, 128, 128)   # z-y-x
+    window_size = (64, 64, 64)   # z-y-x
     num_tiles = np.prod(tuple(map(floordiv, input_shape, window_size)))
     digital_rotations = 361
 
