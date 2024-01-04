@@ -154,6 +154,13 @@ def train_model(
     else:
         inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
 
+    if defocus_only:  # only predict LLS defocus offset
+        pmodes = 1
+    elif lls_defocus:  # add LLS defocus offset to predictions
+        pmodes = modes + 1 if pmodes is None else pmodes + 1
+    else:
+        pmodes = modes if pmodes is None else pmodes
+
     if dataset is None:
         config = dict(
             psf_type=psf_type,
@@ -169,20 +176,23 @@ def train_model(
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
             refractive_index=refractive_index,
-            cpu_workers=cpu_workers
+            cpu_workers=cpu_workers,
+            lls_defocus=lls_defocus,
+            defocus_only=defocus_only,
         )
         train_data = data_utils.create_dataset(config)
     else:
         train_data = data_utils.collect_dataset(
             dataset,
             metadata=False,
-            modes=modes,
+            modes=pmodes,
             distribution=distribution,
             embedding=embedding,
             samplelimit=samplelimit,
             max_amplitude=max_amplitude,
             no_phase=no_phase,
             lls_defocus=lls_defocus,
+            defocus_only=defocus_only,
             photons_range=(min_photons, max_photons),
             cpu_workers=cpu_workers,
             model_input_shape=inputs
@@ -269,13 +279,6 @@ def train_model(
         logger.warning(f"No model found in {outdir}")
 
     if not restored:  # Build a new model
-        if defocus_only:  # only predict LLS defocus offset
-            pmodes = 1
-        elif lls_defocus:  # add LLS defocus offset to predictions
-            pmodes = modes+1 if pmodes is None else pmodes+1
-        else:
-            pmodes = modes if pmodes is None else pmodes
-
         if network == 'prototype':
             model = prototype.OpticalTransformer(
                 name='Prototype',

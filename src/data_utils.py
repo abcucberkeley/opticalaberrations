@@ -325,6 +325,7 @@ def collect_dataset(
     iotf=None,
     metadata=False,
     lls_defocus: bool = False,
+    defocus_only: bool = False,
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
     cpu_workers: int = -1,
     model_input_shape: tuple = (6, 64, 64, 1)
@@ -362,7 +363,7 @@ def collect_dataset(
     else:
         # img, amps
         dtypes = [tf.float32, tf.float32]
-        dshapes = [model_input_shape, (modes,)]
+        dshapes = [model_input_shape, (modes)]
 
     load = partial(
         get_sample,
@@ -371,7 +372,8 @@ def collect_dataset(
         iotf=iotf,
         embedding_option=embedding_option,
         metadata=metadata,
-        lls_defocus=lls_defocus
+        lls_defocus=lls_defocus,
+        defocus_only=defocus_only
     )
     
     @tf.autograph.experimental.do_not_convert
