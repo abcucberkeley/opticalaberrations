@@ -1271,8 +1271,8 @@ def cluster_tiles(
                 clustering.fit(features)    # Cluster calculation
 
                 ztile_preds['cluster'] = clustering.predict(features)   # Predict the closest cluster each tile belongs to
-        
-            return 0, 0, 0
+
+            
             if ztile_preds['cluster'].unique().size < max_isoplanatic_clusters:
                 # We didn't have enough tiles to make all requested clusters. We're done.
                 compute_clustering = False
