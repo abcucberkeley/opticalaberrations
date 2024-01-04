@@ -1450,4 +1450,4 @@ if __name__ == "__main__":
     children = active_children()
     logging.shutdown()
     print(f'Finished. Active children: {len(children)}')
-    exit(1)
+    raise SystemExit(0)
