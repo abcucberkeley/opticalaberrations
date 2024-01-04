@@ -218,25 +218,25 @@ jobs:
       - name: Test training
         run: ${{ env.APPTAINER_PYTEST }}/tests/test_train.py
 
-  cleanup-job2:
-    runs-on: self-hosted
-    needs: test_train-apptainer  # run after apptainer stuff is finished
-    if: always()
-    container:
-      image: ghcr.io/catthehacker/ubuntu:act-22.04
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: 'Cleanup build folder'
-        run: |
-          ls -la ./
-          rm -rf ./* || true
-          rm -rf ./.??* || true
-          ls -la ./
+  # cleanup-job2:
+  #   runs-on: self-hosted
+  #   needs: test_train-apptainer  # run after apptainer stuff is finished
+  #   if: always()
+  #   container:
+  #     image: ghcr.io/catthehacker/ubuntu:act-22.04
+  #   defaults:
+  #     run:
+  #       shell: bash
+  #   steps:
+  #     - name: 'Cleanup build folder'
+  #       run: |
+  #         ls -la ./
+  #         rm -rf ./* || true
+  #         rm -rf ./.??* || true
+  #         ls -la ./
 
   test-docker:
-    needs: cleanup-job2 # needs to run after apptainer because this is going to write root files.
+    needs: test_train-apptainer # needs to run after apptainer because this is going to write root files.
     if: always()
     runs-on: self-hosted
     container: 
