@@ -1444,3 +1444,5 @@ def main(args=None, preloaded=None):
 
 if __name__ == "__main__":
     main()
+    print('Finished')
+    exit(1)
