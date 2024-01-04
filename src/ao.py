@@ -1439,6 +1439,7 @@ def main(args=None, preloaded=None):
         if os.name != 'nt':
             logger.info(f"Updating file permissions to {args.input.parent}")
             subprocess.run(f"find {str(Path(args.input).parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +", shell=True)
+            logger.info(f"Updating file permissions complete.")
 
 
 if __name__ == "__main__":
