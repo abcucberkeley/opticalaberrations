@@ -1478,7 +1478,7 @@ def aggregate_predictions(
         z_voxel_size=axial_voxel_size
     )
 
-    return 0
+
     # predict_snr_map(
     #     Path(str(model_pred).replace('_tiles_predictions.csv', '.tif')),
     #     window_size=window_size
@@ -1536,7 +1536,7 @@ def aggregate_predictions(
         clusters3d_colormap.extend([zero_confident_color, *cc])  # append the same zero color (e.g. yellow) at the front
     clusters3d_colormap.extend([unconfident_color])  # append the unconfident color (e.g. white) to the end
     clusters3d_colormap = np.array(clusters3d_colormap)  # yellow, blue, orange,...  yellow, ...  white
-
+    return 0
     predictions, stdevs, corrections = cluster_tiles(
         predictions=predictions,
         stdevs=stdevs,
