@@ -1227,7 +1227,7 @@ def cluster_tiles(
     predictions['cluster'] = np.nan
     stdevs['cluster'] = np.nan
 
-    pool = mp.Pool(processes=4)  # async pool for plotting
+    # pool = mp.Pool(processes=4)  # async pool for plotting
 
     # valid_predictions = predictions.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_predictions = predictions.groupby('z')
@@ -1361,13 +1361,12 @@ def cluster_tiles(
             )
 
             if plot:
-                task = partial(
-                    vis.diagnosis,
+                vis.diagnosis(
                     pred=wavefronts[cluster],
                     pred_std=pred_std,
                     save_path=Path(f"{savepath}_{postfix}_{cluster}_diagnosis"),
                 )
-                pool.apply_async(task)
+                # pool.apply_async(task)
 
             coefficients[cluster] = wavefronts[cluster].amplitudes
 
