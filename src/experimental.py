@@ -1445,6 +1445,7 @@ def aggregate_predictions(
     psf_type: Optional[Union[str, Path]] = None,
     postfix: str = 'aggregated'
 ):
+    return 0
     dm_state = utils.load_dm(dm_state)
 
     pd.options.display.width = 200
@@ -1551,8 +1552,6 @@ def aggregate_predictions(
         postfix=postfix,
         minimum_number_of_tiles_per_cluster=np.maximum(np.minimum(number_of_nonzero_tiles * 0.09, 3).astype(int), 1), # 3 or less tiles
     )
-
-    return predictions
 
     for z in range(ztiles):
         # create a mask to get the indices for each z tile and set the mask for the rest of the tiles to False
