@@ -37,6 +37,9 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends \
   sudo \
   htop \
+  cifs-utils \
+  winbind \
+  smbclient \
   && rm -rf /var/lib/apt/lists/*
 
 # Git-lfs install
@@ -76,7 +79,7 @@ ARG USER_GID=1000
 # Create the user
 RUN groupadd --gid $USER_GID $USERNAME \
     && groupadd --gid 1001 vscode_secondary \
-    && useradd --uid $USER_UID --gid $USER_GID -G 1001 -m $USERNAME \
+    && useradd -l --uid $USER_UID --gid $USER_GID -G 1001 -m $USERNAME \
     #
     # [Optional] Add sudo support. Omit if you don't need to install software after connecting.        
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
