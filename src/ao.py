@@ -12,7 +12,9 @@ import pandas as pd
 import tensorflow as tf
 from pathlib import Path
 import re
-# import docker
+
+from multiprocessing.pool import Pool
+from multiprocessing import active_children
 
 import cli
 import experimental
@@ -1445,4 +1447,7 @@ def main(args=None, preloaded=None):
 if __name__ == "__main__":
     main()
     print('Finished')
+    # report the number of child processes that are still active
+    children = active_children()
+    print(f'Active children: {len(children)}')
     exit(1)
