@@ -1237,6 +1237,7 @@ def cluster_tiles(
 
     wavefronts, coefficients, actuators = {}, {}, {}
     wavefronts_montage = np.zeros((len(valid_predictions.groups.keys())*64, (max_isoplanatic_clusters+1)*64)).astype(np.float32)
+    return 0
     for z in valid_predictions.groups.keys():  # basically loop through all ztiles, unless no valid predictions exist
         ztile_preds = valid_predictions.get_group(z)
         ztile_preds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
@@ -1536,7 +1537,7 @@ def aggregate_predictions(
         clusters3d_colormap.extend([zero_confident_color, *cc])  # append the same zero color (e.g. yellow) at the front
     clusters3d_colormap.extend([unconfident_color])  # append the unconfident color (e.g. white) to the end
     clusters3d_colormap = np.array(clusters3d_colormap)  # yellow, blue, orange,...  yellow, ...  white
-    return 0
+
     predictions, stdevs, corrections = cluster_tiles(
         predictions=predictions,
         stdevs=stdevs,
@@ -1553,6 +1554,7 @@ def aggregate_predictions(
         postfix=postfix,
         minimum_number_of_tiles_per_cluster=np.maximum(np.minimum(number_of_nonzero_tiles * 0.09, 3).astype(int), 1), # 3 or less tiles
     )
+    return 0
 
     for z in range(ztiles):
         # create a mask to get the indices for each z tile and set the mask for the rest of the tiles to False
