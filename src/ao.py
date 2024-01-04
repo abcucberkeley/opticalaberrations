@@ -1446,8 +1446,8 @@ def main(args=None, preloaded=None):
 
 if __name__ == "__main__":
     main()
-    print('Finished')
     # report the number of child processes that are still active
     children = active_children()
-    print(f'Active children: {len(children)}')
+    logging.shutdown()
+    print(f'Finished. Active children: {len(children)}')
     exit(1)
