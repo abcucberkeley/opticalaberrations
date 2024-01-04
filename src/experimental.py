@@ -1456,7 +1456,7 @@ def aggregate_predictions(
     vol /= np.percentile(vol, 98)
     vol = np.clip(vol, 0, 1)
 
-    pool = mp.Pool(processes=4)  # async pool for plotting
+    # pool = mp.Pool(processes=4)  # async pool for plotting
 
     with open(str(model_pred).replace('.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
@@ -1685,8 +1685,8 @@ def aggregate_predictions(
     # )
 
     logger.info(f'Done. Waiting for plots to write for {model_pred.with_suffix("")}')
-    pool.close()    # close the pool
-    pool.join()     # wait for all tasks to complete
+    # pool.close()    # close the pool
+    # pool.join()     # wait for all tasks to complete
 
     non_zero_tiles = ~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)
     with Path(f"{model_pred.with_suffix('')}_{postfix}_settings.json").open('w') as f:
