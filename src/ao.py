@@ -999,7 +999,7 @@ def parse_args(args):
     return parser.parse_known_args(args)
 
 
-def main(args=None, preloaded: Preloadedmodelclass = None):
+def main(args=None, preloaded=None):
     command_flags = sys.argv[1:] if args is None else args
     args, unknown = parse_args(args)
     pd.options.display.width = 200
@@ -1438,7 +1438,7 @@ def main(args=None, preloaded: Preloadedmodelclass = None):
 
         if os.name != 'nt':
             logger.info(f"Updating file permissions to {args.input.parent}")
-            subprocess.run(f"chmod a+wrx -R {str(Path(args.input).parent.resolve())}", shell=True)
+            subprocess.run(f"find {str(Path(args.input).parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +", shell=True)
 
 
 if __name__ == "__main__":
