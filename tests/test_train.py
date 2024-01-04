@@ -217,5 +217,5 @@ def test_finetune_zernike_model(kargs):
             batch_size=kargs['batch_size']//3,
             warmup=1,
             epochs=5,
-            finetune=Path(f"{kargs['repo']}/models/tests/yumb_zernike_model"),
+            finetune=Path(f"{kargs['repo']}/models/pytests/yumb_zernike_model"),
         )
