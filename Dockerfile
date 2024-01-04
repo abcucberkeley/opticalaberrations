@@ -35,6 +35,7 @@ WORKDIR /docker_install
 # Install requirements. Don't "apt-get upgrade" or else all the NVIDIA tools and drivers will update.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
+  sudo \
   htop \
   && rm -rf /var/lib/apt/lists/*
 
@@ -74,12 +75,10 @@ ARG USER_GID=1000
 
 # Create the user
 RUN groupadd --gid $USER_GID $USERNAME \
-    groupadd --gid 1001 vscode_secondary \
+    && groupadd --gid 1001 vscode_secondary \
     && useradd --uid $USER_UID --gid $USER_GID -G 1001 -m $USERNAME \
     #
-    # [Optional] Add sudo support. Omit if you don't need to install software after connecting.
-    && apt-get update \
-    && apt-get install -y sudo \
+    # [Optional] Add sudo support. Omit if you don't need to install software after connecting.        
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 

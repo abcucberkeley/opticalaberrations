@@ -39,7 +39,24 @@ cloneit && repo
 # run predict sample on the example 'single.tif'
 python ao.py predict_sample ../pretrained_models/opticalnet-15-YuMB-lambda510.h5 ../examples/single/single.tif ../calibration/aang/15_mode_calibration.csv --current_dm None --dm_damping_scalar 1.0 --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --prediction_threshold 0. --batch_size 96 --prev None --plot --plot_rotations
 ```
-
+```shell
+root@b6f4ae89b870:/app/opticalaberrations/src# python ao.py predict_sample ../pretrained_models/opticalnet-15-YuMB-lambda510.h5 ../examples/single/single.tif ../calibration/aang/15_mode_calibration.csv --current_dm None --dm_damping_scalar 1.0 --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --prediction_threshold 0. --batch_size 96 --prev None --plot --plot_rotations
+2024-01-03 17:47:57,631 - INFO - Namespace(func='predict_sample', model=PosixPath('../pretrained_models/opticalnet-15-YuMB-lambda510.h5'), input=PosixPath('../examples/single/single.tif'), dm_calibration=PosixPath('../calibration/aang/15_mode_calibration.csv'), current_dm=PosixPath('None'), prev=PosixPath('None'), lateral_voxel_size=0.097, axial_voxel_size=0.2, wavelength=0.51, dm_damping_scalar=1.0, freq_strength_threshold=0.01, prediction_threshold=0.0, confidence_threshold=0.02, sign_threshold=0.9, plot=True, plot_rotations=True, num_predictions=1, batch_size=96, estimate_sign_with_decon=False, ignore_mode=[0, 1, 2, 4], ideal_empirical_psf=None, cpu_workers=-1, cluster=False, docker=False, digital_rotations=361, psf_type=None, min_psnr=5, object_width=0.0)
+2024-01-03 17:47:57,988 - INFO - Number of active GPUs: 1, NVIDIA RTX A3000 12GB Laptop GPU, batch_size=96
+2024-01-03 17:47:57,988 - INFO - Loading new model, because model didn't exist
+2024-01-03 17:47:58,068 - INFO - FOV scalar: ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat => (axial: 1.00), (lateral: 1.00)
+2024-01-03 17:47:58,365 - INFO - Loading ../pretrained_models/opticalnet-15-YuMB-lambda510.h5
+2024-01-03 17:48:03,365 - INFO - Loading file: single.tif
+2024-01-03 17:48:03,429 - INFO - Sample: (256, 256, 256)
+2024-01-03 17:48:08,423 - INFO - FOV scalar: ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat => (axial: 1.00), (lateral: 1.00)
+2024-01-03 17:48:16,324 - INFO - Ignoring modes: [0, 1, 2, 4]
+2024-01-03 17:48:16,324 - INFO - Checking for invalid inputs
+2024-01-03 17:48:16,369 - INFO - [BS=96, n=1] Predict-rotations
+4/4 [==============================] - 5s 424ms/step
+Evaluate predictions: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:02<00:00,  2.21s/it] 2.2s elapsed
+2024-01-03 17:48:25,241 - INFO - Total time elapsed: 27.61 sec.
+2024-01-03 17:48:25,241 - INFO - Updating file permissions to ../examples/single
+```
 
 ## Full Installation
 
