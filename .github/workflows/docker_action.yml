@@ -167,7 +167,7 @@ jobs:
 
   test-apptainer:
     needs: build-apptainer
-    if: steps.build-apptainer.conclusion == 'success'
+    if: always()
     runs-on: self-hosted
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif
@@ -209,7 +209,7 @@ jobs:
 
   test_train-apptainer:
     needs: test-apptainer # need to wait for test-docker to finish otherwise GPU will be utilized.
-    if: steps.build-apptainer.conclusion == 'success'
+    if: always()
     runs-on: self-hosted
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif
@@ -221,7 +221,7 @@ jobs:
   cleanup-job2:
     runs-on: self-hosted
     needs: test_train-apptainer  # run after apptainer stuff is finished
-    if: steps.build-docker.conclusion == 'success'
+    if: always()
     container:
       image: ghcr.io/catthehacker/ubuntu:act-22.04
     defaults:
@@ -237,7 +237,7 @@ jobs:
 
   test-docker:
     needs: cleanup-job2 # needs to run after apptainer because this is going to write root files.
-    if: steps.build-docker.conclusion == 'success'
+    if: always()
     runs-on: self-hosted
     container: 
       image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # pull image 'latest-tf' or 'develop' that we just built
@@ -287,7 +287,7 @@ jobs:
 
   test_train-docker:         
     needs: test-docker
-    if: steps.build-docker.conclusion == 'success'
+    if: always()
     runs-on: self-hosted
     container: 
       image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # pull image 'latest-tf' or 'develop' that we just built
