@@ -1445,7 +1445,7 @@ def aggregate_predictions(
     psf_type: Optional[Union[str, Path]] = None,
     postfix: str = 'aggregated'
 ):
-    return 0
+
     dm_state = utils.load_dm(dm_state)
 
     pd.options.display.width = 200
@@ -1478,6 +1478,7 @@ def aggregate_predictions(
         z_voxel_size=axial_voxel_size
     )
 
+    return 0
     # predict_snr_map(
     #     Path(str(model_pred).replace('_tiles_predictions.csv', '.tif')),
     #     window_size=window_size
