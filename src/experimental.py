@@ -1552,6 +1552,8 @@ def aggregate_predictions(
         minimum_number_of_tiles_per_cluster=np.maximum(np.minimum(number_of_nonzero_tiles * 0.09, 3).astype(int), 1), # 3 or less tiles
     )
 
+    return predictions
+
     for z in range(ztiles):
         # create a mask to get the indices for each z tile and set the mask for the rest of the tiles to False
         zmask = all_zeros_tiles.mask(all_zeros_tiles.index.get_level_values(0) != z).fillna(False)
