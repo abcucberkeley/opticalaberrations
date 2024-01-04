@@ -1266,11 +1266,13 @@ def cluster_tiles(
 
         compute_clustering = True
         while compute_clustering:
-            clustering = KMeans(n_clusters=n_clusters, max_iter=1000, random_state=0)
-            clustering.fit(features)    # Cluster calculation
+            with KMeans(n_clusters=n_clusters, max_iter=1000, random_state=0) as clustering:
 
-            ztile_preds['cluster'] = clustering.predict(features)   # Predict the closest cluster each tile belongs to
+                clustering.fit(features)    # Cluster calculation
 
+                ztile_preds['cluster'] = clustering.predict(features)   # Predict the closest cluster each tile belongs to
+        
+            return 0, 0, 0
             if ztile_preds['cluster'].unique().size < max_isoplanatic_clusters:
                 # We didn't have enough tiles to make all requested clusters. We're done.
                 compute_clustering = False
@@ -1288,7 +1290,7 @@ def cluster_tiles(
                         break
                     else:
                         compute_clustering = False
-        return 0,0,0
+
         # sort clusters by p2v
         centers_mag = [
             ztile_preds[ztile_preds['cluster'] == i].mask(where_unconfident).drop(columns='cluster').fillna(0).agg(
