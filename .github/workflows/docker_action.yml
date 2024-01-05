@@ -53,9 +53,9 @@ jobs:
       matrix:
         include:
           - TF_IMAGE: 23.12
-            CUDA_VERSION: "_CUDA_12.3"
+            CUDA_VERSION: "_CUDA_12_3"
           - TF_IMAGE: 22.12
-            CUDA_VERSION: "_CUDA_11.8"
+            CUDA_VERSION: "_CUDA_11_8"
     steps:
       - name: Dump GitHub context
         env:
@@ -145,9 +145,9 @@ jobs:
       matrix:
         include:
           - TF_IMAGE: 23.12
-            CUDA_VERSION: "_CUDA_12.3"
+            CUDA_VERSION: "_CUDA_12_3"
           - TF_IMAGE: 22.12
-            CUDA_VERSION: "_CUDA_11.8"
+            CUDA_VERSION: "_CUDA_11_8"
     steps:
       - name: List files in the directory
         run: |
@@ -189,9 +189,9 @@ jobs:
       matrix:
         include:
           - TF_IMAGE: 23.12
-            CUDA_VERSION: "_CUDA_12.3"
+            CUDA_VERSION: "_CUDA_12_3"
           # - TF_IMAGE: 22.12
-          #   CUDA_VERSION: "_CUDA_11.8"
+          #   CUDA_VERSION: "_CUDA_11_8"
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}${{ matrix.CUDA_VERSION }}.sif
       APPTAINER_PYTEST: apptainer exec --nv ${{ github.head_ref || github.ref_name }}${{ matrix.CUDA_VERSION }}.sif python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider ${{ github.workspace }}
@@ -235,9 +235,9 @@ jobs:
       matrix:
         include:
           - TF_IMAGE: 23.12
-            CUDA_VERSION: "_CUDA_12.3"
+            CUDA_VERSION: "_CUDA_12_3"
           # - TF_IMAGE: 22.12
-          #   CUDA_VERSION: "_CUDA_11.8"
+          #   CUDA_VERSION: "_CUDA_11_8"
     needs: test-apptainer # need to wait for test-docker to finish otherwise GPU will be utilized.
     if: always()
     runs-on: self-hosted
@@ -273,9 +273,9 @@ jobs:
       matrix:
         include:
           - TF_IMAGE: 23.12
-            CUDA_VERSION: "_CUDA_12.3"
+            CUDA_VERSION: "_CUDA_12_3"
           # - TF_IMAGE: 22.12
-          #   CUDA_VERSION: "_CUDA_11.8"
+          #   CUDA_VERSION: "_CUDA_11_8"
     container: 
       image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}${{ matrix.CUDA_VERSION }}   # pull image 'latest-tf' or 'develop' that we just built
       credentials:
@@ -330,9 +330,9 @@ jobs:
       matrix:
         include:
           - TF_IMAGE: 23.12
-            CUDA_VERSION: "_CUDA_12.3"
+            CUDA_VERSION: "_CUDA_12_3"
           # - TF_IMAGE: 22.12
-          #   CUDA_VERSION: "_CUDA_11.8"
+          #   CUDA_VERSION: "_CUDA_11_8"
     container: 
       image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}${{ matrix.CUDA_VERSION }}   # pull image 'latest-tf' or 'develop' that we just built
       credentials:
