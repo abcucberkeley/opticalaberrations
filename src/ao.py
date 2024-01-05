@@ -1033,7 +1033,7 @@ def main(args=None, preloaded=None):
         return number_of_idle_nodes
 
     if args.cluster:
-        cluster_env = f"~/anaconda3/envs/ml/bin/python"
+        # cluster_env = f"~/anaconda3/envs/ml/bin/python"
         cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
         cluster_env = f"apptainer exec --bind /clusterfs --nv {cluster_repo}/develop.sif python "
         script = f"{cluster_repo}/src/ao.py"
@@ -1130,7 +1130,7 @@ def main(args=None, preloaded=None):
         if gpu_workers > 0:
             gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
             if gpu_model.find('A100') >= 0:  # update batchsize automatically
-                args.batch_size = 896 * gpu_workers * 1.5
+                args.batch_size = 1024 * gpu_workers
         else:
             gpu_model = None
 
