@@ -246,7 +246,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
       ports:
         - 80
-      options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864 --user 1000
+      options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864 # --user 1000  Needs to run as 'root' not 'vscode' for cupy cache to work.
     defaults:
       run:
         shell: bash
@@ -296,7 +296,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
       ports:
         - 80
-      options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864 --user 1000
+      options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864 # --user 1000  Needs to run as 'root' not 'vscode' for cupy cache to work.
     defaults:
       run:
         shell: bash
