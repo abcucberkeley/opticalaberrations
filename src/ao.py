@@ -1035,6 +1035,7 @@ def main(args=None, preloaded=None):
     if args.cluster:
         cluster_env = f"~/anaconda3/envs/ml/bin/python"
         cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
+        cluster_env = f"apptainer exec --bind /clusterfs --nv {cluster_repo}/develop.sif python "
         script = f"{cluster_repo}/src/ao.py"
 
         flags = ' '.join(command_flags)
