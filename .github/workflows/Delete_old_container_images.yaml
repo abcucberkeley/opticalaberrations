@@ -1,8 +1,19 @@
-name: Delete old unused container images
+name: delete old unused container images
 on:
   schedule:
     - cron: "0 13 * * 1" 
     # Every Monday at 1PM UTC (9AM EST)
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'
+        required: true
+        default: 'warning'
+        type: choice
+        options:
+          - info
+          - warning
+          - debug
 
 jobs:
   clean-ghcr:
