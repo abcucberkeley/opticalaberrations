@@ -16,19 +16,20 @@
 # docker system prune
 # container's user is different than github action's user, so change permissions of folder: sudo chmod 777 /home/mosaic/Desktop/actions-runner/_work -R
 
-# test tensorflow GPU:
-# python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
-
 # 'conda install tensorflow-gpu' will not install GPU version because GPU is not detected during 'docker build' unless DOCKER_BUILDKIT=0, so we just do pip install of everything.
 
+# Pass in a build argument when building to override the default TF Image with the version you want: --build-arg BRANCH_NAME=$(git branch --show-current) --build-arg TF_IMAGE=22.12
+# For github actions, this is how we will build multiple docker images.
 # https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html
 # https://docs.nvidia.com/deeplearning/frameworks/tensorflow-release-notes/rel-23-12.html#rel-23-12
-# Tensorflow 2.14.0
-# for CUDA 12.x
-# FROM nvcr.io/nvidia/tensorflow:23.12-tf2-py3
 
-# for CUDA 11.x
-FROM nvcr.io/nvidia/tensorflow:22.12-tf2-py3 
+# for CUDA 11.x   
+# ARG TF_IMAGE=22.12
+
+# for CUDA 12.x
+ARG TF_IMAGE=23.12
+
+FROM nvcr.io/nvidia/tensorflow:$TF_IMAGE-tf2-py3
 
 # Make bash colorful https://www.baeldung.com/linux/docker-container-colored-bash-output   https://ss64.com/nt/syntax-ansi.html 
 ENV TERM=xterm-256color

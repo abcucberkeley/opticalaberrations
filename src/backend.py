@@ -1221,23 +1221,23 @@ def predict_files(
             object_gaussian_kernel_width=object_gaussian_kernel_width
         )
 
-        # inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
-        #
-        # inputs = inputs.map(
-        #     lambda x: tf.py_function(
-        #         generate_fourier_embeddings,
-        #         inp=[x],
-        #         Tout=tf.float32,
-        #     ),
-        #     num_parallel_calls=tf.data.AUTOTUNE,
-        #     deterministic=True,
-        # )
+        inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
 
-        inputs = tf.data.Dataset.from_generator(
-            DatasetGenerator(paths=paths, load_preprocess_func=generate_fourier_embeddings),
-            output_types=(tf.float32),
-            output_shapes=(digital_rotations, *model.input_shape[1:])
+        inputs = inputs.map(
+            lambda x: tf.py_function(
+                generate_fourier_embeddings,
+                inp=[x],
+                Tout=tf.float32,
+            ),
+            num_parallel_calls=tf.data.AUTOTUNE,
+            deterministic=True,
         )
+
+        # inputs = tf.data.Dataset.from_generator(
+        #     DatasetGenerator(paths=paths, load_preprocess_func=generate_fourier_embeddings),
+        #     output_types=(tf.float32),
+        #     output_shapes=(digital_rotations, *model.input_shape[1:])
+        # )
 
     num_predictions = paths.shape[0] * digital_rotations if digital_rotations else paths.shape[0]
 
