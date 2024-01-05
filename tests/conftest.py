@@ -24,7 +24,7 @@ def kargs():
         num_tiles=num_tiles,
         num_modes=num_modes,
         model=repo / f'pretrained_models/opticalnet-{num_modes}-YuMB-lambda510.h5',
-        dm_calibration=repo/'calibration/aang/28_mode_calibration.csv',
+        dm_calibration=repo/'calibration/aang/15_mode_calibration.csv',
         psf_type=repo/'lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         pois=repo/f'examples/single/results/Detection3D.mat',
         ideal_psf=repo/'examples/psf.tif',
