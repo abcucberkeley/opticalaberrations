@@ -169,7 +169,7 @@ jobs:
 
       - name: Build Apptainer from local docker image we just pulled to a local .sif
         run: |
-            apptainer build --nv --force ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}${{ matrix.CUDA_VERSION }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}${{ matrix.CUDA_VERSION }}
+            apptainer build --nv --force --disable-cache ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}${{ matrix.CUDA_VERSION }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}${{ matrix.CUDA_VERSION }}
 
       - name: Login and Push Apptainer SIF to github
         run: |
