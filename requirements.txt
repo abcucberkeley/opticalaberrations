@@ -10,6 +10,8 @@ dphtools
 csbdeep
 line-profiler
 line-profiler-pycharm
-tifffile==2023.9.18
-imagecodecs==2023.9.18
+tifffile==2023.9.18 ; python_version >= '3.9'
+imagecodecs==2023.9.18 ; python_version >= '3.9'
+tifffile ; python_version < '3.9'
+imagecodecs ; python_version < '3.9'
 nvitop
