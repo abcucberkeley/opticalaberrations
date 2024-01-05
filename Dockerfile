@@ -24,7 +24,11 @@
 # https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html
 # https://docs.nvidia.com/deeplearning/frameworks/tensorflow-release-notes/rel-23-12.html#rel-23-12
 # Tensorflow 2.14.0
-FROM nvcr.io/nvidia/tensorflow:23.12-tf2-py3
+# for CUDA 12.x
+# FROM nvcr.io/nvidia/tensorflow:23.12-tf2-py3
+
+# for CUDA 11.x
+FROM nvcr.io/nvidia/tensorflow:22.12-tf2-py3 
 
 # Make bash colorful https://www.baeldung.com/linux/docker-container-colored-bash-output   https://ss64.com/nt/syntax-ansi.html 
 ENV TERM=xterm-256color
