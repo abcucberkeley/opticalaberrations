@@ -1,8 +1,8 @@
-name: Delete old container images
-
+name: Delete old unused container images
 on:
   schedule:
-    - cron: '0 0 0 * *'  # the first day of the month
+    - cron: "0 13 * * 1" 
+    # Every Monday at 1PM UTC (9AM EST)
 
 jobs:
   clean-ghcr:
