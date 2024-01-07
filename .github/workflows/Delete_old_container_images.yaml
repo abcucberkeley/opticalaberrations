@@ -23,7 +23,7 @@ jobs:
       - name: Delete old images
         uses: snok/container-retention-policy@v2
         with:
-          image-names: dev*
+          image-names: develop, develop_CUDA_11_8, develop_CUDA_12_3, develop_sif, develop_CUDA_11_8_sif, develop_CUDA_12_3_sif,
           cut-off: One week ago UTC
           keep-at-least: 3
           account-type: personal
