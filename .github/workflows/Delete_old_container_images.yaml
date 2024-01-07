@@ -19,8 +19,7 @@ jobs:
   clean-ghcr:
     strategy:
       matrix:
-        include:
-          - IMAGE-NAME: [ develop, develop_CUDA_11_8, develop_CUDA_12_3, develop_sif, develop_CUDA_11_8_sif, develop_CUDA_12_3_sif]
+        IMAGE-NAME: [develop, develop_CUDA_11_8, develop_CUDA_12_3, develop_sif, develop_CUDA_11_8_sif, develop_CUDA_12_3_sif]
     name: Delete old unused container images
     runs-on: ubuntu-latest
     steps:
