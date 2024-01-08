@@ -30,5 +30,5 @@ jobs:
           cut-off: One week ago UTC
           keep-at-least: 3
           account-type: personal
-          token: ${{ secrets.GITHUB_TOKEN }}
-          token-type: github-token
+          token: ${{ secrets.cleanup_packages }}
+          token-type: pat
