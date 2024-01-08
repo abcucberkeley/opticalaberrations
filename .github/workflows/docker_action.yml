@@ -239,7 +239,6 @@ jobs:
           - TF_IMAGE: 22.12
             CUDA_VERSION: "_CUDA_11_8"
     needs: test-apptainer # need to wait for test-docker to finish otherwise GPU will be utilized.
-    if: always()
     runs-on: self-hosted
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}${{ matrix.CUDA_VERSION }}.sif
@@ -324,7 +323,6 @@ jobs:
 
   test_train-docker:         
     needs: test-docker
-    if: always()
     runs-on: self-hosted
     strategy:
       matrix:
