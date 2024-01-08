@@ -3,7 +3,7 @@ seaborn
 scikit-image
 scikit-spatial
 pytest
-matplotlib>=3.8
+matplotlib>=3.7.4
 ujson
 zarr
 pycudadecon

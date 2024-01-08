@@ -179,7 +179,7 @@ jobs:
             
       # singularity push container.sif oras://ghcr.io/abcucberkeley/opticalaberrations:develop_sif
       # singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
-      # apptainer pull --force --disable-cache -develop.sif oras://ghcr.io/abcucberkeley/opticalaberrations:develop_sif
+      # apptainer pull --force --disable-cache develop.sif oras://ghcr.io/abcucberkeley/opticalaberrations:develop_sif
 
   test-apptainer:
     needs: build-apptainer
