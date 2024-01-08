@@ -20,7 +20,7 @@ NETWORK='opticalnet'
 SKIP_REMOVE_BACKGROUND=false
 
 TRAINED_MODELS=(
-  "YuMB_lambda510-lamb-amp"
+  "YuMB_lambda510"
 )
 
 for M in ${TRAINED_MODELS[@]}
@@ -29,10 +29,10 @@ do
 
     if [ "${M:0:4}" = YuMB ];then
       declare -a PSFS=(
-        "YuMB ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
-        #"Gaussian ../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat"
-        #"MBSq ../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat"
-        #"Sinc ../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat"
+        # "YuMB ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
+        "Gaussian ../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat"
+        "MBSq ../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat"
+        "Sinc ../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat"
       )
 
     elif [ "${M:0:5}" == v2Hex ];then
@@ -84,8 +84,10 @@ do
           JOB="${CLUSTER} test.py --timelimit $TIMELIMIT --dependency singleton --partition gpu_a100 --cpus 8 --gpus 4"
         fi
 
-        for SIM in '' '--use_theoretical_widefield_simulator'; do
-          for PREP in ''; do #'--skip_remove_background'; do
+        for SIM in '' #'--use_theoretical_widefield_simulator'
+        do  
+          for PREP in '' #'--skip_remove_background'
+          do
               CONFIG=" $SIM $PREP --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
               python manager.py $JOB \
