@@ -349,21 +349,21 @@ def collect_dataset(
             tf.string       # filename
         ]
         dshapes = [
-            (modes), # amps
-            (1),     # photons
-            (1),     # counts
-            (1),     # counts_mode
-            (100),   # counts_percentiles
-            (1),     # peak2peak
-            (1),     # umRMS
-            (1),     # npoints
-            (1),     # avg_min_distance
-            (1)      # filename
+            (modes,),   # amps
+            (),         # photons
+            (),         # counts
+            (),         # counts_mode
+            (100,),     # counts_percentiles
+            (),         # peak2peak
+            (),         # umRMS
+            (),         # npoints
+            (),         # avg_min_distance
+            ()          # filename
         ]
     else:
         # img, amps
         dtypes = [tf.float32, tf.float32]
-        dshapes = [model_input_shape, (modes)]
+        dshapes = [model_input_shape, (modes,)]
 
     load = partial(
         get_sample,

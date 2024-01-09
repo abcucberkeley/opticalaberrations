@@ -16,11 +16,11 @@ NA=1.0
 ABC_A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
 CLUSTER=slurm
 TIMELIMIT='24:00:00'  #hh:mm:ss
-NETWORK='opticalnet'
+NETWORK='prototype'
 SKIP_REMOVE_BACKGROUND=false
 
 TRAINED_MODELS=(
-  "YuMB_lambda510"
+  "YuMB_lambda510-lamb-amp"
 )
 
 for M in ${TRAINED_MODELS[@]}
@@ -91,17 +91,17 @@ do
               CONFIG=" $SIM $PREP --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
               python manager.py $JOB \
-              --task "$MODEL.h5 --num_beads 1 $CONFIG snrheatmap" \
+              --task "${MODEL}.h5 --num_beads 1 $CONFIG snrheatmap" \
               --taskname na_$NA \
               --name $OUTDIR/${DATASET}${SIM}${PREP}-fourier_filter/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
               #python manager.py $JOB \
-              #--task "$MODEL.h5  $CONFIG densityheatmap" \
+              #--task "${MODEL}.h5  $CONFIG densityheatmap" \
               #--taskname na_$NA \
               #--name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
               #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
-              #--task "$MODEL.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
+              #--task "${MODEL}.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
               #--taskname na_$NA \
               #--name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
               echo
