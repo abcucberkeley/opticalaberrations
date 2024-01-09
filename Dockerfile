@@ -54,7 +54,7 @@ RUN echo 'alias repo="cd /app/opticalaberrations/src"' >> ~/.bashrc
 RUN echo 'alias cloneit=${cloneit}' >> ~/.bashrc
 
 # Download the current github commit page for this branch. This will invalidate the cache for later Docker layers when the commit changes things.
-ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=${BRANCH_NAME}&per_page=1" dummy_location
+# ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=${BRANCH_NAME}&per_page=1" dummy_location_one
 
 # git clone "requirements.txt" into a junk directory, then pip install. --filter=blob:none will only download the files in HEAD
 WORKDIR /docker_install
@@ -126,7 +126,7 @@ RUN echo 'alias repo="cd /app/opticalaberrations/src"' >> ~/.bashrc
 RUN echo 'alias cloneit=${cloneit}' >> ~/.bashrc
 
 # Download the current github commit page for this branch. This will invalidate the cache for later Docker layers when the commit changes things.
-ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=${BRANCH_NAME}&per_page=1" dummy_location
+# ADD "https://api.github.com/repos/abcucberkeley/opticalaberrations/commits?sha=${BRANCH_NAME}&per_page=1" dummy_location
 
 # git clone "requirements.txt" into a junk directory, then pip install. --filter=blob:none will only download the files in HEAD
 WORKDIR /docker_install
