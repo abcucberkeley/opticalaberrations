@@ -1,36 +1,35 @@
+import pip
+pip.main(['install', 'onnx'])
+pip.main(['install', 'tf2onnx'])
+pip.main(['install', 'onnxruntime-gpu'])
+pip.main(['install', 'pycuda'])
+
 import matplotlib
 matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
-import os
-import time
-import logging
-import sys
 from pathlib import Path
 from typing import Any
-
-import tensorflow as tf
-import numpy as np
+import subprocess
+import time
 
 import onnx
 import tf2onnx
 import onnxruntime as ort
+import tensorrt as trt
+import tensorflow as tf
+import numpy as np
+import pycuda.driver as cuda
+
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 from tensorflow.python.saved_model import tag_constants, signature_constants
 from tensorflow.python.compiler.tensorrt import trt_convert as tftrt
+from tensorflow.python.keras import backend as K
 
 import backend
-
-
-logging.basicConfig(
-    stream=sys.stdout,
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-tf.get_logger().setLevel(logging.ERROR)
+import trt_utils
 
 
 def batchify(arr, batch_size):
@@ -38,65 +37,66 @@ def batchify(arr, batch_size):
         yield arr[i:i + batch_size]
 
 
-def convert2tftrt(
+def convert_h5_to_graph(
     model_path: Path,
-    dtype: Any = np.float32,
-    optimal_batch_size: int = 512,
 ):
-    timeit = time.time()
+    model = backend.load(model_path)
 
-    model = backend.load(f"{model_path}.h5")
-
-    # Convert Keras model to ConcreteFunction
     full_model = tf.function(lambda x: model(x))
     full_model = full_model.get_concrete_function(x=tf.TensorSpec(model.inputs[0].shape, model.inputs[0].dtype))
 
-    # Get frozen ConcreteFunction
-    frozen_func = convert_variables_to_constants_v2(full_model)
-    frozen_func.graph.as_graph_def()
+    frozen = convert_variables_to_constants_v2(full_model)
+    frozen.graph.as_graph_def()
 
-    # inspect the layers operations inside your frozen graph definition and see the name of its input and output tensors
-    layers = [op.name for op in frozen_func.graph.get_operations()]
-    print("-" * 50)
-    print("Frozen model layers: ")
-    for layer in layers:
-        print(layer)
+    input_names = [t.name for t in model.inputs]
+    output_names = [t.name for t in model.outputs]
+    
+    print(f"Frozen model inputs: {input_names}: {frozen.inputs}")
+    print(f"Frozen model outputs: {output_names}: {frozen.outputs}")
 
-    print("-" * 50)
-    print("Frozen model inputs: ")
-    print(frozen_func.inputs)
-    print("Frozen model outputs: ")
-    print(frozen_func.outputs)
-
-    # Save frozen graph from frozen ConcreteFunction to hard drive
-    # serialize the frozen graph and its text representation to disk.
+    # model_path.with_suffix('').mkdir(parents=True, exist_ok=True)
+    
     tf.io.write_graph(
-        graph_or_graph_def=frozen_func.graph,
+        graph_or_graph_def=frozen.graph,
         logdir=str(Path(model_path).parent),
-        name=f"{model_path}.pb",
+        name=f"{model_path.with_suffix('')}_frozen_graph.pb",
         as_text=False
     )
 
-    # Optional
     tf.io.write_graph(
-        graph_or_graph_def=frozen_func.graph,
+        graph_or_graph_def=frozen.graph,
         logdir=str(Path(model_path).parent),
-        name=f"{model_path}.pbtxt",
+        name=f"{model_path.with_suffix('')}_frozen_graph.pbtxt",
         as_text=True
-    )
+    )   
 
+    return frozen, input_names, output_names
+
+
+def convert_h5_to_pb(
+    model_path: Path,
+):
+    timeit = time.time()
+    
+    model = backend.load(model_path)
+    tf.saved_model.save(model, str(model_path.with_suffix('')))
+    subprocess.call(
+        f"saved_model_cli show --all --dir {model_path.with_suffix('')}",
+        shell=True,
+    )
+    
     return time.time() - timeit
 
 
-def convertpb2tftrt(
+def convert_pb_to_tftrt(
     model_path: Path,
-    dtype: Any = np.float32,
-    optimal_batch_size: int = 512,
+    dtype: Any = 'float16',
+    optimal_batch_size: int = 128,
 ):
     timeit = time.time()
-
+    
     converter = tftrt.TrtGraphConverterV2(
-        input_saved_model_dir=f"{model_path}.h5",
+        input_saved_model_dir=str(model_path.with_suffix('')),
         precision_mode=tftrt.TrtPrecisionMode.FP16,
         use_dynamic_shape=True,
         allow_build_at_runtime=False,
@@ -112,51 +112,89 @@ def convertpb2tftrt(
     # Optionally, build TensorRT engines before deployment to save time at runtime
     # Note that this is GPU specific, and as a rule of thumb, we recommend building at runtime
     def input_fn():
-        yield tf.convert_to_tensor(np.random.random((optimal_batch_size, 6, 64, 64, 1)).astype(dtype))
+        yield tf.convert_to_tensor(np.random.random((optimal_batch_size, 6, 64, 64, 1)).astype('float32'))
 
     converter.build(input_fn=input_fn)
 
-    converter.save(f"{model_path}/tftrt")
+    converter.save(str(model_path.with_suffix('.tftrt')))
     converter.summary()
 
     return time.time() - timeit
 
 
-def convert2onnx(
+def convert_h5_to_onnx(
     model_path: Path,
-    dtype: Any = np.float32,
-    optimal_batch_size: int = 512,
+    dtype: Any = 'float16',
+    optimal_batch_size: int = 128,
 ):
     timeit = time.time()
+    
+    model = backend.load(model_path)
+    input_signature = (tf.TensorSpec((None, 6, 64, 64, 1), 'float16', name="embeddings"),)
 
-    model = backend.load(f"{model_path}.h5")
-    # tfmodel = backend.load(f'{modeldir}/tf')
-    #
-    # for l1, l2 in zip(tfmodel.layers, model.layers):
-    #     for w1, w2 in zip(l1.get_weights(), l2.get_weights()):
-    #         logger.info(f"{l1.name}: {w1.shape} \t {l2.name}: {w2.shape}")
-    #         try:
-    #             np.testing.assert_equal(w1, w2)
-    #         except AssertionError as e:
-    #             logger.error(e)
-    #     print('-'*100)
-
-    input_signature = (tf.TensorSpec((None, 6, 64, 64, 1), tf.float32, name="embeddings"),)
-
-    onnx_model, _ = tf2onnx.convert.from_keras(
+    tf2onnx.convert.from_keras(
         model,
-        opset=18,
+        opset=17,
         input_signature=input_signature,
         target='tensorrt',
-        output_path=f"{model_path}.onnx",
+        output_path=str(model_path.with_suffix('.onnx')),
     )
+    
+    return time.time() - timeit
+
+
+def convert_onnx_to_trt(
+    model_path: Path,
+    dtype: Any = 'float16',
+    optimal_batch_size: int = 128,
+):
+    timeit = time.time()
+    
+    subprocess.call(
+        f"/usr/src/tensorrt/bin/trtexec "
+        f"--onnx={model_path.with_suffix('.onnx')} "
+        f"--saveEngine={model_path.with_suffix('.trt')} "
+        "--workspace=16000 "
+        # f"--explicitBatch "
+        # f"--fp16 "
+        # f"--verbose "
+        f"--best ",
+        shell=True,
+    )
+    
+    return time.time() - timeit
+
+
+def convert_pb_to_onnx(
+    model_path: Path,
+    dtype: Any = 'float16',
+    optimal_batch_size: int = 128,
+):
+    timeit = time.time()
+    
+    subprocess.call(
+        f"python -m tf2onnx.convert "
+        f"--saved-model={model_path.with_suffix('')} "
+        f"--output={model_path.with_suffix('.onnx')} "
+        f"--opset=17 "
+        f"--target=tensorrt "
+        f"--verbose ",
+        shell=True,
+    )   
+    
     return time.time() - timeit
 
 
 def benchmark(path, dataset, modelformat='tftrt'):
-    timeit = time.time()
 
+    timeit = time.time()
+    
     if modelformat == 'onnx':
+        model = onnx.load(path)
+        out_names =[node.name for node in model.graph.output]
+        input_names = [node.name for node in model.graph.input]
+        del model 
+        
         options = ort.SessionOptions()
         sess = ort.InferenceSession(
             path,
@@ -167,19 +205,33 @@ def benchmark(path, dataset, modelformat='tftrt'):
 
         predictions = []
         for batch in dataset.as_numpy_iterator():
-            preds = sess.run(['regressor'], {'embeddings': batch})[0]
+            preds = sess.run(out_names, {input_names[0]: batch})[0]
             predictions.extend(preds)
 
-    elif modelformat == 'tftrt':
+    elif modelformat == 'pb' or modelformat == 'tftrt':
         graph = tf.saved_model.load(path, tags=[tag_constants.SERVING])
         model = graph.signatures[signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
 
         predictions = []
-        for batch in dataset.as_numpy_iterator():
+        for batch in dataset:
             preds = model(batch)
             predictions.extend(preds[next(iter(preds))].numpy())
 
-    else:
+    elif modelformat == 'trt':
+        stream = cuda.Stream()
+        with trt_utils.compile_engine(path) as engine:
+            with engine.create_execution_context() as context:
+
+                predictions = []
+                for batch in dataset.as_numpy_iterator():
+                    preds = trt_utils.predict(
+                        context=context,
+                        stream=stream,
+                        batch=batch,
+                    )
+                    predictions.extend(preds)
+
+    else:  # tf/keras model
         model = backend.load(path)
         predictions = model.predict(dataset)
 
@@ -188,32 +240,53 @@ def benchmark(path, dataset, modelformat='tftrt'):
 
 def optimize_model(
     model_path: Path,
-    dtype: Any = np.float32,
-    modelformat: str = 'onnx',
-    number_of_samples: int = 10240,
+    dtype: Any = 'float16',
+    modelformat: str = 'trt',
+    number_of_samples: int = 10*1024,
     batch_size: int = 128,
 ):
-    logger.info(f"Compiling {model_path.name} => {modelformat}")
+    print(f"Compiling {model_path.name} => {modelformat}")
 
-    if modelformat == 'onnx':
-        convert2onnx(
-            model_path=f"{model_path}",
+    if modelformat == 'pb':
+        convert_h5_to_pb(
+            model_path=model_path,
+        )  
+    elif modelformat == 'tftrt':
+        convert_h5_to_pb(
+            model_path=model_path,
+        )  
+        convert_pb_to_tftrt(
+            model_path=model_path,
             dtype=dtype,
             optimal_batch_size=batch_size
         )
-    elif modelformat == 'tftrt':
-        convert2tftrt(
-            model_path=f"{model_path}",
+    elif modelformat == 'onnx':
+        convert_h5_to_onnx(
+            model_path=model_path,
+            dtype=dtype,
+            optimal_batch_size=batch_size
+        )
+    elif modelformat == 'trt':
+        convert_h5_to_pb(
+            model_path=model_path,
+        ) 
+        convert_pb_to_onnx(
+            model_path=model_path,
+            dtype=dtype,
+            optimal_batch_size=batch_size
+        )
+        convert_onnx_to_trt(
+            model_path=model_path,
             dtype=dtype,
             optimal_batch_size=batch_size
         )
     else:
-        logger.error(f"Unknown model format: {modelformat}")
+        print(f"Unknown model format: {modelformat}")
 
-    logger.info(f"Creating [{number_of_samples}] test samples")
+    print(f"Creating [{number_of_samples}] test samples")
 
     dataset = tf.data.Dataset.from_tensor_slices(
-        np.random.random((number_of_samples, 6, 64, 64, 1)).astype(np.float32)
+        np.random.random((number_of_samples, 6, 64, 64, 1)).astype('float32')
     )
     dataset = dataset.cache()
     dataset = dataset.batch(batch_size)
@@ -222,12 +295,19 @@ def optimize_model(
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
     dataset = dataset.with_options(options)
 
-    logger.info(f"Evaluating samples with [{modelformat}] model")
-    preds_tf, timer_tf = benchmark(f"{model_path}.h5", dataset=dataset, modelformat='keras')
-    preds, timer = benchmark(f"{model_path}.onnx", dataset=dataset, modelformat=modelformat)
+    print(f"Evaluating samples with [{modelformat}] model")
+    preds, timer = benchmark(
+        model_path.with_suffix(f".{modelformat}") if modelformat != 'pb' else model_path.with_suffix(''), 
+        dataset=dataset, 
+        modelformat=modelformat
+    )
+    preds_tf, timer_tf = benchmark(
+        model_path, 
+        dataset=dataset, 
+        modelformat='keras'
+    )
 
-    logger.info(f"Runtime for {number_of_samples} samples [{batch_size=}]")
-    logger.info(f"TF backend: {number_of_samples/timer_tf:.0f} prediction/sec.")
-    logger.info(f"{modelformat.upper()} backend: {number_of_samples/timer:.0f} prediction/sec.")
+    print(f"Runtime for {number_of_samples} samples [{batch_size=}]")
+    print(f"TF backend: {number_of_samples/timer_tf:.0f} prediction/sec.")
+    print(f"{modelformat.upper()} backend: {number_of_samples/timer:.0f} prediction/sec.")
     np.testing.assert_allclose(preds_tf, preds, rtol=1e-3, atol=1e-3)
-

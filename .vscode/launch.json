@@ -706,7 +706,7 @@
       "program": "${workspaceFolder}/src/config.py",
       "console": "integratedTerminal",
       "args": [
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15/model",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "--modelformat",
         "trt",
         "optimize"
@@ -1161,9 +1161,9 @@
       "program": "${workspaceFolder}/src/test.py",
       "console": "integratedTerminal",
       "args": [
-        "../pretrained_models/opticalnet-15-YuMB_lambda510-nostem.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "--datadir",
-        "../dataset/test/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/",
+        "../dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/",
         "--na",
         "1.0",
         "--batch_size",

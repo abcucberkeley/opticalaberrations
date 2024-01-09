@@ -1,9 +1,3 @@
-# import pip
-# pip.main(['install', 'onnx'])
-# pip.main(['install', 'tf2onnx'])
-# pip.main(['install', 'onnxruntime-gpu'])
-
-
 import logging
 from pathlib import Path
 import cli
