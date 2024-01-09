@@ -1,6 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="calibrate_dm" type="PythonConfigurationType" factoryName="Python" folderName="dm">
     <module name="opticalaberrations" />
+    <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
@@ -13,7 +14,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="calibrate_dm U:\Data\TestsForThayer\20230620_recheck_DM_cal\Check_DM_cal C:\AangSettings\PhaseRetrival\PR_outputs\PSF\Zernike_Aang_Bax272.csv" />
+    <option name="PARAMETERS" value="calibrate_dm U:\Data\TestsForThayer\20240109_DM_cal_new_model\Check_DM_cal\ C:\AangSettings\PhaseRetrival\PR_outputs\PSF\Zernike_Aang_Bax272.csv" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
