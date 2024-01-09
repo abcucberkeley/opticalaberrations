@@ -23,7 +23,6 @@ cd /docker_install
 # Install requirements. Don't "apt-get upgrade" or else all the NVIDIA tools and drivers will update.
 apt-get update \
 && apt-get install -y --no-install-recommends \
-sudo \
 htop \
 cifs-utils \
 winbind \
@@ -31,7 +30,7 @@ smbclient \
 && rm -rf /var/lib/apt/lists/*
 
 # Git-lfs install
-curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && apt-get install git-lfs && rm -rf /var/lib/apt/lists/*
+curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && apt-get update && apt-get install git-lfs && rm -rf /var/lib/apt/lists/*
 
 # Make the dockerfile use the current branch (passed in as a command line argument to "docker build")
 

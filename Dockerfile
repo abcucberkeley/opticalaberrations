@@ -95,6 +95,7 @@ ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
 ### Target older CUDA
 # Need to use google container, because NVIDIA ones don't have python >3.8 and CUDA 11_x.  But this means more installing
 # using different requirements file.
+# https://cloud.google.com/deep-learning-containers/docs/choosing-container#versions
 FROM us-docker.pkg.dev/deeplearning-platform-release/gcr.io/tf2-gpu.2-12.py310 as CUDA_11_8
 
 # Make bash colorful https://www.baeldung.com/linux/docker-container-colored-bash-output   https://ss64.com/nt/syntax-ansi.html
@@ -114,7 +115,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 # Git-lfs install
-RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && apt-get install git-lfs && rm -rf /var/lib/apt/lists/*
+RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && apt-get update && apt-get install -y --no-install-recommends git-lfs && rm -rf /var/lib/apt/lists/*
 
 # Make the dockerfile use the current branch (passed in as a command line argument to "docker build")
 ARG BRANCH_NAME
@@ -152,7 +153,6 @@ ARG USER_GID=1000
 
 # Create the user
 RUN   if id -g $USER_GID >//dev/null 2>&1; then echo "group $USER_GID exists"; else groupadd --gid $USER_GID $USERNAME; fi
-#RUN   if id -g 1001 >//dev/null 2>&1; then echo "group 1001      exists"; else groupadd --gid 1001 vscode_secondary; fi
 RUN   if id -u $USER_UID >//dev/null 2>&1; then echo "user  $USER_UID exists"; else useradd -l --uid $USER_UID --gid $USER_GID -G 1001 -m $USERNAME; fi
     #
     # [Optional] Add sudo support. Omit if you don't need to install software after connecting.
