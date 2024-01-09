@@ -1034,8 +1034,10 @@ def main(args=None, preloaded=None):
 
     if args.cluster:
         # cluster_env = f"~/anaconda3/envs/ml/bin/python"
+        # CUDA_version = "CUDA_12_3"    # awaiting cluster GPU driver update
+        CUDA_version = "CUDA_11_8"
         cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
-        cluster_env = f"apptainer exec --bind /clusterfs --nv {cluster_repo}/develop.sif python "
+        cluster_env = f"apptainer exec --bind /clusterfs --nv {cluster_repo}/develop_{CUDA_version}.sif python "
         script = f"{cluster_repo}/src/ao.py"
 
         flags = ' '.join(command_flags)
@@ -1082,23 +1084,24 @@ def main(args=None, preloaded=None):
         container_repo = "/app/opticalaberrations"  # location of repo in the container
         local_repo = Path(__file__).parent.parent  # location of repo in host
         branch_name = get_active_branch_name(local_repo)
+        CUDA_version = "CUDA_12_3"
 
         flags = ' '.join(command_flags)
         flags = re.sub(pattern=' --docker', repl='', string=flags)  # remove flag
         flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
         flags = flags.replace("..", container_repo)  # regex stinks at replacing ".."
         flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
-        flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
+        flags = re.sub(pattern='~/nvme2',   repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='U:\\\\',    repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='U:/',       repl='/clusterfs/nvme2/', string=flags)
+        flags = re.sub(pattern='V:\\\\',    repl='/clusterfs/nvme/', string=flags)
+        flags = re.sub(pattern='V:/',       repl='/clusterfs/nvme/', string=flags)
 
         flags = re.sub(pattern=local_repo.as_posix(), repl=container_repo, string=flags)
 
         docker_run = "docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --name opt_net"
         docker_mount = f'-v "{local_repo}":{container_repo}'
-        docker_image = f"ghcr.io/abcucberkeley/opticalaberrations:{branch_name}"
+        docker_image = f"ghcr.io/abcucberkeley/opticalaberrations:{branch_name}_{CUDA_version}"
         docker_job = f'{docker_run} --workdir {container_repo}/src {docker_mount} {docker_image} "python ao.py {flags}"'
         logger.info(f"Docker job: \n{docker_job}\n")
         subprocess.run(docker_job, shell=True)
