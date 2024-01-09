@@ -327,3 +327,36 @@ jobs:
     steps:
       - name: Test training        
         run: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider tests/test_train.py
+
+
+  build-native-apptainer:
+    needs: build-docker
+    if: always()
+    runs-on: self-hosted
+    strategy:
+      matrix:
+        include:
+          - TF_IMAGE: 23.12
+            CUDA_VERSION: "CUDA_12_3"
+          - TF_IMAGE: 22.12
+            CUDA_VERSION: "CUDA_11_8"
+    steps:          
+      # Login against a Docker registry except on PR
+      # https://github.com/docker/login-action
+      - name: Log into registry ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}    # aka ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+                        
+      - name: Build Apptainer from Recipe to a local .sif
+        run: |
+            apptainer build--nv --force --build-arg BRANCH_NAME=${{ env.BRANCH }} ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_native.sif Apptainerfile_${{ matrix.CUDA_VERSION }}
+
+      - name: Login and Push Apptainer SIF to github
+        run: |
+            ls *.si*         
+            apptainer remote login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io       
+            apptainer push ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_native.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_native_sif  
