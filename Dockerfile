@@ -75,12 +75,12 @@ ARG USER_UID=1000
 ARG USER_GID=1000
 
 # Create the user
-RUN   if id -g $USER_GID >//dev/null 2>&1; then echo "group $USER_GID exists"; else groupadd --gid $USER_GID $USERNAME; fi
-#RUN   if id -g 1001 >//dev/null 2>&1; then echo "group 1001      exists"; else groupadd --gid 1001 vscode_secondary; fi
-RUN   if id -u $USER_UID >//dev/null 2>&1; then echo "user  $USER_UID exists"; else useradd -l --uid $USER_UID --gid $USER_GID -G 1001 -m $USERNAME; fi
+RUN   groupadd --gid $USER_GID $USERNAME && \
+    groupadd --gid 1001 vscode_secondary && \
+    useradd -l --uid $USER_UID --gid $USER_GID -G 1001 -m $USERNAME && \
     #
     # [Optional] Add sudo support. Omit if you don't need to install software after connecting.        
-RUN echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
+    echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
 # [Optional] Set the default user. Omit if you want to keep the default as root.
