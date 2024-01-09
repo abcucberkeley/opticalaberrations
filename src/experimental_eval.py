@@ -115,7 +115,7 @@ def eval_dm(
     the modes in the dm_calibration, to produce a dm_calibration that will work for this ML model.
 
     The ML model has a learned using a different definition of each Zernike mode than the ALPAO provided dm_calibration
-    matrix.  Both sign and amplitude need to be adjusted. We take empirical data on beads using applied abberations to
+    matrix.  Both sign and amplitude need to be adjusted. We take empirical data on beads using applied aberrations to
     the DM. These series of measurements (one at each mode) yield the scaling factor.
 
     Args:
