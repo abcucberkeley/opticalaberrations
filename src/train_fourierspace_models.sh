@@ -9,10 +9,11 @@ DY=125
 DX=125
 DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
-NETWORK=opticalnet
+NETWORK='prototype'
 MODES=15
 CLUSTER='lsf'
 DEFAULT='--positional_encoding_scheme default --batch_size 2048 --lr 5e-4 --wd 5e-6 --opt adamw'
+LAMB='--batch_size 2048 --lr 1e-3 --wd 1e-2 --opt lamb'
 
 SUBSET='fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
@@ -47,34 +48,24 @@ do
   else
     LAM=.510
   fi
+  
+  CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
-    CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
+  for HEADS in '2-4-8-16' '3-6-12-24' '16-16-16-16'
+  do 
+    for REPEATS in '2-4-6-2' '1-4-6-2' '1-2-4-2' '1-2-8-4' 
+    do
+      python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+      --task "$CONFIG $LAMB --heads $HEADS --repeats $REPEATS" \
+      --taskname $NETWORK \
+      --name new/$SUBSET/$NETWORK-$MODES-$DIR-H-${HEADS}-R-${REPEATS}
 
-#    python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-#    --task "$CONFIG --batch_size 2048 --lr 1e-3 --wd 1e-2 --opt lamb" \
-#    --taskname $NETWORK \
-#    --name new/$SUBSET/$NETWORK-$MODES-$DIR-lamb-amp
-#
-#    python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-#    --task "$CONFIG $DEFAULT" \
-#    --taskname $NETWORK \
-#    --name new/$SUBSET/$NETWORK-$MODES-$DIR-default
-#
-#    python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-#    --task "$CONFIG --depth_scalar 1.5 --batch_size 1024 --lr 1e-3 --wd 1e-2 --opt lamb" \
-#    --taskname $NETWORK \
-#    --name new/$SUBSET/$NETWORK-$MODES-$DIR-lamb-amp-1p5x
-#
-#    python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-#    --task "$CONFIG --depth_scalar 2.0 --batch_size 1024 --lr 1e-3 --wd 1e-2 --opt lamb" \
-#    --taskname $NETWORK \
-#    --name new/$SUBSET/$NETWORK-$MODES-$DIR-lamb-amp-2x
-
-    python manager.py $CLUSTER train.py --partition gpu_h100 --gpus 8 --cpus 8 \
-    --task "$CONFIG --depth_scalar 2.0 --batch_size 2048 --lr 1e-3 --wd 1e-2 --opt lamb" \
-    --taskname $NETWORK \
-    --name new/$SUBSET/$NETWORK-$MODES-$DIR-lamb-amp-2x-h100
-
+      # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+      # --task "$CONFIG $DEFAULT" \
+      # --taskname $NETWORK \
+      # --name new/$SUBSET/$NETWORK-$MODES-$DIR-default
+    done
+  done
 done
 
 

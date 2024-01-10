@@ -50,7 +50,7 @@ tf.get_logger().setLevel(logging.ERROR)
 plt.set_loglevel('error')
 
 
-def plot_patches(img: np.ndarray, outdir: Path, patch_size: list):
+def plot_patches(img: np.ndarray, outdir: Path, patches: list):
     for k, label in enumerate(['xy', 'xz', 'yz']):
         img = np.expand_dims(img[0], axis=0)
         original = np.squeeze(img[0, k])
@@ -73,7 +73,7 @@ def plot_patches(img: np.ndarray, outdir: Path, patch_size: list):
         plt.title('Original')
         plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-        for p in patch_size:
+        for p in patches:
             patches = opticalnet.Patchify(patch_size=p)(img)
             merged = opticalnet.Merge(patch_size=p)(patches)
 
@@ -108,7 +108,9 @@ def train_model(
     max_amplitude: float = 1,
     input_shape: int = 64,
     batch_size: int = 32,
-    patch_size: list = (32, 16, 8, 8),
+    patches: list = [32, 16, 8, 8],
+    heads: list = [2, 4, 8, 16],
+    repeats: list = [2, 4, 6, 2],
     depth_scalar: float = 1.,
     width_scalar: float = 1.,
     activation: str = 'gelu',
@@ -205,7 +207,7 @@ def train_model(
                 for i, (img, y) in enumerate(train_data.shuffle(batch_size).take(5)):
 
                     if plot_patchfiy:
-                        plot_patches(img=img, outdir=outdir, patch_size=patch_size)
+                        plot_patches(img=img, outdir=outdir, patches=patches)
 
                     img = np.squeeze(img, axis=-1)
 
@@ -284,7 +286,9 @@ def train_model(
                 name='Prototype',
                 roi=roi,
                 stem=stem,
-                patches=patch_size,
+                patches=patches,
+                heads=heads,
+                repeats=repeats,
                 modes=pmodes,
                 depth_scalar=depth_scalar,
                 width_scalar=width_scalar,
@@ -303,7 +307,9 @@ def train_model(
                 name='OpticalNet',
                 roi=roi,
                 stem=stem,
-                patches=patch_size,
+                patches=patches,
+                heads=heads,
+                repeats=repeats,
                 modes=pmodes,
                 depth_scalar=depth_scalar,
                 width_scalar=width_scalar,
@@ -510,7 +516,15 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--patch_size", default='32-16-8-8', help="patch size for transformer-based model"
+        "--patches", default='32-16-8-8', help="patch size for transformer-based model"
+    )
+    
+    train_parser.add_argument(
+        "--heads", default='2-4-8-16', help="patch size for transformer-based model"
+    )
+        
+    train_parser.add_argument(
+        "--repeats", default='2-4-6-2', help="patch size for transformer-based model"
     )
 
     train_parser.add_argument(
@@ -757,7 +771,9 @@ def main(args=None):
                 network=args.network,
                 input_shape=args.input_shape,
                 batch_size=args.batch_size,
-                patch_size=[int(i) for i in args.patch_size.split('-')],
+                patches=[int(i) for i in args.patches.split('-')],
+                heads=[int(i) for i in args.heads.split('-')],
+                repeats=[int(i) for i in args.repeats.split('-')],
                 roi=[int(i) for i in args.roi.split('-')] if args.roi is not None else args.roi,
                 steps_per_epoch=args.steps_per_epoch,
                 psf_type=args.psf_type,

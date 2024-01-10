@@ -431,7 +431,7 @@ class OpticalTransformer(Base, ABC):
     def __init__(
             self,
             roi=None,
-            patches=(8, 8, 8, 8),
+            patches=(32, 16, 8, 8),
             heads=(2, 4, 8, 16),
             repeats=(2, 4, 6, 2),
             depth_scalar=1.0,
