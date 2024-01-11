@@ -1221,11 +1221,7 @@
         "--outdir",
         "../models/opticalnet",
         "--dataset",
-        "../dataset/fit_125",
-        "--finetune",
-        "\"C:\\SPIM\\Common\\Calculations\\Python\\Phase",
-        "Retrieval",
-        "ML\\opticalaberrations\\pretrained_models\\lattice_yumb_x108um_y108um_z200um\\opticalnet-15-YuMB_lambda510-lamb-amp-single\""
+        "../dataset/training_dataset",
       ],
       "presentation": {
         "hidden": false,
