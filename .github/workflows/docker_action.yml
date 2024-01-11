@@ -7,7 +7,8 @@ on:
       - 'main'
       - 'develop'
       - 'releases/**'
-      - 'latest-tf'
+      - 'release/**'
+      - 'release'
     tags:
       - '*'
   pull_request:
@@ -15,6 +16,8 @@ on:
       - 'main'
       - 'develop'
       - 'releases/**'
+      - 'release/**'
+      - 'release'
 
 # only allow one copy of this workflow to run at a time (the group specified by workflow name)
 # cancel current workflows if they are running, so that we just run the latest queue'd.
