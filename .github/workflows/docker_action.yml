@@ -251,8 +251,7 @@ jobs:
         run: ${{ env.APPTAINER_RUN }} ${{ env.PYTEST }} ${{ github.workspace }}/tests/test_train.py
 
   test-docker:
-    needs: [test_train-apptainer, build-docker] # needs to run after apptainer because this is going to write root files.
-    if:  always() && needs.build-docker.result == 'success'
+    needs: test_train-apptainer # needs to run after apptainer because this is going to write root files.
     runs-on: self-hosted
     strategy:
       matrix:
