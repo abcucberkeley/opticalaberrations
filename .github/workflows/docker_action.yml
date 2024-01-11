@@ -19,7 +19,7 @@ on:
 # only allow one copy of this workflow to run at a time (the group specified by workflow name)
 # cancel current workflows if they are running, so that we just run the latest queue'd.
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -53,10 +53,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - TF_IMAGE: 23.12
-            CUDA_VERSION: "CUDA_12_3"
-          - TF_IMAGE: 22.12
-            CUDA_VERSION: "CUDA_11_8"
+          # - CUDA_VERSION: "Torch_CUDA_12_3"
+          - CUDA_VERSION: "TF_CUDA_12_3"
     steps:
       - name: Dump GitHub context
         env:
@@ -150,10 +148,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - TF_IMAGE: 23.12
-            CUDA_VERSION: "CUDA_12_3"
-          - TF_IMAGE: 22.12
-            CUDA_VERSION: "CUDA_11_8"
+          - CUDA_VERSION: "Torch_CUDA_12_3"
+          - CUDA_VERSION: "TF_CUDA_12_3"          
     steps:
       - name: List files in the directory
         run: |
@@ -175,7 +171,7 @@ jobs:
 
       - name: Build Apptainer from local docker image we just pulled to a local .sif
         run: |
-            apptainer build --nv --force --disable-cache ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}
+            apptainer build --nv --force ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}
 
       - name: Login and Push Apptainer SIF to github
         run: |
@@ -193,10 +189,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - TF_IMAGE: 23.12
-            CUDA_VERSION: "CUDA_12_3"
-          - TF_IMAGE: 22.12
-            CUDA_VERSION: "CUDA_11_8"
+          - CUDA_VERSION: "TF_CUDA_12_3"
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif
     steps:
@@ -238,10 +231,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - TF_IMAGE: 23.12
-            CUDA_VERSION: "CUDA_12_3"
-          - TF_IMAGE: 22.12
-            CUDA_VERSION: "CUDA_11_8"
+          - CUDA_VERSION: "TF_CUDA_12_3"          
     needs: test-apptainer # need to wait for test-docker to finish otherwise GPU will be utilized.
     runs-on: self-hosted
     env: 
@@ -256,10 +246,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - TF_IMAGE: 23.12
-            CUDA_VERSION: "CUDA_12_3"
-          - TF_IMAGE: 22.12
-            CUDA_VERSION: "CUDA_11_8"
+          - CUDA_VERSION: "TF_CUDA_12_3"
     container: 
       image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}   # pull image 'latest-tf' or 'develop' that we just built
       credentials:
@@ -312,10 +299,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - TF_IMAGE: 23.12
-            CUDA_VERSION: "CUDA_12_3"
-          - TF_IMAGE: 22.12
-            CUDA_VERSION: "CUDA_11_8"
+          - CUDA_VERSION: "TF_CUDA_12_3"
     container: 
       image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}   # pull image 'latest-tf' or 'develop' that we just built
       credentials:
@@ -339,10 +323,7 @@ jobs:
   #   strategy:
   #     matrix:
   #       include:
-  #         - TF_IMAGE: 23.12
-  #           CUDA_VERSION: "CUDA_12_3"
-  #         - TF_IMAGE: 22.12
-  #           CUDA_VERSION: "CUDA_11_8"
+  #         - CUDA_VERSION: "TF_CUDA_12_3"
   #   steps:          
   #     # Login against a Docker registry except on PR
   #     # https://github.com/docker/login-action
