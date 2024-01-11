@@ -1035,13 +1035,14 @@ def main(args=None, preloaded=None):
     if args.cluster:
         # cluster_env = f"~/anaconda3/envs/ml/bin/python"
         # CUDA_version = "CUDA_12_3"    # awaiting cluster GPU driver update
-        CUDA_version = "CUDA_11_8"
+        CUDA_version = "CUDA_12_3"
         cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
         cluster_env = f"apptainer exec --bind /clusterfs --nv {cluster_repo}/develop_{CUDA_version}.sif python "
         script = f"{cluster_repo}/src/ao.py"
 
         flags = ' '.join(command_flags)
         flags = re.sub(pattern='--cluster', repl='', string=flags)
+        flags = re.sub(pattern='--docker', repl='', string=flags)
         flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
         flags = flags.replace("..", cluster_repo)       # regex stinks at replacing ".."
         flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
