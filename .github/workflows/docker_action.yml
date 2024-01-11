@@ -125,6 +125,11 @@ jobs:
             org.opencontainers.image.title=OpticalNet_ubuntu
             org.opencontainers.image.description=Docker image for a transformer network to perform sensorless detection of aberrations in adaptive optics. https://github.com/abcucberkeley/opticalaberrations
             org.opencontainers.image.vendor=Advanced Bioimaging Center at UC Berkeley and Janelia Research Campus
+          tags: |
+            type=schedule
+            type=ref,suffix=_${{ matrix.CUDA_VERSION }},event=branch
+            type=ref,suffix=_${{ matrix.CUDA_VERSION }},event=tag
+            type=ref,suffix=_${{ matrix.CUDA_VERSION }},event=pr
 
       - name: Build and push Docker image
         id: build-and-push
@@ -133,7 +138,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}_${{ matrix.CUDA_VERSION }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BRANCH_NAME=${{ env.BRANCH }}
