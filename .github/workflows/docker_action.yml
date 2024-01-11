@@ -151,7 +151,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - CUDA_VERSION: "Torch_CUDA_12_3"
+          # - CUDA_VERSION: "Torch_CUDA_12_3"
           - CUDA_VERSION: "TF_CUDA_12_3"          
     steps:
       - name: List files in the directory
