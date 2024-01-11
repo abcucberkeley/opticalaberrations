@@ -1,7 +1,7 @@
 # Multiscale attention networks for sensorless detection of aberrations in adaptive optics
 
-[![python](https://img.shields.io/badge/python-3.8+-3776AB.svg?style=flat&logo=python&logoColor=3776AB)](https://www.python.org/)
-[![tensorflow](https://img.shields.io/badge/tensorFlow-2.5+-FF6F00.svg?style=flat&logo=tensorflow)](https://www.tensorflow.org/)
+[![python](https://img.shields.io/badge/python-3.10+-3776AB.svg?style=flat&logo=python&logoColor=3776AB)](https://www.python.org/)
+[![tensorflow](https://img.shields.io/badge/tensorFlow-2.14+-FF6F00.svg?style=flat&logo=tensorflow)](https://www.tensorflow.org/)
 [![license](https://img.shields.io/github/license/abcucberkeley/opticalaberrations.svg?style=flat&logo=git&logoColor=white)](https://opensource.org/license/bsd-2-clause/)
 [![issues](https://img.shields.io/github/issues/abcucberkeley/opticalaberrations.svg?style=flat&logo=github)](https://github.com/abcucberkeley/opticalaberrations/issues)
 [![pr](https://img.shields.io/github/issues-pr/abcucberkeley/opticalaberrations.svg?style=flat&logo=github)](https://github.com/abcucberkeley/opticalaberrations/pulls)
