@@ -17,15 +17,18 @@ on:
 
 jobs:
   clean-ghcr:
+    strategy:
+      matrix:
+        IMAGE-NAME: [develop, develop_CUDA_11_8, develop_CUDA_12_3, develop_sif, develop_CUDA_11_8_sif, develop_CUDA_12_3_sif]
     name: Delete old unused container images
     runs-on: ubuntu-latest
     steps:
       - name: Delete old images
         uses: snok/container-retention-policy@v2
         with:
-          image-names: dev*
+          image-names: ${{ matrix.IMAGE-NAME }}
           cut-off: One week ago UTC
           keep-at-least: 3
           account-type: personal
-          token: ${{ secrets.GITHUB_TOKEN }}
-          token-type: github-token
+          token: ${{ secrets.cleanup_packages }}
+          token-type: pat
