@@ -50,7 +50,7 @@ tf.get_logger().setLevel(logging.ERROR)
 plt.set_loglevel('error')
 
 
-def plot_patches(img: np.ndarray, outdir: Path, patch_size: list):
+def plot_patches(img: np.ndarray, outdir: Path, patches: list):
     for k, label in enumerate(['xy', 'xz', 'yz']):
         img = np.expand_dims(img[0], axis=0)
         original = np.squeeze(img[0, k])
@@ -73,7 +73,7 @@ def plot_patches(img: np.ndarray, outdir: Path, patch_size: list):
         plt.title('Original')
         plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-        for p in patch_size:
+        for p in patches:
             patches = opticalnet.Patchify(patch_size=p)(img)
             merged = opticalnet.Merge(patch_size=p)(patches)
 
@@ -108,7 +108,9 @@ def train_model(
     max_amplitude: float = 1,
     input_shape: int = 64,
     batch_size: int = 32,
-    patch_size: list = (32, 16, 8, 8),
+    patches: list = [32, 16, 8, 8],
+    heads: list = [2, 4, 8, 16],
+    repeats: list = [2, 4, 6, 2],
     depth_scalar: float = 1.,
     width_scalar: float = 1.,
     activation: str = 'gelu',
@@ -154,6 +156,13 @@ def train_model(
     else:
         inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
 
+    if defocus_only:  # only predict LLS defocus offset
+        pmodes = 1
+    elif lls_defocus:  # add LLS defocus offset to predictions
+        pmodes = modes + 1 if pmodes is None else pmodes + 1
+    else:
+        pmodes = modes if pmodes is None else pmodes
+
     if dataset is None:
         config = dict(
             psf_type=psf_type,
@@ -169,22 +178,26 @@ def train_model(
             y_voxel_size=y_voxel_size,
             z_voxel_size=z_voxel_size,
             refractive_index=refractive_index,
-            cpu_workers=cpu_workers
+            cpu_workers=cpu_workers,
+            lls_defocus=lls_defocus,
+            defocus_only=defocus_only,
         )
         train_data = data_utils.create_dataset(config)
     else:
         train_data = data_utils.collect_dataset(
             dataset,
             metadata=False,
-            modes=modes,
+            modes=pmodes,
             distribution=distribution,
             embedding=embedding,
             samplelimit=samplelimit,
             max_amplitude=max_amplitude,
             no_phase=no_phase,
             lls_defocus=lls_defocus,
+            defocus_only=defocus_only,
             photons_range=(min_photons, max_photons),
-            cpu_workers=cpu_workers
+            cpu_workers=cpu_workers,
+            model_input_shape=inputs
         )
 
         sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
@@ -194,7 +207,7 @@ def train_model(
                 for i, (img, y) in enumerate(train_data.shuffle(batch_size).take(5)):
 
                     if plot_patchfiy:
-                        plot_patches(img=img, outdir=outdir, patch_size=patch_size)
+                        plot_patches(img=img, outdir=outdir, patches=patches)
 
                     img = np.squeeze(img, axis=-1)
 
@@ -268,19 +281,14 @@ def train_model(
         logger.warning(f"No model found in {outdir}")
 
     if not restored:  # Build a new model
-        if defocus_only:  # only predict LLS defocus offset
-            pmodes = 1
-        elif lls_defocus:  # add LLS defocus offset to predictions
-            pmodes = modes+1 if pmodes is None else pmodes+1
-        else:
-            pmodes = modes if pmodes is None else pmodes
-
         if network == 'prototype':
             model = prototype.OpticalTransformer(
                 name='Prototype',
                 roi=roi,
                 stem=stem,
-                patches=patch_size,
+                patches=patches,
+                heads=heads,
+                repeats=repeats,
                 modes=pmodes,
                 depth_scalar=depth_scalar,
                 width_scalar=width_scalar,
@@ -299,7 +307,9 @@ def train_model(
                 name='OpticalNet',
                 roi=roi,
                 stem=stem,
-                patches=patch_size,
+                patches=patches,
+                heads=heads,
+                repeats=repeats,
                 modes=pmodes,
                 depth_scalar=depth_scalar,
                 width_scalar=width_scalar,
@@ -356,7 +366,7 @@ def train_model(
     )
 
     pb_checkpoints = ModelCheckpoint(
-        filepath=outdir/"tf",
+        filepath=str(outdir/"tf"),
         monitor="loss",
         verbose=1,
         save_best_only=True,
@@ -364,7 +374,7 @@ def train_model(
     )
 
     h5_checkpoints = ModelCheckpoint(
-        filepath=outdir/"keras"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}-epoch{{epoch:03d}}.h5",
+        filepath=str(outdir/"keras"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}-epoch{{epoch:03d}}.h5"),
         monitor="loss",
         verbose=1,
         save_best_only=True,
@@ -467,7 +477,8 @@ def eval_model(
             max_amplitude=max_amplitude,
             no_phase=no_phase,
             lls_defocus=lls_defocus,
-            photons_range=(min_photons, max_photons)
+            photons_range=(min_photons, max_photons),
+            model_input_shape=inputs
         )
 
         eval_data = eval_data.cache()
@@ -505,7 +516,15 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--patch_size", default='32-16-8-8', help="patch size for transformer-based model"
+        "--patches", default='32-16-8-8', help="patch size for transformer-based model"
+    )
+    
+    train_parser.add_argument(
+        "--heads", default='2-4-8-16', help="patch size for transformer-based model"
+    )
+        
+    train_parser.add_argument(
+        "--repeats", default='2-4-6-2', help="patch size for transformer-based model"
     )
 
     train_parser.add_argument(
@@ -752,7 +771,9 @@ def main(args=None):
                 network=args.network,
                 input_shape=args.input_shape,
                 batch_size=args.batch_size,
-                patch_size=[int(i) for i in args.patch_size.split('-')],
+                patches=[int(i) for i in args.patches.split('-')],
+                heads=[int(i) for i in args.heads.split('-')],
+                repeats=[int(i) for i in args.repeats.split('-')],
                 roi=[int(i) for i in args.roi.split('-')] if args.roi is not None else args.roi,
                 steps_per_epoch=args.steps_per_epoch,
                 psf_type=args.psf_type,

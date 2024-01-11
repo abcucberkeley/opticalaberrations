@@ -9,7 +9,7 @@ def kargs():
     repo = Path.cwd()
     num_modes = 15
     input_shape = (256, 256, 256)   # z-y-x
-    window_size = (128, 128, 128)   # z-y-x
+    window_size = (64, 64, 64)   # z-y-x
     num_tiles = np.prod(tuple(map(floordiv, input_shape, window_size)))
     digital_rotations = 361
 
@@ -23,8 +23,8 @@ def kargs():
         window_size=window_size,
         num_tiles=num_tiles,
         num_modes=num_modes,
-        model=repo / f'pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-{num_modes}-spatial_planes10.h5',
-        dm_calibration=repo/'calibration/aang/28_mode_calibration.csv',
+        model=repo / f'pretrained_models/opticalnet-{num_modes}-YuMB-lambda510.h5',
+        dm_calibration=repo/'calibration/aang/15_mode_calibration.csv',
         psf_type=repo/'lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         pois=repo/f'examples/single/results/Detection3D.mat',
         ideal_psf=repo/'examples/psf.tif',

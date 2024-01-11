@@ -253,7 +253,8 @@ def collect_data(
         no_phase=no_phase,
         photons_range=photons_range,
         npoints_range=npoints_range,
-        filename_pattern=filename_pattern
+        filename_pattern=filename_pattern,
+        model_input_shape=model.input_shape[1:]
     )
 
     # This runs multiple samples (aka images) at a time.

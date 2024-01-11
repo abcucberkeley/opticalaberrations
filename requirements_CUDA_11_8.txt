@@ -14,3 +14,6 @@ line-profiler-pycharm
 tifffile==2023.9.18
 imagecodecs==2023.9.18
 nvitop
+cupy-cuda11x
+tensorflow_addons
+dask-cuda

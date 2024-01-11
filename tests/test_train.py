@@ -88,7 +88,7 @@ def test_zernike_model(kargs):
 
     with strategy.scope():
         train.train_model(
-            network='prototype',
+            network='opticalnet',
             dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
             outdir=outdir,
             psf_type=kargs['psf_type'],
@@ -126,7 +126,7 @@ def test_defocus_model(kargs):
 
     with strategy.scope():
         train.train_model(
-            network='prototype',
+            network='opticalnet',
             dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
             outdir=outdir,
             psf_type=kargs['psf_type'],
@@ -166,7 +166,7 @@ def test_zernike_defocus_model(kargs):
 
     with strategy.scope():
         train.train_model(
-            network='prototype',
+            network='opticalnet',
             dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
             outdir=outdir,
             psf_type=kargs['psf_type'],
@@ -205,7 +205,7 @@ def test_finetune_zernike_model(kargs):
 
     with strategy.scope():
         train.train_model(
-            network='prototype',
+            network='opticalnet',
             dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
             outdir=outdir,
             psf_type=kargs['psf_type'],
@@ -217,5 +217,5 @@ def test_finetune_zernike_model(kargs):
             batch_size=kargs['batch_size']//3,
             warmup=1,
             epochs=5,
-            finetune=Path(f"{kargs['repo']}/models/tests/yumb_zernike_model"),
+            finetune=Path(f"{kargs['repo']}/models/pytests/yumb_zernike_model/keras"),
         )

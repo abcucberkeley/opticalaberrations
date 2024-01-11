@@ -1,4 +1,8 @@
-from functools import partial
+import pip
+pip.main(['install', 'onnx'])
+pip.main(['install', 'tf2onnx'])
+pip.main(['install', 'onnxruntime-gpu'])
+pip.main(['install', 'pycuda'])
 
 import matplotlib
 matplotlib.use('Agg')
@@ -6,37 +10,26 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
-import time
-import subprocess
-import logging
-import sys
 from pathlib import Path
 from typing import Any
-
-import tensorflow as tf
-import numpy as np
-
-import utils
-import backend
-import trt_utils
-from wavefront import Wavefront
+import subprocess
+import time
 
 import onnx
 import tf2onnx
 import onnxruntime as ort
 import tensorrt as trt
+import tensorflow as tf
+import numpy as np
 import pycuda.driver as cuda
-import pycuda.autoinit
-from polygraphy.backend.trt import TrtRunner, EngineFromBytes
 
+from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
+from tensorflow.python.saved_model import tag_constants, signature_constants
+from tensorflow.python.compiler.tensorrt import trt_convert as tftrt
+from tensorflow.python.keras import backend as K
 
-logging.basicConfig(
-    stream=sys.stdout,
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-tf.get_logger().setLevel(logging.ERROR)
+import backend
+import trt_utils
 
 
 def batchify(arr, batch_size):
@@ -44,297 +37,277 @@ def batchify(arr, batch_size):
         yield arr[i:i + batch_size]
 
 
-def create_test_sample(
+def convert_h5_to_graph(
     model_path: Path,
-    dtype: Any = np.float32,
 ):
-    gen = backend.load_metadata(model_path)
-    phi = Wavefront(
-        (0, .15),
-        modes=gen.n_modes,
-        distribution='mixed',
-        signed=True,
-        rotate=True,
-        mode_weights='pyramid',
-        lam_detection=gen.lam_detection,
+    model = backend.load(model_path)
+
+    full_model = tf.function(lambda x: model(x))
+    full_model = full_model.get_concrete_function(x=tf.TensorSpec(model.inputs[0].shape, model.inputs[0].dtype))
+
+    frozen = convert_variables_to_constants_v2(full_model)
+    frozen.graph.as_graph_def()
+
+    input_names = [t.name for t in model.inputs]
+    output_names = [t.name for t in model.outputs]
+    
+    print(f"Frozen model inputs: {input_names}: {frozen.inputs}")
+    print(f"Frozen model outputs: {output_names}: {frozen.outputs}")
+
+    # model_path.with_suffix('').mkdir(parents=True, exist_ok=True)
+    
+    tf.io.write_graph(
+        graph_or_graph_def=frozen.graph,
+        logdir=str(Path(model_path).parent),
+        name=f"{model_path.with_suffix('')}_frozen_graph.pb",
+        as_text=False
     )
 
-    psf, zernikes, y_lls_defocus = gen.single_psf(
-        phi=phi,
-        normed=True,
-        meta=True,
-        lls_defocus_offset=(0, 0)
+    tf.io.write_graph(
+        graph_or_graph_def=frozen.graph,
+        logdir=str(Path(model_path).parent),
+        name=f"{model_path.with_suffix('')}_frozen_graph.pbtxt",
+        as_text=True
+    )   
+
+    return frozen, input_names, output_names
+
+
+def convert_h5_to_pb(
+    model_path: Path,
+):
+    timeit = time.time()
+    
+    model = backend.load(model_path)
+    tf.saved_model.save(model, str(model_path.with_suffix('')))
+    subprocess.call(
+        f"saved_model_cli show --all --dir {model_path.with_suffix('')}",
+        shell=True,
+    )
+    
+    return time.time() - timeit
+
+
+def convert_pb_to_tftrt(
+    model_path: Path,
+    dtype: Any = 'float16',
+    optimal_batch_size: int = 128,
+):
+    timeit = time.time()
+    
+    converter = tftrt.TrtGraphConverterV2(
+        input_saved_model_dir=str(model_path.with_suffix('')),
+        precision_mode=tftrt.TrtPrecisionMode.FP16,
+        use_dynamic_shape=True,
+        allow_build_at_runtime=False,
+        dynamic_shape_profile_strategy='Optimal',
+        max_workspace_size_bytes=1 << 32,
+        maximum_cached_engines=100,
+        minimum_segment_size=3,
     )
 
-    inputs = utils.add_noise(psf)
-    emb = backend.preprocess(
-        inputs,
-        modelpsfgen=gen,
-        digital_rotations=None,
-        remove_background=True,
-        normalize=True,
+    # Converter method used to partition and optimize TensorRT compatible segments
+    converter.convert()
+
+    # Optionally, build TensorRT engines before deployment to save time at runtime
+    # Note that this is GPU specific, and as a rule of thumb, we recommend building at runtime
+    def input_fn():
+        yield tf.convert_to_tensor(np.random.random((optimal_batch_size, 6, 64, 64, 1)).astype('float32'))
+
+    converter.build(input_fn=input_fn)
+
+    converter.save(str(model_path.with_suffix('.tftrt')))
+    converter.summary()
+
+    return time.time() - timeit
+
+
+def convert_h5_to_onnx(
+    model_path: Path,
+    dtype: Any = 'float16',
+    optimal_batch_size: int = 128,
+):
+    timeit = time.time()
+    
+    model = backend.load(model_path)
+    input_signature = (tf.TensorSpec((None, 6, 64, 64, 1), 'float16', name="embeddings"),)
+
+    tf2onnx.convert.from_keras(
+        model,
+        opset=17,
+        input_signature=input_signature,
+        target='tensorrt',
+        output_path=str(model_path.with_suffix('.onnx')),
     )
-    return emb.astype(dtype), zernikes.astype(dtype)
+    
+    return time.time() - timeit
 
 
-def convert2onnx(
+def convert_onnx_to_trt(
     model_path: Path,
-    embeddings: np.ndarray,
-    zernikes: np.ndarray,
-    dtype: Any = np.float32,
-    atol: float = 1e-2,
-    overwrite: bool = True,
-    batch_size: int = 512,
+    dtype: Any = 'float16',
+    optimal_batch_size: int = 128,
 ):
+    timeit = time.time()
+    
+    subprocess.call(
+        f"/usr/src/tensorrt/bin/trtexec "
+        f"--onnx={model_path.with_suffix('.onnx')} "
+        f"--saveEngine={model_path.with_suffix('.trt')} "
+        "--workspace=16000 "
+        # f"--explicitBatch "
+        # f"--fp16 "
+        # f"--verbose "
+        f"--best ",
+        shell=True,
+    )
+    
+    return time.time() - timeit
 
-    # input_signature = [tf.TensorSpec((batch_size, *input_shape[1:]), dtype=dtype, name='embeddings')]
-    # onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature=input_signature)
-    # onnx.save(onnx_model, f"{model_path}.onnx")
-    # del onnx_model
 
-    if overwrite or not Path(f"{model_path}.onnx").exists():
-        subprocess.call(
-            f"python -m tf2onnx.convert "
-            f"--saved-model {model_path} "
-            f"--output={model_path}.onnx "
-            f"--rename-inputs embeddings "
-            f"--rename-outputs zernikes "
-            f"--target tensorrt "
-            f"--verbose ",
-            shell=True,
-        )
+def convert_pb_to_onnx(
+    model_path: Path,
+    dtype: Any = 'float16',
+    optimal_batch_size: int = 128,
+):
+    timeit = time.time()
+    
+    subprocess.call(
+        f"python -m tf2onnx.convert "
+        f"--saved-model={model_path.with_suffix('')} "
+        f"--output={model_path.with_suffix('.onnx')} "
+        f"--opset=17 "
+        f"--target=tensorrt "
+        f"--verbose ",
+        shell=True,
+    )   
+    
+    return time.time() - timeit
 
-    # load onnx model
-    sess = ort.InferenceSession(f"{model_path}.onnx", providers=['CUDAExecutionProvider'])
+
+def benchmark(path, dataset, modelformat='tftrt'):
 
     timeit = time.time()
-    results_ort = sess.run(["zernikes"], {"embeddings": embeddings})[0]
-    timer = time.time() - timeit
-
-    try:
-        np.testing.assert_allclose(results_ort, zernikes, atol=atol)
-    except AssertionError as e:
-        logger.info(e)
-
-    return results_ort, timer
-
-
-def convert2trt(
-    model_path: Path,
-    embeddings: np.ndarray,
-    zernikes: np.ndarray,
-    dtype: Any = np.float32,
-    atol: float = 1e-2,
-    overwrite: bool = True,
-    batch_size: int = 512,
-):
-    if not Path(f"{model_path}.onnx").exists():
-        subprocess.call(
-            f"python -m tf2onnx.convert "
-            f"--saved-model {model_path} "
-            f"--output={model_path}.onnx "
-            f"--rename-inputs embeddings "
-            f"--rename-outputs zernikes "
-            f"--target tensorrt "
-            f"--verbose ",
-            shell=True,
+    
+    if modelformat == 'onnx':
+        model = onnx.load(path)
+        out_names =[node.name for node in model.graph.output]
+        input_names = [node.name for node in model.graph.input]
+        del model 
+        
+        options = ort.SessionOptions()
+        sess = ort.InferenceSession(
+            path,
+            sess_options=options,
+            providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
+            # providers=['TensorrtExecutionProvider', 'CUDAExecutionProvider', 'CPUExecutionProvider']
         )
 
-    if overwrite or not Path(f"{model_path}.trt").exists():
-        subprocess.call(
-            f"/usr/src/tensorrt/bin/trtexec "
-            f"--verbose "
-            f"--onnx={model_path}.onnx "
-            f"--saveEngine={model_path}.trt "
-            f"--best",
-            shell=True,
-        )
+        predictions = []
+        for batch in dataset.as_numpy_iterator():
+            preds = sess.run(out_names, {input_names[0]: batch})[0]
+            predictions.extend(preds)
 
-    timeit = time.time()
+    elif modelformat == 'pb' or modelformat == 'tftrt':
+        graph = tf.saved_model.load(path, tags=[tag_constants.SERVING])
+        model = graph.signatures[signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
 
-    stream = cuda.Stream()
-    with trt_utils.compile_engine(f"{model_path}.trt") as engine:
-        with engine.create_execution_context() as context:
-            results_trt = trt_utils.predict(
-                context=context,
-                stream=stream,
-                inputs=embeddings,
-            )
+        predictions = []
+        for batch in dataset:
+            preds = model(batch)
+            predictions.extend(preds[next(iter(preds))].numpy())
 
-    timer = time.time() - timeit
+    elif modelformat == 'trt':
+        stream = cuda.Stream()
+        with trt_utils.compile_engine(path) as engine:
+            with engine.create_execution_context() as context:
 
-    try:
-        np.testing.assert_allclose(results_trt, zernikes, atol=atol)
-    except AssertionError as e:
-        logger.info(e)
+                predictions = []
+                for batch in dataset.as_numpy_iterator():
+                    preds = trt_utils.predict(
+                        context=context,
+                        stream=stream,
+                        batch=batch,
+                    )
+                    predictions.extend(preds)
 
-    return results_trt, timer
+    else:  # tf/keras model
+        model = backend.load(path)
+        predictions = model.predict(dataset)
 
-
-def convert2polygraphy(
-    model_path: Path,
-    embeddings: np.ndarray,
-    zernikes: np.ndarray,
-    dtype: Any = np.float32,
-    atol: float = 1e-2,
-    backend: str = 'engine',
-    overwrite: bool = True,
-    batch_size: int = 512,
-):
-
-    if not Path(f"{model_path}.onnx").exists():
-        subprocess.call(
-            f"python -m tf2onnx.convert "
-            f"--saved-model {model_path} "
-            f"--output={model_path}.onnx "
-            f"--rename-inputs embeddings "
-            f"--rename-outputs zernikes "
-            f"--target tensorrt "
-            f"--verbose ",
-            shell=True,
-        )
-
-    if backend == 'trt' and not Path(f"{model_path}.trt").exists():
-        subprocess.call(
-            f"/usr/src/tensorrt/bin/trtexec "
-            f"--verbose "
-            f"--onnx={model_path}.onnx "
-            f"--saveEngine={model_path}.trt "
-            f"--best",
-            shell=True,
-        )
-    else:
-        if overwrite or not Path(f"{model_path}.engine").exists():
-            n, z, y, x, c = embeddings.shape
-            subprocess.call(
-                f"/usr/src/tensorrt/bin/trtexec "
-                f"--verbose "
-                f"--onnx={model_path}.onnx "
-                f"--saveEngine={model_path}.engine "
-                f"--minShapes=embeddings:1x{z}x{y}x{x}x{c} "
-                f"--optShapes=embeddings:512x{z}x{y}x{x}x{c} "
-                f"--maxShapes=embeddings:1024x{z}x{y}x{x}x{c} "
-                f"--best",
-                shell=True,
-            )
-
-    timeit = time.time()
-
-    if backend == 'trt':
-        f = open(f"{model_path}.trt", "rb")
-        engine = EngineFromBytes(f.read())
-        runner = TrtRunner(engine)
-
-        with runner:
-            results_trt = np.concatenate([
-                runner.infer({"embeddings": emb[np.newaxis, ...]})["zernikes"]
-                for emb in embeddings
-            ], axis=0)
-
-    else:
-        f = open(f"{model_path}.engine", "rb")
-        engine = EngineFromBytes(f.read())
-        runner = TrtRunner(engine)
-
-        with runner:
-            results_trt = np.concatenate([
-                runner.infer({"embeddings": batch})["zernikes"]
-                for batch in batchify(embeddings, batch_size=batch_size)
-            ], axis=0)
-
-    timer = time.time() - timeit
-
-    try:
-        np.testing.assert_allclose(results_trt, zernikes, atol=atol)
-    except AssertionError as e:
-        logger.info(e)
-
-    return results_trt, timer
+    return predictions, time.time() - timeit
 
 
 def optimize_model(
     model_path: Path,
-    dtype: Any = np.float32,
-    atol: float = 1e-2,
+    dtype: Any = 'float16',
     modelformat: str = 'trt',
-    number_of_samples: int = 10000,
-    batch_size: int = 768,
+    number_of_samples: int = 10*1024,
+    batch_size: int = 128,
 ):
+    print(f"Compiling {model_path.name} => {modelformat}")
 
-    if not Path(f'{model_path.parent}/embeddings_{number_of_samples}.npy').exists():
-        logger.info(f"Creating [{number_of_samples}] test samples")
-
-        samples = utils.multiprocess(
-            jobs=np.repeat(f"{model_path}.h5", number_of_samples),
-            func=create_test_sample,
-            cores=8,
-            desc=f"Creating test samples"
-        )
-        embeddings, zernikes = np.stack(samples[:, 0]), np.stack(samples[:, 1])
-
-        np.save(f'{model_path.parent}/embeddings_{number_of_samples}', embeddings)
-        np.save(f'{model_path.parent}/zernikes_{number_of_samples}', zernikes)
-
-    else:
-        logger.info(f"Loading [{number_of_samples}] test samples")
-        embeddings = np.load(f'{model_path.parent}/embeddings_{number_of_samples}.npy')
-        zernikes = np.load(f'{model_path.parent}/zernikes_{number_of_samples}.npy')
-
-    logger.info(f"Evaluating samples with [{modelformat}] model")
-
-    if modelformat == 'onnx':
-        results, timer = convert2onnx(
+    if modelformat == 'pb':
+        convert_h5_to_pb(
             model_path=model_path,
-            embeddings=embeddings,
-            zernikes=zernikes,
-            dtype=dtype,
-            atol=atol,
-            overwrite=False,
-            batch_size=batch_size
-        )
-
-    elif modelformat == 'polygraphy':
-        results, timer = convert2polygraphy(
+        )  
+    elif modelformat == 'tftrt':
+        convert_h5_to_pb(
             model_path=model_path,
-            embeddings=embeddings,
-            zernikes=zernikes,
+        )  
+        convert_pb_to_tftrt(
+            model_path=model_path,
             dtype=dtype,
-            atol=atol,
-            overwrite=False,
-            backend='engine',
-            batch_size=batch_size
+            optimal_batch_size=batch_size
         )
-
+    elif modelformat == 'onnx':
+        convert_h5_to_onnx(
+            model_path=model_path,
+            dtype=dtype,
+            optimal_batch_size=batch_size
+        )
     elif modelformat == 'trt':
-        results, timer = convert2trt(
+        convert_h5_to_pb(
             model_path=model_path,
-            embeddings=embeddings,
-            zernikes=zernikes,
+        ) 
+        convert_pb_to_onnx(
+            model_path=model_path,
             dtype=dtype,
-            atol=atol,
-            overwrite=False,
-            batch_size=batch_size
+            optimal_batch_size=batch_size
         )
-
+        convert_onnx_to_trt(
+            model_path=model_path,
+            dtype=dtype,
+            optimal_batch_size=batch_size
+        )
     else:
-        timer = 0.
-        results = np.zeros_like(zernikes)
-        logger.error(f"Unknown model format: {modelformat}")
+        print(f"Unknown model format: {modelformat}")
 
-    # load tf model
-    model = backend.load(model_path)
+    print(f"Creating [{number_of_samples}] test samples")
 
-    timeit = time.time()
-    results_tf = model.predict(embeddings, batch_size=512)
-    timer_tf = time.time() - timeit
+    dataset = tf.data.Dataset.from_tensor_slices(
+        np.random.random((number_of_samples, 6, 64, 64, 1)).astype('float32')
+    )
+    dataset = dataset.cache()
+    dataset = dataset.batch(batch_size)
+    dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
+    options = tf.data.Options()
+    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+    dataset = dataset.with_options(options)
 
-    try:
-        np.testing.assert_allclose(results_tf, zernikes, atol=atol)
-    except AssertionError as e:
-        logger.info(e)
+    print(f"Evaluating samples with [{modelformat}] model")
+    preds, timer = benchmark(
+        model_path.with_suffix(f".{modelformat}") if modelformat != 'pb' else model_path.with_suffix(''), 
+        dataset=dataset, 
+        modelformat=modelformat
+    )
+    preds_tf, timer_tf = benchmark(
+        model_path, 
+        dataset=dataset, 
+        modelformat='keras'
+    )
 
-    logger.info(f"Runtime for {embeddings.shape} samples")
-    logger.info(f"TF backend [batchsize=512]: {number_of_samples/timer_tf:.0f} pred/sec [{timer_tf:.2f}]")
-    logger.info(f"{modelformat.upper()} backend [batchsize={batch_size}]: {number_of_samples/timer:.0f} pred/sec [{timer:.2f}]")
-    np.testing.assert_allclose(results, results_tf, atol=1e-2)
-    return results, timer
+    print(f"Runtime for {number_of_samples} samples [{batch_size=}]")
+    print(f"TF backend: {number_of_samples/timer_tf:.0f} prediction/sec.")
+    print(f"{modelformat.upper()} backend: {number_of_samples/timer:.0f} prediction/sec.")
+    np.testing.assert_allclose(preds_tf, preds, rtol=1e-3, atol=1e-3)

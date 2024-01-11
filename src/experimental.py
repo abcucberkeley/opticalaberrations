@@ -1227,7 +1227,7 @@ def cluster_tiles(
     predictions['cluster'] = np.nan
     stdevs['cluster'] = np.nan
 
-    pool = mp.Pool(processes=4)  # async pool for plotting
+    # pool = mp.Pool(processes=4)  # async pool for plotting
 
     # valid_predictions = predictions.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_predictions = predictions.groupby('z')
@@ -1237,6 +1237,7 @@ def cluster_tiles(
 
     wavefronts, coefficients, actuators = {}, {}, {}
     wavefronts_montage = np.zeros((len(valid_predictions.groups.keys())*64, (max_isoplanatic_clusters+1)*64)).astype(np.float32)
+
     for z in valid_predictions.groups.keys():  # basically loop through all ztiles, unless no valid predictions exist
         ztile_preds = valid_predictions.get_group(z)
         ztile_preds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
@@ -1267,8 +1268,9 @@ def cluster_tiles(
         while compute_clustering:
             clustering = KMeans(n_clusters=n_clusters, max_iter=1000, random_state=0)
             clustering.fit(features)    # Cluster calculation
-
             ztile_preds['cluster'] = clustering.predict(features)   # Predict the closest cluster each tile belongs to
+            del clustering
+
 
             if ztile_preds['cluster'].unique().size < max_isoplanatic_clusters:
                 # We didn't have enough tiles to make all requested clusters. We're done.
@@ -1361,13 +1363,12 @@ def cluster_tiles(
             )
 
             if plot:
-                task = partial(
-                    vis.diagnosis,
+                vis.diagnosis(
                     pred=wavefronts[cluster],
                     pred_std=pred_std,
                     save_path=Path(f"{savepath}_{postfix}_{cluster}_diagnosis"),
                 )
-                pool.apply_async(task)
+                # pool.apply_async(task)
 
             coefficients[cluster] = wavefronts[cluster].amplitudes
 
@@ -1446,6 +1447,7 @@ def aggregate_predictions(
     psf_type: Optional[Union[str, Path]] = None,
     postfix: str = 'aggregated'
 ):
+
     dm_state = utils.load_dm(dm_state)
 
     pd.options.display.width = 200
@@ -1456,7 +1458,7 @@ def aggregate_predictions(
     vol /= np.percentile(vol, 98)
     vol = np.clip(vol, 0, 1)
 
-    pool = mp.Pool(processes=4)  # async pool for plotting
+    # pool = mp.Pool(processes=4)  # async pool for plotting
 
     with open(str(model_pred).replace('.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
@@ -1477,6 +1479,7 @@ def aggregate_predictions(
         y_voxel_size=lateral_voxel_size,
         z_voxel_size=axial_voxel_size
     )
+
 
     # predict_snr_map(
     #     Path(str(model_pred).replace('_tiles_predictions.csv', '.tif')),
@@ -1685,8 +1688,8 @@ def aggregate_predictions(
     # )
 
     logger.info(f'Done. Waiting for plots to write for {model_pred.with_suffix("")}')
-    pool.close()    # close the pool
-    pool.join()     # wait for all tasks to complete
+    # pool.close()    # close the pool
+    # pool.join()     # wait for all tasks to complete
 
     non_zero_tiles = ~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)
     with Path(f"{model_pred.with_suffix('')}_{postfix}_settings.json").open('w') as f:

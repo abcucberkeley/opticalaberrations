@@ -8,7 +8,7 @@
       "console": "integratedTerminal",
       "args": [
         "aggregate_predictions",
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "../examples/LabVIEW/Measurement_510nm_rois_predictions.csv",
         "../calibration/aang/15_mode_calibration.csv",
         "--current_dm",
@@ -275,7 +275,7 @@
       "program": "${workspaceFolder}/src/test.py",
       "console": "integratedTerminal",
       "args": [
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "--datadir",
         "../dataset/test/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/",
         "--digital_rotations",
@@ -312,7 +312,7 @@
       "console": "integratedTerminal",
       "args": [
         "embeddings",
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "../examples/LabVIEW/Measurement_510nm.tif",
         "--wavelength",
         "0.51",
@@ -366,7 +366,7 @@
       "program": "${workspaceFolder}/src/test.py",
       "console": "integratedTerminal",
       "args": [
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "--eval_sign",
         "signed",
         "--digital_rotations",
@@ -387,7 +387,7 @@
       "program": "${workspaceFolder}/src/test.py",
       "console": "integratedTerminal",
       "args": [
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "--eval_sign",
         "signed",
         "--digital_rotations",
@@ -433,7 +433,7 @@
       "program": "${workspaceFolder}/src/test.py",
       "console": "integratedTerminal",
       "args": [
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "--eval_sign",
         "signed",
         "--digital_rotations",
@@ -518,7 +518,7 @@
       "console": "integratedTerminal",
       "args": [
         "eval_mode",
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "$USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_lightsheet_ansi_z07_n03_m-1_amp0p1_single.tif",
         "$USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_widefield_ansi_z07_n03_m-1_amp0p1_single_matlab_pupil_waves.tif",
         "$USER_HOME$/nvme2/Data/20221003_Korra_TestForThayer/20230202/PR_test/before_lightsheet_ansi_z07_n03_m-1_amp0p1_single_sample_predictions_zernike_coefficients.csv"
@@ -552,7 +552,7 @@
       "program": "${workspaceFolder}/src/test.py",
       "console": "integratedTerminal",
       "args": [
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "--datadir",
         "V:\\thayer\\dataset\\eval_dataset\\test\\x108-y108-z200\\i64\\z15\\mixed",
         "--na",
@@ -706,7 +706,7 @@
       "program": "${workspaceFolder}/src/config.py",
       "console": "integratedTerminal",
       "args": [
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15/model",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "--modelformat",
         "trt",
         "optimize"
@@ -866,7 +866,7 @@
       "console": "integratedTerminal",
       "args": [
         "predict_large_fov",
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "${workspaceFolder}/examples/_summary/test.tif",
         "../calibration/aang/15_mode_calibration.csv",
         "--current_dm",
@@ -908,7 +908,7 @@
       "console": "integratedTerminal",
       "args": [
         "predict_rois",
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "../examples/LabVIEW/Measurement_510nm.tif",
         "../examples/LabVIEW/results/Detection3D.mat",
         "../calibration/aang/15_mode_calibration.csv",
@@ -953,7 +953,7 @@
       "console": "integratedTerminal",
       "args": [
         "predict_sample",
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "${workspaceFolder}/dataset/fit_125_data/YuMB_lambda510/z200-y125-x125/z64-y64-x64/z15/single/photons_550000-600000/amp_p11-p12/npoints_1/spatial_planes/1_realspace.tif",
         "../calibration/aang/15_mode_calibration.csv",
         "--current_dm",
@@ -989,7 +989,7 @@
       "console": "integratedTerminal",
       "args": [
         "predict_tiles",
-        "../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "../examples/test/test.tif",
         "../calibration/aang/15_mode_calibration.csv",
         "--current_dm",
@@ -1112,7 +1112,7 @@
       "program": "${workspaceFolder}/src/test.py",
       "console": "integratedTerminal",
       "args": [
-        "${workspaceFolder}/pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15-spatial_planes10.h5",
+        "${workspaceFolder}/pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "--eval_sign",
         "signed",
         "--digital_rotations",
@@ -1161,9 +1161,9 @@
       "program": "${workspaceFolder}/src/test.py",
       "console": "integratedTerminal",
       "args": [
-        "../pretrained_models/opticalnet-15-YuMB_lambda510-nostem.h5",
+        "../pretrained_models/opticalnet-15-YuMB-lambda510.h5",
         "--datadir",
-        "../dataset/test/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/",
+        "../dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/",
         "--na",
         "1.0",
         "--batch_size",
@@ -1221,11 +1221,7 @@
         "--outdir",
         "../models/opticalnet",
         "--dataset",
-        "../dataset/fit_125",
-        "--finetune",
-        "\"C:\\SPIM\\Common\\Calculations\\Python\\Phase",
-        "Retrieval",
-        "ML\\opticalaberrations\\pretrained_models\\lattice_yumb_x108um_y108um_z200um\\opticalnet-15-YuMB_lambda510-lamb-amp-single\""
+        "../dataset/training_dataset",
       ],
       "presentation": {
         "hidden": false,

@@ -14,7 +14,7 @@ set fileD=%prefix%cluster3%suffix%
 set ao.py="ao.py"
 
 REM -----Flags for predict_tiles------
-set model=../pretrained_models/lattice_yumb_x108um_y108um_z200um/opticalnet-15.h5
+set model=../pretrained_models/opticalnet-15-YuMB-lambda510.h5
 set predict_tiles_flags=--wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --window_size 64-64-64 --freq_strength_threshold 0.01 --batch_size 450 --prev None --plot --plot_rotations --cluster
 
 REM -----Flags for aggregate_predictions-----

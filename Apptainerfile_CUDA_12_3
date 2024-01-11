@@ -1,0 +1,72 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/tensorflow:23.12-tf2-py3 
+
+# pip3 install spython
+# spython recipe Dockerfile Apptainerfile
+# replace-all ${BRANCH_NAME} with {{BRANCH_NAME}}
+# split out stages
+# Build
+# apptainer build --nv --force --build-arg BRANCH_NAME=$(git branch --show-current) develop_CUDA_11_8.sif Apptainerfile_CUDA_12_3
+# apptainer build --nv --force --build-arg BRANCH_NAME=$(git branch --show-current) develop_CUDA_12_3.sif Apptainerfile_CUDA_12_3
+
+%files
+requirements.txt requirements.txt
+
+%post
+
+TERM=xterm-256color
+echo "PS1='\e[97m\u\e[0m@\e[94m\h\e[0m:\e[35m\w\e[0m# '" >> /root/.bashrc
+
+mkdir -p /docker_install
+cd /docker_install
+
+# Install requirements. Don't "apt-get upgrade" or else all the NVIDIA tools and drivers will update.
+apt-get update \
+&& apt-get install -y --no-install-recommends \
+htop \
+cifs-utils \
+winbind \
+smbclient \
+&& rm -rf /var/lib/apt/lists/*
+
+# Git-lfs install
+curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && apt-get update && apt-get install git-lfs && rm -rf /var/lib/apt/lists/*
+
+# Make the dockerfile use the current branch (passed in as a command line argument to "docker build")
+
+
+# some helpful shortcuts
+cloneit="git clone -b {{BRANCH_NAME}} --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git"
+echo 'alias repo="cd /app/opticalaberrations/src"' >> ~/.bashrc
+echo 'alias cloneit=${cloneit}' >> ~/.bashrc
+
+# Download the current github commit page for this branch. This will invalidate the cache for later Docker layers when the commit changes things.
+
+# git clone "requirements.txt" into a junk directory, then pip install. --filter=blob:none will only download the files in HEAD
+mkdir -p /docker_install
+cd /docker_install
+echo "branch={{BRANCH_NAME}}" && git clone -n -b {{BRANCH_NAME}} --depth 1 --filter=blob:none https://github.com/abcucberkeley/opticalaberrations.git
+mkdir -p /docker_install/opticalaberrations
+cd /docker_install/opticalaberrations
+git checkout HEAD requirements.txt
+pip install --no-cache-dir -r requirements.txt  --progress-bar off  &&  pip cache purge
+
+
+
+
+
+mkdir -p /app
+cd /app
+
+
+%environment
+BRANCH_NAME=develop
+export BRANCH_NAME
+export TERM=xterm-256color
+export cloneit="git clone -b {{BRANCH_NAME}} --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git"
+%runscript
+cd /app
+exec /bin/bash -l -c "$@"
+%startscript
+cd /app
+exec /bin/bash -l -c "$@"

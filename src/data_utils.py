@@ -189,7 +189,7 @@ def check_criteria(
     file,
     distribution='/',
     embedding='',
-    modes='',
+    modes=-1,
     max_amplitude=1.,
     photons_range=None,
     npoints_range=None,
@@ -198,7 +198,8 @@ def check_criteria(
     amp = float(str([s for s in file.parts if s.startswith('amp_')][0]).split('-')[-1].replace('p', '.'))
     photons = tuple(map(int, str([s.strip('photons_') for s in file.parts if s.startswith('photons_')][0]).split('-')))
     npoints = int([s.strip('npoints_') for s in file.parts if s.startswith('npoints')][0])
-
+    modes = '' if modes -1 else str(modes)
+    
     if 'iter' not in path \
         and (distribution == '/' or distribution in path) \
         and embedding in path \
@@ -220,7 +221,7 @@ def load_dataset(
     samplelimit=None,
     distribution='/',
     embedding='',
-    modes='',
+    modes=-1,
     max_amplitude=1.,
     photons_range=None,
     npoints_range=None,
@@ -313,7 +314,7 @@ def collect_dataset(
     multiplier=1,
     distribution='/',
     embedding='',
-    modes='',
+    modes=-1,
     samplelimit=None,
     max_amplitude=1.,
     no_phase=False,
@@ -324,8 +325,10 @@ def collect_dataset(
     iotf=None,
     metadata=False,
     lls_defocus: bool = False,
+    defocus_only: bool = False,
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
     cpu_workers: int = -1,
+    model_input_shape: tuple = (6, 64, 64, 1)
 ):
     """
     Returns:
@@ -345,9 +348,22 @@ def collect_dataset(
             tf.float32,     # avg_min_distance
             tf.string       # filename
         ]
+        dshapes = [
+            (modes,),   # amps
+            (),         # photons
+            (),         # counts
+            (),         # counts_mode
+            (100,),     # counts_percentiles
+            (),         # peak2peak
+            (),         # umRMS
+            (),         # npoints
+            (),         # avg_min_distance
+            ()          # filename
+        ]
     else:
         # img, amps
         dtypes = [tf.float32, tf.float32]
+        dshapes = [model_input_shape, (modes,)]
 
     load = partial(
         get_sample,
@@ -356,8 +372,16 @@ def collect_dataset(
         iotf=iotf,
         embedding_option=embedding_option,
         metadata=metadata,
-        lls_defocus=lls_defocus
+        lls_defocus=lls_defocus,
+        defocus_only=defocus_only
     )
+    
+    @tf.autograph.experimental.do_not_convert
+    def load_image(filepath):
+        tensor = tf.py_function(load, [filepath], dtypes)
+        for t, shape in zip(tensor, dshapes):
+            t.set_shape(shape)
+        return tensor
 
     if split is not None:
         train_data, val_data = load_dataset(
@@ -375,8 +399,8 @@ def collect_dataset(
             cpu_workers=cpu_workers
         )
 
-        train = train_data.map(lambda x: tf.py_function(load, [x], dtypes))
-        val = val_data.map(lambda x: tf.py_function(load, [x], dtypes))
+        train = train_data.map(load_image)
+        val = val_data.map(load_image)
 
         for i in train.take(1):
             logger.info(f"Input: {i[0].numpy().shape}")
@@ -402,7 +426,7 @@ def collect_dataset(
             cpu_workers=cpu_workers,
         ) # TF dataset
 
-        data = data.map(lambda x: tf.py_function(load, [x], dtypes)) # TFdataset -> img & zern or -> metadata df
+        data = data.map(load_image) # TFdataset -> img & zern or -> metadata df
 
         if not metadata:
             for i in data.take(1):

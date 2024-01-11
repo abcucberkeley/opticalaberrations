@@ -1,6 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="snrheatmap" type="PythonConfigurationType" factoryName="Python" folderName="eval">
     <module name="opticalaberrations" />
+    <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
@@ -13,7 +14,7 @@
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/test.py" />
-    <option name="PARAMETERS" value="../pretrained_models/opticalnet-15-YuMB_lambda510-nostem.h5 --datadir ../dataset/test/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/ --na 1.0 --batch_size 256 --eval_sign signed --digital_rotations --niter 1 --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat snrheatmap" />
+    <option name="PARAMETERS" value="../pretrained_models/opticalnet-15-YuMB-lambda510.h5 --datadir ../dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/ --na 1.0 --batch_size 256 --eval_sign signed --digital_rotations --niter 1 --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat snrheatmap" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

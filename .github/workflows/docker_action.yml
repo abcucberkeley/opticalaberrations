@@ -23,10 +23,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Use docker.io for Docker Hub if empty
-  REGISTRY: ghcr.io
-  # github.repository as <account>/<repo>
-  IMAGE_NAME: ${{ github.repository }}  
+  REGISTRY: ghcr.io  
+  IMAGE_NAME: ${{ github.repository }}  # github.repository as <account>/<repo>  "abcucberkeley/opticalaberrations"
   DO_SIGNING: ${{ false }}
   BRANCH: ${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'  
 
@@ -51,9 +49,13 @@ jobs:
     if: always()
     name: docker_image_build
     runs-on: self-hosted
-    # container:
-    #   image: docker:git
-    #   options: --user 1000
+    strategy:
+      matrix:
+        include:
+          - TF_IMAGE: 23.12
+            CUDA_VERSION: "CUDA_12_3"
+          - TF_IMAGE: 22.12
+            CUDA_VERSION: "CUDA_11_8"
     steps:
       - name: Dump GitHub context
         env:
@@ -79,13 +81,6 @@ jobs:
           echo "The run id is: $GITHUB_RUN_ID"
           echo "The GitHub Actor's username is: $GITHUB_ACTOR"
           echo "GitHub SHA: $GITHUB_SHA"
-          
-      # - name: 'Cleanup build folder'
-      #   run: |
-      #     ls -la ./
-      #     rm -rf ./* || true
-      #     rm -rf ./.??* || true
-      #     ls -la ./
 
       # The repo gets volume mapped into the container automatically in test-docker
       - name: Checkout whole repo  
@@ -137,14 +132,22 @@ jobs:
           context: .
           file: ./Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}_${{ matrix.CUDA_VERSION }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BRANCH_NAME=${{ env.BRANCH }}    
+            BRANCH_NAME=${{ env.BRANCH }}
+          target: ${{ matrix.CUDA_VERSION }}
         
   build-apptainer:
     needs: build-docker
     runs-on: self-hosted
+    strategy:
+      matrix:
+        include:
+          - TF_IMAGE: 23.12
+            CUDA_VERSION: "CUDA_12_3"
+          - TF_IMAGE: 22.12
+            CUDA_VERSION: "CUDA_11_8"
     steps:
       - name: List files in the directory
         run: |
@@ -162,28 +165,42 @@ jobs:
                 
       - name: Pull latest docker
         run: |
-            docker pull ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+            docker pull ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}
 
       - name: Build Apptainer from local docker image we just pulled to a local .sif
         run: |
-            apptainer build --nv --force ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}
+            apptainer build --nv --force --disable-cache ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}
 
       - name: Login and Push Apptainer SIF to github
         run: |
             ls *.si*         
             apptainer remote login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io       
-            apptainer push ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_sif  
+            apptainer push ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_sif  
             
       # singularity push container.sif oras://ghcr.io/abcucberkeley/opticalaberrations:develop_sif
       # singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://${{ env.REGISTRY }} 
+      # apptainer pull --force --disable-cache develop.sif oras://ghcr.io/abcucberkeley/opticalaberrations:develop_sif
 
   test-apptainer:
-    needs: build-apptainer # need to wait for test-docker to finish otherwise GPU will be utilized.
+    needs: build-apptainer    
     runs-on: self-hosted
+    strategy:
+      matrix:
+        include:
+          - TF_IMAGE: 23.12
+            CUDA_VERSION: "CUDA_12_3"
+          - TF_IMAGE: 22.12
+            CUDA_VERSION: "CUDA_11_8"
     env: 
-      APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}.sif
-      APPTAINER_PYTEST: apptainer exec --nv ${{ github.head_ref || github.ref_name }}.sif python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider ${{ github.workspace }}
+      APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif
+      APPTAINER_PYTEST: apptainer exec --nv ${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider ${{ github.workspace }}
     steps:
+      - name: investigate 
+        run: |
+          pwd
+          id
+          id -u
+          ls -lhXR
           
       - name: pip list 
         run: ${{ env.APPTAINER_RUN }} pip list
@@ -211,22 +228,43 @@ jobs:
 
       - name: Test AO  # requires test data generated by previous step: Test synthetic datasets
         run: ${{ env.APPTAINER_PYTEST }}/tests/test_ao.py
-          
+
+  test_train-apptainer:
+    strategy:
+      matrix:
+        include:
+          - TF_IMAGE: 23.12
+            CUDA_VERSION: "CUDA_12_3"
+          - TF_IMAGE: 22.12
+            CUDA_VERSION: "CUDA_11_8"
+    needs: test-apptainer # need to wait for test-docker to finish otherwise GPU will be utilized.
+    runs-on: self-hosted
+    env: 
+      APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif
+      APPTAINER_PYTEST: apptainer exec --nv ${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider ${{ github.workspace }}
+    steps:          
       - name: Test training
         run: ${{ env.APPTAINER_PYTEST }}/tests/test_train.py
-        
+
   test-docker:
-    needs: [build-docker, test-apptainer]
-    if: always()
+    needs: [test_train-apptainer, build-docker] # needs to run after apptainer because this is going to write root files.
+    if:  always() && needs.build-docker.result == 'success'
     runs-on: self-hosted
+    strategy:
+      matrix:
+        include:
+          - TF_IMAGE: 23.12
+            CUDA_VERSION: "CUDA_12_3"
+          - TF_IMAGE: 22.12
+            CUDA_VERSION: "CUDA_11_8"
     container: 
-      image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}   # pull image 'latest-tf' or 'develop' that we just built
+      image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}   # pull image 'latest-tf' or 'develop' that we just built
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       ports:
         - 80
-      options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864
+      options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864 # --user 1000  Needs to run as 'root' not 'vscode' for cupy cache to work.
     defaults:
       run:
         shell: bash
@@ -264,7 +302,61 @@ jobs:
 
       - name: Test AO  # requires test data generated by previous step: Test synthetic datasets
         run: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider tests/test_ao.py
-          
+
+  test_train-docker:         
+    needs: test-docker
+    runs-on: self-hosted
+    strategy:
+      matrix:
+        include:
+          - TF_IMAGE: 23.12
+            CUDA_VERSION: "CUDA_12_3"
+          - TF_IMAGE: 22.12
+            CUDA_VERSION: "CUDA_11_8"
+    container: 
+      image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}   # pull image 'latest-tf' or 'develop' that we just built
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      ports:
+        - 80
+      options: --gpus all --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864 # --user 1000  Needs to run as 'root' not 'vscode' for cupy cache to work.
+    defaults:
+      run:
+        shell: bash
+    steps:
       - name: Test training        
         run: python -m pytest -vvv --color=yes --disable-warnings -p no:cacheprovider tests/test_train.py
- 
+
+
+  # build-native-apptainer:
+  #   needs: build-docker
+  #   if: always()
+  #   runs-on: self-hosted
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - TF_IMAGE: 23.12
+  #           CUDA_VERSION: "CUDA_12_3"
+  #         - TF_IMAGE: 22.12
+  #           CUDA_VERSION: "CUDA_11_8"
+  #   steps:          
+  #     # Login against a Docker registry except on PR
+  #     # https://github.com/docker/login-action
+  #     - name: Log into registry ${{ env.REGISTRY }}
+  #       if: github.event_name != 'pull_request'
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: ${{ env.REGISTRY }}    # aka ghcr.io
+  #         username: ${{ github.actor }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
+                        
+  #     - name: Build Apptainer from Recipe to a local .sif
+  #       run: |
+  #           apptainer build --nv --force --build-arg BRANCH_NAME=${{ env.BRANCH }} ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_native.sif Apptainerfile_${{ matrix.CUDA_VERSION }}
+
+  #     - name: Login and Push Apptainer SIF to github
+  #       run: |
+  #           ls *.si*         
+  #           apptainer remote login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io       
+  #           apptainer push ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_native.sif oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_native_sif  
