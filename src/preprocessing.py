@@ -15,7 +15,6 @@ from scipy.ndimage import gaussian_filter
 import pandas as pd
 import seaborn as sns
 import zarr
-import h5py
 import scipy.io
 from tqdm.contrib import itertools
 from tifffile import imread, imwrite

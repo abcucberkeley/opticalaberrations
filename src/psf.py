@@ -23,7 +23,6 @@ from skimage.transform import rescale
 from line_profiler_pycharm import profile
 from astropy.convolution import convolve_fft
 from scipy.interpolate import RegularGridInterpolator
-import h5py
 from tifffile import imread, imwrite
 from pyotf.pyotf.otf import HanserPSF
 from utils import microns2waves

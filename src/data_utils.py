@@ -1,7 +1,13 @@
 import logging
 import sys, os
 from functools import partial
+from typing import Callable, Iterable, List
 from line_profiler_pycharm import profile
+from sympy import Union
+
+import torch
+from torch.utils.data import Dataset, DataLoader, random_split, default_collate
+from torch.utils.data.distributed import DistributedSampler
 
 import pandas as pd
 from tifffile import TiffFile
@@ -12,15 +18,11 @@ import matplotlib.ticker as mtick
 
 import seaborn as sns
 from tqdm import tqdm
-import random
-
-import tensorflow as tf
 import ujson
 
 import embeddings
 from wavefront import Wavefront
 from zernike import Zernike
-from synthetic import SyntheticPSF
 from utils import multiprocess
 from preprocessing import resize_with_crop_or_pad
 import vis
@@ -31,12 +33,11 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-tf.get_logger().setLevel(logging.ERROR)
 
 
 @profile
 def get_image(path):
-    if isinstance(path, tf.Tensor):
+    if isinstance(path, torch.Tensor):
         path = Path(str(path.numpy(), "utf-8"))
     else:
         path = Path(str(path))
@@ -66,7 +67,7 @@ def get_image(path):
 
 def get_metadata(path, codename: str):
     try:
-        if isinstance(path, tf.Tensor):
+        if isinstance(path, torch.Tensor):
             path = Path(str(path.numpy(), "utf-8"))
         else:
             path = Path(str(path))
@@ -91,15 +92,13 @@ def get_sample(
         lls_defocus: bool = False,
         defocus_only: bool = False
 ):
-    if isinstance(path, tf.Tensor):
+    if isinstance(path, torch.Tensor):
         path = Path(str(path.numpy(), "utf-8"))
     else:
         path = Path(str(path))
 
     with open(path.with_suffix('.json')) as f:
         hashtbl = ujson.load(f)
-
-
 
     npoints = int(hashtbl.get('npoints', 1))
     photons = hashtbl.get('photons', 0)
@@ -118,6 +117,8 @@ def get_sample(
         if lls_defocus:
             zernikes.append(lls_defocus_offset)
 
+    zernikes = np.array(zernikes).astype('float32')
+    
     try:
         umRMS = hashtbl['umRMS']
     except KeyError:
@@ -132,10 +133,10 @@ def get_sample(
         return zernikes, photons, counts, counts_mode, counts_percentiles, p2v, umRMS, npoints, avg_min_distance, str(path)
 
     else:
-        img = get_image(path)
+        img = get_image(path).astype('float32')
 
         if input_coverage != 1.:
-            img = resize_with_crop_or_pad(img, crop_shape=[int(s * input_coverage) for s in img.psf_shape])
+            img = resize_with_crop_or_pad(img, crop_shape=[int(s * input_coverage) for s in img.shape])
 
         if img.shape[0] == img.shape[1] and iotf is not None:
             img = embeddings.fourier_embeddings(
@@ -214,10 +215,8 @@ def check_criteria(
 
 
 @profile
-def load_dataset(
+def collect_files(
     datadir,
-    split=None,
-    multiplier=1,
     samplelimit=None,
     distribution='/',
     embedding='',
@@ -268,29 +267,10 @@ def load_dataset(
         files = np.random.choice(files, min(samplelimit,len(files)), replace=False).tolist()
         logger.info(f'.tif files selected ({samplelimit=}): {len(files)} files')
 
-    dataset_size = len(files) * multiplier
     if shuffle:
         np.random.shuffle(files)
-    ds = tf.data.Dataset.from_tensor_slices(files)
-    ds = ds.repeat(multiplier)
-
-    if split is not None:
-        val_size = int(np.ceil(dataset_size * split))
-        train = ds.skip(val_size)
-        val = ds.take(val_size)
-
-        logger.info(
-            f"datadir={datadir.resolve()} : "
-            f"training has {tf.data.experimental.cardinality(train).numpy()} elements, "
-            f"validation has {tf.data.experimental.cardinality(val).numpy()} elements"
-        )
-        return train, val
-    else:
-        logger.info(
-            f"datadir={datadir.resolve()} : "
-            f"dataset has {tf.data.experimental.cardinality(ds).numpy()} elements"
-        )
-        return ds
+    
+    return files
 
 
 @profile
@@ -305,168 +285,6 @@ def check_dataset(
     print(corrupted)
     corrupted.to_csv(datadir/'corrupted.csv', header=False, index=False)
     return corrupted
-
-
-@profile
-def collect_dataset(
-    datadir,
-    split=None,
-    multiplier=1,
-    distribution='/',
-    embedding='',
-    modes=-1,
-    samplelimit=None,
-    max_amplitude=1.,
-    no_phase=False,
-    input_coverage=1.,
-    embedding_option='spatial_planes',
-    photons_range=None,
-    npoints_range=None,
-    iotf=None,
-    metadata=False,
-    lls_defocus: bool = False,
-    defocus_only: bool = False,
-    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
-    cpu_workers: int = -1,
-    model_input_shape: tuple = (6, 64, 64, 1)
-):
-    """
-    Returns:
-        metadata=True -> (amps, photons, counts, peak2peak, umRMS, npoints, avg_min_distance, filename)
-        metadata=False-> img & zern
-    """
-    if metadata:
-        dtypes = [
-            tf.float32,     # amps
-            tf.int32,       # photons
-            tf.int32,       # counts
-            tf.int32,       # counts_mode
-            tf.int32,       # counts_percentiles
-            tf.float32,     # peak2peak
-            tf.float32,     # umRMS
-            tf.float32,     # npoints
-            tf.float32,     # avg_min_distance
-            tf.string       # filename
-        ]
-        dshapes = [
-            (modes,),   # amps
-            (),         # photons
-            (),         # counts
-            (),         # counts_mode
-            (100,),     # counts_percentiles
-            (),         # peak2peak
-            (),         # umRMS
-            (),         # npoints
-            (),         # avg_min_distance
-            ()          # filename
-        ]
-    else:
-        # img, amps
-        dtypes = [tf.float32, tf.float32]
-        dshapes = [model_input_shape, (modes,)]
-
-    load = partial(
-        get_sample,
-        no_phase=no_phase,
-        input_coverage=input_coverage,
-        iotf=iotf,
-        embedding_option=embedding_option,
-        metadata=metadata,
-        lls_defocus=lls_defocus,
-        defocus_only=defocus_only
-    )
-    
-    @tf.autograph.experimental.do_not_convert
-    def load_image(filepath):
-        tensor = tf.py_function(load, [filepath], dtypes)
-        for t, shape in zip(tensor, dshapes):
-            t.set_shape(shape)
-        return tensor
-
-    if split is not None:
-        train_data, val_data = load_dataset(
-            datadir,
-            split=split,
-            modes=modes,
-            multiplier=multiplier,
-            samplelimit=samplelimit,
-            embedding=embedding,
-            distribution=distribution,
-            max_amplitude=max_amplitude,
-            photons_range=photons_range,
-            npoints_range=npoints_range,
-            filename_pattern=filename_pattern,
-            cpu_workers=cpu_workers
-        )
-
-        train = train_data.map(load_image)
-        val = val_data.map(load_image)
-
-        for i in train.take(1):
-            logger.info(f"Input: {i[0].numpy().shape}")
-            logger.info(f"Output: {i[1].numpy().shape}")
-
-        logger.info(f"Training samples: {tf.data.experimental.cardinality(train).numpy()}")
-        logger.info(f"Validation samples: {tf.data.experimental.cardinality(val).numpy()}")
-
-        return train, val
-
-    else:
-        data = load_dataset(
-            datadir,
-            modes=modes,
-            multiplier=multiplier,
-            samplelimit=samplelimit,
-            embedding=embedding,
-            distribution=distribution,
-            max_amplitude=max_amplitude,
-            photons_range=photons_range,
-            npoints_range=npoints_range,
-            filename_pattern=filename_pattern,
-            cpu_workers=cpu_workers,
-        ) # TF dataset
-
-        data = data.map(load_image) # TFdataset -> img & zern or -> metadata df
-
-        if not metadata:
-            for i in data.take(1):
-                logger.info(f"Input: {i[0].numpy().shape}")
-                logger.info(f"Output: {i[1].numpy().shape}")
-
-            logger.info(f"Samples: {tf.data.experimental.cardinality(data).numpy()}")
-
-        return data
-
-
-@profile
-def create_dataset(config, split=None):
-    master = tf.data.Dataset.from_tensor_slices([f'generator{i}' for i in range(4)])
-
-    train = master.interleave(
-        lambda x: tf.data.Dataset.from_generator(
-            SyntheticPSF(**config).generator,
-            output_signature=(
-                tf.TensorSpec(shape=(None, *config['psf_shape']), dtype=tf.float32),
-                tf.TensorSpec(shape=(None, config['n_modes']), dtype=tf.float32)
-            )
-        ),
-        num_parallel_calls=tf.data.AUTOTUNE,
-    )
-
-    if split is not None:
-        val = master.interleave(
-            lambda x: tf.data.Dataset.from_generator(
-                SyntheticPSF(**config).generator,
-                output_signature=(
-                    tf.TensorSpec(shape=(None, *config['psf_shape']), dtype=tf.float32),
-                    tf.TensorSpec(shape=(None, config['n_modes']), dtype=tf.float32)
-                )
-            ),
-            num_parallel_calls=tf.data.AUTOTUNE,
-        )
-        return train, val
-    else:
-        return train
 
 
 def dataset_statistics(
@@ -621,3 +439,176 @@ def dataset_statistics(
     # sns.histplot(stats['psnr'].values, kde=True, ax=axs[0], color='dimgrey', bins=20)
 
     # fig.tight_layout()
+    
+
+class DataFinder(Dataset):
+    def __init__(
+        self, 
+        datadir,
+        distribution='/',
+        embedding='',
+        modes=-1,
+        samplelimit=None,
+        max_amplitude=1.,
+        no_phase=False,
+        input_coverage=1.,
+        embedding_option='spatial_planes',
+        photons_range=None,
+        npoints_range=None,
+        iotf=None,
+        metadata=False,
+        lls_defocus: bool = False,
+        defocus_only: bool = False,
+        filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
+        cpu_workers: int = -1,
+        model_input_shape: tuple = (6, 64, 64, 1)
+):
+        super(Dataset, self).__init__()
+
+        
+        self.datadir = datadir
+        self.distribution = distribution
+        self.embedding = embedding
+        self.modes = modes
+        self.samplelimit = samplelimit
+        self.max_amplitude = max_amplitude
+        self.no_phase = no_phase
+        self.input_coverage = input_coverage
+        self.embedding_option = embedding_option
+        self.photons_range = photons_range
+        self.npoints_range = npoints_range
+        self.iotf = iotf
+        self.metadata = metadata
+        self.lls_defocus = lls_defocus
+        self.defocus_only = defocus_only
+        self.filename_pattern = filename_pattern
+        self.cpu_workers = cpu_workers
+        self.model_input_shape = model_input_shape
+
+        self.files = collect_files(
+            datadir,
+            modes=self.modes,
+            samplelimit=self.samplelimit,
+            embedding=self.embedding,
+            distribution=self.distribution,
+            max_amplitude=self.max_amplitude,
+            photons_range=self.photons_range,
+            npoints_range=self.npoints_range,
+            filename_pattern=self.filename_pattern,
+            cpu_workers=self.cpu_workers
+        )
+    
+    
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, idx):
+        
+        path = self.files[idx]
+        
+        return get_sample(
+            path=path,
+            no_phase=self.no_phase,
+            input_coverage=self.input_coverage,
+            iotf=self.iotf,
+            embedding_option=self.embedding_option,
+            metadata=self.metadata,
+            lls_defocus=self.lls_defocus,
+            defocus_only=self.defocus_only
+        )
+
+
+@profile
+def collect_dataset(
+    datadir,
+    split=None,
+    multiplier=1,
+    batch_size=1,
+    distribution='/',
+    embedding='',
+    modes=-1,
+    samplelimit=None,
+    max_amplitude=1.,
+    no_phase=False,
+    input_coverage=1.,
+    embedding_option='spatial_planes',
+    photons_range=None,
+    npoints_range=None,
+    iotf=None,
+    metadata=False,
+    lls_defocus: bool = False,
+    defocus_only: bool = False,
+    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
+    cpu_workers: int = -1,
+    model_input_shape: tuple = (6, 64, 64, 1)
+):
+    """
+    Returns:
+        metadata=True -> (amps, photons, counts, peak2peak, umRMS, npoints, avg_min_distance, filename)
+        metadata=False-> img & zern
+    """
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    
+    dataset = DataFinder(
+        datadir=datadir,
+        distribution=distribution,
+        embedding=embedding,
+        modes=modes,
+        samplelimit=samplelimit,
+        max_amplitude=max_amplitude,
+        no_phase=no_phase,
+        input_coverage=input_coverage,
+        embedding_option=embedding_option,
+        photons_range=photons_range,
+        npoints_range=npoints_range,    
+        iotf=iotf,
+        metadata=metadata,
+        lls_defocus=lls_defocus,
+        defocus_only=defocus_only,
+        filename_pattern=filename_pattern,
+        cpu_workers=cpu_workers,
+        model_input_shape=model_input_shape
+    )
+    
+    if split is not None:
+        val_size = round(len(dataset)* split)
+        train, val = random_split(dataset, lengths=[len(dataset) - val_size, val_size])
+
+        train = DataLoader(
+            train, 
+            batch_size=batch_size, 
+            shuffle=True,
+            # sampler=DistributedSampler(train)
+        )
+        val = DataLoader(
+            val, 
+            batch_size=batch_size, 
+            shuffle=False,
+            # sampler=DistributedSampler(val)
+        )
+
+        i = next(iter(train))
+        logger.info(f"Input: {i[0].shape}")
+        logger.info(f"Output: {i[1].shape}")
+        logger.info(f"Training samples: {len(train)}")
+        logger.info(f"Validation samples: {len(val)}")
+
+        return train, val
+
+    else:
+        
+        data = DataLoader(
+            dataset, 
+            batch_size=batch_size,
+            shuffle=True,
+            pin_memory=True,
+            # sampler=DistributedSampler(dataset)
+        )
+        
+        if not metadata:
+            i = next(iter(data))
+            logger.info(f"Input: {i[0].shape}")
+            logger.info(f"Output: {i[1].shape}")
+            logger.info(f"Samples: {len(data)}")
+
+        return data
