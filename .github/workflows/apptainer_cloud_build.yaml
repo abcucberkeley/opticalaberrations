@@ -62,6 +62,10 @@ jobs:
       - name: Make Tmp Dir
         run: mkdir -p ${{ github.workspace }}/tmp-sif-path
 
+      - name: List files in the repository
+        run: |
+          ls -lhX ${{ github.workspace }}
+
       - name: Build image using cloud
         env:
             SYLABS_AUTH_TOKEN: ${{ secrets.SYLABS_AUTH_TOKEN }}
