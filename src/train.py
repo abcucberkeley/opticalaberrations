@@ -1,43 +1,30 @@
 import matplotlib
+from sympy import im
 matplotlib.use('Agg')
-
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 
 import warnings
 warnings.filterwarnings("ignore")
+
+import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
+
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torchinfo import summary
+from torch.utils.tensorboard import SummaryWriter
 
 import logging
 import sys
 import time
 import numpy as np
-import pandas as pd
 from pathlib import Path
-from datetime import datetime
 from typing import Any, Optional
+from functools import partial
 
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-
-import tensorflow as tf
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.optimizers.experimental import AdamW
-from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping
-from tensorflow_addons.optimizers import LAMB
-
-from warmupcosinedecay import WarmupCosineDecay
-from callbacks import Defibrillator
-from callbacks import TensorBoardCallback
-from callbacks import LRLogger
-from backend import load
-
-import utils
+import base
 import data_utils
-import opticalnet
-import baseline
-import otfnet
-import prototype
 import cli
 
 logging.basicConfig(
@@ -46,56 +33,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-tf.get_logger().setLevel(logging.ERROR)
-plt.set_loglevel('error')
-
-
-def plot_patches(img: np.ndarray, outdir: Path, patches: list):
-    for k, label in enumerate(['xy', 'xz', 'yz']):
-        img = np.expand_dims(img[0], axis=0)
-        original = np.squeeze(img[0, k])
-
-        vmin = np.min(original)
-        vmax = np.max(original)
-        vcenter = (vmin + vmax) / 2
-        step = .01
-
-        highcmap = plt.get_cmap('YlOrRd', 256)
-        lowcmap = plt.get_cmap('YlGnBu_r', 256)
-        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-        cmap = mcolors.ListedColormap(cmap)
-
-        plt.figure(figsize=(4, 4))
-        plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
-        plt.axis("off")
-        plt.title('Original')
-        plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-        for p in patches:
-            patches = opticalnet.Patchify(patch_size=p)(img)
-            merged = opticalnet.Merge(patch_size=p)(patches)
-
-            patches = patches[0, k]
-            merged = np.squeeze(merged[0, k])
-
-            plt.figure(figsize=(4, 4))
-            plt.imshow(merged, cmap=cmap, vmin=vmin, vmax=vmax)
-            plt.axis("off")
-            plt.title('Merged')
-            plt.savefig(f'{outdir}/{label}_merged.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-            n = int(np.sqrt(patches.shape[0]))
-            plt.figure(figsize=(4, 4))
-            plt.title('Patches')
-            for i, patch in enumerate(patches):
-                ax = plt.subplot(n, n, i + 1)
-                patch_img = tf.reshape(patch, (p, p)).numpy()
-                ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
-                ax.axis("off")
-
-            plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
 def train_model(
@@ -115,11 +52,11 @@ def train_model(
     width_scalar: float = 1.,
     activation: str = 'gelu',
     fixedlr: bool = False,
-    opt: str = 'AdamW',
+    opt: Any = 'AdamW',
     lr: float = 5e-4,
     wd: float = 5e-6,
     dropout: float = .1,
-    warmup: int = 2,
+    warmup: int = 1,
     epochs: int = 5,
     wavelength: float = .510,
     psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
@@ -150,6 +87,9 @@ def train_model(
     network = network.lower()
     opt = opt.lower()
     restored = False
+    loss_fn = nn.MSELoss(reduction='sum')
+    writer = SummaryWriter(outdir)
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     if network == 'baseline':
         inputs = (input_shape, input_shape, input_shape, 1)
@@ -163,263 +103,92 @@ def train_model(
     else:
         pmodes = modes if pmodes is None else pmodes
 
-    if dataset is None:
-        config = dict(
-            psf_type=psf_type,
-            psf_shape=inputs,
-            photons=(min_photons, max_photons),
-            n_modes=modes,
-            distribution=distribution,
-            embedding_option=embedding,
-            amplitude_ranges=(-max_amplitude, max_amplitude),
-            lam_detection=wavelength,
-            batch_size=batch_size,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            refractive_index=refractive_index,
-            cpu_workers=cpu_workers,
-            lls_defocus=lls_defocus,
-            defocus_only=defocus_only,
-        )
-        train_data = data_utils.create_dataset(config)
+    model = base.Base().to(device)
+
+    summary(
+        model=model,
+        input_size=inputs,
+        depth=5,
+        col_width=25,
+        col_names=["kernel_size", "output_size", "num_params"],
+        row_settings=["var_names"],
+        verbose=2,
+    )
+    
+    train_data = data_utils.collect_dataset(
+        dataset,
+        metadata=False,
+        modes=pmodes,
+        distribution=distribution,
+        embedding=embedding,
+        samplelimit=samplelimit,
+        max_amplitude=max_amplitude,
+        no_phase=no_phase,
+        lls_defocus=lls_defocus,
+        defocus_only=defocus_only,
+        photons_range=(min_photons, max_photons),
+        cpu_workers=cpu_workers,
+        model_input_shape=inputs
+    )
+    steps_per_epoch = np.ceil(len(train_data) / batch_size).astype(int)
+
+    if opt == 'lamb':
+        opt = optim.AdamW(model.parameters(), lr=lr, weight_decay=wd, betas=(0.9, 0.99))
+    elif opt.lower() == 'adamw':
+        opt = optim.AdamW(model.parameters(), lr=lr, weight_decay=wd, betas=(0.9, 0.99))
     else:
-        train_data = data_utils.collect_dataset(
-            dataset,
-            metadata=False,
-            modes=pmodes,
-            distribution=distribution,
-            embedding=embedding,
-            samplelimit=samplelimit,
-            max_amplitude=max_amplitude,
-            no_phase=no_phase,
-            lls_defocus=lls_defocus,
-            defocus_only=defocus_only,
-            photons_range=(min_photons, max_photons),
-            cpu_workers=cpu_workers,
-            model_input_shape=inputs
-        )
-
-        sample_writer = tf.summary.create_file_writer(f'{outdir}/train_samples/')
-        with sample_writer.as_default():
-            for s in range(10):
-                fig = None
-                for i, (img, y) in enumerate(train_data.shuffle(batch_size).take(5)):
-
-                    if plot_patchfiy:
-                        plot_patches(img=img, outdir=outdir, patches=patches)
-
-                    img = np.squeeze(img, axis=-1)
-
-                    if fig is None:
-                        fig, axes = plt.subplots(5, img.shape[0], figsize=(8, 8))
-
-                    for k in range(img.shape[0]):
-                        if k > 2:
-                            mphi = axes[i, k].imshow(img[k, :, :], cmap='coolwarm', vmin=-.5, vmax=.5)
-                        else:
-                            malpha = axes[i, k].imshow(img[k, :, :], cmap='Spectral_r', vmin=0, vmax=2)
-
-                        axes[i, k].axis('off')
-
-                    if img.shape[0] > 3:
-                        cax = inset_axes(axes[i, 0], width="10%", height="100%", loc='center left', borderpad=-3)
-                        cb = plt.colorbar(malpha, cax=cax)
-                        cax.yaxis.set_label_position("left")
-
-                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                        cb = plt.colorbar(mphi, cax=cax)
-                        cax.yaxis.set_label_position("right")
-
-                    else:
-                        cax = inset_axes(axes[i, -1], width="10%", height="100%", loc='center right', borderpad=-2)
-                        cb = plt.colorbar(malpha, cax=cax)
-                        cax.yaxis.set_label_position("right")
-
-                tf.summary.image("Training samples", utils.plot_to_image(fig), step=s)
-
-        train_data = train_data.cache()
-        train_data = train_data.shuffle(batch_size*10, reshuffle_each_iteration=True)
-        train_data = train_data.batch(batch_size)
-        train_data = train_data.prefetch(buffer_size=tf.data.AUTOTUNE)
-        steps_per_epoch = tf.data.experimental.cardinality(train_data).numpy()
+        opt = optim.Adam(model.parameters(), lr=lr)
 
     if fixedlr:
-        scheduler = lr
+        scheduler = torch.optim.lr_scheduler.LinearLR(
+            opt, 
+            start_factor=1.0, 
+            end_factor=1.0, 
+            total_iters=epochs
+        )
         logger.info(f"Training steps: [{steps_per_epoch * epochs}]")
     else:
         warmup_steps = warmup * steps_per_epoch
-        decay_steps = (epochs - warmup) * steps_per_epoch
+        total_steps = epochs * steps_per_epoch
+        decay_steps = total_steps - warmup_steps
         logger.info(f"Training steps [{steps_per_epoch * epochs}] = ({warmup_steps=}) + ({decay_steps=})")
 
-        scheduler = WarmupCosineDecay(
-            initial_learning_rate=0.,
-            decay_steps=decay_steps,
-            warmup_target=lr,
-            warmup_steps=warmup_steps,
-            alpha=.01,
+        def _warmup_cosine_decay(iteration, warmup_iterations, total_iterations):
+            if iteration <= warmup_iterations:
+                multiplier = iteration / warmup_iterations
+            else:
+                multiplier = (iteration - warmup_iterations) / (total_iterations - warmup_iterations)
+                multiplier = 0.5 * (1 + np.cos(np.pi * multiplier))
+            return multiplier
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer=opt, 
+            lr_lambda=partial(_warmup_cosine_decay, warmup_iterations=warmup, total_iterations=epochs),
+            verbose=True
         )
 
-    if opt == 'lamb':
-        opt = LAMB(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99, clipnorm=1.0)
-    elif opt.lower() == 'adamw':
-        opt = AdamW(learning_rate=scheduler, weight_decay=wd)
-    else:
-        opt = Adam(learning_rate=scheduler)
+    for epoch in range(epochs):
 
-    try:  # check if model already exists
-        model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent  # sort models to get the latest checkpoint
-        model = load(model_path)
+        # Make sure gradient tracking is on, and do a pass over the data
+        model.train(True)
+        scheduler.step()
+        
+        for i, (inputs, zernikes) in enumerate(train_data):
+            inputs, zernikes = inputs.to(device), zernikes.to(device)
+            
+            # Zero your gradients for every batch!
+            opt.zero_grad()
 
-        if isinstance(model, tf.keras.Model):
-            restored = True
-            opt = model.optimizer
-            training_history = pd.read_csv(outdir / 'logbook.csv', header=0, index_col=0)
-            logger.info(f"Training history: {training_history}")
+            predictions = model(inputs)
 
-    except Exception as e:
-        logger.warning(f"No model found in {outdir}")
+            # Compute the loss and its gradients
+            loss = loss_fn(predictions, zernikes)
+            loss.backward()
 
-    if not restored:  # Build a new model
-        if network == 'prototype':
-            model = prototype.OpticalTransformer(
-                name='Prototype',
-                roi=roi,
-                stem=stem,
-                patches=patches,
-                heads=heads,
-                repeats=repeats,
-                modes=pmodes,
-                depth_scalar=depth_scalar,
-                width_scalar=width_scalar,
-                dropout_rate=dropout,
-                activation=activation,
-                mul=mul,
-                no_phase=no_phase,
-                positional_encoding_scheme=positional_encoding_scheme,
-                radial_encoding_period=radial_encoding_period,
-                radial_encoding_nth_order=radial_encoding_nth_order,
-                fixed_dropout_depth=fixed_dropout_depth,
-            )
-
-        elif network == 'opticalnet':
-            model = opticalnet.OpticalTransformer(
-                name='OpticalNet',
-                roi=roi,
-                stem=stem,
-                patches=patches,
-                heads=heads,
-                repeats=repeats,
-                modes=pmodes,
-                depth_scalar=depth_scalar,
-                width_scalar=width_scalar,
-                dropout_rate=dropout,
-                activation=activation,
-                mul=mul,
-                no_phase=no_phase,
-                positional_encoding_scheme=positional_encoding_scheme,
-                radial_encoding_period=radial_encoding_period,
-                radial_encoding_nth_order=radial_encoding_nth_order,
-                fixed_dropout_depth=fixed_dropout_depth,
-            )
-
-        elif network == 'baseline':
-            model = baseline.Baseline(
-                name='Baseline',
-                modes=pmodes,
-                depth_scalar=depth_scalar,
-                width_scalar=width_scalar,
-                activation=activation,
-            )
-
-        elif network == 'otfnet':
-            model = otfnet.OTFNet(
-                name='OTFNet',
-                modes=pmodes
-            )
-
-        else:
-            raise Exception(f'Network "{network}" is unknown.')
-
-    if restored and finetune is None:
-        logger.info(f"Continue training {model.name} restored from {model_path} using {opt.get_config()}")
-    else:
-        if finetune is not None:
-            model = load(finetune)
-            logger.info(model.summary(line_length=125, expand_nested=True))
-            logger.info(f"Finetuning {model.name}; {opt.get_config()}")
-
-        else:  # creating a new model
-            model = model.build(input_shape=inputs)
-            logger.info(model.summary(line_length=125, expand_nested=True))
-            logger.info(f"Creating a new model; {opt.get_config()})")
-
-        model.compile(
-            optimizer=opt,
-            loss=tf.losses.MeanSquaredError(reduction=tf.losses.Reduction.SUM),
-            metrics=[tf.keras.metrics.RootMeanSquaredError(), 'mae', 'mse'],
-        )
-
-    tblogger = CSVLogger(
-        f"{outdir}/logbook.csv",
-        append=True,
-    )
-
-    pb_checkpoints = ModelCheckpoint(
-        filepath=str(outdir/"tf"),
-        monitor="loss",
-        verbose=1,
-        save_best_only=True,
-        save_weights_only=False,
-    )
-
-    h5_checkpoints = ModelCheckpoint(
-        filepath=str(outdir/"keras"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}-epoch{{epoch:03d}}.h5"),
-        monitor="loss",
-        verbose=1,
-        save_best_only=True,
-        save_weights_only=False,
-    )
-
-    earlystopping = EarlyStopping(
-        monitor='loss',
-        min_delta=0,
-        patience=50,
-        verbose=1,
-        mode='auto',
-        restore_best_weights=True
-    )
-
-    defibrillator = Defibrillator(
-        monitor='loss',
-        patience=25,
-        verbose=1,
-    )
-
-    tensorboard = TensorBoardCallback(
-        log_dir=outdir,
-        histogram_freq=1,
-        profile_batch=100000000
-    )
-
-    lrlogger = LRLogger()
-
-    model.fit(
-        train_data,
-        steps_per_epoch=steps_per_epoch,
-        epochs=epochs,
-        verbose=2,
-        shuffle=True,
-        callbacks=[
-            tblogger,
-            tensorboard,
-            pb_checkpoints,
-            h5_checkpoints,
-            earlystopping,
-            defibrillator,
-            lrlogger
-        ],
-    )
+            # Adjust learning weights
+            opt.step()
+            
+    writer.close()
 
 
 def eval_model(
@@ -448,52 +217,20 @@ def eval_model(
     else:
         inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
 
-    if dataset is None:
-        config = dict(
-            psf_type=psf_type,
-            psf_shape=inputs,
-            photons=(min_photons, max_photons),
-            n_modes=modes,
-            distribution=distribution,
-            embedding_option=embedding,
-            amplitude_ranges=(-max_amplitude, max_amplitude),
-            lam_detection=wavelength,
-            batch_size=batch_size,
-            x_voxel_size=x_voxel_size,
-            y_voxel_size=y_voxel_size,
-            z_voxel_size=z_voxel_size,
-            refractive_index=refractive_index,
-            cpu_workers=-1
-        )
-        eval_data = data_utils.create_dataset(config)
-    else:
-        eval_data = data_utils.collect_dataset(
-            dataset,
-            metadata=False,
-            modes=modes,
-            distribution=distribution,
-            embedding=embedding,
-            samplelimit=samplelimit,
-            max_amplitude=max_amplitude,
-            no_phase=no_phase,
-            lls_defocus=lls_defocus,
-            photons_range=(min_photons, max_photons),
-            model_input_shape=inputs
-        )
-
-        eval_data = eval_data.cache()
-        eval_data = eval_data.batch(batch_size)
-        eval_data = eval_data.prefetch(buffer_size=tf.data.AUTOTUNE)
-
-        options = tf.data.Options()
-        options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-        eval_data = eval_data.with_options(options)
-
-    model = load(network)
-    results = model.evaluate(
-        eval_data,
-        verbose=1,
+    eval_data = data_utils.collect_dataset(
+        dataset,
+        metadata=False,
+        modes=modes,
+        distribution=distribution,
+        embedding=embedding,
+        samplelimit=samplelimit,
+        max_amplitude=max_amplitude,
+        no_phase=no_phase,
+        lls_defocus=lls_defocus,
+        photons_range=(min_photons, max_photons),
+        model_input_shape=inputs
     )
+    
 
 
 def parse_args(args):
@@ -715,104 +452,77 @@ def main(args=None):
     timeit = time.time()
     args = parse_args(args)
     logger.info(args)
-
-    physical_devices = tf.config.list_physical_devices('GPU')
-    for gpu_instance in physical_devices:
-        tf.config.experimental.set_memory_growth(gpu_instance, True)
-
-    if args.multinode:
-        strategy = tf.distribute.MultiWorkerMirroredStrategy(
-            cluster_resolver=tf.distribute.cluster_resolver.SlurmClusterResolver(),
+    
+    if args.eval:
+        eval_model(
+            dataset=args.dataset,
+            network=args.network,
+            embedding=args.embedding,
+            input_shape=args.input_shape,
+            batch_size=args.batch_size,
+            psf_type=args.psf_type,
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
+            modes=args.modes,
+            min_photons=args.min_photons,   
+            max_photons=args.max_photons,
+            max_amplitude=args.max_amplitude,
+            distribution=args.dist,
+            samplelimit=args.samplelimit,
+            wavelength=args.wavelength,
+            no_phase=args.no_phase,
+            lls_defocus=args.lls_defocus,
         )
     else:
-        strategy = tf.distribute.MirroredStrategy()
-
-    gpu_workers = strategy.num_replicas_in_sync
-    logger.info(f'Number of active GPUs: {gpu_workers}')
-
-    """
-        To enable automatic mixed precision training for tensorflow:
-        https://www.tensorflow.org/guide/mixed_precision
-        https://docs.nvidia.com/deeplearning/performance/mixed-precision-training/index.html#mptrain
-        https://on-demand.gputechconf.com/gtc-taiwan/2018/pdf/5-1_Internal%20Speaker_Michael%20Carilli_PDF%20For%20Sharing.pdf
-    """
-
-    if not args.fixed_precision:
-        policy = tf.keras.mixed_precision.Policy('mixed_float16')
-        tf.keras.mixed_precision.set_global_policy(policy)
-
-    with strategy.scope():
-        if args.eval:
-            eval_model(
-                dataset=args.dataset,
-                network=args.network,
-                embedding=args.embedding,
-                input_shape=args.input_shape,
-                batch_size=args.batch_size,
-                psf_type=args.psf_type,
-                x_voxel_size=args.x_voxel_size,
-                y_voxel_size=args.y_voxel_size,
-                z_voxel_size=args.z_voxel_size,
-                modes=args.modes,
-                min_photons=args.min_photons,
-                max_photons=args.max_photons,
-                max_amplitude=args.max_amplitude,
-                distribution=args.dist,
-                samplelimit=args.samplelimit,
-                wavelength=args.wavelength,
-                no_phase=args.no_phase,
-                lls_defocus=args.lls_defocus,
-            )
-        else:
-            train_model(
-                dataset=args.dataset,
-                embedding=args.embedding,
-                outdir=args.outdir,
-                network=args.network,
-                input_shape=args.input_shape,
-                batch_size=args.batch_size,
-                patches=[int(i) for i in args.patches.split('-')],
-                heads=[int(i) for i in args.heads.split('-')],
-                repeats=[int(i) for i in args.repeats.split('-')],
-                roi=[int(i) for i in args.roi.split('-')] if args.roi is not None else args.roi,
-                steps_per_epoch=args.steps_per_epoch,
-                psf_type=args.psf_type,
-                x_voxel_size=args.x_voxel_size,
-                y_voxel_size=args.y_voxel_size,
-                z_voxel_size=args.z_voxel_size,
-                modes=args.modes,
-                activation=args.activation,
-                mul=args.mul,
-                opt=args.opt,
-                lr=args.lr,
-                wd=args.wd,
-                dropout=args.dropout,
-                fixedlr=args.fixedlr,
-                warmup=args.warmup,
-                epochs=args.epochs,
-                pmodes=args.pmodes,
-                min_photons=args.min_photons,
-                max_photons=args.max_photons,
-                max_amplitude=args.max_amplitude,
-                distribution=args.dist,
-                samplelimit=args.samplelimit,
-                wavelength=args.wavelength,
-                depth_scalar=args.depth_scalar,
-                width_scalar=args.width_scalar,
-                no_phase=args.no_phase,
-                lls_defocus=args.lls_defocus,
-                defocus_only=args.defocus_only,
-                radial_encoding_period=args.radial_encoding_period,
-                radial_encoding_nth_order=args.radial_encoding_nth_order,
-                positional_encoding_scheme=args.positional_encoding_scheme,
-                stem=args.stem,
-                fixed_dropout_depth=args.fixed_dropout_depth,
-                finetune=args.finetune,
-                cpu_workers=args.cpu_workers
-            )
+        train_model(
+            dataset=args.dataset,
+            embedding=args.embedding,
+            outdir=args.outdir,
+            network=args.network,
+            input_shape=args.input_shape,
+            batch_size=args.batch_size,
+            patches=[int(i) for i in args.patches.split('-')],
+            heads=[int(i) for i in args.heads.split('-')],
+            repeats=[int(i) for i in args.repeats.split('-')],
+            roi=[int(i) for i in args.roi.split('-')] if args.roi is not None else args.roi,
+            steps_per_epoch=args.steps_per_epoch,
+            psf_type=args.psf_type,
+            x_voxel_size=args.x_voxel_size,
+            y_voxel_size=args.y_voxel_size,
+            z_voxel_size=args.z_voxel_size,
+            modes=args.modes,
+            activation=args.activation,
+            mul=args.mul,
+            opt=args.opt,
+            lr=args.lr,
+            wd=args.wd,
+            dropout=args.dropout,
+            fixedlr=args.fixedlr,
+            warmup=args.warmup,
+            epochs=args.epochs,
+            pmodes=args.pmodes,
+            min_photons=args.min_photons,
+            max_photons=args.max_photons,
+            max_amplitude=args.max_amplitude,
+            distribution=args.dist,
+            samplelimit=args.samplelimit,
+            wavelength=args.wavelength,
+            depth_scalar=args.depth_scalar,
+            width_scalar=args.width_scalar,
+            no_phase=args.no_phase,
+            lls_defocus=args.lls_defocus,
+            defocus_only=args.defocus_only,
+            radial_encoding_period=args.radial_encoding_period,
+            radial_encoding_nth_order=args.radial_encoding_nth_order,
+            positional_encoding_scheme=args.positional_encoding_scheme,
+            stem=args.stem,
+            fixed_dropout_depth=args.fixed_dropout_depth,
+            finetune=args.finetune,
+            cpu_workers=args.cpu_workers
+        )
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
-
 
 if __name__ == "__main__":
     main()

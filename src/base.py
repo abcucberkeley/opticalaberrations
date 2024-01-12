@@ -1,11 +1,10 @@
 
 import logging
 import sys
-from abc import ABC
-
-from tensorflow.keras import Model
-from tensorflow.keras import layers
-
+import torch
+import torch.nn as nn
+from functools import reduce
+ 
 logging.basicConfig(
     stream=sys.stdout,
     level=logging.INFO,
@@ -14,15 +13,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class Base(Model, ABC):
-
-    def __init__(self, modes=15, *args, **kwargs):
+class Base(nn.Module):
+    
+    def __init__(self, input_shape=(1, 6, 64, 64, 1), modes=15, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.flat = layers.Flatten()
-        self.regressor = layers.Dense(modes, activation='linear', name='regressor')
-        self.classifier = layers.Dense(modes, activation='softmax', name='classifier')
+        
+        in_features = reduce(lambda x, y: x*y, input_shape)
+        self.regressor = nn.Linear(
+            in_features=in_features, 
+            out_features=modes
+        )
 
-    def build(self, input_shape):
-        inputs = layers.Input(shape=input_shape)
-        outputs = self.call(inputs)
-        return Model(inputs=inputs, outputs=outputs, name=self.name)
+    def forward(self, x):
+        x = torch.flatten(x)
+        x = self.regressor(x)
+        return x
