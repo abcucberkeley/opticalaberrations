@@ -4,7 +4,23 @@
 
 name: Cloud Build Apptainer 
 
-on: workflow_dispatch
+on: 
+  push:
+    branches:
+      - 'main'
+      - 'develop'
+      - 'releases/**'
+      - 'release/**'
+      - 'release'
+    tags:
+      - '*'
+  pull_request:
+    branches:
+      - 'main'
+      - 'develop'
+      - 'releases/**'
+      - 'release/**'
+      - 'release'
 
 # only allow one copy of this workflow to run at a time (the group specified by workflow name)
 # cancel current workflows if they are running, so that we just run the latest queue'd.
@@ -48,7 +64,7 @@ jobs:
             android: true
             dotnet: true
             haskell: true
-            large-packages: true
+            large-packages: false    # slow
             docker-images: true
             swap-storage: true
 
@@ -76,15 +92,23 @@ jobs:
     #     run: mv ${{ github.workspace }}/${{env.OUTPUT_SIF}} ${{ github.workspace }}/tmp-sif-path/${{env.OUTPUT_SIF}}
 
 
-        # Login against a Docker registry except on PR
-        # https://github.com/docker/login-action
-      - name: Log into registry ${{ env.REGISTRY }}
+    #     # Login against a Docker registry except on PR
+    #     # https://github.com/docker/login-action
+    #   - name: Log into registry ${{ env.REGISTRY }}
+    #     if: github.event_name != 'pull_request'
+    #     uses: docker/login-action@v3
+    #     with:
+    #         registry: ${{ env.REGISTRY }}    # aka ghcr.io
+    #         username: ${{ github.actor }}
+    #         password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log into registry SylabsCloud
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-            registry: ${{ env.REGISTRY }}    # aka ghcr.io
-            username: ${{ github.actor }}
-            password: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+            apptainer remote add --no-login SylabsCloud cloud.sycloud.io
+            apptainer remote use SylabsCloud
+            apptainer remote list
+            
                 
       - name: Build Apptainer from local docker image we just pulled to a local .sif
         run: |
