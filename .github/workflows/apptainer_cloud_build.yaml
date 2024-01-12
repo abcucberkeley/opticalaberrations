@@ -1,3 +1,7 @@
+# from https://sylabs.io/2022/03/introducing-scs-build/
+# from https://github.com/sylabs/scs-build-client/blob/main/examples/github-actions-ci.yaml
+
+
 name: Cloud Build Apptainer 
 
 on: workflow_dispatch
@@ -15,61 +19,107 @@ env:
   BRANCH: ${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'
   PYTEST: python -m pytest --cache-clear -vvv --color=yes --disable-warnings
 
-  DEF_FILE: "Apptainer_CUDA_12_3" # REPLACE with Def file in a repo.
+  
 
 jobs:
 
-  # # Build SIF and store SIF as an CI artifact.
-  # build-artifact:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
-
-  #     - name: Make Tmp Dir
-  #       run: |
-  #         mkdir -p ${{ github.workspace }}/tmp-sif-path
-
-  #     - name: Build image
-  #       env:
-  #         SYLABS_AUTH_TOKEN: ${{ secrets.SYLABS_AUTH_TOKEN }}
-  #       run: |
-  #         docker run -v ${{ github.workspace }}:/app \
-  #         -u $(id -u ${USER}):$(id -g ${USER}) \
-  #         $DOCKER_BUILD_CLIENT build \
-  #         --skip-verify /app/$DEF_FILE "/app/$OUTPUT_SIF"
-
-  #     - name: Move Sif
-  #       run: mv ${{ github.workspace }}/$OUTPUT_SIF ${{ github.workspace }}/tmp-sif-path/$OUTPUT_SIF
-
-  #     - name: Save image
-  #       uses: actions/upload-artifact@v2
-  #       with:
-  #         name: ${{ env.OUTPUT_SIF }}
-  #         path: ${{ github.workspace }}/tmp-sif-path
-
-  # Build SIF and Push to cloud.sylabs.io
-  push-cloud:
-    env:
-        OUTPUT_SIF: ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif  # REPLACE with SIF name
-        LIBRARY_PATH: oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_sif # REPLACE with library path to store sif.
+  # Build SIF and store SIF as an CI artifact.
+  build-artifact:
     runs-on: ubuntu-latest
-    container: sylabsio/scs-build
-
+    strategy:
+        matrix:
+          include:
+            # - CUDA_VERSION: "Torch_CUDA_12_3"
+            - CUDA_VERSION: "TF_CUDA_12_3"   
+    env:
+        OUTPUT_SIF: ${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif  # REPLACE with SIF name
+        LIBRARY_PATH: oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_sif # REPLACE with library path to store sif.        
+        DEF_FILE: "Apptainer_${{ matrix.CUDA_VERSION }}_derived" # REPLACE with Def file in a repo.
     steps:
-      # Login against a Docker registry except on PR
-      # https://github.com/docker/login-action
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+            # this might remove tools that are actually needed,
+            # if set to "true" but frees about 6 GB
+            tool-cache: false
+            
+            # all of these default to true, but feel free to set to
+            # "false" if necessary for your workflow
+            android: true
+            dotnet: true
+            haskell: true
+            large-packages: true
+            docker-images: true
+            swap-storage: true
+
+      - name: Install Apptainer
+        uses: eWaterCycle/setup-apptainer@v2
+        with:
+            apptainer-version: 1.2.5
+
+      - uses: actions/checkout@v4
+
+      - name: Make Tmp Dir
+        run: mkdir -p ${{ github.workspace }}/tmp-sif-path
+
+      - name: Build image using cloud
+        env:
+            SYLABS_AUTH_TOKEN: ${{ secrets.SYLABS_AUTH_TOKEN }}
+        run: |
+            docker run -v ${{ github.workspace }}:/app \
+            -u $(id -u ${USER}):$(id -g ${USER}) \
+            sylabsio/scs-build build \
+            --skip-verify /app/${{env.DEF_FILE}} "/app/${{env.OUTPUT_SIF}}"
+
+      - name: Move Sif
+        run: mv ${{ github.workspace }}/${{env.OUTPUT_SIF}} ${{ github.workspace }}/tmp-sif-path/${{env.OUTPUT_SIF}}
+
+
+        # Login against a Docker registry except on PR
+        # https://github.com/docker/login-action
       - name: Log into registry ${{ env.REGISTRY }}
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}    # aka ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-          
-      - uses: actions/checkout@v4
+            registry: ${{ env.REGISTRY }}    # aka ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+                
+    #   - name: Pull latest docker
+    #     run: |
+    #         docker pull ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}
 
-      - name: Build and Push SIF
-        env:
-          SYLABS_AUTH_TOKEN: ${{ secrets.SYLABS_AUTH_TOKEN }}
-        run: |         
-          scs-build build --skip-verify /app/${{env.DEF_FILE}} ${{ env.LIBRARY_PATH }}
+    # - name: Build Apptainer from local docker image we just pulled to a local .sif
+    # run: |
+    #     apptainer build --nv --force ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}
+
+      - name: Login and Push Apptainer SIF to github
+        run: |
+            apptainer remote login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io       
+            apptainer push ${{ github.workspace }}/tmp-sif-path/${{ env.OUTPUT_SIF }} oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_sif  
+
+        # - name: Save image
+        #     uses: actions/upload-artifact@v2
+        #     with:
+        #     name: 
+        #     path: ${{ github.workspace }}/tmp-sif-path
+
+
+
+# # Build SIF and Push to cloud.sylabs.io
+#   push-cloud:
+#     env:
+#         OUTPUT_SIF: ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif  # REPLACE with SIF name
+#         LIBRARY_PATH: oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_sif # REPLACE with library path to store sif.
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - name: Build and Push SIF
+#         env:
+#           SYLABS_AUTH_TOKEN: ${{ secrets.SYLABS_AUTH_TOKEN }}
+#         run: |
+#           docker run -v ${{ github.workspace }}:/app \
+#           -u $(id -u ${USER}):$(id -g ${USER}) \
+#           $DOCKER_BUILD_CLIENT \
+#           build --skip-verify /app/${{env.DEF_FILE}} ${{ env.LIBRARY_PATH }}

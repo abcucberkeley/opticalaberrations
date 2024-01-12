@@ -2,7 +2,8 @@
 Bootstrap: library
 From: dmilkie/opticalaberrations/develop:    # change this to "<myuser>/default/ubuntu:focal" if using Sylabs Cloud
 %post
-  apt-get update
+# Add commands here:
+#   apt-get update
 
 %environment
 BRANCH_NAME=develop
