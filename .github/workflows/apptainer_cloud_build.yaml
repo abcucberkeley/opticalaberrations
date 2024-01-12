@@ -88,7 +88,7 @@ jobs:
                 
       - name: Build Apptainer from local docker image we just pulled to a local .sif
         run: |
-          apptainer build --nv --force --build-arg BRANCH_NAME=${{env.BRANCH_NAME}} ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif  Apptainerfile_${{ matrix.CUDA_VERSION }}_derived.sif
+          apptainer build --nv --force --build-arg BRANCH_NAME=${{env.BRANCH_NAME}} ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif  Apptainerfile_${{ matrix.CUDA_VERSION }}_derived
 
       - name: Login and Push Apptainer SIF to github
         run: |
