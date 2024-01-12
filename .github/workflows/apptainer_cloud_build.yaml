@@ -15,7 +15,6 @@ env:
   BRANCH: ${{ github.head_ref || github.ref_name }}   # 'latest-tf' or 'develop'
   PYTEST: python -m pytest --cache-clear -vvv --color=yes --disable-warnings
 
-  DOCKER_BUILD_CLIENT: "sylabsio/scs-build"
   DEF_FILE: "Apptainer_CUDA_12_3" # REPLACE with Def file in a repo.
 
 jobs:
@@ -54,6 +53,8 @@ jobs:
         OUTPUT_SIF: ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif  # REPLACE with SIF name
         LIBRARY_PATH: oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_sif # REPLACE with library path to store sif.
     runs-on: ubuntu-latest
+    container: sylabsio/scs-build
+
     steps:
       # Login against a Docker registry except on PR
       # https://github.com/docker/login-action
@@ -70,8 +71,5 @@ jobs:
       - name: Build and Push SIF
         env:
           SYLABS_AUTH_TOKEN: ${{ secrets.SYLABS_AUTH_TOKEN }}
-        run: |
-          docker run -v ${{ github.workspace }}:/app \
-          -u $(id -u ${USER}):$(id -g ${USER}) \
-          ${{env.DOCKER_BUILD_CLIENT}} \
+        run: |         
           scs-build build --skip-verify /app/${{env.DEF_FILE}} ${{ env.LIBRARY_PATH }}
