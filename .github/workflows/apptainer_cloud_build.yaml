@@ -59,24 +59,21 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Make Tmp Dir
-        run: mkdir -p ${{ github.workspace }}/tmp-sif-path
-
       - name: List files in the repository
         run: |
           ls -lhX ${{ github.workspace }}
 
-      - name: Build image using cloud
-        env:
-            SYLABS_AUTH_TOKEN: ${{ secrets.SYLABS_AUTH_TOKEN }}
-        run: |
-            docker run -v ${{ github.workspace }}:/app \
-            -u $(id -u ${USER}):$(id -g ${USER}) \
-            sylabsio/scs-build build \
-            --skip-verify /app/${{env.DEF_FILE}} "/app/${{env.OUTPUT_SIF}}"
+    #   - name: Build image using cloud
+    #     env:
+    #         SYLABS_AUTH_TOKEN: ${{ secrets.SYLABS_AUTH_TOKEN }}
+    #     run: |
+    #         docker run -v ${{ github.workspace }}:/app \
+    #         -u $(id -u ${USER}):$(id -g ${USER}) \
+    #         sylabsio/scs-build build \
+    #         --skip-verify /app/${{env.DEF_FILE}} "/app/${{env.OUTPUT_SIF}}"
 
-      - name: Move Sif
-        run: mv ${{ github.workspace }}/${{env.OUTPUT_SIF}} ${{ github.workspace }}/tmp-sif-path/${{env.OUTPUT_SIF}}
+    #   - name: Move Sif
+    #     run: mv ${{ github.workspace }}/${{env.OUTPUT_SIF}} ${{ github.workspace }}/tmp-sif-path/${{env.OUTPUT_SIF}}
 
 
         # Login against a Docker registry except on PR
@@ -89,18 +86,14 @@ jobs:
             username: ${{ github.actor }}
             password: ${{ secrets.GITHUB_TOKEN }}
                 
-    #   - name: Pull latest docker
-    #     run: |
-    #         docker pull ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}
-
-    # - name: Build Apptainer from local docker image we just pulled to a local .sif
-    # run: |
-    #     apptainer build --nv --force ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif docker-daemon:ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}
+      - name: Build Apptainer from local docker image we just pulled to a local .sif
+        run: |
+          apptainer build --nv --force --build-arg BRANCH_NAME=${{env.BRANCH_NAME}} ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif  Apptainerfile_${{ matrix.CUDA_VERSION }}_derived.sif
 
       - name: Login and Push Apptainer SIF to github
         run: |
             apptainer remote login --username ${{ github.actor }} --password ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io       
-            apptainer push ${{ github.workspace }}/tmp-sif-path/${{ env.OUTPUT_SIF }} oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_sif  
+            apptainer push ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif  oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_sif  
 
         # - name: Save image
         #     uses: actions/upload-artifact@v2
