@@ -34,7 +34,7 @@ jobs:
     env:
         OUTPUT_SIF: ${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif  # REPLACE with SIF name
         LIBRARY_PATH: oras://ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}_sif # REPLACE with library path to store sif.        
-        DEF_FILE: "Apptainer_${{ matrix.CUDA_VERSION }}_derived" # REPLACE with Def file in a repo.
+        DEF_FILE: "Apptainerfile_${{ matrix.CUDA_VERSION }}_derived" # REPLACE with Def file in a repo.
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
