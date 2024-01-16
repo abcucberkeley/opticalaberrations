@@ -92,8 +92,7 @@ def multiprocess(
                 file=sys.stdout,
             ))
     else:
-        logging.error('Jobs must be a positive integer')
-        return False
+        raise Exception(f'No data found in {jobs=}')
 
     return np.array(results)
 
