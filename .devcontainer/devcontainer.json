@@ -24,7 +24,7 @@
 
 	"workspaceMount": "source=${localWorkspaceFolder},target=/app/opticalaberrations,type=bind",
 	"workspaceFolder": "/app/opticalaberrations",
-	// "remoteUser": "1000",
+	"remoteUser": "1000",
 
 	// Uncomment to connect as an existing user other than the container default. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "devcontainer"
@@ -49,4 +49,3 @@
 		}
 	}
 } 
-

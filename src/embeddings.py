@@ -744,6 +744,7 @@ def fourier_embeddings(
         freq_strength_threshold: float = 0.01,
         pois: Any = None,
         remove_interference: bool = True,
+        plot_interference: bool = False,
         embedding_option: str = 'spatial_planes',
         digital_rotations: Optional[int] = None,
         model_psf_shape: tuple = (64, 64, 64),
@@ -834,7 +835,7 @@ def fourier_embeddings(
                 otf = remove_interference_pattern(
                     psf,
                     otf,
-                    plot=plot,
+                    plot=plot if plot_interference else None,
                     pois=pois,
                     windowing=True
                 )
@@ -898,6 +899,7 @@ def rolling_fourier_embeddings(
         model_psf_shape: tuple = (64, 64, 64),
         debug_rotations: bool = False,
         remove_interference: bool = True,
+        plot_interference: bool = False,
         cpu_workers: int = -1,
         nrows: Optional[int] = None,
         ncols: Optional[int] = None,
@@ -994,7 +996,7 @@ def rolling_fourier_embeddings(
                 avg_otf = np.nanmean(phi_otfs, axis=0)
                 avg_otf = resize_with_crop_or_pad(avg_otf, crop_shape=iotf.shape)
 
-                if plot:
+                if plot_interference:
                     gamma = 0.5
                     avg_psf = ifft(avg_otf)  # this will have ipsf voxel size (a different voxel size than sample).
 
