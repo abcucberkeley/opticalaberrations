@@ -1,0 +1,18 @@
+# derivative.def
+Bootstrap: library
+From: dmilkie/opticalaberrations/opticalaberrations:develop_tf_cuda_12_3    # change this to "<myuser>/default/ubuntu:focal" if using Sylabs Cloud
+%post
+# Add commands here:
+#   apt-get update
+
+%environment
+BRANCH_NAME=develop
+export BRANCH_NAME
+export TERM=xterm-256color
+export cloneit="git clone -b {{BRANCH_NAME}} --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git"
+%runscript
+cd /app
+exec /bin/bash -l -c "$@"
+%startscript
+cd /app
+exec /bin/bash -l -c "$@"
