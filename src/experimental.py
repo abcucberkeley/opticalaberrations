@@ -2138,7 +2138,7 @@ def phase_retrieval(
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.0,
     use_pyotf_zernikes: bool = False,
-    plot_otf_diagnosis: bool = True,
+    plot_otf_diagnosis: bool = False,
     RW_path: Path = Path(__file__).parent.parent / "calibration" / "PSF_RW_515em_128_128_101_100nmSteps_97nmXY.tif",
 ):
 
@@ -2154,9 +2154,6 @@ def phase_retrieval(
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
 
     data = np.int_(imread(img))
-    crop_shape = [round_to_odd(dim_len - .1) for dim_len in data.shape]
-    data = resize_with_crop_or_pad(data, crop_shape)    # make each dimension an odd number of voxels
-    logger.info(f'Cropping from {data.shape} to {crop_shape}')
 
     psfgen = SyntheticPSF(
         psf_type='widefield',
@@ -2167,6 +2164,11 @@ def phase_retrieval(
         y_voxel_size=lateral_voxel_size,
         z_voxel_size=axial_voxel_size
     )
+
+    crop_shape = [round_to_odd(dim_len - .1) for dim_len in data.shape]
+    logger.info(f'Cropping from {data.shape} to {crop_shape}')
+    data = resize_with_crop_or_pad(data, crop_shape)    # make each dimension an odd number of voxels
+
 
     psf = data / np.nanmax(data)
     otf = utils.fft(psf)

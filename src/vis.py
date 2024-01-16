@@ -2067,7 +2067,7 @@ def otf_diagnosis(
         otf_floor: float = 0.5e-5,
 ):
     from embeddings import fft
-    from src.preprocessing import resize_with_crop_or_pad
+    from preprocessing import resize_with_crop_or_pad
 
     plt.style.use("default")
     plt.rcParams.update({
