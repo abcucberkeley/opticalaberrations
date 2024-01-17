@@ -175,7 +175,7 @@ def plot_mip(
         cax.yaxis.set_label_position("left")
         cax.get_xaxis().get_major_formatter().labelOnlyBase = False
 
-    return m
+    return
 
 
 def plot_wavefront(
@@ -1611,7 +1611,7 @@ def plot_beads_dataset(
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                hcolorbar=True if i == 3 else False,
+                # hcolorbar=True if i == 3 else False, ## mplib breaks with "_raw_ticks istep=np.nonzero(large_steps)[0][0] IndexError: index 0 is out of bounds for axis 0 with size 0
             )
 
             plot_mip(
@@ -1639,7 +1639,7 @@ def plot_beads_dataset(
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                hcolorbar=True if i == 3 else False,
+                # hcolorbar=True if i == 3 else False, ## mplib breaks with "_raw_ticks istep=np.nonzero(large_steps)[0][0] IndexError: index 0 is out of bounds for axis 0 with size 0
             )
 
             plot_mip(
@@ -1667,7 +1667,7 @@ def plot_beads_dataset(
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                hcolorbar=True if i == 3 else False,
+                hcolorbar=False,
             )
 
             plot_mip(
@@ -1694,7 +1694,7 @@ def plot_beads_dataset(
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                hcolorbar=True if i == 3 else False,
+                # hcolorbar=True if i == 3 else False,  ## mplib breaks with "_raw_ticks istep=np.nonzero(large_steps)[0][0] IndexError: index 0 is out of bounds for axis 0 with size 0
             )
 
         for k, (heatmapax, na) in enumerate(zip([heatmap1, heatmap85], [1.0, .85])):
