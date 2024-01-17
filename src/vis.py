@@ -1699,7 +1699,7 @@ def plot_beads_dataset(
 
         for k, (heatmapax, na) in enumerate(zip([heatmap1, heatmap85], [1.0, .85])):
 
-            g = heatmaps[heatmaps['na'] == na].pivot("iteration_index", "modes",  val).T
+            g = heatmaps[heatmaps['na'] == na].pivot(index="iteration_index", columns="modes",  values=val).T
             levels = np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .05)
 
             if custom_colormap:
