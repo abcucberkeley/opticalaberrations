@@ -1755,9 +1755,9 @@ def plot_beads_dataset(
         cbar_ax.xaxis.set_label_position('top')
 
         plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.06, wspace=.06)
-        plt.savefig(f'{savepath}_{val}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}_{val}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}_{val}.pdf', dpi=300, bbox_inches='tight', pad_inches=.25)
+        savesvg(plt,f'{savepath}_{val}.svg')
+        plt.savefig(f'{savepath}_{val}.png', dpi=300,  pad_inches=.25)
+        plt.savefig(f'{savepath}_{val}.pdf', dpi=300,  pad_inches=.25)
         logger.info(f'{savepath}_{val}')
 
 
