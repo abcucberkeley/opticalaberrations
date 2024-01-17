@@ -1097,13 +1097,17 @@ def main(args=None, preloaded=None):
         flags = re.sub(pattern='U:/',       repl='/clusterfs/nvme2/', string=flags)
         flags = re.sub(pattern='V:\\\\',    repl='/clusterfs/nvme/', string=flags)
         flags = re.sub(pattern='V:/',       repl='/clusterfs/nvme/', string=flags)
-
+        flags = re.sub(pattern='D:/',       repl='/d_drive/', string=flags)
+        flags = re.sub(pattern='C:/',       repl='/c_drive/', string=flags)
         flags = re.sub(pattern=local_repo.as_posix(), repl=container_repo, string=flags)
 
         docker_run = "docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --name opt_net"
-        docker_mount = f'-v "{local_repo}":{container_repo}'
+        docker_mount = (f'-v "{local_repo}":{container_repo}  '
+                        r'-v D:\:/d_drive  '
+                        r'-v C:\:/c_drive  ')
+        docker_vars = (r' -e RUNNING_IN_DOCKER=TRUE')
         docker_image = f"ghcr.io/abcucberkeley/opticalaberrations:{branch_name}_{CUDA_version}"
-        docker_job = f'{docker_run} --workdir {container_repo}/src {docker_mount} {docker_image} "python ao.py {flags}"'
+        docker_job = f'{docker_run} {docker_vars} --workdir {container_repo}/src {docker_mount} {docker_image} "python ao.py {flags}"'
         logger.info(f"Docker job: \n{docker_job}\n")
         subprocess.run(docker_job, shell=True)
 
@@ -1443,7 +1447,7 @@ def main(args=None, preloaded=None):
 
         logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
-        if os.name != 'nt':
+        if os.name != 'nt' and os.getenv('RUNNING_IN_DOCKER') is None:
             logger.info(f"Updating file permissions to {args.input.parent}")
             subprocess.run(f"find {str(Path(args.input).parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +", shell=True)
             logger.info(f"Updating file permissions complete.")
