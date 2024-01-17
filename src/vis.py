@@ -1516,7 +1516,7 @@ def plot_beads_dataset(
     dz: float = .2,
     wavelength: float = .510,
     pltstyle: Any = None,
-    custum_colormap: bool = True,
+    custom_colormap: bool = True,
     transform_to_align_to_DM: bool = True
 ):
     plt.rcParams.update({
@@ -1702,7 +1702,7 @@ def plot_beads_dataset(
             g = heatmaps[heatmaps['na'] == na].pivot("iteration_index", "modes",  val).T
             levels = np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .05)
 
-            if custum_colormap:
+            if custom_colormap:
                 vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
                 highcmap = plt.get_cmap('magma_r', 256)
                 lowcmap = plt.get_cmap('GnBu_r', 256)
