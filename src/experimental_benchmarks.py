@@ -303,11 +303,6 @@ def phasenet_heatmap(
         dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
         dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
 
-        try:
-            dataframe = dataframe.sort_index().interpolate()
-        except ValueError:
-            pass
-
         dataframe.to_csv(f'{savepath}_{x}.csv')
         logger.info(f'Saved: {savepath.resolve()}_{x}.csv')
 

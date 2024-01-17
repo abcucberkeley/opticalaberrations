@@ -204,6 +204,7 @@ def eval_template(shape, psf_type, lam_detection):
         'id': np.arange(shape[0], dtype=int),
         'iter_num': np.zeros(shape[0], dtype=int),          # iteration index.
         'aberration': np.zeros(shape[0], dtype=float),      # initial p2v aberration. Constant over iterations.
+        'aberration_umRMS': np.zeros(shape[0], dtype=float),      # initial p2v aberration. Constant over iterations.
         'residuals': np.zeros(shape[0], dtype=float),       # remaining p2v aberration after ML correction.
         'residuals_umRMS': np.zeros(shape[0], dtype=float), # remaining umRMS aberration after ML correction.
         'confidence': np.zeros(shape[0], dtype=float),      # model's confidence for the primary mode (waves)
@@ -277,6 +278,7 @@ def collect_data(
 
         counts_percentiles[i] = dataset[i, 4].numpy()
 
+        results['aberration_umRMS'][i] = np.linalg.norm(ys[i])
         results['aberration'][i] = dataset[i, 5].numpy()
         results['residuals'][i] = results['aberration'][i]
 
@@ -475,6 +477,106 @@ def iter_evaluate(
 
 
 @profile
+def plot_coverage(
+    dataframe,
+    wavelength,
+    savepath:Path,
+    label='Integrated photons per object',
+    lims=(0, 100),
+    ax=None,
+    cax=None,
+    sci=False,
+    p2v=False,
+    cmap='viridis'
+):
+    try:
+        dataframe = dataframe.sort_index().interpolate()
+    except ValueError:
+        pass
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+    if cax is None:
+        cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+
+    contours = ax.contourf(
+        dataframe.columns.values,
+        dataframe.index.values,
+        dataframe.values,
+        cmap=cmap,
+        extend='max',
+        linewidths=2,
+        linestyles='dashed',
+    )
+
+    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+
+    cbar = plt.colorbar(
+        contours,
+        cax=cax,
+        fraction=0.046,
+        pad=0.04,
+        extend='both',
+        spacing='proportional',
+        format=FormatStrFormatter("%.2f"),
+    )
+    cbar.ax.set_ylabel(fr'Number of test samples')
+    cbar.ax.yaxis.set_ticks_position('right')
+    cbar.ax.yaxis.set_label_position('left')
+
+    if label == 'Integrated photons' or label == 'Integrated photoelectrons':
+        ax.set_xticks(np.arange(lims[0], lims[1]+5e4, 5e4), minor=False)
+        ax.set_xticks(np.arange(lims[0], lims[1]+2.5e4, 2.5e4), minor=True)
+    elif label == 'Number of iterations':
+        ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
+
+    if sci:
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0), useMathText=True)
+
+    ax.set_xlabel(label)
+    ax.set_xlim(lims)
+
+    if p2v:
+        ax.set_ylabel(rf'Initial aberration (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)')
+        ax.set_yticks(np.arange(0, 6, .5), minor=True)
+        ax.set_yticks(np.arange(0, 6, 1))
+        ax.set_ylim(0, 5)
+    else:
+        ax.set_ylabel(rf'Initial aberration ($\lambda$ RMS, $\lambda = {int(wavelength * 1000)}~nm$)')
+        ax.set_yticks(np.arange(0, 1.1, .05), minor=True)
+        ax.set_yticks(np.arange(0, 1.1, .1))
+        ax.set_ylim(0, 1)
+
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    plt.tight_layout()
+
+    if p2v:
+        savepath = Path(f'{savepath}_p2v')
+    else:
+        savepath = Path(f'{savepath}_umRMS')
+
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    logger.info(f'Saved: {savepath.resolve()}.png  .pdf  .svg')
+    return ax
+
+
+@profile
 def plot_heatmap_p2v(
     dataframe,
     wavelength,
@@ -486,12 +588,17 @@ def plot_heatmap_p2v(
     ax=None,
     cax=None,
     agg='mean',
+    sci=False,
     histograms: Optional[pd.DataFrame] = None,
     kde_color='grey',
     cdf_color='k',
     hist_color='lightgrey',
-    sci=False
 ):
+    try:
+        dataframe = dataframe.sort_index().interpolate()
+    except ValueError:
+        pass
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -835,7 +942,7 @@ def plot_heatmap_p2v(
 
             x = histograms[
                 (histograms.iter_num == 1) &
-                (histograms.aberration >= 2.5) & (histograms.aberration <= 3.5)
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
             ]
             ax1 = sns.histplot(
                 ax=ax1,
@@ -879,7 +986,7 @@ def plot_heatmap_p2v(
 
             x = histograms[
                 (histograms.iter_num == 2) &
-                (histograms.aberration >= 2.5) & (histograms.aberration <= 3.5)
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
             ]
             ax2 = sns.histplot(
                 ax=ax2,
@@ -919,7 +1026,7 @@ def plot_heatmap_p2v(
 
             x = histograms[
                 (histograms.iter_num == 5) &
-                (histograms.aberration >= 2.5) & (histograms.aberration <= 3.5)
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
             ]
             ax3 = sns.histplot(
                 ax=ax3,
@@ -997,16 +1104,28 @@ def plot_heatmap_p2v(
 
 
 @profile
-def plot_heatmap_umRMS(
+def plot_heatmap_rms(
     dataframe,
     wavelength,
     savepath:Path,
-    label='Integrated photons per object',
+    label='Integrated photoelectrons',
+    color_label='Residuals',
+    hist_col='confidence',
     lims=(0, 100),
     ax=None,
     cax=None,
     agg='mean',
+    sci=False,
+    histograms: Optional[pd.DataFrame] = None,
+    kde_color='grey',
+    cdf_color='k',
+    hist_color='lightgrey',
 ):
+    try:
+        dataframe = dataframe.sort_index().interpolate()
+    except ValueError:
+        pass
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -1018,21 +1137,27 @@ def plot_heatmap_umRMS(
     })
 
     if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 6))
+        if histograms is not None:
+            fig = plt.figure(figsize=(12, 8))
+            gs = fig.add_gridspec(3, 4)
+            ax = fig.add_subplot(gs[:, 1:])
+            ax1 = fig.add_subplot(gs[0, 0])
+            ax2 = fig.add_subplot(gs[1, 0])
+            ax3 = fig.add_subplot(gs[2, 0])
+        else:
+            fig, ax = plt.subplots(figsize=(8, 6))
 
     if cax is None:
         cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
 
     levels = np.array([
-        0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
-        .5, .6, .7, .8, .9,
-        1, 1.25, 1.5, 1.75, 2., 2.5,
-        3., 4., 5.,
+        0, .025, .05, .075, .1, .125, .15, .175, .2, .225,
+        .25, .3, .35, .4, .45,
+        .5, .55, .6, .65, .7,
+        .75, .8, .9, 1,
     ])
 
-    umRMS_per_p2v_factor = round(np.percentile(dataframe.to_numpy(), 98) / np.max(levels), 2)
-    levels *= umRMS_per_p2v_factor
-    vmin, vmax, vcenter, step = levels[0], levels[-1], levels[10], levels[1] - levels[0]
+    vmin, vmax, vcenter, step = levels[0], levels[-1], .25, levels[1] - levels[0]
     highcmap = plt.get_cmap('magma_r', 256)
     lowcmap = plt.get_cmap('GnBu_r', 256)
     low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -1051,8 +1176,6 @@ def plot_heatmap_umRMS(
         linestyles='dashed',
     )
 
-    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
-
     cbar = plt.colorbar(
         contours,
         cax=cax,
@@ -1061,24 +1184,406 @@ def plot_heatmap_umRMS(
         extend='both',
         spacing='proportional',
         format=FormatStrFormatter("%.2f"),
-        ticks=np.array([0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]) * umRMS_per_p2v_factor,
+        # ticks=np.arange(vmin, vmax+.05, .05),
+        ticks=[
+            0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
+            .5, .6, .7, .8, .9, 1,
+        ],
     )
-    cbar.ax.set_ylabel(fr'Residuals ({agg} $\mu$mRMS)')
+    cbar.ax.set_ylabel(fr'Residuals ({agg} $\lambda$ RMS)')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
+    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
-    if label == 'Integrated photons per object':
-        ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
-        ax.set_xticks(np.arange(0, 1e6+10e4, 5e4), minor=True)
+    if histograms is not None:
+        if label == 'Integrated photons' or label == 'Integrated photoelectrons':
+            x = histograms[
+                (histograms.pbins <= 1e5) &
+                (histograms.ibins >= .4) & (histograms.ibins <= .6)
+            ]
+
+            if color_label == 'Residuals':
+                xmax = .3
+                binwidth = .02
+                bins = np.arange(0, xmax + binwidth, binwidth)
+                xticks = np.arange(0, xmax+.05, .05)
+            else:
+                if hist_col == 'confidence':
+                    xmax = .15
+                    binwidth = .01
+                    bins = np.arange(0, xmax + binwidth, binwidth)
+                    xticks = np.arange(0, xmax+.05, .05)
+                else:
+                    xmax = .3
+                    binwidth = .025
+                    bins = np.arange(0, xmax + binwidth, binwidth)
+                    xticks = np.arange(0, xmax+.05, .05)
+
+            try:
+                ax1t = ax1.twinx()
+                ax1t = sns.histplot(
+                    ax=ax1t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax1t.lines[0].set_color(kde_color)
+                ax1t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax1t.set_ylabel('KDE', color=kde_color)
+                ax1t.set_ylim(0, 50)
+
+                ax1 = sns.histplot(
+                    ax=ax1,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color=cdf_color,
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                )
+
+                ax1.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax1.set_ylabel('CDF', color=cdf_color)
+                ax1.set_ylim(0, 1)
+                ax1.set_yticks(np.arange(0, 1.2, .2))
+                ax1.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, label='Median', zorder=3)
+                ax1.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, label='Mean', zorder=3)
+                ax1.set_xlim(0, xmax)
+                ax1.set_xticks(xticks)
+                ax1.set_xlabel(color_label)
+                ax1.text(
+                    .9, .8, 'I',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax1.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((0, .4), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .1, .5, 'I',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            x = histograms[
+                (histograms.pbins >= 2e5) & (histograms.pbins <= 3e5) &
+                (histograms.ibins >= .4) & (histograms.ibins <= .6)
+            ]
+
+            try:
+                ax2t = ax2.twinx()
+                ax2t = sns.histplot(
+                    ax=ax2t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax2t.lines[0].set_color(kde_color)
+                ax2t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax2t.set_ylabel('KDE', color=kde_color)
+                ax2t.set_ylim(0, 50)
+
+                ax2 = sns.histplot(
+                    ax=ax2,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color=cdf_color,
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                )
+                ax2.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax2.set_ylabel('CDF', color=cdf_color)
+                ax2.set_ylim(0, 1)
+                ax2.set_yticks(np.arange(0, 1.2, .2))
+                ax2.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+                ax2.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
+                ax2.set_xlim(0, xmax)
+                ax2.set_xticks(xticks)
+                ax2.set_xlabel(color_label)
+                ax2.text(
+                    .9, .8, 'II',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax2.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((.4, .4), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .5, .5, 'II',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            x = histograms[
+                (histograms.pbins >= 4e5) & (histograms.pbins <= 5e5) &
+                (histograms.ibins >= .4) & (histograms.ibins <= .6)
+            ]
+
+            try:
+                ax3t = ax3.twinx()
+                ax3t = sns.histplot(
+                    ax=ax3t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax3t.lines[0].set_color(kde_color)
+                ax3t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax3t.set_ylabel('KDE', color=kde_color)
+                ax3t.set_ylim(0, 50)
+
+                ax3 = sns.histplot(
+                    ax=ax3,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color='k',
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                    zorder=3
+                )
+                ax3.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax3.set_ylabel('CDF', color=cdf_color)
+                ax3.set_ylim(0, 1)
+                ax3.set_yticks(np.arange(0, 1.2, .2))
+                ax3.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+                ax3.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
+                ax3.set_xlim(0, xmax)
+                ax3.set_xticks(xticks)
+                ax3.set_xlabel(color_label)
+                ax3.text(
+                    .9, .8, 'III',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax3.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((.8, .4), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+
+            ax.text(
+                .9, .5, 'III',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            if color_label == 'Residuals':
+                ax1.legend(frameon=False, ncol=1, loc='upper left')
+            else:
+                ax1.legend(frameon=False, ncol=1, loc='center right')
+
+            ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax2.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+            ax1.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+            ax2.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+            ax3.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+
+            ax1t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax2t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax3t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+
+            ax1.set_zorder(ax1t.get_zorder()+1)
+            ax1.patch.set_visible(False)
+            ax2.set_zorder(ax2t.get_zorder()+1)
+            ax2.patch.set_visible(False)
+            ax3.set_zorder(ax3t.get_zorder()+1)
+            ax3.patch.set_visible(False)
+
+        elif label == f'Number of iterations':
+
+            x = histograms[
+                (histograms.iter_num == 1) &
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
+            ]
+            ax1 = sns.histplot(
+                ax=ax1,
+                data=x,
+                x=hist_col,
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2, label='Median')
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2, label='Mean')
+            ax1.set_ylim(0, 80)
+            ax1.set_xlim(0, 5)
+            ax1.set_xlabel(color_label)
+            ax1.set_ylabel('')
+            ax1.text(
+                .9, .8, 'I',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax1.transAxes
+            )
+
+            ax.add_patch(
+                plt.Rectangle((.05, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .1, .6, 'I',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            x = histograms[
+                (histograms.iter_num == 2) &
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
+            ]
+            ax2 = sns.histplot(
+                ax=ax2,
+                data=x,
+                x=hist_col,
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+            ax2.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax2.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
+            ax2.set_ylim(0, 80)
+            ax2.set_xlim(0, 5)
+            ax2.set_xlabel(color_label)
+            ax2.set_ylabel('')
+            ax2.text(
+                .9, .8, 'II',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax2.transAxes
+            )
+
+            ax.add_patch(
+                plt.Rectangle((.15, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .2, .6, 'II',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            x = histograms[
+                (histograms.iter_num == 5) &
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
+            ]
+            ax3 = sns.histplot(
+                ax=ax3,
+                data=x,
+                x=hist_col,
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+            ax3.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2, label='Median')
+            ax3.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2, label='Mean')
+            ax3.set_ylim(0, 80)
+            ax3.set_xlim(0, 5)
+            ax3.set_xlabel(color_label)
+            ax3.set_ylabel('')
+            ax3.text(
+                .9, .8, 'III',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax3.transAxes
+            )
+
+            ax.add_patch(
+                plt.Rectangle((.45, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .5, .6, 'III',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            ax1.legend(frameon=False, ncol=1, loc='upper center')
+            ax1.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax2.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax2.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax3.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+    if label == 'Integrated photons' or label == 'Integrated photoelectrons':
+        ax.set_xticks(np.arange(lims[0], lims[1]+5e4, 5e4), minor=False)
+        ax.set_xticks(np.arange(lims[0], lims[1]+2.5e4, 2.5e4), minor=True)
     elif label == 'Number of iterations':
-        ax.set_xticks(np.arange(0, dataframe.columns.values.max() + 1, 1), minor=False)
+        ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
+
+    if sci:
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0), useMathText=True)
 
     ax.set_xlabel(label)
     ax.set_xlim(lims)
 
-    ax.set_ylabel(fr'Initial aberration ({agg} $\mu$mRMS)')
-    ax.set_yticks(np.arange(0, 6, .5) * umRMS_per_p2v_factor, minor=True)
-    ax.set_yticks(np.arange(0, 6, 1) * umRMS_per_p2v_factor)
+    ax.set_ylabel(rf'Initial aberration ({agg} $\lambda$ RMS, $\lambda = {int(wavelength * 1000)}~nm$)')
+    ax.set_yticks(np.arange(0, 2, .05), minor=True)
+    ax.set_yticks(np.arange(0, 2, .1))
     ax.set_ylim(0, levels[-1])
 
     ax.spines['right'].set_visible(False)
@@ -1161,7 +1666,13 @@ def snrheatmap(
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
         )
 
-    df = df[df['iter_num'] == iter_num]
+    if 'aberration_umRMS' not in df.columns.values:
+        df['aberration_umRMS'] = np.nan
+        for idx in df.id.values:
+            df.loc[df.id == idx, 'aberration_umRMS'] = df[df.id == idx].iloc[0]['residuals_umRMS']
+
+    backup = df.copy()
+    df = backup[backup['iter_num'] == iter_num]
     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
 
     for x in ['photons', 'photoelectrons', 'counts', 'counts_p100', 'counts_p99']:
@@ -1188,22 +1699,50 @@ def snrheatmap(
             pbins = np.arange(lims[0], lims[-1]+50, 25)
 
         df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
-        bins = np.arange(0, 10.25, .25).round(2)
-        df['ibins'] = pd.cut(
-            df['aberration'],
-            bins,
-            labels=bins[1:],
-            include_lowest=True
-        )
 
         for agg in ['mean', 'median']:
+            bins = np.arange(0, 2.55, .05).round(2)
+            df['ibins'] = pd.cut(
+                df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection)),
+                bins,
+                labels=bins[1:],
+                include_lowest=True
+            )
+            rms_dataframe = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc=agg)
+            rms_dataframe = rms_dataframe.applymap(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
+            rms_dataframe.insert(0, 0, rms_dataframe.index.values.astype(df['residuals'].dtype))
+
+            plot_heatmap_rms(
+                rms_dataframe,
+                histograms=df if x == 'photons' else None,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{agg}"),
+                label=label,
+                lims=lims,
+                agg=agg,
+                sci=True,
+            )
+
+            coverage = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc='count')
+            plot_coverage(
+                coverage,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_coverage"),
+                label=label,
+                lims=lims,
+                sci=True,
+                p2v=False
+            )
+
+            bins = np.arange(0, 10.25, .25).round(2)
+            df['ibins'] = pd.cut(
+                df['aberration'],
+                bins,
+                labels=bins[1:],
+                include_lowest=True
+            )
             dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
             dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
-
-            try:
-                dataframe = dataframe.sort_index().interpolate()
-            except ValueError:
-                pass
 
             dataframe.to_csv(f'{savepath}_{x}_{agg}.csv')
             logger.info(f'Saved: {savepath.resolve()}_{x}_{agg}.csv')
@@ -1220,15 +1759,21 @@ def snrheatmap(
                 agg=agg
             )
 
+            coverage = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc='count')
+            plot_coverage(
+                coverage,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_coverage"),
+                label=label,
+                lims=lims,
+                sci=True,
+                p2v=True
+            )
+
             try:
                 for c in ['confidence', 'confidence_sum']:
                     dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
                     dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
-
-                    try:
-                        dataframe = dataframe.sort_index().interpolate()
-                    except ValueError:
-                        pass
 
                     # replace unconfident predictions with max std
                     dataframe.replace(0, dataframe.max(), inplace=True)
@@ -1336,12 +1881,6 @@ def densityheatmap(
     ):
         dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns=col, aggfunc=agg)
         dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
-
-        try:
-            dataframe = dataframe.sort_index().interpolate()
-        except ValueError:
-            pass
-
         dataframe.to_csv(f'{savepath}.csv')
         logger.info(f'Saved: {savepath.resolve()}.csv')
 
@@ -1435,7 +1974,6 @@ def iterheatmap(
         dataframe.index.name = 'bins'
         dataframe = dataframe.groupby("bins").agg(agg)
         dataframe.loc[0] = pd.Series({cc: 0 for cc in dataframe.columns})
-        dataframe = dataframe.sort_index().interpolate()
         dataframe.to_csv(f'{savepath}.csv')
         logger.info(f'Saved: {savepath.resolve()}.csv')
 
@@ -1450,7 +1988,7 @@ def iterheatmap(
                 agg=agg,
             )
         elif value == 'residuals_umRMS':
-            plot_heatmap_umRMS(
+            plot_heatmap_rms(
                 dataframe,
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
@@ -1737,6 +2275,14 @@ def eval_object(
         psf_shape=3*[model.input_shape[2]],
         rotate=False
     )
+    samplepsfgen = backend.load_metadata(
+        modelpath,
+        psf_type=psf_type,
+        psf_shape=3*[model.input_shape[2]],
+        rotate=False,
+        x_voxel_size=.097,
+        y_voxel_size=.097
+    )
 
     if not isinstance(wavefronts[0], Wavefront):
         wavefronts = [Wavefront(w, lam_detection=gen.lam_detection, rotate=False) for w in wavefronts]
@@ -1746,7 +2292,7 @@ def eval_object(
     inputs = create_samples(
         wavefronts=wavefronts,
         photons=photons,
-        gen=gen,
+        gen=samplepsfgen,
         savepath=savepath,
         num_objs=num_objs,
         object_size=object_size,
@@ -1757,14 +2303,16 @@ def eval_object(
     else:
         embeddings = np.stack([
             backend.preprocess(
-                i,
+                inputs[i],
                 modelpsfgen=gen,
+                samplepsfgen=samplepsfgen,
                 digital_rotations=digital_rotations,
                 remove_background=True,
                 normalize=True,
                 min_psnr=0,
+                plot=f"{savepath}_{a}_{ph}"
             )
-            for i in tqdm(inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout)
+            for i, (a, ph) in enumerate(itertools.product(p2v, photons))
         ], axis=0)
         np.save(f"{savepath}_embeddings", embeddings)
 
@@ -1782,7 +2330,7 @@ def eval_object(
             batch_size=batch_size,
             save_path=[f"{savepath}_{a}_{ph}" for a, ph in itertools.product(p2v, photons)],
             digital_rotations=digital_rotations,
-            # plot_rotations=True
+            plot_rotations=True
         )
 
         try:
@@ -1838,9 +2386,8 @@ def evaluate_modes(
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
-    photons = np.arange(0, 1e6+5e4, 5e4)
-    photons[0] = 1e4
-    waves = np.arange(1e-5, .55, step=.05).round(2)
+    photons = np.arange(1, 1e5+1e4, 1e4)
+    waves = np.arange(0, .35, step=.05).round(2)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
 
@@ -1888,7 +2435,7 @@ def evaluate_modes(
         df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
 
         x, y = 'photons', 'aberration'
-        xstep, ystep = 5e4, .25
+        xstep, ystep = 1e4, .25
 
         ybins = np.arange(0, df[y].max()+ystep, ystep)
         df['ybins'] = pd.cut(df[y], ybins, labels=ybins[1:], include_lowest=True)
@@ -1902,6 +2449,7 @@ def evaluate_modes(
 
         dataframe = pd.pivot_table(df, values='residuals', index='ybins', columns='xbins', aggfunc=agg)
         dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
+        dataframe.drop(columns=[1], inplace=True)
 
         try:
             dataframe = dataframe.sort_index().interpolate()
@@ -2472,12 +3020,6 @@ def confidence_heatmap(
         for c in ['confidence', 'confidence_sum']:
             dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
             dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
-
-            try:
-                dataframe = dataframe.sort_index().interpolate()
-            except ValueError:
-                pass
-
             dataframe.to_csv(f'{savepath}_{x}_{c}.csv')
             logger.info(f'Saved: {savepath.resolve()}_{x}_{c}.csv')
 
