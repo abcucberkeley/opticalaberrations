@@ -14,13 +14,15 @@ DATASET="97nm_dataset"
 EVALSIGN="signed"
 NA=1.0
 ABC_A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
-CLUSTER=slurm
+CLUSTER='slurm'
 TIMELIMIT='24:00:00'  #hh:mm:ss
-NETWORK='prototype'
+NETWORK='opticalnet'
 SKIP_REMOVE_BACKGROUND=false
 
 TRAINED_MODELS=(
-  "YuMB_lambda510-lamb-amp"
+  "YuMB-lambda510-R1242"
+  "YuMB-lambda510-R1462"
+  #"YuMB-lambda510-R2462"
 )
 
 for M in ${TRAINED_MODELS[@]}
@@ -29,10 +31,10 @@ do
 
     if [ "${M:0:4}" = YuMB ];then
       declare -a PSFS=(
-        # "YuMB ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
-        "Gaussian ../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat"
-        "MBSq ../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat"
-        "Sinc ../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat"
+        "YuMB ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
+        #"Gaussian ../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat"
+        #"MBSq ../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat"
+        #"Sinc ../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat"
       )
 
     elif [ "${M:0:5}" == v2Hex ];then
@@ -95,10 +97,10 @@ do
               --taskname na_$NA \
               --name $OUTDIR/${DATASET}${SIM}${PREP}-fourier_filter/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
-              #python manager.py $JOB \
-              #--task "${MODEL}.h5  $CONFIG densityheatmap" \
-              #--taskname na_$NA \
-              #--name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
+              python manager.py $JOB \
+              --task "${MODEL}.h5  $CONFIG densityheatmap" \
+              --taskname na_$NA \
+              --name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
               #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
               #--task "${MODEL}.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \

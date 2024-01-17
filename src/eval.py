@@ -2777,6 +2777,7 @@ def evaluate_object_sizes(
         x_voxel_size=.097,
         y_voxel_size=.097,
         z_voxel_size=.2,
+        use_theoretical_widefield_simulator=False,
     )
     w = Wavefront(np.zeros(15))
 
@@ -2865,7 +2866,7 @@ def evaluate_object_sizes(
             np.save(f"{savepath}_predictions", preds)
 
         residuals = ys - preds
-
+        sizes = [s * samplegen.x_voxel_size for s in sizes]
         df = pd.DataFrame([w for w in sizes], columns=['size'])
         df['prediction'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in preds]
         df['residuals'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in residuals]
