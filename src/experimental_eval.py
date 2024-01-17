@@ -310,7 +310,6 @@ def eval_mode(
 
     noisy_img = backend.load_sample(input_path)
     maxcounts = np.max(noisy_img)
-    psnr = predictions_settings['psnr']
     gen = backend.load_metadata(
         model_path,
         psf_shape=noisy_img.shape,
@@ -348,6 +347,21 @@ def eval_mode(
             save_path=dm_wavefront
         )
 
+    residuals = [
+        {
+            'n': z.n,
+            'm': z.m,
+            'prediction': p_wave.zernikes[z],
+            'ground_truth': y_wave.zernikes[z],
+            'residuals': diff.zernikes[z],
+        }
+        for z in p_wave.zernikes.keys()
+    ]
+
+    residuals = pd.DataFrame(residuals, columns=['n', 'm', 'prediction', 'ground_truth', 'residuals'])
+    residuals.index.name = 'ansi'
+    residuals.to_csv(f'{save_path}_residuals.csv')
+
     if plot:
         noisy_img = preprocessing.prep_sample(
             noisy_img,
@@ -374,7 +388,6 @@ def eval_mode(
             gt_psf=gt_psf,
             predicted_psf=p_psf,
             corrected_psf=corrected_psf,
-            psnr=psnr,
             maxcounts=maxcounts,
             y=y_wave,
             pred=p_wave,
@@ -383,23 +396,9 @@ def eval_mode(
             dxy=gen.x_voxel_size,
             dz=gen.z_voxel_size,
             transform_to_align_to_DM=True,
+            photons=np.NaN,
         )
 
-    residuals = [
-        {
-            'n': z.n,
-            'm': z.m,
-            'prediction': p_wave.zernikes[z],
-            'ground_truth': y_wave.zernikes[z],
-            'residuals': diff.zernikes[z],
-            'psnr': psnr,
-        }
-        for z in p_wave.zernikes.keys()
-    ]
-
-    residuals = pd.DataFrame(residuals, columns=['n', 'm', 'prediction', 'ground_truth', 'residuals', 'psnr'])
-    residuals.index.name = 'ansi'
-    residuals.to_csv(f'{save_path}_residuals.csv')
 
 
 def process_eval_file(file: Path, nas=(1.0, .95, .85)):
@@ -467,160 +466,177 @@ def eval_dataset(
     gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv',
     plot_evals: bool = True,
     precomputed: bool = False,
+    rerun_calc: bool = True,
 ):
     results = {}
+    savepath = Path(f'{datadir}/beads_evaluation')
 
-    # get model from .json file
-    with open(list(Path(datadir / 'MLResults').glob('*_settings.json'))[0]) as f:
-        predictions_settings = ujson.load(f)
-        model = Path(predictions_settings['model'])
+    if rerun_calc:
 
-        if not model.exists():
-            filename = str(model).split('\\')[-1]
-            model = Path(f"../pretrained_models/{filename}")
+        # get model from .json file
+        with open(list(Path(datadir / 'MLResults').glob('*_settings.json'))[0]) as f:
+            predictions_settings = ujson.load(f)
+            model = Path(predictions_settings['model'])
 
-        pool = mp.Pool(processes=mp.cpu_count())
-        MLresultsdir = Path(datadir / 'MLResults')
-        MLresults_list = list(MLresultsdir.glob('**/*'))    # only get directory list once for speed
+            if not model.exists():
+                filename = str(model).split('\\')[-1]
+                model = Path(f"../pretrained_models/{filename}")
 
-        evaluate = partial(
-            eval_mode,
-            model_path=model,
-            flat_path=flat,
-            postfix=postfix,
-            gt_postfix=gt_postfix,
-            plot=plot_evals,
-        )
+            mp.set_start_method('spawn', force=True)
+            pool = mp.Pool(processes=mp.cpu_count())
+            MLresultsdir = Path(datadir / 'MLResults')
+            MLresults_list = list(MLresultsdir.glob('**/*'))    # only get directory list once for speed
 
-        logger.info('Beginning evaluations')
-        for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime):  # sort by creation time
-            if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
-                continue
+            evaluate = partial(
+                eval_mode,
+                model_path=model,
+                flat_path=flat,
+                postfix=postfix,
+                gt_postfix=gt_postfix,
+                plot=plot_evals,
+            )
 
-            state = file.stem.split('_')[0]
-            modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
-            modes = [m for m in modes if m]
-
-            if len(modes) > 1:
-                prefix = f"ansi_"
-                for m in modes:
-                    prefix += f"z{m}*"
-            else:
-                mode = modes[0]
-                prefix = f"ansi_z{mode}*"
-
-            gt_path = None
-            for gtfile in MLresults_list:
-                if fnmatch.fnmatch(gtfile.name, f'{state}_widefield_{prefix}_{gt_postfix}'):
-                    gt_path = gtfile
+            logger.info('Beginning evaluations')
+            for file in sorted(datadir.glob('*_lightsheet_ansi_z*.tif'), key=os.path.getctime):  # sort by creation time
+                if 'CamB' in str(file) or 'pupil' in str(file) or 'autoexpos' in str(file):
                     continue
-            if gt_path is None:
-                logger.warning(f'GT not found for: {state}_widefield_{prefix}_*.tif')
 
-            pr_path = None
-            for gtfile in sorted(datadir.glob('*_widefield_ansi_z*.tif')):
-                if fnmatch.fnmatch(gtfile.name, f'{state}_widefield_{prefix}_*.tif'):
-                    pr_path = gtfile
-                    break
+                state = file.stem.split('_')[0]
+                modes = ':'.join(s.lstrip('z') if s.startswith('z') else '' for s in file.stem.split('_')).split(':')
+                modes = [m for m in modes if m]
 
-            if gt_path is None:
-                logger.warning(f'GT not found for: {file.name}.tif')
+                if len(modes) > 1:
+                    prefix = f"ansi_"
+                    for m in modes:
+                        prefix += f"z{m}*"
+                else:
+                    mode = modes[0]
+                    prefix = f"ansi_z{mode}*"
 
-            prediction_path = None
-            for predfile in MLresults_list:
-                if fnmatch.fnmatch(predfile.name, f'{state}_lightsheet_{prefix}_{postfix}'):
-                    prediction_path = predfile
-                    continue
-            if prediction_path is None: logger.warning(f'Prediction not found for: {file.name}')
+                gt_path = None
+                for gtfile in MLresults_list:
+                    if fnmatch.fnmatch(gtfile.name, f'{state}_widefield_{prefix}_{gt_postfix}'):
+                        gt_path = gtfile
+                        continue
+                if gt_path is None:
+                    logger.warning(f'GT not found for: {state}_widefield_{prefix}_*.tif')
 
-            ml_img = backend.load_sample(file)
-            # ml_img -= 100
-            # ml_img = preprocessing.prep_sample(
-            #     ml_img,
-            #     normalize=True,
-            #     remove_background=False,
-            #     windowing=False,
-            #     sample_voxel_size=predictions_settings['sample_voxel_size'],
-            #     na_mask=gen.na_mask
-            # )
+                pr_path = None
+                for gtfile in sorted(datadir.glob('*_widefield_ansi_z*.tif')):
+                    if fnmatch.fnmatch(gtfile.name, f'{state}_widefield_{prefix}_*.tif'):
+                        pr_path = gtfile
+                        break
 
-            pr_img = backend.load_sample(pr_path)
-            # pr_img -= 100
-            # pr_img = preprocessing.prep_sample(
-            #     pr_img,
-            #     normalize=True,
-            #     remove_background=True,
-            #     windowing=False,
-            #     sample_voxel_size=predictions_settings['sample_voxel_size']
-            # )
+                if gt_path is None:
+                    logger.warning(f'GT not found for: {file.name}.tif')
 
-            if prediction_path is not None:
-                p = pd.read_csv(prediction_path)
-                ml_wavefront = Wavefront(
-                    p.amplitude.values,
+                prediction_path = None
+                for predfile in MLresults_list:
+                    if fnmatch.fnmatch(predfile.name, f'{state}_lightsheet_{prefix}_{postfix}'):
+                        prediction_path = predfile
+                        continue
+                if prediction_path is None: logger.warning(f'Prediction not found for: {file.name}')
+
+                ml_img = backend.load_sample(file)
+                # ml_img -= 100
+                # ml_img = preprocessing.prep_sample(
+                #     ml_img,
+                #     normalize=True,
+                #     remove_background=False,
+                #     windowing=False,
+                #     sample_voxel_size=predictions_settings['sample_voxel_size'],
+                #     na_mask=gen.na_mask
+                # )
+
+                pr_img = backend.load_sample(pr_path)
+                # pr_img -= 100
+                # pr_img = preprocessing.prep_sample(
+                #     pr_img,
+                #     normalize=True,
+                #     remove_background=True,
+                #     windowing=False,
+                #     sample_voxel_size=predictions_settings['sample_voxel_size']
+                # )
+
+                if prediction_path is not None:
+                    p = pd.read_csv(prediction_path)
+                    ml_wavefront = Wavefront(
+                        p.amplitude.values,
+                        modes=p.shape[0],
+                        lam_detection=predictions_settings['wavelength']
+                    )
+                else:
+                    ml_wavefront = None
+
+                if gt_path is not None:
+                    y = pd.read_csv(gt_path)
+                    gt_wavefront = Wavefront(
+                        y.amplitude.values[:p.shape[0]],
+                        modes=p.shape[0],
+                        lam_detection=predictions_settings['wavelength']
+                    )
+                else:
+                    gt_wavefront = None
+
+                diff_wavefront = Wavefront(
+                    gt_wavefront - ml_wavefront,
                     modes=p.shape[0],
                     lam_detection=predictions_settings['wavelength']
                 )
-            else:
-                ml_wavefront = None
 
-            if gt_path is not None:
-                y = pd.read_csv(gt_path)
-                gt_wavefront = Wavefront(
-                    y.amplitude.values[:p.shape[0]],
-                    modes=p.shape[0],
-                    lam_detection=predictions_settings['wavelength']
+                results[(state, '-'.join(modes))] = dict(
+                    ml_img=ml_img,
+                    ml_wavefront=ml_wavefront,
+                    gt_img=pr_img,
+                    gt_wavefront=gt_wavefront,
+                    diff_wavefront=diff_wavefront,
+                    residuals=f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv',
                 )
-            else:
-                gt_wavefront = None
 
-            diff_wavefront = Wavefront(
-                gt_wavefront - ml_wavefront,
-                modes=p.shape[0],
-                lam_detection=predictions_settings['wavelength']
-            )
+                if not precomputed:
+                    logger.info(f"ansi_z{modes}")
+                    logger.info(file.stem)
+                    logger.info(pr_path.stem)
 
-            results[(state, '-'.join(modes))] = dict(
-                ml_img=ml_img,
-                ml_wavefront=ml_wavefront,
-                gt_img=pr_img,
-                gt_wavefront=gt_wavefront,
-                diff_wavefront=diff_wavefront,
-                residuals=f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv',
-            )
+                    task = partial(
+                        evaluate,
+                        input_path=file,
+                        prediction_path=prediction_path,
+                        gt_path=gt_path
+                    )
+                    _ = pool.apply_async(task)  # issue task
 
             if not precomputed:
-                logger.info(f"ansi_z{modes}")
-                logger.info(file.stem)
-                logger.info(pr_path.stem)
+                children = mp.active_children()
+                logger.info(f"Awaiting {len(children)} 'eval_mode' tasks to finish.")
+            pool.close()    # close the pool
+            pool.join()     # wait for all tasks to complete
 
-                task = partial(
-                    evaluate,
-                    input_path=file,
-                    prediction_path=prediction_path,
-                    gt_path=gt_path
-                )
-                _ = pool.apply_async(task)  # issue task
+        postfix = 'predictions_zernike_coefficients_ml_eval_residuals.csv'
+        residuals = utils.multiprocess(
+            func=process_eval_file,
+            jobs=sorted(datadir.rglob(f'*{postfix}'), key=os.path.getctime),  # sort by creation time
+            desc=f'Collecting *{postfix} results',
+            unit='_eval_files'
+        )
 
-        pool.close()    # close the pool
-        pool.join()     # wait for all tasks to complete
+        if isinstance(residuals, bool) or len(residuals) == 0:
+            raise Exception(f'Did not find eval_mode results in: {Path(datadir / f"*{postfix}").resolve()} \t '
+                            f'Please rerun without --precomputed flag to compute _residuals.csv.')
 
-    postfix = 'predictions_zernike_coefficients_ml_eval_residuals.csv'
-    residuals = utils.multiprocess(
-        func=process_eval_file,
-        jobs=sorted(datadir.rglob(f'*{postfix}'), key=os.path.getctime),  # sort by creation time
-        desc=f'Collecting *{postfix} results'
-    )
+        residuals = pd.DataFrame([v for d in residuals for k, v in d.items()])
+        residuals.sort_values(by=['modes', 'iteration_index', 'na'], ascending=[True, True, False], inplace=True)
+        print(residuals)
 
-    if len(residuals) == 0:
-        raise Exception(f'Did not find results in {datadir}\\*{postfix}\t Please reurun without --precomputed flag.')
 
-    residuals = pd.DataFrame([v for d in residuals for k, v in d.items()])
-    residuals.sort_values(by=['modes', 'iteration_index', 'na'], ascending=[True, True, False], inplace=True)
-    print(residuals)
+        residuals.to_csv(f'{savepath}.csv')
+        np.save(f'{savepath}_results.npy', results)
 
-    savepath = Path(f'{datadir}/beads_evaluation')
-    residuals.to_csv(f'{savepath}.csv')
+    else:
+        # skip calc. Reload results and just replot
+        residuals = pd.read_csv(f'{savepath}.csv')
+        results = np.load(f'{savepath}_results.npy', allow_pickle='TRUE').item()
+
     logger.info(f'{savepath}.csv')
     vis.plot_beads_dataset(results, residuals, savepath=savepath)
 

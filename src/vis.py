@@ -175,7 +175,7 @@ def plot_mip(
         cax.yaxis.set_label_position("left")
         cax.get_xaxis().get_major_formatter().labelOnlyBase = False
 
-    return m
+    return
 
 
 def plot_wavefront(
@@ -1516,7 +1516,7 @@ def plot_beads_dataset(
     dz: float = .2,
     wavelength: float = .510,
     pltstyle: Any = None,
-    custum_colormap: bool = True,
+    custom_colormap: bool = True,
     transform_to_align_to_DM: bool = True
 ):
     plt.rcParams.update({
@@ -1611,7 +1611,7 @@ def plot_beads_dataset(
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                hcolorbar=True if i == 3 else False,
+                # hcolorbar=True if i == 3 else False, ## mplib breaks with "_raw_ticks istep=np.nonzero(large_steps)[0][0] IndexError: index 0 is out of bounds for axis 0 with size 0
             )
 
             plot_mip(
@@ -1639,7 +1639,7 @@ def plot_beads_dataset(
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                hcolorbar=True if i == 3 else False,
+                # hcolorbar=True if i == 3 else False, ## mplib breaks with "_raw_ticks istep=np.nonzero(large_steps)[0][0] IndexError: index 0 is out of bounds for axis 0 with size 0
             )
 
             plot_mip(
@@ -1667,7 +1667,7 @@ def plot_beads_dataset(
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                hcolorbar=True if i == 3 else False,
+                hcolorbar=False,
             )
 
             plot_mip(
@@ -1694,15 +1694,15 @@ def plot_beads_dataset(
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                hcolorbar=True if i == 3 else False,
+                # hcolorbar=True if i == 3 else False,  ## mplib breaks with "_raw_ticks istep=np.nonzero(large_steps)[0][0] IndexError: index 0 is out of bounds for axis 0 with size 0
             )
 
         for k, (heatmapax, na) in enumerate(zip([heatmap1, heatmap85], [1.0, .85])):
 
-            g = heatmaps[heatmaps['na'] == na].pivot("iteration_index", "modes",  val).T
+            g = heatmaps[heatmaps['na'] == na].pivot(index="iteration_index", columns="modes",  values=val).T
             levels = np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .05)
 
-            if custum_colormap:
+            if custom_colormap:
                 vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
                 highcmap = plt.get_cmap('magma_r', 256)
                 lowcmap = plt.get_cmap('GnBu_r', 256)
@@ -1755,9 +1755,9 @@ def plot_beads_dataset(
         cbar_ax.xaxis.set_label_position('top')
 
         plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.06, wspace=.06)
-        plt.savefig(f'{savepath}_{val}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}_{val}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}_{val}.pdf', dpi=300, bbox_inches='tight', pad_inches=.25)
+        savesvg(plt,f'{savepath}_{val}.svg')
+        plt.savefig(f'{savepath}_{val}.png', dpi=300,  pad_inches=.25)
+        plt.savefig(f'{savepath}_{val}.pdf', dpi=300,  pad_inches=.25)
         logger.info(f'{savepath}_{val}')
 
 
@@ -2067,7 +2067,7 @@ def otf_diagnosis(
         otf_floor: float = 0.5e-5,
 ):
     from embeddings import fft
-    from src.preprocessing import resize_with_crop_or_pad
+    from preprocessing import resize_with_crop_or_pad
 
     plt.style.use("default")
     plt.rcParams.update({
