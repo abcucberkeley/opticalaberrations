@@ -18,7 +18,7 @@ from skimage.filters import window
 from skimage.restoration import unwrap_phase
 from skimage.feature import peak_local_max
 from skimage.transform import resize
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
 from scipy import ndimage
@@ -434,7 +434,8 @@ def remove_interference_pattern(
                     [m1, m2, m3],
                     [f'Inputs (MIP)', 'Kernel', 'Peak detection\n(No objects were detected)']
             ):
-                cax = inset_axes(axes[ax, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0.1)
                 cb = plt.colorbar(m, cax=cax)
                 cax.yaxis.set_label_position("right")
                 cax.set_ylabel(label)
@@ -1015,7 +1016,8 @@ def rolling_fourier_embeddings(
 
                         label = f'Reconstructed\nTile {row} of {phi_otfs.shape[0]}. $\gamma$={gamma}'
 
-                        cax = inset_axes(axes[row, -1], width="10%", height="90%", loc='center right', borderpad=-2)
+                        divider = make_axes_locatable(axes[row, -1])
+                        cax = divider.append_axes("right", size="5%", pad=0.1)
                         cb = plt.colorbar(m5, cax=cax)
                         cax.yaxis.set_label_position("right")
                         cax.set_ylabel(label)
@@ -1025,7 +1027,8 @@ def rolling_fourier_embeddings(
 
                     label = f'Reconstructed\navg $\gamma$={gamma}'
 
-                    cax = inset_axes(axes[-1, -1], width="10%", height="90%", loc='center right', borderpad=-2)
+                    divider = make_axes_locatable(axes[-1, -1])
+                    cax = divider.append_axes("right", size="5%", pad=0.1)
                     cb = plt.colorbar(m5, cax=cax)
                     cax.yaxis.set_label_position("right")
                     cax.set_ylabel(label)

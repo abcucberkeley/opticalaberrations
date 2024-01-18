@@ -463,7 +463,7 @@ def prep_sample(
         plot = Path(plot)
         if plot.is_dir(): plot.mkdir(parents=True, exist_ok=True)
 
-        fig, axes = plt.subplots(3, ncols=3, figsize=(10, 10))
+        fig, axes = plt.subplots(3, ncols=3, figsize=(12, 12))
 
         plot_mip(
             vol=sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample),

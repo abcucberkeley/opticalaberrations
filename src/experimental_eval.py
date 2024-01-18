@@ -15,8 +15,7 @@ import seaborn as sns
 from typing import Any
 import numpy as np
 import pandas as pd
-from line_profiler_pycharm import profile
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import utils
 import vis
@@ -88,7 +87,9 @@ def plot_dm_actuators(
     m = ax1.imshow(dm.T, cmap='Spectral_r', vmin=-1*dm.max(), vmax=dm.max())
     ax1.set_xticks(range(9))
     ax1.set_yticks(range(9))
-    cax = inset_axes(ax1, width="10%", height="100%", loc='center right', borderpad=-3)
+
+    divider = make_axes_locatable(ax1)
+    cax = divider.append_axes("left", size="5%", pad=0.1)
     cb = plt.colorbar(m, cax=cax)
     cax.yaxis.set_label_position("right")
 

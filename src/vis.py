@@ -15,6 +15,7 @@ import itertools
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1 import ImageGrid
 from numpy.lib.stride_tricks import sliding_window_view
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.ticker import FormatStrFormatter, LogFormatterMathtext
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
@@ -26,7 +27,6 @@ import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
 from line_profiler_pycharm import profile
 from matplotlib import colors
-import seaborn as sns
 
 from wavefront import Wavefront
 from zernike import Zernike
@@ -80,10 +80,11 @@ def plot_mip(
     dxy=.097,
     dz=.2,
     colorbar=True,
-    aspect=None,
+    aspect='auto',
     log=False,
     mip=True,
-    ticks=True
+    ticks=True,
+    normalize=False
 ):
     def formatter(x, pos, dd):
         return f'{np.ceil(x * dd).astype(int):1d}'
@@ -91,7 +92,6 @@ def plot_mip(
     if log:
         vmin, vmax, step = 1e-4, 1, .025
         norm = mcolors.LogNorm(vmin=vmin, vmax=vmax)
-        cmap = mcolors.ListedColormap(plt.get_cmap('hot', 256)(np.arange(vmin, vmax+step, step)))
         vol[vol < vmin] = vmin
     else:
         vol = vol ** gamma
@@ -99,7 +99,6 @@ def plot_mip(
         vol = np.nan_to_num(vol)
         vmin, vmax, step = 0, 1, .025
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-        cmap = mcolors.ListedColormap(plt.get_cmap('hot', 256)(np.arange(vmin, vmax+step, step)))
 
     if xy is not None:
         if mip:
@@ -107,7 +106,7 @@ def plot_mip(
         else:
             v = vol[vol.shape[0]//2, :, :]
 
-        xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
+        mat = xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None)
 
         xy.set_xlabel(r'XY ($\mu$m)')
         if ticks:
@@ -125,7 +124,7 @@ def plot_mip(
         else:
             v = vol[:, vol.shape[0] // 2, :]
 
-        xz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
+        mat = xz.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None)
 
         xz.set_xlabel(r'XZ ($\mu$m)')
         if ticks:
@@ -143,7 +142,7 @@ def plot_mip(
         else:
             v = vol[:, :, vol.shape[0] // 2]
 
-        yz.imshow(v, cmap=cmap, aspect=aspect, norm=norm)
+        mat = yz.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None)
 
         yz.set_xlabel(r'YZ ($\mu$m)')
         if ticks:
@@ -156,24 +155,18 @@ def plot_mip(
             yz.axis('off')
 
     if colorbar:
-        if xy is not None:
-            cax = inset_axes(xy, width="10%", height="100%", loc='center left', borderpad=-5)
-        elif xz is not None:
-            cax = inset_axes(xz, width="10%", height="100%", loc='center left', borderpad=-5)
-        else:
-            cax = inset_axes(yz, width="10%", height="100%", loc='center left', borderpad=-5)
+        divider = make_axes_locatable(xy)
+        cax = divider.append_axes("left", size="5%", pad=0.1)
+        cb = plt.colorbar(
+            mat,
+            cax=cax,
+            format=LogFormatterMathtext() if log else FormatStrFormatter("%.1f"),
+        )
 
-        if log:
-            formatter = LogFormatterMathtext()
-        else:
-            formatter = FormatStrFormatter("%.1f")
-
-        m = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_major_formatter(formatter)
-        cax.set_ylabel(f"{label}")
-        cax.yaxis.set_label_position("left")
-        cax.get_xaxis().get_major_formatter().labelOnlyBase = False
+        cb.ax.set_ylabel(f"{label}")
+        cb.ax.yaxis.set_label_position("left")
+        cb.ax.yaxis.set_ticks_position('left')
+        cb.ax.get_xaxis().get_major_formatter().labelOnlyBase = False
 
     return
 
@@ -203,7 +196,6 @@ def plot_wavefront(
         return mask
 
     dlimit = .05
-    step = .01
 
     if vmin is None:
         vmin = np.floor(np.nanmin(phi)*2)/4     # round down to nearest 0.25 wave
@@ -213,21 +205,7 @@ def plot_wavefront(
         vmax = np.ceil(np.nanmax(phi)*2)/4  # round up to nearest 0.25 wave
         vmax = dlimit if vmax < 0.01 else vmax
 
-    highcmap = plt.get_cmap('magma_r', 256)
-    middlemap = plt.get_cmap('gist_gray_r', 256)
-    lowcmap = plt.get_cmap('gist_earth_r', 256)
-
-    ll = np.arange(vmin, -1*dlimit+step, step)
-    hh = np.arange(dlimit, vmax+step, step)
-    mm = [1]  # [.8, .9, 1, .9, .8]
-
-    wave_cmap = np.vstack((
-        lowcmap(.66 * ll / ll.min()),
-        middlemap(mm),
-        highcmap(.66 * hh / hh.max())
-    ))
-    cmap = mcolors.ListedColormap(wave_cmap)
-
+    cmap = 'Spectral_r'
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
     mat = iax.imshow(phi, cmap=cmap, norm=norm)
 
@@ -257,20 +235,27 @@ def plot_wavefront(
     iax.set_aspect("equal")
 
     if vcolorbar:
-        cax = inset_axes(iax, width="10%", height="100%", loc='center right', borderpad=-3)
+        divider = make_axes_locatable(iax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
         cbar = plt.colorbar(
-            matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap),
-            cax=cax, extend='both', format=formatter
+            mat,
+            cax=cax,
+            extend='both',
+            format=formatter,
         )
         cbar.ax.set_title(r'$\lambda$', pad=10)
         cbar.ax.yaxis.set_ticks_position('right')
         cbar.ax.yaxis.set_label_position('left')
 
     if hcolorbar:
-        cax = inset_axes(iax, width="100%", height="10%", loc='lower center', borderpad=-1)
+        divider = make_axes_locatable(iax)
+        cax = divider.append_axes("bottom", size="5%", pad=0.1)
         cbar = plt.colorbar(
-            matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap),
-            cax=cax, extend='both', format=formatter, orientation='horizontal'
+            mat,
+            cax=cax,
+            extend='both',
+            orientation='horizontal',
+            format=formatter,
         )
         cbar.ax.xaxis.set_ticks_position('bottom')
         cbar.ax.xaxis.set_label_position('top')
@@ -647,7 +632,8 @@ def prediction(
                 m = xy.imshow(vol[mid_plane, :, :], cmap=cmap, vmin=0, vmax=1)
                 zx.imshow(vol[:, mid_plane, :], cmap=cmap, vmin=0, vmax=1)
 
-        cax = inset_axes(zx, width="10%", height="100%", loc='center right', borderpad=-3)
+        divider = make_axes_locatable(zx)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
         cax.yaxis.set_label_position("right")
@@ -925,7 +911,8 @@ def sign_eval(
 
         if i == 2:
             for k in range(2):
-                cax = inset_axes(axes[k, i], width="10%", height="100%", loc='center right', borderpad=-3)
+                divider = make_axes_locatable(axes[k, i])
+                cax = divider.append_axes("right", size="5%", pad=0.1)
                 cb = plt.colorbar(m, cax=cax)
                 cax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
                 cax.yaxis.set_label_position("right")
@@ -1027,13 +1014,6 @@ def plot_interference(
     )
     transparency = 0.6
 
-    vmin, vmax, step = 0, 1, .025
-    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-    cmap = mcolors.ListedColormap(plt.get_cmap('hot', 256)(np.arange(vmin, vmax+step, step)))
-
-    greysnorm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-    greyscmap = mcolors.ListedColormap(plt.get_cmap('Greys_r', 256)(np.arange(vmin, vmax+step, step)))
-
     for ax in range(3):
         for p in range(pois.shape[0]):
             if ax == 0:
@@ -1070,23 +1050,23 @@ def plot_interference(
                     color=f'C{p}',
                     alpha=transparency
                 ))
-        m1 = axes[0, ax].imshow(np.nanmax(psf_peaks, axis=ax), cmap=cmap, norm=norm)
-        m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap=cmap, norm=norm)
-        m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap=greyscmap, norm=greysnorm, alpha=.66)
+        m1 = axes[0, ax].imshow(np.nanmax(psf_peaks, axis=ax), cmap='hot', aspect='auto')
+        m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot', aspect='auto')
+        m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66, aspect='auto')
 
         if plot_interference_pattern:
             interference = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=axes[3, ax], wspace=0.05, hspace=0)
             ax1 = fig.add_subplot(interference[0])
-            ax1.imshow(np.nanmax(beads, axis=ax), cmap='hot')
+            ax1.imshow(np.nanmax(beads, axis=ax), cmap='hot', aspect='auto')
             ax1.axis('off')
             ax1.set_title(r'$\mathcal{S}$')
 
             ax2 = fig.add_subplot(interference[1])
-            m4 = ax2.imshow(np.nanmax(abs(interference_pattern), axis=ax), cmap='magma')
+            m4 = ax2.imshow(np.nanmax(abs(interference_pattern), axis=ax), cmap='magma', aspect='auto')
             ax2.axis('off')
             ax2.set_title(r'$|\mathscr{F}(\mathcal{S})|$')
 
-        m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap=cmap, norm=norm)
+        m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot', aspect='auto')
 
     for ax, m, label in zip(
         range(5) if plot_interference_pattern else range(4),
@@ -1105,8 +1085,8 @@ def plot_interference(
             'Reconstructed'
         ]
     ):
-
-        cax = inset_axes(axes[ax, -1], width="10%", height="90%", loc='center right', borderpad=-3)
+        divider = make_axes_locatable(axes[ax, -1])
+        cax = divider.append_axes("right", size="5%", pad=0.1)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("right")
         cax.set_ylabel(label)
@@ -1130,6 +1110,8 @@ def plot_embeddings(
         nrows: Optional[int] = None,
         ncols: Optional[int] = None,
         ztiles: Optional[int] = None,
+        icmap: str = 'hot',
+        aspect: str = 'auto'
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -1157,10 +1139,6 @@ def plot_embeddings(
     ))
     cmap = mcolors.ListedColormap(cmap)
 
-    ivmin, ivmax, istep = 0, 1, .025
-    inorm = mcolors.Normalize(vmin=ivmin, vmax=ivmax)
-    icmap = mcolors.ListedColormap(plt.get_cmap('hot', 256)(np.arange(ivmin, ivmax+istep, istep)))
-
     if emb.shape[0] == 3:
         fig, axes = plt.subplots(2, 3, figsize=(8, 6))
     else:
@@ -1185,33 +1163,40 @@ def plot_embeddings(
                 ax = fig.add_subplot(grid[i, j])
 
                 try:
-                    m = ax.imshow(np.max(inputs[idx], axis=proj) ** gamma, cmap=icmap, norm=inorm)
+                    m = ax.imshow(np.max(inputs[idx], axis=proj) ** gamma, cmap=icmap, aspect=aspect)
 
                 except IndexError: # if we dropped a tile due to poor SNR
-                    m = ax.imshow(np.zeros_like(np.max(inputs[0], axis=proj)), cmap=icmap, norm=inorm)
+                    m = ax.imshow(np.zeros_like(np.max(inputs[0], axis=proj)), cmap=icmap, aspect=aspect)
 
                 ax.axis('off')
             axes[0, proj].axis('off')
 
-        cax = inset_axes(axes[0, 0], width="10%", height="100%", loc='center left', borderpad=-5)
+        divider = make_axes_locatable(axes[0, 0])
+        cax = divider.append_axes("left", size="5%", pad=0.1)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("left")
         cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
     else:
-        m = axes[0, 0].imshow(np.max(inputs**gamma, axis=0), cmap=icmap, norm=inorm)
-        axes[0, 1].imshow(np.max(inputs**gamma, axis=1), cmap=icmap, norm=inorm)
-        axes[0, 2].imshow(np.max(inputs**gamma, axis=2), cmap=icmap, norm=inorm)
-        cax = inset_axes(axes[0, 0], width="10%", height="100%", loc='center left', borderpad=-5)
-        cb = fig.colorbar(m, cax=cax)
+        m = axes[0, 0].imshow(np.max(inputs**gamma, axis=0), cmap=icmap, aspect=aspect)
+        axes[0, 1].imshow(np.max(inputs**gamma, axis=1), cmap=icmap, aspect=aspect)
+        axes[0, 2].imshow(np.max(inputs**gamma, axis=2), cmap=icmap, aspect=aspect)
+
+        divider = make_axes_locatable(axes[0, 0])
+        cax = divider.append_axes("left", size="5%", pad=0.1)
+        cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("left")
+        cax.yaxis.set_ticks_position('left')
         cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
 
     m = axes[1, 0].imshow(emb[0], cmap=cmap, vmin=vmin, vmax=vmax)
     axes[1, 1].imshow(emb[1], cmap=cmap, vmin=vmin, vmax=vmax)
     axes[1, 2].imshow(emb[2], cmap=cmap, vmin=vmin, vmax=vmax)
-    cax = inset_axes(axes[1, 0], width="10%", height="100%", loc='center left', borderpad=-5)
-    cb = fig.colorbar(m, cax=cax)
+
+    divider = make_axes_locatable(axes[1, 0])
+    cax = divider.append_axes("left", size="5%", pad=0.1)
+    cb = plt.colorbar(m, cax=cax)
     cax.yaxis.set_label_position("left")
+    cax.yaxis.set_ticks_position('left')
     cax.set_ylabel(r'Embedding ($\alpha$)')
 
     if emb.shape[0] > 3:
@@ -1235,9 +1220,12 @@ def plot_embeddings(
         m = axes[-1, 0].imshow(emb[3], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
         axes[-1, 1].imshow(emb[4], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
         axes[-1, 2].imshow(emb[5], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
-        cax = inset_axes(axes[-1, 0], width="10%", height="100%", loc='center left', borderpad=-5)
-        cb = fig.colorbar(m, cax=cax, format=lambda x, _: f"{x:.1f}")
+
+        divider = make_axes_locatable(axes[-1, 0])
+        cax = divider.append_axes("left", size="5%", pad=0.1)
+        cb = plt.colorbar(m, cax=cax, format=lambda x, _: f"{x:.1f}")
         cax.yaxis.set_label_position("left")
+        cax.yaxis.set_ticks_position('left')
         cax.set_ylabel(r'Embedding ($\varphi$, radians)')
 
     for ax in axes.flatten():
@@ -1423,7 +1411,8 @@ def plot_volume(
             lam_detection=wavelength
         )
 
-        wax = inset_axes(axes[i], width="25%", height="100%", loc='center right', borderpad=-15)
+        divider = make_axes_locatable(axes[i])
+        wax = divider.append_axes("right", size="25%", pad=0.3)
         w = plot_wavefront(wax, wavefront.wave(size=100), vcolorbar=True, label='Average', nas=[.95, .85])
 
     axes[0].set_xlabel('X ($\mu$m)' if proj_ax == 1 else 'Y ($\mu$m)')
@@ -1920,7 +1909,8 @@ def compare_ao_iterations(
 
         if i == 0:
             for ax, label in zip((ax_ml, ax_sh), ('OpticalNet', 'Shack–Hartmann')):
-                cax = inset_axes(ax, width="10%", height="100%", loc='center left', borderpad=-5)
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("left", size="5%", pad=0.1)
                 cbar = fig.colorbar(
                     mat,
                     cax=cax,
