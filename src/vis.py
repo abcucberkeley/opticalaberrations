@@ -1667,7 +1667,7 @@ def plot_beads_dataset(
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                hcolorbar=False,
+                # hcolorbar=True if i == 3 else False, ## mplib breaks with "_raw_ticks istep=np.nonzero(large_steps)[0][0] IndexError: index 0 is out of bounds for axis 0 with size 0
             )
 
             plot_mip(
