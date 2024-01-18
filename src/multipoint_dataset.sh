@@ -15,13 +15,16 @@ SKIP_REMOVE_BACKGROUND=false
 USE_THEORETICAL_WIDEFIELD_SIMULATOR=false
 
 MODES=15
-xVOXEL=.125
-yVOXEL=.125
+#xVOXEL=.125
+xVOXEL=.097
+#yVOXEL=.125
+yVOXEL=.097
 zVOXEL=.200
-TITLE='fourier_filter_125nm_dataset'
-DATASET='train'
+TITLE='97nm_dataset_extended'
+#DATASET='train'
+DATASET='test'
 MODE_DIST='pyramid'
-HANDLER=lsf
+HANDLER=slurm
 
 MODALITIES=(
   "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
@@ -57,14 +60,14 @@ if [ "$DATASET" = "train" ];then  # 2M samples
   FILL_RADIUS=0.66
 else
   TYPE=''
-  SAMPLES_PER_JOB=25
-  SAMPLES_PER_BIN=25
+  SAMPLES_PER_JOB=50
+  SAMPLES_PER_BIN=50
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   OBJS=(1 2 3 5 10 25 50 100 125 150)
   mPH=($(seq     1 25000 500000))
   xPH=($(seq 25000 25000 500000))
-  amps1=($(seq    0 .025 .475))
-  amps2=($(seq .025 .025 .50))
+  amps1=($(seq    0 .025 .975))
+  amps2=($(seq .025 .025 1))
   DISTRIBUTIONS=(mixed)
   FILL_RADIUS=0.66
 fi
