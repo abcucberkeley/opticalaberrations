@@ -10,7 +10,7 @@ ITERS=5
 MAX=10000
 OUTDIR='../evaluations'
 PRETRAINED="../pretrained_models"
-DATASET="97nm_dataset"
+DATASET="97nm_dataset_extended"
 EVALSIGN="signed"
 NA=1.0
 ABC_A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
@@ -22,7 +22,7 @@ SKIP_REMOVE_BACKGROUND=false
 TRAINED_MODELS=(
   "YuMB-lambda510-R1242"
   "YuMB-lambda510-R1462"
-  #"YuMB-lambda510-R2462"
+  "YuMB-lambda510-R2462"
 )
 
 for M in ${TRAINED_MODELS[@]}
@@ -95,12 +95,12 @@ do
               python manager.py $JOB \
               --task "${MODEL}.h5 --num_beads 1 $CONFIG snrheatmap" \
               --taskname na_$NA \
-              --name $OUTDIR/${DATASET}${SIM}${PREP}-fourier_filter/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
+              --name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
-              python manager.py $JOB \
-              --task "${MODEL}.h5  $CONFIG densityheatmap" \
-              --taskname na_$NA \
-              --name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
+              #python manager.py $JOB \
+              #--task "${MODEL}.h5  $CONFIG densityheatmap" \
+              #--taskname na_$NA \
+              #--name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
               #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
               #--task "${MODEL}.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
