@@ -51,21 +51,35 @@ do
   
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
-  for HEADS in '2-4-8-16' '3-6-12-24' '16-16-16-16'
-  do 
-    for REPEATS in '2-4-6-2' '1-4-6-2' '1-2-4-2' '1-2-8-4' 
-    do
-      python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-      --task "$CONFIG $LAMB --heads $HEADS --repeats $REPEATS" \
-      --taskname $NETWORK \
-      --name new/$SUBSET/$NETWORK-$MODES-$DIR-H-${HEADS}-R-${REPEATS}
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG $LAMB --patches '8-8-8-8' --repeats '2-2-2-2'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P8-R1222
 
-      # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-      # --task "$CONFIG $DEFAULT" \
-      # --taskname $NETWORK \
-      # --name new/$SUBSET/$NETWORK-$MODES-$DIR-default
-    done
-  done
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG $LAMB --patches '16-16-16-16' --repeats '2-2-2-2'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R1222
+
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG $LAMB --patches '16-16-8-8' --repeats '2-2-2-2'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P168-R2222
+
+  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG $LAMB --patches '32-16-8-8' --repeats '1-2-2-2'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P32168-R1222
+
+  #python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  #--task "$CONFIG $LAMB" \
+  #--taskname $NETWORK \
+  #--name new/$SUBSET/$NETWORK-$MODES-$DIR
+
+  # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  # --task "$CONFIG $DEFAULT" \
+  # --taskname $NETWORK \
+  # --name new/$SUBSET/$NETWORK-$MODES-$DIR-default
 done
 
 
