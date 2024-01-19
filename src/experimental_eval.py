@@ -472,7 +472,7 @@ def eval_dataset(
     results = {}
     savepath = Path(f'{datadir}/beads_evaluation')
 
-    if rerun_calc:
+    if rerun_calc or not Path(f'{savepath}.csv').exists:
 
         # get model from .json file
         with open(list(Path(datadir / 'MLResults').glob('*_settings.json'))[0]) as f:
@@ -579,20 +579,21 @@ def eval_dataset(
                 else:
                     gt_wavefront = None
 
-                diff_wavefront = Wavefront(
-                    gt_wavefront - ml_wavefront,
-                    modes=p.shape[0],
-                    lam_detection=predictions_settings['wavelength']
-                )
+                if gt_wavefront is not None and ml_wavefront is not None:
+                    diff_wavefront = Wavefront(
+                        gt_wavefront - ml_wavefront,
+                        modes=p.shape[0],
+                        lam_detection=predictions_settings['wavelength']
+                    )
 
-                results[(state, '-'.join(modes))] = dict(
-                    ml_img=ml_img,
-                    ml_wavefront=ml_wavefront,
-                    gt_img=pr_img,
-                    gt_wavefront=gt_wavefront,
-                    diff_wavefront=diff_wavefront,
-                    residuals=f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv',
-                )
+                    results[(state, '-'.join(modes))] = dict(
+                        ml_img=ml_img,
+                        ml_wavefront=ml_wavefront,
+                        gt_img=pr_img,
+                        gt_wavefront=gt_wavefront,
+                        diff_wavefront=diff_wavefront,
+                        residuals=f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv',
+                    )
 
                 if not precomputed:
                     logger.info(f"ansi_z{modes}")
