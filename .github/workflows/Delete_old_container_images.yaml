@@ -16,19 +16,27 @@ on:
           - debug
 
 jobs:
+  use_api:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.cleanup_packages }}
+        run: |
+          gh api /user/packages/container/opticalaberrations/versions?per_page=10
+
   clean-ghcr:
-    strategy:
-      matrix:
-        IMAGE-NAME: [develop, develop_CUDA_11_8, develop_CUDA_12_3, develop_sif, develop_CUDA_11_8_sif, develop_CUDA_12_3_sif]
     name: Delete old unused container images
     runs-on: ubuntu-latest
     steps:
       - name: Delete old images
         uses: snok/container-retention-policy@v2
         with:
-          image-names: ${{ matrix.IMAGE-NAME }}
+          image-names: opticalaberrations
           cut-off: One week ago UTC
           keep-at-least: 3
           account-type: personal
           token: ${{ secrets.cleanup_packages }}
           token-type: pat
+          untagged-only: true
+          dry-run: true
