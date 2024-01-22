@@ -230,7 +230,7 @@ def remove_interference_pattern(
 
     blured_psf = ndimage.gaussian_filter(psf, sigma=1.1)
 
-    # exclude values close to the egde in Z for finding our template
+    # exclude values close to the edge in Z for finding our template
     blured_psf[0: zborder] = 0
     blured_psf[blured_psf.shape[0]-zborder:blured_psf.shape[0]] = 0
 
