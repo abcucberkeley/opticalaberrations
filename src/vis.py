@@ -1518,15 +1518,15 @@ def plot_beads_dataset(
         'axes.autolimit_mode': 'round_numbers'
     })
 
-    heatmaps = residuals.drop_duplicates(
-        subset=['eval_file', 'na']
-    )[["na", "iteration_index", "p2v_gt", "p2v_residual", "modes", "mode_1", "mode_2"]]
+    heatmaps = residuals.drop_duplicates(subset=['eval_file', 'na'])
+    heatmaps = heatmaps[["na", "iteration_index", "p2v_gt", "p2v_residual", "p2v_pred", "modes", "mode_1", "mode_2"]]
 
     for val, label in zip(
-            ["p2v_gt", "p2v_residual"],
+            ["p2v_gt", "p2v_residual", "p2v_pred"],
             [
                 rf"Aberration (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
                 rf"Disagreement (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
+                rf"Prediction (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
             ]
     ):
 
