@@ -51,25 +51,30 @@ do
   
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
-  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  --task "$CONFIG $LAMB --patches '8-8-8-8' --repeats '2-2-2-2'" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P8-R1222
+  # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  # --task "$CONFIG $LAMB --patches '8-8-8-8' --repeats '2-2-2-2'" \
+  # --taskname $NETWORK \
+  # --name new/$SUBSET/$NETWORK-$MODES-$DIR-P8-R2222
+
+  # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  # --task "$CONFIG $LAMB --patches '16-16-16-16' --repeats '2-2-2-2'" \
+  # --taskname $NETWORK \
+  # --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R2222
+
+  # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  # --task "$CONFIG $LAMB --patches '16-16-8-8' --repeats '2-2-2-2'" \
+  # --taskname $NETWORK \
+  # --name new/$SUBSET/$NETWORK-$MODES-$DIR-P168-R2222
 
   python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  --task "$CONFIG $LAMB --patches '16-16-16-16' --repeats '2-2-2-2'" \
+  --task "$CONFIG $LAMB --patches '32-32-16-16' --repeats '2-2-2-2'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R1222
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P3216-R2222
 
-  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  --task "$CONFIG $LAMB --patches '16-16-8-8' --repeats '2-2-2-2'" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P168-R2222
-
-  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  --task "$CONFIG $LAMB --patches '32-16-8-8' --repeats '1-2-2-2'" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P32168-R1222
+  # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  # --task "$CONFIG $LAMB --patches '32-16-8-8' --repeats '1-2-2-2'" \
+  # --taskname $NETWORK \
+  # --name new/$SUBSET/$NETWORK-$MODES-$DIR-P32168-R1222
 
   #python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
   #--task "$CONFIG $LAMB" \
