@@ -1793,7 +1793,7 @@ def create_consensus_map(
     optimized_volume = np.zeros_like(correction_scans[0])
     volume_used = np.zeros((ztiles, *optimized_volume.shape[1:]))
 
-    unconfident_cluster_id = ztiles * len(correction_scans)
+    unconfident_cluster_id = ztiles * len(correction_scans) + 1
     org_cluster_array = np.reshape((org_cluster_map['cluster']).to_numpy(),
                                    [ztiles, ytiles, xtiles])  # 3D np array of cluster ids
     num_of_stacks = len(correction_scans)
