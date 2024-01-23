@@ -52,6 +52,7 @@ RUN echo 'alias cloneit=${cloneit}' >> ~/.bashrc
 
 # git clone "requirements.txt" into a junk directory, then pip install. --filter=blob:none will only download the files in HEAD
 WORKDIR /docker_install
+ADD https://raw.githubusercontent.com/abcucberkeley/opticalaberrations/${BRANCH_NAME}/requirements.txt requirements.txt
 RUN echo "branch=${BRANCH_NAME}" && git clone -n -b ${BRANCH_NAME} --depth 1 --filter=blob:none https://github.com/abcucberkeley/opticalaberrations.git 
 WORKDIR /docker_install/opticalaberrations
 RUN git checkout HEAD requirements.txt
