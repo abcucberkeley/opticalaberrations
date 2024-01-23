@@ -45,17 +45,20 @@ logger = logging.getLogger(__name__)
 
 @profile
 def measure_noise(a: np.ndarray, axis: Optional[int] = None) -> np.float32:
-    """ Return estimated noise """
+    """ Return estimated noise (standard deviation) """
     noise = np.nanstd(a, axis=axis)
     return noise
 
 
 @profile
-def measure_snr(a: np.ndarray, axis: Optional[int] = None) -> int:
+def measure_snr(signal_img: np.ndarray,
+                noise_img: Optional[np.ndarray] = None,
+                axis: Optional[int] = None,
+                ) -> int:
     """ Return estimated signal-to-noise ratio or inf if the given image has no noise """
 
-    signal = np.nanmax(a, axis=axis) - np.nanmedian(a, axis=axis)
-    noise = measure_noise(a, axis=axis)
+    signal = np.nanmax(signal_img, axis=axis) - np.nanmedian(signal_img, axis=axis)
+    noise = measure_noise(signal_img if noise_img is None else noise_img, axis=axis)
     return int(np.round(np.where(noise == 0, 0, signal/noise), 0))
 
 
@@ -181,7 +184,7 @@ def combine_filtered_imgs(
 
     Args:
         original_image: Raw data
-        im1_sharper: Raw_data with highest frequencies removed
+        im1_sharper: Just highest frequencies
         im2_low_freqs_to_subtract: Just lowest frequencies (aka the non-uniform background to be subtracted)
         min_psnr:
         dtype:
@@ -196,7 +199,8 @@ def combine_filtered_imgs(
     mask[mask >= .9] = 1
     # if blurred shows little std deviation: this is sparse, will want to more aggressively subtract
     if np.std(im2_low_freqs_to_subtract[mask == 1]) < 3:
-        snr = measure_snr(original_image * mask)
+        # estimate signal from processed (remove salt pepper noise), estimate noise from original image.
+        snr = measure_snr(im1_sharper * mask, noise_img=original_image * mask)
         if snr > min_psnr:  # sparse, yet SNR of original image is good
             noise = np.std(original_image - im2_low_freqs_to_subtract)  # increase the bkgrd subtraction by the noise
             return im1_sharper - (im2_low_freqs_to_subtract + noise)
