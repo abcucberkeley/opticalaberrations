@@ -26,6 +26,9 @@ from preprocessing import prep_sample
 from preloaded import Preloadedmodelclass
 from embeddings import measure_fourier_snr
 
+import warnings
+warnings.filterwarnings("ignore")
+
 def get_active_branch_name(head_dir):
 
     head_dir = Path(head_dir) / ".git" / "HEAD"
