@@ -602,7 +602,7 @@ def compute_emb(
         return emb.astype(np.float32)
 
 
-@lru_cache(maxsize=361, typed=True)
+@lru_cache(typed=True)
 def rotate_coords(
     shape: Union[tuple, np.ndarray],
     digital_rotations: int,
@@ -709,10 +709,18 @@ def rotate_embeddings(
 
     if gpu_support:
         emb = cp.asnumpy(
-            map_coordinates(cp.array(emb), coordinates=coordinates, output=cp.float32, order=1, prefilter=False)
+            map_coordinates(cp.array(emb),
+                            coordinates=coordinates,
+                            output=cp.float32,
+                            order=1,
+                            prefilter=False)
         )
     else:
-        emb = map_coordinates(emb, coordinates=coordinates, output=np.float32, order=1, prefilter=False)
+        emb = map_coordinates(emb,
+                              coordinates=coordinates,
+                              output=np.float32,
+                              order=1,
+                              prefilter=False)
 
     if debug_rotations and plot:
         rotation_labels = np.linspace(0, 360, digital_rotations)

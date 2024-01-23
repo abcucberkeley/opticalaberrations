@@ -637,6 +637,7 @@ def eval_dataset(
     else:
         # skip calc. Reload results and just replot
         residuals = pd.read_csv(f'{savepath}.csv')
+        print(residuals)
         results = np.load(f'{savepath}_results.npy', allow_pickle='TRUE').item()
 
     logger.info(f'{savepath}.csv')
