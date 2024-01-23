@@ -1733,6 +1733,7 @@ def aggregate_predictions(
             unconfident_tiles=unconfident_tiles.loc[unconfident_tiles].index.to_list(),
             all_zeros_tiles=all_zeros_tiles.loc[all_zeros_tiles].index.to_list(),
             non_zero_tiles=non_zero_tiles.loc[non_zero_tiles].index.to_list(),
+            ignored_tiles=ignored_tiles,
         )
         ujson.dump(
             json,
@@ -1794,6 +1795,7 @@ def create_consensus_map(
     volume_used = np.zeros((ztiles, *optimized_volume.shape[1:]))
 
     unconfident_cluster_id = ztiles * len(correction_scans) + 1
+    ignored_cluster_id = ztiles * len(correction_scans)
     org_cluster_array = np.reshape((org_cluster_map['cluster']).to_numpy(),
                                    [ztiles, ytiles, xtiles])  # 3D np array of cluster ids
     num_of_stacks = len(correction_scans)
@@ -1823,7 +1825,7 @@ def create_consensus_map(
         optimized_cluster_id = org_cluster_map.loc[(z, y, x), 'cluster'].astype(int)  # cluster group id
 
         # last code (e.g. 8) = unconfident gray. was gray in the "before" stack
-        if optimized_cluster_id == unconfident_cluster_id:
+        if optimized_cluster_id == unconfident_cluster_id or optimized_cluster_id == ignored_cluster_id:
 
             optimized_stack_id = votes.loc[z, y, x]
 
@@ -1846,7 +1848,7 @@ def create_consensus_map(
             optimized_stack_id = optimized_cluster_id - (z * len(correction_scans))
             cluster_result_from_optimized_stack = stack_preds[optimized_stack_id].loc[(z, y, x), 'cluster'].astype(int)
 
-            if cluster_result_from_optimized_stack == unconfident_cluster_id:  # optimized stack was gray
+            if cluster_result_from_optimized_stack == unconfident_cluster_id or cluster_result_from_optimized_stack == ignored_cluster_id:  # optimized stack was gray
                 # the optimized stack was expected to have a prediction here.
                 # It doesn't.  So use result from the first stack
                 # (which is most similar to our previous time point which made the prediction).
@@ -1854,6 +1856,7 @@ def create_consensus_map(
                 optimized_stack_id = 0
                 current_zernikes = zernikes_on_mirror[f'z{z}_c{z * len(correction_scans)}'].values
             else:  # optimized stack has a confident prediction
+                logger.info(f'z{z}_c{optimized_cluster_id}')
                 current_zernikes = zernikes_on_mirror[f'z{z}_c{optimized_cluster_id}']
 
         optimized_zernikes = stack_preds[optimized_stack_id].loc[(z, y, x)][zernike_indices].values
@@ -1950,7 +1953,7 @@ def combine_tiles(
         str(corrected_actuators_csv).replace('corrected_actuators.csv', 'clusters.csv'),
         index_col=['z', 'y', 'x'],  # z, y, x are going to be the MultiIndex
         header=0
-    )   # cluster ids, e.g. 0,1,2,3, 4,5,6,7, 8 is unconfident
+    )   # cluster ids, e.g. 0,1,2,3, 4,5,6,7, 8 is ignored, 9 is unconfident
 
     output_base_path = str(corrections[0]).replace('_tiles_predictions_aggregated_p2v_error.tif', '')
 
