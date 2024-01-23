@@ -1265,9 +1265,15 @@ def predict_files(
     )
 
     if template is not None:
+        # initialize predictions dataframe with NaNs, the ignored tiles (dropped from poor SNR) will remain as NaNs.
+        # NaNs in the _predictions.csv will appear as blank.
+        # ignored tiles will be written to _settings.json and read in from aggregate from there.
         tile_names = [f.stem for f in paths]
-        predictions = pd.DataFrame(np.zeros((preds.shape[1], template.shape[1])), columns=template.columns)
-        predictions[tile_names] = preds.T
+        predictions = pd.DataFrame(
+            np.full((preds.shape[1], template.shape[1]), fill_value=np.NaN),
+            columns=template.columns
+        )
+        predictions[tile_names] = preds.T   # overwrite with predictions
 
         stdevs = pd.DataFrame(np.zeros((std.shape[1], template.shape[1])), columns=template.columns)
         stdevs[tile_names] = std.T

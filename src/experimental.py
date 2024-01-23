@@ -408,6 +408,7 @@ def predict_sample(
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
         object_gaussian_kernel_width=object_gaussian_kernel_width
     )
+    logger.info(f"Preprocess complete. {embeddings.shape}")
 
     if no_phase:
         p, std, pchange = backend.dual_stage_prediction(
@@ -962,6 +963,7 @@ def predict_tiles(
             xtiles=int(ncols),
             dm_calibration=str(dm_calibration),
             psf_type=str(preloadedpsfgen.psf_type),
+            ignored_tiles=tiles['ignored'].to_list(),
         )
 
         ujson.dump(
@@ -1443,6 +1445,7 @@ def aggregate_predictions(
     clusters3d_colormap: str = 'tab20',
     zero_confident_color: tuple = (255, 255, 0),
     unconfident_color: tuple = (255, 255, 255),
+    ignored_color: tuple = (255, 166, 246),     # pink
     preloaded: Preloadedmodelclass = None,
     psf_type: Optional[Union[str, Path]] = None,
     postfix: str = 'aggregated'
@@ -1495,6 +1498,7 @@ def aggregate_predictions(
     except KeyError:
         predictions_settings['ignore_modes'] = [0, 1, 2, 4]
 
+    ignored_tiles = predictions_settings['ignored_tiles']
     unconfident_tiles, zero_confident_tiles, all_zeros_tiles = utils.get_tile_confidence(
         predictions=predictions,
         stdevs=stdevs,
@@ -1536,8 +1540,9 @@ def aggregate_predictions(
     clusters3d_colormap = []
     for cc in cluster_colors:  # for each z tile's colors
         clusters3d_colormap.extend([zero_confident_color, *cc])  # append the same zero color (e.g. yellow) at the front
+    clusters3d_colormap.extend([ignored_color])  # append the ignored color (e.g. red) to the end
     clusters3d_colormap.extend([unconfident_color])  # append the unconfident color (e.g. white) to the end
-    clusters3d_colormap = np.array(clusters3d_colormap)  # yellow, blue, orange,...  yellow, ...  white
+    clusters3d_colormap = np.array(clusters3d_colormap)  # yellow, blue, orange,...  yellow, ...  white, pink
 
     predictions, stdevs, corrections = cluster_tiles(
         predictions=predictions,
@@ -1570,7 +1575,12 @@ def aggregate_predictions(
     predictions.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
     stdevs.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
 
-    predictions.to_csv(f"{model_pred.with_suffix('')}_{postfix}_clusters.csv") # e.g. clusterids: [0,1,2,3, 4,5,6,7, 8] 8 is unconfident
+    # assign ignored_tiles cluster id to second to last one
+    predictions.loc[ignored_tiles, 'cluster'] = len(clusters3d_colormap) - 2
+    stdevs.loc[ignored_tiles, 'cluster'] = len(clusters3d_colormap) - 2
+
+    # clusterids: [0,1,2,3, 4,5,6,7, 8,9] 9 is unconfident, 8 is ignored for low SNR
+    predictions.to_csv(f"{model_pred.with_suffix('')}_{postfix}_clusters.csv")
 
     clusters_rgb = np.full((ztiles, *vol.shape[1:]), len(clusters3d_colormap)-1, dtype=np.float32)
     clusters3d_heatmap = np.full_like(vol, len(clusters3d_colormap)-1, dtype=np.float32)
@@ -1589,7 +1599,7 @@ def aggregate_predictions(
         if not np.isnan(c):
             clusters_rgb[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((yw, xw), int(c))    # cluster group id
 
-            if c == len(clusters3d_colormap)-1:     # last code (e.g. 8) = unconfident gray
+            if c == len(clusters3d_colormap) - 1 or c == len(clusters3d_colormap) - 2:  # last codes (e.g. 8, 9) set to flat.
                 wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
                 expected_wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
 
