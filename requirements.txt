@@ -15,4 +15,4 @@ line-profiler-pycharm
 tifffile==2023.9.18
 imagecodecs==2023.9.18
 nvitop
-pytriton
+nvidia-pytriton
