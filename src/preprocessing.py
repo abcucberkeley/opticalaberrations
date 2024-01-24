@@ -848,7 +848,7 @@ def get_tiles(
     return tiles, ztiles, nrows, ncols
 
 
-def optimal_rolling_strides(model_psf_fov, sample_voxel_size, sample_shape):
+def optimal_rolling_strides(model_psf_fov, sample_voxel_size, sample_shape, overlap_factor: float = 0.8):
     model_window_size = (
         round_to_even(model_psf_fov[0] / sample_voxel_size[0]),
         round_to_even(model_psf_fov[1] / sample_voxel_size[1]),
@@ -856,7 +856,7 @@ def optimal_rolling_strides(model_psf_fov, sample_voxel_size, sample_shape):
     )  # number of sample voxels that make up a model psf.
 
     model_window_size = np.minimum(model_window_size, sample_shape)
-    number_of_rois = np.ceil(sample_shape / model_window_size)
+    number_of_rois = np.ceil(sample_shape / (model_window_size * overlap_factor))
     strides = np.floor((sample_shape - model_window_size) / (number_of_rois - 1))
     idx = np.where(np.isnan(strides))[0]
     strides[idx] = model_window_size[idx]
@@ -865,7 +865,7 @@ def optimal_rolling_strides(model_psf_fov, sample_voxel_size, sample_shape):
     min_strides = np.ceil(model_window_size * 0.66).astype(np.int32)
     # throwaway = sample_shape - ((np.array(number_of_rois) - 1) * strides + model_window_size)
 
-    if any(strides < min_strides): # if strides overlap too much with model window
+    if any(strides < min_strides):  # if strides overlap too much with model window
         number_of_rois -= (strides < min_strides).astype(np.int32)    # choose one less roi and recompute
         strides = np.floor((sample_shape - model_window_size) / (number_of_rois - 1))
         idx = np.where(np.isnan(strides))[0]
