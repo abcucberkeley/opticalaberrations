@@ -297,7 +297,8 @@ def preprocess(
     rolling_strides: Optional[tuple] = None,
     skip_prep_sample: bool = False,
     min_psnr: int = 10,
-    object_gaussian_kernel_width: float = 0  # to simulate ideal OTF for objects bigger than diffraction limit
+    object_gaussian_kernel_width: float = 0,  # to simulate ideal OTF for objects bigger than diffraction limit
+    cpu_workers: int = -1,
 ):
     if samplepsfgen is None:
         samplepsfgen = modelpsfgen
@@ -416,7 +417,8 @@ def preprocess(
             model_psf_shape=modelpsfgen.psf_shape,
             nrows=nrows,
             ncols=ncols,
-            ztiles=ztiles
+            ztiles=ztiles,
+            cpu_workers=cpu_workers,
         ).astype(np.float32)
 
 
@@ -1219,7 +1221,8 @@ def predict_files(
             rolling_strides=rolling_strides,
             skip_prep_sample=skip_prep_sample,
             min_psnr=min_psnr,
-            object_gaussian_kernel_width=object_gaussian_kernel_width
+            object_gaussian_kernel_width=object_gaussian_kernel_width,
+            cpu_workers=1,  # already parallelized over files
         )
 
         inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
