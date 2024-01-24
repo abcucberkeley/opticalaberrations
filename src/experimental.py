@@ -915,6 +915,7 @@ def predict_tiles(
             min_psnr=min_psnr,
             na_mask=samplepsfgen.na_mask
         )
+        sample_shape = preloadedpsfgen.psf_fov
     else:
         prep = partial(
             prep_sample,
@@ -924,6 +925,7 @@ def predict_tiles(
             min_psnr=min_psnr,
             na_mask=samplepsfgen.na_mask
         )
+        sample_shape = window_size
 
     # obtain each tile and save to .tif.
     tiles, ztiles, nrows, ncols = get_tiles(
@@ -993,7 +995,7 @@ def predict_tiles(
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
-        rolling_strides=optimal_rolling_strides(preloadedpsfgen.psf_fov, samplepsfgen.voxel_size, window_size),
+        rolling_strides=optimal_rolling_strides(preloadedpsfgen.psf_fov, samplepsfgen.voxel_size, sample_shape),
         cpu_workers=cpu_workers,
         skip_prep_sample=True,
         template=template,
