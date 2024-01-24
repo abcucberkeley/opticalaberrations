@@ -947,6 +947,8 @@ def rolling_fourier_embeddings(
                 if no_phase else np.zeros((6, *model_psf_shape[1:]))
 
     else:  # filter out blank images
+        if plot is not None:
+            original_rois = rois.copy() # save a copy to plot correct order of tiles
         rois = rois[[~np.all(r == 0) for r in rois]].astype(np.float32)
 
         otfs = multiprocess(
@@ -1072,7 +1074,7 @@ def rolling_fourier_embeddings(
         if plot is not None:
             plt.style.use("default")
             plot_embeddings(
-                inputs=rois,
+                inputs=original_rois,
                 emb=emb,
                 save_path=plot,
                 nrows=nrows,
