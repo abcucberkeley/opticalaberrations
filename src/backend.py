@@ -393,7 +393,8 @@ def preprocess(
                 remove_background=remove_background,
                 normalize=normalize,
                 read_noise_bias=read_noise_bias,
-                na_mask=samplepsfgen.na_mask
+                na_mask=samplepsfgen.na_mask,
+                min_psnr=min_psnr,
             )
 
             rois = utils.multiprocess(func=prep, jobs=rois,
