@@ -917,15 +917,15 @@ def predict_tiles(
         )
         sample_shape = preloadedpsfgen.psf_fov
     else:           # large FOV
-        prep = partial(
-            prep_sample,
-            sample_voxel_size=samplepsfgen.voxel_size,
-            remove_background=True,
-            normalize=True,
-            min_psnr=min_psnr,
-            na_mask=samplepsfgen.na_mask
-        )
-        prep = None
+        # prep = partial(
+        #     prep_sample,
+        #     sample_voxel_size=samplepsfgen.voxel_size,
+        #     remove_background=True,
+        #     normalize=True,
+        #     min_psnr=min_psnr,
+        #     na_mask=samplepsfgen.na_mask
+        # )
+        prep = None     # Can't prep sample ahead of time if doing large fov
         sample_shape = window_size
 
     # obtain each tile and save to .tif.
