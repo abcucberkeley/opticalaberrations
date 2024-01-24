@@ -1163,7 +1163,8 @@ def plot_embeddings(
                 ax = fig.add_subplot(grid[i, j])
 
                 try:
-                    m = ax.imshow(np.max(inputs[idx], axis=proj) ** gamma, cmap=icmap, aspect=aspect)
+                    if np.max(inputs[idx], axis=None) > 0 :
+                        m = ax.imshow(np.max(inputs[idx], axis=proj) ** gamma, cmap=icmap, aspect=aspect)
 
                 except IndexError: # if we dropped a tile due to poor SNR
                     m = ax.imshow(np.zeros_like(np.max(inputs[0], axis=proj)), cmap=icmap, aspect=aspect)
@@ -1175,6 +1176,7 @@ def plot_embeddings(
         cax = divider.append_axes("left", size="5%", pad=0.1)
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("left")
+        cax.yaxis.set_ticks_position('left')
         cax.set_ylabel(rf'Input (MIP) [$\gamma$={gamma}]')
     else:
         m = axes[0, 0].imshow(np.max(inputs**gamma, axis=0), cmap=icmap, aspect=aspect)
@@ -1235,6 +1237,7 @@ def plot_embeddings(
         plt.show()
     else:
         savesvg(fig, f'{save_path}_embeddings.svg')
+        plt.savefig(f'{save_path}_embeddings.png')
 
 
 @profile
