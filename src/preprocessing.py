@@ -212,7 +212,7 @@ def combine_filtered_imgs(
 
     else:  # This is a dense image
         filtered_img = im1_sharper - im2_low_freqs_to_subtract
-        snr = measure_snr(filtered_img, noise_img=noise_img)
+        snr = measure_snr(filtered_img * mask, noise_img=noise_img)
         if snr < min_psnr:  # SNR poor
             logger.warning(f"Dropping  dense image for poor SNR {snr} < {min_psnr}")
             return np.zeros_like(original_image)  # return zeros
