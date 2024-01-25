@@ -822,7 +822,7 @@ def get_tiles(
     )):
         name = f"z{z}-y{y}-x{x}"
 
-        imwrite(f"{savepath_unprocessed}" / f"{name}.tif", w, compression='deflate', dtype=np.float32)
+        imwrite(savepath_unprocessed / f"{name}.tif", w, compression='deflate', dtype=np.float32)
 
         if prep is not None:
             w = prep(windows[i],  plot=savepath / f"{name}" if plot else None)
