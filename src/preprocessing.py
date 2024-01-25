@@ -782,7 +782,7 @@ def get_tiles(
     plot: bool = False
 ):
     savepath_unprocessed = Path(f"{savepath}_unprocessed")
-    
+
     savepath.mkdir(parents=True, exist_ok=True)
     savepath_unprocessed.mkdir(parents=True, exist_ok=True)
 
@@ -822,8 +822,7 @@ def get_tiles(
     )):
         name = f"z{z}-y{y}-x{x}"
 
-        if not np.all(w == 0):
-            imwrite(f"{savepath_unprocessed}" / f"{name}.tif", w, compression='deflate', dtype=np.float32)
+        imwrite(f"{savepath_unprocessed}" / f"{name}.tif", w, compression='deflate', dtype=np.float32)
 
         if prep is not None:
             w = prep(windows[i],  plot=savepath / f"{name}" if plot else None)
