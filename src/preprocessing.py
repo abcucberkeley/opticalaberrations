@@ -197,10 +197,12 @@ def combine_filtered_imgs(
     mask[mask < .9] = np.nan
 
     mask[mask >= .9] = 1
+    noise_img = (original_image - im2_low_freqs_to_subtract) * mask
     # if blurred shows little std deviation: this is sparse, will want to more aggressively subtract
     if np.std(im2_low_freqs_to_subtract[mask == 1]) < 3:
         # estimate signal from processed (remove salt pepper noise), estimate noise from original image.
-        snr = measure_snr(im1_sharper * mask, noise_img=original_image * mask)
+        filtered_img = im1_sharper - im2_low_freqs_to_subtract
+        snr = measure_snr(filtered_img * mask, noise_img=noise_img)
         if snr > min_psnr:  # sparse, yet SNR of original image is good
             noise = np.std(original_image - im2_low_freqs_to_subtract)  # increase the bkgrd subtraction by the noise
             return im1_sharper - (im2_low_freqs_to_subtract + noise)
@@ -210,7 +212,7 @@ def combine_filtered_imgs(
 
     else:  # This is a dense image
         filtered_img = im1_sharper - im2_low_freqs_to_subtract
-        snr = measure_snr(filtered_img)
+        snr = measure_snr(filtered_img, noise_img=noise_img)
         if snr < min_psnr:  # SNR poor
             logger.warning(f"Dropping  dense image for poor SNR {snr} < {min_psnr}")
             return np.zeros_like(original_image)  # return zeros
