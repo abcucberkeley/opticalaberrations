@@ -781,7 +781,10 @@ def get_tiles(
     prep: Optional[partial] = None,
     plot: bool = False
 ):
+    savepath_unprocessed = Path(f"{savepath}_unprocessed")
+    
     savepath.mkdir(parents=True, exist_ok=True)
+    savepath_unprocessed.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update({
         'font.size': 10,
@@ -818,6 +821,9 @@ def get_tiles(
         file=sys.stdout
     )):
         name = f"z{z}-y{y}-x{x}"
+
+        if not np.all(w == 0):
+            imwrite(f"{savepath_unprocessed}" / f"{name}.tif", w, compression='deflate', dtype=np.float32)
 
         if prep is not None:
             w = prep(windows[i],  plot=savepath / f"{name}" if plot else None)
