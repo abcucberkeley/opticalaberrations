@@ -754,7 +754,7 @@ def fourier_embeddings(
         freq_strength_threshold: float = 0.01,
         pois: Any = None,
         remove_interference: bool = True,
-        plot_interference: bool = True,
+        plot_interference: bool = False,        # because it's broken.
         embedding_option: str = 'spatial_planes',
         digital_rotations: Optional[int] = None,
         model_psf_shape: tuple = (64, 64, 64),
