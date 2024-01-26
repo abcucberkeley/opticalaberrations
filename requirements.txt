@@ -15,4 +15,13 @@ line-profiler-pycharm
 tifffile==2023.9.18
 imagecodecs==2023.9.18
 nvitop
+torch
+tf2onnx
+pycuda
+onnx
+onnxruntime
+onnxruntime-gpu
+nvidia-pyindex
 nvidia-pytriton
+triton-model-navigator[tensorflow]
+dask_cuda
