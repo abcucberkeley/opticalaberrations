@@ -247,7 +247,6 @@ def remove_interference_pattern(
     template_poi[2] = np.clip(template_poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
 
     high_snr = measure_snr(psf) > 30  # SNR good enough for template
-    logger.info(f'{max_poi=}  {template_poi=}')
     if high_snr:
         # logger.info('Using template')
         init_pos = [p-half_length for p in template_poi]
