@@ -7,6 +7,7 @@ from typing import Any, Union, Optional
 from functools import lru_cache
 
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 plt.set_loglevel('error')
 from tifffile import imwrite
 
@@ -424,8 +425,43 @@ def remove_interference_pattern(
                 sharey=False,
                 sharex=False
             )
-
+            transparency = 0.6
+            marker_color = 'blue'
             for ax in range(3):
+                if ax == 0:
+                    axes[0, ax].plot(p[2], p[1], marker='x', ls='', color=marker_color)
+                    axes[2, ax].plot(p[2], p[1], marker='x', ls='', color=marker_color, alpha=transparency)
+                    axes[2, ax].add_patch(patches.Rectangle(
+                        xy=(p[2] - min_distance, p[1] - min_distance),
+                        width=min_distance * 2,
+                        height=min_distance * 2,
+                        fill=None,
+                        color=marker_color,
+                        alpha=transparency
+                    ))
+                elif ax == 1:
+                    axes[0, ax].plot(p[2], p[0], marker='x', ls='', color=marker_color)
+                    axes[2, ax].plot(p[2], p[0], marker='x', ls='', color=marker_color, alpha=transparency)
+                    axes[2, ax].add_patch(patches.Rectangle(
+                        xy=(p[2] - min_distance, p[0] - min_distance),
+                        width=min_distance * 2,
+                        height=min_distance * 2,
+                        fill=None,
+                        color=marker_color,
+                        alpha=transparency
+                    ))
+
+                elif ax == 2:
+                    axes[0, ax].plot(p[1], p[0], marker='x', ls='', color=marker_color)
+                    axes[2, ax].plot(p[1], p[0], marker='x', ls='', color=marker_color, alpha=transparency)
+                    axes[2, ax].add_patch(patches.Rectangle(
+                        xy=(p[1] - min_distance, p[0] - min_distance),
+                        width=min_distance * 2,
+                        height=min_distance * 2,
+                        fill=None,
+                        color=marker_color,
+                        alpha=transparency
+                    ))
                 m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='hot', aspect='auto')
                 m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot', aspect='auto')
                 m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66, aspect='auto')
