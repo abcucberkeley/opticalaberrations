@@ -174,6 +174,7 @@ def plot_mip(
 def plot_wavefront(
     iax,
     phi,
+    rms=None,
     label=None,
     nas=(.65, .75, .85, .95),
     vcolorbar=False,
@@ -223,13 +224,16 @@ def plot_wavefront(
     if label is not None:
         p2v = abs(np.nanmin(phi) - np.nanmax(phi))
         err = '\n'.join([
-            f'$NA_{{{na:.2f}}}$={p2v if na == 1 else abs(p[1]-p[0]):.2f}$\lambda$'
+            f'$NA_{{{na:.2f}}}$={p2v if na == 1 else abs(p[1]-p[0]):.2f}$\lambda$ (P2V)'
             for na, p in zip(nas, pcts)
         ])
         if label == '':
             iax.set_title(err)
         else:
-            iax.set_title(f'{label} [{p2v:.2f}$\lambda$]\n{err}')
+            if rms is not None:
+                iax.set_title(f'{label} RMS[{rms:.2f}$\lambda$]\n{err}\n$NA_{{1.0}}=${p2v:.2f}$\lambda$ (P2V)')
+            else:
+                iax.set_title(f'{label} [{p2v:.2f}$\lambda$] (P2V)\n{err}')
 
     iax.axis('off')
     iax.set_aspect("equal")
@@ -524,6 +528,7 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None, lls_defocu
     })
 
     pred_wave = pred.wave(size=100)
+    pred_rms = np.linalg.norm(pred.amplitudes_noll_waves)
 
     fig = plt.figure(figsize=(10, 6))
     gs = fig.add_gridspec(4, 3)
@@ -538,6 +543,7 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None, lls_defocu
     plot_wavefront(
         ax_wavefront,
         pred_wave,
+        rms=pred_rms,
         label='Predicted wavefront',
         vcolorbar=True,
     )
