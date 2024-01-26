@@ -485,7 +485,7 @@ def remove_interference_pattern(
             axes[0, 2].set_title('YZ')
             savesvg(fig, f'{plot}_interference_pattern.svg')
 
-        return otf
+        return np.zeros_like(otf)
 
 
 def pix_shift_to_phase_ramp(pix_shift, array_shape):
