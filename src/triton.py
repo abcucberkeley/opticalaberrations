@@ -130,7 +130,7 @@ def main(args=None):
             logger.info("Launching Triton inference server")
             triton.serve()
             
-    elif args.model.ext == '.h5':
+    elif args.model.suffix == '.h5':
         gpus = tf.config.experimental.list_physical_devices("GPU")
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
