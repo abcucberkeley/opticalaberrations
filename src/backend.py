@@ -710,7 +710,7 @@ def eval_rotation(
                     confident = 1
                     rho = 0  # confident-Z
                 else:
-                    confident = np.abs(rho) / std_rho > 1  # is SNR above 1?
+                    confident = np.abs(rho) / std_rho > 4   # is SNR above 4?
 
                 if confident and np.abs(rho) > 0:  # confident-A
                     preds[mode.index_ansi] = rho

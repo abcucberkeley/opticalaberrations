@@ -7,6 +7,7 @@ from typing import Any, Union, Optional
 from functools import lru_cache
 
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 plt.set_loglevel('error')
 from tifffile import imwrite
 
@@ -231,11 +232,12 @@ def remove_interference_pattern(
     blured_psf = ndimage.gaussian_filter(psf, sigma=1.1)
 
     # exclude values close to the edge in Z for finding our template
-    blured_psf[0: zborder] = 0
-    blured_psf[blured_psf.shape[0]-zborder:blured_psf.shape[0]] = 0
+    restricted_blurred = blured_psf.copy()
+    restricted_blurred[0: zborder] = 0
+    restricted_blurred[blured_psf.shape[0]-zborder:blured_psf.shape[0]] = 0
 
-    # get max pixel in the image
-    max_poi = list(np.unravel_index(np.nanargmax(blured_psf, axis=None), blured_psf.shape))
+    # get max pixel in the restricted_blurred image
+    max_poi = list(np.unravel_index(np.nanargmax(restricted_blurred, axis=None), restricted_blurred.shape))
 
     # crop a window around the object for template matching
     template_poi = max_poi.copy()
@@ -245,7 +247,6 @@ def remove_interference_pattern(
     template_poi[2] = np.clip(template_poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
 
     high_snr = measure_snr(psf) > 30  # SNR good enough for template
-
     if high_snr:
         # logger.info('Using template')
         init_pos = [p-half_length for p in template_poi]
@@ -423,18 +424,53 @@ def remove_interference_pattern(
                 sharey=False,
                 sharex=False
             )
-
+            transparency = 0.6
+            marker_color = 'blue'
             for ax in range(3):
-                m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='hot')
-                m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot')
-                m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66)
+                if ax == 0:
+                    axes[0, ax].plot(p[2], p[1], marker='x', ls='', color=marker_color)
+                    axes[2, ax].plot(p[2], p[1], marker='x', ls='', color=marker_color, alpha=transparency)
+                    axes[2, ax].add_patch(patches.Rectangle(
+                        xy=(p[2] - min_distance, p[1] - min_distance),
+                        width=min_distance * 2,
+                        height=min_distance * 2,
+                        fill=None,
+                        color=marker_color,
+                        alpha=transparency
+                    ))
+                elif ax == 1:
+                    axes[0, ax].plot(p[2], p[0], marker='x', ls='', color=marker_color)
+                    axes[2, ax].plot(p[2], p[0], marker='x', ls='', color=marker_color, alpha=transparency)
+                    axes[2, ax].add_patch(patches.Rectangle(
+                        xy=(p[2] - min_distance, p[0] - min_distance),
+                        width=min_distance * 2,
+                        height=min_distance * 2,
+                        fill=None,
+                        color=marker_color,
+                        alpha=transparency
+                    ))
+
+                elif ax == 2:
+                    axes[0, ax].plot(p[1], p[0], marker='x', ls='', color=marker_color)
+                    axes[2, ax].plot(p[1], p[0], marker='x', ls='', color=marker_color, alpha=transparency)
+                    axes[2, ax].add_patch(patches.Rectangle(
+                        xy=(p[1] - min_distance, p[0] - min_distance),
+                        width=min_distance * 2,
+                        height=min_distance * 2,
+                        fill=None,
+                        color=marker_color,
+                        alpha=transparency
+                    ))
+                m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='hot', aspect='auto')
+                m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot', aspect='auto')
+                m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66, aspect='auto')
 
             for ax, m, label in zip(
                     range(3),
                     [m1, m2, m3],
                     [f'Inputs (MIP)', 'Kernel', 'Peak detection\n(No objects were detected)']
             ):
-                divider = make_axes_locatable(ax)
+                divider = make_axes_locatable(axes[ax, -1])
                 cax = divider.append_axes("right", size="5%", pad=0.1)
                 cb = plt.colorbar(m, cax=cax)
                 cax.yaxis.set_label_position("right")
@@ -448,7 +484,7 @@ def remove_interference_pattern(
             axes[0, 2].set_title('YZ')
             savesvg(fig, f'{plot}_interference_pattern.svg')
 
-        return otf
+        return np.zeros_like(otf)
 
 
 def pix_shift_to_phase_ramp(pix_shift, array_shape):
@@ -753,7 +789,7 @@ def fourier_embeddings(
         freq_strength_threshold: float = 0.01,
         pois: Any = None,
         remove_interference: bool = True,
-        plot_interference: bool = False,
+        plot_interference: bool = False,        # because it's broken.
         embedding_option: str = 'spatial_planes',
         digital_rotations: Optional[int] = None,
         model_psf_shape: tuple = (64, 64, 64),

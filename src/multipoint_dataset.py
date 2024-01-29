@@ -7,6 +7,7 @@ import logging
 import sys
 import os
 import time
+import subprocess
 import ujson
 from functools import partial
 from typing import Any, Optional, Union

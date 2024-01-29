@@ -170,6 +170,8 @@ def main(args=None):
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
             )
+        elif args.target == 'templates':
+            savepath = eval.plot_templates(args.model)
         elif args.target == 'sizes':
             savepath = eval.evaluate_object_sizes(
                 args.model,
