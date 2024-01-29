@@ -2156,8 +2156,8 @@ def random_samples(
 def plot_templates(model: Path, num_objs: Optional[int] = 1):
     plt.rcParams.update({
         'font.size': 12,
-        'axes.titlesize': 14,
-        'axes.labelsize': 14,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
         'xtick.labelsize': 12,
         'ytick.labelsize': 12,
         'legend.fontsize': 12,
@@ -2170,9 +2170,9 @@ def plot_templates(model: Path, num_objs: Optional[int] = 1):
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
-    photons = np.arange(0, 1e6+5e4, 5e4)
-    photons[0] = 1e4
-    waves = np.arange(1e-5, .55, step=.05).round(2)
+    photon_step = 10e3
+    photons = np.arange(photon_step, 1e5+photon_step, photon_step).astype(int)
+    waves = np.arange(0, .55, step=.05).round(2)
 
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
@@ -2184,7 +2184,7 @@ def plot_templates(model: Path, num_objs: Optional[int] = 1):
 
         savepath = outdir / f"m{i}"
 
-        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(14, 10))
+        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(12, 14))
 
         for t, a in enumerate(waves[::-1]):
             for j, ph in enumerate(photons):
@@ -2193,6 +2193,13 @@ def plot_templates(model: Path, num_objs: Optional[int] = 1):
 
                 w = Wavefront(phi, lam_detection=gen.lam_detection)
                 kernel = gen.single_psf(phi=w, meta=False)
+
+                if j == 0:
+                    p2v = np.round(w.peak2valley(), 1)
+                    axes[t, j].set_ylabel(f'{p2v:.1f}$\lambda$')
+
+                if t == len(waves) - 1:
+                    axes[t, j].set_xlabel(f"{int(ph / 1e3)}$\\times 10^3$")
 
                 img = simulate_beads(
                     psf=kernel,
@@ -2203,9 +2210,13 @@ def plot_templates(model: Path, num_objs: Optional[int] = 1):
                     noise=True,
                     fill_radius=0
                 )
+                img -= 100
+                img[img < 0] = 0
 
                 axes[t, j].imshow(np.max(img, axis=0) ** .5, cmap='hot')
-                axes[t, j].axis('off')
+                axes[t, j].set_xticks([])
+                axes[t, j].set_yticks([])
+                # axes[t, j].axis('off')
                 axes[t, j].set_title(
                     f"{int(np.max(img) / 1e3)}$\\times 10^3$" if np.max(img) > 1e4 else int(np.max(img)),
                     # f"{int(np.sum(img)/1e6)}$\\times 10^6$" if np.sum(img) > 1e6 else int(np.sum(img)),
@@ -2391,7 +2402,7 @@ def evaluate_modes(
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
 
-    # plot_templates(model=model, num_objs=1)
+    plot_templates(model=model, num_objs=1)
 
     levels = [
         0, .05, .1, .15, .2, .25, .3, .35, .4, .45,

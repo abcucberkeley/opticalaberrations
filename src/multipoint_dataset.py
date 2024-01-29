@@ -7,6 +7,7 @@ import logging
 import sys
 import os
 import time
+import subprocess
 import ujson
 from functools import partial
 from typing import Any, Optional, Union
@@ -862,6 +863,14 @@ def main(args=None):
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]
     multiprocess(func=sample, jobs=jobs, cores=args.cpu_workers)
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+
+    if os.name != 'nt' and os.getenv('RUNNING_IN_DOCKER') is None:
+        logger.info(f"Updating file permissions to {args.outdir}")
+        subprocess.run(
+            f"find {str(Path(args.outdir).resolve())}" + r" -user $USER -exec chmod g+wrx {} +",
+            shell=True
+        )
+        logger.info(f"Updating file permissions complete.")
 
 
 if __name__ == "__main__":
