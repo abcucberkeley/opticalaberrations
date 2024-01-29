@@ -1,6 +1,6 @@
 # derivative.def
 Bootstrap: library
-From: dmilkie/opticalaberrations/opticalaberrations:develop_tf_cuda_12_3    # change this to "<myuser>/default/ubuntu:focal" if using Sylabs Cloud
+From: dmilkie/opticalaberrations/opticalaberrations:develop_tf_cuda_12_3    # this gets built using Sylabs Cloud: https://cloud.sylabs.io/builder
 %post
 # Add commands here:
 #   apt-get update
