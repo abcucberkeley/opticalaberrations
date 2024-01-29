@@ -11,7 +11,6 @@ import time
 
 import tensorflow as tf
 import numpy as np
-import model_navigator as nav
 
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 from tensorflow.python.saved_model import tag_constants, signature_constants
@@ -322,6 +321,8 @@ def optimize_model(
     dtype: Any = 'float16',
     batch_size: int = 1024,
 ):
+    import model_navigator as nav
+
     gpus = tf.config.experimental.list_physical_devices("GPU")
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
