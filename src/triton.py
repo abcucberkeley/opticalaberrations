@@ -5,15 +5,12 @@ import numpy as np
 from pathlib import Path
 
 
-import tensorflow as tf  
-import model_navigator as nav  
+import tensorflow as tf
 from pytriton.decorators import batch
 from pytriton.model_config import ModelConfig, Tensor
 from pytriton.triton import Triton
 
 import backend
-import utils
-import data_utils
 import cli
 
 logging.basicConfig(
@@ -111,17 +108,16 @@ def main(args=None):
     logger.info(args) 
 
     if args.model.suffix == '.nav':
-        
+        import model_navigator as nav
+
         package = nav.package.load(path=args.model)
         pytriton_adapter = nav.pytriton.PyTritonAdapter(package=package, strategy=nav.MaxThroughputStrategy())
         runner = pytriton_adapter.runner
         runner.activate()
 
-
         @batch
         def infer_func(**inputs):
             return runner.infer(inputs)
-
 
         with Triton() as triton:
             triton.bind(
