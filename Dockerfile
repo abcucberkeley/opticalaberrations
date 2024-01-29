@@ -1,6 +1,9 @@
 #   to build image, run container, interactively:
 # docker rm -f ml_cont ; docker build . -t ml --build-arg BRANCH_NAME=$(git branch --show-current) --target Torch_CUDA_12_3 --progress=plain && docker run -it --name ml_cont --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864  -v ${PWD}:/app/opticalaberrations --workdir /app/opticalaberrations  ml /bin/bash
 
+# to build the TF_CUDA_12_3 image: 
+# docker build . -t ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 --build-arg BRANCH_NAME=$(git branch --show-current) --target TF_CUDA_12_3 --build-arg TF_IMAGE=22.12 --progress=plain
+#
 # to run on a ubuntu system:
 # install docker: https://docs.docker.com/engine/install/ubuntu/
 # set docker permissions for non-root: https://docs.docker.com/engine/install/linux-postinstall/ 
@@ -12,7 +15,14 @@
 
 # 'conda install tensorflow-gpu' will not install GPU version because GPU is not detected during 'docker build' unless DOCKER_BUILDKIT=0, so we just do pip install of everything.
 
-# Pass in a target when building to choose the TF Image with the version you want: --build-arg BRANCH_NAME=$(git branch --show-current) --target CUDA_12_3
+# NSIGHT NOT WORKING YET, STILL DOESN'T SHOW GPU METRICS
+# nvidia nsight profiling:
+# https://developer.nvidia.com/nvidia-development-tools-solutions-err_nvgpuctrperm-permission-issue-performance-counters#AllUsersTag
+
+# docker run --rm -it --gpus all --ipc=host --cap-add=SYS_ADMIN --privileged=true --security-opt seccomp=unconfined --ulimit memlock=-1 --ulimit stack=67108864 -v ${PWD}:/app/opticalaberrations  ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 /bin/bash
+# sudo nsys profile --gpu-metrics-device all  pytest tests/test_ao.py::test_predict_sample --disable-warnings --color=yes -vvv
+
+# Pass in a target when building to choose the TF Image with the version you want: --build-arg BRANCH_NAME=$(git branch --show-current) --target TF_CUDA_12_3
 # For github actions, this is how we will build multiple docker images.
 # https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html
 # https://docs.nvidia.com/deeplearning/frameworks/tensorflow-release-notes/rel-23-12.html#rel-23-12
@@ -56,7 +66,8 @@ ADD https://raw.githubusercontent.com/abcucberkeley/opticalaberrations/${BRANCH_
 RUN echo "branch=${BRANCH_NAME}" && git clone -n -b ${BRANCH_NAME} --depth 1 --filter=blob:none https://github.com/abcucberkeley/opticalaberrations.git 
 WORKDIR /docker_install/opticalaberrations
 RUN git checkout HEAD requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off  &&  pip cache purge
+# ADD requirements.txt requirements.txt 
+RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off  &&  pip cache purge || true
 
 # Our repo location will be /app/opticalabberations
 # You can switch to this location with "repo" alias command
@@ -76,7 +87,7 @@ RUN   groupadd --gid $USER_GID $USERNAME && \
     #
     # [Optional] Add sudo support. Omit if you don't need to install software after connecting.        
     echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
-    && chmod 0440 /etc/sudoers.d/$USERNAME
+    && chmod 0440 /etc/sudoers.d/$USERNAME || true
 
 # [Optional] Set the default user. Omit if you want to keep the default as root.
 # USER $USERNAME
@@ -125,7 +136,7 @@ ADD https://raw.githubusercontent.com/abcucberkeley/opticalaberrations/${BRANCH_
 RUN echo "branch=${BRANCH_NAME}" && git clone -n -b ${BRANCH_NAME} --depth 1 --filter=blob:none https://github.com/abcucberkeley/opticalaberrations.git 
 WORKDIR /docker_install/opticalaberrations
 RUN git checkout HEAD requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off 
+RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off  &&  pip cache purge || true
 
 # Our repo location will be /app/opticalabberations
 # You can switch to this location with "repo" alias command
