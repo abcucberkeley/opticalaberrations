@@ -7,7 +7,7 @@ import logging
 import sys
 import os
 import time
-import subprocess
+import uuid
 import ujson
 from functools import partial
 from typing import Any, Optional, Union
@@ -405,11 +405,34 @@ def create_synthetic_sample(
             template = wavefronts.get("../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat")
 
         if denoising_dataset:
-            outdir = savedir / 'noisy'
-            outdir.mkdir(exist_ok=True, parents=True)
+            basedir = savedir / rf"{re.sub(r'.*/lattice/', '', str(gen.psf_type)).split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
+            basedir = basedir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
+            basedir = basedir / f"z{gen.n_modes}"
 
-            gtdir = savedir / 'gt'
+            outdir = basedir / 'noisy'
+
+            if gen.distribution == 'powerlaw':
+                outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
+            else:
+                outdir = outdir / f"{gen.distribution}"
+
+            outdir = outdir / f"photons_{photon_range[0]}-{photon_range[1]}"
+            outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
+            gtdir = basedir / 'gt'
+            if gen.distribution == 'powerlaw':
+                gtdir = gtdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
+            else:
+                gtdir = gtdir / f"{gen.distribution}"
+
+            gtdir = gtdir / f"photons_{photon_range[0]}-{photon_range[1]}"
+            gtdir = gtdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
+            outdir.mkdir(exist_ok=True, parents=True)
             gtdir.mkdir(exist_ok=True, parents=True)
+
         else:
             gtdir = None
             outdir = savedir / rf"{re.sub(r'.*/lattice/', '', str(gen.psf_type)).split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
@@ -461,7 +484,6 @@ def create_synthetic_sample(
 
         if emb:
             try:  # check if file already exists and not corrupted
-
                 if override:
                     raise Exception(f'Override {filename}')
 
@@ -860,7 +882,12 @@ def main(args=None):
         skip_remove_background=args.skip_remove_background
     )
     logger.info(f"Output folder: {Path(args.outdir).resolve()}")
-    jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]
+
+    if args.denoising_dataset:
+        jobs = [f"{uuid.uuid4()}" for k in range(args.iters)]
+    else:
+        jobs = [f"{int(args.filename) + k}" for k in range(args.iters)]
+
     multiprocess(func=sample, jobs=jobs, cores=args.cpu_workers)
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
