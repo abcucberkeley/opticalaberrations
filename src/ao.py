@@ -197,6 +197,14 @@ def parse_args(args):
     denoise.add_argument("input", type=Path, help="path to input .tif file")
     denoise.add_argument("output", type=Path, help="path to denoised output .tif file", default=None)
     denoise.add_argument("--window_size", default='64-64-64', type=str, help='size of the window to denoise around each point of interest')
+    denoise.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
+    denoise.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
 
     predict_sample = subparsers.add_parser("predict_sample")
     predict_sample.add_argument("model", type=Path, help="path to pretrained tensorflow model")
