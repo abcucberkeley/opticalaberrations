@@ -1,15 +1,15 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="optimize" type="PythonConfigurationType" factoryName="Python" folderName="utils">
     <module name="opticalaberrations" />
+    <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
       <env name="PYTHONUNBUFFERED" value="1" />
     </envs>
     <option name="SDK_HOME" value="$USER_HOME$/anaconda3/envs/test/bin/python" />
-    <option name="SDK_NAME" value="test" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
-    <option name="IS_MODULE_SDK" value="false" />
+    <option name="IS_MODULE_SDK" value="true" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />

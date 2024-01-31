@@ -17,6 +17,9 @@ def test_tensorflow(kargs):
     logging.info(f'TensorFlow version = {tf.version.VERSION}')
     print(f'\n\nTensorFlow version = {tf.version.VERSION}\n')
 
+    devices = tf.config.list_physical_devices()
+    print(devices)
+
     physical_devices = tf.config.list_physical_devices('GPU')
 
     strategy = tf.distribute.MirroredStrategy(
@@ -30,5 +33,5 @@ def test_tensorflow(kargs):
     else:
         gpu_model = None
 
-    logging.info(f'Number of active GPUs: {gpu_workers}, {gpu_model}')
+    print(f'Number of active GPUs: {gpu_workers}, {gpu_model}')
     assert gpu_workers > 0

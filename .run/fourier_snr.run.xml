@@ -1,6 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="fourier_snr" type="PythonConfigurationType" factoryName="Python" folderName="ao">
     <module name="opticalaberrations" />
+    <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
@@ -11,6 +12,35 @@
     <option name="IS_MODULE_SDK" value="true" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="DockerContainerSettingsRunConfigurationExtension">
+      <option name="envVars">
+        <list />
+      </option>
+      <option name="extraHosts">
+        <list />
+      </option>
+      <option name="links">
+        <list />
+      </option>
+      <option name="networkDisabled" value="false" />
+      <option name="networkMode" value="bridge" />
+      <option name="portBindings">
+        <list />
+      </option>
+      <option name="publishAllPorts" value="false" />
+      <option name="runCliOptions" value="--entrypoint= --rm --gpu all" />
+      <option name="version" value="2" />
+      <option name="volumeBindings">
+        <list>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/opt/project" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="$PROJECT_DIR$" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
+        </list>
+      </option>
+    </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
     <option name="PARAMETERS" value="fourier_snr ../examples/LabVIEW/lightsheet.tif" />

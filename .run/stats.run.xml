@@ -12,6 +12,35 @@
     <option name="IS_MODULE_SDK" value="true" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="DockerContainerSettingsRunConfigurationExtension">
+      <option name="envVars">
+        <list />
+      </option>
+      <option name="extraHosts">
+        <list />
+      </option>
+      <option name="links">
+        <list />
+      </option>
+      <option name="networkDisabled" value="false" />
+      <option name="networkMode" value="bridge" />
+      <option name="portBindings">
+        <list />
+      </option>
+      <option name="publishAllPorts" value="false" />
+      <option name="runCliOptions" value="--entrypoint= --rm --gpu all" />
+      <option name="version" value="2" />
+      <option name="volumeBindings">
+        <list>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/opt/project" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="$PROJECT_DIR$" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
+        </list>
+      </option>
+    </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/data.py" />
     <option name="PARAMETERS" value="stats &quot;C:\SPIM\Common\Calculations\Python\Phase Retrieval ML\opticalaberrations\dataset\fit_125\YuMB_lambda510\z200-y125-x125\z64-y64-x64\z15\powerlaw_gamma_0p75&quot;" />
