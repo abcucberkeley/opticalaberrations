@@ -192,6 +192,20 @@ def parse_args(args):
         help='a toggle to run predictions through docker container'
     )
 
+    denoise = subparsers.add_parser("denoise")
+    denoise.add_argument("model", type=Path, help="path to pretrained denoise tensorflow model", default=r'U:\Data\TestsForThayer\denoisemodels\20231107_simulatedBeads_v3')
+    denoise.add_argument("input", type=Path, help="path to input .tif file")
+    denoise.add_argument("output", type=Path, help="path to denoised output .tif file", default=None)
+    denoise.add_argument("--window_size", default='64-64-64', type=str, help='size of the window to denoise around each point of interest')
+    denoise.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
+    denoise.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
+
     predict_sample = subparsers.add_parser("predict_sample")
     predict_sample.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_sample.add_argument("input", type=Path, help="path to input .tif file")
@@ -1230,6 +1244,14 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
+                )
+
+            elif args.func == 'denoise':
+                experimental.denoise(
+                    inputFullpath=args.input,
+                    outputFullpath=args.output,
+                    modelPath=args.model,
+                    window_size=tuple(int(i) for i in args.window_size.split('-')),
                 )
 
             elif args.func == 'predict_large_fov':
