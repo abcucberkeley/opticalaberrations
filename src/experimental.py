@@ -24,7 +24,7 @@ import numpy as np
 
 import pandas as pd
 import seaborn as sns
-from tifffile import imread, imwrite, TiffFile
+from tifffile import imread, imwrite, TiffFile, memmap
 from line_profiler_pycharm import profile
 from tqdm import tqdm
 
@@ -48,6 +48,7 @@ from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern
 from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad
+from CARE_Prediction_Frame import CARE_Prediction_Frame
 
 import logging
 logger = logging.getLogger('')
@@ -2717,3 +2718,23 @@ def decon(
         )
     return savepath
 
+
+def denoise(inputFullpath: Union[Path, str],
+            outputFullpath,
+            modelPath: Union[Path, str],
+            window_size: tuple,
+):
+    memmap_image = memmap(inputFullpath)    # get image shape without loading whole image
+    image_shape = np.array(memmap_image.shape)
+    n_tiles = np.ceil(image_shape / window_size).astype(int)
+
+    if outputFullpath is None:
+        outputFullpath = f"{Path(inputFullpath).with_suffix('')}_denoised.tif"
+
+    CARE_Prediction_Frame(
+        inputFullpath=inputFullpath,
+        outputFullpath=outputFullpath,
+        modelPath=modelPath,
+        basedir=Path(modelPath).parent,
+        n_tiles=None,
+    )
