@@ -14,6 +14,7 @@ MODES=15
 CLUSTER='lsf'
 DEFAULT='--positional_encoding_scheme default --batch_size 2048 --lr 5e-4 --wd 5e-6 --opt adamw'
 LAMB='--batch_size 2048 --lr 1e-3 --wd 1e-2 --opt lamb'
+APPTAINER="--apptainer ../develop_CUDA_12_3.sif"
 
 SUBSET='fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
@@ -51,40 +52,40 @@ do
   
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
-  # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  # --task "$CONFIG $LAMB --patches '8-8-8-8' --repeats '2-2-2-2'" \
-  # --taskname $NETWORK \
-  # --name new/$SUBSET/$NETWORK-$MODES-$DIR-P8-R2222
+  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG $LAMB --patches '8-8-8-8' --repeats '2-2-2-2'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P8-R2222
 
-  # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  # --task "$CONFIG $LAMB --patches '16-16-16-16' --repeats '2-2-2-2'" \
-  # --taskname $NETWORK \
-  # --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R2222
+  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG $LAMB --patches '16-16-16-16' --repeats '2-2-2-2'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R2222
 
-  # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  # --task "$CONFIG $LAMB --patches '16-16-8-8' --repeats '2-2-2-2'" \
-  # --taskname $NETWORK \
-  # --name new/$SUBSET/$NETWORK-$MODES-$DIR-P168-R2222
+  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG $LAMB --patches '16-16-8-8' --repeats '2-2-2-2'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P168-R2222
 
-  python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
   --task "$CONFIG $LAMB --patches '32-32-16-16' --repeats '2-2-2-2'" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-P3216-R2222
 
-  # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  # --task "$CONFIG $LAMB --patches '32-16-8-8' --repeats '1-2-2-2'" \
-  # --taskname $NETWORK \
-  # --name new/$SUBSET/$NETWORK-$MODES-$DIR-P32168-R1222
+  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG $LAMB --patches '32-16-8-8' --repeats '1-2-2-2'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P32168-R1222
 
-  #python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  #--task "$CONFIG $LAMB" \
-  #--taskname $NETWORK \
-  #--name new/$SUBSET/$NETWORK-$MODES-$DIR
+  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG $LAMB" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR
 
-  # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  # --task "$CONFIG $DEFAULT" \
-  # --taskname $NETWORK \
-  # --name new/$SUBSET/$NETWORK-$MODES-$DIR-default
+  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  --task "$CONFIG $DEFAULT" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-default
 done
 
 

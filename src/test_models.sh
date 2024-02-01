@@ -18,6 +18,7 @@ CLUSTER='slurm'
 TIMELIMIT='24:00:00'  #hh:mm:ss
 NETWORK='opticalnet'
 SKIP_REMOVE_BACKGROUND=false
+APPTAINER="--apptainer ../develop_CUDA_12_3.sif"
 
 TRAINED_MODELS=(
   "YuMB-lambda510-R1242"
@@ -80,10 +81,10 @@ do
       do
         if [ $CLUSTER = 'slurm' ];then
           DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
-          JOB="${CLUSTER} test.py --timelimit $TIMELIMIT --dependency singleton --partition abc_a100 --mem=500GB --cpus 16 --gpus 4 --exclusive"
+          JOB="test.py --timelimit $TIMELIMIT --dependency singleton --partition abc_a100 --mem=500GB --cpus 16 --gpus 4 --exclusive"
         else
           DATA="/groups/betzig/betziglab/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
-          JOB="${CLUSTER} test.py --timelimit $TIMELIMIT --dependency singleton --partition gpu_a100 --cpus 8 --gpus 4"
+          JOB="test.py --timelimit $TIMELIMIT --dependency singleton --partition gpu_a100 --cpus 8 --gpus 4"
         fi
 
         for SIM in '' #'--use_theoretical_widefield_simulator'
@@ -92,18 +93,18 @@ do
           do
               CONFIG=" $SIM $PREP --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
-              python manager.py $JOB \
+              python manager.py ${CLUSTER} $APPTAINER $JOB \
               --task "${MODEL}.h5 --num_beads 1 $CONFIG snrheatmap" \
               --taskname na_$NA \
               --name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
-              #python manager.py $JOB \
+              #python manager.py ${CLUSTER} $APPTAINER $JOB \
               #--task "${MODEL}.h5  $CONFIG densityheatmap" \
               #--taskname na_$NA \
               #--name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
-              #python manager.py $CLUSTER test.py --dependency singleton --partition $PARTITION --mem $MEM --cpus $CPUS --gpus $GPUS $EXCLUSIVE \
-              #--task "${MODEL}.h5 --niter $i --datadir $DATA --n_samples $MAX --wavelength $LAM --psf_type $PSF_TYPE --na $NA --batch_size $BATCH --eval_sign $EVALSIGN $ROTATIONS snrheatmap" \
+              #python manager.py ${CLUSTER} $APPTAINER $JOB \
+              #--task "${MODEL}.h5 $CONFIG snrheatmap" \
               #--taskname na_$NA \
               #--name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
               echo

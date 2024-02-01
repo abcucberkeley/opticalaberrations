@@ -1,4 +1,3 @@
-import logging
 from pathlib import Path
 from subprocess import call
 import cli
@@ -31,7 +30,7 @@ def parse_args(args):
 
     slurm.add_argument(
         "--taskname", action='append',
-        help='allies name for each task'
+        help='name for each task'
     )
 
     slurm.add_argument(
@@ -75,7 +74,7 @@ def parse_args(args):
 
     slurm.add_argument(
         "--name", default='train', type=str,
-        help='allies name for this job'
+        help='name for this job'
     )
 
     slurm.add_argument(
@@ -90,13 +89,19 @@ def parse_args(args):
 
     slurm.add_argument(
         "--exclusive", action='store_true',
-        help='allies name for this job'
+        help='exclusive access to all resources on the requested node'
     )
 
     slurm.add_argument(
         "--timelimit", default=None, type=str,
         help='execution timelimit string'
     )
+
+    slurm.add_argument(
+        "--apptainer", default=None, type=str,
+        help='path to apptainer (*.sif) image to use for this job'
+    )
+
 
     lsf = subparsers.add_parser("lsf", help='use LSF to submit jobs')
 
@@ -117,7 +122,7 @@ def parse_args(args):
 
     lsf.add_argument(
         "--taskname", action='append',
-        help='allies name for each task'
+        help='name for each task'
     )
 
     lsf.add_argument(
@@ -141,7 +146,7 @@ def parse_args(args):
 
     lsf.add_argument(
         "--name", default='train', type=str,
-        help='allies name for this job'
+        help='name for this job'
     )
 
     lsf.add_argument(
@@ -161,10 +166,49 @@ def parse_args(args):
 
     lsf.add_argument(
         "--exclusive", action='store_true',
-        help='allies name for this job'
+        help='name for this job'
     )
 
-    default = subparsers.add_parser("default", help='run a job using default python')
+    lsf.add_argument(
+        "--apptainer", default=None, type=str,
+        help='path to apptainer (*.sif) image to use for this job'
+    )
+
+
+    docker = subparsers.add_parser("docker", help='use docker to run jobs on your local machine')
+
+    docker.add_argument(
+        "script", type=str,
+        help='path to script to run'
+    )
+
+    docker.add_argument(
+        "--image", default='ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3', type=str,
+        help='docker image to use for this job'
+    )
+
+    docker.add_argument(
+        "--python", default=f'python', type=str,
+        help='path to ext python to run program with'
+    )
+
+    docker.add_argument(
+        "--flags", default='', type=str,
+        help='any additional flags you want to run the script with'
+    )
+
+    docker.add_argument(
+        "--outdir", default='../models', type=str,
+        help='output directory'
+    )
+
+    docker.add_argument(
+        "--name", default='train', type=str,
+        help='name for this job'
+    )
+
+
+    default = subparsers.add_parser("default", help='run a job using conda on your local machine')
 
     default.add_argument(
         "script", type=str,
@@ -182,18 +226,13 @@ def parse_args(args):
     )
 
     default.add_argument(
-        "--outdir", default='/clusterfs/nvme/thayer/opticalaberrations/models', type=str,
+        "--outdir", default=f'{Path.home()}/opticalaberrations/models', type=str,
         help='output directory'
     )
 
     default.add_argument(
         "--name", default='train', type=str,
-        help='allies name for this job'
-    )
-
-    default.add_argument(
-        "--exclusive", action='store_true',
-        help='allies name for this job'
+        help='name for this job'
     )
 
     return parser.parse_args(args)
@@ -201,95 +240,112 @@ def parse_args(args):
 
 def main(args=None):
     args = parse_args(args)
-    logging.info(args)
 
     outdir = Path(f"{args.outdir}/{args.name}").resolve()
     outdir.mkdir(exist_ok=True, parents=True)
 
     profiler = f"/usr/bin/time -v -o {outdir}/{args.script.split('.')[0]}_profile.log "
 
-    if args.cmd == 'default':
+    if args.cmd == 'local':
         sjob = profiler
         sjob += f"{args.python} "
         sjob += f"{args.script} "
         sjob += f" --outdir {outdir} {args.flags} 2>&1 | tee {outdir}/{args.script.split('.')[0]}.log"
 
-        logging.info(sjob)
+        print(sjob)
         call([sjob], shell=True)
 
+    elif args.cmd == 'docker':
+        docker_job = "docker run --rm -it --gpus all --ipc=host "
+        docker_job += f" -v {Path.cwd().parent}:/app/opticalaberrations -w /app/opticalaberrations/src "
+        docker_job += f" {args.image} "
+        docker_job += f" \"{args.python} {args.script} {args.flags}\" "
+
+        print(docker_job)
+        call([docker_job], shell=True)
+
     elif args.cmd == 'slurm':
-        sjob = '/usr/bin/sbatch '
-        sjob += f' --qos={args.qos} '
-        sjob += f' --partition={args.partition} '
+        env = 'python' if args.apptainer is not None else args.python
+
+        tasks = ""
+        for i, (t, n) in enumerate(zip(args.task, args.taskname)):
+            tasks = f" {env} {args.script} {t} --cpu_workers -1 --gpu_workers -1 --outdir {outdir/n}"
+            tasks += ' ; ' if i < len(args.task)-1 else ''
+
+        sjob = "/usr/bin/sbatch"
+        sjob += f" --qos={args.qos}"
+        sjob += f" --partition={args.partition}"
 
         if args.constraint is not None:
-            sjob += f" -C '{args.constraint}' "
+            sjob += f" -C '{args.constraint}'"
 
         if args.exclusive:
-            sjob += f"--exclusive "
+            sjob += f" --exclusive"
         else:
             if args.gpus > 0:
-                sjob += f' --gres=gpu:{args.gpus} '
+                sjob += f" --gres=gpu:{args.gpus}"
 
-            sjob += f' --cpus-per-task={args.cpus} '
-            sjob += f" --mem='{args.mem}' "
+            sjob += f" --cpus-per-task={args.cpus}"
+            sjob += f" --mem='{args.mem}'"
 
         if args.nodelist is not None:
-            sjob += f" --nodelist='{args.nodelist}' "
+            sjob += f" --nodelist='{args.nodelist}'"
 
         if args.dependency is not None:
-            sjob += f" --dependency={args.dependency} "
+            sjob += f" --dependency={args.dependency}"
 
         if args.timelimit is not None:
-            sjob += f" --time={args.timelimit} "
+            sjob += f" --time={args.timelimit}"
 
-        sjob += f" --job-name={args.name} "
+        sjob += f" --job-name={args.name}"
         sjob += f" --output={outdir}/{args.script.split('.')[0]}.log"
-        sjob += f" --export=ALL,"
-        sjob += f"PROFILER='{profiler}',"
-        sjob += f"SCRIPT='{args.script}',"
-        sjob += f"PYTHON='{args.python}',"
-        sjob += f"JOBS='{len(args.task)}',"
+        sjob += f" --export=ALL"
 
-        for i, (t, n) in enumerate(zip(args.task, args.taskname)):
-            sjob += f"TASK_{i + 1}='{profiler} {args.python} {args.script} {t} --cpu_workers {args.cpus} --gpu_workers {args.gpus} --outdir {outdir/n}'"
-            sjob += ',' if i < len(args.task)-1 else ' '
+        if args.apptainer is not None:
+            sjob += f' --wrap="apptainer exec --nv --bind /clusterfs:/clusterfs \"{args.apptainer}\" {tasks}"'
+        else:
+            sjob += f' --wrap=\"{tasks}\"'
 
-        sjob += args.job
-        logging.info(sjob)
+        print(sjob)
         call([sjob], shell=True)
 
     elif args.cmd == 'lsf':
+        env = 'python' if args.apptainer is not None else args.python
+
+        tasks = ""
+        for i, (t, n) in enumerate(zip(args.task, args.taskname)):
+            tasks = f" {env} {args.script} {t} --cpu_workers -1 --gpu_workers -1 --outdir {outdir/n}"
+            tasks += ' ; ' if i < len(args.task)-1 else ''
+
         sjob = 'bsub'
         sjob += f' -q {args.partition}'
 
         if args.gpus > 0:
-            if args.partition == 'gpu_a100' or args.partition == 'gpu_h100':
+            if args.partition == 'gpu_a100':
                 sjob += f' -gpu "num={args.gpus}:nvlink=yes"'
             else:
                 sjob += f' -gpu "num={args.gpus}"'
 
         if args.dependency is not None:
-            sjob += f'-w "done({args.name})"'
+            sjob += f' -w "done({args.name})"'
 
         if args.timelimit is not None:
             sjob += f" --We {args.timelimit} "
 
-        sjob += f' -n {args.cpus}'
+        sjob += f" -n {args.cpus}"
         sjob += f" -J {args.name}"
         sjob += f" -o {outdir}/{args.script.split('.')[0]}.log"
 
-        tasks = ""
-        for i, (t, n) in enumerate(zip(args.task, args.taskname)):
-            tasks += f"{args.python} {args.script} {t} --cpu_workers -1 --gpu_workers -1 --outdir {outdir/n}"
-            tasks += ' ; ' if i < len(args.task)-1 else ''
+        if args.apptainer is not None:
+            sjob += f' \"apptainer exec --nv --bind /groups/betzig/betziglab:/groups/betzig/betziglab \"{args.apptainer}\" {tasks}\"'
+        else:
+            sjob += f' \"{tasks}\"'
 
-        sjob = f'{sjob} "{tasks}"'
-        logging.info(sjob)
+        print(sjob)
         call([sjob], shell=True)
 
     else:
-        logging.error('Unknown action')
+        print('Unknown action')
 
 
 if __name__ == "__main__":
