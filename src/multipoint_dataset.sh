@@ -1,5 +1,4 @@
 #!/bin/bash
-ENV=~/anaconda3/envs/ml/bin/python
 
 LAMBDA=.510
 NA=1.0
@@ -17,7 +16,7 @@ MODES=15
 MODE_DIST='pyramid'
 
 DENOISE=true
-DENOISER='pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
+DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
 HANDLER=lsf
 TITLE='denoise_fourier_filter_125nm_dataset'
@@ -42,12 +41,22 @@ MODALITIES=(
 )
 
 if [ $HANDLER = 'lsf' ];then
-  OUTDIR="/groups/betzig/betziglab/thayer/dataset/${TITLE}/${DATASET}"
+  MYDIR="/groups/betzig/betziglab/thayer"
+  OUTDIR="${MYDIR}/dataset/${TITLE}/${DATASET}"
+  REPO="${MYDIR}/opticalaberrations"
+  APPTAINER="${REPO}/develop_CUDA_12_3.sif"
+  ENV="apptainer exec --nv --bind ${MYDIR}:${MYDIR} --pwd ${REPO}/src -e ${APPTAINER} python"
 elif [ $HANDLER = 'slurm' ]; then
-  OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
+  MYDIR="/clusterfs/nvme/thayer"
+  OUTDIR="${MYDIR}/dataset/${TITLE}/${DATASET}"
+  REPO="${MYDIR}/opticalaberrations/"
+  APPTAINER="${REPO}/develop_CUDA_12_3.sif"
+  ENV="apptainer exec --nv --bind /clusterfs:/clusterfs --pwd ${REPO}/src -e ${APPTAINER} python"
 else
   OUTDIR="~/dataset/${TITLE}/${DATASET}"
+  ENV="~/anaconda3/envs/ml/bin/python"
 fi
+
 
 LOGS="${OUTDIR}/logs"
 mkdir -p $OUTDIR
@@ -59,8 +68,8 @@ if [ "$DATASET" = "train" ];then  # 2M samples
   SAMPLES_PER_BIN=400
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   OBJS=(1 2 3 4 5)  # 5 bins
-  mPH=($(seq 50000 25000 275000)) # 10 bins
-  xPH=($(seq 75000 25000 300000))
+  mPH=($(seq 0 10000 90000)) # 10 bins
+  xPH=($(seq 10000 10000 100000))
   amps1=($(seq 0 .01 .24))  # 25 bins
   amps2=($(seq .01 .01 .25))
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet) # 4 bins
@@ -185,7 +194,7 @@ do
                 task="${task} -o ${LOGS}/${JOB}.log"
                 task="${task} \"${j}\""
 
-                echo $task
+                echo $task | bash
                 echo "$(bjobs -u $USER -sum)"
 
             elif [ $HANDLER = 'slurm' ]; then
