@@ -16,6 +16,7 @@ from tifffile import TiffFile
 from tifffile import imwrite
 import numpy as np
 from scipy import stats as st
+from csbdeep.models import CARE
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -208,6 +209,8 @@ def simulate_image(
     plot: bool = False,
     gtdir: Optional[Path] = None,
     skip_remove_background: bool = False,
+        denoiser: Optional[CARE] = None,
+        denoiser_window_size: tuple = (32, 64, 64),
 ):
     outdir.mkdir(exist_ok=True, parents=True)
 
@@ -265,6 +268,11 @@ def simulate_image(
             odir = outdir/e
             odir.mkdir(exist_ok=True, parents=True)
 
+            if denoiser is not None:
+                n_tiles = np.ceil(np.array(inputs.shape) / np.array(denoiser_window_size)).astype(int)
+                inputs = denoiser.predict(inputs, axes='ZYX', n_tiles=n_tiles)
+                inputs[inputs < 0.0] = 0.0
+
             processed = prep_sample(
                 inputs,
                 sample_voxel_size=gen.voxel_size,
@@ -309,6 +317,12 @@ def simulate_image(
                 psf_type=gen.psf_type,
             )
     else:
+        if denoiser is not None:
+            imwrite(f"{outdir / filename}_raw.tif", inputs.astype(np.float32), compression='deflate')
+            n_tiles = np.ceil(np.array(inputs.shape) / np.array(denoiser_window_size)).astype(int)
+            inputs = denoiser.predict(inputs, axes='ZYX', n_tiles=n_tiles)
+            inputs[inputs < 0.0] = 0.0
+
         save_synthetic_sample(
             savepath=outdir/filename,
             inputs=inputs,
@@ -368,8 +382,9 @@ def create_synthetic_sample(
     denoising_dataset: bool = False,
     uniform_background: int = 0,
     skip_remove_background: bool = False,
+        denoiser: Optional[CARE] = None,
+        denoiser_window_size: tuple = (32, 64, 64),
 ):
-
     aberration = Wavefront(
         amplitudes=(min_amplitude, max_amplitude),
         order='ansi',
@@ -559,7 +574,9 @@ def create_synthetic_sample(
                     scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
                     if gen.psf_type == 'widefield' else None,
                     plot=plot,
-                    skip_remove_background=skip_remove_background
+                    skip_remove_background=skip_remove_background,
+                    denoiser=denoiser,
+                    denoiser_window_size=denoiser_window_size
                 )
         else:
             wavefronts[gen.psf_type] = phi
@@ -585,7 +602,9 @@ def create_synthetic_sample(
                 scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
                 if gen.psf_type == 'widefield' else None,
                 plot=plot,
-                skip_remove_background=skip_remove_background
+                skip_remove_background=skip_remove_background,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size
             )
 
     return inputs
@@ -792,6 +811,11 @@ def parse_args(args):
         help='optional toggle to skip preprocessing input data using the DoG filter'
     )
 
+    parser.add_argument(
+        '--denoiser', type=Path, default=None,
+        help='path to denoiser model'
+    )
+
     return parser.parse_args(args)
 
 
@@ -847,6 +871,12 @@ def main(args=None):
             skip_remove_background_ideal_psf=args.skip_remove_background
         )
 
+    if args.denoiser is not None:
+        logger.info(f"Loading denoiser model: {args.denoiser}")
+        denoiser = CARE(config=None, name=args.denoiser.name, basedir=args.denoiser.parent)
+    else:
+        denoiser = None
+
     sample = partial(
         create_synthetic_sample,
         generators=generators,
@@ -879,7 +909,8 @@ def main(args=None):
         plot=args.plot,
         denoising_dataset=args.denoising_dataset,
         uniform_background=args.uniform_background,
-        skip_remove_background=args.skip_remove_background
+        skip_remove_background=args.skip_remove_background,
+        denoiser=denoiser
     )
     logger.info(f"Output folder: {Path(args.outdir).resolve()}")
 

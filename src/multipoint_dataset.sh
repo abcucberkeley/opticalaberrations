@@ -13,18 +13,25 @@ MAX_LLS_OFFSET=0
 RAND_VSIZE=false
 SKIP_REMOVE_BACKGROUND=false
 USE_THEORETICAL_WIDEFIELD_SIMULATOR=false
-
 MODES=15
-#xVOXEL=.125
-xVOXEL=.097
-#yVOXEL=.125
-yVOXEL=.097
-zVOXEL=.200
-TITLE='97nm_dataset_extended'
-#DATASET='train'
-DATASET='test'
 MODE_DIST='pyramid'
-HANDLER=slurm
+
+DENOISE=true
+DENOISER='pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
+
+HANDLER=lsf
+TITLE='denoise_fourier_filter_125nm_dataset'
+DATASET='train'
+
+if [ "$DATASET" = "train" ]; then
+  xVOXEL=.125
+  yVOXEL=.125
+  zVOXEL=.200
+else
+  xVOXEL=.097
+  yVOXEL=.097
+  zVOXEL=.200
+fi
 
 MODALITIES=(
   "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
@@ -93,24 +100,19 @@ do
       do
         for S in `seq 1 ${#SAMPLES[@]}`
         do
-
-#            if [ $HANDLER = 'lsf' ];then
-#                while [ $(bjobs -u $USER | wc -l) -gt 25000 ]
-#                do
-#                  sleep 10s
-#                done
-#
-#            elif [ $HANDLER = 'slurm' ]; then
-#                while [ $(squeue -u $USER -h -t pending -r | wc -l) -gt 500 ]
-#                do
-#                  sleep 10s
-#                done
-#
-#            else
-#                sleep 10s
-#
-#            fi
-
+            #if [ $HANDLER = 'lsf' ];then
+            #    while [ $(bjobs -u $USER | wc -l) -gt 25000 ]
+            #    do
+            #      sleep 10s
+            #    done
+            #elif [ $HANDLER = 'slurm' ]; then
+            #    while [ $(squeue -u $USER -h -t pending -r | wc -l) -gt 500 ]
+            #    do
+            #      sleep 10s
+            #    done
+            #else
+            #    sleep 10s
+            #fi
 
             (( JOB_COUNTER=JOB_COUNTER+1 ))
 
@@ -147,6 +149,10 @@ do
               j="${j} --use_theoretical_widefield_simulator"
             fi
 
+            if $DENOISE; then
+              j="${j} --denoiser ${DENOISER}"
+            fi
+
             if $SKIP_REMOVE_BACKGROUND; then
               j="${j} --skip_remove_background"
             fi
@@ -179,7 +185,7 @@ do
                 task="${task} -o ${LOGS}/${JOB}.log"
                 task="${task} \"${j}\""
 
-                echo $task | bash
+                echo $task
                 echo "$(bjobs -u $USER -sum)"
 
             elif [ $HANDLER = 'slurm' ]; then

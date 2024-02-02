@@ -28,7 +28,6 @@ from tifffile import imread, imwrite, TiffFile
 from line_profiler_pycharm import profile
 from tqdm import tqdm
 
-import multiprocessing as mp
 from sklearn.cluster import KMeans
 from skimage.transform import resize
 from sklearn.metrics import silhouette_score
@@ -36,7 +35,7 @@ from joblib import Parallel, delayed
 from scipy.interpolate import NearestNDInterpolator
 from scipy.ndimage import shift, generate_binary_structure, binary_dilation
 from scipy.signal import correlate
-from scipy.optimize import minimize_scalar, minimize
+from scipy.optimize import minimize
 
 import utils
 import vis
