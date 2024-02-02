@@ -40,7 +40,7 @@
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="pytest" />
-    <option name="PARAMETERS" value="-s -v --disable-pytest-warnings --color=yes $PROJECT_DIR$/tests/test_embeddings.py" />
+    <option name="PARAMETERS" value="-s -v --disable-pytest-warnings --color=yes tests/test_embeddings.py" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="true" />
