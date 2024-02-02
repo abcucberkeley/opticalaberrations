@@ -24,7 +24,7 @@ import numpy as np
 
 import pandas as pd
 import seaborn as sns
-from tifffile import imread, imwrite, TiffFile, memmap
+from tifffile import imread, imwrite, TiffFile
 from line_profiler_pycharm import profile
 from tqdm import tqdm
 
@@ -2724,9 +2724,13 @@ def denoise(inputFullpath: Union[Path, str],
             modelPath: Union[Path, str],
             window_size: tuple,
 ):
-    memmap_image = memmap(inputFullpath)    # get image shape without loading whole image
+    tif = TiffFile(Path(inputFullpath))
+    z_size = len(tif.pages)  # number of pages in the file
+    y_size, x_size = tif.pages[0].shape
+    memmap_image = imread(inputFullpath)    # get image shape without loading whole image
     image_shape = np.array(memmap_image.shape)
     n_tiles = np.ceil(image_shape / window_size).astype(int)
+    del memmap_image
 
     if outputFullpath is None:
         outputFullpath = f"{Path(inputFullpath).with_suffix('')}_denoised.tif"
@@ -2735,6 +2739,5 @@ def denoise(inputFullpath: Union[Path, str],
         inputFullpath=inputFullpath,
         outputFullpath=outputFullpath,
         modelPath=modelPath,
-        basedir=Path(modelPath).parent,
-        n_tiles=None,
+        n_tiles=n_tiles,
     )

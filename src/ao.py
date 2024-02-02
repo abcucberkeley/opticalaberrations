@@ -195,7 +195,7 @@ def parse_args(args):
     denoise = subparsers.add_parser("denoise")
     denoise.add_argument("model", type=Path, help="path to pretrained denoise tensorflow model", default=r'U:\Data\TestsForThayer\denoisemodels\20231107_simulatedBeads_v3')
     denoise.add_argument("input", type=Path, help="path to input .tif file")
-    denoise.add_argument("output", type=Path, help="path to denoised output .tif file", default=None)
+    denoise.add_argument("--output", type=Path, help="path to denoised output .tif file", default=None)
     denoise.add_argument("--window_size", default='64-64-64', type=str, help='size of the window to denoise around each point of interest')
     denoise.add_argument(
         "--cluster", action='store_true',

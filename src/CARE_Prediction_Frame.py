@@ -13,17 +13,16 @@ from csbdeep.models import CARE
 # set negative values as 0
  
 
-def CARE_Prediction_Frame(inputFullpath, outputFullpath, modelPath, basedir, subtractVal=0., n_tiles=(4,10,10), axes='ZYX', Save16bit=False):
-    if os.path.isfile(outputFullpath):
-        print("File exists, skip it!")
-        return
-    
-    model = CARE(config=None, name=modelPath, basedir=basedir)
-        
+def CARE_Prediction_Frame(inputFullpath, outputFullpath, modelPath, subtractVal=0., n_tiles=(4,10,10), axes='ZYX', Save16bit=False):
+    # if os.path.isfile(outputFullpath):
+    #     print(f"output file exists, skip it! :  {outputFullpath.resolve()}")
+    #     return
+
+    model = CARE(config=None, name=modelPath.name, basedir=modelPath.parent)
+    print(f"CARE model loaded : {modelPath}")
     print(inputFullpath)
     # fnbase = os.path.basename(inputFullpath)
-    print ("File does not exist... Processing")
-    print(inputFullpath)
+    print (f"output file does not exist... Processing using {n_tiles=}")
     x = imread(inputFullpath)
     x = x.astype('float32') - subtractVal
     
@@ -35,7 +34,7 @@ def CARE_Prediction_Frame(inputFullpath, outputFullpath, modelPath, basedir, sub
     else:
         save_tiff_imagej_compatible(outputFullpath, restored.astype('float32'), axes, compression='zlib')
 
-    print("Done!")
+    print(f"Done! Saved to {outputFullpath}")
 
 
 def main(inputFullpath=None, outputFullpath=None, modelPath=None, basedir=None, subtractVal=0., n_tiles=(4,10,10), axes='ZYX', Save16bit=False):
