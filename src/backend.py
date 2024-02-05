@@ -31,6 +31,7 @@ from tqdm import tqdm
 import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
 from tensorflow_addons.optimizers import AdamW, LAMB  # keep for old models trained with TF2.5
+from csbdeep.models import CARE
 
 import psutil
 import multiprocessing as mp
@@ -304,6 +305,8 @@ def preprocess(
     min_psnr: int = 10,
     object_gaussian_kernel_width: float = 0,  # to simulate ideal OTF for objects bigger than diffraction limit
     cpu_workers: int = -1,
+    denoiser: Optional[CARE] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     if samplepsfgen is None:
         samplepsfgen = modelpsfgen
@@ -328,6 +331,11 @@ def preprocess(
 
     else:
         iotf = modelpsfgen.iotf
+    
+    if denoiser is not None:
+        n_tiles = np.ceil(np.array(sample.shape) / np.array(denoiser_window_size)).astype(int)
+        noisy_img = denoiser.predict(sample, axes='ZYX', n_tiles=n_tiles)
+        noisy_img[noisy_img < 0.0] = 0.0
 
     if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
 

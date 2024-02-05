@@ -179,11 +179,6 @@ def generate_sample(
                 scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
             )
         
-        if denoiser is not None:
-            n_tiles = np.ceil(np.array(noisy_img.shape) / np.array(denoiser_window_size)).astype(int)
-            noisy_img = denoiser.predict(noisy_img, axes='ZYX', n_tiles=n_tiles)
-            noisy_img[noisy_img < 0.0] = 0.0
-
         if preprocess:
             noisy_img = backend.preprocess(
                 noisy_img,
@@ -193,7 +188,9 @@ def generate_sample(
                 remove_background=True,
                 normalize=True,
                 min_psnr=0,
-                plot=savepath.with_suffix('') if plot else None
+                plot=savepath.with_suffix('') if plot else None,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size
             )
 
         if savedir is not None:
@@ -373,7 +370,6 @@ def iter_evaluate(
         denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
     else:
         denoiser = None
-
 
     if Path(f'{savepath}_predictions.csv').exists():
         # continue from previous results, ignoring criteria
@@ -2322,7 +2318,9 @@ def eval_object(
     savepath: Any = None,
     psf_type: Any = None,
     digital_rotations: Optional[int] = 361,
-    object_size: int = 0
+    object_size: int = 0,
+    denoiser: Optional[CARE] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(
@@ -2366,7 +2364,9 @@ def eval_object(
                 remove_background=True,
                 normalize=True,
                 min_psnr=0,
-                plot=f"{savepath}_{a}_{ph}"
+                plot=f"{savepath}_{a}_{ph}",
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size
             )
             for i, (a, ph) in enumerate(itertools.product(p2v, photons))
         ], axis=0)
@@ -2424,7 +2424,9 @@ def evaluate_modes(
     batch_size: int = 512,
     num_objs: Optional[int] = 1,
     digital_rotations: bool = True,
-    agg: str = 'median'
+    agg: str = 'median',
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     plt.rcParams.update({
         'font.size': 12,
@@ -2442,6 +2444,12 @@ def evaluate_modes(
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
     
+    if denoiser is not None:
+        logger.info(f"Loading denoiser model: {denoiser}")
+        denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+    else:
+        denoiser = None
+
     photon_step = 10e3
     photons = np.arange(1, 1e5 + photon_step, photon_step).astype(int)
     waves = np.arange(0, .35, step=.05).round(2)
@@ -2484,7 +2492,9 @@ def evaluate_modes(
                 batch_size=batch_size,
                 eval_sign=eval_sign,
                 savepath=savepath,
-                digital_rotations=361 if digital_rotations else None
+                digital_rotations=361 if digital_rotations else None,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size
             )
 
         df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)

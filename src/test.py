@@ -174,6 +174,7 @@ def main(args=None):
                 num_objs=args.num_objs,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                denoiser=args.denoiser
             )
         elif args.target == 'templates':
             savepath = eval.plot_templates(args.model)

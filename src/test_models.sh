@@ -20,6 +20,9 @@ NETWORK='prototype'
 SKIP_REMOVE_BACKGROUND=false
 APPTAINER="--apptainer ../develop_CUDA_12_3.sif"
 
+DENOISE=true
+DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
+
 TRAINED_MODELS=(
   "YuMB_lambda510-P3216-R2222"
   "YuMB_lambda510-P3216168-R2222"
@@ -92,15 +95,19 @@ do
           do
               CONFIG=" $SIM $PREP --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
+              if $DENOISE; then
+                j="${CONFIG} --denoiser ${DENOISER}"
+              fi
+
               python manager.py ${CLUSTER} $APPTAINER $JOB \
               --task "${MODEL}.h5 --num_beads 1 $CONFIG snrheatmap" \
               --taskname na_$NA \
               --name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
 
-              #python manager.py ${CLUSTER} $APPTAINER $JOB \
-              #--task "${MODEL}.h5  $CONFIG densityheatmap" \
-              #--taskname na_$NA \
-              #--name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
+              python manager.py ${CLUSTER} $APPTAINER $JOB \
+              --task "${MODEL}.h5  $CONFIG densityheatmap" \
+              --taskname na_$NA \
+              --name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
 
               #python manager.py ${CLUSTER} $APPTAINER $JOB \
               #--task "${MODEL}.h5 $CONFIG snrheatmap" \
