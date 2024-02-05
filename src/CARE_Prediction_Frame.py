@@ -34,7 +34,7 @@ def CARE_Prediction_Frame(inputFullpath, outputFullpath, modelPath, subtractVal=
     else:
         save_tiff_imagej_compatible(outputFullpath, restored.astype('float32'), axes, compression='zlib')
 
-    print(f"Done! Saved to {outputFullpath}")
+    print(f"Done! Saved Denoised file: {Path(outputFullpath).resolve()}")  # LabVIEW searches for this "Denoised file:"
 
 
 def main(inputFullpath=None, outputFullpath=None, modelPath=None, basedir=None, subtractVal=0., n_tiles=(4,10,10), axes='ZYX', Save16bit=False):

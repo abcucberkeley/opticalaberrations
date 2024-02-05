@@ -2722,14 +2722,19 @@ def denoise(inputFullpath: Union[Path, str],
             outputFullpath,
             modelPath: Union[Path, str],
             window_size: tuple,
+            batch_size: int,
 ):
     tif = TiffFile(Path(inputFullpath))
     z_size = len(tif.pages)  # number of pages in the file
     y_size, x_size = tif.pages[0].shape
     memmap_image = imread(inputFullpath)    # get image shape without loading whole image
     image_shape = np.array(memmap_image.shape)
-    n_tiles = np.ceil(image_shape / window_size).astype(int)
     del memmap_image
+
+    n_tiles = np.ceil(image_shape / (np.array(window_size) * np.cbrt(batch_size))).astype(int)
+    # batch_factor = max(np.floor(np.cbrt(np.prod(n_tiles, axis=None) / batch_size)).astype(int), 1)
+    # n_tiles = np.ceil(n_tiles / float(batch_factor)).astype(int)
+    logger.info(f"n_tiles: {n_tiles}")
 
     if outputFullpath is None:
         outputFullpath = f"{Path(inputFullpath).with_suffix('')}_denoised.tif"

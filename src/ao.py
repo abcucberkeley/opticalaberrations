@@ -198,6 +198,8 @@ def parse_args(args):
     denoise.add_argument("--output", type=Path, help="path to denoised output .tif file", default=None)
     denoise.add_argument("--window_size", default='64-64-64', type=str, help='size of the window to denoise around each point of interest')
     denoise.add_argument(
+        "--batch_size", default=100, type=int, help='maximum batch size for the model')
+    denoise.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
@@ -1252,6 +1254,7 @@ def main(args=None, preloaded=None):
                     outputFullpath=args.output,
                     modelPath=args.model,
                     window_size=tuple(int(i) for i in args.window_size.split('-')),
+                    batch_size=args.batch_size,
                 )
 
             elif args.func == 'predict_large_fov':
