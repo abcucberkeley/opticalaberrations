@@ -47,7 +47,7 @@ from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern
 from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad
-from CARE_Prediction_Frame import CARE_Prediction_Frame
+from csbdeep.models import CARE
 
 import logging
 logger = logging.getLogger('')
@@ -2739,9 +2739,14 @@ def denoise(inputFullpath: Union[Path, str],
     if outputFullpath is None:
         outputFullpath = f"{Path(inputFullpath).with_suffix('')}_denoised.tif"
 
-    CARE_Prediction_Frame(
-        inputFullpath=inputFullpath,
-        outputFullpath=outputFullpath,
-        modelPath=modelPath,
-        n_tiles=n_tiles,
-    )
+    model = CARE(config=None, name=modelPath.name, basedir=modelPath.parent)
+    logger.info(f"CARE model loaded : {modelPath}")
+
+    x = imread(inputFullpath)
+    logger.info(f"Image loaded: {inputFullpath}")
+
+    restored = model.predict(x, axes='ZYX', n_tiles=n_tiles)
+    restored[restored < 0.0] = 0.0
+    imwrite(outputFullpath, restored.astype('uint16'), compression='deflate')
+
+    print(f"Done! Saved Denoised file: {Path(outputFullpath).resolve()}")  # LabVIEW searches for this "Denoised file:"
