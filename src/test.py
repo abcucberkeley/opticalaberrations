@@ -1,16 +1,16 @@
+import logging
+import multiprocessing as mp
 import os
 import subprocess
-import multiprocessing as mp
-
-import logging
 import sys
 import time
 from pathlib import Path
+
 import tensorflow as tf
+import ujson
 
 import cli
 import eval
-import ujson
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -127,6 +127,11 @@ def parse_args(args):
         '--use_theoretical_widefield_simulator', action='store_true',
         help='optional toggle to calculate 3D PSF without amplitude attenuation (cosine factor)'
     )
+    
+    parser.add_argument(
+        '--denoiser', type=Path, default=None,
+        help='path to denoiser model'
+    )
 
     return parser.parse_args(args)
 
@@ -226,6 +231,7 @@ def main(args=None):
                 num_beads=args.num_beads,
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser
             )
         elif args.target == 'confidence_heatmap':
             savepath = eval.confidence_heatmap(
@@ -245,6 +251,7 @@ def main(args=None):
                 lam_detection=args.wavelength,
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser
             )
         elif args.target == 'densityheatmap':
             savepath = eval.densityheatmap(
@@ -266,6 +273,7 @@ def main(args=None):
                 num_beads=args.num_beads,
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
@@ -285,7 +293,8 @@ def main(args=None):
                 psf_type=args.psf_type,
                 lam_detection=args.wavelength,
                 skip_remove_background=args.skip_remove_background,
-                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator
+                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser
             )
 
         if savepath is not None:

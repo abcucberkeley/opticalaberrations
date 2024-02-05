@@ -16,14 +16,13 @@ NA=1.0
 ABC_A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
 CLUSTER='slurm'
 TIMELIMIT='24:00:00'  #hh:mm:ss
-NETWORK='opticalnet'
+NETWORK='prototype'
 SKIP_REMOVE_BACKGROUND=false
 APPTAINER="--apptainer ../develop_CUDA_12_3.sif"
 
 TRAINED_MODELS=(
-  "YuMB-lambda510-R1242"
-  "YuMB-lambda510-R1462"
-  "YuMB-lambda510-R2462"
+  "YuMB_lambda510-P3216-R2222"
+  "YuMB_lambda510-P3216168-R2222"
 )
 
 for M in ${TRAINED_MODELS[@]}

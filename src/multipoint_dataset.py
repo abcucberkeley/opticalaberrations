@@ -209,8 +209,8 @@ def simulate_image(
     plot: bool = False,
     gtdir: Optional[Path] = None,
     skip_remove_background: bool = False,
-        denoiser: Optional[CARE] = None,
-        denoiser_window_size: tuple = (32, 64, 64),
+    denoiser: Optional[CARE] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     outdir.mkdir(exist_ok=True, parents=True)
 
@@ -382,8 +382,8 @@ def create_synthetic_sample(
     denoising_dataset: bool = False,
     uniform_background: int = 0,
     skip_remove_background: bool = False,
-        denoiser: Optional[CARE] = None,
-        denoiser_window_size: tuple = (32, 64, 64),
+    denoiser: Optional[CARE] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     aberration = Wavefront(
         amplitudes=(min_amplitude, max_amplitude),

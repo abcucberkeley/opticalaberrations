@@ -1,5 +1,7 @@
 import itertools
+
 import matplotlib
+
 matplotlib.use('Agg')
 import tempfile
 import shutil
@@ -25,6 +27,7 @@ import tensorflow as tf
 from line_profiler_pycharm import profile
 from tqdm import tqdm, trange
 from tifffile import imwrite
+from csbdeep.models import CARE
 
 import utils
 import data_utils
@@ -126,7 +129,9 @@ def generate_sample(
     plot: bool = False,
     no_beads: bool = False,
     preprocess: bool = False,
-    file_format: str = 'tif'
+    file_format: str = 'tif',
+    denoiser: Optional[CARE] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     hashtable = data[data['id'] == image_id].iloc[0].to_dict()
     f = Path(str(hashtable['file']))
@@ -173,6 +178,11 @@ def generate_sample(
                 photons=hashtable['photons'],
                 scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
             )
+        
+        if denoiser is not None:
+            n_tiles = np.ceil(np.array(noisy_img.shape) / np.array(denoiser_window_size)).astype(int)
+            noisy_img = denoiser.predict(noisy_img, axes='ZYX', n_tiles=n_tiles)
+            noisy_img[noisy_img < 0.0] = 0.0
 
         if preprocess:
             noisy_img = backend.preprocess(
@@ -332,6 +342,8 @@ def iter_evaluate(
     preprocess: bool = False,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     """
     Gathers the set of .tif files that meet the input criteria.
@@ -355,6 +367,13 @@ def iter_evaluate(
         skip_remove_background_ideal_psf=skip_remove_background,
         use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
     )
+    
+    if denoiser is not None:
+        logger.info(f"Loading denoiser model: {denoiser}")
+        denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+    else:
+        denoiser = None
+
 
     if Path(f'{savepath}_predictions.csv').exists():
         # continue from previous results, ignoring criteria
@@ -395,7 +414,9 @@ def iter_evaluate(
             no_phase=no_phase,
             digital_rotations=rotations if digital_rotations else None,
             preprocess=preprocess,
-            plot=plot
+            plot=plot,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size
         ),
         jobs=previous['id'].values,
         desc=f'Create samples ({savepath.resolve()})',
@@ -1620,6 +1641,8 @@ def snrheatmap(
     lam_detection: Optional[float] = .510,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1664,6 +1687,8 @@ def snrheatmap(
             lam_detection=lam_detection,
             skip_remove_background=skip_remove_background,
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size
         )
 
     if 'aberration_umRMS' not in df.columns.values:
@@ -1819,6 +1844,8 @@ def densityheatmap(
     lam_detection: Optional[float] = .510,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1861,7 +1888,9 @@ def densityheatmap(
             psf_type=psf_type,
             lam_detection=lam_detection,
             skip_remove_background=skip_remove_background,
-            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -1917,6 +1946,8 @@ def iterheatmap(
     lam_detection: Optional[float] = .510,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1960,7 +1991,9 @@ def iterheatmap(
             psf_type=psf_type,
             lam_detection=lam_detection,
             skip_remove_background=skip_remove_background,
-            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size
         )
 
     max_iter = df['iter_num'].max()
@@ -2208,6 +2241,7 @@ def plot_templates(model: Path):
                 imwrite(f'{savepath}_ph{ph}_a{str(a).replace("0.", "p")}.tif', img.astype(np.float32))
                 img -= 100
                 img[img < 0] = 0
+                # img = imread(f'{savepath}_ph{ph}_a{str(a).replace("0.", "p")}.tif').astype(np.float32)
 
                 axes[t, j].imshow(np.max(img, axis=0) ** .5, cmap='hot')
                 axes[t, j].set_xticks([])
@@ -2248,6 +2282,7 @@ def create_samples(
     object_size: int = 0,
 ):
     kernels = [gen.single_psf(phi=w, normed=True) for w in wavefronts]
+    # amps = [np.max(w.amplitudes) for w in wavefronts]
 
     if Path(f"{savepath}_inputs.npy").exists():
         inputs = np.load(f"{savepath}_inputs.npy")
@@ -2263,6 +2298,7 @@ def create_samples(
                     noise=True,
                     fill_radius=0 if num_objs == 1 else .66
                 )
+            # imread(f'{savepath}_ph{ph}_a{str(amps[k]).replace("0.", "p")}.tif').astype(np.float32)
             for k, ph in tqdm(
                 itertools.product(range(len(kernels)), photons),
                 desc='Generating samples',
@@ -2401,12 +2437,13 @@ def evaluate_modes(
     })
 
     num_objs = 1 if num_objs is None else num_objs
-
-    outdir = model.with_suffix('') / eval_sign / 'evalmodes' / f'num_objs_{num_objs}'
+    
+    outdir = model.with_suffix('') / eval_sign / 'evalmodes' / f'test'
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
-
-    photons = np.arange(1, 1e5+1e4, 1e4)
+    
+    photon_step = 10e3
+    photons = np.arange(1, 1e5 + photon_step, photon_step).astype(int)
     waves = np.arange(0, .35, step=.05).round(2)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
@@ -2518,7 +2555,7 @@ def evaluate_modes(
         axt.set_ylim(ybins[0], ybins[-1])
 
         # axt.set_xscale('log')
-        axt.set_xlim(xbins[0], xbins[-1])
+        axt.set_xlim(0, xbins[-1])
         axt.set_xlabel(f'{x}')
 
         axt.spines['right'].set_visible(False)
@@ -2959,6 +2996,8 @@ def confidence_heatmap(
     lam_detection: Optional[float] = .510,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -2998,6 +3037,8 @@ def confidence_heatmap(
             lam_detection=lam_detection,
             skip_remove_background=skip_remove_background,
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size
         )
 
     df = df[df['iter_num'] == iter_num]
