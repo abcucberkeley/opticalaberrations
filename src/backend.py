@@ -334,8 +334,8 @@ def preprocess(
     
     if denoiser is not None:
         n_tiles = np.ceil(np.array(sample.shape) / np.array(denoiser_window_size)).astype(int)
-        noisy_img = denoiser.predict(sample, axes='ZYX', n_tiles=n_tiles)
-        noisy_img[noisy_img < 0.0] = 0.0
+        sample = denoiser.predict(sample, axes='ZYX', n_tiles=n_tiles)
+        sample[sample < 0.0] = 0.0
 
     if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
 
