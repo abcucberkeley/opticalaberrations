@@ -37,7 +37,8 @@ import multiprocessing as mp
 if platform.system() != "Windows":
     from dask_cuda import LocalCUDACluster  # Only Linux is supported by Dask-CUDA at this time
 
-from dask.distributed import LocalCluster, Client, progress
+from dask.distributed import LocalCluster, Client
+
 mp.set_start_method('spawn', force=True)
 
 import utils
@@ -130,6 +131,8 @@ def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
             "MLP": opticalnet.MLP,
             "Transformer": opticalnet.Transformer,
             "WarmupCosineDecay": WarmupCosineDecay,
+            "LAMB": LAMB,
+            "AdamW": AdamW,
         }
         return load_model(model_path, custom_objects=custom_objects)
     except TypeError as e:
@@ -142,6 +145,8 @@ def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
             "MLP": prototype.MLP,
             "Transformer": prototype.Transformer,
             "WarmupCosineDecay": WarmupCosineDecay,
+            "LAMB": LAMB,
+            "AdamW": AdamW,
         }
         return load_model(model_path, custom_objects=custom_objects)
 
