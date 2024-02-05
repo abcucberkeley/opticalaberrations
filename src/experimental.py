@@ -47,6 +47,7 @@ from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern
 from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad
+from csbdeep.utils.tf import limit_gpu_memory
 from csbdeep.models import CARE
 
 import logging
@@ -2738,6 +2739,8 @@ def denoise(inputFullpath: Union[Path, str],
 
     if outputFullpath is None:
         outputFullpath = f"{Path(inputFullpath).with_suffix('')}_denoised.tif"
+
+    limit_gpu_memory(allow_growth=True, fraction=None, total_memory=None)
 
     model = CARE(config=None, name=modelPath.name, basedir=modelPath.parent)
     logger.info(f"CARE model loaded : {modelPath}")
