@@ -155,7 +155,7 @@ def submit_docker_job(args, command_flags):
     docker_mount = (f'-v "{local_repo}":{container_repo}  '
                     r'-v D:\:/d_drive  '
                     r'-v C:\:/c_drive  ')
-    docker_vars = (r' -e RUNNING_IN_DOCKER=TRUE')
+    docker_vars = r' -e RUNNING_IN_DOCKER=TRUE'
     docker_image = f"ghcr.io/abcucberkeley/opticalaberrations:{branch_name}_{CUDA_version}"
     docker_job = f'{docker_run} {docker_vars} --workdir {container_repo}/src {docker_mount} {docker_image} "python ao.py {flags}"'
     logger.info(f"Docker job: \n{docker_job}\n")
