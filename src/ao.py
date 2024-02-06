@@ -988,10 +988,6 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     eval_dm.add_argument(
-        "--partition", type=str, default='abc_a100',
-        help="slurm partition to use on the ABC cluster"
-    )
-    eval_dm.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -1146,10 +1142,10 @@ def main(args=None, preloaded=None):
         return number_of_idle_nodes
 
     if args.cluster:
-        slurm_utils.submit_slurm_job(command_flags, partition=args.partition)
+        slurm_utils.submit_slurm_job(args, command_flags, partition=args.partition)
 
     elif args.docker:
-        slurm_utils.submit_docker_job(command_flags)
+        slurm_utils.submit_docker_job(args, command_flags=command_flags,)
 
     else:
         if os.environ.get('SLURM_JOB_ID') is not None:
