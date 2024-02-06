@@ -1,13 +1,18 @@
 
+import logging
 import re
 import subprocess
+from pathlib import Path
+
 import pandas as pd
 
-import logging
 logger = logging.getLogger('')
 
+hostname = "master.abc.berkeley.edu"
+username = "thayeralshaabi"
 
-def get_number_of_idle_nodes(hostname, partition, username):
+
+def get_number_of_idle_nodes(partition: str = "abc_a100"):
     retry = True
     while retry:
         table = subprocess.run(
@@ -36,7 +41,7 @@ def get_number_of_idle_nodes(hostname, partition, username):
     return number_of_idle_nodes
 
 
-def get_available_resources(username, hostname, requested_partition='abc_a100'):
+def get_available_resources(requested_partition='abc_a100'):
     resources = {}
 
     nodes = str(subprocess.run(
@@ -66,3 +71,92 @@ def get_available_resources(username, hostname, requested_partition='abc_a100'):
             }
 
     return pd.DataFrame.from_dict(resources, orient='index')
+
+
+def get_active_branch_name(head_dir):
+    head_dir = Path(head_dir) / ".git" / "HEAD"
+    with head_dir.open("r") as f:
+        content = f.read().splitlines()
+    
+    for line in content:
+        if line[0:4] == "ref:":
+            return line.partition("refs/heads/")[2]
+
+
+def submit_slurm_job(args, partition: str = "abc_a100"):
+    # cluster_env = f"~/anaconda3/envs/ml/bin/python"
+    CUDA_version = "CUDA_12_3"
+    cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
+    cluster_env = f"apptainer exec --bind /clusterfs --nv {cluster_repo}/develop_{CUDA_version}.sif python "
+    script = f"{cluster_repo}/src/ao.py"
+    
+    flags = ' '.join(args)
+    flags = re.sub(pattern='--cluster', repl='', string=flags)
+    flags = re.sub(pattern='--docker', repl='', string=flags)
+    flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
+    flags = flags.replace("..", cluster_repo)  # regex stinks at replacing ".."
+    flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
+    flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
+    
+    # available_nodes = slurm_utils.get_available_resources(
+    #     username=username,
+    #     hostname=hostname,
+    #     requested_partition='abc_a100'
+    # ).sort_values('available_gpus', ascending=False)
+    #
+    # print(available_nodes)
+    # desired_node = available_nodes.iloc[0].to_dict()
+    
+    # flags = re.sub(
+    #     pattern='--batch_size \d+',  # replace w/ 896; max number of samples we can fit on A100 w/ 80G of vram
+    #     repl=f'--batch_size {896*desired_node["available_gpus"]}',
+    #     string=flags
+    # )
+    
+    sjob = f"srun "
+    sjob += f"-p {partition} "
+    sjob += f" --nodes=1 "
+    # sjob += f' --gres=gpu:{desired_node["available_gpus"]} '
+    # sjob += f' --cpus-per-task={desired_node["available_cpus"]} '
+    # sjob += f" --mem='{desired_node['available_mem']}' "
+    # sjob += f" --nodelist='{available_nodes.index[0]}' "
+    sjob += f"--exclusive "
+    sjob += f"--job-name={args.func}_{args.input.stem} "
+    sjob += f"{cluster_env} {script} {flags}"
+    logger.info(sjob)
+    subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
+
+
+def submit_docker_job(args):
+    container_repo = "/app/opticalaberrations"  # location of repo in the container
+    local_repo = Path(__file__).parent.parent  # location of repo in host
+    branch_name = get_active_branch_name(local_repo)
+    CUDA_version = "CUDA_12_3"
+    
+    flags = ' '.join(args)
+    flags = re.sub(pattern=' --docker', repl='', string=flags)  # remove flag
+    flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
+    flags = flags.replace("..", container_repo)  # regex stinks at replacing ".."
+    flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
+    flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
+    flags = re.sub(pattern='D:/', repl='/d_drive/', string=flags)
+    flags = re.sub(pattern='C:/', repl='/c_drive/', string=flags)
+    flags = re.sub(pattern=local_repo.as_posix(), repl=container_repo, string=flags)
+    
+    docker_run = "docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --name opt_net"
+    docker_mount = (f'-v "{local_repo}":{container_repo}  '
+                    r'-v D:\:/d_drive  '
+                    r'-v C:\:/c_drive  ')
+    docker_vars = (r' -e RUNNING_IN_DOCKER=TRUE')
+    docker_image = f"ghcr.io/abcucberkeley/opticalaberrations:{branch_name}_{CUDA_version}"
+    docker_job = f'{docker_run} {docker_vars} --workdir {container_repo}/src {docker_mount} {docker_image} "python ao.py {flags}"'
+    logger.info(f"Docker job: \n{docker_job}\n")
+    subprocess.run(docker_job, shell=True)
