@@ -1271,9 +1271,9 @@ def main(args=None, preloaded=None):
 
             elif args.func == 'denoise':
                 experimental.denoise(
-                    inputFullpath=args.input,
-                    outputFullpath=args.output,
-                    modelPath=args.model,
+                    input_path=args.input,
+                    output_path=args.output,
+                    model_path=args.model,
                     window_size=tuple(int(i) for i in args.window_size.split('-')),
                     batch_size=args.batch_size,
                 )
