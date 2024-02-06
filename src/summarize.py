@@ -83,6 +83,10 @@ def concat_U16_tiffs(source_files=list([]), dst: Path = None, ch_two=None, drop_
 def parse_args(args):
     parser = cli.argparser()
     parser.add_argument("input", type=Path, help=r"Path to input folder, for example:  U:\Data\TestsForThayer\20240123_cells\exp8-R2462\rotated")
+    parser.add_argument(
+        "--denoised", action='store_true',
+        help='a toggle to run summarize on denoised data'
+    )
 
     return parser.parse_known_args(args)
 
@@ -96,39 +100,42 @@ def main(args=None):
 
     cam_A = 'CamA'
     cam_B = 'CamB'
+    denoise_suffix = '_denoised'
 
-    before_files = list(folder.glob(f'*{cam_A}*stack0000_*00??t.tif'))
-    before_files_b = list(folder.glob(f'*{cam_B}*stack0000_*00??t.tif'))
-    optimized_files = list(folder.glob(f'*{cam_A}*stack0000_*00??*optimized.tif'))
-    optimized_files_b = list(folder.glob(f'*{cam_B}*stack0000_*00??*optimized.tif'))
-    vol_used_files = list(folder.glob(f'*{cam_A}*stack0000_*00??*volume_used.tif'))
+    before_files = list(folder.glob(f'*{cam_A}*stack0000_*00??t{denoise_suffix}.tif'))
+    if len(before_files) == 0:
+        denoise_suffix = ''
+
+    before_files = list(folder.glob(f'*{cam_A}*stack0000_*00??t{denoise_suffix}.tif'))
+    before_files_b = list(folder.glob(f'*{cam_B}*stack0000_*00??t{denoise_suffix}.tif'))
+    optimized_files = list(folder.glob(f'*{cam_A}*stack0000_*00??*{denoise_suffix}_optimized.tif'))
+    optimized_files_b = list(folder.glob(f'*{cam_B}*stack0000_*00??*{denoise_suffix}_optimized.tif'))
+    vol_used_files = list(folder.glob(f'*{cam_A}*stack0000_*00??*{denoise_suffix}_combined_volume_used.tif'))
     patterns_to_drop = list(['after_three'])
 
-
-    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_before_hyperstack_{cam_A}.tif")
+    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_before_hyperstack_{cam_A}{denoise_suffix}.tif")
     concat_U16_tiffs(source_files=before_files, dst=dst, drop_patterns=patterns_to_drop)
-    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_before_hyperstack_{cam_B}.tif")
+    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_before_hyperstack_{cam_B}{denoise_suffix}.tif")
     concat_U16_tiffs(source_files=before_files_b, dst=dst, drop_patterns=patterns_to_drop)
 
-    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_before_vs_optimized_hyperstack_{cam_A}.tif")
+    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_before_vs_optimized_hyperstack_{cam_A}{denoise_suffix}.tif")
     concat_U16_tiffs(source_files=before_files, dst=dst, drop_patterns=patterns_to_drop, ch_two=optimized_files)
-    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_before_vs_optimized_hyperstack_{cam_B}.tif")
+    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_before_vs_optimized_hyperstack_{cam_B}{denoise_suffix}.tif")
     concat_U16_tiffs(source_files=before_files_b, dst=dst, drop_patterns=patterns_to_drop, ch_two=optimized_files_b)
 
-    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_optimized_hyperstack_{cam_A}.tif")
+    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_optimized_hyperstack_{cam_A}{denoise_suffix}.tif")
     concat_U16_tiffs(source_files=optimized_files, dst=dst, drop_patterns=patterns_to_drop)
-    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_optimized_hyperstack_{cam_B}.tif")
+    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_optimized_hyperstack_{cam_B}{denoise_suffix}.tif")
     concat_U16_tiffs(source_files=optimized_files_b, dst=dst, drop_patterns=patterns_to_drop)
 
-    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_volume_used_hyperstack.tif")
+    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_volume_used_hyperstack{denoise_suffix}.tif")
     concat_U16_tiffs(source_files=vol_used_files, dst=dst, drop_patterns=patterns_to_drop)
 
-
     # make consensus_map (aka wavefronts over time)
-    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_consensus_map.tif")
-    consensus_clusters = folder.glob('*_combined_tiles_predictions_consensus_clusters.tif')
-    consensus_clusters_wavefronts = folder.glob('*_combined_tiles_predictions_consensus_clusters_wavefronts.tif')
-    consensus_clusters_psfs = folder.glob('*_combined_tiles_predictions_consensus_clusters_psfs.tif')
+    dst = Path(f"{folder}\\_summary\\{folder.parts[-2]}_consensus_map{denoise_suffix}.tif")
+    consensus_clusters = folder.glob(f'*{denoise_suffix}_combined_tiles_predictions_consensus_clusters.tif')
+    consensus_clusters_wavefronts = folder.glob(f'*{denoise_suffix}_combined_tiles_predictions_consensus_clusters_wavefronts.tif')
+    consensus_clusters_psfs = folder.glob(f'*{denoise_suffix}_combined_tiles_predictions_consensus_clusters_psfs.tif')
 
     # filter files via "patterns_to_drop", then sort by modified time.
     consensus_clusters = [x for x in consensus_clusters if all(y not in str(x) for y in patterns_to_drop)]
