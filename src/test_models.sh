@@ -96,7 +96,7 @@ do
               CONFIG=" $SIM $PREP --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
               if $DENOISE; then
-                j="${CONFIG} --denoiser ${DENOISER}"
+                CONFIG="${CONFIG} --denoiser ${DENOISER}"
               fi
 
               python manager.py ${CLUSTER} $APPTAINER $JOB \
