@@ -37,6 +37,11 @@ from scipy.ndimage import shift, generate_binary_structure, binary_dilation
 from scipy.signal import correlate
 from scipy.optimize import minimize
 
+from csbdeep.utils.tf import limit_gpu_memory
+
+limit_gpu_memory(allow_growth=True, fraction=None, total_memory=None)
+from csbdeep.models import CARE
+
 import utils
 import vis
 import backend
@@ -46,9 +51,8 @@ from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern
-from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad
-from csbdeep.utils.tf import limit_gpu_memory
-from csbdeep.models import CARE
+from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad, \
+    denoise_image
 
 import logging
 logger = logging.getLogger('')
@@ -369,7 +373,9 @@ def predict_sample(
     psf_type: Optional[Union[str, Path]] = None,
     cpu_workers: int = -1,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0
+    object_gaussian_kernel_width: float = 0,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
@@ -407,7 +413,9 @@ def predict_sample(
         fov_is_small=True,
         min_psnr=min_psnr,
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
-        object_gaussian_kernel_width=object_gaussian_kernel_width
+        object_gaussian_kernel_width=object_gaussian_kernel_width,
+        denoiser=denoiser,
+        denoiser_window_size=denoiser_window_size
     )
     logger.info(f"Preprocess complete. {embeddings.shape}")
 
@@ -541,7 +549,9 @@ def predict_large_fov(
     psf_type: Optional[Union[str, Path]] = None,
     cpu_workers: int = -1,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0
+    object_gaussian_kernel_width: float = 0,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
@@ -582,7 +592,9 @@ def predict_large_fov(
         min_psnr=min_psnr,
         rolling_strides=optimal_rolling_strides(preloadedpsfgen.psf_fov, sample_voxel_size, sample.shape),
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
-        object_gaussian_kernel_width=object_gaussian_kernel_width
+        object_gaussian_kernel_width=object_gaussian_kernel_width,
+        denoiser=denoiser,
+        denoiser_window_size=denoiser_window_size
     )
 
     res = backend.predict_rotation(
@@ -700,7 +712,9 @@ def predict_rois(
     estimate_sign_with_decon: bool = False,
     digital_rotations: Optional[int] = 361,
     psf_type: Optional[Union[str, Path]] = None,
-    cpu_workers: int = -1
+    cpu_workers: int = -1,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
 
     preloadedmodel, preloadedpsfgen = reloadmodel_if_needed(
@@ -792,7 +806,9 @@ def predict_rois(
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
-        cpu_workers=cpu_workers
+        cpu_workers=cpu_workers,
+        denoiser=denoiser,
+        denoiser_window_size=denoiser_window_size
     )
     return predictions
 
@@ -858,7 +874,9 @@ def predict_tiles(
     shifting: tuple = (0, 0, 0),
     psf_type: Optional[Union[str, Path]] = None,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0
+    object_gaussian_kernel_width: float = 0,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     # Begin spawning workers for Generate Fourier Embeddings (windows only). Must die to release their GPU memory.
     # if platform.system() == "Windows":
@@ -890,7 +908,7 @@ def predict_tiles(
         sample = shift(sample, shift=(-1*shifting[0], -1*shifting[1], -1*shifting[2]))
         img = Path(f"{img.with_suffix('')}_shifted_z{shifting[0]}_y{shifting[1]}_x{shifting[2]}.tif")
         imwrite(img, sample.astype(np.float32), compression='deflate', dtype=np.float32)
-
+    
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
 
@@ -903,7 +921,15 @@ def predict_tiles(
         y_voxel_size=lateral_voxel_size,
         z_voxel_size=axial_voxel_size
     )
-
+    
+    if denoiser is not None:
+        sample = denoise_image(
+            image=sample,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+            batch_size=batch_size
+        )
+    
     fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
 
     if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
@@ -1035,6 +1061,8 @@ def predict_folder(
         psf_type: Optional[Union[str, Path]] = None,
         min_psnr: int = 5,
         object_gaussian_kernel_width: float = 0,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
         filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
 ):
     pool = None
@@ -1066,7 +1094,12 @@ def predict_folder(
     )
 
     fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
-
+    
+    if denoiser is not None:
+        logger.info(f"Loading denoiser model: {denoiser}")
+        denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+        logger.info(f"{denoiser.name} loaded")
+    
     if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
         prep = partial(
             prep_sample,
@@ -1076,7 +1109,9 @@ def predict_folder(
             normalize=True,
             min_psnr=min_psnr,
             expand_dims=False,
-            na_mask=samplepsfgen.na_mask
+            na_mask=samplepsfgen.na_mask,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size
         )
     else:
         prep = partial(
@@ -1086,7 +1121,9 @@ def predict_folder(
             normalize=True,
             min_psnr=min_psnr,
             expand_dims=False,
-            na_mask=samplepsfgen.na_mask
+            na_mask=samplepsfgen.na_mask,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size
         )
 
     files = {}
@@ -2719,37 +2756,23 @@ def decon(
     return savepath
 
 
-def denoise(inputFullpath: Union[Path, str],
-            outputFullpath,
-            modelPath: Union[Path, str],
-            window_size: tuple,
-            batch_size: int,
+def denoise(
+    input_path: Union[Path, str],
+    model_path: Union[Path, str],
+    output_path: Union[Path, str] = None,
+    window_size: tuple = (32, 64, 64),
+    batch_size: int = 1,
 ):
-    tif = TiffFile(Path(inputFullpath))
+    tif = TiffFile(Path(input_path))
     z_size = len(tif.pages)  # number of pages in the file
     y_size, x_size = tif.pages[0].shape
-    memmap_image = imread(inputFullpath)    # get image shape without loading whole image
-    image_shape = np.array(memmap_image.shape)
-    del memmap_image
-
-    n_tiles = np.ceil(image_shape / (np.array(window_size) * np.cbrt(batch_size))).astype(int)
-    # batch_factor = max(np.floor(np.cbrt(np.prod(n_tiles, axis=None) / batch_size)).astype(int), 1)
-    # n_tiles = np.ceil(n_tiles / float(batch_factor)).astype(int)
-    logger.info(f"n_tiles: {n_tiles}")
-
-    if outputFullpath is None:
-        outputFullpath = f"{Path(inputFullpath).with_suffix('')}_denoised.tif"
-
-    limit_gpu_memory(allow_growth=True, fraction=None, total_memory=None)
-
-    model = CARE(config=None, name=modelPath.name, basedir=modelPath.parent)
-    logger.info(f"CARE model loaded : {modelPath}")
-
-    x = imread(inputFullpath)
-    logger.info(f"Image loaded: {inputFullpath}")
-
-    restored = model.predict(x, axes='ZYX', n_tiles=n_tiles)
-    restored[restored < 0.0] = 0.0
-    imwrite(outputFullpath, restored.astype('uint16'), compression='deflate')
-
-    print(f"Done! Saved Denoised file: {Path(outputFullpath).resolve()}")  # LabVIEW searches for this "Denoised file:"
+    image = imread(input_path)
+    
+    if output_path is None:
+        output_path = f"{Path(input_path).with_suffix('')}_denoised.tif"
+    
+    denoised = denoise_image(image=image, denoiser=model_path, denoiser_window_size=window_size, batch_size=batch_size)
+    imwrite(output_path, denoised.astype('uint16'), compression='deflate')
+    
+    print(f"Done! Saved Denoised file: {Path(output_path).resolve()}")  # LabVIEW searches for this "Denoised file:"
+    return denoised

@@ -1,7 +1,7 @@
 
+import multiprocessing as mp
 import os
 import subprocess
-import multiprocessing as mp
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -11,9 +11,7 @@ import sys
 import pandas as pd
 import tensorflow as tf
 from pathlib import Path
-import re
 
-from multiprocessing.pool import Pool
 from multiprocessing import active_children
 
 import cli
@@ -23,20 +21,10 @@ import slurm_utils
 
 from backend import load_sample
 from preprocessing import prep_sample
-from preloaded import Preloadedmodelclass
 from embeddings import measure_fourier_snr
 
 import warnings
 warnings.filterwarnings("ignore")
-
-def get_active_branch_name(head_dir):
-
-    head_dir = Path(head_dir) / ".git" / "HEAD"
-    with head_dir.open("r") as f: content = f.read().splitlines()
-
-    for line in content:
-        if line[0:4] == "ref:":
-            return line.partition("refs/heads/")[2]
 
 
 def parse_args(args):
@@ -70,6 +58,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     deskew.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    deskew.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -80,12 +72,20 @@ def parse_args(args):
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
+    psnr.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
 
     fourier_snr = subparsers.add_parser("fourier_snr")
     fourier_snr.add_argument("input", type=Path, help="path to input .tif file")
     fourier_snr.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    fourier_snr.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
     )
     fourier_snr.add_argument(
         "--docker", action='store_true',
@@ -118,6 +118,10 @@ def parse_args(args):
     preprocessing.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    preprocessing.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
     )
     preprocessing.add_argument(
         "--docker", action='store_true',
@@ -161,6 +165,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     embeddings.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    embeddings.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -188,6 +196,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     detect_rois.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    detect_rois.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -202,6 +214,10 @@ def parse_args(args):
     denoise.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    denoise.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
     )
     denoise.add_argument(
         "--docker", action='store_true',
@@ -290,6 +306,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     predict_sample.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    predict_sample.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -310,7 +330,12 @@ def parse_args(args):
         "--object_width", default=0.0, type=float,
         help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
     )
-
+    
+    predict_sample.add_argument(
+	    '--denoiser', type=Path, default=None,
+	    help='path to denoiser model'
+    )
+    
     predict_large_fov = subparsers.add_parser("predict_large_fov")
     predict_large_fov.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_large_fov.add_argument("input", type=Path, help="path to input .tif file")
@@ -393,6 +418,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     predict_large_fov.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    predict_large_fov.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -413,7 +442,12 @@ def parse_args(args):
         "--object_width", default=0.0, type=float,
         help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
     )
-
+    
+    predict_large_fov.add_argument(
+	    '--denoiser', type=Path, default=None,
+	    help='path to denoiser model'
+    )
+    
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_rois.add_argument("input", type=Path, help="path to input .tif file")
@@ -504,6 +538,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     predict_rois.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    predict_rois.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -519,6 +557,10 @@ def parse_args(args):
     predict_rois.add_argument(
         "--object_width", default=0.0, type=float,
         help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
+    )
+    predict_rois.add_argument(
+	    '--denoiser', type=Path, default=None,
+	    help='path to denoiser model'
     )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
@@ -603,6 +645,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     predict_tiles.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    predict_tiles.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -622,6 +668,10 @@ def parse_args(args):
     predict_tiles.add_argument(
         "--min_psnr", default=5, type=int,
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
+    )
+    predict_tiles.add_argument(
+	    '--denoiser', type=Path, default=None,
+	    help='path to denoiser model'
     )
 
     predict_folder = subparsers.add_parser("predict_folder")
@@ -710,6 +760,10 @@ def parse_args(args):
         help='a toggle to run predictions through docker container'
     )
     predict_folder.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    predict_folder.add_argument(
         "--digital_rotations", default=361, type=int,
         help='optional flag for applying digital rotations'
     )
@@ -725,6 +779,10 @@ def parse_args(args):
     predict_folder.add_argument(
         "--min_psnr", default=5, type=int,
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
+    )
+    predict_folder.add_argument(
+	    '--denoiser', type=Path, default=None,
+	    help='path to denoiser model'
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
@@ -781,6 +839,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     aggregate_predictions.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    aggregate_predictions.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -815,6 +877,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     decon.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    decon.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -837,6 +903,10 @@ def parse_args(args):
     combine_tiles.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    combine_tiles.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
     )
     combine_tiles.add_argument(
         "--docker", action='store_true',
@@ -900,6 +970,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     phase_retrieval.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    phase_retrieval.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -914,8 +988,16 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     eval_dm.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    eval_dm.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
+    )
+    eval_dm.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
     )
 
     calibrate_dm = subparsers.add_parser("calibrate_dm")
@@ -930,6 +1012,10 @@ def parse_args(args):
     calibrate_dm.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    calibrate_dm.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
     )
     calibrate_dm.add_argument(
         "--docker", action='store_true',
@@ -949,6 +1035,10 @@ def parse_args(args):
     eval_mode.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    eval_mode.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
     )
     eval_mode.add_argument(
         "--docker", action='store_true',
@@ -974,6 +1064,10 @@ def parse_args(args):
         help='a toggle to run predictions on our cluster'
     )
     eval_dataset.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    eval_dataset.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -993,6 +1087,10 @@ def parse_args(args):
     eval_ao_dataset.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
+    )
+    eval_ao_dataset.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
     )
     eval_ao_dataset.add_argument(
         "--docker", action='store_true',
@@ -1033,12 +1131,8 @@ def main(args=None, preloaded=None):
     logger = logging.getLogger('')
     logger.info(args)
 
-    hostname = "master.abc.berkeley.edu"
-    username = "thayeralshaabi"
-    partition = "abc_a100"
-
     if args.func == 'cluster_nodes_idle':
-        number_of_idle_nodes = slurm_utils.get_number_of_idle_nodes(hostname, partition, username)
+        number_of_idle_nodes = slurm_utils.get_number_of_idle_nodes(args.partition)
         return number_of_idle_nodes
 
     if args.func == 'cluster_nodes_wait_for_idle':
@@ -1046,89 +1140,16 @@ def main(args=None, preloaded=None):
         while number_of_idle_nodes < args.idle_minimum:
             if number_of_idle_nodes < args.idle_minimum:
                 time.sleep(1)  # Sleep for 1 second
-            number_of_idle_nodes = slurm_utils.get_number_of_idle_nodes(hostname, partition, username)
-            logger.info(f'Number of idle nodes is {number_of_idle_nodes} on {partition}. Need {args.idle_minimum}')
+            number_of_idle_nodes = slurm_utils.get_number_of_idle_nodes(args.partition)
+            logger.info(f'Number of idle nodes is {number_of_idle_nodes} on {args.partition}. Need {args.idle_minimum}')
 
         return number_of_idle_nodes
 
     if args.cluster:
-        # cluster_env = f"~/anaconda3/envs/ml/bin/python"
-        # CUDA_version = "CUDA_12_3"    # awaiting cluster GPU driver update
-        CUDA_version = "CUDA_12_3"
-        cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
-        cluster_env = f"apptainer exec --bind /clusterfs --nv {cluster_repo}/develop_{CUDA_version}.sif python "
-        script = f"{cluster_repo}/src/ao.py"
-
-        flags = ' '.join(command_flags)
-        flags = re.sub(pattern='--cluster', repl='', string=flags)
-        flags = re.sub(pattern='--docker', repl='', string=flags)
-        flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
-        flags = flags.replace("..", cluster_repo)       # regex stinks at replacing ".."
-        flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
-        flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
-
-        # available_nodes = slurm_utils.get_available_resources(
-        #     username=username,
-        #     hostname=hostname,
-        #     requested_partition='abc_a100'
-        # ).sort_values('available_gpus', ascending=False)
-        #
-        # print(available_nodes)
-        # desired_node = available_nodes.iloc[0].to_dict()
-
-        # flags = re.sub(
-        #     pattern='--batch_size \d+',  # replace w/ 896; max number of samples we can fit on A100 w/ 80G of vram
-        #     repl=f'--batch_size {896*desired_node["available_gpus"]}',
-        #     string=flags
-        # )
-
-        sjob = f"srun "
-        sjob += f"-p {partition} "
-        sjob += f" --nodes=1 "
-        # sjob += f' --gres=gpu:{desired_node["available_gpus"]} '
-        # sjob += f' --cpus-per-task={desired_node["available_cpus"]} '
-        # sjob += f" --mem='{desired_node['available_mem']}' "
-        # sjob += f" --nodelist='{available_nodes.index[0]}' "
-        sjob += f"--exclusive "
-        sjob += f"--job-name={args.func}_{args.input.stem} "
-        sjob += f"{cluster_env} {script} {flags}"
-        logger.info(sjob)
-        subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
+        slurm_utils.submit_slurm_job(command_flags, partition=args.partition)
 
     elif args.docker:
-
-        container_repo = "/app/opticalaberrations"  # location of repo in the container
-        local_repo = Path(__file__).parent.parent  # location of repo in host
-        branch_name = get_active_branch_name(local_repo)
-        CUDA_version = "CUDA_12_3"
-
-        flags = ' '.join(command_flags)
-        flags = re.sub(pattern=' --docker', repl='', string=flags)  # remove flag
-        flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
-        flags = flags.replace("..", container_repo)  # regex stinks at replacing ".."
-        flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='~/nvme2',   repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='U:\\\\',    repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='U:/',       repl='/clusterfs/nvme2/', string=flags)
-        flags = re.sub(pattern='V:\\\\',    repl='/clusterfs/nvme/', string=flags)
-        flags = re.sub(pattern='V:/',       repl='/clusterfs/nvme/', string=flags)
-        flags = re.sub(pattern='D:/',       repl='/d_drive/', string=flags)
-        flags = re.sub(pattern='C:/',       repl='/c_drive/', string=flags)
-        flags = re.sub(pattern=local_repo.as_posix(), repl=container_repo, string=flags)
-
-        docker_run = "docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --name opt_net"
-        docker_mount = (f'-v "{local_repo}":{container_repo}  '
-                        r'-v D:\:/d_drive  '
-                        r'-v C:\:/c_drive  ')
-        docker_vars = (r' -e RUNNING_IN_DOCKER=TRUE')
-        docker_image = f"ghcr.io/abcucberkeley/opticalaberrations:{branch_name}_{CUDA_version}"
-        docker_job = f'{docker_run} {docker_vars} --workdir {container_repo}/src {docker_mount} {docker_image} "python ao.py {flags}"'
-        logger.info(f"Docker job: \n{docker_job}\n")
-        subprocess.run(docker_job, shell=True)
+        slurm_utils.submit_docker_job(command_flags)
 
     else:
         if os.environ.get('SLURM_JOB_ID') is not None:
@@ -1153,11 +1174,19 @@ def main(args=None, preloaded=None):
         )
 
         gpu_workers = strategy.num_replicas_in_sync
-
-        if gpu_workers > 0:
+        
+        if gpu_workers > 0:  # update batchsize automatically
             gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
-            if gpu_model.find('A100') >= 0:  # update batchsize automatically
+            if gpu_model.find('A100') >= 0:
                 args.batch_size = 896 * gpu_workers
+            elif gpu_model.find('NVIDIA RTX 6000 Ada Generation') >= 0:
+                args.batch_size = 512 * gpu_workers
+            elif gpu_model.find('Quadro RTX 8000') >= 0:
+                args.batch_size = 512 * gpu_workers
+            elif gpu_model.find('NVIDIA TITAN V') >= 0:
+                args.batch_size = 128 * gpu_workers
+            else:
+                pass  # keep custom batch batch size
         else:
             gpu_model = None
 
@@ -1246,13 +1275,14 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
+	                denoiser=args.denoiser
                 )
 
             elif args.func == 'denoise':
                 experimental.denoise(
-                    inputFullpath=args.input,
-                    outputFullpath=args.output,
-                    modelPath=args.model,
+                    input_path=args.input,
+                    output_path=args.output,
+                    model_path=args.model,
                     window_size=tuple(int(i) for i in args.window_size.split('-')),
                     batch_size=args.batch_size,
                 )
@@ -1285,6 +1315,7 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
+	                denoiser=args.denoiser
                 )
 
             elif args.func == 'predict_rois':
@@ -1317,6 +1348,7 @@ def main(args=None, preloaded=None):
                     preloaded=preloaded,
                     psf_type=args.psf_type,
                     object_gaussian_kernel_width=args.object_width,
+	                denoiser=args.denoiser
                 )
             elif args.func == 'predict_tiles':
                 experimental.predict_tiles(
@@ -1346,6 +1378,7 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
+	                denoiser=args.denoiser
                 )
             elif args.func == 'predict_folder':
                 experimental.predict_folder(
@@ -1375,6 +1408,7 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
+	                denoiser=args.denoiser
                 )
             elif args.func == 'aggregate_predictions':
                 experimental.aggregate_predictions(

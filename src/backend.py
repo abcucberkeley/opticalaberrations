@@ -305,7 +305,7 @@ def preprocess(
     min_psnr: int = 10,
     object_gaussian_kernel_width: float = 0,  # to simulate ideal OTF for objects bigger than diffraction limit
     cpu_workers: int = -1,
-    denoiser: Optional[CARE] = None,
+    denoiser: Optional[Union[Path, CARE]] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):
     if samplepsfgen is None:
@@ -332,11 +332,6 @@ def preprocess(
     else:
         iotf = modelpsfgen.iotf
     
-    if denoiser is not None:
-        n_tiles = np.ceil(np.array(sample.shape) / np.array(denoiser_window_size)).astype(int)
-        sample = denoiser.predict(sample, axes='ZYX', n_tiles=n_tiles)
-        sample[sample < 0.0] = 0.0
-
     if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
 
         if not skip_prep_sample:
@@ -349,7 +344,9 @@ def preprocess(
                 read_noise_bias=read_noise_bias,
                 min_psnr=min_psnr,
                 plot=plot if plot else None,
-                na_mask=samplepsfgen.na_mask
+                na_mask=samplepsfgen.na_mask,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size,
             )
 
         return fourier_embeddings(
@@ -409,6 +406,8 @@ def preprocess(
                 read_noise_bias=read_noise_bias,
                 na_mask=samplepsfgen.na_mask,
                 min_psnr=min_psnr,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size,
             )
 
             rois = utils.multiprocess(func=prep, jobs=rois,
@@ -1205,7 +1204,9 @@ def predict_files(
     template: Optional[pd.DataFrame] = None,
     pool: Optional[mp.Pool] = None,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0
+    object_gaussian_kernel_width: float = 0,
+    denoiser: Optional[Union[Path, CARE]] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
 
     if preprocessed:
@@ -1236,6 +1237,8 @@ def predict_files(
             min_psnr=min_psnr,
             object_gaussian_kernel_width=object_gaussian_kernel_width,
             cpu_workers=1,  # already parallelized over files
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size
         )
 
         inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
