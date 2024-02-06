@@ -1,7 +1,8 @@
-import pytest
-from pathlib import Path
 from operator import floordiv
+from pathlib import Path
+
 import numpy as np
+import pytest
 
 
 @pytest.fixture(scope="session")
@@ -55,6 +56,8 @@ def kargs():
         min_intensity=200,
         minimum_distance=.5,
         min_psnr=5,
+        denoiser=repo / f"pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64",
+        denoiser_window_size=(32, 64, 64),
     )
 
     return kargs

@@ -26,6 +26,11 @@ from line_profiler_pycharm import profile
 from skimage.filters import window
 from tifffile import TiffFile
 
+from csbdeep.utils.tf import limit_gpu_memory
+
+limit_gpu_memory(allow_growth=True, fraction=None, total_memory=None)
+from csbdeep.models import CARE
+
 try:
     import cupy as cp
     from cupyx.scipy.ndimage import gaussian_filter as cp_gaussian_filter
@@ -416,6 +421,8 @@ def prep_sample(
     expand_dims: bool = True,
     na_mask: Optional[np.ndarray] = None,
     remove_background_noise_method: str = 'fourier_filter',
+    denoiser: Optional[Union[Path, CARE]] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
         
@@ -487,6 +494,13 @@ def prep_sample(
             f'${int(sample_voxel_size[2]*1000)}^X$ (nm)'
         )
         axes[0, 1].set_title(f"PSNR: {measure_snr(sample)}")
+    
+    if denoiser is not None:
+        sample = denoise_image(
+            image=sample,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+        )
 
     if remove_background:
         sample = remove_background_noise(
@@ -883,3 +897,36 @@ def optimal_rolling_strides(model_psf_fov, sample_voxel_size, sample_shape, over
         raise Exception(f'Your strides {strides} overlap too much. '
                         f'Make window size larger so strides are > 2/3 of Model window size {min_strides}')
     return strides
+
+
+def denoise_image(
+    image: np.ndarray,
+    denoiser: Union[Path, CARE],
+    denoiser_window_size: tuple = (32, 64, 64),
+    batch_size: int = 96
+):
+    n_tiles = np.ceil(image.shape / (np.array(denoiser_window_size) * np.cbrt(batch_size))).astype(int)
+    # batch_factor = max(np.floor(np.cbrt(np.prod(n_tiles, axis=None) / batch_size)).astype(int), 1)
+    # n_tiles = np.ceil(n_tiles / float(batch_factor)).astype(int)
+    
+    if isinstance(denoiser, Path):
+        logger.info(f"Loading denoiser model: {denoiser}")
+        denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+        logger.info(f"{denoiser.name} loaded")
+    
+    elif isinstance(denoiser, CARE):
+        logger.info(f"Denoising image {image.shape} [w/ {denoiser.name}]: {n_tiles=}, {denoiser_window_size=}")
+    else:
+        raise Exception(f"Unknown denoiser type: {denoiser}")
+    
+    denoised = denoiser.predict(
+        image.get() if isinstance(image, cp.ndarray) else image,
+        axes='ZYX',
+        n_tiles=n_tiles
+    )
+    denoised[denoised < 0.0] = 0.0
+    
+    if isinstance(image, np.ndarray):
+        return denoised
+    else:
+        return cp.array(denoised)  # make this a GPU array.

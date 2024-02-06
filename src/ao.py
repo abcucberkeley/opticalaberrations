@@ -1,7 +1,7 @@
 
+import multiprocessing as mp
 import os
 import subprocess
-import multiprocessing as mp
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -13,7 +13,6 @@ import tensorflow as tf
 from pathlib import Path
 import re
 
-from multiprocessing.pool import Pool
 from multiprocessing import active_children
 
 import cli
@@ -23,7 +22,6 @@ import slurm_utils
 
 from backend import load_sample
 from preprocessing import prep_sample
-from preloaded import Preloadedmodelclass
 from embeddings import measure_fourier_snr
 
 import warnings
@@ -310,7 +308,12 @@ def parse_args(args):
         "--object_width", default=0.0, type=float,
         help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
     )
-
+    
+    predict_sample.add_argument(
+	    '--denoiser', type=Path, default=None,
+	    help='path to denoiser model'
+    )
+    
     predict_large_fov = subparsers.add_parser("predict_large_fov")
     predict_large_fov.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_large_fov.add_argument("input", type=Path, help="path to input .tif file")
@@ -413,7 +416,12 @@ def parse_args(args):
         "--object_width", default=0.0, type=float,
         help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
     )
-
+    
+    predict_large_fov.add_argument(
+	    '--denoiser', type=Path, default=None,
+	    help='path to denoiser model'
+    )
+    
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_rois.add_argument("input", type=Path, help="path to input .tif file")
@@ -520,6 +528,10 @@ def parse_args(args):
         "--object_width", default=0.0, type=float,
         help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
     )
+    predict_rois.add_argument(
+	    '--denoiser', type=Path, default=None,
+	    help='path to denoiser model'
+    )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
     predict_tiles.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -623,6 +635,10 @@ def parse_args(args):
         "--min_psnr", default=5, type=int,
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
+    predict_tiles.add_argument(
+	    '--denoiser', type=Path, default=None,
+	    help='path to denoiser model'
+    )
 
     predict_folder = subparsers.add_parser("predict_folder")
     predict_folder.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -725,6 +741,10 @@ def parse_args(args):
     predict_folder.add_argument(
         "--min_psnr", default=5, type=int,
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
+    )
+    predict_folder.add_argument(
+	    '--denoiser', type=Path, default=None,
+	    help='path to denoiser model'
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
@@ -1246,6 +1266,7 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
+	                denoiser=args.denoiser
                 )
 
             elif args.func == 'denoise':
@@ -1285,6 +1306,7 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
+	                denoiser=args.denoiser
                 )
 
             elif args.func == 'predict_rois':
@@ -1317,6 +1339,7 @@ def main(args=None, preloaded=None):
                     preloaded=preloaded,
                     psf_type=args.psf_type,
                     object_gaussian_kernel_width=args.object_width,
+	                denoiser=args.denoiser
                 )
             elif args.func == 'predict_tiles':
                 experimental.predict_tiles(
@@ -1346,6 +1369,7 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
+	                denoiser=args.denoiser
                 )
             elif args.func == 'predict_folder':
                 experimental.predict_folder(
@@ -1375,6 +1399,7 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
+	                denoiser=args.denoiser
                 )
             elif args.func == 'aggregate_predictions':
                 experimental.aggregate_predictions(

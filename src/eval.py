@@ -12,7 +12,7 @@ import logging
 import sys
 from functools import partial
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from matplotlib.ticker import FormatStrFormatter, PercentFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import matplotlib.colors as mcolors
@@ -27,6 +27,10 @@ import tensorflow as tf
 from line_profiler_pycharm import profile
 from tqdm import tqdm, trange
 from tifffile import imwrite
+
+from csbdeep.utils.tf import limit_gpu_memory
+
+limit_gpu_memory(allow_growth=True, fraction=None, total_memory=None)
 from csbdeep.models import CARE
 
 import utils
@@ -130,7 +134,7 @@ def generate_sample(
     no_beads: bool = False,
     preprocess: bool = False,
     file_format: str = 'tif',
-    denoiser: Optional[CARE] = None,
+    denoiser: Optional[Union[Path, CARE]] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):
     hashtable = data[data['id'] == image_id].iloc[0].to_dict()
@@ -190,7 +194,7 @@ def generate_sample(
                 min_psnr=0,
                 plot=savepath.with_suffix('') if plot else None,
                 denoiser=denoiser,
-                denoiser_window_size=denoiser_window_size
+                denoiser_window_size=denoiser_window_size,
             )
 
         if savedir is not None:
@@ -233,7 +237,8 @@ def eval_template(shape, psf_type, lam_detection):
 
 def collect_data(
     datapath,
-    model,
+    model_output_shape: int,
+    model_input_shape: tuple,
     samplelimit: int = 1,
     distribution: str = '/',
     no_phase: bool = False,
@@ -245,30 +250,23 @@ def collect_data(
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
 ):
 
-    if isinstance(model, tf.keras.Model):
-        predicted_modes = model.output_shape[-1]
-    elif isinstance(model, int):
-        predicted_modes = model
-    else:
-        predicted_modes = 15
-
     dataset = data_utils.collect_dataset(
         datapath,
         metadata=True,
-        modes=predicted_modes,
+        modes=model_output_shape,
         samplelimit=samplelimit,
         distribution=distribution,
         no_phase=no_phase,
         photons_range=photons_range,
         npoints_range=npoints_range,
         filename_pattern=filename_pattern,
-        model_input_shape=model.input_shape[1:]
+        model_input_shape=model_input_shape
     )
 
     # This runs multiple samples (aka images) at a time.
     # ys is a 2D array, rows are each sample, columns give aberration in zernike coefficients
     dataset = np.array(list(dataset.take(-1)), dtype=object)
-    ys = np.zeros((dataset.shape[0], predicted_modes))
+    ys = np.zeros((dataset.shape[0], model_output_shape))
     counts_percentiles = np.zeros((dataset.shape[0], 100))
     results = eval_template(shape=dataset.shape, psf_type=psf_type, lam_detection=lam_detection)
 
@@ -276,7 +274,7 @@ def collect_data(
     for i in range(dataset.shape[0]):
 
         # rescale zernike amplitudes to maintain the same peak2valley for different PSFs
-        ys[i] = lam_detection / default_wavelength * dataset[i, 0].numpy()[:predicted_modes]
+        ys[i] = lam_detection / default_wavelength * dataset[i, 0].numpy()[:model_output_shape]
         results['residuals_umRMS'][i] = np.linalg.norm(ys[i])
 
         results['photons'][i] = dataset[i, 1].numpy()
@@ -339,7 +337,7 @@ def iter_evaluate(
     preprocess: bool = False,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
-    denoiser: Optional[Path] = None,
+    denoiser: Optional[Union[Path, CARE]] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):
     """
@@ -365,12 +363,6 @@ def iter_evaluate(
         use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
     )
     
-    if denoiser is not None:
-        logger.info(f"Loading denoiser model: {denoiser}")
-        denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
-    else:
-        denoiser = None
-
     if Path(f'{savepath}_predictions.csv').exists():
         # continue from previous results, ignoring criteria
         results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
@@ -382,7 +374,8 @@ def iter_evaluate(
         # on first call, setup the dataframe with the 0th iteration stuff
         results = collect_data(
             datapath=datapath,
-            model=model,
+            model_output_shape=model.output_shape[-1],
+            model_input_shape=model.input_shape[1:],
             samplelimit=samplelimit,
             distribution=distribution,
             no_phase=no_phase,
@@ -398,7 +391,7 @@ def iter_evaluate(
     ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
     residual_cols = [col for col in results.columns if col.endswith('_residual')]
     previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
-
+    
     # create realspace images for the current iteration
     paths = utils.multiprocess(
         func=partial(
@@ -419,12 +412,17 @@ def iter_evaluate(
         unit=' sample',
         cores=-1
     )
-
+    
     current = previous.copy()
     current['iter_num'] = iter_num
     current['file'] = paths
     current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
-
+    
+    if denoiser is not None:
+        logger.info(f"Loading denoiser model: {denoiser}")
+        denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+        logger.info(f"{denoiser.name} loaded")
+        
     predictions, stdevs = backend.predict_files(
         paths=np.hstack(paths) if digital_rotations else paths,
         outdir=savepath/f'iter_{iter_num}',
@@ -442,6 +440,8 @@ def iter_evaluate(
         skip_prep_sample=False,
         preprocessed=True if preprocess else False,
         remove_background=False if skip_remove_background else True,
+        denoiser=denoiser,
+        denoiser_window_size=denoiser_window_size
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
