@@ -48,7 +48,7 @@ def test_training_dataset(kargs):
             distribution=gen.distribution,
             mode_dist=gen.mode_weights,
             gamma=.75,
-            randomize_voxel_size=False,
+            randomize_object_size=False,
             emb=True,
             signed=True,
             random_crop=None,

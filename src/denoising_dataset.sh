@@ -120,7 +120,7 @@ do
             fi
 
             if $RAND_VSIZE; then
-              j="${j} --randomize_voxel_size"
+              j="${j} --randomize_object_size"
             fi
 
             for e in spatial_planes

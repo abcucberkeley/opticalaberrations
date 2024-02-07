@@ -9,7 +9,7 @@ CPUS=1
 TIMELIMIT='1:00'
 SHAPE=64
 MAX_LLS_OFFSET=0
-RAND_VSIZE=false
+RAND_OBJECT_SIZE=false
 SKIP_REMOVE_BACKGROUND=false
 USE_THEORETICAL_WIDEFIELD_SIMULATOR=false
 MODES=15
@@ -166,8 +166,8 @@ do
               j="${j} --skip_remove_background"
             fi
 
-            if $RAND_VSIZE; then
-              j="${j} --randomize_voxel_size"
+            if $RAND_OBJECT_SIZE; then
+              j="${j} --randomize_object_size"
             fi
 
             for e in spatial_planes

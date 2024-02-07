@@ -123,7 +123,7 @@ def beads(
     zborder: int = 10,
     kernlen: int = 21,
     kernhalfwidth: int = 10,
-    uniform_background: int = 0
+    uniform_background: int = 0,
 ):
     """
     Args:
@@ -140,11 +140,11 @@ def beads(
         num_objs = int(randuniform((1, 50)))
     else:
         num_objs = int(num_objs)
-
+    
     if object_size == 0:
         bead = photons
     elif object_size == -1:  # bead size will be randomly selected
-        pick_random_bead_size = lambda: np.random.uniform(low=1, high=5)
+        pick_random_bead_size = lambda: np.random.uniform(low=2, high=5)
     else:  # all beads will have the same size
         bead = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=fwhm2sigma(object_size)) * photons
 
@@ -163,10 +163,9 @@ def beads(
             reference[z, y, x] = bead
 
         elif object_size == -1:  # bead size will be randomly selected
-            bead = gaussian_kernel(
-                kernlen=(kernlen, kernlen, kernlen),
-                std=fwhm2sigma(pick_random_bead_size())
-            ) * photons
+            sigma = fwhm2sigma(pick_random_bead_size())
+            
+            bead = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=sigma) * photons
 
             reference[
                 max(0, z-kernhalfwidth):min(reference.shape[0], z+kernhalfwidth+1),
@@ -359,7 +358,7 @@ def create_synthetic_sample(
     mode_dist: str,
     gamma: float,
     signed: bool,
-    randomize_voxel_size: bool,
+    randomize_object_size: bool,
     rotate: bool,
     min_amplitude: float,
     max_amplitude: float,
@@ -405,10 +404,10 @@ def create_synthetic_sample(
     reference = beads(
         image_shape=image_shape,
         photons=photons,
-        object_size=object_size,
+        object_size=-1 if randomize_object_size else object_size,
         num_objs=npoints,
         fill_radius=fill_radius,
-        uniform_background=uniform_background
+        uniform_background=uniform_background,
     )
 
     inputs, wavefronts = {}, {}
@@ -451,8 +450,8 @@ def create_synthetic_sample(
         else:
             gtdir = None
             outdir = savedir / rf"{re.sub(r'.*/lattice/', '', str(gen.psf_type)).split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
-
-            if not randomize_voxel_size:
+            
+            if not randomize_object_size:
                 outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
 
             outdir = outdir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
@@ -717,7 +716,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        '--randomize_voxel_size', action='store_true',
+        '--randomize_object_size', action='store_true',
         help='optional flag to randomize voxel size during training'
     )
 
@@ -895,7 +894,7 @@ def main(args=None):
         random_crop=args.random_crop,
         gamma=args.gamma,
         signed=args.signed,
-        randomize_voxel_size=args.randomize_voxel_size,
+        randomize_object_size=args.randomize_object_size,
         rotate=args.rotate,
         min_amplitude=args.min_amplitude,
         max_amplitude=args.max_amplitude,
