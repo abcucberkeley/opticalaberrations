@@ -246,9 +246,10 @@ def remove_interference_pattern(
     template_poi[1] = np.clip(template_poi[1], a_min=half_length, a_max=(psf.shape[1] - half_length) - 1)
     template_poi[2] = np.clip(template_poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
 
-    high_snr = measure_snr(psf) > 30  # SNR good enough for template
+    measured_snr = measure_snr(psf)
+    high_snr = measured_snr > 30  # SNR good enough for template
     if high_snr:
-        # logger.info('Using template')
+        # logger.info(f'Using template. {measured_snr=} > 30')
         init_pos = [p-half_length for p in template_poi]
         kernel = blured_psf[
             init_pos[0]:init_pos[0]+kernel_size,
@@ -257,7 +258,7 @@ def remove_interference_pattern(
         ]
         effective_kernel_width = kernel_size // 2
     else:  # SNR isn't good enough for template, use a gaussian kernel
-        # logger.info('Using gaussian kernel')
+        # logger.info(f'Using gaussian kernel. {measured_snr=} <= 30')
         effective_kernel_width = 1
         kernel = gaussian_kernel(kernlen=[kernel_size]*3, std=effective_kernel_width)
 
@@ -863,6 +864,17 @@ def fourier_embeddings(
                 model_psf_shape=model_psf_shape
             )
         else:
+            use_reconstructed_otf = False   # option to use reconstructed otf for alpha embedding
+            if remove_interference and use_reconstructed_otf:
+                otf = remove_interference_pattern(
+                    psf,
+                    otf,
+                    plot=plot if plot_interference else None,
+                    pois=pois,
+                    windowing=True
+                )
+
+
             alpha = compute_emb(
                 otf,
                 iotf,
@@ -876,7 +888,7 @@ def fourier_embeddings(
                 model_psf_shape=model_psf_shape
             )
 
-            if remove_interference:
+            if remove_interference and not use_reconstructed_otf:
                 otf = remove_interference_pattern(
                     psf,
                     otf,
