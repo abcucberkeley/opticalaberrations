@@ -1,5 +1,6 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="eval-background" type="PythonConfigurationType" factoryName="Python" folderName="eval">
+  <configuration default="false" name="eval_background" type="PythonConfigurationType" factoryName="Python"
+                 folderName="eval">
     <module name="opticalaberrations" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
