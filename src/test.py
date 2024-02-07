@@ -170,6 +170,7 @@ def main(args=None):
         if args.target == 'modes':
             savepath = eval.evaluate_modes(
                 args.model,
+                outdir=args.outdir,
                 eval_sign=args.eval_sign,
                 num_objs=args.num_objs,
                 batch_size=batch_size,
@@ -181,9 +182,11 @@ def main(args=None):
         elif args.target == 'sizes':
             savepath = eval.evaluate_object_sizes(
                 args.model,
+                outdir=args.outdir,
                 eval_sign=args.eval_sign,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                denoiser=args.denoiser
             )
         elif args.target == 'background':
             savepath = eval.evaluate_uniform_background(

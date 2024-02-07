@@ -2420,6 +2420,7 @@ def eval_object(
 @profile
 def evaluate_modes(
     model: Path,
+    outdir: Path,
     eval_sign: str = 'signed',
     batch_size: int = 512,
     num_objs: Optional[int] = 1,
@@ -2440,7 +2441,7 @@ def evaluate_modes(
 
     num_objs = 1 if num_objs is None else num_objs
     
-    outdir = model.with_suffix('') / eval_sign / 'evalmodes' / f'test'
+    outdir = outdir / model.with_suffix('').name / eval_sign / 'evalmodes' / f'test'
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
     
@@ -3353,14 +3354,18 @@ def residuals_histogram(
 @profile
 def evaluate_object_sizes(
     model: Path,
+    outdir: Path,
     eval_sign: str = 'signed',
     batch_size: int = 256,
     num_objs: Optional[int] = 1,
     digital_rotations: bool = True,
     agg: str = 'median',
     na: float = 1.0,
-    photons: int = 1000000,
+    photons: int = 40000,
     override: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    amp: float = .15
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -3382,23 +3387,23 @@ def evaluate_object_sizes(
     )
     samplegen = backend.load_metadata(
         model,
-        psf_shape=(72, 72, 72),
+        psf_shape=(96, 96, 96),
         rotate=False,
         # psf_type='widefield',
         x_voxel_size=.097,
         y_voxel_size=.097,
         z_voxel_size=.2,
-        use_theoretical_widefield_simulator=False,
+        use_theoretical_widefield_simulator=True,
     )
     w = Wavefront(np.zeros(15))
-
-    outdir = model.with_suffix('') / eval_sign / 'evalobjects' / f'num_objs_{num_objs}'
+    
+    outdir = outdir / model.with_suffix('').name / eval_sign / 'evalobjects' / f'num_objs_{num_objs}'
 
     for i, (mode, twin) in enumerate(w.twins.items()):
         if mode.index_ansi == 4: continue
 
         zernikes = np.zeros(15)
-        zernikes[mode.index_ansi] = .1
+        zernikes[mode.index_ansi] = amp
 
         if np.all(zernikes == 0):
             savepath = outdir / f"z0"
@@ -3407,8 +3412,8 @@ def evaluate_object_sizes(
 
         savepath.mkdir(parents=True, exist_ok=True)
         savepath = savepath / f"ph{photons}"
-
-        sizes = np.arange(0, 5.25, .25).round(2)
+        
+        sizes = np.arange(0, 6.5, .25).round(2)
         wavefront = Wavefront(zernikes, lam_detection=samplegen.lam_detection, rotate=False)
         psf = samplegen.single_psf(phi=wavefront, normed=True)
         psf /= np.sum(psf)
@@ -3445,6 +3450,8 @@ def evaluate_object_sizes(
                     normalize=True,
                     min_psnr=0,
                     plot=Path(f"{savepath}_{sizes[w]}"),
+                    denoiser=denoiser,
+                    denoiser_window_size=denoiser_window_size
                 )
                 for w, i in enumerate(tqdm(
                     inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout
@@ -3477,7 +3484,7 @@ def evaluate_object_sizes(
             np.save(f"{savepath}_predictions", preds)
 
         residuals = ys - preds
-        sizes = [s * samplegen.x_voxel_size for s in sizes]
+        sizes = [s * samplegen.x_voxel_size * 1000 for s in sizes]
         df = pd.DataFrame([w for w in sizes], columns=['size'])
         df['prediction'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in preds]
         df['residuals'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in residuals]
@@ -3498,20 +3505,20 @@ def evaluate_object_sizes(
             color=".2",
             ax=ax
         )
-
-        ax.set_yticks(np.arange(-.1, .11, .01))
+        
+        ax.set_yticks(np.arange(-1 * amp, amp + .025, .025))
+        ax.set_ylim(-1 * amp, amp)
         ax.set_xlim(0, sizes[-1])
-        ax.set_ylim(-.1, .1)
         ax.axhline(y=0, color='r')
-        ax.set_ylabel(r'Residuals ($y - \hat{y}$)')
+        ax.set_ylabel(r'Residuals ($y - \hat{y}$) $\mu$m RMS')
         # ax.set_ylabel(rf'Residuals ($\lambda = {int(gen.lam_detection * 1000)}~nm$)')
-        ax.set_xlabel(r'Gaussian kernel full width at half maximum (FWHM) $w$')
+        ax.set_xlabel(r'Gaussian kernel full width at half maximum (FWHM) $w$ [nm]')
         ax.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0, alpha=.5)
         ax.spines.right.set_visible(False)
         ax.spines.top.set_visible(False)
 
         secax = ax.secondary_xaxis('top', functions=(utils.fwhm2sigma, utils.sigma2fwhm))
-        secax.set_xlabel(r'Gaussian kernel $\sigma$ ($\sigma = w / 2 \sqrt{2 \ln{2}}$)')
+        secax.set_xlabel(r'Gaussian kernel ($\sigma = w / 2 \sqrt{2 \ln{2}}$) $\sigma$ [nm]')
 
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
