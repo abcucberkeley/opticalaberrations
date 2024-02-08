@@ -52,7 +52,7 @@ from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern
 from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad, \
-    denoise_image
+    denoise_image, remove_background_noise
 
 import logging
 logger = logging.getLogger('')
@@ -727,13 +727,34 @@ def predict_rois(
         ideal_empirical_psf=ideal_empirical_psf,
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
-
+    
+    samplepsfgen = SyntheticPSF(
+        psf_type=preloadedpsfgen.psf_type,
+        psf_shape=preloadedpsfgen.psf_shape,
+        n_modes=preloadedmodel.output_shape[1],
+        lam_detection=wavelength,
+        x_voxel_size=lateral_voxel_size,
+        y_voxel_size=lateral_voxel_size,
+        z_voxel_size=axial_voxel_size
+    )
+    
     outdir = Path(f"{img.with_suffix('')}_rois")
     outdir.mkdir(exist_ok=True, parents=True)
 
     logger.info(f"Loading file: {img.name}")
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
+    
+    if not isinstance(sample, cp.ndarray):
+        sample = cp.array(sample)
+    
+    sample = remove_background_noise(
+        sample,
+        min_psnr=min_psnr,
+        na_mask=preloadedpsfgen.na_mask,
+    )
+    
+    sample = sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample)
     
     if denoiser is not None:
         sample = denoise_image(
@@ -754,16 +775,6 @@ def predict_rois(
         max_neighbor=20,
         min_intensity=min_intensity,
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-    )
-
-    samplepsfgen = SyntheticPSF(
-        psf_type=preloadedpsfgen.psf_type,
-        psf_shape=preloadedpsfgen.psf_shape,
-        n_modes=preloadedmodel.output_shape[1],
-        lam_detection=wavelength,
-        x_voxel_size=lateral_voxel_size,
-        y_voxel_size=lateral_voxel_size,
-        z_voxel_size=axial_voxel_size
     )
     
     fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
