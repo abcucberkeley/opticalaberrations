@@ -451,7 +451,6 @@ def parse_args(args):
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_rois.add_argument("input", type=Path, help="path to input .tif file")
-    predict_rois.add_argument("pois", type=Path, help="path to point detection results (.mat file)")
     predict_rois.add_argument(
         "dm_calibration", type=Path,
         help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
@@ -1318,7 +1317,6 @@ def main(args=None, preloaded=None):
                 experimental.predict_rois(
                     model=args.model,
                     img=args.input,
-                    pois=args.pois,
                     prev=args.prev,
                     dm_calibration=args.dm_calibration,
                     dm_state=args.current_dm,
@@ -1343,7 +1341,6 @@ def main(args=None, preloaded=None):
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded,
                     psf_type=args.psf_type,
-                    object_gaussian_kernel_width=args.object_width,
 	                denoiser=args.denoiser
                 )
             elif args.func == 'predict_tiles':

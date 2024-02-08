@@ -15,8 +15,6 @@ from scipy.ndimage import gaussian_filter
 import pandas as pd
 import seaborn as sns
 import zarr
-import h5py
-import scipy.io
 from tqdm.contrib import itertools
 from tifffile import imread, imwrite
 from scipy.spatial import KDTree
@@ -25,7 +23,8 @@ import matplotlib.patches as patches
 from line_profiler_pycharm import profile
 from skimage.filters import window
 from tifffile import TiffFile
-
+from astropy import convolution
+from skimage.feature import peak_local_max
 from csbdeep.utils.tf import limit_gpu_memory
 
 limit_gpu_memory(allow_growth=True, fraction=None, total_memory=None)
@@ -38,7 +37,7 @@ except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
 from vis import plot_mip, savesvg
-from utils import round_to_even
+from utils import round_to_even, gaussian_kernel
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -570,7 +569,7 @@ def prep_sample(
 
 @profile
 def find_roi(
-    path: Union[Path, np.array],
+    image: Union[Path, np.array],
     savepath: Path,
     window_size: tuple = (64, 64, 64),
     plot: Any = None,
@@ -578,10 +577,13 @@ def find_roi(
     min_dist: Any = 1,
     max_dist: Any = None,
     min_intensity: Any = 100,
-    pois: Any = None,
     max_neighbor: int = 5,
     voxel_size: tuple = (.200, .097, .097),
-    timestamp: int = 17
+    kernel_size: int = 15,
+    max_num_peaks: int = 20,
+    min_psnr: float = 10.0,
+    zborder: int = 10,
+    min_distance: int = 5,
 ):
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -593,46 +595,80 @@ def find_roi(
         'ytick.labelsize': 10,
         'legend.fontsize': 10,
     })
-
-    if isinstance(path, (np.ndarray, np.generic)):
-        dataset = path
-    elif path.suffix == '.tif':
-        dataset = imread(path).astype(np.float32)
-    elif path.suffix == '.zarr':
-        dataset = zarr.open_array(str(path), mode='r', order='F')
+    
+    if isinstance(image, Path):
+        image = imread(image).astype(np.float32)
+    
+    blured_image = gaussian_filter(image, sigma=1.1)
+    kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=1)
+    
+    # exclude values close to the edge in Z for finding our template
+    restricted_blurred = blured_image.copy()
+    restricted_blurred[0: zborder] = 0
+    restricted_blurred[blured_image.shape[0] - zborder:blured_image.shape[0]] = 0
+    max_poi = list(np.unravel_index(np.nanargmax(restricted_blurred, axis=None), restricted_blurred.shape))
+    
+    # convolve template with the input image
+    convolved_image = convolution.convolve_fft(
+        blured_image,
+        kernel,
+        allow_huge=True,
+        boundary='fill',
+        nan_treatment='fill',
+        fill_value=0,
+        normalize_kernel=False
+    )
+    convolved_image -= np.nanmin(convolved_image)
+    convolved_image /= np.nanmax(convolved_image)
+    
+    pois = []
+    detected_peaks = peak_local_max(
+        convolved_image,
+        min_distance=min_distance,
+        threshold_rel=.3,
+        exclude_border=1,
+        p_norm=2,
+        num_peaks=max_num_peaks
+    ).astype(int)
+    
+    candidates_map = np.zeros_like(image)
+    if len(detected_peaks) == 0:
+        p = max_poi
+        intensity = image[p[0], p[1], p[2]]
+        
+        candidates_map[p[0], p[1], p[2]] = 1
+        pois.append([p[0], p[1], p[2], intensity])
+    
+    elif len(detected_peaks) == 1:
+        p = detected_peaks[0]
+        intensity = image[p[0], p[1], p[2]]
+        candidates_map[p[0], p[1], p[2]] = 1
+        pois.append([p[0], p[1], p[2], intensity])
+    
     else:
-        logger.error(f"Unknown file format: {path.name}")
-        return
-
-    if isinstance(pois, str) or isinstance(pois, Path):
-        try:
-            with h5py.File(pois, 'r') as file:
-                file = file.get('frameInfo')
-                pois = pd.DataFrame(
-                    np.hstack((file['x'], file['y'], file['z'], file['A'], file['c'], file['isPSF'])),
-                    columns=['x', 'y', 'z', 'A', 'c', 'isPSF']
-                ).round(0).astype(int)
-        except OSError:
-            file = scipy.io.loadmat(pois)
-            file = file.get('frameInfo')
-            pois = pd.DataFrame(
-                np.vstack((
-                    file['x'][0][timestamp+1][0],
-                    file['y'][0][timestamp+1][0],
-                    file['z'][0][timestamp+1][0],
-                    file['A'][0][timestamp+1][0],
-                    file['c'][0][timestamp+1][0],
-                    file['isPSF'][0][timestamp+1][0],
-                )).T,
-                columns=['x', 'y', 'z', 'A', 'c', 'isPSF']
-            ).round(0).astype(int)
-
-        # index by zero like every other good language (stupid, matlab!)
-        pois[['z', 'y', 'x']] -= 1
-
-    pois = pois[pois['isPSF'] == 1]
+        for p in detected_peaks:
+            try:
+                fov = convolved_image[
+                      p[0] - (min_distance + 1):p[0] + (min_distance + 1),
+                      p[1] - (min_distance + 1):p[1] + (min_distance + 1),
+                      p[2] - (min_distance + 1):p[2] + (min_distance + 1),
+                      ]
+                peak_value = max(image[p[0], p[1], p[2]], blured_image[p[0], p[1], p[2]])
+                
+                if np.nanmax(fov) > convolved_image[p[0], p[1], p[2]]:
+                    continue  # we are not at the summit if a max nearby is available.
+                else:
+                    candidates_map[p[0], p[1], p[2]] = peak_value
+                    pois.append([p[0], p[1], p[2], peak_value])  # keep peak
+            
+            except Exception:
+                # keep peak if we are at the border of the image
+                candidates_map[p[0], p[1], p[2]] = peak_value
+                pois.append([p[0], p[1], p[2], peak_value])
+    
+    pois = pd.DataFrame(pois, columns=['z', 'y', 'x', 'intensity'])
     points = pois[['z', 'y', 'x']].values
-    scaled_peaks = np.zeros_like(points)
+    scaled_peaks = np.zeros_like(pois)
     scaled_peaks[:, 0] = points[:, 0] * voxel_size[0]
     scaled_peaks[:, 1] = points[:, 1] * voxel_size[1]
     scaled_peaks[:, 2] = points[:, 2] * voxel_size[2]
@@ -647,17 +683,17 @@ def find_roi(
 
     # filter out points too close to the edge
     lzedge = pois['z'] >= window_size[0]//4
-    hzedge = pois['z'] <= dataset.shape[0] - window_size[0]//4
+    hzedge = pois['z'] <= image.shape[0] - window_size[0] // 4
     lyedge = pois['y'] >= window_size[1]//4
-    hyedge = pois['y'] <= dataset.shape[1] - window_size[1]//4
+    hyedge = pois['y'] <= image.shape[1] - window_size[1] // 4
     lxedge = pois['x'] >= window_size[2]//4
-    hxedge = pois['x'] <= dataset.shape[2] - window_size[2]//4
+    hxedge = pois['x'] <= image.shape[2] - window_size[2] // 4
     pois = pois[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=pois['dist'], y=pois['A'], s=5, color="C0")
-        sns.kdeplot(ax=axes[0], x=pois['dist'], y=pois['A'], levels=5, color="grey", linewidths=1)
+        sns.scatterplot(ax=axes[0], x=pois['dist'], y=pois['intensity'], s=5, color="C0")
+        sns.kdeplot(ax=axes[0], x=pois['dist'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
         axes[0].set_ylabel('Intensity')
         axes[0].set_xlabel('Distance (microns)')
         axes[0].set_yscale('log')
@@ -686,18 +722,18 @@ def find_roi(
         pois = pois[pois['dist'] <= max_dist]
 
     if min_intensity is not None:
-        pois = pois[pois['A'] >= min_intensity]
+        pois = pois[pois['intensity'] >= min_intensity]
 
     neighbors = pois.columns[pois.columns.str.startswith('dist')].tolist()
     min_dist = np.min(window_size)*np.min(voxel_size)
     pois['neighbors'] = pois[pois[neighbors] <= min_dist].count(axis=1)
-    pois.sort_values(by=['neighbors', 'dist', 'A'], ascending=[True, False, False], inplace=True)
+    pois.sort_values(by=['neighbors', 'dist', 'intensity'], ascending=[True, False, False], inplace=True)
     pois = pois[pois['neighbors'] <= max_neighbor]
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=pois['dist'], y=pois['A'], s=5, color="C0")
-        sns.kdeplot(ax=axes[0], x=pois['dist'], y=pois['A'], levels=5, color="grey", linewidths=1)
+        sns.scatterplot(ax=axes[0], x=pois['dist'], y=pois['intensity'], s=5, color="C0")
+        sns.kdeplot(ax=axes[0], x=pois['dist'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
         axes[0].set_ylabel('Intensity')
         axes[0].set_xlabel('Distance')
         axes[0].set_xlim(0, None)
@@ -728,7 +764,7 @@ def find_roi(
         fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharey=False, sharex=False)
         for ax in range(2):
             axes[ax].imshow(
-                np.nanmax(dataset, axis=ax),
+                np.nanmax(image, axis=ax),
                 aspect='equal',
                 cmap='Greys_r',
             )
@@ -773,10 +809,10 @@ def find_roi(
             for s in range(3)
         ]
         end = [
-            pois[p, s] + widths[s] if pois[p, s] + widths[s] < dataset.shape[s] else dataset.shape[s]
+            pois[p, s] + widths[s] if pois[p, s] + widths[s] < image.shape[s] else image.shape[s]
             for s in range(3)
         ]
-        r = dataset[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
+        r = image[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
 
         if r.size != 0:
             tile = f"z{0}-y{y}-x{x}"

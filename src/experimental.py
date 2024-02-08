@@ -688,7 +688,6 @@ def predict_large_fov(
 def predict_rois(
     img: Path,
     model: Path,
-    pois: Any,
     dm_calibration: Any,
     dm_state: Any,
     axial_voxel_size: float,
@@ -697,22 +696,26 @@ def predict_rois(
     num_predictions: int = 1,
     batch_size: int = 1,
     window_size: tuple = (64, 64, 64),
-    num_rois: int = 10,
+    num_rois: int = 50,
     min_intensity: int = 200,
+    minimum_distance: int = 10,
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,
-    minimum_distance: float = 1.,
+    confidence_threshold: float = .02,
+    sign_threshold: float = .9,
     plot: bool = False,
     plot_rotations: bool = False,
+    prev: Any = None,
+    estimate_sign_with_decon: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
     preloaded: Preloadedmodelclass = None,
     ideal_empirical_psf: Any = None,
-    sign_threshold: float = .9,
-    prev: Any = None,
-    estimate_sign_with_decon: bool = False,
     digital_rotations: Optional[int] = 361,
-    psf_type: Optional[Union[str, Path]] = None,
     cpu_workers: int = -1,
+    shifting: tuple = (0, 0, 0),
+    psf_type: Optional[Union[str, Path]] = None,
+    min_psnr: int = 5,
+    object_gaussian_kernel_width: float = 0,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):
@@ -731,11 +734,18 @@ def predict_rois(
     logger.info(f"Loading file: {img.name}")
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
-
+    
+    if denoiser is not None:
+        sample = denoise_image(
+            image=sample,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+            batch_size=batch_size
+        )
+    
     rois, ztiles, nrows, ncols = find_roi(
         sample,
         savepath=outdir,
-        pois=pois,
         window_size=window_size,
         plot=f"{outdir}_predictions" if plot else None,
         num_rois=num_rois,
@@ -748,12 +758,24 @@ def predict_rois(
 
     samplepsfgen = SyntheticPSF(
         psf_type=preloadedpsfgen.psf_type,
-        psf_shape=sample.shape,
+        psf_shape=preloadedpsfgen.psf_shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
         y_voxel_size=lateral_voxel_size,
         z_voxel_size=axial_voxel_size
+    )
+    
+    fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
+    
+    prep = partial(
+        prep_sample,
+        model_fov=preloadedpsfgen.psf_fov,  # this is what we will crop to
+        sample_voxel_size=samplepsfgen.voxel_size,
+        remove_background=True,
+        normalize=True,
+        min_psnr=min_psnr,
+        na_mask=samplepsfgen.na_mask
     )
 
     with Path(f"{img.with_suffix('')}_rois_predictions_settings.json").open('w') as f:
@@ -795,20 +817,18 @@ def predict_rois(
         samplepsfgen=samplepsfgen,
         dm_calibration=dm_calibration,
         dm_state=dm_state,
-        prediction_threshold=prediction_threshold,
+        prediction_threshold=0,
+        confidence_threshold=confidence_threshold,
         batch_size=batch_size,
         wavelength=wavelength,
-        ztiles=ztiles,
-        nrows=nrows,
-        ncols=ncols,
         ignore_modes=ignore_modes,
         freq_strength_threshold=freq_strength_threshold,
+        fov_is_small=fov_is_small,
+        skip_prep_sample=prep is not None,
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
         cpu_workers=cpu_workers,
-        denoiser=denoiser,
-        denoiser_window_size=denoiser_window_size
     )
     return predictions
 
