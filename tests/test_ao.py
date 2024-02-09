@@ -230,3 +230,32 @@ def test_predict_folder_with_denoising(kargs):
     )
     predictions = predictions.drop(columns=['mean', 'median', 'min', 'max', 'std'])
     assert predictions.shape == (kargs['num_modes'], number_of_files)
+
+
+@pytest.mark.run(order=11)
+def test_predict_rois(kargs):
+    num_rois = 10
+    logging.info(
+        f"Pytest will assert that 'predict_rois' has output shape of: "
+        f"(num_modes={kargs['num_modes']}, num_rois={num_rois})"
+    )
+    
+    roi_predictions = experimental.predict_rois(
+        model=kargs['model'],
+        img=kargs['inputs'],
+        prev=kargs['prev'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=False,
+        plot_rotations=False,
+        batch_size=kargs['batch_size'],
+        ignore_modes=kargs['ignore_modes'],
+        window_size=kargs['window_size'],
+        min_psnr=kargs['min_psnr'],
+        num_rois=num_rois,
+    )
+    roi_predictions = roi_predictions.drop(columns=['mean', 'median', 'min', 'max', 'std'])
+    assert roi_predictions.shape == (kargs['num_modes'], num_rois), f'{roi_predictions=}'

@@ -701,7 +701,7 @@ def predict_rois(
     batch_size: int = 1,
     window_size: tuple = (64, 64, 64),
     num_rois: int = 50,
-    min_intensity: int = 200,
+    min_intensity: int = 100,
     minimum_distance: int = 10,
     prediction_threshold: float = 0.,
     freq_strength_threshold: float = .01,

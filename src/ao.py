@@ -480,7 +480,7 @@ def parse_args(args):
         help='max number of detected points to use for estimating aberrations'
     )
     predict_rois.add_argument(
-        "--min_intensity", default=200, type=int,
+        "--min_intensity", default=100, type=int,
         help='minimum intensity desired for detecting peaks of interest'
     )
     predict_rois.add_argument(

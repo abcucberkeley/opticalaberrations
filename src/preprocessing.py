@@ -603,7 +603,6 @@ def find_roi(
     max_num_peaks: int = 20,
     min_psnr: float = 10.0,
     zborder: int = 10,
-    min_distance: int = 5,
 ):
     savepath.mkdir(parents=True, exist_ok=True)
 
@@ -620,13 +619,20 @@ def find_roi(
         image = imread(image).astype(np.float32)
     
     blured_image = gaussian_filter(image, sigma=1.1)
-    kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=1)
-    
+
     # exclude values close to the edge in Z for finding our template
     restricted_blurred = blured_image.copy()
     restricted_blurred[0: zborder] = 0
     restricted_blurred[blured_image.shape[0] - zborder:blured_image.shape[0]] = 0
     max_poi = list(np.unravel_index(np.nanargmax(restricted_blurred, axis=None), restricted_blurred.shape))
+    
+    kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=1)
+    # init_pos = [p - kernel_size // 2 for p in max_poi]
+    # kernel = blured_image[
+    #     init_pos[0]:init_pos[0] + kernel_size,
+    #     init_pos[1]:init_pos[1] + kernel_size,
+    #     init_pos[2]:init_pos[2] + kernel_size,
+    # ]
     
     # convolve template with the input image
     convolved_image = convolution.convolve_fft(
@@ -644,7 +650,7 @@ def find_roi(
     pois = []
     detected_peaks = peak_local_max(
         convolved_image,
-        min_distance=min_distance,
+        min_distance=5,
         threshold_rel=.3,
         exclude_border=1,
         p_norm=2,
@@ -667,14 +673,15 @@ def find_roi(
     
     else:
         for p in detected_peaks:
+            peak_value = max(image[p[0], p[1], p[2]], blured_image[p[0], p[1], p[2]])
+            
             try:
                 fov = convolved_image[
-                      p[0] - (min_distance + 1):p[0] + (min_distance + 1),
-                      p[1] - (min_distance + 1):p[1] + (min_distance + 1),
-                      p[2] - (min_distance + 1):p[2] + (min_distance + 1),
+                      p[0] - (min_dist + 1):p[0] + (min_dist + 1),
+                      p[1] - (min_dist + 1):p[1] + (min_dist + 1),
+                      p[2] - (min_dist + 1):p[2] + (min_dist + 1),
                       ]
-                peak_value = max(image[p[0], p[1], p[2]], blured_image[p[0], p[1], p[2]])
-                
+
                 if np.nanmax(fov) > convolved_image[p[0], p[1], p[2]]:
                     continue  # we are not at the summit if a max nearby is available.
                 else:
