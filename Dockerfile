@@ -2,7 +2,7 @@
 # docker rm -f ml_cont ; docker build . -t ml --build-arg BRANCH_NAME=$(git branch --show-current) --target Torch_CUDA_12_3 --progress=plain && docker run -it --name ml_cont --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864  -v ${PWD}:/app/opticalaberrations --workdir /app/opticalaberrations  ml /bin/bash
 
 # to build the TF_CUDA_12_3 image: 
-# docker build . -t ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 --build-arg BRANCH_NAME=$(git branch --show-current) --target TF_CUDA_12_3 --build-arg TF_IMAGE=22.12 --progress=plain
+# docker build . -t ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 --build-arg BRANCH_NAME=$(git branch --show-current) --target TF_CUDA_12_3 --progress=plain
 #
 # to run on a ubuntu system:
 # install docker: https://docs.docker.com/engine/install/ubuntu/
@@ -20,6 +20,8 @@
 # https://developer.nvidia.com/nvidia-development-tools-solutions-err_nvgpuctrperm-permission-issue-performance-counters#AllUsersTag
 
 # docker run --rm -it --gpus all --ipc=host --cap-add=SYS_ADMIN --privileged=true --security-opt seccomp=unconfined --ulimit memlock=-1 --ulimit stack=67108864 -v ${PWD}:/app/opticalaberrations  ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 /bin/bash
+# docker run --rm -it --gpus all --ipc=host --cap-add=SYS_ADMIN --privileged=true --ulimit memlock=-1 --ulimit stack=67108864 -v ${PWD}:/app/opticalaberrations -u 1000:1000 --net=host -e DISPLAY=:0 ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 /bin/bash
+
 # sudo nsys profile --gpu-metrics-device all  pytest tests/test_ao.py::test_predict_sample --disable-warnings --color=yes -vvv
 
 # Pass in a target when building to choose the TF Image with the version you want: --build-arg BRANCH_NAME=$(git branch --show-current) --target TF_CUDA_12_3
@@ -50,6 +52,13 @@ RUN apt-get update \
 
 # Git-lfs install
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && apt-get install git-lfs && rm -rf /var/lib/apt/lists/*
+
+# LabVIEW Linux run-time      # https://www.ni.com/en/support/downloads/software-products/download.labview.html#521764
+# RUN git checkout HEAD ${LabVIEW_runtime}
+WORKDIR /docker_install
+ARG LabVIEW_runtime=ni-labview-2024-runtime-engine_24.1.0.49394-0+f242-ubuntu2204_all.deb 
+ADD ${LabVIEW_runtime} ${LabVIEW_runtime}
+RUN sudo apt install ./${LabVIEW_runtime}; sudo apt update; sudo apt install libncurses5 libopenal1 libxinerama1 libgl1-mesa-glx libglu1-mesa labview-2024-rte -y; rm -rf /var/lib/apt/lists/*
 
 # Make the dockerfile use the current branch (passed in as a command line argument to "docker build")
 ARG BRANCH_NAME
@@ -121,6 +130,14 @@ RUN apt-get update \
 
 # Git-lfs install
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash && apt-get install git-lfs && rm -rf /var/lib/apt/lists/*
+
+# LabVIEW Linux run-time      # https://www.ni.com/en/support/downloads/software-products/download.labview.html#521764
+# RUN git checkout HEAD ${LabVIEW_runtime}
+WORKDIR /docker_install
+ARG LabVIEW_runtime=ni-labview-2024-runtime-engine_24.1.0.49394-0+f242-ubuntu2204_all.deb 
+ADD ${LabVIEW_runtime} ${LabVIEW_runtime}
+RUN sudo apt install ./${LabVIEW_runtime}; sudo apt update; sudo apt install libncurses5 libopenal1 libxinerama1 libgl1-mesa-glx libglu1-mesa labview-2024-rte -y; rm -rf /var/lib/apt/lists/*
+
 
 # Make the dockerfile use the current branch (passed in as a command line argument to "docker build")
 ARG BRANCH_NAME
