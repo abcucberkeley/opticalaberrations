@@ -18,7 +18,6 @@ from pathlib import Path
 from skimage.filters import window
 from skimage.restoration import unwrap_phase
 from skimage.feature import peak_local_max
-from skimage.transform import resize
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
@@ -33,7 +32,7 @@ except ImportError as e:
     from scipy.ndimage import rotate, map_coordinates
     logging.warning(f"Cupy not supported on your system: {e}")
 
-from preprocessing import resize_with_crop_or_pad, measure_snr, measure_noise
+from preprocessing import resize_image, measure_snr, measure_noise
 from utils import multiprocess, gaussian_kernel, fft, ifft, normalize_otf
 from vis import savesvg, plot_interference, plot_embeddings
 
@@ -511,6 +510,7 @@ def pix_shift_to_phase_ramp(pix_shift, array_shape):
     return np.exp(1j*ramp3d)
 
 
+
 @profile
 def compute_emb(
         otf: np.ndarray,
@@ -557,22 +557,8 @@ def compute_emb(
     else:
         na_mask = na_mask.astype(bool)
 
-    if otf.shape != model_psf_shape:  # psf should be the same FOV size in um, then we crop the otf to the iotf shape
-        real = resize_with_crop_or_pad(np.real(otf), crop_shape=model_psf_shape, mode='constant')  # only center crop
-        imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=model_psf_shape, mode='constant')  # only center crop
-        otf = real + 1j * imag
-
-    if iotf.shape != model_psf_shape:
-        iotf = resize_with_crop_or_pad(iotf, crop_shape=model_psf_shape, mode='constant')  # only center crop
-
-    if na_mask.shape != model_psf_shape:
-        na_mask = resize_with_crop_or_pad(
-            na_mask.astype(float), crop_shape=model_psf_shape, mode='constant'
-        ).astype(bool)
-
     if norm:
         otf = normalize_otf(otf, freq_strength_threshold=freq_strength_threshold)
-
 
     if val == 'real':
         emb = np.real(otf)
@@ -794,7 +780,8 @@ def fourier_embeddings(
         embedding_option: str = 'spatial_planes',
         digital_rotations: Optional[int] = None,
         model_psf_shape: tuple = (64, 64, 64),
-        debug_rotations: bool = False
+    debug_rotations: bool = False,
+    interpolate_embeddings: bool = False,
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -822,6 +809,7 @@ def fourier_embeddings(
             Capitalizing on the radial symmetry of the FFT,
             we have a few options to minimize the size of the embedding.
         debug_rotations: Print out the rotations if true
+        interpolate_embeddings: downsample/upsample embeddings to match model's input size
     """
 
     if isinstance(inputs, tuple):
@@ -835,8 +823,8 @@ def fourier_embeddings(
         otf = np.squeeze(otf)
 
     if input_coverage != 1.:
-        psf = resize_with_crop_or_pad(psf, crop_shape=[int(s * input_coverage) for s in psf.shape])
-
+        psf = resize_image(psf, crop_shape=[int(s * input_coverage) for s in psf.shape])
+    
     if np.all(psf == 0):
         if digital_rotations is not None:
             emb = np.zeros((digital_rotations, 3, *model_psf_shape[1:])) \
@@ -846,10 +834,20 @@ def fourier_embeddings(
                 if no_phase else np.zeros((6, *model_psf_shape[1:]))
 
     else:
-        # bead = gaussian_kernel(kernlen=iotf.shape, std=fwhm2sigma(3))
-        # bead_fft = fft(bead)
-        # iotf = normalize_otf(iotf*bead_fft, iotf, freq_strength_threshold=0.05)
-
+        
+        if not interpolate_embeddings:  # psf should be the same FOV size in um, then we crop the otf to the iotf shape
+            if psf.shape != model_psf_shape:
+                psf = resize_image(psf, crop_shape=model_psf_shape)
+            
+            if otf.shape != model_psf_shape:
+                otf = resize_image(otf, crop_shape=model_psf_shape)
+        
+        if iotf.shape != otf.shape:
+            iotf = resize_image(iotf, crop_shape=otf.shape)
+        
+        if na_mask.shape != otf.shape:
+            na_mask = resize_image(na_mask.astype(np.float32), crop_shape=otf.shape)
+        
         if no_phase:
             emb = compute_emb(
                 otf,
@@ -873,7 +871,6 @@ def fourier_embeddings(
                     pois=pois,
                     windowing=True
                 )
-
 
             alpha = compute_emb(
                 otf,
@@ -913,8 +910,7 @@ def fourier_embeddings(
             emb = np.concatenate([alpha, phi], axis=0)
 
         if emb.shape[1:] != model_psf_shape[1:]:
-            emb = resize(emb, output_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
-            # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
+            emb = resize_image(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]), interpolate=True)
 
         if plot is not None:
             plt.style.use("default")
@@ -1005,10 +1001,20 @@ def rolling_fourier_embeddings(
             cores=cpu_workers,
             desc='Compute FFTs'
         )
-
+        avg_otf = np.nanmean(otfs, axis=0)
+        
+        if avg_otf.shape != model_psf_shape:
+            avg_otf = resize_image(avg_otf, crop_shape=model_psf_shape)
+        
+        if iotf.shape != model_psf_shape:
+            iotf = resize_image(iotf, crop_shape=model_psf_shape)
+        
+        if na_mask.shape != iotf.shape:
+            na_mask = resize_image(na_mask.astype(np.float32), crop_shape=iotf.shape)
+        
         if no_phase:
             emb = compute_emb(
-                resize_with_crop_or_pad(np.nanmean(np.abs(otfs), axis=0), crop_shape=iotf.shape),
+                np.abs(avg_otf),
                 iotf,
                 na_mask=na_mask,
                 val=alpha_val,
@@ -1020,7 +1026,7 @@ def rolling_fourier_embeddings(
             )
         else:
             alpha = compute_emb(
-                np.nanmean(np.abs(otfs), axis=0),
+                np.abs(avg_otf),
                 iotf,
                 na_mask=na_mask,
                 val=alpha_val,
@@ -1053,7 +1059,7 @@ def rolling_fourier_embeddings(
 
                 phi_otfs = phi_otfs[found_spots_in_tile]
                 avg_otf = np.nanmean(phi_otfs, axis=0)
-                avg_otf = resize_with_crop_or_pad(avg_otf, crop_shape=iotf.shape)
+                avg_otf = resize_image(avg_otf, crop_shape=iotf.shape)
 
                 if plot_interference:
                     gamma = 0.5
@@ -1068,7 +1074,7 @@ def rolling_fourier_embeddings(
                     )
                     for row in range(min(3, phi_otfs.shape[0])):
                         # this will have ipsf voxel size (a different voxel size than sample).
-                        phi_psf = ifft(resize_with_crop_or_pad(phi_otfs[row], crop_shape=window_size))
+                        phi_psf = ifft(resize_image(phi_otfs[row], crop_shape=window_size))
                         for ax in range(3):
                             m5 = axes[row, ax].imshow(np.nanmax(phi_psf, axis=ax)**gamma, cmap='magma')
 
@@ -1098,8 +1104,6 @@ def rolling_fourier_embeddings(
                     axes[0, 1].set_title('XZ')
                     axes[0, 2].set_title('YZ')
                     savesvg(fig, f'{plot}_avg_interference_pattern.svg')
-            else:
-                avg_otf = resize_with_crop_or_pad(np.nanmean(otfs, axis=0), crop_shape=iotf.shape)
 
             phi = compute_emb(
                 avg_otf,
@@ -1116,8 +1120,7 @@ def rolling_fourier_embeddings(
             emb = np.concatenate([alpha, phi], axis=0)
 
         if emb.shape[1:] != model_psf_shape[1:]:
-            emb = resize(emb, output_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
-            # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
+            emb = resize_image(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]), interpolate=True)
 
         if plot is not None:
             plt.style.use("default")

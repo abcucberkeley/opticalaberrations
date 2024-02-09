@@ -162,7 +162,8 @@ def generate_embeddings(
     digital_rotations: Optional[int] = None,
     psf_type: Optional[Union[str, Path]] = None,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0
+    object_gaussian_kernel_width: float = 0,
+    interpolate_embeddings: bool = False
 ):
 
     model, modelpsfgen = reloadmodel_if_needed(
@@ -197,7 +198,8 @@ def generate_embeddings(
         read_noise_bias=read_noise_bias,
         plot=file.with_suffix('') if plot else None,
         min_psnr=min_psnr,
-        object_gaussian_kernel_width=object_gaussian_kernel_width
+        object_gaussian_kernel_width=object_gaussian_kernel_width,
+        interpolate_embeddings=interpolate_embeddings
     )
 
 
@@ -552,6 +554,7 @@ def predict_large_fov(
     object_gaussian_kernel_width: float = 0,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
+    interpolate_embeddings: bool = False
 ):
     lls_defocus = 0.
     dm_state = None if (dm_state is None or str(dm_state) == 'None') else dm_state
@@ -594,7 +597,8 @@ def predict_large_fov(
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
         object_gaussian_kernel_width=object_gaussian_kernel_width,
         denoiser=denoiser,
-        denoiser_window_size=denoiser_window_size
+        denoiser_window_size=denoiser_window_size,
+        interpolate_embeddings=interpolate_embeddings,
     )
 
     res = backend.predict_rotation(

@@ -447,6 +447,11 @@ def parse_args(args):
 	    '--denoiser', type=Path, default=None,
 	    help='path to denoiser model'
     )
+    predict_large_fov.add_argument(
+        "--interpolate_embeddings", action='store_true',
+        help="`predict_large_fov` will tile the image into small patches and average the FFTs to make the embeddings, "
+             "this toggle will compute the FFT of the entire image then downsample/upsample embeddings to match model's input size"
+    )
     
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
@@ -1310,7 +1315,8 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
-	                denoiser=args.denoiser
+                    denoiser=args.denoiser,
+                    interpolate_embeddings=args.interpolate_embeddings
                 )
 
             elif args.func == 'predict_rois':

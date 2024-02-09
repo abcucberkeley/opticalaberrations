@@ -115,6 +115,28 @@ def test_predict_large_fov(kargs):
 
 
 @pytest.mark.run(order=6)
+def test_predict_large_fov_with_interpolated_embeddings(kargs):
+    zernikes = experimental.predict_large_fov(
+        model=kargs['model'],
+        img=kargs['inputs'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        prev=kargs['prev'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=kargs['plot'],
+        plot_rotations=kargs['plot_rotations'],
+        batch_size=kargs['batch_size'],
+        ignore_modes=kargs['ignore_modes'],
+        prediction_threshold=kargs['prediction_threshold'],
+        min_psnr=kargs['min_psnr'],
+        interpolate_embeddings=True
+    )
+    assert zernikes.shape[0] == kargs['num_modes']
+
+
+@pytest.mark.run(order=7)
 def test_predict_folder(kargs):
     test_folder = Path(f"{kargs['repo']}/dataset/experimental_zernikes/psfs")
     number_of_files = len(sorted(test_folder.glob(kargs['prediction_filename_pattern'])))
@@ -144,7 +166,7 @@ def test_predict_folder(kargs):
     assert predictions.shape == (kargs['num_modes'], number_of_files)
 
 
-@pytest.mark.run(order=7)
+@pytest.mark.run(order=8)
 def test_denoise(kargs):
     denoised_image = experimental.denoise(
         input_path=kargs['inputs'],
@@ -155,7 +177,7 @@ def test_denoise(kargs):
     assert denoised_image.shape == kargs['input_shape']
 
 
-@pytest.mark.run(order=8)
+@pytest.mark.run(order=9)
 def test_predict_sample_with_denoising(kargs):
     zernikes = experimental.predict_sample(
         model=kargs['model'],
@@ -178,7 +200,7 @@ def test_predict_sample_with_denoising(kargs):
     assert zernikes.shape[0] == kargs['num_modes']
 
 
-@pytest.mark.run(order=9)
+@pytest.mark.run(order=10)
 def test_predict_folder_with_denoising(kargs):
     test_folder = Path(f"{kargs['repo']}/dataset/experimental_zernikes/psfs")
     number_of_files = len(sorted(test_folder.glob(kargs['prediction_filename_pattern'])))

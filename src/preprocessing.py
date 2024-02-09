@@ -26,6 +26,7 @@ from tifffile import TiffFile
 from astropy import convolution
 from skimage.feature import peak_local_max
 from csbdeep.utils.tf import limit_gpu_memory
+from skimage.transform import resize
 
 limit_gpu_memory(allow_growth=True, fraction=None, total_memory=None)
 from csbdeep.models import CARE
@@ -120,6 +121,25 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 're
             window_z = cp.array(window_z)  # GPU array
         padded *= window_z[..., np.newaxis, np.newaxis]
         return padded
+
+
+def resize_image(image, crop_shape: Union[tuple, list], interpolate: bool = False):
+    if np.iscomplexobj(image):
+        if interpolate:
+            real = resize(np.real(image), output_shape=crop_shape, anti_aliasing=False, order=1, preserve_range=True)
+            imag = resize(np.imag(image), output_shape=crop_shape, anti_aliasing=False, order=1, preserve_range=True)
+            return real + 1j * imag
+        else:  # only center crop
+            real = resize_with_crop_or_pad(np.real(image), crop_shape=crop_shape, mode='constant')
+            imag = resize_with_crop_or_pad(np.imag(image), crop_shape=crop_shape, mode='constant')
+            return real + 1j * imag
+    else:
+        if interpolate:
+            return resize(image, output_shape=crop_shape, anti_aliasing=False, order=1, preserve_range=True).astype(
+                np.float32)
+        else:
+            return resize_with_crop_or_pad(image.astype(np.float32), crop_shape=crop_shape, mode='constant').astype(
+                np.float32)
 
 
 def na_and_background_filter(

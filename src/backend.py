@@ -307,6 +307,7 @@ def preprocess(
     cpu_workers: int = -1,
     denoiser: Optional[Union[Path, CARE]] = None,
     denoiser_window_size: tuple = (32, 64, 64),
+    interpolate_embeddings: bool = False
 ):
     if samplepsfgen is None:
         samplepsfgen = modelpsfgen
@@ -363,75 +364,111 @@ def preprocess(
         ).astype(np.float32)
 
     else:  # at least one tile fov dimension is larger than model fov
-        model_window_size = (
-            round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
-            round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
-            round_to_even(modelpsfgen.psf_fov[2] / samplepsfgen.voxel_size[2]),
-        )   # number of sample voxels that make up a model psf.
-
-        model_window_size = np.minimum(model_window_size, sample.shape)
-
-        # how many non-overlapping rois can we split this tile fov into (round down)
-        rois = sliding_window_view(
-            sample,
-            window_shape=model_window_size
-        )   # stride = 1.
-
-        # decimate from all available windows to the stride we want (either rolling_strides or model_window_size)
-        if rolling_strides is not None:
-            strides = rolling_strides
-        else:
-            strides = model_window_size
-
-        rois = rois[
-           ::strides[0],
-           ::strides[1],
-           ::strides[2]
-        ]
-
-        throwaway = np.array(sample.shape) - ((np.array(rois.shape[:3])-1) * strides + rois.shape[-3:])
-        if any(throwaway > (np.array(sample.shape) / 4)):
-            raise Exception(f'You are throwing away {throwaway} voxels out of {sample.shape}, with stride length'
-                            f'{strides}. Change rolling_strides.')
-
-        ztiles, nrows, ncols = rois.shape[:3]
-        rois = np.reshape(rois, (-1, *model_window_size))
-
-        if not skip_prep_sample:
-            prep = partial(
-                prep_sample,
-                sample_voxel_size=samplepsfgen.voxel_size,
-                remove_background=remove_background,
-                normalize=normalize,
-                read_noise_bias=read_noise_bias,
+        if interpolate_embeddings:
+            if not skip_prep_sample:
+                voxel_size_scalar = np.array(samplepsfgen.voxel_size) ** 2 / np.array(modelpsfgen.voxel_size)
+                adjusted_pov = tuple(
+                    voxel_size_scalar * np.array(sample.shape) * np.array(samplepsfgen.fov_scaler)
+                )
+                
+                sample = prep_sample(
+                    sample,
+                    model_fov=adjusted_pov,
+                    sample_voxel_size=samplepsfgen.voxel_size,
+                    remove_background=remove_background,
+                    normalize=normalize,
+                    read_noise_bias=read_noise_bias,
+                    min_psnr=min_psnr,
+                    plot=plot if plot else None,
+                    na_mask=samplepsfgen.na_mask,
+                    denoiser=denoiser,
+                    denoiser_window_size=denoiser_window_size,
+                )
+            
+            return fourier_embeddings(
+                sample,
+                iotf=samplepsfgen.iotf,
                 na_mask=samplepsfgen.na_mask,
-                min_psnr=min_psnr,
-                denoiser=denoiser,
-                denoiser_window_size=denoiser_window_size,
-            )
-
-            rois = utils.multiprocess(func=prep, jobs=rois,
-                                      desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
-                                           f'roi size, {rois.shape[-3:]}, '
-                                           f'stride length {strides}, '
-                                           f'throwing away {throwaway} voxels')
-
-        return rolling_fourier_embeddings(  # aka "large_fov"
-            rois,
-            iotf=iotf,
-            na_mask=modelpsfgen.na_mask,
-            plot=plot,
-            no_phase=no_phase,
-            remove_interference=True,
-            embedding_option=modelpsfgen.embedding_option,
-            freq_strength_threshold=freq_strength_threshold,
-            digital_rotations=digital_rotations,
-            model_psf_shape=modelpsfgen.psf_shape,
-            nrows=nrows,
-            ncols=ncols,
-            ztiles=ztiles,
-            cpu_workers=cpu_workers,
-        ).astype(np.float32)
+                plot=plot if plot else None,
+                no_phase=no_phase,
+                remove_interference=True,
+                embedding_option=modelpsfgen.embedding_option,
+                freq_strength_threshold=freq_strength_threshold,
+                digital_rotations=digital_rotations,
+                model_psf_shape=modelpsfgen.psf_shape,
+                interpolate_embeddings=interpolate_embeddings
+            ).astype(np.float32)
+        
+        else:  # average FFTs
+            model_window_size = (
+                round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
+                round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
+                round_to_even(modelpsfgen.psf_fov[2] / samplepsfgen.voxel_size[2]),
+            )  # number of sample voxels that make up a model psf.
+            
+            model_window_size = np.minimum(model_window_size, sample.shape)
+            
+            # how many non-overlapping rois can we split this tile fov into (round down)
+            rois = sliding_window_view(
+                sample,
+                window_shape=model_window_size
+            )  # stride = 1.
+            
+            # decimate from all available windows to the stride we want (either rolling_strides or model_window_size)
+            if rolling_strides is not None:
+                strides = rolling_strides
+            else:
+                strides = model_window_size
+            
+            rois = rois[
+                   ::strides[0],
+                   ::strides[1],
+                   ::strides[2]
+                   ]
+            
+            throwaway = np.array(sample.shape) - ((np.array(rois.shape[:3]) - 1) * strides + rois.shape[-3:])
+            if any(throwaway > (np.array(sample.shape) / 4)):
+                raise Exception(f'You are throwing away {throwaway} voxels out of {sample.shape}, with stride length'
+                                f'{strides}. Change rolling_strides.')
+            
+            ztiles, nrows, ncols = rois.shape[:3]
+            rois = np.reshape(rois, (-1, *model_window_size))
+            
+            if not skip_prep_sample:
+                prep = partial(
+                    prep_sample,
+                    sample_voxel_size=samplepsfgen.voxel_size,
+                    remove_background=remove_background,
+                    normalize=normalize,
+                    read_noise_bias=read_noise_bias,
+                    na_mask=samplepsfgen.na_mask,
+                    min_psnr=min_psnr,
+                    denoiser=denoiser,
+                    denoiser_window_size=denoiser_window_size,
+                )
+                
+                rois = utils.multiprocess(func=prep, jobs=rois,
+                                          desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
+                                               f'roi size, {rois.shape[-3:]}, '
+                                               f'stride length {strides}, '
+                                               f'throwing away {throwaway} voxels')
+            
+            return rolling_fourier_embeddings(  # aka "large_fov"
+                rois,
+                iotf=iotf,
+                na_mask=modelpsfgen.na_mask,
+                plot=plot,
+                no_phase=no_phase,
+                remove_interference=True,
+                embedding_option=modelpsfgen.embedding_option,
+                freq_strength_threshold=freq_strength_threshold,
+                digital_rotations=digital_rotations,
+                model_psf_shape=modelpsfgen.psf_shape,
+                nrows=nrows,
+                ncols=ncols,
+                ztiles=ztiles,
+                cpu_workers=cpu_workers,
+            ).astype(np.float32)
 
 
 @profile
