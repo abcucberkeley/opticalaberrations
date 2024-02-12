@@ -756,6 +756,7 @@ def predict_rois(
         sample,
         min_psnr=min_psnr,
         na_mask=preloadedpsfgen.na_mask,
+        method ='difference_of_gaussians',
     )
     
     sample = sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample)

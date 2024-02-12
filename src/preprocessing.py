@@ -617,7 +617,9 @@ def find_roi(
     
     if isinstance(image, Path):
         image = imread(image).astype(np.float32)
-    
+
+
+    image = image**0.5
     blured_image = gaussian_filter(image, sigma=1.1)
 
     # exclude values close to the edge in Z for finding our template
@@ -644,14 +646,14 @@ def find_roi(
         fill_value=0,
         normalize_kernel=False
     )
-    convolved_image -= np.nanmin(convolved_image)
+    convolved_image -= st.mode(convolved_image, axis=None)[0]
     convolved_image /= np.nanmax(convolved_image)
-    
+
     pois = []
     detected_peaks = peak_local_max(
         convolved_image,
         min_distance=5,
-        threshold_rel=.3,
+        threshold_rel=.1,
         exclude_border=1,
         p_norm=2,
         num_peaks=max_num_peaks
@@ -694,6 +696,16 @@ def find_roi(
                 pois.append([p[0], p[1], p[2], peak_value])
     
     pois = pd.DataFrame(pois, columns=['z', 'y', 'x', 'intensity'])
+    # filter out points too close to the edge
+    lzedge = pois['z'] >= window_size[0]//8
+    hzedge = pois['z'] <= image.shape[0] - window_size[0] // 8
+    lyedge = pois['y'] >= window_size[1]//8
+    hyedge = pois['y'] <= image.shape[1] - window_size[1] // 8
+    lxedge = pois['x'] >= window_size[2]//8
+    hxedge = pois['x'] <= image.shape[2] - window_size[2] // 8
+    pois = pois[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
+
+    pois.sort_values(by='intensity', ascending=False, inplace=True)
     points = pois[['z', 'y', 'x']].values
     scaled_peaks = np.zeros_like(pois)
     scaled_peaks[:, 0] = points[:, 0] * voxel_size[0]
@@ -702,25 +714,28 @@ def find_roi(
 
     kd = KDTree(scaled_peaks)
     dist, idx = kd.query(scaled_peaks, k=11, workers=-1)
+    logger.info(f'{idx=}')
     for n in range(1, 11):
-        if n == 1:
-            pois[f'dist'] = dist[:, n]
-        else:
-            pois[f'dist_{n}'] = dist[:, n]
+        pois[f'dist_{n}'] = dist[:, n]
+        pois[f'nn_ids_{n}'] = idx[:, n]
 
-    # filter out points too close to the edge
-    lzedge = pois['z'] >= window_size[0]//4
-    hzedge = pois['z'] <= image.shape[0] - window_size[0] // 4
-    lyedge = pois['y'] >= window_size[1]//4
-    hyedge = pois['y'] <= image.shape[1] - window_size[1] // 4
-    lxedge = pois['x'] >= window_size[2]//4
-    hxedge = pois['x'] <= image.shape[2] - window_size[2] // 4
-    pois = pois[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
+    logger.info(f'poi dataframe\n{pois}')
+
+    neighbor_dists = pois.columns[pois.columns.str.startswith('dist_')].tolist() # column names
+    neighbor_ids = pois.columns[pois.columns.str.startswith('nn_ids_')].tolist() # column names
+    pois['winners'] = 1
+    for index, row in pois.iterrows():
+        if pois.loc[index, 'winners']:
+            losers_ids = row[neighbor_ids].astype(int)[np.array(row[neighbor_dists] < min_dist)]
+            losers_ids = losers_ids[losers_ids > index]     # only kill losers that have less intensity than current row
+            pois['winners'][losers_ids] = 0
+
+    logger.info(pois)
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=pois['dist'], y=pois['intensity'], s=5, color="C0")
-        sns.kdeplot(ax=axes[0], x=pois['dist'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
+        sns.scatterplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], s=5, color="C0")
+        sns.kdeplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
         axes[0].set_ylabel('Intensity')
         axes[0].set_xlabel('Distance (microns)')
         axes[0].set_yscale('log')
@@ -728,7 +743,7 @@ def find_roi(
         axes[0].set_xlim(0, None)
         axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        x = np.sort(pois['dist'])
+        x = np.sort(pois['dist_1'])
         y = np.arange(len(x)) / float(len(x))
         axes[1].plot(x, y, color='dimgrey')
         axes[1].set_xlabel('Distance (microns)')
@@ -736,37 +751,43 @@ def find_roi(
         axes[1].set_xlim(0, None)
         axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        sns.histplot(ax=axes[2], data=pois, x="dist", kde=True)
+        sns.histplot(ax=axes[2], data=pois, x="dist_1", kde=True)
         axes[2].set_xlabel('Distance')
         axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
         savesvg(fig, f'{plot}_detected_points.svg')
 
-    if min_dist is not None:
-        pois = pois[pois['dist'] >= min_dist]
+    # if min_dist is not None:
+    #     logger.info(f'{min_dist =} um')
+    #     pois = pois[pois['dist_1'] >= min_dist]
+    pois = pois[pois['winners'] == True]
+
 
     if max_dist is not None:
-        pois = pois[pois['dist'] <= max_dist]
+        logger.info(f'{max_dist =} um')
+        pois = pois[pois['dist_1'] <= max_dist]
 
     if min_intensity is not None:
         pois = pois[pois['intensity'] >= min_intensity]
 
-    neighbors = pois.columns[pois.columns.str.startswith('dist')].tolist()
+    neighbors = pois.columns[pois.columns.str.startswith('dist_1')].tolist()
     min_dist = np.min(window_size)*np.min(voxel_size)
     pois['neighbors'] = pois[pois[neighbors] <= min_dist].count(axis=1)
-    pois.sort_values(by=['neighbors', 'dist', 'intensity'], ascending=[True, False, False], inplace=True)
+
+
+
     pois = pois[pois['neighbors'] <= max_neighbor]
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=pois['dist'], y=pois['intensity'], s=5, color="C0")
-        sns.kdeplot(ax=axes[0], x=pois['dist'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
+        sns.scatterplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], s=5, color="C0")
+        sns.kdeplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
         axes[0].set_ylabel('Intensity')
         axes[0].set_xlabel('Distance')
         axes[0].set_xlim(0, None)
         axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        x = np.sort(pois['dist'])
+        x = np.sort(pois['dist_1'])
         y = np.arange(len(x)) / float(len(x))
         axes[1].plot(x, y, color='dimgrey')
         axes[1].set_xlabel('Distance')
@@ -774,7 +795,7 @@ def find_roi(
         axes[1].set_xlim(0, None)
         axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        sns.histplot(ax=axes[2], data=pois, x="dist", kde=True)
+        sns.histplot(ax=axes[2], data=pois, x='dist_1', kde=True)
         axes[2].set_xlabel('Distance')
         axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
@@ -788,17 +809,17 @@ def find_roi(
     widths = [w // 2 for w in window_size]
 
     if plot:
-        fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharey=False, sharex=False)
-        for ax in range(2):
+        fig, axes = plt.subplots(2, 1, figsize=(8, 4), sharey=False, sharex=True)
+        for ax, mip_directions in enumerate([0,1]):
             axes[ax].imshow(
-                np.nanmax(image, axis=ax),
-                aspect='equal',
+                np.nanmax(image, axis=mip_directions),
+                aspect='auto',
                 cmap='Greys_r',
             )
 
             for p in range(pois.shape[0]):
                 if ax == 0:
-                    axes[ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
+                    # axes[ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
                     axes[ax].add_patch(patches.Rectangle(
                         xy=(pois[p, 2] - window_size[2] // 2, pois[p, 1] - window_size[1] // 2),
                         width=window_size[1],
@@ -809,7 +830,7 @@ def find_roi(
                     ))
                     axes[ax].set_title('XY')
                 elif ax == 1:
-                    axes[ax].plot(pois[p, 2], pois[p, 0], marker='.', ls='', color=f'C{p}')
+                    # axes[ax].plot(pois[p, 2], pois[p, 0], marker='.', ls='', color=f'C{p}')
                     axes[ax].add_patch(patches.Rectangle(
                         xy=(pois[p, 2] - window_size[2] // 2, pois[p, 0] - window_size[0] // 2),
                         width=window_size[1],
@@ -823,7 +844,7 @@ def find_roi(
 
     rois = []
     ztiles = 1
-    ncols = int(np.ceil(len(pois) / 5))
+    ncols = 1 # max(int(np.floor(len(pois) / 5)), 1)
     nrows = int(np.ceil(len(pois) / ncols))
 
     for p, (z, y, x) in enumerate(itertools.product(
@@ -831,20 +852,21 @@ def find_roi(
         desc=f"Locating tiles: {[pois.shape[0]]}",
         file=sys.stdout
     )):
-        start = [
-            pois[p, s] - widths[s] if pois[p, s] >= widths[s] else 0
-            for s in range(3)
-        ]
-        end = [
-            pois[p, s] + widths[s] if pois[p, s] + widths[s] < image.shape[s] else image.shape[s]
-            for s in range(3)
-        ]
-        r = image[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
+        if p < len(pois):
+            start = [
+                pois[p, s] - widths[s] if pois[p, s] >= widths[s] else 0
+                for s in range(3)
+            ]
+            end = [
+                pois[p, s] + widths[s] if pois[p, s] + widths[s] < image.shape[s] else image.shape[s]
+                for s in range(3)
+            ]
+            r = image[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
 
-        if r.size != 0:
-            tile = f"z{0}-y{y}-x{x}"
-            imwrite(savepath / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
-            rois.append(savepath / f"{tile}.tif")
+            if r.size != 0:
+                tile = f"z{0}-y{y}-x{x}"
+                imwrite(savepath / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
+                rois.append(savepath / f"{tile}.tif")
 
     return np.array(rois), ztiles, nrows, ncols
 
