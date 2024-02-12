@@ -768,6 +768,36 @@ def predict_rois(
             denoiser_window_size=denoiser_window_size,
             batch_size=batch_size
         )
+
+    fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
+
+    prep = partial(
+        prep_sample,
+        model_fov=preloadedpsfgen.psf_fov,  # this is what we will crop to
+        sample_voxel_size=samplepsfgen.voxel_size,
+        remove_background=True,
+        normalize=True,
+        min_psnr=min_psnr,
+        na_mask=samplepsfgen.na_mask
+    )
+    prep = partial(
+        backend.preprocess,
+        modelpsfgen=preloadedpsfgen,
+        samplepsfgen=samplepsfgen,
+        freq_strength_threshold=freq_strength_threshold,
+        digital_rotations=digital_rotations,
+        plot=plot,
+        no_phase=False,
+        remove_background=True,
+        normalize=True,
+        fov_is_small=fov_is_small,
+        skip_prep_sample=False,
+        min_psnr=min_psnr,
+        object_gaussian_kernel_width=object_gaussian_kernel_width,
+        cpu_workers=1,  # already parallelized over files
+        denoiser=denoiser,
+        denoiser_window_size=denoiser_window_size
+    )
     
     rois, ztiles, nrows, ncols = find_roi(
         sample,
@@ -780,18 +810,7 @@ def predict_rois(
         max_neighbor=20,
         min_intensity=min_intensity,
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
-    )
-    
-    fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
-    
-    prep = partial(
-        prep_sample,
-        model_fov=preloadedpsfgen.psf_fov,  # this is what we will crop to
-        sample_voxel_size=samplepsfgen.voxel_size,
-        remove_background=True,
-        normalize=True,
-        min_psnr=min_psnr,
-        na_mask=samplepsfgen.na_mask
+        prep=prep
     )
 
     with Path(f"{img.with_suffix('')}_rois_predictions_settings.json").open('w') as f:
@@ -841,6 +860,7 @@ def predict_rois(
         freq_strength_threshold=freq_strength_threshold,
         fov_is_small=fov_is_small,
         skip_prep_sample=prep is not None,
+        preprocessed=True,
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,

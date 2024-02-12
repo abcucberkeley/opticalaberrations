@@ -600,12 +600,17 @@ def find_roi(
     max_neighbor: int = 5,
     voxel_size: tuple = (.200, .097, .097),
     kernel_size: int = 15,
-    max_num_peaks: int = 20,
     min_psnr: float = 10.0,
     zborder: int = 10,
+    prep: Optional[partial] = None,
 ):
-    savepath.mkdir(parents=True, exist_ok=True)
+    savepath_unprocessed = Path(f"{savepath}_unprocessed")
 
+    savepath.mkdir(parents=True, exist_ok=True)
+    savepath_unprocessed.mkdir(parents=True, exist_ok=True)
+
+
+    pd.set_option("display.precision", 2)
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -618,9 +623,7 @@ def find_roi(
     if isinstance(image, Path):
         image = imread(image).astype(np.float32)
 
-
-    image = image**0.5
-    blured_image = gaussian_filter(image, sigma=1.1)
+    blured_image = gaussian_filter(image**0.5, sigma=1.1)
 
     # exclude values close to the edge in Z for finding our template
     restricted_blurred = blured_image.copy()
@@ -652,13 +655,14 @@ def find_roi(
     pois = []
     detected_peaks = peak_local_max(
         convolved_image,
-        min_distance=5,
-        threshold_rel=.1,
+        min_distance=2,
+        threshold_rel=.05,
         exclude_border=1,
         p_norm=2,
-        num_peaks=max_num_peaks
+        num_peaks=num_rois
     ).astype(int)
-    
+
+    logger.info(f"Found {len(detected_peaks)} peaks from peak_local_max (limited to {num_rois})")
     candidates_map = np.zeros_like(image)
     if len(detected_peaks) == 0:
         p = max_poi
@@ -697,15 +701,17 @@ def find_roi(
     
     pois = pd.DataFrame(pois, columns=['z', 'y', 'x', 'intensity'])
     # filter out points too close to the edge
-    lzedge = pois['z'] >= window_size[0]//8
-    hzedge = pois['z'] <= image.shape[0] - window_size[0] // 8
-    lyedge = pois['y'] >= window_size[1]//8
-    hyedge = pois['y'] <= image.shape[1] - window_size[1] // 8
-    lxedge = pois['x'] >= window_size[2]//8
-    hxedge = pois['x'] <= image.shape[2] - window_size[2] // 8
+    edge = 8
+    lzedge = pois['z'] >= window_size[0]//edge
+    hzedge = pois['z'] <= image.shape[0] - window_size[0] // edge
+    lyedge = pois['y'] >= window_size[1]//edge
+    hyedge = pois['y'] <= image.shape[1] - window_size[1] // edge
+    lxedge = pois['x'] >= window_size[2]//edge
+    hxedge = pois['x'] <= image.shape[2] - window_size[2] // edge
     pois = pois[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
 
     pois.sort_values(by='intensity', ascending=False, inplace=True)
+    pois.reset_index(inplace=True)
     points = pois[['z', 'y', 'x']].values
     scaled_peaks = np.zeros_like(pois)
     scaled_peaks[:, 0] = points[:, 0] * voxel_size[0]
@@ -713,24 +719,25 @@ def find_roi(
     scaled_peaks[:, 2] = points[:, 2] * voxel_size[2]
 
     kd = KDTree(scaled_peaks)
-    dist, idx = kd.query(scaled_peaks, k=11, workers=-1)
-    logger.info(f'{idx=}')
-    for n in range(1, 11):
+    num_nearest = len(scaled_peaks)
+    dist, idx = kd.query(scaled_peaks, k=num_nearest, workers=-1)
+
+    for n in range(1, num_nearest):
         pois[f'dist_{n}'] = dist[:, n]
         pois[f'nn_ids_{n}'] = idx[:, n]
 
-    logger.info(f'poi dataframe\n{pois}')
-
-    neighbor_dists = pois.columns[pois.columns.str.startswith('dist_')].tolist() # column names
-    neighbor_ids = pois.columns[pois.columns.str.startswith('nn_ids_')].tolist() # column names
+    neighbor_dists = pois.columns[pois.columns.str.startswith('dist_')].tolist()  # column names
+    neighbor_ids = pois.columns[pois.columns.str.startswith('nn_ids_')].tolist()  # column names
     pois['winners'] = 1
+    print(pois)
+
     for index, row in pois.iterrows():
         if pois.loc[index, 'winners']:
             losers_ids = row[neighbor_ids].astype(int)[np.array(row[neighbor_dists] < min_dist)]
             losers_ids = losers_ids[losers_ids > index]     # only kill losers that have less intensity than current row
             pois['winners'][losers_ids] = 0
-
-    logger.info(pois)
+    logger.info('after winner selection')
+    print(pois)
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
@@ -812,7 +819,7 @@ def find_roi(
         fig, axes = plt.subplots(2, 1, figsize=(8, 4), sharey=False, sharex=True)
         for ax, mip_directions in enumerate([0,1]):
             axes[ax].imshow(
-                np.nanmax(image, axis=mip_directions),
+                np.nanmax(convolved_image, axis=mip_directions),
                 aspect='auto',
                 cmap='Greys_r',
             )
@@ -865,6 +872,11 @@ def find_roi(
 
             if r.size != 0:
                 tile = f"z{0}-y{y}-x{x}"
+                imwrite(savepath_unprocessed / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
+
+                if prep is not None:
+                    r = prep(r, plot=savepath / f"{tile}" if plot else None)
+
                 imwrite(savepath / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
                 rois.append(savepath / f"{tile}.tif")
 
