@@ -855,6 +855,10 @@ def parse_args(args):
         help='widefield, 2photon, confocal, or a path to an LLS excitation profile '
              '(Default: None; to keep default mode used during training)'
     )
+    aggregate_predictions.add_argument(
+        "--roi_predictions", action='store_true',
+        help='a toggle to aggregate predictions from `predict_rois`'
+    )
 
     decon = subparsers.add_parser("decon")
     decon.add_argument("input", type=Path, help="path to csv file")
@@ -1424,7 +1428,8 @@ def main(args=None, preloaded=None):
                     dm_damping_scalar=args.dm_damping_scalar,
                     plot=args.plot,
                     preloaded=preloaded,
-                    psf_type=args.psf_type
+                    psf_type=args.psf_type,
+                    roi_predictions=args.roi_predictions
                 )
             elif args.func == 'decon':
                 experimental.decon(
