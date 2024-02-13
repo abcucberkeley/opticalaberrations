@@ -723,7 +723,8 @@ def predict_rois(
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):
-
+    dm_state = utils.load_dm(dm_state)
+    
     preloadedmodel, preloadedpsfgen = reloadmodel_if_needed(
         modelpath=model,
         preloaded=preloaded,
@@ -780,24 +781,24 @@ def predict_rois(
         min_psnr=min_psnr,
         na_mask=samplepsfgen.na_mask
     )
-    prep = partial(
-        backend.preprocess,
-        modelpsfgen=preloadedpsfgen,
-        samplepsfgen=samplepsfgen,
-        freq_strength_threshold=freq_strength_threshold,
-        digital_rotations=digital_rotations,
-        plot=plot,
-        no_phase=False,
-        remove_background=True,
-        normalize=True,
-        fov_is_small=fov_is_small,
-        skip_prep_sample=False,
-        min_psnr=min_psnr,
-        object_gaussian_kernel_width=object_gaussian_kernel_width,
-        cpu_workers=1,  # already parallelized over files
-        denoiser=denoiser,
-        denoiser_window_size=denoiser_window_size
-    )
+    # prep = partial(
+    #     backend.preprocess,
+    #     modelpsfgen=preloadedpsfgen,
+    #     samplepsfgen=samplepsfgen,
+    #     freq_strength_threshold=freq_strength_threshold,
+    #     digital_rotations=digital_rotations,
+    #     plot=plot,
+    #     no_phase=False,
+    #     remove_background=True,
+    #     normalize=True,
+    #     fov_is_small=fov_is_small,
+    #     skip_prep_sample=False,
+    #     min_psnr=min_psnr,
+    #     object_gaussian_kernel_width=object_gaussian_kernel_width,
+    #     cpu_workers=1,  # already parallelized over files
+    #     denoiser=denoiser,
+    #     denoiser_window_size=denoiser_window_size
+    # )
     
     rois, ztiles, nrows, ncols = find_roi(
         sample,
@@ -806,8 +807,6 @@ def predict_rois(
         plot=f"{outdir}_predictions" if plot else None,
         num_rois=num_rois,
         min_dist=minimum_distance,
-        max_dist=None,
-        max_neighbor=20,
         min_intensity=min_intensity,
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
         prep=prep
@@ -821,8 +820,10 @@ def predict_rois(
             sample_voxel_size=list(samplepsfgen.voxel_size),
             model_voxel_size=list(preloadedpsfgen.voxel_size),
             psf_fov=list(preloadedpsfgen.psf_fov),
+            window_size=list(window_size),
             wavelength=float(wavelength),
             prediction_threshold=float(prediction_threshold),
+            dm_state=list(dm_state),
             freq_strength_threshold=float(freq_strength_threshold),
             prev=str(prev),
             ignore_modes=list(ignore_modes),
@@ -833,6 +834,7 @@ def predict_rois(
             xtiles=int(ncols),
             dm_calibration=str(dm_calibration),
             psf_type=str(preloadedpsfgen.psf_type),
+            ignored_tiles=[],
         )
 
         ujson.dump(
@@ -860,7 +862,6 @@ def predict_rois(
         freq_strength_threshold=freq_strength_threshold,
         fov_is_small=fov_is_small,
         skip_prep_sample=prep is not None,
-        preprocessed=True,
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
@@ -1545,15 +1546,23 @@ def aggregate_predictions(
     ignored_color: tuple = (255, 166, 246),     # pink
     preloaded: Preloadedmodelclass = None,
     psf_type: Optional[Union[str, Path]] = None,
-    postfix: str = 'aggregated'
+    postfix: str = 'aggregated',
+    roi_predictions: bool = False
 ):
 
     dm_state = utils.load_dm(dm_state)
 
     pd.options.display.width = 200
     pd.options.display.max_columns = 20
-
-    vol = backend.load_sample(str(model_pred).replace('_tiles_predictions.csv', '.tif'))
+    
+    if 'tiles' in str(model_pred):
+        vol_path = str(model_pred).replace('_tiles_predictions.csv', '.tif')
+    elif 'rois' in str(model_pred):
+        vol_path = str(model_pred).replace('_rois_predictions.csv', '.tif')
+    else:
+        raise Exception(f'Unknown prediction format {model_pred=}')
+    
+    vol = backend.load_sample(vol_path)
     vol -= np.percentile(vol, 5)
     vol /= np.percentile(vol, 98)
     vol = np.clip(vol, 0, 1)
@@ -1690,113 +1699,121 @@ def aggregate_predictions(
     logger.info(f"volume_size = {vol.shape}")
     logger.info(f"window_size = {zw, yw, xw}")
     logger.info(f"      tiles = {ztiles, ytiles, xtiles}")
-
-    for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
-        c = predictions.loc[(z, y, x), 'cluster']
-        if not np.isnan(c):
-            clusters_rgb[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((yw, xw), int(c))    # cluster group id
-
-            if c == len(clusters3d_colormap) - 1 or c == len(clusters3d_colormap) - 2:  # last codes (e.g. 8, 9) set to flat.
-                wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
-                expected_wavefront_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
-
-                psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
-                expected_psf_heatmap[z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.zeros((yw, xw))
-            else:   # gets a color
-                w = wavefronts[(z, y, x)]
-
-                if c != 0:
-                    expected_w = Wavefront(
-                        w.amplitudes_ansi - corrections[f"z{z}_c{int(c)}"].values,
-                        lam_detection=wavelength
-                    )
-                else:
-                    expected_w = w
-
-
-                abberated_psf = samplepsfgen.single_psf(w)
-                abberated_psf *= np.sum(samplepsfgen.ipsf)/np.sum(abberated_psf)
-                expected_psf = samplepsfgen.single_psf(expected_w)
-                expected_psf *= np.sum(samplepsfgen.ipsf)/np.sum(abberated_psf)
-
-                wavefront_heatmap[
-                    z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw
-                ] = np.nan_to_num(w.wave(xw), nan=0)
-
-                expected_wavefront_heatmap[
-                    z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw
-                ] = np.nan_to_num(expected_w.wave(xw), nan=0)
-
-                psf_heatmap[
-                    z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw
-                ] = np.max(abberated_psf, axis=0)
-
-                expected_psf_heatmap[
-                    z, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw
-                ] = np.max(expected_psf, axis=0)
-
-            clusters3d_heatmap[z*zw:(z*zw)+zw, y*yw:(y*yw)+yw, x*xw:(x*xw)+xw] = np.full((zw, yw, xw), int(c)) # filled with cluster id 0,1,2,3, 4,5,6,7, 8] 8 is unconfident, color gets assigned later
-
-    imwrite(f"{model_pred.with_suffix('')}_{postfix}_wavefronts.tif", wavefront_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
-    imwrite(f"{model_pred.with_suffix('')}_{postfix}_wavefronts_expected.tif", expected_wavefront_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
-    imwrite(f"{model_pred.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
-    imwrite(f"{model_pred.with_suffix('')}_{postfix}_psfs_expected.tif", expected_psf_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
-
-    color_clusters(
-        vol,
-        clusters3d_heatmap,
-        savepath=f"{model_pred.with_suffix('')}_{postfix}_clusters.tif",
-        xw=xw,
-        yw=yw,
-        colormap=clusters3d_colormap,
-    )
-
-    for name, heatmap in zip(
-        ('wavefronts', 'wavefronts_expected', 'psfs', 'psfs_expected'),
-        (wavefront_heatmap, expected_wavefront_heatmap, psf_heatmap, expected_psf_heatmap),
-    ):
+    
+    if not roi_predictions:
+        for i, (z, y, x) in enumerate(itertools.product(range(ztiles), range(ytiles), range(xtiles))):
+            c = predictions.loc[(z, y, x), 'cluster']
+            if not np.isnan(c):
+                clusters_rgb[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.full((yw, xw),
+                                                                                      int(c))  # cluster group id
+                
+                if c == len(clusters3d_colormap) - 1 or c == len(
+                        clusters3d_colormap) - 2:  # last codes (e.g. 8, 9) set to flat.
+                    wavefront_heatmap[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.zeros((yw, xw))
+                    expected_wavefront_heatmap[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.zeros((yw, xw))
+                    
+                    psf_heatmap[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.zeros((yw, xw))
+                    expected_psf_heatmap[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.zeros((yw, xw))
+                else:  # gets a color
+                    w = wavefronts[(z, y, x)]
+                    
+                    if c != 0:
+                        expected_w = Wavefront(
+                            w.amplitudes_ansi - corrections[f"z{z}_c{int(c)}"].values,
+                            lam_detection=wavelength
+                        )
+                    else:
+                        expected_w = w
+                    
+                    abberated_psf = samplepsfgen.single_psf(w)
+                    abberated_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
+                    expected_psf = samplepsfgen.single_psf(expected_w)
+                    expected_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
+                    
+                    wavefront_heatmap[
+                    z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
+                    ] = np.nan_to_num(w.wave(xw), nan=0)
+                    
+                    expected_wavefront_heatmap[
+                    z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
+                    ] = np.nan_to_num(expected_w.wave(xw), nan=0)
+                    
+                    psf_heatmap[
+                    z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
+                    ] = np.max(abberated_psf, axis=0)
+                    
+                    expected_psf_heatmap[
+                    z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
+                    ] = np.max(expected_psf, axis=0)
+                
+                clusters3d_heatmap[z * zw:(z * zw) + zw, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.full(
+                    (zw, yw, xw),
+                    int(c))  # filled with cluster id 0,1,2,3, 4,5,6,7, 8] 8 is unconfident, color gets assigned later
+        
+        imwrite(f"{model_pred.with_suffix('')}_{postfix}_wavefronts.tif", wavefront_heatmap.astype(np.float32),
+                compression='deflate', dtype=np.float32)
+        imwrite(f"{model_pred.with_suffix('')}_{postfix}_wavefronts_expected.tif",
+                expected_wavefront_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
+        imwrite(f"{model_pred.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32),
+                compression='deflate', dtype=np.float32)
+        imwrite(f"{model_pred.with_suffix('')}_{postfix}_psfs_expected.tif", expected_psf_heatmap.astype(np.float32),
+                compression='deflate', dtype=np.float32)
+        
         color_clusters(
-            heatmap,
-            clusters_rgb,
-            savepath=f"{model_pred.with_suffix('')}_{postfix}_clusters_{name}.tif",
+            vol,
+            clusters3d_heatmap,
+            savepath=f"{model_pred.with_suffix('')}_{postfix}_clusters.tif",
             xw=xw,
             yw=yw,
             colormap=clusters3d_colormap,
         )
-
-    # reconstruct_wavefront_error_landscape(
-    #     wavefronts=wavefronts,
-    #     xtiles=xtiles,
-    #     ytiles=ytiles,
-    #     ztiles=ztiles,
-    #     image=vol,
-    #     save_path=Path(f"{model_pred.with_suffix('')}_{postfix}_error_landscape.tif"),
-    #     window_size=predictions_settings['window_size'],
-    #     lateral_voxel_size=lateral_voxel_size,
-    #     axial_voxel_size=axial_voxel_size,
-    #     wavelength=wavelength,
-    #     na=.9,
-    #     tile_p2v=predictions['p2v'].values,
-    # )
-
-    # vis.plot_volume(
-    #     vol=terrain3d,
-    #     results=coefficients,
-    #     window_size=predictions_settings['window_size'],
-    #     dxy=lateral_voxel_size,
-    #     dz=axial_voxel_size,
-    #     save_path=f"{model_pred.with_suffix('')}_{postfix}_projections.svg",
-    # )
-
-    # vis.plot_isoplanatic_patchs(
-    #     results=isoplanatic_patchs,
-    #     clusters=clusters,
-    #     save_path=f"{model_pred.with_suffix('')}_{postfix}_isoplanatic_patchs.svg"
-    # )
-
-    logger.info(f'Done. Waiting for plots to write for {model_pred.with_suffix("")}')
-    # pool.close()    # close the pool
-    # pool.join()     # wait for all tasks to complete
+        
+        for name, heatmap in zip(
+                ('wavefronts', 'wavefronts_expected', 'psfs', 'psfs_expected'),
+                (wavefront_heatmap, expected_wavefront_heatmap, psf_heatmap, expected_psf_heatmap),
+        ):
+            color_clusters(
+                heatmap,
+                clusters_rgb,
+                savepath=f"{model_pred.with_suffix('')}_{postfix}_clusters_{name}.tif",
+                xw=xw,
+                yw=yw,
+                colormap=clusters3d_colormap,
+            )
+        
+        # reconstruct_wavefront_error_landscape(
+        #     wavefronts=wavefronts,
+        #     xtiles=xtiles,
+        #     ytiles=ytiles,
+        #     ztiles=ztiles,
+        #     image=vol,
+        #     save_path=Path(f"{model_pred.with_suffix('')}_{postfix}_error_landscape.tif"),
+        #     window_size=predictions_settings['window_size'],
+        #     lateral_voxel_size=lateral_voxel_size,
+        #     axial_voxel_size=axial_voxel_size,
+        #     wavelength=wavelength,
+        #     na=.9,
+        #     tile_p2v=predictions['p2v'].values,
+        # )
+        
+        # vis.plot_volume(
+        #     vol=terrain3d,
+        #     results=coefficients,
+        #     window_size=predictions_settings['window_size'],
+        #     dxy=lateral_voxel_size,
+        #     dz=axial_voxel_size,
+        #     save_path=f"{model_pred.with_suffix('')}_{postfix}_projections.svg",
+        # )
+        
+        # vis.plot_isoplanatic_patchs(
+        #     results=isoplanatic_patchs,
+        #     clusters=clusters,
+        #     save_path=f"{model_pred.with_suffix('')}_{postfix}_isoplanatic_patchs.svg"
+        # )
+        
+        logger.info(f'Done. Waiting for plots to write for {model_pred.with_suffix("")}')
+        # pool.close()    # close the pool
+        # pool.join()     # wait for all tasks to complete
 
     non_zero_tiles = ~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)
     with Path(f"{model_pred.with_suffix('')}_{postfix}_settings.json").open('w') as f:
