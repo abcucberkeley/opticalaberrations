@@ -610,12 +610,13 @@ def find_roi(
     min_dist: Any = 1,
     max_dist: Any = None,
     min_intensity: Any = 100,
-    max_neighbor: int = 5,
+    max_neighbor: int = 50,
     voxel_size: tuple = (.200, .097, .097),
     kernel_size: int = 15,
     min_psnr: float = 10.0,
     zborder: int = 10,
     prep: Optional[partial] = None,
+    plot_mips: bool = False,
 ):
     savepath_unprocessed = Path(f"{savepath}_unprocessed")
 
@@ -775,7 +776,7 @@ def find_roi(
         axes[2].set_xlabel('Distance')
         axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-        savesvg(fig, f'{plot}_detected_points.svg')
+        savesvg(fig, f'{plot}_detected_rois.svg')
 
     # if min_dist is not None:
     #     logger.info(f'{min_dist =} um')
@@ -819,7 +820,7 @@ def find_roi(
         axes[2].set_xlabel('Distance')
         axes[2].set_xlim(0, None)
         axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-        savesvg(fig, f'{plot}_selected_points.svg')
+        savesvg(fig, f'{plot}_selected_rois.svg')
 
 
     pois = pois.head(num_rois)
@@ -827,9 +828,9 @@ def find_roi(
 
     pois = pois[['z', 'y', 'x']].values[:num_rois]
     widths = [w // 2 for w in window_size]
-
-    if plot:
-        fig, axes = plt.subplots(2, 1, figsize=(8, 4), sharey=False, sharex=True)
+    
+    if plot_mips:
+        fig, axes = plt.subplots(2, 1, figsize=(8, 8), sharey=False, sharex=True)
         for ax, mip_directions in enumerate([0,1]):
             axes[ax].imshow(
                 np.nanmax(convolved_image, axis=mip_directions),
@@ -866,10 +867,11 @@ def find_roi(
     ztiles = 1
     ncols = 1 # max(int(np.floor(len(pois) / 5)), 1)
     nrows = int(np.ceil(len(pois) / ncols))
-
+    
+    poi_map = np.zeros_like(image)
     for p, (z, y, x) in enumerate(itertools.product(
         range(ztiles), range(nrows), range(ncols),
-        desc=f"Locating tiles: {[pois.shape[0]]}",
+            desc=f"Locating rois: {[pois.shape[0]]}",
         file=sys.stdout
     )):
         if p < len(pois):
@@ -882,6 +884,8 @@ def find_roi(
                 for s in range(3)
             ]
             r = image[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
+            poi_map[start[0]:end[0], start[1]:end[1], start[2]:end[2]] = np.full(r.shape, int(p))
+            
 
             if r.size != 0:
                 tile = f"z{0}-y{y}-x{x}"
@@ -892,7 +896,22 @@ def find_roi(
 
                 imwrite(savepath / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
                 rois.append(savepath / f"{tile}.tif")
-
+    
+    scaled_heatmap = (image - np.nanpercentile(image[image > 0], 1)) / \
+                     (np.nanpercentile(image[image > 0], 99) - np.nanpercentile(image[image > 0], 1))
+    scaled_heatmap = np.clip(scaled_heatmap, a_min=0, a_max=1)  # this helps see the volume data in _clusters.tif
+    
+    colormap = np.array(sns.color_palette('tab20', n_colors=len(pois))) * 255
+    colormap = np.insert(colormap, 0, [0, 0, 0], axis=0)
+    rgb_map = colormap[poi_map.astype(np.ubyte)] * scaled_heatmap[..., np.newaxis]
+    imwrite(
+        f'{plot}_selected_rois.tif',
+        rgb_map.astype(np.ubyte),
+        photometric='rgb',
+        resolution=window_size[1:],
+        metadata={'axes': 'ZYXS'},
+        compression='deflate',
+    )
     return np.array(rois), ztiles, nrows, ncols
 
 

@@ -780,24 +780,24 @@ def predict_rois(
         min_psnr=min_psnr,
         na_mask=samplepsfgen.na_mask
     )
-    prep = partial(
-        backend.preprocess,
-        modelpsfgen=preloadedpsfgen,
-        samplepsfgen=samplepsfgen,
-        freq_strength_threshold=freq_strength_threshold,
-        digital_rotations=digital_rotations,
-        plot=plot,
-        no_phase=False,
-        remove_background=True,
-        normalize=True,
-        fov_is_small=fov_is_small,
-        skip_prep_sample=False,
-        min_psnr=min_psnr,
-        object_gaussian_kernel_width=object_gaussian_kernel_width,
-        cpu_workers=1,  # already parallelized over files
-        denoiser=denoiser,
-        denoiser_window_size=denoiser_window_size
-    )
+    # prep = partial(
+    #     backend.preprocess,
+    #     modelpsfgen=preloadedpsfgen,
+    #     samplepsfgen=samplepsfgen,
+    #     freq_strength_threshold=freq_strength_threshold,
+    #     digital_rotations=digital_rotations,
+    #     plot=plot,
+    #     no_phase=False,
+    #     remove_background=True,
+    #     normalize=True,
+    #     fov_is_small=fov_is_small,
+    #     skip_prep_sample=False,
+    #     min_psnr=min_psnr,
+    #     object_gaussian_kernel_width=object_gaussian_kernel_width,
+    #     cpu_workers=1,  # already parallelized over files
+    #     denoiser=denoiser,
+    #     denoiser_window_size=denoiser_window_size
+    # )
     
     rois, ztiles, nrows, ncols = find_roi(
         sample,
@@ -806,8 +806,6 @@ def predict_rois(
         plot=f"{outdir}_predictions" if plot else None,
         num_rois=num_rois,
         min_dist=minimum_distance,
-        max_dist=None,
-        max_neighbor=20,
         min_intensity=min_intensity,
         voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size),
         prep=prep
@@ -860,7 +858,6 @@ def predict_rois(
         freq_strength_threshold=freq_strength_threshold,
         fov_is_small=fov_is_small,
         skip_prep_sample=prep is not None,
-        preprocessed=True,
         plot=plot,
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
