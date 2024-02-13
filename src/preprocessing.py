@@ -135,11 +135,24 @@ def resize_image(image, crop_shape: Union[tuple, list], interpolate: bool = Fals
             return real + 1j * imag
     else:
         if interpolate:
-            return resize(image, output_shape=crop_shape, anti_aliasing=False, order=1, preserve_range=True).astype(
-                np.float32)
+            # factors =  tuple([np.round(image.shape[i]/crop_shape[i]).astype(int) for i in range(3)])
+            # print(f"{factors=}, {crop_shape=}, {image.shape=}")
+            # downscaled_image = downscale_local_mean(image, factors=factors).astype(np.float32)
+            # downscaled_image = resize_with_crop_or_pad(downscaled_image, crop_shape=crop_shape, mode='constant')
+            # return downscaled_image
+            return resize(
+                image.astype(np.float32),
+                output_shape=crop_shape,
+                anti_aliasing=False,
+                order=1,
+                preserve_range=True
+            )
         else:
-            return resize_with_crop_or_pad(image.astype(np.float32), crop_shape=crop_shape, mode='constant').astype(
-                np.float32)
+            return resize_with_crop_or_pad(
+                image.astype(np.float32),
+                crop_shape=crop_shape,
+                mode='constant'
+            ).astype(np.float32)
 
 
 def na_and_background_filter(

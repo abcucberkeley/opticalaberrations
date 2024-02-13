@@ -366,7 +366,7 @@ def preprocess(
     else:  # at least one tile fov dimension is larger than model fov
         if interpolate_embeddings:
             if not skip_prep_sample:
-                voxel_size_scalar = np.array(samplepsfgen.voxel_size) ** 2 / np.array(modelpsfgen.voxel_size)
+                voxel_size_scalar = np.array(modelpsfgen.voxel_size) ** 2 / np.array(samplepsfgen.voxel_size)
                 adjusted_pov = tuple(
                     voxel_size_scalar * np.array(sample.shape) * np.array(samplepsfgen.fov_scaler)
                 )
@@ -387,8 +387,8 @@ def preprocess(
             
             return fourier_embeddings(
                 sample,
-                iotf=samplepsfgen.iotf,
-                na_mask=samplepsfgen.na_mask,
+                iotf=modelpsfgen.iotf,
+                na_mask=modelpsfgen.na_mask,
                 plot=plot if plot else None,
                 no_phase=no_phase,
                 remove_interference=True,

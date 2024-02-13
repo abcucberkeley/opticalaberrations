@@ -522,7 +522,8 @@ def compute_emb(
         log10: bool = False,
         embedding_option: Any = 'spatial_planes',
         freq_strength_threshold: float = 0.,
-        model_psf_shape: tuple = (64, 64, 64)
+    model_psf_shape: tuple = (64, 64, 64),
+    interpolate_embeddings: bool = False
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -557,9 +558,6 @@ def compute_emb(
     else:
         na_mask = na_mask.astype(bool)
 
-    if norm:
-        otf = normalize_otf(otf, freq_strength_threshold=freq_strength_threshold)
-
     if val == 'real':
         emb = np.real(otf)
 
@@ -569,7 +567,32 @@ def compute_emb(
     elif val == 'angle':
         emb = np.angle(otf)
         emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
+    
+    elif val == 'abs':
+        emb = np.abs(otf).astype(np.float32)
 
+    else:
+        raise Exception(f'invalid choice, {val=}, for compute_emb')
+    
+    if emb.shape != model_psf_shape:
+        emb = resize_image(emb, crop_shape=model_psf_shape, interpolate=interpolate_embeddings)
+    
+    if norm:
+        emb = normalize_otf(emb, freq_strength_threshold=freq_strength_threshold)
+
+    if ratio:
+        iotf = np.abs(iotf).astype(np.float32)
+        
+        if iotf.shape != emb.shape:
+            iotf = resize_image(iotf, crop_shape=emb.shape, interpolate=interpolate_embeddings)
+        
+        emb /= iotf
+        emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
+    
+    if na_mask.shape != emb.shape:
+        na_mask = resize_image(na_mask, crop_shape=emb.shape, interpolate=interpolate_embeddings)
+    
+    if val == 'angle':
         try:
             # unwrap phase if we have at least 100 nonzero points left in emb.
             if len(np.ma.nonzero(emb)[0]) > 100:
@@ -579,16 +602,6 @@ def compute_emb(
                 emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
         except TimeoutError as e:
             logger.warning(f"`unwrap_phase`: {e}")
-
-    elif val == 'abs':
-        emb = np.abs(otf)
-
-    else:
-        raise Exception(f'invalid choice, {val=}, for compute_emb')
-
-    if ratio:
-        emb /= np.abs(iotf)
-        emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
 
     emb *= na_mask
 
@@ -761,25 +774,25 @@ def rotate_embeddings(
 
 @profile
 def fourier_embeddings(
-        inputs: Union[np.array, tuple],
-        iotf: np.array,
-        na_mask: Optional[np.ndarray] = None,
-        ratio: bool = True,
-        norm: bool = True,
-        padsize: Any = None,
-        no_phase: bool = False,
-        alpha_val: str = 'abs',
-        phi_val: str = 'angle',
-        plot: Any = None,
-        log10: bool = False,
-        input_coverage: float = 1.0,
-        freq_strength_threshold: float = 0.01,
-        pois: Any = None,
-        remove_interference: bool = True,
-        plot_interference: bool = False,        # because it's broken.
-        embedding_option: str = 'spatial_planes',
-        digital_rotations: Optional[int] = None,
-        model_psf_shape: tuple = (64, 64, 64),
+    inputs: Union[np.array, tuple],
+    iotf: np.array,
+    na_mask: Optional[np.ndarray] = None,
+    ratio: bool = True,
+    norm: bool = True,
+    padsize: Any = None,
+    no_phase: bool = False,
+    alpha_val: str = 'abs',
+    phi_val: str = 'angle',
+    plot: Any = None,
+    log10: bool = False,
+    input_coverage: float = 1.0,
+    freq_strength_threshold: float = 0.01,
+    pois: Any = None,
+    remove_interference: bool = True,
+    plot_interference: bool = False,  # because it's broken.
+    embedding_option: str = 'spatial_planes',
+    digital_rotations: Optional[int] = None,
+    model_psf_shape: tuple = (64, 64, 64),
     debug_rotations: bool = False,
     interpolate_embeddings: bool = False,
 ):
@@ -835,19 +848,6 @@ def fourier_embeddings(
 
     else:
         
-        if not interpolate_embeddings:  # psf should be the same FOV size in um, then we crop the otf to the iotf shape
-            if psf.shape != model_psf_shape:
-                psf = resize_image(psf, crop_shape=model_psf_shape)
-            
-            if otf.shape != model_psf_shape:
-                otf = resize_image(otf, crop_shape=model_psf_shape)
-        
-        if iotf.shape != otf.shape:
-            iotf = resize_image(iotf, crop_shape=otf.shape)
-        
-        if na_mask.shape != otf.shape:
-            na_mask = resize_image(na_mask.astype(np.float32), crop_shape=otf.shape)
-        
         if no_phase:
             emb = compute_emb(
                 otf,
@@ -859,7 +859,8 @@ def fourier_embeddings(
                 log10=log10,
                 embedding_option=embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
-                model_psf_shape=model_psf_shape
+                model_psf_shape=model_psf_shape,
+                interpolate_embeddings=interpolate_embeddings
             )
         else:
             use_reconstructed_otf = False   # option to use reconstructed otf for alpha embedding
@@ -882,7 +883,8 @@ def fourier_embeddings(
                 log10=log10,
                 embedding_option=embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
-                model_psf_shape=model_psf_shape
+                model_psf_shape=model_psf_shape,
+                interpolate_embeddings=interpolate_embeddings
             )
 
             if remove_interference and not use_reconstructed_otf:
@@ -904,13 +906,11 @@ def fourier_embeddings(
                 log10=False,
                 embedding_option='spatial_planes',
                 freq_strength_threshold=freq_strength_threshold,
-                model_psf_shape=model_psf_shape
+                model_psf_shape=model_psf_shape,
+                interpolate_embeddings=interpolate_embeddings
             )
 
             emb = np.concatenate([alpha, phi], axis=0)
-
-        if emb.shape[1:] != model_psf_shape[1:]:
-            emb = resize_image(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]), interpolate=True)
 
         if plot is not None:
             plt.style.use("default")
