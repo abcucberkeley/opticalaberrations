@@ -259,3 +259,22 @@ def test_predict_rois(kargs):
     )
     roi_predictions = roi_predictions.drop(columns=['mean', 'median', 'min', 'max', 'std'])
     assert roi_predictions.shape == (kargs['num_modes'], num_rois), f'{roi_predictions=}'
+
+
+@pytest.mark.run(order=12)
+def test_aggregate_rois(kargs):
+    zernikes = experimental.aggregate_predictions(
+        model_pred=Path(f"{kargs['inputs'].with_suffix('')}_rois_predictions.csv"),
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        prediction_threshold=kargs['prediction_threshold'],
+        majority_threshold=kargs['majority_threshold'],
+        min_percentile=kargs['min_percentile'],
+        max_percentile=kargs['max_percentile'],
+        aggregation_rule=kargs['aggregation_rule'],
+        max_isoplanatic_clusters=kargs['max_isoplanatic_clusters'],
+        ignore_tile=kargs['ignore_tile'],
+        plot=kargs['plot'],
+        roi_predictions=True
+    )
+    assert zernikes.shape[1] == kargs['num_modes'] + 2

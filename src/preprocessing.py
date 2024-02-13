@@ -16,6 +16,7 @@ import pandas as pd
 import seaborn as sns
 import zarr
 from tqdm.contrib import itertools
+from tqdm import trange
 from tifffile import imread, imwrite
 from scipy.spatial import KDTree
 from numpy.lib.stride_tricks import sliding_window_view
@@ -618,11 +619,9 @@ def find_roi(
     prep: Optional[partial] = None,
     plot_mips: bool = False,
 ):
-    savepath_unprocessed = Path(f"{savepath}_unprocessed")
-
     savepath.mkdir(parents=True, exist_ok=True)
+    savepath_unprocessed = Path(f"{savepath}_unprocessed")
     savepath_unprocessed.mkdir(parents=True, exist_ok=True)
-
 
     pd.set_option("display.precision", 2)
     plt.rcParams.update({
@@ -864,16 +863,14 @@ def find_roi(
         savesvg(fig, f'{plot}_mips.svg')
 
     rois = []
-    ztiles = 1
-    ncols = 1 # max(int(np.floor(len(pois) / 5)), 1)
-    nrows = int(np.ceil(len(pois) / ncols))
-    
     poi_map = np.zeros_like(image)
-    for p, (z, y, x) in enumerate(itertools.product(
-        range(ztiles), range(nrows), range(ncols),
-            desc=f"Locating rois: {[pois.shape[0]]}",
-        file=sys.stdout
-    )):
+    ztiles = np.ceil(np.array(image.shape[0]) / window_size[0]).astype(int)
+    ytiles = 1
+    xtiles = np.ceil(len(pois) / ztiles).astype(int)
+    xtiles_counter = {z: 0 for z in range(ztiles)}
+    
+    for p in trange(pois.shape[0], desc=f"Locating rois: {pois.shape[0]}", file=sys.stdout):
+    
         if p < len(pois):
             start = [
                 pois[p, s] - widths[s] if pois[p, s] >= widths[s] else 0
@@ -886,9 +883,13 @@ def find_roi(
             r = image[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
             poi_map[start[0]:end[0], start[1]:end[1], start[2]:end[2]] = np.full(r.shape, int(p))
             
-
             if r.size != 0:
-                tile = f"z{0}-y{y}-x{x}"
+                z = np.floor(np.array(start[0]) / window_size[0]).astype(int)
+                y = ytiles
+                x = xtiles_counter[z]
+                xtiles_counter[z] += 1
+                
+                tile = f"z{z}-y{y}-x{x}"
                 imwrite(savepath_unprocessed / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
 
                 if prep is not None:
@@ -901,8 +902,15 @@ def find_roi(
                      (np.nanpercentile(image[image > 0], 99) - np.nanpercentile(image[image > 0], 1))
     scaled_heatmap = np.clip(scaled_heatmap, a_min=0, a_max=1)  # this helps see the volume data in _clusters.tif
     
-    colormap = np.array(sns.color_palette('tab20', n_colors=len(pois))) * 255
-    colormap = np.insert(colormap, 0, [0, 0, 0], axis=0)
+    poi_colors = np.split(
+        np.array(sns.color_palette('tab20', n_colors=(len(pois) * ztiles))) * 255,
+        ztiles,
+    )  # list of colors for each z tiles
+    
+    colormap = []
+    for cc in poi_colors:  # for each z tile's colors
+        colormap.extend([[0, 0, 0], *cc])  # append the same zero color at the front
+    colormap = np.array(colormap)
     rgb_map = colormap[poi_map.astype(np.ubyte)] * scaled_heatmap[..., np.newaxis]
     imwrite(
         f'{plot}_selected_rois.tif',
@@ -912,7 +920,7 @@ def find_roi(
         metadata={'axes': 'ZYXS'},
         compression='deflate',
     )
-    return np.array(rois), ztiles, nrows, ncols
+    return np.array(sorted(rois)), ztiles, ytiles, xtiles
 
 
 @profile
