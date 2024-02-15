@@ -745,6 +745,7 @@ def predict_rois(
     
     outdir = Path(f"{img.with_suffix('')}_rois")
     outdir.mkdir(exist_ok=True, parents=True)
+    [f.unlink() for f in outdir.glob("*.tif") if f.is_file()]  # remove any old tiles
 
     logger.info(f"Loading file: {img.name}")
     sample = backend.load_sample(img)
@@ -757,7 +758,7 @@ def predict_rois(
         sample,
         min_psnr=min_psnr,
         na_mask=preloadedpsfgen.na_mask,
-        method ='difference_of_gaussians',
+        method='difference_of_gaussians',
     )
     
     sample = sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample)
@@ -968,6 +969,7 @@ def predict_tiles(
     
     outdir = Path(f"{img.with_suffix('')}_tiles")
     outdir.mkdir(exist_ok=True, parents=True)
+    [f.unlink() for f in outdir.glob("*.tif") if f.is_file()]  # remove any old tiles
 
     samplepsfgen = SyntheticPSF(
         psf_type=preloadedpsfgen.psf_type,
