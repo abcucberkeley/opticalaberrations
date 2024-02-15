@@ -617,7 +617,7 @@ def find_roi(
     min_psnr: float = 10.0,
     zborder: int = 10,
     prep: Optional[partial] = None,
-    plot_mips: bool = False,
+    plot_mips: bool = True,
 ):
     savepath.mkdir(parents=True, exist_ok=True)
     savepath_unprocessed = Path(f"{savepath}_unprocessed")
@@ -636,7 +636,7 @@ def find_roi(
     if isinstance(image, Path):
         image = imread(image).astype(np.float32)
 
-    blured_image = gaussian_filter(image**0.5, sigma=1.1)
+    blured_image = gaussian_filter(image, sigma=1.1)
 
     # exclude values close to the edge in Z for finding our template
     restricted_blurred = blured_image.copy()
@@ -668,9 +668,9 @@ def find_roi(
     pois = []
     detected_peaks = peak_local_max(
         convolved_image,
-        min_distance=2,
+        min_distance=round(np.mean(window_size)/4),
         threshold_rel=.05,
-        exclude_border=1,
+        exclude_border=True,
         p_norm=2,
         num_peaks=num_rois
     ).astype(int)
@@ -761,7 +761,7 @@ def find_roi(
                 pois['z'][index] = new_z
             losers_ids = losers_ids[losers_ids > index]     # only kill losers that have less intensity than current row
             pois['winners'][losers_ids] = 0
-    logger.info('after winner selection')
+    logger.info(f"After winner selection, {pois['winners'].sum()} winners remain.")
     print(pois)
 
     if plot:
@@ -808,7 +808,7 @@ def find_roi(
 
 
 
-    pois = pois[pois['neighbors'] <= max_neighbor]
+    # pois = pois[pois['neighbors'] <= max_neighbor]
 
     if plot:
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
@@ -880,8 +880,9 @@ def find_roi(
     ytiles = 1
     xtiles = np.ceil(len(pois) / ztiles).astype(int)
     xtiles_counter = {z: 0 for z in range(ztiles)}
-    
-    for p in trange(pois.shape[0], desc=f"Locating rois: {pois.shape[0]}", file=sys.stdout):
+
+    desc = f"Saving rois and (so slowly) plotting svgs: {pois.shape[0]}" if plot else f"Saving rois: {pois.shape[0]}"
+    for p in trange(pois.shape[0], desc=desc, file=sys.stdout, unit='file'):
     
         if p < len(pois):
             start = [
