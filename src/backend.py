@@ -859,7 +859,7 @@ def predict_rotation(
             inputs,
             iotf=psfgen.iotf,
             na_mask=psfgen.na_mask,
-            plot=plot,
+            # plot=plot,
             padsize=padsize,
             no_phase=no_phase,
             alpha_val=alpha_val,

@@ -636,19 +636,19 @@ def find_roi(
     if isinstance(image, Path):
         image = imread(image).astype(np.float32)
     
-    blured_image = remove_background_noise(image, method='difference_of_gaussians', min_psnr=0)
-    blured_image = blured_image if isinstance(blured_image, np.ndarray) else cp.asnumpy(blured_image)
-    blured_image = gaussian_filter(blured_image, sigma=1.1)
+    blurred_image = remove_background_noise(image, method='difference_of_gaussians', min_psnr=0)
+    blurred_image = blurred_image if isinstance(blurred_image, np.ndarray) else cp.asnumpy(blurred_image)
+    blurred_image = gaussian_filter(blurred_image, sigma=1.1)
 
     # exclude values close to the edge in Z for finding our template
-    restricted_blurred = blured_image.copy()
+    restricted_blurred = blurred_image.copy()
     restricted_blurred[0: zborder] = 0
-    restricted_blurred[blured_image.shape[0] - zborder:blured_image.shape[0]] = 0
+    restricted_blurred[blurred_image.shape[0] - zborder:blurred_image.shape[0]] = 0
     max_poi = list(np.unravel_index(np.nanargmax(restricted_blurred, axis=None), restricted_blurred.shape))
     
     kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=1)
     # init_pos = [p - kernel_size // 2 for p in max_poi]
-    # kernel = blured_image[
+    # kernel = blurred_image[
     #     init_pos[0]:init_pos[0] + kernel_size,
     #     init_pos[1]:init_pos[1] + kernel_size,
     #     init_pos[2]:init_pos[2] + kernel_size,
@@ -656,7 +656,7 @@ def find_roi(
     
     # convolve template with the input image
     convolved_image = convolution.convolve_fft(
-        blured_image,
+        blurred_image,
         kernel,
         allow_huge=True,
         boundary='fill',
@@ -671,7 +671,7 @@ def find_roi(
     detected_peaks = peak_local_max(
         convolved_image,
         min_distance=round(np.mean(window_size)/4),
-        threshold_rel=.05,
+        threshold_rel=.1,
         exclude_border=True,
         p_norm=2,
         num_peaks=num_rois
@@ -694,7 +694,7 @@ def find_roi(
     
     else:
         for p in detected_peaks:
-            peak_value = max(image[p[0], p[1], p[2]], blured_image[p[0], p[1], p[2]])
+            peak_value = max(image[p[0], p[1], p[2]], blurred_image[p[0], p[1], p[2]])
             
             try:
                 fov = convolved_image[
@@ -716,14 +716,22 @@ def find_roi(
     
     pois = pd.DataFrame(pois, columns=['z', 'y', 'x', 'intensity'])
     # filter out points too close to the edge
-    edge = 8
-    lzedge = pois['z'] >= window_size[0]//edge
-    hzedge = pois['z'] <= image.shape[0] - window_size[0] // edge
-    lyedge = pois['y'] >= window_size[1]//edge
-    hyedge = pois['y'] <= image.shape[1] - window_size[1] // edge
-    lxedge = pois['x'] >= window_size[2]//edge
-    hxedge = pois['x'] <= image.shape[2] - window_size[2] // edge
-    pois = pois[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
+    if len(pois) > 1:
+        edge = 8
+        lzedge = pois['z'] >= window_size[0]//edge
+        hzedge = pois['z'] <= image.shape[0] - window_size[0] // edge
+        lyedge = pois['y'] >= window_size[1]//edge
+        hyedge = pois['y'] <= image.shape[1] - window_size[1] // edge
+        lxedge = pois['x'] >= window_size[2]//edge
+        hxedge = pois['x'] <= image.shape[2] - window_size[2] // edge
+        pois = pois[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
+
+    if len(detected_peaks) == 0:
+        p = max_poi
+        intensity = image[p[0], p[1], p[2]]
+
+        candidates_map[p[0], p[1], p[2]] = 1
+        pois.append([p[0], p[1], p[2], intensity])
 
     pois.sort_values(by='intensity', ascending=False, inplace=True)
     pois.reset_index(inplace=True)
@@ -733,37 +741,40 @@ def find_roi(
     scaled_peaks[:, 1] = points[:, 1] * voxel_size[1]
     scaled_peaks[:, 2] = points[:, 2] * voxel_size[2]
 
-    kd = KDTree(scaled_peaks)
-    num_nearest = len(scaled_peaks)
-    dist, idx = kd.query(scaled_peaks, k=num_nearest, workers=-1)
+    if len(scaled_peaks) > 1:
+        kd = KDTree(scaled_peaks)
+        num_nearest = len(scaled_peaks)
+        dist, idx = kd.query(scaled_peaks, k=num_nearest, workers=-1)
 
-    for n in range(1, num_nearest):
-        pois[f'dist_{n}'] = dist[:, n]
-        pois[f'nn_ids_{n}'] = idx[:, n]
+        for n in range(1, num_nearest):
+            pois[f'dist_{n}'] = dist[:, n]
+            pois[f'nn_ids_{n}'] = idx[:, n]
 
-    neighbor_dists = pois.columns[pois.columns.str.startswith('dist_')].tolist()  # column names
-    neighbor_ids = pois.columns[pois.columns.str.startswith('nn_ids_')].tolist()  # column names
-    pois['winners'] = 1
-    print(pois)
+        neighbor_dists = pois.columns[pois.columns.str.startswith('dist_')].tolist()  # column names
+        neighbor_ids = pois.columns[pois.columns.str.startswith('nn_ids_')].tolist()  # column names
+        pois['winners'] = 1
+        print(pois)
 
-    for index, row in pois.iterrows():
-        if pois.loc[index, 'winners']:
-            losers_ids = row[neighbor_ids].astype(int)[np.array(row[neighbor_dists] < min_dist)]
-            # if this POI is very close to a single other POI:
-            if len(losers_ids) == 1 and row[neighbor_dists[losers_ids[0]]] < np.mean(window_size)/2:
-                # shift this POI (at most 1/4 window_size) so that both are within the FOV.
-                merge_id = losers_ids[0]
-                new_x = round((row['x'] + pois['x'][merge_id])/2)
-                new_y = round((row['y'] + pois['y'][merge_id])/2)
-                new_z = round((row['z'] + pois['z'][merge_id])/2)
+        for index, row in pois.iterrows():
+            if pois.loc[index, 'winners']:
+                losers_ids = row[neighbor_ids].astype(int)[np.array(row[neighbor_dists] < min_dist)]
+                # if this POI is very close to a single other POI:
+                if len(losers_ids) == 1 and row[neighbor_dists[losers_ids[0]]] < np.mean(window_size)/2:
+                    # shift this POI (at most 1/4 window_size) so that both are within the FOV.
+                    merge_id = losers_ids[0]
+                    new_x = round((row['x'] + pois['x'][merge_id])/2)
+                    new_y = round((row['y'] + pois['y'][merge_id])/2)
+                    new_z = round((row['z'] + pois['z'][merge_id])/2)
 
-                logger.info(f"Merging ROI {index} with ROI {merge_id}, shifting by {new_z - row['z']:.1f}, {new_y - row['y']:.1f}, {new_x - row['x']:.1f} (Z,Y,X) pixels.")
-                pois['x'][index] = new_x
-                pois['y'][index] = new_y
-                pois['z'][index] = new_z
-            losers_ids = losers_ids[losers_ids > index]     # only kill losers that have less intensity than current row
-            pois['winners'][losers_ids] = 0
-    logger.info(f"After winner selection, {pois['winners'].sum()} winners remain.")
+                    logger.info(f"Merging ROI {index} with ROI {merge_id}, shifting by {new_z - row['z']:.1f}, {new_y - row['y']:.1f}, {new_x - row['x']:.1f} (Z,Y,X) pixels.")
+                    pois['x'][index] = new_x
+                    pois['y'][index] = new_y
+                    pois['z'][index] = new_z
+                losers_ids = losers_ids[losers_ids > index]     # only kill losers that have less intensity than current row
+                pois['winners'][losers_ids] = 0
+        logger.info(f"After winner selection, {pois['winners'].sum()} winners remain.")
+    else:
+        pois['winners'] = 1
     print(pois)
 
     if plot:
@@ -801,7 +812,7 @@ def find_roi(
         logger.info(f'{max_dist =} um')
         pois = pois[pois['dist_1'] <= max_dist]
 
-    if min_intensity is not None:
+    if min_intensity is not None and min_intensity > 0:
         pois = pois[pois['intensity'] >= min_intensity]
 
     neighbors = pois.columns[pois.columns.str.startswith('dist_1')].tolist()
@@ -875,6 +886,7 @@ def find_roi(
                     ))
                     axes[ax].set_title('XZ')
         savesvg(fig, f'{plot}_mips.svg')
+        logger.info(f'Saved {plot}_mips.svg')
 
     rois = []
     poi_map = np.zeros_like(image)
@@ -908,7 +920,8 @@ def find_roi(
                 imwrite(savepath_unprocessed / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
 
                 if prep is not None:
-                    r = prep(r, plot=savepath / f"{tile}" if plot else None)
+                    # r = prep(r, plot=savepath / f"{tile}" if plot else None)
+                    r = prep(r, plot=None)  # Can't plot. plotting broken.
 
                 imwrite(savepath / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
                 rois.append(savepath / f"{tile}.tif")
