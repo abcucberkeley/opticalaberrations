@@ -796,7 +796,17 @@ def eval_rotation(
 
     if plot is not None:
         vis.plot_rotations(Path(f'{plot}_rotations.csv'))
-
+        
+        p = Wavefront(preds, order='ansi', lam_detection=psfgen.lam_detection)
+        std = Wavefront(stdevs, order='ansi', lam_detection=psfgen.lam_detection)
+        
+        vis.diagnosis(
+            pred=p,
+            pred_std=std,
+            save_path=Path(f"{plot}_diagnosis"),
+            lls_defocus=0.
+        )
+        
     return preds, stdevs
 
 
@@ -1189,7 +1199,7 @@ def predict_dataset(
                 p.starmap(
                     eval_rotation,  # order matters future thayer
                     zip(
-                        preds,                               # init_preds
+                        preds,  # init_preds
                         repeat(digital_rotations),                      # rotations
                         repeat(psfgen),                                 # psfgen
                         save_path,                                      # save_path
