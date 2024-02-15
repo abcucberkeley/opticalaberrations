@@ -267,6 +267,5 @@ def test_aggregate_rois(kargs):
         max_isoplanatic_clusters=kargs['max_isoplanatic_clusters'],
         ignore_tile=kargs['ignore_tile'],
         plot=kargs['plot'],
-        roi_predictions=True
     )
     assert not zernikes.empty

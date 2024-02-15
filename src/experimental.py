@@ -1547,7 +1547,6 @@ def aggregate_predictions(
     preloaded: Preloadedmodelclass = None,
     psf_type: Optional[Union[str, Path]] = None,
     postfix: str = 'aggregated',
-    roi_predictions: bool = False
 ):
 
     dm_state = utils.load_dm(dm_state)
@@ -1557,8 +1556,10 @@ def aggregate_predictions(
     
     if 'tiles' in str(model_pred):
         vol_path = str(model_pred).replace('_tiles_predictions.csv', '.tif')
+        roi_predictions = False
     elif 'rois' in str(model_pred):
         vol_path = str(model_pred).replace('_rois_predictions.csv', '.tif')
+        roi_predictions = True
     else:
         raise Exception(f'Unknown prediction format {model_pred=}')
     

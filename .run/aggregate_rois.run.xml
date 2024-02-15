@@ -44,7 +44,7 @@
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
     <option name="PARAMETERS"
-            value="aggregate_predictions ../examples/single/single_rois_predictions.csv ../calibration/aang/15_mode_calibration.csv --current_dm None --aggregation_rule median --roi_predictions --plot"/>
+            value="aggregate_predictions ../examples/single/single_rois_predictions.csv ../calibration/aang/15_mode_calibration.csv --current_dm None --aggregation_rule median --plot"/>
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
