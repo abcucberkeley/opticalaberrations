@@ -636,7 +636,7 @@ def find_roi(
     if isinstance(image, Path):
         image = imread(image).astype(np.float32)
     
-    blured_image = remove_background_noise(image, method='difference_of_gaussians')
+    blured_image = remove_background_noise(image, method='difference_of_gaussians', min_psnr=0)
     blured_image = blured_image if isinstance(blured_image, np.ndarray) else cp.asnumpy(blured_image)
     blured_image = gaussian_filter(blured_image, sigma=1.1)
 
