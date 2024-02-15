@@ -52,7 +52,7 @@ from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern
 from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad, \
-    denoise_image, remove_background_noise
+    denoise_image
 
 import logging
 logger = logging.getLogger('')
@@ -749,18 +749,6 @@ def predict_rois(
     logger.info(f"Loading file: {img.name}")
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
-    
-    if not isinstance(sample, cp.ndarray):
-        sample = cp.array(sample)
-    
-    sample = remove_background_noise(
-        sample,
-        min_psnr=min_psnr,
-        na_mask=preloadedpsfgen.na_mask,
-        method ='difference_of_gaussians',
-    )
-    
-    sample = sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample)
     
     if denoiser is not None:
         sample = denoise_image(

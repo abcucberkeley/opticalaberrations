@@ -635,8 +635,10 @@ def find_roi(
     
     if isinstance(image, Path):
         image = imread(image).astype(np.float32)
-
-    blured_image = gaussian_filter(image**0.5, sigma=1.1)
+    
+    blured_image = remove_background_noise(image, method='difference_of_gaussians')
+    blured_image = blured_image if isinstance(blured_image, np.ndarray) else cp.asnumpy(blured_image)
+    blured_image = gaussian_filter(blured_image, sigma=1.1)
 
     # exclude values close to the edge in Z for finding our template
     restricted_blurred = blured_image.copy()
