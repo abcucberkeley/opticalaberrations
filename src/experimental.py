@@ -52,7 +52,7 @@ from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern
 from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad, \
-    denoise_image, remove_background_noise
+    denoise_image
 
 import logging
 logger = logging.getLogger('')
@@ -750,18 +750,6 @@ def predict_rois(
     logger.info(f"Loading file: {img.name}")
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
-    
-    if not isinstance(sample, cp.ndarray):
-        sample = cp.array(sample)
-    
-    sample = remove_background_noise(
-        sample,
-        min_psnr=min_psnr,
-        na_mask=preloadedpsfgen.na_mask,
-        method='difference_of_gaussians',
-    )
-    
-    sample = sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample)
     
     if denoiser is not None:
         sample = denoise_image(
@@ -1549,7 +1537,6 @@ def aggregate_predictions(
     preloaded: Preloadedmodelclass = None,
     psf_type: Optional[Union[str, Path]] = None,
     postfix: str = 'aggregated',
-    roi_predictions: bool = False
 ):
 
     dm_state = utils.load_dm(dm_state)
@@ -1559,8 +1546,10 @@ def aggregate_predictions(
     
     if 'tiles' in str(model_pred):
         vol_path = str(model_pred).replace('_tiles_predictions.csv', '.tif')
+        roi_predictions = False
     elif 'rois' in str(model_pred):
         vol_path = str(model_pred).replace('_rois_predictions.csv', '.tif')
+        roi_predictions = True
     else:
         raise Exception(f'Unknown prediction format {model_pred=}')
     
