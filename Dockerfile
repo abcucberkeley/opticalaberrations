@@ -13,14 +13,28 @@
 # docker system prune
 # container's user is different than github action's user, so change permissions of folder: sudo chmod 777 /home/mosaic/Desktop/actions-runner/_work -R
 
-# 'conda install tensorflow-gpu' will not install GPU version because GPU is not detected during 'docker build' unless DOCKER_BUILDKIT=0, so we just do pip install of everything.
+# 'conda install tensorflow-gpu' will not install GPU version because GPU is not detected during 'docker build' unless DOCKER_BUILDKIT=0, so we just do pip install of everything. Actually we will just use NVIDIA container that has it all installed already.
+
+# mounting /clusterfs via this plugin DOES NOT WORK
+# docker plugin install vieux/sshfs sshkey.source=/c/Users/Mosaic/.ssh/id_rsa
+# docker plugin set vieux/sshfs sshkey.source=/c/Users/Mosaic/.ssh/id_rsa
+# docker plugin enable vieux/sshfs
+# docker volume create -d vieux/sshfs -o sshcmd=thayeralshaabi@master.abc.berkeley.edu:/clustersfs sshvolume
+# [-o IdentityFile=/root/.ssh/<key>] [-o port=<port>] [-o <any_sshfs_-o_option> ] 
 
 # NSIGHT NOT WORKING YET, STILL DOESN'T SHOW GPU METRICS
 # nvidia nsight profiling:
 # https://developer.nvidia.com/nvidia-development-tools-solutions-err_nvgpuctrperm-permission-issue-performance-counters#AllUsersTag
 
-# docker run --rm -it --gpus all --ipc=host --cap-add=SYS_ADMIN --privileged=true --security-opt seccomp=unconfined --ulimit memlock=-1 --ulimit stack=67108864 -v ${PWD}:/app/opticalaberrations  ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 /bin/bash
-# docker run --rm -it --gpus all --ipc=host --cap-add=SYS_ADMIN --privileged=true --ulimit memlock=-1 --ulimit stack=67108864 -v ${PWD}:/app/opticalaberrations -u 1000:1000 --net=host -e DISPLAY=:0 ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 /bin/bash
+
+# this works if you want smb mount a network drive.
+# docker volume create --driver local --opt type=cifs  --opt device=//10.17.209.7/nvme2  --opt o=username=abcabc,password=********,file_mode=0777,dir_mode=0777  --name nvme2
+# then add this mount flag to the docker run command:     -v nvme2:/clusterfs/nvme2
+
+# to mount clusterfs using ssh keys (1. copy keys from /.ssh on host to /sshkey in container, 2. make mount point and change permissions for local user, 3. sshfs with that key and no user input):
+# docker run --rm -it --gpus all --ipc=host --cap-add=SYS_ADMIN --privileged=true --security-opt seccomp=unconfined --ulimit memlock=-1 --ulimit stack=67108864 -v ${HOME}/.ssh:/sshkey -u 1000 -v ${PWD}:/app/opticalaberrations  ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 /bin/bash
+# sudo mkdir /clusterfs; sudo chmod a+wrx /clusterfs/; sudo chown 1000:1000 -R /sshkey/; sshfs thayeralshaabi@master.abc.berkeley.edu:/clusterfs  /clusterfs -o IdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null
+
 
 # sudo nsys profile --gpu-metrics-device all  pytest tests/test_ao.py::test_predict_sample --disable-warnings --color=yes -vvv
 
