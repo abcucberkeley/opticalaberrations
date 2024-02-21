@@ -757,20 +757,28 @@ def find_roi(
 
         for index, row in pois.iterrows():
             if pois.loc[index, 'winners']:
-                losers_ids = row[neighbor_ids].astype(int)[np.array(row[neighbor_dists] < min_dist)]
-                # if this POI is very close to a single other POI:
-                if len(losers_ids) == 1 and row[neighbor_dists[losers_ids[0]]] < np.mean(window_size)/2:
-                    # shift this POI (at most 1/4 window_size) so that both are within the FOV.
-                    merge_id = losers_ids[0]
-                    new_x = round((row['x'] + pois['x'][merge_id])/2)
-                    new_y = round((row['y'] + pois['y'][merge_id])/2)
-                    new_z = round((row['z'] + pois['z'][merge_id])/2)
+                losers_ids = row[neighbor_ids].astype(int)[np.array(row[neighbor_dists] < min_dist)].values
 
-                    logger.info(f"Merging ROI {index} with ROI {merge_id}, shifting by {new_z - row['z']:.1f}, {new_y - row['y']:.1f}, {new_x - row['x']:.1f} (Z,Y,X) pixels.")
-                    pois['x'][index] = new_x
-                    pois['y'][index] = new_y
-                    pois['z'][index] = new_z
-                losers_ids = losers_ids[losers_ids > index]     # only kill losers that have less intensity than current row
+                # if this POI has only one loser near it.
+                if len(losers_ids) == 1 and losers_ids[0] > index:
+
+                    threshold = np.mean(window_size) / 2
+                    # if this POI is very close to that single other POI loser:
+                    if len(row[neighbor_ids].astype(int)[np.array(row[neighbor_dists] < threshold)].values) > 0:
+                        # shift this POI (at most 1/2 window_size) so that both are within the FOV.
+                        merge_id = losers_ids[0]
+                        new_x = round((row['x'] + pois['x'][merge_id])/2)
+                        new_y = round((row['y'] + pois['y'][merge_id])/2)
+                        new_z = round((row['z'] + pois['z'][merge_id])/2)
+
+                        logger.info(f"Merging ROI {index} with ROI {merge_id}, threshold {threshold:.1f}, shifting by "
+                                    f"{new_z - row['z']:3.0f}, "
+                                    f"{new_y - row['y']:3.0f}, "
+                                    f"{new_x - row['x']:3.0f} (Z,Y,X) pixels.")
+                        pois['x'][index] = new_x
+                        pois['y'][index] = new_y
+                        pois['z'][index] = new_z
+                losers_ids = losers_ids[losers_ids > index]  # only kill losers with less intensity than current row
                 pois['winners'][losers_ids] = 0
         logger.info(f"After winner selection, {pois['winners'].sum()} winners remain.")
     else:
