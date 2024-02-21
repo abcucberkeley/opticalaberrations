@@ -339,6 +339,7 @@ def iter_evaluate(
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Union[Path, CARE]] = None,
     denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False
 ):
     """
     Gathers the set of .tif files that meet the input criteria.
@@ -393,25 +394,28 @@ def iter_evaluate(
     previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
     
     # create realspace images for the current iteration
-    paths = utils.multiprocess(
-        func=partial(
-            generate_sample,
-            iter_number=iter_num,
-            savedir=savepath.resolve(),
-            data=previous,
-            psfgen=gen,
-            no_phase=no_phase,
-            digital_rotations=rotations if digital_rotations else None,
-            preprocess=preprocess,
-            plot=plot,
-            denoiser=denoiser,
-            denoiser_window_size=denoiser_window_size
-        ),
-        jobs=previous['id'].values,
-        desc=f'Create samples ({savepath.resolve()})',
-        unit=' sample',
-        cores=-1
-    )
+    if simulate_samples:
+        paths = utils.multiprocess(
+            func=partial(
+                generate_sample,
+                iter_number=iter_num,
+                savedir=savepath.resolve(),
+                data=previous,
+                psfgen=gen,
+                no_phase=no_phase,
+                digital_rotations=rotations if digital_rotations else None,
+                preprocess=preprocess,
+                plot=plot,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size
+            ),
+            jobs=previous['id'].values,
+            desc=f'Create samples ({savepath.resolve()})',
+            unit=' sample',
+            cores=-1
+        )
+    else:
+        paths = previous.file.values
     
     current = previous.copy()
     current['iter_num'] = iter_num
@@ -438,7 +442,7 @@ def iter_evaluate(
         digital_rotations=rotations if digital_rotations else None,
         min_psnr=0,
         skip_prep_sample=False,
-        preprocessed=True if preprocess else False,
+        preprocessed=preprocess,
         remove_background=False if skip_remove_background else True,
         denoiser=denoiser,
         denoiser_window_size=denoiser_window_size
@@ -1639,6 +1643,7 @@ def snrheatmap(
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1684,7 +1689,8 @@ def snrheatmap(
             skip_remove_background=skip_remove_background,
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
             denoiser=denoiser,
-            denoiser_window_size=denoiser_window_size
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples
         )
 
     if 'aberration_umRMS' not in df.columns.values:
@@ -1842,6 +1848,7 @@ def densityheatmap(
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1886,7 +1893,8 @@ def densityheatmap(
             skip_remove_background=skip_remove_background,
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
             denoiser=denoiser,
-            denoiser_window_size=denoiser_window_size
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -1944,6 +1952,7 @@ def iterheatmap(
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1989,7 +1998,8 @@ def iterheatmap(
             skip_remove_background=skip_remove_background,
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
             denoiser=denoiser,
-            denoiser_window_size=denoiser_window_size
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples
         )
 
     max_iter = df['iter_num'].max()
@@ -3009,6 +3019,7 @@ def confidence_heatmap(
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -3049,7 +3060,8 @@ def confidence_heatmap(
             skip_remove_background=skip_remove_background,
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
             denoiser=denoiser,
-            denoiser_window_size=denoiser_window_size
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples
         )
 
     df = df[df['iter_num'] == iter_num]

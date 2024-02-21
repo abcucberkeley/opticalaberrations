@@ -67,7 +67,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--max_amplitude", default=.5, type=float, help="max amplitude for the zernike coefficients"
+        "--max_amplitude", default=1, type=float, help="max amplitude for the zernike coefficients"
     )
 
     parser.add_argument(
@@ -87,11 +87,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--photons_min", default=1e5, type=float, help='min number of photons to use'
+        "--photons_min", default=5e4, type=float, help='min number of photons to use'
     )
 
     parser.add_argument(
-        "--photons_max", default=1.5e5, type=float, help='max number of photons to use'
+        "--photons_max", default=1e5, type=float, help='max number of photons to use'
     )
 
     parser.add_argument(
@@ -131,6 +131,11 @@ def parse_args(args):
     parser.add_argument(
         '--denoiser', type=Path, default=None,
         help='path to denoiser model'
+    )
+    
+    parser.add_argument(
+        '--simulate_samples', action='store_true',
+        help='optional toggle to simulate PSFs to do iterative eval'
     )
 
     return parser.parse_args(args)
@@ -235,7 +240,8 @@ def main(args=None):
                 num_beads=args.num_beads,
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
-                denoiser=args.denoiser
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples
             )
         elif args.target == 'confidence_heatmap':
             savepath = eval.confidence_heatmap(
@@ -255,7 +261,8 @@ def main(args=None):
                 lam_detection=args.wavelength,
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
-                denoiser=args.denoiser
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples
             )
         elif args.target == 'densityheatmap':
             savepath = eval.densityheatmap(
@@ -277,7 +284,8 @@ def main(args=None):
                 num_beads=args.num_beads,
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
-                denoiser=args.denoiser
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
@@ -298,7 +306,8 @@ def main(args=None):
                 lam_detection=args.wavelength,
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
-                denoiser=args.denoiser
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples
             )
 
         if savepath is not None:

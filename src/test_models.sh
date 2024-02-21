@@ -6,7 +6,7 @@ DZ=200
 SHAPE=64
 MODES=15
 ROTATIONS='--digital_rotations'
-ITERS=5
+ITERS=1
 MAX=10000
 OUTDIR='../evaluations'
 PRETRAINED="../pretrained_models"
@@ -93,7 +93,7 @@ do
         do  
           for PREP in '' #'--skip_remove_background'
           do
-              CONFIG=" $SIM $PREP --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
+              CONFIG=" $SIM $PREP --simulate_samples --n_samples $MAX --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
 
               if $DENOISE; then
                 CONFIG="${CONFIG} --denoiser ${DENOISER}"

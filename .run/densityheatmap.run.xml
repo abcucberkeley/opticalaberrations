@@ -43,7 +43,8 @@
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/test.py" />
-    <option name="PARAMETERS" value="../pretrained_models/opticalnet-15-YuMB-lambda510.h5 --datadir ../dataset/test/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/ --digital_rotations --eval_sign signed densityheatmap" />
+      <option name="PARAMETERS"
+              value="../pretrained_models/prototype-15-YuMB_lambda510-P3216-R2222.h5 --datadir ../dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/ --digital_rotations --eval_sign signed --simulate_samples --denoiser ../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64 densityheatmap"/>
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

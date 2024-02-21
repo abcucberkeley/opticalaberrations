@@ -44,7 +44,7 @@
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/test.py" />
     <option name="PARAMETERS"
-            value="../pretrained_models/prototype-15-YuMB_lambda510-P3216-R2222.h5 --datadir ../dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/ --na 1.0 --batch_size 896 --eval_sign signed --digital_rotations --niter 1 --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat snrheatmap"/>
+            value="../pretrained_models/prototype-15-YuMB_lambda510-P3216-R2222.h5 --datadir ../dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/ --na 1.0 --batch_size 896 --eval_sign signed --digital_rotations --niter 1 --simulate_samples --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat --denoiser ../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64 snrheatmap"/>
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
