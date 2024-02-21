@@ -61,7 +61,7 @@ RUN apt-get update \
   cifs-utils \
   winbind \
   smbclient \
-  sshfs\
+  sshfs \
   && rm -rf /var/lib/apt/lists/*
 
 # Git-lfs install
@@ -140,6 +140,7 @@ RUN apt-get update \
   cifs-utils \
   winbind \
   smbclient \
+  sshfs \
   && rm -rf /var/lib/apt/lists/*
 
 # Git-lfs install
