@@ -1,7 +1,7 @@
 
 import logging
-import re
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -85,8 +85,10 @@ def get_active_branch_name(head_dir):
 
 def paths_to_clusterfs(flags, local_repo):
     flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
+    
     if local_repo is not None:
         flags = flags.replace("..", local_repo)  # regex stinks at replacing ".."
+    
     flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
     flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
     flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)

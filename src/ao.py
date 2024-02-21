@@ -1114,9 +1114,10 @@ def parse_args(args):
         help="Visualize bleaching rates evaluations"
     )
     plot_bleaching_rate.add_argument("datadir", type=Path, help="path to dataset directory")
-
-    if os.getenv('RUNNING_IN_DOCKER'):
+    
+    if os.getenv('RUNNING_IN_DOCKER') and os.name == 'nt':
         args = [slurm_utils.paths_to_clusterfs(mystring, local_repo=None) for mystring in args]
+    
     return parser.parse_known_args(args)
 
 
