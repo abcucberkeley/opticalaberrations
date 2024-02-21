@@ -85,7 +85,7 @@ def get_active_branch_name(head_dir):
 
 def paths_to_clusterfs(flags, local_repo):
     flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
-    flags = flags.replace(__old="..", new=local_repo)  # regex stinks at replacing ".."
+    flags = flags.replace("..", local_repo)  # regex stinks at replacing ".."
     flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
     flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
     flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
