@@ -861,7 +861,7 @@ def find_roi(
     pois = pois[['z', 'y', 'x']].values[:num_rois]
     widths = [w // 2 for w in window_size]
     
-    if plot_mips:
+    if plot:
         fig, axes = plt.subplots(2, 1, figsize=(8, 8), sharey=False, sharex=True)
         for ax, mip_directions in enumerate([0,1]):
             axes[ax].imshow(
