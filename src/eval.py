@@ -38,7 +38,7 @@ import data_utils
 import backend
 import vis
 import multipoint_dataset
-
+from preprocessing import denoise_image
 from wavefront import Wavefront
 from synthetic import SyntheticPSF
 
@@ -196,7 +196,14 @@ def generate_sample(
                 denoiser=denoiser,
                 denoiser_window_size=denoiser_window_size,
             )
-
+        
+        if denoiser is not None and not preprocess:
+            noisy_img = denoise_image(
+                image=noisy_img,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size,
+            )
+            
         if savedir is not None:
             if file_format == 'tif':
                 imwrite(savepath, noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
@@ -215,7 +222,7 @@ def eval_template(shape, psf_type, lam_detection):
         'id': np.arange(shape[0], dtype=int),
         'iter_num': np.zeros(shape[0], dtype=int),          # iteration index.
         'aberration': np.zeros(shape[0], dtype=float),      # initial p2v aberration. Constant over iterations.
-        'aberration_umRMS': np.zeros(shape[0], dtype=float),      # initial p2v aberration. Constant over iterations.
+        'aberration_umRMS': np.zeros(shape[0], dtype=float),  # initial rms aberration. Constant over iterations.
         'residuals': np.zeros(shape[0], dtype=float),       # remaining p2v aberration after ML correction.
         'residuals_umRMS': np.zeros(shape[0], dtype=float), # remaining umRMS aberration after ML correction.
         'confidence': np.zeros(shape[0], dtype=float),      # model's confidence for the primary mode (waves)
@@ -393,6 +400,11 @@ def iter_evaluate(
     residual_cols = [col for col in results.columns if col.endswith('_residual')]
     previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
     
+    if denoiser is not None:
+        logger.info(f"Loading denoiser model: {denoiser}")
+        denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+        logger.info(f"{denoiser.name} loaded")
+
     # create realspace images for the current iteration
     if simulate_samples:
         paths = utils.multiprocess(
@@ -422,11 +434,6 @@ def iter_evaluate(
     current['file'] = paths
     current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
     
-    if denoiser is not None:
-        logger.info(f"Loading denoiser model: {denoiser}")
-        denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
-        logger.info(f"{denoiser.name} loaded")
-        
     predictions, stdevs = backend.predict_files(
         paths=np.hstack(paths) if digital_rotations else paths,
         outdir=savepath/f'iter_{iter_num}',
@@ -444,8 +451,6 @@ def iter_evaluate(
         skip_prep_sample=False,
         preprocessed=preprocess,
         remove_background=False if skip_remove_background else True,
-        denoiser=denoiser,
-        denoiser_window_size=denoiser_window_size
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)

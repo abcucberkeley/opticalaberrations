@@ -87,11 +87,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--photons_min", default=5e4, type=float, help='min number of photons to use'
+        "--min_photons", default=5e4, type=float, help='min number of photons to use'
     )
 
     parser.add_argument(
-        "--photons_max", default=1e5, type=float, help='max number of photons to use'
+        "--max_photons", default=1e5, type=float, help='max number of photons to use'
     )
 
     parser.add_argument(
@@ -276,7 +276,7 @@ def main(args=None):
                 batch_size=batch_size,
                 eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
-                photons_range=(args.photons_min, args.photons_max),
+                photons_range=(args.min_photons, args.max_photons),
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
@@ -299,7 +299,7 @@ def main(args=None):
                 batch_size=batch_size,
                 eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
-                photons_range=(args.photons_min, args.photons_max),
+                photons_range=(args.min_photons, args.max_photons),
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
@@ -322,8 +322,8 @@ def main(args=None):
                     batch_size=int(batch_size),
                     eval_sign=bool(args.eval_sign),
                     digital_rotations=bool(args.digital_rotations),
-                    photons_min=float(args.photons_min),
-                    photons_max=float(args.photons_max),
+                    min_photons=float(args.min_photons),
+                    max_photons=float(args.max_photons),
                     psf_type=args.psf_type,
                     lam_detection=args.wavelength,
                 )

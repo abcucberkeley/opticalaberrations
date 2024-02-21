@@ -1252,8 +1252,6 @@ def predict_files(
     pool: Optional[mp.Pool] = None,
     min_psnr: int = 5,
     object_gaussian_kernel_width: float = 0,
-    denoiser: Optional[Union[Path, CARE]] = None,
-    denoiser_window_size: tuple = (32, 64, 64),
 ):
 
     if preprocessed:
@@ -1284,8 +1282,6 @@ def predict_files(
             min_psnr=min_psnr,
             object_gaussian_kernel_width=object_gaussian_kernel_width,
             cpu_workers=1,  # already parallelized over files
-            denoiser=denoiser,
-            denoiser_window_size=denoiser_window_size
         )
 
         inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
