@@ -1114,13 +1114,16 @@ def parse_args(args):
         help="Visualize bleaching rates evaluations"
     )
     plot_bleaching_rate.add_argument("datadir", type=Path, help="path to dataset directory")
-
+    
+    if os.getenv('RUNNING_IN_DOCKER') and os.name == 'nt':
+        args = [slurm_utils.paths_to_clusterfs(mystring, local_repo=None) for mystring in args]
+    
     return parser.parse_known_args(args)
 
 
 def main(args=None, preloaded=None):
-    command_flags = sys.argv[1:] if args is None else args
-    args, unknown = parse_args(args)
+    command_flags = sys.argv[1:] if args is None else args      # raw flags
+    args, unknown = parse_args(command_flags)                   # parsed flags or passed args
     pd.options.display.width = 200
     pd.options.display.max_columns = 20
 
@@ -1149,7 +1152,7 @@ def main(args=None, preloaded=None):
         slurm_utils.submit_slurm_job(args, command_flags, partition=args.partition)
 
     elif args.docker:
-        slurm_utils.submit_docker_job(args, command_flags=command_flags,)
+        slurm_utils.submit_docker_job(args, command_flags,)
 
     else:
         if os.environ.get('SLURM_JOB_ID') is not None:

@@ -1,5 +1,6 @@
 
 import logging
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -82,10 +83,28 @@ def get_active_branch_name(head_dir):
         if line[0:4] == "ref:":
             return line.partition("refs/heads/")[2]
 
+def paths_to_clusterfs(flags, local_repo):
+    flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
+    
+    if local_repo is not None:
+        flags = flags.replace("..", local_repo)  # regex stinks at replacing ".."
+    
+    flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
+    flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
+    flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
+    flags = re.sub(pattern='D:/', repl='/d_drive/', string=flags)
+    flags = re.sub(pattern='C:/', repl='/c_drive/', string=flags)
+
+    return flags
+
+
 
 def submit_slurm_job(args, command_flags, partition: str = "abc_a100"):
     # cluster_env = f"~/anaconda3/envs/ml/bin/python"
-    CUDA_version = "CUDA_12_3"
+    CUDA_version = "TF_CUDA_12_3"
     cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
     cluster_env = f"apptainer exec --bind /clusterfs --nv {cluster_repo}/develop_{CUDA_version}.sif python "
     script = f"{cluster_repo}/src/ao.py"
@@ -93,14 +112,7 @@ def submit_slurm_job(args, command_flags, partition: str = "abc_a100"):
     flags = ' '.join(command_flags)
     flags = re.sub(pattern='--cluster', repl='', string=flags)
     flags = re.sub(pattern='--docker', repl='', string=flags)
-    flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
-    flags = flags.replace("..", cluster_repo)  # regex stinks at replacing ".."
-    flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
-    flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
-    flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
-    flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
-    flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
-    flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
+    flags = paths_to_clusterfs(flags, cluster_repo)
     
     # available_nodes = slurm_utils.get_available_resources(
     #     username=username,
@@ -135,28 +147,34 @@ def submit_docker_job(args, command_flags):
     container_repo = "/app/opticalaberrations"  # location of repo in the container
     local_repo = Path(__file__).parent.parent  # location of repo in host
     branch_name = get_active_branch_name(local_repo)
-    CUDA_version = "CUDA_12_3"
+    CUDA_version = "TF_CUDA_12_3"
     
     flags = ' '.join(command_flags)
     flags = re.sub(pattern=' --docker', repl='', string=flags)  # remove flag
-    flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
-    flags = flags.replace("..", container_repo)  # regex stinks at replacing ".."
-    flags = re.sub(pattern='/home/supernova/nvme2/', repl='/clusterfs/nvme2/', string=flags)
-    flags = re.sub(pattern='~/nvme2', repl='/clusterfs/nvme2/', string=flags)
-    flags = re.sub(pattern='U:\\\\', repl='/clusterfs/nvme2/', string=flags)
-    flags = re.sub(pattern='U:/', repl='/clusterfs/nvme2/', string=flags)
-    flags = re.sub(pattern='V:\\\\', repl='/clusterfs/nvme/', string=flags)
-    flags = re.sub(pattern='V:/', repl='/clusterfs/nvme/', string=flags)
-    flags = re.sub(pattern='D:/', repl='/d_drive/', string=flags)
-    flags = re.sub(pattern='C:/', repl='/c_drive/', string=flags)
+    flags = paths_to_clusterfs(flags, container_repo)
     flags = re.sub(pattern=local_repo.as_posix(), repl=container_repo, string=flags)
     
-    docker_run = "docker run --rm --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --name opt_net"
+    docker_run = ("docker run --rm "
+                  "--gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864"   # GPU stuff
+                  " --name opt_net --privileged=true -u 1000")  # privileged means sudo is available to user
     docker_mount = (f'-v "{local_repo}":{container_repo}  '
                     r'-v D:\:/d_drive  '
-                    r'-v C:\:/c_drive  ')
+                    r'-v C:\:/c_drive  '
+                    )
+    if os.name == 'nt':
+        docker_mount = docker_mount + r'-v %userprofile%/.ssh:/sshkey '
+    else:
+        docker_mount = docker_mount + r'-v ~/.ssh:/sshkey '
+
     docker_vars = r' -e RUNNING_IN_DOCKER=TRUE'
     docker_image = f"ghcr.io/abcucberkeley/opticalaberrations:{branch_name}_{CUDA_version}"
-    docker_job = f'{docker_run} {docker_vars} --workdir {container_repo}/src {docker_mount} {docker_image} "python ao.py {flags}"'
+    if os.name == 'nt':
+        mount_clusterfs = (r"sudo mkdir /clusterfs && sudo chmod a+wrx /clusterfs/ && "     # make empty directory
+                           r"sudo chown 1000:1000 -R /sshkey/ && " # make sshkeys (mounted from host) avail to user 1000
+                           r"sshfs thayeralshaabi@master.abc.berkeley.edu:/clusterfs /clusterfs -oIdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null && "    # sshfs mount without user input
+                           r"ls /clusterfs && ") # test mount
+    else:
+        mount_clusterfs = ""
+    docker_job = f'{docker_run} {docker_vars} --workdir {container_repo}/src {docker_mount} {docker_image} "{mount_clusterfs} python ao.py {flags}"'
     logger.info(f"Docker job: \n{docker_job}\n")
     subprocess.run(docker_job, shell=True)

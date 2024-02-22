@@ -14,7 +14,7 @@ MODES=15
 CLUSTER='lsf'
 DEFAULT='--positional_encoding_scheme default --batch_size 2048 --lr 5e-4 --wd 5e-6 --opt adamw'
 LAMB='--batch_size 2048 --lr 1e-3 --wd 1e-2 --opt lamb'
-APPTAINER="--apptainer ../develop_CUDA_12_3.sif"
+APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
 
 SUBSET='denoise_fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
