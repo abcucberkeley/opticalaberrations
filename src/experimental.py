@@ -1747,6 +1747,7 @@ def aggregate_rois(
     dm_damping_scalar: float = 1,
     plot: bool = False,
     postfix: str = 'aggregated',
+    expected_ztiles: int = 1,
 ):
     # valid_predictions = predictions.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_predictions = predictions.groupby('z')
@@ -1756,28 +1757,33 @@ def aggregate_rois(
     
     wavefronts, coefficients, actuators = {}, {}, {}
     
-    for z in valid_predictions.groups.keys():  # basically loop through all ztiles, unless no valid predictions exist
-        ztile_preds = valid_predictions.get_group(z)
-        ztile_preds.drop(columns=['p2v'], errors='ignore', inplace=True)
-        ztile_preds = ztile_preds.mask(where_unconfident).fillna(0)
+    for z in range(expected_ztiles):  # basically loop through all ztiles, unless no valid predictions exist
+        try:
+            ztile_preds = valid_predictions.get_group(z)
+            ztile_preds.drop(columns=['p2v'], errors='ignore', inplace=True)
+            ztile_preds = ztile_preds.mask(where_unconfident).fillna(0)
+            
+            ztile_stds = valid_stdevs.get_group(z)
+            ztile_stds.drop(columns=['p2v'], errors='ignore', inplace=True)
+            ztile_stds = ztile_stds.mask(where_unconfident).fillna(0)
+            
+            if aggregation_rule == 'mean':
+                pred = ztile_preds.agg(pd.Series.mean, axis=0)
+                pred_std = ztile_stds.agg(pd.Series.mean, axis=0)
+            elif aggregation_rule == 'median':
+                pred = ztile_preds.agg(pd.Series.median, axis=0)
+                pred_std = ztile_stds.agg(pd.Series.median, axis=0)
+            elif aggregation_rule == 'freq':
+                # round predictions up then take most frequent predicted amplitude for each zernike mode
+                pred = ztile_preds.round(2).agg(lambda x: x.value_counts().index[0])
+                pred_std = ztile_stds.round(2).agg(lambda x: x.value_counts().index[0])
+            else:
+                raise Exception(f'Unknown  {aggregation_rule=}')
         
-        ztile_stds = valid_stdevs.get_group(z)
-        ztile_stds.drop(columns=['p2v'], errors='ignore', inplace=True)
-        ztile_stds = ztile_stds.mask(where_unconfident).fillna(0)
-        
-        if aggregation_rule == 'mean':
-            pred = ztile_preds.agg(pd.Series.mean, axis=0)
-            pred_std = ztile_stds.agg(pd.Series.mean, axis=0)
-        elif aggregation_rule == 'median':
-            pred = ztile_preds.agg(pd.Series.median, axis=0)
-            pred_std = ztile_stds.agg(pd.Series.median, axis=0)
-        elif aggregation_rule == 'freq':
-            # round predictions up then take most frequent predicted amplitude for each zernike mode
-            pred = ztile_preds.round(2).agg(lambda x: x.value_counts().index[0])
-            pred_std = ztile_stds.round(2).agg(lambda x: x.value_counts().index[0])
-        else:
-            raise Exception(f'Unknown  {aggregation_rule=}')
-        
+        except KeyError:
+            pred = np.zeros(samplepsfgen.n_modes)
+            pred_std = np.zeros(samplepsfgen.n_modes)
+
         agg = f'z{z}_c0'
         wavefronts[agg] = Wavefront(
             np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
@@ -1943,7 +1949,8 @@ def aggregate_predictions(
             aggregation_rule=aggregation_rule,
             dm_damping_scalar=dm_damping_scalar,
             plot=plot,
-            postfix=postfix
+            postfix=postfix,
+            expected_ztiles=predictions_settings['ztiles']
         )
     else:
         predictions, stdevs = aggregate_tiles(
