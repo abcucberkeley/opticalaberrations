@@ -50,7 +50,7 @@ from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from embeddings import fourier_embeddings, rolling_fourier_embeddings
 from preprocessing import prep_sample
-from utils import round_to_even
+from utils import round_to_even, multiprocess
 
 from roi import ROI
 import opticalnet
@@ -307,7 +307,8 @@ def preprocess(
     cpu_workers: int = -1,
     denoiser: Optional[Union[Path, CARE]] = None,
     denoiser_window_size: tuple = (32, 64, 64),
-    interpolate_embeddings: bool = False
+    interpolate_embeddings: bool = False,
+    save_processed_tif_file: bool = False,
 ):
     if samplepsfgen is None:
         samplepsfgen = modelpsfgen
@@ -349,8 +350,8 @@ def preprocess(
                 denoiser=denoiser,
                 denoiser_window_size=denoiser_window_size,
             )
-
-        return fourier_embeddings(
+        
+        embs = fourier_embeddings(
             sample,
             iotf=iotf,
             na_mask=modelpsfgen.na_mask,
@@ -362,6 +363,17 @@ def preprocess(
             digital_rotations=digital_rotations,
             model_psf_shape=modelpsfgen.psf_shape
         ).astype(np.float32)
+        
+        if save_processed_tif_file:
+            imwrite(
+                file,
+                data=embs.astype(np.float32),
+                compression='deflate',
+                dtype=np.float32
+            )
+            return file
+        else:
+            return embs
 
     else:  # at least one tile fov dimension is larger than model fov
         if interpolate_embeddings:
@@ -385,7 +397,7 @@ def preprocess(
                     denoiser_window_size=denoiser_window_size,
                 )
             
-            return fourier_embeddings(
+            embs = fourier_embeddings(
                 sample,
                 iotf=modelpsfgen.iotf,
                 na_mask=modelpsfgen.na_mask,
@@ -398,6 +410,18 @@ def preprocess(
                 model_psf_shape=modelpsfgen.psf_shape,
                 interpolate_embeddings=interpolate_embeddings
             ).astype(np.float32)
+            
+            if save_processed_tif_file:
+                imwrite(
+                    file,
+                    data=sample.astype(np.float32),
+                    compression='deflate',
+                    dtype=np.float32
+                )
+                return file
+            else:
+                return embs
+
         
         else:  # average FFTs
             model_window_size = (
@@ -447,13 +471,16 @@ def preprocess(
                     denoiser_window_size=denoiser_window_size,
                 )
                 
-                rois = utils.multiprocess(func=prep, jobs=rois,
-                                          desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
-                                               f'roi size, {rois.shape[-3:]}, '
-                                               f'stride length {strides}, '
-                                               f'throwing away {throwaway} voxels')
+                rois = utils.multiprocess(
+                    func=prep,
+                    jobs=rois,
+                    desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
+                         f'roi size, {rois.shape[-3:]}, '
+                         f'stride length {strides}, '
+                         f'throwing away {throwaway} voxels'
+                )
             
-            return rolling_fourier_embeddings(  # aka "large_fov"
+            embs = rolling_fourier_embeddings(  # aka "large_fov"
                 rois,
                 iotf=iotf,
                 na_mask=modelpsfgen.na_mask,
@@ -469,6 +496,18 @@ def preprocess(
                 ztiles=ztiles,
                 cpu_workers=cpu_workers,
             ).astype(np.float32)
+            
+            if save_processed_tif_file:
+                imwrite(
+                    file,
+                    data=sample.astype(np.float32),
+                    compression='deflate',
+                    dtype=np.float32
+                )
+                return file
+            else:
+                return embs
+
 
 
 @profile
@@ -1252,20 +1291,9 @@ def predict_files(
     pool: Optional[mp.Pool] = None,
     min_psnr: int = 5,
     object_gaussian_kernel_width: float = 0,
+    save_processed_tif_file: bool = False
 ):
-
-    if preprocessed:
-        inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
-        inputs = inputs.map(
-            lambda x: tf.py_function(
-                load_sample,
-                inp=[x],
-                Tout=tf.float32,
-            ),
-            num_parallel_calls=tf.data.AUTOTUNE,
-            deterministic=True,
-        )
-    else:
+    if not preprocessed:
         generate_fourier_embeddings = partial(
             preprocess,
             modelpsfgen=modelpsfgen,
@@ -1282,25 +1310,34 @@ def predict_files(
             min_psnr=min_psnr,
             object_gaussian_kernel_width=object_gaussian_kernel_width,
             cpu_workers=1,  # already parallelized over files
+            save_processed_tif_file=save_processed_tif_file
         )
-
-        inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
-
-        inputs = inputs.map(
-            lambda x: tf.py_function(
-                generate_fourier_embeddings,
-                inp=[x],
-                Tout=tf.float32,
-            ),
-            num_parallel_calls=tf.data.AUTOTUNE,
-            deterministic=True,
+        
+        paths = multiprocess(
+            func=generate_fourier_embeddings,
+            jobs=paths,
+            cores=cpu_workers,
+            desc='Generate fourier embeddings',
+            unit=' .tif file'
         )
-
-        # inputs = tf.data.Dataset.from_generator(
-        #     DatasetGenerator(paths=paths, load_preprocess_func=generate_fourier_embeddings),
-        #     output_types=(tf.float32),
-        #     output_shapes=(digital_rotations, *model.input_shape[1:])
-        # )
+    
+    inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
+    
+    inputs = inputs.map(
+        lambda x: tf.py_function(
+            load_sample,
+            inp=[x],
+            Tout=tf.float32,
+        ),
+        num_parallel_calls=tf.data.AUTOTUNE,
+        deterministic=True,
+    )
+    
+    # inputs = tf.data.Dataset.from_generator(
+    #     DatasetGenerator(paths=paths, load_preprocess_func=generate_fourier_embeddings),
+    #     output_types=(tf.float32),
+    #     output_shapes=(digital_rotations, *model.input_shape[1:])
+    # )
 
     num_predictions = paths.shape[0] * digital_rotations if digital_rotations else paths.shape[0]
 

@@ -617,7 +617,6 @@ def find_roi(
     min_psnr: float = 10.0,
     zborder: int = 10,
     prep: Optional[partial] = None,
-    plot_mips: bool = True,
 ):
     savepath.mkdir(parents=True, exist_ok=True)
     savepath_unprocessed = Path(f"{savepath}_unprocessed")

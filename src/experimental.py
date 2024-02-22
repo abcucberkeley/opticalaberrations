@@ -855,6 +855,7 @@ def predict_rois(
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
         cpu_workers=cpu_workers,
+        save_processed_tif_file=True
     )
     return predictions
 
@@ -1075,7 +1076,8 @@ def predict_tiles(
         skip_prep_sample=prep is not None,
         template=template,
         pool=pool,
-        object_gaussian_kernel_width=object_gaussian_kernel_width
+        object_gaussian_kernel_width=object_gaussian_kernel_width,
+        save_processed_tif_file=True
     )
 
     return predictions
