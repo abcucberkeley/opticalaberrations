@@ -859,13 +859,15 @@ def find_roi(
 
     pois = pois[['z', 'y', 'x']].values[:num_rois]
     widths = [w // 2 for w in window_size]
-    
+
+    height_of_plot = convolved_image.shape[1] + convolved_image.shape[0]
+    height_ratios = [convolved_image.shape[1]/height_of_plot, convolved_image.shape[0]/height_of_plot]
     if plot:
-        fig, axes = plt.subplots(2, 1, figsize=(8, 8), sharey=False, sharex=True)
+        fig, axes = plt.subplots(2, 1, figsize=(8, 8), sharey=False, sharex=True, height_ratios=height_ratios)
         for ax, mip_directions in enumerate([0,1]):
             axes[ax].imshow(
                 np.nanmax(convolved_image, axis=mip_directions),
-                aspect='auto',
+                aspect='equal',
                 cmap='Greys_r',
             )
 
@@ -892,6 +894,7 @@ def find_roi(
                         alpha=1
                     ))
                     axes[ax].set_title('XZ')
+        fig.tight_layout()
         savesvg(fig, f'{plot}_mips.svg')
         logger.info(f'Saved {plot}_mips.svg')
 
