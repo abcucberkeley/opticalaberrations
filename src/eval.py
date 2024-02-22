@@ -341,7 +341,7 @@ def iter_evaluate(
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
-    preprocess: bool = False,
+    preprocess: bool = True,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Union[Path, CARE]] = None,
