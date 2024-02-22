@@ -404,7 +404,8 @@ def iter_evaluate(
         logger.info(f"Loading denoiser model: {denoiser}")
         denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
         logger.info(f"{denoiser.name} loaded")
-
+    
+    print(previous)
     # create realspace images for the current iteration
     if simulate_samples:
         paths = utils.multiprocess(
@@ -488,6 +489,7 @@ def iter_evaluate(
         lambda row: np.linalg.norm(row[confidence_cols].values),
         axis=1
     )
+    print(current)
 
     results = pd.concat([results, current], ignore_index=True, sort=False)
 
