@@ -1508,7 +1508,7 @@ def main(args=None, preloaded=None):
 
         logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
-        if os.name != 'nt' and os.getenv('RUNNING_IN_DOCKER') is None:
+        if os.name != 'nt':
             logger.info(f"Updating file permissions to {args.input.parent}")
             subprocess.run(f"find {str(Path(args.input).parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +", shell=True)
             logger.info(f"Updating file permissions complete.")
