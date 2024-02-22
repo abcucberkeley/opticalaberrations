@@ -1513,6 +1513,7 @@ def main(args=None, preloaded=None):
             subprocess.run(f"find {str(Path(args.input).parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +", shell=True)
             logger.info(f"Updating file permissions complete.")
 
+    return 0
 
 if __name__ == "__main__":
     main()

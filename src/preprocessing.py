@@ -784,30 +784,30 @@ def find_roi(
         pois['winners'] = 1
     print(pois)
 
-    if plot:
-        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], s=5, color="C0")
-        sns.kdeplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
-        axes[0].set_ylabel('Intensity')
-        axes[0].set_xlabel('Distance (microns)')
-        axes[0].set_yscale('log')
-        axes[0].set_ylim(10 ** 0, None)
-        axes[0].set_xlim(0, None)
-        axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        x = np.sort(pois['dist_1'])
-        y = np.arange(len(x)) / float(len(x))
-        axes[1].plot(x, y, color='dimgrey')
-        axes[1].set_xlabel('Distance (microns)')
-        axes[1].set_ylabel('CDF')
-        axes[1].set_xlim(0, None)
-        axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        sns.histplot(ax=axes[2], data=pois, x="dist_1", kde=True)
-        axes[2].set_xlabel('Distance')
-        axes[2].set_xlim(0, None)
-        axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-        savesvg(fig, f'{plot}_detected_rois.svg')
+    # if plot:
+    #     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    #     sns.scatterplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], s=5, color="C0")
+    #     sns.kdeplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
+    #     axes[0].set_ylabel('Intensity')
+    #     axes[0].set_xlabel('Distance (microns)')
+    #     axes[0].set_yscale('log')
+    #     axes[0].set_ylim(10 ** 0, None)
+    #     axes[0].set_xlim(0, None)
+    #     axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    #
+    #     x = np.sort(pois['dist_1'])
+    #     y = np.arange(len(x)) / float(len(x))
+    #     axes[1].plot(x, y, color='dimgrey')
+    #     axes[1].set_xlabel('Distance (microns)')
+    #     axes[1].set_ylabel('CDF')
+    #     axes[1].set_xlim(0, None)
+    #     axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    #
+    #     sns.histplot(ax=axes[2], data=pois, x="dist_1", kde=True)
+    #     axes[2].set_xlabel('Distance')
+    #     axes[2].set_xlim(0, None)
+    #     axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    #     savesvg(fig, f'{plot}_detected_rois.svg')
 
     # if min_dist is not None:
     #     logger.info(f'{min_dist =} um')
@@ -830,28 +830,28 @@ def find_roi(
 
     # pois = pois[pois['neighbors'] <= max_neighbor]
 
-    if plot:
-        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        sns.scatterplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], s=5, color="C0")
-        sns.kdeplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
-        axes[0].set_ylabel('Intensity')
-        axes[0].set_xlabel('Distance')
-        axes[0].set_xlim(0, None)
-        axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        x = np.sort(pois['dist_1'])
-        y = np.arange(len(x)) / float(len(x))
-        axes[1].plot(x, y, color='dimgrey')
-        axes[1].set_xlabel('Distance')
-        axes[1].set_ylabel('CDF')
-        axes[1].set_xlim(0, None)
-        axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        sns.histplot(ax=axes[2], data=pois, x='dist_1', kde=True)
-        axes[2].set_xlabel('Distance')
-        axes[2].set_xlim(0, None)
-        axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-        savesvg(fig, f'{plot}_selected_rois.svg')
+    # if plot:
+    #     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    #     sns.scatterplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], s=5, color="C0")
+    #     sns.kdeplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
+    #     axes[0].set_ylabel('Intensity')
+    #     axes[0].set_xlabel('Distance')
+    #     axes[0].set_xlim(0, None)
+    #     axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    #
+    #     x = np.sort(pois['dist_1'])
+    #     y = np.arange(len(x)) / float(len(x))
+    #     axes[1].plot(x, y, color='dimgrey')
+    #     axes[1].set_xlabel('Distance')
+    #     axes[1].set_ylabel('CDF')
+    #     axes[1].set_xlim(0, None)
+    #     axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    #
+    #     sns.histplot(ax=axes[2], data=pois, x='dist_1', kde=True)
+    #     axes[2].set_xlabel('Distance')
+    #     axes[2].set_xlim(0, None)
+    #     axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    #     savesvg(fig, f'{plot}_selected_rois.svg')
 
 
     pois = pois.head(num_rois)
@@ -860,8 +860,9 @@ def find_roi(
     pois = pois[['z', 'y', 'x']].values[:num_rois]
     widths = [w // 2 for w in window_size]
 
+    height_of_titles = 0.1
     height_of_plot = convolved_image.shape[1] + convolved_image.shape[0]
-    height_ratios = [convolved_image.shape[1]/height_of_plot, convolved_image.shape[0]/height_of_plot]
+    height_ratios = [convolved_image.shape[1]/height_of_plot + height_of_titles, convolved_image.shape[0]/height_of_plot + height_of_titles]
     if plot:
         fig, axes = plt.subplots(2, 1, figsize=(8, 8), sharey=False, sharex=True, height_ratios=height_ratios)
         for ax, mip_directions in enumerate([0,1]):

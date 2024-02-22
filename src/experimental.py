@@ -1778,7 +1778,7 @@ def aggregate_rois(
         else:
             raise Exception(f'Unknown  {aggregation_rule=}')
         
-        agg = f'z{z}_{aggregation_rule}'
+        agg = f'z{z}_c0'
         wavefronts[agg] = Wavefront(
             np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
             order='ansi',
