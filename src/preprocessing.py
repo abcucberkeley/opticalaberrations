@@ -901,7 +901,8 @@ def find_roi(
 
     rois = []
     poi_map = np.zeros_like(image)
-    ztiles = np.ceil(np.array(image.shape[0]) / window_size[0]).astype(int)
+    # ztiles = np.ceil(np.array(image.shape[0]) / window_size[0]).astype(int)
+    ztiles = 1
     zslab_size = image.shape[0] / ztiles
     ytiles = 1
     xtiles = np.ceil(len(pois) / ztiles).astype(int)
@@ -924,7 +925,7 @@ def find_roi(
             
             if r.size != 0:
                 z = np.floor(pois[p, 0] / zslab_size).astype(int)
-                logger.info(f'{zslab_size=} z location = {pois[p, 0]}')
+                logger.info(f'{zslab_size=}, poi located at z = {pois[p, 0]}, zslab={z}')
                 y = ytiles - 1
                 x = xtiles_counter[z]
                 xtiles_counter[z] += 1
