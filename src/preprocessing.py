@@ -902,6 +902,7 @@ def find_roi(
     rois = []
     poi_map = np.zeros_like(image)
     ztiles = np.ceil(np.array(image.shape[0]) / window_size[0]).astype(int)
+    zslab_size = image.shape[0] / ztiles
     ytiles = 1
     xtiles = np.ceil(len(pois) / ztiles).astype(int)
     xtiles_counter = {z: 0 for z in range(ztiles)}
@@ -922,8 +923,9 @@ def find_roi(
             poi_map[start[0]:end[0], start[1]:end[1], start[2]:end[2]] = np.full(r.shape, int(p))
             
             if r.size != 0:
-                z = np.floor(np.array(start[0]) / window_size[0]).astype(int)
-                y = ytiles
+                z = np.floor(pois[p, 0] / zslab_size).astype(int)
+                logger.info(f'{zslab_size=} z location = {pois[p, 0]}')
+                y = ytiles - 1
                 x = xtiles_counter[z]
                 xtiles_counter[z] += 1
                 
@@ -931,8 +933,8 @@ def find_roi(
                 imwrite(savepath_unprocessed / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
 
                 if prep is not None:
-                    # r = prep(r, plot=savepath / f"{tile}" if plot else None)
-                    r = prep(r, plot=None)  # Can't plot. plotting broken.
+                    r = prep(r, plot=savepath / f"{tile}" if plot else None)
+                    # r = prep(r, plot=None)  # Can't plot. plotting broken.
 
                 imwrite(savepath / f"{tile}.tif", r, compression='deflate', dtype=np.float32)
                 rois.append(savepath / f"{tile}.tif")
