@@ -768,7 +768,8 @@ def predict_rois(
         remove_background=True,
         normalize=True,
         min_psnr=min_psnr,
-        na_mask=samplepsfgen.na_mask
+        na_mask=samplepsfgen.na_mask,
+        plot=plot,
     )
     # prep = partial(
     #     backend.preprocess,
