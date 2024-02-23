@@ -176,7 +176,7 @@ def plot_wavefront(
     phi,
     rms=None,
     label=None,
-    nas=(.65, .75, .85, .95),
+    nas=(.85, .95, .99),
     vcolorbar=False,
     hcolorbar=False,
     vmin=None,
@@ -516,7 +516,7 @@ def diagnostic_assessment(
 
 
 @profile
-def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None, lls_defocus: float = 0.):
+def zernikes(pred: Wavefront, save_path: Path, pred_std: Any = None, lls_defocus: float = 0.):
 
     plt.rcParams.update({
         'font.size': 10,
@@ -609,7 +609,162 @@ def diagnosis(pred: Wavefront, save_path: Path, pred_std: Any = None, lls_defocu
         ax_defocus.axvline(0, ls='-', color='k')
         ax_defocus.xaxis.set_major_formatter(FormatStrFormatter('%.3f'))
         ax_defocus.set_xticklabels(ax_defocus.get_xticks(), rotation=45)
+    
+    savesvg(fig, f'{save_path}.svg')
 
+
+@profile
+def diagnosis(
+    pred: Wavefront,
+    save_path: Path,
+    pred_std: Any = None,
+    lls_defocus: float = 0.,
+    predicted_psf: Optional[np.ndarray] = None,
+    predicted_embeddings: Optional[np.ndarray] = None,
+    gamma: float = .5,
+    icmap: str = 'hot',
+    aspect: str = 'equal'
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+    
+    pred_wave = pred.wave(size=100)
+    pred_rms = np.linalg.norm(pred.amplitudes_noll_waves)
+    
+    fig = plt.figure(figsize=(7, 11))
+    gs = fig.add_gridspec(5, 3)
+    
+    if predicted_psf is None and predicted_embeddings is None:
+        ax_wavefront = fig.add_subplot(gs[:, -1])
+        ax_zcoff = fig.add_subplot(gs[:, :-1])
+    else:
+        ax_wavefront = fig.add_subplot(gs[:2, -1])
+        ax_zcoff = fig.add_subplot(gs[:2, :-1])
+        psf_axes = [fig.add_subplot(gs[-3, 0]), fig.add_subplot(gs[-3, 1]), fig.add_subplot(gs[-3, 2])]
+        alpha_axes = [fig.add_subplot(gs[-2, 0]), fig.add_subplot(gs[-2, 1]), fig.add_subplot(gs[-2, 2])]
+        phi_axes = [fig.add_subplot(gs[-1, 0]), fig.add_subplot(gs[-1, 1]), fig.add_subplot(gs[-1, 2])]
+        
+        step = .1
+        vmin = int(np.floor(np.nanpercentile(predicted_embeddings[0], 1))) if np.any(predicted_embeddings[0] < 0) else 0
+        vmax = int(np.ceil(np.nanpercentile(predicted_embeddings[0], 99))) if vmin < 0 else 3
+        vcenter = 1 if vmin == 0 else 0
+        
+        cmap = np.vstack((
+            plt.get_cmap('GnBu_r' if vmin == 0 else 'GnBu_r', 256)(
+                np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+            ),
+            [1, 1, 1, 1],
+            plt.get_cmap('YlOrRd' if vmax != 1 else 'OrRd', 256)(
+                np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+            )
+        ))
+        cmap = mcolors.ListedColormap(cmap)
+        
+        p_vmax = max(np.ceil(np.nanpercentile(np.abs(predicted_embeddings[3:]), 95) * 2) / 2, .25)
+        p_vmin = -p_vmax
+        p_vcenter = 0
+        step = p_vmax / 10
+        
+        p_cmap = np.vstack((
+            plt.get_cmap('GnBu_r' if p_vmin == 0 else 'GnBu_r', 256)(
+                np.linspace(0, 1, int(abs(p_vcenter - p_vmin) / step))
+            ),
+            [1, 1, 1, 1],
+            plt.get_cmap('YlOrRd' if p_vmax == 3 else 'OrRd', 256)(
+                np.linspace(0, 1, int(abs(p_vcenter - p_vmax) / step))
+            )
+        ))
+        p_cmap = mcolors.ListedColormap(p_cmap)
+    
+    plot_wavefront(
+        ax_wavefront,
+        pred_wave,
+        rms=pred_rms,
+        label='Predicted wavefront',
+        vcolorbar=True,
+    )
+    
+    if pred_std is not None:
+        ax_zcoff.bar(
+            range(len(pred.amplitudes)),
+            pred.amplitudes,
+            yerr=pred_std.amplitudes,
+            capsize=2,
+            color='dimgrey',
+            alpha=.75,
+            align='center',
+            ecolor='lightgrey',
+        )
+    else:
+        ax_zcoff.bar(
+            range(len(pred.amplitudes)),
+            pred.amplitudes,
+            capsize=2,
+            color='dimgrey',
+            alpha=.75,
+            align='center',
+            ecolor='k',
+        )
+    
+    ax_zcoff.set_ylabel(f'Zernike coefficients ($\mu$m RMS)')
+    ax_zcoff.spines['top'].set_visible(False)
+    ax_zcoff.spines['left'].set_visible(False)
+    ax_zcoff.spines['right'].set_visible(False)
+    ax_zcoff.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0)
+    ax_zcoff.set_xticks(range(len(pred.amplitudes)), minor=True)
+    ax_zcoff.set_xticks(range(0, len(pred.amplitudes) + 5, min(5, int(np.ceil(len(pred.amplitudes) + 5) / 8))),
+                        minor=False)  # at least 8 ticks
+    ax_zcoff.set_xlim((-.5, len(pred.amplitudes)))
+    ax_zcoff.axhline(0, ls='--', color='r', alpha=.5)
+    
+    if predicted_psf is not None:
+        m = psf_axes[0].imshow(np.max(predicted_psf ** gamma, axis=0), cmap=icmap, aspect=aspect)
+        psf_axes[1].imshow(np.max(predicted_psf ** gamma, axis=1), cmap=icmap, aspect=aspect)
+        psf_axes[2].imshow(np.max(predicted_psf ** gamma, axis=2), cmap=icmap, aspect=aspect)
+        
+        divider = make_axes_locatable(psf_axes[0])
+        cax = divider.append_axes("left", size="5%", pad=0.1)
+        cb = plt.colorbar(m, cax=cax)
+        cax.yaxis.set_label_position("left")
+        cax.yaxis.set_ticks_position('left')
+        cax.set_ylabel(rf'Predicted PSF')
+        
+        for ax in [*psf_axes]:
+            ax.axis('off')
+    
+    if predicted_embeddings is not None:
+        m = alpha_axes[0].imshow(predicted_embeddings[0], cmap=cmap, vmin=vmin, vmax=vmax)
+        alpha_axes[1].imshow(predicted_embeddings[1], cmap=cmap, vmin=vmin, vmax=vmax)
+        alpha_axes[2].imshow(predicted_embeddings[2], cmap=cmap, vmin=vmin, vmax=vmax)
+        
+        divider = make_axes_locatable(alpha_axes[0])
+        cax = divider.append_axes("left", size="5%", pad=0.1)
+        cb = plt.colorbar(m, cax=cax)
+        cax.yaxis.set_label_position("left")
+        cax.yaxis.set_ticks_position('left')
+        cax.set_ylabel(r'Embedding ($\alpha$)')
+        
+        m = phi_axes[0].imshow(predicted_embeddings[3], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
+        phi_axes[1].imshow(predicted_embeddings[4], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
+        phi_axes[2].imshow(predicted_embeddings[5], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
+        
+        divider = make_axes_locatable(phi_axes[0])
+        cax = divider.append_axes("left", size="5%", pad=0.1)
+        cb = plt.colorbar(m, cax=cax, format=lambda x, _: f"{x:.1f}")
+        cax.yaxis.set_label_position("left")
+        cax.yaxis.set_ticks_position('left')
+        cax.set_ylabel(r'Embedding ($\varphi$)')
+        
+        for ax in [*alpha_axes, *phi_axes]:
+            ax.axis('off')
+    
+    plt.subplots_adjust(wspace=0, hspace=0)
     savesvg(fig, f'{save_path}.svg')
 
 
