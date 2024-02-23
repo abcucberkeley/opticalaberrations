@@ -103,6 +103,7 @@ RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off  &&  pip 
 WORKDIR /app
 
 ARG USERNAME=vscode
+ARG USER=${USERNAME}
 ARG USER_UID=1000
 ARG USER_GID=1000
 
@@ -182,6 +183,7 @@ RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off  &&  pip 
 WORKDIR /app
 
 ARG USERNAME=vscode
+ARG USER=${USERNAME}
 ARG USER_UID=1000
 ARG USER_GID=1000
 
