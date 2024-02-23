@@ -153,10 +153,11 @@ def submit_docker_job(args, command_flags):
     flags = re.sub(pattern=' --docker', repl='', string=flags)  # remove flag
     flags = paths_to_clusterfs(flags, container_repo)
     flags = re.sub(pattern=local_repo.as_posix(), repl=container_repo, string=flags)
-    
+    docker_container_name = 'opt_net'
+
     docker_run = ("docker run --rm "
                   "--gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864"   # GPU stuff
-                  " --name opt_net --privileged=true -u 1000")  # privileged means sudo is available to user
+                  f" --name {docker_container_name} --privileged=true -u 1000")  # privileged means sudo is available to user
     docker_mount = (f'-v "{local_repo}":{container_repo}  '
                     r'-v D:\:/d_drive  '
                     r'-v C:\:/c_drive  '
@@ -176,5 +177,7 @@ def submit_docker_job(args, command_flags):
     else:
         mount_clusterfs = ""
     docker_job = f'{docker_run} {docker_vars} --workdir {container_repo}/src {docker_mount} {docker_image} "{mount_clusterfs} python ao.py {flags}"'
+    docker_remove_old = f'docker rm  --force {docker_container_name} || True'    # kill container if it was orphaned.
     logger.info(f"Docker job: \n{docker_job}\n")
+    subprocess.run(docker_remove_old, shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)  # supress output
     subprocess.run(docker_job, shell=True)
