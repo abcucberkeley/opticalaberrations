@@ -839,11 +839,21 @@ def eval_rotation(
         p = Wavefront(preds, order='ansi', lam_detection=psfgen.lam_detection)
         std = Wavefront(stdevs, order='ansi', lam_detection=psfgen.lam_detection)
         
+        predicted_psf = psfgen.single_psf(phi=p, normed=True, lls_defocus_offset=0.)
+        predicted_embeddings = fourier_embeddings(
+            predicted_psf,
+            iotf=psfgen.iotf,
+            na_mask=psfgen.na_mask,
+            remove_interference=False
+        )
+        
         vis.diagnosis(
             pred=p,
             pred_std=std,
             save_path=Path(f"{plot}_diagnosis"),
-            lls_defocus=0.
+            lls_defocus=0.,
+            predicted_psf=predicted_psf,
+            predicted_embeddings=predicted_embeddings
         )
         
     return preds, stdevs
