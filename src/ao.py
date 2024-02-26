@@ -1124,6 +1124,13 @@ def main(args=None, preloaded=None):
     pd.options.display.width = 200
     pd.options.display.max_columns = 20
 
+    args.input = None if args.input is None else slurm_utils.paths_to_clusterfs(args.input, None)
+    if not Path('/clusterfs').exists():
+        subprocess.run(
+            'sudo mkdir /clusterfs; sudo chmod a+wrx /clusterfs/; sudo chown 1000:1000 -R /sshkey/; sshfs thayeralshaabi@master.abc.berkeley.edu:/clusterfs  /clusterfs -o IdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null',
+            shell=True)
+        subprocess.run('ls /clusterfs', shell=True)
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
