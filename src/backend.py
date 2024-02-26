@@ -672,6 +672,7 @@ def eval_rotation(
     preds = np.zeros(psfgen.n_modes)
     stdevs = np.zeros(psfgen.n_modes)
     wavefront = Wavefront(preds)
+    mses = np.zeros(len(wavefront.twins.items()))
     results = []
 
     for row, (mode, twin) in enumerate(wavefront.twins.items()):
