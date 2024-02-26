@@ -50,7 +50,7 @@ from utils import round_to_even, round_to_odd
 from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
-from embeddings import remove_interference_pattern
+from embeddings import remove_interference_pattern, fourier_embeddings
 from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad, \
     denoise_image
 
@@ -1732,6 +1732,7 @@ def aggregate_rois(
     plot: bool = False,
     postfix: str = 'aggregated',
     expected_ztiles: int = 1,
+    ignore_modes: list = (0, 1, 2, 4),
 ):
     # valid_predictions = predictions.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_predictions = predictions.groupby('z')
@@ -1745,29 +1746,47 @@ def aggregate_rois(
         try:
             ztile_preds = valid_predictions.get_group(z)
             ztile_preds.drop(columns=['p2v'], errors='ignore', inplace=True)
-            ztile_preds = ztile_preds.mask(where_unconfident).fillna(0)
+            ztile_preds = ztile_preds.mask(where_unconfident)
             
             ztile_stds = valid_stdevs.get_group(z)
             ztile_stds.drop(columns=['p2v'], errors='ignore', inplace=True)
-            ztile_stds = ztile_stds.mask(where_unconfident).fillna(0)
+            ztile_stds = ztile_stds.mask(where_unconfident)
             
-            if aggregation_rule == 'mean':
+            if aggregation_rule == 'conf':
+                # find ROI index with the minimum error for each zernike mode
+                best_rois = ztile_stds[~ztile_stds.isin(ignore_modes)].idxmin(axis=0)
+                # count number of confident zernike modes for each ROI, then select ROI with the most confident modes
+                conf_roi_index = best_rois.agg(lambda x: x.value_counts().index[0])
+                logger.info(f"ROI with the most confident predictions: {conf_roi_index}")
+                
+                pred = ztile_preds.loc[conf_roi_index]
+                pred_std = ztile_stds.loc[conf_roi_index]
+            elif aggregation_rule == 'mean':
                 pred = ztile_preds.agg(pd.Series.mean, axis=0)
                 pred_std = ztile_stds.agg(pd.Series.mean, axis=0)
             elif aggregation_rule == 'median':
                 pred = ztile_preds.agg(pd.Series.median, axis=0)
                 pred_std = ztile_stds.agg(pd.Series.median, axis=0)
+            elif aggregation_rule == 'min':
+                pred = ztile_preds.agg(pd.Series.min, axis=0)
+                pred_std = ztile_stds.agg(pd.Series.min, axis=0)
+            elif aggregation_rule == 'max':
+                pred = ztile_preds.agg(pd.Series.max, axis=0)
+                pred_std = ztile_stds.agg(pd.Series.max, axis=0)
             elif aggregation_rule == 'freq':
                 # round predictions up then take most frequent predicted amplitude for each zernike mode
                 pred = ztile_preds.round(2).agg(lambda x: x.value_counts().index[0])
                 pred_std = ztile_stds.round(2).agg(lambda x: x.value_counts().index[0])
             else:
                 raise Exception(f'Unknown  {aggregation_rule=}')
+            
+            pred = pred.fillna(0)
+            pred_std = pred_std.fillna(0)
         
         except KeyError:
             pred = np.zeros(samplepsfgen.n_modes)
             pred_std = np.zeros(samplepsfgen.n_modes)
-
+        
         agg = f'z{z}_c0'
         wavefronts[agg] = Wavefront(
             np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
@@ -1791,10 +1810,20 @@ def aggregate_rois(
                 lam_detection=samplepsfgen.lam_detection
             )
             
+            predicted_psf = samplepsfgen.single_psf(phi=wavefronts[agg], normed=True, lls_defocus_offset=0.)
+            predicted_embeddings = fourier_embeddings(
+                predicted_psf,
+                iotf=samplepsfgen.iotf,
+                na_mask=samplepsfgen.na_mask,
+                remove_interference=False
+            )
+            
             vis.diagnosis(
                 pred=wavefronts[agg],
                 pred_std=pred_std,
                 save_path=Path(f"{save_path.with_suffix('')}_{postfix}_{agg}_diagnosis"),
+                predicted_psf=predicted_psf,
+                predicted_embeddings=predicted_embeddings
             )
     
     coefficients = pd.DataFrame.from_dict(coefficients)
@@ -1934,7 +1963,8 @@ def aggregate_predictions(
             dm_damping_scalar=dm_damping_scalar,
             plot=plot,
             postfix=postfix,
-            expected_ztiles=predictions_settings['ztiles']
+            expected_ztiles=predictions_settings['ztiles'],
+            ignore_modes=predictions_settings['ignore_modes']
         )
     else:
         predictions, stdevs = aggregate_tiles(
