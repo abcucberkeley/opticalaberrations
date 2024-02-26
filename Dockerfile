@@ -33,7 +33,7 @@
 
 # this works to mount using ssh keys
 # to mount clusterfs using ssh keys (1. copy keys from /.ssh on host to /sshkey in container, 2. make mount point and change permissions for local user, 3. sshfs with that key and no user input):
-# docker run --rm -it --gpus all --ipc=host --cap-add=SYS_ADMIN --privileged=true --security-opt seccomp=unconfined --ulimit memlock=-1 --ulimit stack=67108864 -v ${HOME}/.ssh:/sshkey -u 1000 -v ${PWD}:/app/opticalaberrations  ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 /bin/bash
+# docker run --rm -it --gpus all --ipc=host --cap-add=SYS_ADMIN --privileged=true --security-opt seccomp=unconfined --ulimit memlock=-1 --ulimit stack=67108864  -u 1000 -v ${HOME}/.ssh:/sshkey -v ${PWD}:/app/opticalaberrations  ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 /bin/bash
 # sudo mkdir /clusterfs; sudo chmod a+wrx /clusterfs/; sudo chown 1000:1000 -R /sshkey/; sshfs thayeralshaabi@master.abc.berkeley.edu:/clusterfs  /clusterfs -o IdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null
 
 # this works to make an apptainer version
@@ -103,7 +103,7 @@ RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off  &&  pip 
 WORKDIR /app
 
 ARG USERNAME=vscode
-ARG USER=${USERNAME}
+ENV USER=${USERNAME}
 ARG USER_UID=1000
 ARG USER_GID=1000
 
@@ -183,7 +183,7 @@ RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off  &&  pip 
 WORKDIR /app
 
 ARG USERNAME=vscode
-ARG USER=${USERNAME}
+ENV USER=${USERNAME}
 ARG USER_UID=1000
 ARG USER_GID=1000
 
