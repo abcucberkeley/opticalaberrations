@@ -83,7 +83,10 @@ def get_active_branch_name(head_dir):
         if line[0:4] == "ref:":
             return line.partition("refs/heads/")[2]
 
-def paths_to_clusterfs(flags, local_repo):
+def paths_to_clusterfs(flags:str, local_repo):
+    if isinstance(flags, Path):
+        flags = str(flags)
+        is_Path = True
     flags = re.sub(pattern="\\\\", repl='/', string=flags)  # regex needs four backslashes to indicate one
     
     if local_repo is not None:
@@ -98,6 +101,8 @@ def paths_to_clusterfs(flags, local_repo):
     flags = re.sub(pattern='D:/', repl='/d_drive/', string=flags)
     flags = re.sub(pattern='C:/', repl='/c_drive/', string=flags)
 
+    if is_Path:
+        flags = Path(flags)
     return flags
 
 
