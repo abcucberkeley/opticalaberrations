@@ -144,7 +144,7 @@ def beads(
     if object_size == 0:
         bead = photons
     elif object_size == -1:  # bead size will be randomly selected
-        pick_random_bead_size = lambda: np.random.uniform(low=2, high=5)
+        pick_random_fwhm = lambda: fwhm2sigma(np.random.choice([3, 5, 7, 9]))
     else:  # all beads will have the same size
         bead = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=fwhm2sigma(object_size)) * photons
 
@@ -163,9 +163,7 @@ def beads(
             reference[z, y, x] = bead
 
         elif object_size == -1:  # bead size will be randomly selected
-            sigma = fwhm2sigma(pick_random_bead_size())
-            
-            bead = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=sigma) * photons
+            bead = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=pick_random_fwhm()) * photons
 
             reference[
                 max(0, z-kernhalfwidth):min(reference.shape[0], z+kernhalfwidth+1),

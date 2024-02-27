@@ -9,7 +9,7 @@ CPUS=1
 TIMELIMIT='1:00'
 SHAPE=64
 MAX_LLS_OFFSET=0
-RAND_OBJECT_SIZE=false
+RAND_OBJECT_SIZE=true
 SKIP_REMOVE_BACKGROUND=false
 USE_THEORETICAL_WIDEFIELD_SIMULATOR=false
 MODES=15
@@ -19,7 +19,7 @@ DENOISE=true
 DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
 HANDLER=lsf
-TITLE='denoise_fourier_filter_125nm_dataset'
+TITLE='denoise_variable_object_size_fourier_filter_125nm_dataset'
 DATASET='train'
 
 if [ "$DATASET" = "train" ]; then

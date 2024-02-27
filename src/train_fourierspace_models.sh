@@ -16,7 +16,7 @@ DEFAULT='--positional_encoding_scheme default --batch_size 2048 --lr 5e-4 --wd 5
 LAMB='--batch_size 2048 --lr 1e-3 --wd 1e-2 --opt lamb'
 APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
 
-SUBSET='denoise_fourier_filter_125nm_dataset'
+SUBSET='denoise_variable_object_size_fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"
 else
