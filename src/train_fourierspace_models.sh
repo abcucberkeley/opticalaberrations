@@ -42,7 +42,7 @@ for S in `seq 1 ${#PSF_DATASETS[@]}`
 do
   DIR="${PSF_DATASETS[$S-1]}"
   PTYPE="${PSF_TYPES[$S-1]}"
-  DATA="$DATASET/$SUBSET/train/$DIR/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
+  DATA="$DATASET/$SUBSET/train/$DIR/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
 
   if [ $PTYPE = '2photon' ];then
     LAM=.920
