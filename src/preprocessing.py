@@ -925,7 +925,7 @@ def find_roi(
             
             if r.size != 0:
                 z = np.floor(pois[p, 0] / zslab_size).astype(int)
-                logger.info(f'{zslab_size=}, poi located at z = {pois[p, 0]}, zslab={z}')
+                logger.info(f'{zslab_size=}, poi located at z={pois[p, 0]}, zslab={z}')
                 y = ytiles - 1
                 x = xtiles_counter[z]
                 xtiles_counter[z] += 1

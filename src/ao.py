@@ -36,7 +36,8 @@ def parse_args(args):
 
     cluster_nodes_idle = subparsers.add_parser("cluster_nodes_idle")
     cluster_nodes_wait_for_idle = subparsers.add_parser("cluster_nodes_wait_for_idle")
-    cluster_nodes_wait_for_idle.add_argument("idle_minimum", type=int, default=4, help='Minimum number of idle nodes to wait for')
+    cluster_nodes_wait_for_idle.add_argument("idle_minimum", type=int, default=4,
+                                             help='Minimum number of idle nodes to wait for')
 
     deskew = subparsers.add_parser("deskew")
     deskew.add_argument("input", type=Path, help="path to input .tif file")
@@ -205,10 +206,12 @@ def parse_args(args):
     )
 
     denoise = subparsers.add_parser("denoise")
-    denoise.add_argument("model", type=Path, help="path to pretrained denoise tensorflow model", default='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/')
+    denoise.add_argument("model", type=Path, help="path to pretrained denoise tensorflow model",
+                         default='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/')
     denoise.add_argument("input", type=Path, help="path to input .tif file")
     denoise.add_argument("--output", type=Path, help="path to denoised output .tif file", default=None)
-    denoise.add_argument("--window_size", default='64-64-64', type=str, help='size of the window to denoise around each point of interest')
+    denoise.add_argument("--window_size", default='64-64-64', type=str,
+                         help='size of the window to denoise around each point of interest')
     denoise.add_argument(
         "--batch_size", default=100, type=int, help='maximum batch size for the model')
     denoise.add_argument(
@@ -332,10 +335,10 @@ def parse_args(args):
     )
     
     predict_sample.add_argument(
-	    '--denoiser', type=Path, default=None,
-	    help='path to denoiser model'
+        '--denoiser', type=Path, default='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/',
+        help='path to denoiser model'
     )
-    
+
     predict_large_fov = subparsers.add_parser("predict_large_fov")
     predict_large_fov.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_large_fov.add_argument("input", type=Path, help="path to input .tif file")
@@ -442,17 +445,17 @@ def parse_args(args):
         "--object_width", default=0.0, type=float,
         help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
     )
-    
+
     predict_large_fov.add_argument(
-	    '--denoiser', type=Path, default=None,
-	    help='path to denoiser model'
+        '--denoiser', type=Path, default='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/',
+        help='path to denoiser model'
     )
     predict_large_fov.add_argument(
         "--interpolate_embeddings", action='store_true',
         help="`predict_large_fov` will tile the image into small patches and average the FFTs to make the embeddings, "
              "this toggle will compute the FFT of the entire image then downsample/upsample embeddings to match model's input size"
     )
-    
+
     predict_rois = subparsers.add_parser("predict_rois")
     predict_rois.add_argument("model", type=Path, help="path to pretrained tensorflow model")
     predict_rois.add_argument("input", type=Path, help="path to input .tif file")
@@ -563,8 +566,8 @@ def parse_args(args):
         help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
     )
     predict_rois.add_argument(
-	    '--denoiser', type=Path, default=None,
-	    help='path to denoiser model'
+        '--denoiser', type=Path, default=None,
+        help='path to denoiser model'
     )
 
     predict_tiles = subparsers.add_parser("predict_tiles")
@@ -674,8 +677,8 @@ def parse_args(args):
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
     predict_tiles.add_argument(
-	    '--denoiser', type=Path, default=None,
-	    help='path to denoiser model'
+        '--denoiser', type=Path, default='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/',
+        help='path to denoiser model'
     )
 
     predict_folder = subparsers.add_parser("predict_folder")
@@ -686,7 +689,8 @@ def parse_args(args):
         help="path DM dm_calibration mapping matrix (eg. Zernike_Korra_Bax273.csv)"
     )
     predict_folder.add_argument(
-        "--filename_pattern", default=r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif", type=str,
+        "--filename_pattern",
+        default=r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif", type=str,
         help="optional regex pattern for selecting files in the given directory (Default: `r'*[!_gt|!_realspace|!_noisefree].tif'`)"
     )
     predict_folder.add_argument(
@@ -785,8 +789,8 @@ def parse_args(args):
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
     predict_folder.add_argument(
-	    '--denoiser', type=Path, default=None,
-	    help='path to denoiser model'
+        '--denoiser', type=Path, default='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/',
+        help='path to denoiser model'
     )
 
     aggregate_predictions = subparsers.add_parser("aggregate_predictions")
@@ -1114,22 +1118,17 @@ def parse_args(args):
         help="Visualize bleaching rates evaluations"
     )
     plot_bleaching_rate.add_argument("datadir", type=Path, help="path to dataset directory")
-    
+
     return parser.parse_known_args(args)
 
 
 def main(args=None, preloaded=None):
-    command_flags = sys.argv[1:] if args is None else args      # raw flags
-    args, unknown = parse_args(command_flags)                   # parsed flags or passed args
+    command_flags = sys.argv[1:] if args is None else args  # raw flags
+    args, unknown = parse_args(command_flags)  # parsed flags or passed args
     pd.options.display.width = 200
     pd.options.display.max_columns = 20
 
     args.input = None if args.input is None else slurm_utils.paths_to_clusterfs(args.input, None)
-    if not Path('/clusterfs').exists():
-        subprocess.run(
-            'sudo mkdir /clusterfs; sudo chmod a+wrx /clusterfs/; sudo chown 1000:1000 -R /sshkey/; sshfs thayeralshaabi@master.abc.berkeley.edu:/clusterfs  /clusterfs -o IdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null',
-            shell=True)
-        subprocess.run('ls /clusterfs', shell=True)
 
     logging.basicConfig(
         level=logging.INFO,
@@ -1137,6 +1136,7 @@ def main(args=None, preloaded=None):
     )
     logger = logging.getLogger('')
     logger.info(args)
+        subprocess.run('ls /clusterfs', shell=True)
 
     if args.func == 'cluster_nodes_idle':
         number_of_idle_nodes = slurm_utils.get_number_of_idle_nodes(args.partition)
@@ -1156,7 +1156,7 @@ def main(args=None, preloaded=None):
         slurm_utils.submit_slurm_job(args, command_flags, partition=args.partition)
 
     elif args.docker:
-        slurm_utils.submit_docker_job(args, command_flags,)
+        slurm_utils.submit_docker_job(args, command_flags, )
 
     else:
         if os.environ.get('SLURM_JOB_ID') is not None:
@@ -1181,7 +1181,7 @@ def main(args=None, preloaded=None):
         )
 
         gpu_workers = strategy.num_replicas_in_sync
-        
+
         if gpu_workers > 0:  # update batchsize automatically
             gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
             if gpu_model.find('A100') >= 0:
@@ -1282,7 +1282,7 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
-	                denoiser=args.denoiser
+                    denoiser=args.denoiser
                 )
 
             elif args.func == 'denoise':
@@ -1354,7 +1354,7 @@ def main(args=None, preloaded=None):
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded,
                     psf_type=args.psf_type,
-	                denoiser=args.denoiser
+                    denoiser=args.denoiser
                 )
             elif args.func == 'predict_tiles':
                 experimental.predict_tiles(
@@ -1384,7 +1384,7 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
-	                denoiser=args.denoiser
+                    denoiser=args.denoiser
                 )
             elif args.func == 'predict_folder':
                 experimental.predict_folder(
@@ -1414,7 +1414,7 @@ def main(args=None, preloaded=None):
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
                     object_gaussian_kernel_width=args.object_width,
-	                denoiser=args.denoiser
+                    denoiser=args.denoiser
                 )
             elif args.func == 'aggregate_predictions':
                 experimental.aggregate_predictions(
@@ -1517,10 +1517,12 @@ def main(args=None, preloaded=None):
 
         if os.name != 'nt':
             logger.info(f"Updating file permissions to {args.input.parent}")
-            subprocess.run(f"find {str(Path(args.input).parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +", shell=True)
+            subprocess.run(f"find {str(Path(args.input).parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +",
+                           shell=True)
             logger.info(f"Updating file permissions complete.")
 
     return 0
+
 
 if __name__ == "__main__":
     main()
