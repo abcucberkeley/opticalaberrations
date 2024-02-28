@@ -1244,7 +1244,8 @@ def predict_folder(
         skip_prep_sample=True,
         template=template,
         pool=pool,
-        object_gaussian_kernel_width=object_gaussian_kernel_width
+        object_gaussian_kernel_width=object_gaussian_kernel_width,
+        save_processed_tif_file=True
     )
 
     return predictions
