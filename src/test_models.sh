@@ -24,8 +24,7 @@ DENOISE=true
 DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
 TRAINED_MODELS=(
-  "YuMB_lambda510-P3216-R2222"
-  "YuMB_lambda510-P3216168-R2222"
+  "YuMB_lambda510-P3216-R2222-variable"
 )
 
 for M in ${TRAINED_MODELS[@]}
