@@ -596,7 +596,7 @@ def compute_emb(
         try:
             # unwrap phase if we have at least 100 nonzero points left in emb.
             if len(np.ma.nonzero(emb)[0]) > 100:
-                emb = np.ma.masked_array(emb, mask=~na_mask, fill_value=0)
+                emb = np.ma.masked_array(emb, mask=~na_mask.astype(bool), fill_value=0)
                 emb = unwrap_phase(emb)
                 emb = emb.filled(0)
                 emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
