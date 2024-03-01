@@ -1,7 +1,4 @@
 #!/bin/bash
-#--partition gpu_a100 --gpus 4 --cpus 8 \
-#--partition gpu_h100 --gpus 8 --cpus 8 \
-#--partition gpu_rtx8000 --gpus 8 --cpus 16 \
 
 SHAPE=64
 DZ=200
@@ -15,6 +12,8 @@ CLUSTER='lsf'
 DEFAULT='--positional_encoding_scheme default --batch_size 2048 --lr 5e-4 --wd 5e-6 --opt adamw'
 LAMB='--batch_size 2048 --lr 1e-3 --wd 1e-2 --opt lamb'
 APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
+H100="--partition gpu_h100 --gpus 8 --cpus 16"
+A100="--partition gpu_a100 --gpus 4 --cpus 8"
 
 SUBSET='denoise_variable_object_size_fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
@@ -52,30 +51,25 @@ do
   
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
-  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $LAMB --patches '16-16-16-16' --repeats '2-2-2-2'" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R2222
 
-  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $LAMB --patches '32-32-16-16' --repeats '2-2-2-2'" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-P3216-R2222
 
-  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $LAMB --patches '32-16-16-8' --repeats '2-2-2-2'" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-P3216168-R2222
 
-  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $LAMB --patches '32-16-8-8' --repeats '2-2-2-2'" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-P321688-R2222
-
-  python manager.py $CLUSTER $APPTAINER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-  --task "$CONFIG $LAMB --patches '32-16-8-8' --repeats '2-4-6-2'" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P321688-R2462
 
 done
 

@@ -7,6 +7,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 import warnings
 warnings.filterwarnings("ignore")
 
+import contextlib
 import logging
 import sys
 import time
@@ -711,6 +712,15 @@ def parse_args(args):
     return train_parser.parse_known_args(args)[0]
 
 
+@contextlib.contextmanager
+def options(options):
+    old_opts = tf.config.optimizer.get_experimental_options()
+    tf.config.optimizer.set_experimental_options(options)
+    try:
+        yield
+    finally:
+        tf.config.optimizer.set_experimental_options(old_opts)
+
 def main(args=None):
     timeit = time.time()
     args = parse_args(args)
@@ -742,74 +752,76 @@ def main(args=None):
         tf.keras.mixed_precision.set_global_policy(policy)
 
     with strategy.scope():
-        if args.eval:
-            eval_model(
-                dataset=args.dataset,
-                network=args.network,
-                embedding=args.embedding,
-                input_shape=args.input_shape,
-                batch_size=args.batch_size,
-                psf_type=args.psf_type,
-                x_voxel_size=args.x_voxel_size,
-                y_voxel_size=args.y_voxel_size,
-                z_voxel_size=args.z_voxel_size,
-                modes=args.modes,
-                min_photons=args.min_photons,
-                max_photons=args.max_photons,
-                max_amplitude=args.max_amplitude,
-                distribution=args.dist,
-                samplelimit=args.samplelimit,
-                wavelength=args.wavelength,
-                no_phase=args.no_phase,
-                lls_defocus=args.lls_defocus,
-            )
-        else:
-            train_model(
-                dataset=args.dataset,
-                embedding=args.embedding,
-                outdir=args.outdir,
-                network=args.network,
-                input_shape=args.input_shape,
-                batch_size=args.batch_size,
-                patches=[int(i) for i in args.patches.split('-')],
-                heads=[int(i) for i in args.heads.split('-')],
-                repeats=[int(i) for i in args.repeats.split('-')],
-                roi=[int(i) for i in args.roi.split('-')] if args.roi is not None else args.roi,
-                steps_per_epoch=args.steps_per_epoch,
-                psf_type=args.psf_type,
-                x_voxel_size=args.x_voxel_size,
-                y_voxel_size=args.y_voxel_size,
-                z_voxel_size=args.z_voxel_size,
-                modes=args.modes,
-                activation=args.activation,
-                mul=args.mul,
-                opt=args.opt,
-                lr=args.lr,
-                wd=args.wd,
-                dropout=args.dropout,
-                fixedlr=args.fixedlr,
-                warmup=args.warmup,
-                epochs=args.epochs,
-                pmodes=args.pmodes,
-                min_photons=args.min_photons,
-                max_photons=args.max_photons,
-                max_amplitude=args.max_amplitude,
-                distribution=args.dist,
-                samplelimit=args.samplelimit,
-                wavelength=args.wavelength,
-                depth_scalar=args.depth_scalar,
-                width_scalar=args.width_scalar,
-                no_phase=args.no_phase,
-                lls_defocus=args.lls_defocus,
-                defocus_only=args.defocus_only,
-                radial_encoding_period=args.radial_encoding_period,
-                radial_encoding_nth_order=args.radial_encoding_nth_order,
-                positional_encoding_scheme=args.positional_encoding_scheme,
-                stem=args.stem,
-                fixed_dropout_depth=args.fixed_dropout_depth,
-                finetune=args.finetune,
-                cpu_workers=args.cpu_workers
-            )
+        with options({"layout_optimizer": False}):
+            
+            if args.eval:
+                eval_model(
+                    dataset=args.dataset,
+                    network=args.network,
+                    embedding=args.embedding,
+                    input_shape=args.input_shape,
+                    batch_size=args.batch_size,
+                    psf_type=args.psf_type,
+                    x_voxel_size=args.x_voxel_size,
+                    y_voxel_size=args.y_voxel_size,
+                    z_voxel_size=args.z_voxel_size,
+                    modes=args.modes,
+                    min_photons=args.min_photons,
+                    max_photons=args.max_photons,
+                    max_amplitude=args.max_amplitude,
+                    distribution=args.dist,
+                    samplelimit=args.samplelimit,
+                    wavelength=args.wavelength,
+                    no_phase=args.no_phase,
+                    lls_defocus=args.lls_defocus,
+                )
+            else:
+                train_model(
+                    dataset=args.dataset,
+                    embedding=args.embedding,
+                    outdir=args.outdir,
+                    network=args.network,
+                    input_shape=args.input_shape,
+                    batch_size=args.batch_size,
+                    patches=[int(i) for i in args.patches.split('-')],
+                    heads=[int(i) for i in args.heads.split('-')],
+                    repeats=[int(i) for i in args.repeats.split('-')],
+                    roi=[int(i) for i in args.roi.split('-')] if args.roi is not None else args.roi,
+                    steps_per_epoch=args.steps_per_epoch,
+                    psf_type=args.psf_type,
+                    x_voxel_size=args.x_voxel_size,
+                    y_voxel_size=args.y_voxel_size,
+                    z_voxel_size=args.z_voxel_size,
+                    modes=args.modes,
+                    activation=args.activation,
+                    mul=args.mul,
+                    opt=args.opt,
+                    lr=args.lr,
+                    wd=args.wd,
+                    dropout=args.dropout,
+                    fixedlr=args.fixedlr,
+                    warmup=args.warmup,
+                    epochs=args.epochs,
+                    pmodes=args.pmodes,
+                    min_photons=args.min_photons,
+                    max_photons=args.max_photons,
+                    max_amplitude=args.max_amplitude,
+                    distribution=args.dist,
+                    samplelimit=args.samplelimit,
+                    wavelength=args.wavelength,
+                    depth_scalar=args.depth_scalar,
+                    width_scalar=args.width_scalar,
+                    no_phase=args.no_phase,
+                    lls_defocus=args.lls_defocus,
+                    defocus_only=args.defocus_only,
+                    radial_encoding_period=args.radial_encoding_period,
+                    radial_encoding_nth_order=args.radial_encoding_nth_order,
+                    positional_encoding_scheme=args.positional_encoding_scheme,
+                    stem=args.stem,
+                    fixed_dropout_depth=args.fixed_dropout_depth,
+                    finetune=args.finetune,
+                    cpu_workers=args.cpu_workers
+                )
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
