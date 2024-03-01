@@ -19,7 +19,7 @@ DENOISE=true
 DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
 HANDLER=lsf
-TITLE='denoise_variable_object_size_fourier_filter_125nm_dataset'
+TITLE='denoise_higher_snr_variable_object_size_fourier_filter_125nm_dataset'
 DATASET='train'
 
 if [ "$DATASET" = "train" ]; then
@@ -64,12 +64,12 @@ mkdir -p $LOGS
 
 if [ "$DATASET" = "train" ];then  # 2M samples
   TYPE='--emb'
-  SAMPLES_PER_JOB=400
+  SAMPLES_PER_JOB=200
   SAMPLES_PER_BIN=400
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   OBJS=(1 2 3 4 5)  # 5 bins
-  mPH=($(seq 0 10000 90000)) # 10 bins
-  xPH=($(seq 10000 10000 100000))
+  mPH=($(seq 0 20000 180000)) # 10 bins
+  xPH=($(seq 20000 20000 200000))
   amps1=($(seq 0 .01 .24))  # 25 bins
   amps2=($(seq .01 .01 .25))
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet) # 4 bins

@@ -144,7 +144,7 @@ def beads(
     if object_size == 0:
         bead = photons
     elif object_size == -1:  # bead size will be randomly selected
-        pick_random_fwhm = lambda: fwhm2sigma(np.random.choice([3, 5, 7, 9]))
+        pick_random_fwhm = lambda: fwhm2sigma(np.random.choice([1, 2, 3, 4]))
     else:  # all beads will have the same size
         bead = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=fwhm2sigma(object_size)) * photons
 

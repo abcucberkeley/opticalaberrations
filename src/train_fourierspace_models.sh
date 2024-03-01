@@ -15,7 +15,7 @@ APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
 H100="--partition gpu_h100 --gpus 8 --cpus 16"
 A100="--partition gpu_a100 --gpus 4 --cpus 8"
 
-SUBSET='denoise_variable_object_size_fourier_filter_125nm_dataset'
+SUBSET='denoise_higher_snr_variable_object_size_fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"
 else
