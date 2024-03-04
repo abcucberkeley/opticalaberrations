@@ -1753,34 +1753,43 @@ def aggregate_rois(
             ztile_stds = valid_stdevs.get_group(z)
             ztile_stds.drop(columns=['p2v'], errors='ignore', inplace=True)
             ztile_stds = ztile_stds.mask(where_unconfident)
-            
-            if aggregation_rule == 'conf':
-                # find ROI index with the minimum error for each zernike mode
-                best_rois = ztile_stds[~ztile_stds.isin(ignore_modes)].idxmin(axis=0)
-                # count number of confident zernike modes for each ROI, then select ROI with the most confident modes
-                conf_roi_index = best_rois.agg(lambda x: x.value_counts().index[0])
-                logger.info(f"ROI with the most confident predictions: {conf_roi_index}")
-                
-                pred = ztile_preds.loc[conf_roi_index]
-                pred_std = ztile_stds.loc[conf_roi_index]
-            elif aggregation_rule == 'mean':
-                pred = ztile_preds.agg(pd.Series.mean, axis=0)
-                pred_std = ztile_stds.agg(pd.Series.mean, axis=0)
-            elif aggregation_rule == 'median':
-                pred = ztile_preds.agg(pd.Series.median, axis=0)
-                pred_std = ztile_stds.agg(pd.Series.median, axis=0)
-            elif aggregation_rule == 'min':
-                pred = ztile_preds.agg(pd.Series.min, axis=0)
-                pred_std = ztile_stds.agg(pd.Series.min, axis=0)
-            elif aggregation_rule == 'max':
-                pred = ztile_preds.agg(pd.Series.max, axis=0)
-                pred_std = ztile_stds.agg(pd.Series.max, axis=0)
-            elif aggregation_rule == 'freq':
-                # round predictions up then take most frequent predicted amplitude for each zernike mode
-                pred = ztile_preds.round(2).agg(lambda x: x.value_counts().index[0])
-                pred_std = ztile_stds.round(2).agg(lambda x: x.value_counts().index[0])
+
+            if ztile_stds.shape[0] == 0:
+                raise KeyError('No ROI')
+            elif ztile_stds.shape[0] == 1:
+                pred = ztile_preds.iloc[0]
+                pred_std = ztile_stds.iloc[0]
+
             else:
-                raise Exception(f'Unknown  {aggregation_rule=}')
+                if aggregation_rule == 'conf':
+                    # find ROI index with the minimum error for each zernike mode
+
+                    best_rois = ztile_stds[~ztile_stds.isin(ignore_modes)].idxmin(axis=0)
+                    # count number of confident zernike modes for each ROI, then select ROI with the most confident modes
+                    conf_roi_index = best_rois.agg(lambda x: x.value_counts().index[0])
+                    logger.info(f"ROI with the most confident predictions: {conf_roi_index}")
+
+                    pred = ztile_preds.loc[conf_roi_index]
+                    pred_std = ztile_stds.loc[conf_roi_index]
+
+                elif aggregation_rule == 'mean':
+                    pred = ztile_preds.agg(pd.Series.mean, axis=0)
+                    pred_std = ztile_stds.agg(pd.Series.mean, axis=0)
+                elif aggregation_rule == 'median':
+                    pred = ztile_preds.agg(pd.Series.median, axis=0)
+                    pred_std = ztile_stds.agg(pd.Series.median, axis=0)
+                elif aggregation_rule == 'min':
+                    pred = ztile_preds.agg(pd.Series.min, axis=0)
+                    pred_std = ztile_stds.agg(pd.Series.min, axis=0)
+                elif aggregation_rule == 'max':
+                    pred = ztile_preds.agg(pd.Series.max, axis=0)
+                    pred_std = ztile_stds.agg(pd.Series.max, axis=0)
+                elif aggregation_rule == 'freq':
+                    # round predictions up then take most frequent predicted amplitude for each zernike mode
+                    pred = ztile_preds.round(2).agg(lambda x: x.value_counts().index[0])
+                    pred_std = ztile_stds.round(2).agg(lambda x: x.value_counts().index[0])
+                else:
+                    raise Exception(f'Unknown  {aggregation_rule=}')
             
             pred = pred.fillna(0)
             pred_std = pred_std.fillna(0)
