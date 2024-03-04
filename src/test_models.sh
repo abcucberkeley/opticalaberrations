@@ -6,7 +6,7 @@ DZ=200
 SHAPE=64
 MODES=15
 ROTATIONS='--digital_rotations'
-ITERS=1
+ITERS=5
 MAX=10000
 OUTDIR='../evaluations'
 PRETRAINED="../pretrained_models"
@@ -24,7 +24,7 @@ DENOISE=true
 DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
 TRAINED_MODELS=(
-  "YuMB_lambda510-P3216-R2222-variable"
+  "YuMB_lambda510-P3216-R2222-variable-v2"
 )
 
 for M in ${TRAINED_MODELS[@]}
