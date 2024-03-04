@@ -28,7 +28,7 @@
         <list />
       </option>
       <option name="publishAllPorts" value="false" />
-      <option name="runCliOptions" value="--entrypoint= --rm --gpu all" />
+      <option name="runCliOptions" value="--entrypoint= --rm --gpu all --ipc=host --cap-add=SYS_ADMIN --privileged=true --security-opt seccomp=unconfined --ulimit memlock=-1 --ulimit stack=67108864  -u 1000" />
       <option name="version" value="2" />
       <option name="volumeBindings">
         <list>
@@ -38,12 +38,18 @@
             <option name="hostPath" value="$PROJECT_DIR$" />
             <option name="readOnly" value="false" />
           </DockerVolumeBindingImpl>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/sshkey" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="C:\Users\Mosaic\.ssh" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
         </list>
       </option>
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="predict_rois ../pretrained_models/opticalnet-15-YuMB-lambda510.h5 ../examples/LabVIEW/before_rois.tif ../calibration/aang/15_mode_calibration.csv --current_dm None --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --window_size 64-64-64 --minimum_distance 8 --prediction_threshold 0. --freq_strength_threshold 0.01 --batch_size 896 --plot --num_rois 200" />
+    <option name="PARAMETERS" value="predict_rois ../pretrained_models/prototype-15-YuMB_lambda510-P3216-R2222-variable-v2.h5 &quot;U:\Data\TestsForThayer\20240223_nup\exp7_flat.tif&quot; ../calibration/aang/15_mode_calibration.csv --current_dm None --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --window_size 64-96-96 --minimum_distance 8 --prediction_threshold 0. --freq_strength_threshold 0.01 --batch_size 896 --plot --num_rois 200" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
