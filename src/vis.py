@@ -1164,7 +1164,8 @@ def plot_interference(
         psf_peaks,
         corrected_psf,
         kernel,
-        interference_pattern
+        interference_pattern,
+        gamma = 0.5,
 ):
     fig, axes = plt.subplots(
         nrows=5 if plot_interference_pattern else 4,
@@ -1211,7 +1212,7 @@ def plot_interference(
                     color=f'C{p}',
                     alpha=transparency
                 ))
-        m1 = axes[0, ax].imshow(np.nanmax(psf_peaks, axis=ax), cmap='hot', aspect='auto')
+        m1 = axes[0, ax].imshow(np.nanmax(psf_peaks**gamma, axis=ax), cmap='hot', aspect='auto')
         m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot', aspect='auto')
         m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66, aspect='auto')
 
@@ -1227,23 +1228,23 @@ def plot_interference(
             ax2.axis('off')
             ax2.set_title(r'$|\mathscr{F}(\mathcal{S})|$')
 
-        m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf, axis=ax), cmap='hot', aspect='auto')
+        m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf**gamma, axis=ax), cmap='hot', aspect='auto')
 
     for ax, m, label in zip(
         range(5) if plot_interference_pattern else range(4),
         [m1, m2, m3, m4, m5] if plot_interference_pattern else [m1, m2, m3, m5],
         [
-            f'Inputs ({pois.shape[0]} peaks)',
+            f'Inputs ({pois.shape[0]} peaks)\n[$\gamma$=.5]',
             'Kernel',
             'Peak detection',
             'Interference',
-            'Reconstructed'
+            'Reconstructed\n[$\gamma$=.5]'
         ]
         if plot_interference_pattern else [
-            f'Inputs ({pois.shape[0]} peaks)',
+            f'Inputs ({pois.shape[0]} peaks)\n[$\gamma$=.5]',
             'kernel',
             'Peak detection',
-            'Reconstructed'
+            'Reconstructed\n[$\gamma$=.5]'
         ]
     ):
         divider = make_axes_locatable(axes[ax, -1])
