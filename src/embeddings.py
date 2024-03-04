@@ -356,8 +356,22 @@ def remove_interference_pattern(
         ]
 
     if pois.shape[0] > 0:  # found anything?
-        interference_pattern = fft(beads)
+        kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=.9)
 
+        # convolve template with the input image
+        beads = convolution.convolve_fft(
+            beads,
+            kernel,
+            allow_huge=True,
+            boundary='fill',
+            nan_treatment='fill',
+            fill_value=0,
+            normalize_kernel=False
+        )
+        # beads -= np.nanmin(beads)
+        # beads /= np.nanmax(beads)
+
+        interference_pattern = fft(beads)
         if np.all(beads == 0) or np.all(interference_pattern == 0):
             logger.error("Bad interference pattern")
             return otf
@@ -847,7 +861,11 @@ def fourier_embeddings(
                 if no_phase else np.zeros((6, *model_psf_shape[1:]))
 
     else:
-        
+        if na_mask.shape != otf.shape:
+            na_mask_otf = resize_image(na_mask, crop_shape=otf.shape, interpolate=interpolate_embeddings)
+        else:
+            na_mask_otf = na_mask
+        otf *= na_mask_otf
         if no_phase:
             emb = compute_emb(
                 otf,
