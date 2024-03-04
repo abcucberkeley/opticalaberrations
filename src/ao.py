@@ -335,7 +335,7 @@ def parse_args(args):
     )
     
     predict_sample.add_argument(
-        '--denoiser', type=Path, default='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/',
+        '--denoiser', type=Path, default=None,
         help='path to denoiser model'
     )
 
@@ -447,7 +447,7 @@ def parse_args(args):
     )
 
     predict_large_fov.add_argument(
-        '--denoiser', type=Path, default='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/',
+        '--denoiser', type=Path, default=None,
         help='path to denoiser model'
     )
     predict_large_fov.add_argument(
@@ -677,7 +677,7 @@ def parse_args(args):
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
     predict_tiles.add_argument(
-        '--denoiser', type=Path, default='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/',
+        '--denoiser', type=Path, default=None,
         help='path to denoiser model'
     )
 
@@ -789,7 +789,7 @@ def parse_args(args):
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
     predict_folder.add_argument(
-        '--denoiser', type=Path, default='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/',
+        '--denoiser', type=Path, default=None,
         help='path to denoiser model'
     )
 
