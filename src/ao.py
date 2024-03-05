@@ -330,8 +330,8 @@ def parse_args(args):
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
     predict_sample.add_argument(
-        "--object_width", default=0.0, type=float,
-        help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
+        "--estimated_object_gaussian_sigma", default=0.0, type=float,
+        help='size of object for creating an ideal psf (default: 0;  single pixel)'
     )
     
     predict_sample.add_argument(
@@ -442,8 +442,8 @@ def parse_args(args):
         help='Will blank image if filtered image does not meet this SNR minimum. min_psnr=0 disables this threshold'
     )
     predict_large_fov.add_argument(
-        "--object_width", default=0.0, type=float,
-        help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
+        "--estimated_object_gaussian_sigma", default=0.0, type=float,
+        help='size of object for creating an ideal psf (default: 0;  single pixel)'
     )
 
     predict_large_fov.add_argument(
@@ -562,8 +562,8 @@ def parse_args(args):
              '(Default: None; to keep default mode used during training)'
     )
     predict_rois.add_argument(
-        "--object_width", default=0.0, type=float,
-        help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
+        "--estimated_object_gaussian_sigma", default=0.0, type=float,
+        help='size of object for creating an ideal psf (default: 0;  single pixel)'
     )
     predict_rois.add_argument(
         '--denoiser', type=Path, default=None,
@@ -617,8 +617,8 @@ def parse_args(args):
         help='flip sign of modes above given threshold relative to your initial prediction'
     )
     predict_tiles.add_argument(
-        "--object_width", default=0.0, type=float,
-        help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
+        "--estimated_object_gaussian_sigma", default=0.0, type=float,
+        help='size of object for creating an ideal psf (default: 0;  single pixel)'
     )
     predict_tiles.add_argument(
         "--plot", action='store_true',
@@ -729,8 +729,8 @@ def parse_args(args):
         help='flip sign of modes above given threshold relative to your initial prediction'
     )
     predict_folder.add_argument(
-        "--object_width", default=0.0, type=float,
-        help='size of object for ideal psf. 0 (default) = single pixel. >0 gaussian width.'
+        "--estimated_object_gaussian_sigma", default=0.0, type=float,
+        help='size of object for creating an ideal psf (default: 0;  single pixel)'
     )
     predict_folder.add_argument(
         "--plot", action='store_true',
@@ -1288,7 +1288,7 @@ def main(args=None, preloaded=None):
                     preloaded=preloaded,
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
-                    object_gaussian_kernel_width=args.object_width,
+                    estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma,
                     denoiser=args.denoiser
                 )
 
@@ -1328,7 +1328,7 @@ def main(args=None, preloaded=None):
                     preloaded=preloaded,
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
-                    object_gaussian_kernel_width=args.object_width,
+                    estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma,
                     denoiser=args.denoiser,
                     interpolate_embeddings=args.interpolate_embeddings
                 )
@@ -1390,7 +1390,7 @@ def main(args=None, preloaded=None):
                     shifting=(0, 0, args.shift),
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
-                    object_gaussian_kernel_width=args.object_width,
+                    estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma,
                     denoiser=args.denoiser
                 )
             elif args.func == 'predict_folder':
@@ -1420,7 +1420,7 @@ def main(args=None, preloaded=None):
                     shifting=(0, 0, args.shift),
                     psf_type=args.psf_type,
                     min_psnr=args.min_psnr,
-                    object_gaussian_kernel_width=args.object_width,
+                    estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma,
                     denoiser=args.denoiser
                 )
             elif args.func == 'aggregate_predictions':
