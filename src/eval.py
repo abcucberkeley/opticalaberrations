@@ -27,7 +27,7 @@ import tensorflow as tf
 from line_profiler_pycharm import profile
 from tqdm import tqdm, trange
 from tifffile import imwrite
-
+from astropy import convolution
 from csbdeep.utils.tf import limit_gpu_memory
 
 limit_gpu_memory(allow_growth=True, fraction=None, total_memory=None)
@@ -151,6 +151,20 @@ def generate_sample(
     else:
         ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
         ref = np.squeeze(data_utils.get_image(beads))
+        
+        if hashtable['object_gaussian_sigma'] > 0:
+            kernel = utils.gaussian_kernel(kernlen=[21, 21, 21], std=hashtable['object_gaussian_sigma'])
+            
+            # convolve template with the input image
+            ref = convolution.convolve_fft(
+                ref,
+                kernel,
+                allow_huge=True,
+                boundary='fill',
+                nan_treatment='fill',
+                fill_value=0,
+                normalize_kernel=np.sum
+            )
 
         wavefront = Wavefront(
             ys,
@@ -346,7 +360,9 @@ def iter_evaluate(
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Union[Path, CARE]] = None,
     denoiser_window_size: tuple = (32, 64, 64),
-    simulate_samples: bool = False
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
+    randomize_object_gaussian_sigma: Optional[np.ndarray | list | tuple] = None,
 ):
     """
     Gathers the set of .tif files that meet the input criteria.
@@ -358,7 +374,7 @@ def iter_evaluate(
         "results" dataframe
     """
     model = backend.load(modelpath)
-
+    plot = True
     gen = backend.load_metadata(
         modelpath,
         signed=True,
@@ -393,7 +409,13 @@ def iter_evaluate(
             lam_detection=gen.lam_detection,
             filename_pattern=filename_pattern
         )
-
+    
+    if 'object_gaussian_sigma' not in results.columns:
+        results['object_gaussian_sigma'] = 0.
+    
+    if randomize_object_gaussian_sigma is not None:
+        results['object_gaussian_sigma'] = np.random.choice(randomize_object_gaussian_sigma, size=results.shape[0])
+    
     prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
     confidence_cols = [col for col in results.columns if col.endswith('_confidence')]
     ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
@@ -420,7 +442,7 @@ def iter_evaluate(
                 preprocess=preprocess,
                 plot=plot,
                 denoiser=denoiser,
-                denoiser_window_size=denoiser_window_size
+                denoiser_window_size=denoiser_window_size,
             ),
             jobs=previous['id'].values,
             desc=f'Create samples ({savepath.resolve()})',
@@ -434,7 +456,7 @@ def iter_evaluate(
     current['iter_num'] = iter_num
     current['file'] = paths
     current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
-    
+
     predictions, stdevs = backend.predict_files(
         paths=np.hstack(paths) if digital_rotations else paths,
         outdir=savepath/f'iter_{iter_num}',
@@ -452,6 +474,7 @@ def iter_evaluate(
         skip_prep_sample=False,
         preprocessed=preprocess,
         remove_background=False if skip_remove_background else True,
+        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
@@ -1650,7 +1673,8 @@ def snrheatmap(
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
-    simulate_samples: bool = False
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1697,7 +1721,8 @@ def snrheatmap(
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
             denoiser=denoiser,
             denoiser_window_size=denoiser_window_size,
-            simulate_samples=simulate_samples
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
         )
 
     if 'aberration_umRMS' not in df.columns.values:
@@ -1855,7 +1880,8 @@ def densityheatmap(
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
-    simulate_samples: bool = False
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1901,7 +1927,8 @@ def densityheatmap(
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
             denoiser=denoiser,
             denoiser_window_size=denoiser_window_size,
-            simulate_samples=simulate_samples
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -1937,6 +1964,109 @@ def densityheatmap(
 
 
 @profile
+def objectsizeheatmap(
+    modelpath: Path,
+    datadir: Path,
+    outdir: Path,
+    iter_num: int = 1,
+    distribution: str = '/',
+    na: float = 1.0,
+    samplelimit: Any = None,
+    batch_size: int = 100,
+    eval_sign: str = 'signed',
+    digital_rotations: bool = False,
+    plot: Any = None,
+    plot_rotations: bool = False,
+    agg: str = 'median',
+    num_beads: Optional[int] = None,
+    photons_range: Optional[tuple] = None,
+    psf_type: Optional[str] = None,
+    lam_detection: Optional[float] = .510,
+    skip_remove_background: bool = False,
+    use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
+    object_gaussian_sigma_range: tuple = (.6, 1.6)
+):
+    modelspecs = backend.load_metadata(modelpath)
+    
+    if outdir == Path('../evaluations'):
+        savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'objectsizeheatmaps'
+        
+        if psf_type is not None:
+            savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+        
+        if num_beads is not None:
+            savepath = savepath / f'beads-{num_beads}'
+        
+        if distribution != '/':
+            savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+        else:
+            savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+    else:
+        savepath = outdir
+    
+    savepath.mkdir(parents=True, exist_ok=True)
+    
+    if datadir.suffix == '.csv':
+        df = pd.read_csv(datadir, header=0, index_col=0)
+    else:
+        df = iter_evaluate(
+            iter_num=iter_num,
+            modelpath=modelpath,
+            datapath=datadir,
+            savepath=savepath,
+            samplelimit=samplelimit,
+            distribution=distribution,
+            na=na,
+            photons_range=photons_range,
+            npoints_range=(1, num_beads) if num_beads is not None else None,
+            batch_size=batch_size,
+            eval_sign=eval_sign,
+            digital_rotations=digital_rotations,
+            plot=plot,
+            plot_rotations=plot_rotations,
+            psf_type=psf_type,
+            lam_detection=lam_detection,
+            skip_remove_background=skip_remove_background,
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
+            randomize_object_gaussian_sigma=np.arange(*object_gaussian_sigma_range, step=.1)
+        )
+    
+    df = df[df['iter_num'] == iter_num]
+    
+    bins = np.arange(0, 10.25, .25).round(2)
+    df['ibins'] = pd.cut(
+        df['aberration'],
+        bins,
+        labels=bins[1:],
+        include_lowest=True
+    )
+    
+    dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='object_gaussian_sigma', aggfunc=agg)
+    dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
+    dataframe.to_csv(f'{savepath}.csv')
+    logger.info(f'Saved: {savepath.resolve()}.csv')
+    
+    plot_heatmap_p2v(
+        dataframe,
+        wavelength=modelspecs.lam_detection,
+        savepath=Path(f'{savepath}_iter_{iter_num}_gaussian_sigma'),
+        label=r'Gaussian $\sigma$',
+        lims=object_gaussian_sigma_range,
+        agg=agg
+    )
+    
+    return savepath
+
+
+@profile
 def iterheatmap(
     modelpath: Path,
     datadir: Path,  # folder or _predictions.csv file
@@ -1959,7 +2089,8 @@ def iterheatmap(
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
-    simulate_samples: bool = False
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -2006,7 +2137,8 @@ def iterheatmap(
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
             denoiser=denoiser,
             denoiser_window_size=denoiser_window_size,
-            simulate_samples=simulate_samples
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
         )
 
     max_iter = df['iter_num'].max()
@@ -2055,6 +2187,7 @@ def random_samples(
     batch_size: int = 512,
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     m = backend.load(model)
     m.summary()
@@ -2118,6 +2251,7 @@ def random_samples(
                         normalize=True,
                         plot=save_path / f'{s}',
                         min_psnr=0,
+                        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                     )
 
                     if digital_rotations:
@@ -2338,6 +2472,7 @@ def eval_object(
     object_size: int = 0,
     denoiser: Optional[CARE] = None,
     denoiser_window_size: tuple = (32, 64, 64),
+    estimated_object_gaussian_sigma: float = 0,
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(
@@ -2383,7 +2518,8 @@ def eval_object(
                 min_psnr=0,
                 plot=f"{savepath}_{a}_{ph}",
                 denoiser=denoiser,
-                denoiser_window_size=denoiser_window_size
+                denoiser_window_size=denoiser_window_size,
+                estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
             )
             for i, (a, ph) in enumerate(itertools.product(p2v, photons))
         ], axis=0)
@@ -2445,6 +2581,7 @@ def evaluate_modes(
     agg: str = 'median',
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
+    estimated_object_gaussian_sigma: float = 0,
 ):
     plt.rcParams.update({
         'font.size': 12,
@@ -2512,7 +2649,8 @@ def evaluate_modes(
                 savepath=savepath,
                 digital_rotations=361 if digital_rotations else None,
                 denoiser=denoiser,
-                denoiser_window_size=denoiser_window_size
+                denoiser_window_size=denoiser_window_size,
+                estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
             )
 
         df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
@@ -2625,6 +2763,7 @@ def eval_modalities(
     digital_rotations: bool = False,
     num_objs: int = 1,
     psf_shape: tuple = (128, 128, 128),  # needs to be large enough for 2photon
+    estimated_object_gaussian_sigma: float = 0,
     modalities: tuple = (
         '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         '../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat',
@@ -2725,6 +2864,7 @@ def eval_modalities(
                         normalize=True,
                         plot=save_path / f'{z}',
                         min_psnr=0,
+                        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                     )
                     imwrite(save_path / f'{z}_embeddings.tif', embeddings.astype(np.float32), imagej=True, compression='deflate', dtype=np.float32)
 
@@ -2857,6 +2997,7 @@ def eval_confidence(
     eval_sign: str = 'signed',
     dist: str = 'single',
     digital_rotations: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     pool = Pool(processes=4)  # plotting = 2*calculation time, so shouldn't need more than 2-4 processes to keep up.
 
@@ -2924,6 +3065,7 @@ def eval_confidence(
                             normalize=True,
                             plot=save_path / f'{s}',
                             min_psnr=0,
+                            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                         )
 
                         if digital_rotations:
@@ -3026,7 +3168,8 @@ def confidence_heatmap(
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
-    simulate_samples: bool = False
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -3068,7 +3211,8 @@ def confidence_heatmap(
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
             denoiser=denoiser,
             denoiser_window_size=denoiser_window_size,
-            simulate_samples=simulate_samples
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -3384,7 +3528,8 @@ def evaluate_object_sizes(
     override: bool = False,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
-    amp: float = .15
+    amp: float = .15,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -3470,7 +3615,8 @@ def evaluate_object_sizes(
                     min_psnr=0,
                     plot=Path(f"{savepath}_{sizes[w]}"),
                     denoiser=denoiser,
-                    denoiser_window_size=denoiser_window_size
+                    denoiser_window_size=denoiser_window_size,
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                 )
                 for w, i in enumerate(tqdm(
                     inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout
@@ -3557,7 +3703,8 @@ def evaluate_uniform_background(
     na: float = 1.0,
     photons: int = 20000,
     override: bool = False,
-    amplutide: float = .0
+    amplutide: float = .0,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -3649,6 +3796,7 @@ def evaluate_uniform_background(
                     normalize=True,
                     min_psnr=0,
                     plot=Path(f"{savepath}_{backgrounds[w]}"),
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                 )
                 for w, i in enumerate(tqdm(
                     inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout

@@ -137,6 +137,11 @@ def parse_args(args):
         '--simulate_samples', action='store_true',
         help='optional toggle to simulate PSFs to do iterative eval'
     )
+    
+    parser.add_argument(
+        "--estimated_object_gaussian_sigma", default=0.0, type=float,
+        help='size of object for creating an ideal psf (default: 0;  single pixel)'
+    )
 
     return parser.parse_args(args)
 
@@ -180,7 +185,8 @@ def main(args=None):
                 num_objs=args.num_objs,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
-                denoiser=args.denoiser
+                denoiser=args.denoiser,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == 'templates':
             savepath = eval.plot_templates(args.model)
@@ -191,7 +197,8 @@ def main(args=None):
                 eval_sign=args.eval_sign,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
-                denoiser=args.denoiser
+                denoiser=args.denoiser,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == 'background':
             savepath = eval.evaluate_uniform_background(
@@ -199,6 +206,7 @@ def main(args=None):
                 eval_sign=args.eval_sign,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == "random":
             savepath = eval.random_samples(
@@ -206,6 +214,7 @@ def main(args=None):
                 eval_sign=args.eval_sign,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == "modalities":
             savepath = eval.eval_modalities(
@@ -213,6 +222,7 @@ def main(args=None):
                 eval_sign=args.eval_sign,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == "confidence":
             savepath = eval.eval_confidence(
@@ -220,6 +230,7 @@ def main(args=None):
                 eval_sign=args.eval_sign,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == 'snrheatmap':
             savepath = eval.snrheatmap(
@@ -241,7 +252,8 @@ def main(args=None):
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
                 denoiser=args.denoiser,
-                simulate_samples=True if args.niter > 1 else args.simulate_samples
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == 'confidence_heatmap':
             savepath = eval.confidence_heatmap(
@@ -262,7 +274,8 @@ def main(args=None):
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
                 denoiser=args.denoiser,
-                simulate_samples=True if args.niter > 1 else args.simulate_samples
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == 'densityheatmap':
             savepath = eval.densityheatmap(
@@ -285,7 +298,32 @@ def main(args=None):
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
                 denoiser=args.denoiser,
-                simulate_samples=True if args.niter > 1 else args.simulate_samples
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
+            )
+        elif args.target == 'objectsizeheatmap':
+            savepath = eval.objectsizeheatmap(
+                iter_num=args.niter,
+                modelpath=args.model,
+                datadir=args.datadir,
+                outdir=args.outdir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=batch_size,
+                eval_sign=args.eval_sign,
+                digital_rotations=args.digital_rotations,
+                photons_range=(args.min_photons, args.max_photons),
+                plot=args.plot,
+                plot_rotations=args.plot_rotations,
+                psf_type=args.psf_type,
+                lam_detection=args.wavelength,
+                num_beads=args.num_beads,
+                skip_remove_background=args.skip_remove_background,
+                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
@@ -307,7 +345,8 @@ def main(args=None):
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
                 denoiser=args.denoiser,
-                simulate_samples=True if args.niter > 1 else args.simulate_samples
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
 
         if savepath is not None:
