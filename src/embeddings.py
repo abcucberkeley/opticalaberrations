@@ -357,18 +357,19 @@ def remove_interference_pattern(
         ]
 
     if pois.shape[0] > 0:  # found anything?
-        kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=estimated_object_gaussian_sigma)
-
-        # convolve template with the input image
-        beads = convolution.convolve_fft(
-            beads,
-            kernel,
-            allow_huge=True,
-            boundary='fill',
-            nan_treatment='fill',
-            fill_value=0,
-            normalize_kernel=np.sum
-        )
+        if estimated_object_gaussian_sigma > 0:
+            kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=estimated_object_gaussian_sigma)
+            
+            # convolve template with the input image
+            beads = convolution.convolve_fft(
+                beads,
+                kernel,
+                allow_huge=True,
+                boundary='fill',
+                nan_treatment='fill',
+                fill_value=0,
+                normalize_kernel=np.sum
+            )
 
         interference_pattern = fft(beads)
         if np.all(beads == 0) or np.all(interference_pattern == 0):
