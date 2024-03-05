@@ -15,11 +15,11 @@ USE_THEORETICAL_WIDEFIELD_SIMULATOR=false
 MODES=15
 MODE_DIST='pyramid'
 
-DENOISE=true
+DENOISE=false
 DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
 HANDLER=lsf
-TITLE='denoise_higher_snr_variable_object_size_fourier_filter_125nm_dataset'
+TITLE='variable_object_size_fourier_filter_125nm_dataset'
 DATASET='train'
 
 if [ "$DATASET" = "train" ]; then
