@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="summarize" type="PythonConfigurationType" factoryName="Python" folderName="ao" nameIsGenerated="true">
+  <configuration default="false" name="summarize" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
     <module name="opticalaberrations" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
@@ -28,7 +28,7 @@
         <list />
       </option>
       <option name="publishAllPorts" value="false" />
-      <option name="runCliOptions" value="--entrypoint= --rm" />
+      <option name="runCliOptions" value="--entrypoint= --rm --gpu all --ipc=host --cap-add=SYS_ADMIN --privileged=true --security-opt seccomp=unconfined --ulimit memlock=-1 --ulimit stack=67108864  -u 1000" />
       <option name="version" value="2" />
       <option name="volumeBindings">
         <list>
@@ -38,12 +38,18 @@
             <option name="hostPath" value="$PROJECT_DIR$" />
             <option name="readOnly" value="false" />
           </DockerVolumeBindingImpl>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/sshkey" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="C:\Users\Mosaic\.ssh" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
         </list>
       </option>
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/summarize.py" />
-    <option name="PARAMETERS" value="U:\Data\TestsForThayer\20240123_cells\exp8-R2462\rotated" />
+    <option name="PARAMETERS" value="U:\Data\TestsForThayer\20240305_nup\exp6_astig5_100ms_SLM_fixed\rotated" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

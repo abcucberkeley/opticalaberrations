@@ -135,6 +135,7 @@ def eval_dm(
     """
 
     data = np.identity(num_modes)
+    logger.info(f'{datadir=}')
     for file in sorted(datadir.glob('before*_lightsheet_ansi_z*.tif')):
         if 'CamB' in str(file):
             continue
@@ -236,6 +237,7 @@ def calibrate_dm(datadir: Path, dm_calibration: Path):
 
     """
     dataframes = []
+    logger.info(f'{datadir=}')
     for file in sorted(datadir.glob('*dm_matrix.csv')):
         df = pd.read_csv(file, header=0, index_col=0)
         logger.info(f'Reading {file}, found {df.shape} matrix')

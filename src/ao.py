@@ -1128,7 +1128,12 @@ def main(args=None, preloaded=None):
     pd.options.display.width = 200
     pd.options.display.max_columns = 20
 
-    args.input = None if args.input is None else slurm_utils.paths_to_clusterfs(args.input, None)
+    if hasattr(args, 'input'):
+        args.input = None if args.input is None else slurm_utils.paths_to_clusterfs(args.input, None)
+    if hasattr(args, 'datadir'):
+        args.datadir = None if args.datadir is None else slurm_utils.paths_to_clusterfs(args.datadir, None)
+    if hasattr(args, 'dm_calibration'):
+        args.dm_calibration = None if args.dm_calibration is None else slurm_utils.paths_to_clusterfs(args.dm_calibration, None)
 
     logging.basicConfig(
         level=logging.INFO,
@@ -1522,9 +1527,16 @@ def main(args=None, preloaded=None):
 
         logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
-        if os.name != 'nt':
-            logger.info(f"Updating file permissions to {args.input.parent}")
-            subprocess.run(f"find {str(Path(args.input).parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +",
+        if hasattr(args, 'input'):
+            input = args.input
+        elif hasattr(args, 'datadir'):
+            input = args.datadir
+        else:
+            input = None
+
+        if os.name != 'nt' and input is not None:
+            logger.info(f"Updating file permissions to {input.parent}")
+            subprocess.run(f"find {str(Path(input).parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +",
                            shell=True)
             logger.info(f"Updating file permissions complete.")
 
