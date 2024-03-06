@@ -203,8 +203,8 @@ def remove_interference_pattern(
         window_size: tuple = (27, 27, 27),
         plot_interference_pattern: bool = True,
         min_psnr: float = 10.0,
-    zborder: int = 10,
-    estimated_object_gaussian_sigma: float = 0,
+        zborder: int = 10,
+        estimated_object_gaussian_sigma: float = 0,
 ):
     """
     Normalize interference pattern from the given FFT
@@ -982,8 +982,8 @@ def rolling_fourier_embeddings(
         cpu_workers: int = -1,
         nrows: Optional[int] = None,
         ncols: Optional[int] = None,
-    ztiles: Optional[int] = None,
-    estimated_object_gaussian_sigma: float = 0,
+        ztiles: Optional[int] = None,
+        estimated_object_gaussian_sigma: float = 0,
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
