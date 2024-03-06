@@ -181,10 +181,6 @@ def na_and_background_filter(
     Returns:
 
     """
-    fourier = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(image)))
-    fourier[na_mask == 0] = 0
-    im1 = np.real(np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(fourier))))  # needs to be 'real' not abs in this case
-
     spatial_dims = image.ndim
 
     dtype = np.float32
@@ -206,7 +202,13 @@ def na_and_background_filter(
     else:
         im2 = cp_gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
 
+    # fourier filter
+    fourier = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(tukey_window(image, alpha=0.1))))
+    fourier[na_mask == 0] = 0
+    im1 = np.real(np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(fourier))))  # needs to be 'real' not abs in this case
+
     return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=dtype)
+    # return im2
 
 
 def combine_filtered_imgs(
@@ -369,6 +371,7 @@ def remove_background_noise(
         Also checks if sparse, returns zeros if filtered image doesn't have enough signal.
 
     Args:
+        na_mask: light sheet NA mask to filter to when using fourier filter
         image (np.ndarray or cp.ndarray): 3D image volume
         read_noise_bias (float, optional): When method="mode", empty pixels will still be non-zero due to read noise of camera.
             This value increases the amount subtracted to put empty pixels at zero. Defaults to 5.
