@@ -19,6 +19,9 @@ TIMELIMIT='24:00:00'  #hh:mm:ss
 NETWORK='prototype'
 SKIP_REMOVE_BACKGROUND=false
 APPTAINER="--apptainer ../develop_CUDA_12_3.sif"
+ESTIMATED_OBJECT_GAUSSIAN_SIGMA=0
+
+
 
 DENOISE=true
 DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
@@ -92,26 +95,41 @@ do
         do  
           for PREP in '' #'--skip_remove_background'
           do
-              CONFIG=" $SIM $PREP --simulate_samples --n_samples $MAX --datadir $DATA --niter $i --wavelength $LAM --psf_type $PSF_TYPE --na $NA --eval_sign $EVALSIGN $ROTATIONS "
+              CONFIG="${SIM} ${PREP} ${ROTATIONS}"
+              CONFIG="${CONFIG} --simulate_samples"
+              CONFIG="${CONFIG} --n_samples ${MAX}"
+              CONFIG="${CONFIG} --datadir ${DATA}"
+              CONFIG="${CONFIG} --niter ${i}"
+              CONFIG="${CONFIG} --wavelength ${LAM}"
+              CONFIG="${CONFIG} --psf_type ${PSF_TYPE}"
+              CONFIG="${CONFIG} --na ${NA}"
+              CONFIG="${CONFIG} --eval_sign ${EVALSIGN}"
+              CONFIG="${CONFIG} --estimated_object_gaussian_sigma ${ESTIMATED_OBJECT_GAUSSIAN_SIGMA}"
 
               if $DENOISE; then
                 CONFIG="${CONFIG} --denoiser ${DENOISER}"
               fi
 
-              python manager.py ${CLUSTER} $APPTAINER $JOB \
-              --task "${MODEL}.h5 --num_beads 1 $CONFIG snrheatmap" \
-              --taskname na_$NA \
-              --name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads-1
-
-              python manager.py ${CLUSTER} $APPTAINER $JOB \
-              --task "${MODEL}.h5  $CONFIG densityheatmap" \
-              --taskname na_$NA \
-              --name $OUTDIR/${DATASET}${SIM}${PREP}/$NETWORK-$MODES-$M/$EVALSIGN/densityheatmaps/mode-$PTYPE
-
               #python manager.py ${CLUSTER} $APPTAINER $JOB \
               #--task "${MODEL}.h5 $CONFIG snrheatmap" \
               #--taskname na_$NA \
-              #--name $OUTDIR/$DATASET/$NETWORK-$MODES-$M/$EVALSIGN/snrheatmaps/mode-$PTYPE/beads
+              #--name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads
+
+              python manager.py ${CLUSTER} $APPTAINER $JOB \
+              --task "${MODEL}.h5 --num_beads 1 ${CONFIG} snrheatmap" \
+              --taskname na_$NA \
+              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads-1
+
+              python manager.py ${CLUSTER} $APPTAINER $JOB \
+              --task "${MODEL}.h5  ${CONFIG} densityheatmap" \
+              --taskname na_$NA \
+              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/densityheatmaps/mode-${PTYPE}
+
+              python manager.py ${CLUSTER} $APPTAINER $JOB \
+              --task "${MODEL}.h5  ${CONFIG} objectsizeheatmap" \
+              --taskname na_$NA \
+              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/objectsizeheatmaps/mode-${PTYPE}
+
               echo
           done
         done

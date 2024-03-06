@@ -40,7 +40,7 @@ def kargs():
         prediction_threshold=0.,
         confidence_threshold=0.02,
         num_predictions=1,
-        batch_size=96,
+        batch_size=64,
         plot=True,
         plot_rotations=True,
         ignore_modes=[0, 1, 2, 4],
@@ -52,7 +52,7 @@ def kargs():
         max_isoplanatic_clusters=2,
         ignore_tile=[],
         # extra `predict_rois` flags
-        num_rois=10,
+        num_rois=5,
         min_intensity=200,
         minimum_distance=.5,
         min_psnr=5,

@@ -15,7 +15,7 @@ APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
 H100="--partition gpu_h100 --gpus 8 --cpus 16"
 A100="--partition gpu_a100 --gpus 4 --cpus 8"
 
-SUBSET='denoise_higher_snr_variable_object_size_fourier_filter_125nm_dataset'
+SUBSET='variable_object_size_fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"
 else
@@ -52,11 +52,6 @@ do
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --patches '16-16-16-16' --repeats '2-2-2-2'" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R2222
-
-  python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $LAMB --patches '32-32-16-16' --repeats '2-2-2-2'" \
   --taskname $NETWORK \
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-P3216-R2222
@@ -67,9 +62,9 @@ do
   --name new/$SUBSET/$NETWORK-$MODES-$DIR-P3216168-R2222
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --patches '32-16-8-8' --repeats '2-2-2-2'" \
+  --task "$CONFIG $LAMB --patches '32-32-32-32' --repeats '2-2-2-2'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P321688-R2222
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P32-R2222
 
 done
 

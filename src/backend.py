@@ -303,12 +303,12 @@ def preprocess(
     rolling_strides: Optional[tuple] = None,
     skip_prep_sample: bool = False,
     min_psnr: int = 10,
-    object_gaussian_kernel_width: float = 0,  # to simulate ideal OTF for objects bigger than diffraction limit
     cpu_workers: int = -1,
     denoiser: Optional[Union[Path, CARE]] = None,
     denoiser_window_size: tuple = (32, 64, 64),
     interpolate_embeddings: bool = False,
     save_processed_tif_file: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     if samplepsfgen is None:
         samplepsfgen = modelpsfgen
@@ -320,19 +320,24 @@ def preprocess(
         plot = file.with_suffix('')
 
     sample = load_sample(file)
-
-    if object_gaussian_kernel_width != 0:
-        gaussian_sigma = object_gaussian_kernel_width / (2 * np.sqrt(2*np.log(2)))  # convert from FWHM to std dev
-        kernel = utils.gaussian_kernel(kernlen=(21, 21, 21), std=gaussian_sigma)
-        ipsf = utils.fftconvolution(sample=modelpsfgen.ipsf, kernel=kernel).astype(np.float32)
-        ipsf /= np.max(ipsf)
-        if plot:
-            imwrite(f"{plot.with_suffix('')}_ipsf.tif", ipsf, compression='deflate', dtype=np.float32)
-        iotf = utils.fft(ipsf)
-        iotf = utils.normalize_otf(iotf)
-
-    else:
-        iotf = modelpsfgen.iotf
+    
+    # if estimated_object_gaussian_sigma != 0:
+    #     kernel = utils.gaussian_kernel(kernlen=(21, 21, 21), std=estimated_object_gaussian_sigma)
+    #     ipsf = utils.fftconvolution(
+    #         sample=modelpsfgen.ipsf,
+    #         kernel=kernel,
+    #         boundary='fill',
+    #         nan_treatment='fill',
+    #         fill_value=0,
+    #         normalize_kernel=np.sum
+    #     ).astype(np.float32)
+    #     ipsf /= np.max(ipsf)
+    #
+    #     iotf = utils.fft(ipsf)
+    #     iotf = utils.normalize_otf(iotf)
+    #
+    # else:
+    #     iotf = modelpsfgen.iotf
     
     if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
 
@@ -353,7 +358,7 @@ def preprocess(
         
         embs = fourier_embeddings(
             sample,
-            iotf=iotf,
+            iotf=modelpsfgen.iotf,
             na_mask=modelpsfgen.na_mask,
             plot=plot if plot else None,
             no_phase=no_phase,
@@ -361,7 +366,8 @@ def preprocess(
             embedding_option=modelpsfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
-            model_psf_shape=modelpsfgen.psf_shape
+            model_psf_shape=modelpsfgen.psf_shape,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
         ).astype(np.float32)
         
         if save_processed_tif_file:
@@ -408,7 +414,8 @@ def preprocess(
                 freq_strength_threshold=freq_strength_threshold,
                 digital_rotations=digital_rotations,
                 model_psf_shape=modelpsfgen.psf_shape,
-                interpolate_embeddings=interpolate_embeddings
+                interpolate_embeddings=interpolate_embeddings,
+                estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
             ).astype(np.float32)
             
             if save_processed_tif_file:
@@ -482,7 +489,7 @@ def preprocess(
             
             embs = rolling_fourier_embeddings(  # aka "large_fov"
                 rois,
-                iotf=iotf,
+                iotf=modelpsfgen.iotf,
                 na_mask=modelpsfgen.na_mask,
                 plot=plot,
                 no_phase=no_phase,
@@ -495,6 +502,7 @@ def preprocess(
                 ncols=ncols,
                 ztiles=ztiles,
                 cpu_workers=cpu_workers,
+                estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
             ).astype(np.float32)
             
             if save_processed_tif_file:
@@ -1301,7 +1309,7 @@ def predict_files(
     template: Optional[pd.DataFrame] = None,
     pool: Optional[mp.Pool] = None,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0,
+    estimated_object_gaussian_sigma: float = 0,
     save_processed_tif_file: bool = False
 ):
     if not preprocessed:
@@ -1319,7 +1327,7 @@ def predict_files(
             rolling_strides=rolling_strides,
             skip_prep_sample=skip_prep_sample,
             min_psnr=min_psnr,
-            object_gaussian_kernel_width=object_gaussian_kernel_width,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
             cpu_workers=1,  # already parallelized over files
             save_processed_tif_file=save_processed_tif_file
         )

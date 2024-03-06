@@ -162,7 +162,7 @@ def generate_embeddings(
     digital_rotations: Optional[int] = None,
     psf_type: Optional[Union[str, Path]] = None,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0,
+    estimated_object_gaussian_sigma: float = 0,
     interpolate_embeddings: bool = False
 ):
 
@@ -198,7 +198,7 @@ def generate_embeddings(
         read_noise_bias=read_noise_bias,
         plot=file.with_suffix('') if plot else None,
         min_psnr=min_psnr,
-        object_gaussian_kernel_width=object_gaussian_kernel_width,
+        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
         interpolate_embeddings=interpolate_embeddings
     )
 
@@ -375,7 +375,7 @@ def predict_sample(
     psf_type: Optional[Union[str, Path]] = None,
     cpu_workers: int = -1,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0,
+    estimated_object_gaussian_sigma: float = 0,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):
@@ -415,7 +415,7 @@ def predict_sample(
         fov_is_small=True,
         min_psnr=min_psnr,
         plot=Path(f"{img.with_suffix('')}_sample_predictions") if plot else None,
-        object_gaussian_kernel_width=object_gaussian_kernel_width,
+        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
         denoiser=denoiser,
         denoiser_window_size=denoiser_window_size
     )
@@ -542,7 +542,7 @@ def predict_large_fov(
     psf_type: Optional[Union[str, Path]] = None,
     cpu_workers: int = -1,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0,
+    estimated_object_gaussian_sigma: float = 0,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
     interpolate_embeddings: bool = False
@@ -586,7 +586,7 @@ def predict_large_fov(
         min_psnr=min_psnr,
         rolling_strides=optimal_rolling_strides(preloadedpsfgen.psf_fov, sample_voxel_size, sample.shape),
         plot=Path(f"{img.with_suffix('')}_large_fov_predictions") if plot else None,
-        object_gaussian_kernel_width=object_gaussian_kernel_width,
+        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
         denoiser=denoiser,
         denoiser_window_size=denoiser_window_size,
         interpolate_embeddings=interpolate_embeddings,
@@ -702,7 +702,7 @@ def predict_rois(
     shifting: tuple = (0, 0, 0),
     psf_type: Optional[Union[str, Path]] = None,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0,
+    estimated_object_gaussian_sigma: float = 0,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):
@@ -768,7 +768,7 @@ def predict_rois(
     #     fov_is_small=fov_is_small,
     #     skip_prep_sample=False,
     #     min_psnr=min_psnr,
-    #     object_gaussian_kernel_width=object_gaussian_kernel_width,
+    #     estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
     #     cpu_workers=1,  # already parallelized over files
     #     denoiser=denoiser,
     #     denoiser_window_size=denoiser_window_size
@@ -906,7 +906,7 @@ def predict_tiles(
     shifting: tuple = (0, 0, 0),
     psf_type: Optional[Union[str, Path]] = None,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0,
+    estimated_object_gaussian_sigma: float = 0,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):
@@ -1061,7 +1061,7 @@ def predict_tiles(
         skip_prep_sample=prep is not None,
         template=template,
         pool=pool,
-        object_gaussian_kernel_width=object_gaussian_kernel_width,
+        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
         save_processed_tif_file=True
     )
 
@@ -1070,42 +1070,45 @@ def predict_tiles(
 
 @profile
 def predict_folder(
-        folder: Path,
-        model: Path,
-        dm_calibration: Any,
-        dm_state: Any,
-        axial_voxel_size: float,
-        lateral_voxel_size: float,
-        wavelength: float = .605,
-        num_predictions: int = 1,
-        batch_size: int = 1,
-        freq_strength_threshold: float = .01,
-        confidence_threshold: float = .02,
-        sign_threshold: float = .9,
-        plot: bool = False,
-        plot_rotations: bool = False,
-        prev: Any = None,
-        estimate_sign_with_decon: bool = False,
-        ignore_modes: list = (0, 1, 2, 4),
-        preloaded: Preloadedmodelclass = None,
-        ideal_empirical_psf: Any = None,
-        digital_rotations: Optional[int] = 361,
-        cpu_workers: int = -1,
-        shifting: tuple = (0, 0, 0),
-        psf_type: Optional[Union[str, Path]] = None,
-        min_psnr: int = 5,
-        object_gaussian_kernel_width: float = 0,
+    folder: Path,
+    model: Path,
+    dm_calibration: Any,
+    dm_state: Any,
+    axial_voxel_size: float,
+    lateral_voxel_size: float,
+    wavelength: float = .605,
+    num_predictions: int = 1,
+    batch_size: int = 1,
+    freq_strength_threshold: float = .01,
+    confidence_threshold: float = .02,
+    sign_threshold: float = .9,
+    plot: bool = False,
+    plot_rotations: bool = False,
+    prev: Any = None,
+    estimate_sign_with_decon: bool = False,
+    ignore_modes: list = (0, 1, 2, 4),
+    preloaded: Preloadedmodelclass = None,
+    ideal_empirical_psf: Any = None,
+    digital_rotations: Optional[int] = 361,
+    cpu_workers: int = -1,
+    shifting: tuple = (0, 0, 0),
+    psf_type: Optional[Union[str, Path]] = None,
+    min_psnr: int = 5,
+    estimated_object_gaussian_sigma: float = 0,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
-        filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
+    filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
 ):
     pool = None
     dm_state = utils.load_dm(dm_state)
 
     outdir = folder / 'files'
     outdir.mkdir(exist_ok=True, parents=True)
-
-    candidates = sorted(Path(folder).rglob(filename_pattern))
+    
+    candidates = Path(folder).rglob(filename_pattern)
+    candidates = list(filter(lambda x: not 'files/' in str(x), candidates))
+    candidates.sort(key=lambda f: int(''.join(filter(str.isdigit, str(f)))))
+    
     with TiffFile(candidates[0]) as tif:
         input_shape = tif.asarray().shape
 
@@ -1244,7 +1247,7 @@ def predict_folder(
         skip_prep_sample=True,
         template=template,
         pool=pool,
-        object_gaussian_kernel_width=object_gaussian_kernel_width,
+        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
         save_processed_tif_file=True
     )
 

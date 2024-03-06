@@ -203,7 +203,8 @@ def remove_interference_pattern(
         window_size: tuple = (27, 27, 27),
         plot_interference_pattern: bool = True,
         min_psnr: float = 10.0,
-        zborder: int = 10
+    zborder: int = 10,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     """
     Normalize interference pattern from the given FFT
@@ -356,20 +357,19 @@ def remove_interference_pattern(
         ]
 
     if pois.shape[0] > 0:  # found anything?
-        kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=.9)
-
-        # convolve template with the input image
-        beads = convolution.convolve_fft(
-            beads,
-            kernel,
-            allow_huge=True,
-            boundary='fill',
-            nan_treatment='fill',
-            fill_value=0,
-            normalize_kernel=False
-        )
-        # beads -= np.nanmin(beads)
-        # beads /= np.nanmax(beads)
+        if estimated_object_gaussian_sigma > 0:
+            kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=estimated_object_gaussian_sigma)
+            
+            # convolve template with the input image
+            beads = convolution.convolve_fft(
+                beads,
+                kernel,
+                allow_huge=True,
+                boundary='fill',
+                nan_treatment='fill',
+                fill_value=0,
+                normalize_kernel=np.sum
+            )
 
         interference_pattern = fft(beads)
         if np.all(beads == 0) or np.all(interference_pattern == 0):
@@ -809,6 +809,8 @@ def fourier_embeddings(
     model_psf_shape: tuple = (64, 64, 64),
     debug_rotations: bool = False,
     interpolate_embeddings: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
+    use_reconstructed_otf: bool = False
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -837,6 +839,8 @@ def fourier_embeddings(
             we have a few options to minimize the size of the embedding.
         debug_rotations: Print out the rotations if true
         interpolate_embeddings: downsample/upsample embeddings to match model's input size
+        estimated_object_gaussian_sigma: to simulate ideal OTF for objects bigger than diffraction limit
+        use_reconstructed_otf: option to use reconstructed otf for alpha embedding
     """
 
     if isinstance(inputs, tuple):
@@ -865,7 +869,9 @@ def fourier_embeddings(
             na_mask_otf = resize_image(na_mask, crop_shape=otf.shape, interpolate=interpolate_embeddings)
         else:
             na_mask_otf = na_mask
+        
         otf *= na_mask_otf
+        
         if no_phase:
             emb = compute_emb(
                 otf,
@@ -881,14 +887,15 @@ def fourier_embeddings(
                 interpolate_embeddings=interpolate_embeddings
             )
         else:
-            use_reconstructed_otf = False   # option to use reconstructed otf for alpha embedding
+            
             if remove_interference and use_reconstructed_otf:
                 otf = remove_interference_pattern(
                     psf,
                     otf,
                     plot=plot if plot_interference else None,
                     pois=pois,
-                    windowing=True
+                    windowing=True,
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                 )
 
             alpha = compute_emb(
@@ -911,7 +918,8 @@ def fourier_embeddings(
                     otf,
                     plot=plot if plot_interference else None,
                     pois=pois,
-                    windowing=True
+                    windowing=True,
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                 )
 
             phi = compute_emb(
@@ -974,7 +982,8 @@ def rolling_fourier_embeddings(
         cpu_workers: int = -1,
         nrows: Optional[int] = None,
         ncols: Optional[int] = None,
-        ztiles: Optional[int] = None
+    ztiles: Optional[int] = None,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -1062,6 +1071,7 @@ def rolling_fourier_embeddings(
                     plot=None,
                     windowing=True,
                     window_size=window_size,
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                 )
                 phi_otfs = multiprocess(
                     func=interference,
