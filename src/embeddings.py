@@ -200,8 +200,8 @@ def remove_interference_pattern(
         kernel_size: int = 15,
         max_num_peaks: int = 20,
         windowing: bool = True,
-        window_size: tuple = (21, 21, 21),
-        plot_interference_pattern: bool = False,
+        window_size: tuple = (27, 27, 27),
+        plot_interference_pattern: bool = True,
         min_psnr: float = 10.0,
         zborder: int = 10
 ):
@@ -803,7 +803,7 @@ def fourier_embeddings(
     freq_strength_threshold: float = 0.01,
     pois: Any = None,
     remove_interference: bool = True,
-    plot_interference: bool = False,  # because it's broken.
+    plot_interference: bool = True,  # because it's broken.
     embedding_option: str = 'spatial_planes',
     digital_rotations: Optional[int] = None,
     model_psf_shape: tuple = (64, 64, 64),
