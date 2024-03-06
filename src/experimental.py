@@ -1104,8 +1104,11 @@ def predict_folder(
 
     outdir = folder / 'files'
     outdir.mkdir(exist_ok=True, parents=True)
-
-    candidates = sorted(Path(folder).rglob(filename_pattern))
+    
+    candidates = Path(folder).rglob(filename_pattern)
+    candidates = list(filter(lambda x: not 'files/' in str(x), candidates))
+    candidates.sort(key=lambda f: int(''.join(filter(str.isdigit, str(f)))))
+    
     with TiffFile(candidates[0]) as tif:
         input_shape = tif.asarray().shape
 
