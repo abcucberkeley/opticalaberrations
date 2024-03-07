@@ -1366,7 +1366,8 @@ def main(args=None, preloaded=None):
                     cpu_workers=args.cpu_workers,
                     preloaded=preloaded,
                     psf_type=args.psf_type,
-                    denoiser=args.denoiser
+                    denoiser=args.denoiser,
+                    estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma,
                 )
             elif args.func == 'predict_tiles':
                 experimental.predict_tiles(

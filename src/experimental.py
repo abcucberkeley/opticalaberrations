@@ -787,6 +787,11 @@ def predict_rois(
     )
 
     with Path(f"{img.with_suffix('')}_rois_predictions_settings.json").open('w') as f:
+        if hasattr(denoiser, 'name'):
+            denoiser_name = str(denoiser.name)
+        else:
+            denoiser_name = str(denoiser)
+
         json = dict(
             path=str(img),
             model=str(model),
@@ -809,6 +814,9 @@ def predict_rois(
             dm_calibration=str(dm_calibration),
             psf_type=str(preloadedpsfgen.psf_type),
             ignored_tiles=[],
+            denoiser=denoiser_name,
+            denoiser_window_size=list(denoiser_window_size),
+            estimated_object_gaussian_sigma=float(estimated_object_gaussian_sigma),
         )
 
         ujson.dump(
@@ -840,7 +848,8 @@ def predict_rois(
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
         cpu_workers=cpu_workers,
-        save_processed_tif_file=True
+        save_processed_tif_file=True,
+        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
     )
     return predictions
 
