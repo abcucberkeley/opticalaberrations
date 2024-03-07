@@ -133,15 +133,19 @@ def main(args=None):
     dst = Path(f"{folder}/_summary/{folder.parts[-2]}_before_hyperstack_{cam_B}{denoise_suffix}.tif")
     concat_U16_tiffs(source_files=before_files_b, dst=dst, drop_patterns=patterns_to_drop)
 
-    dst = Path(f"{folder}/_summary/{folder.parts[-2]}_before_vs_optimized_hyperstack_{cam_A}{denoise_suffix}.tif")
-    concat_U16_tiffs(source_files=before_files, dst=dst, drop_patterns=patterns_to_drop, ch_two=optimized_files)
-    dst = Path(f"{folder}/_summary/{folder.parts[-2]}_before_vs_optimized_hyperstack_{cam_B}{denoise_suffix}.tif")
-    concat_U16_tiffs(source_files=before_files_b, dst=dst, drop_patterns=patterns_to_drop, ch_two=optimized_files_b)
+    if len(optimized_files) > 0:
+        dst = Path(f"{folder}/_summary/{folder.parts[-2]}_before_vs_optimized_hyperstack_{cam_A}{denoise_suffix}.tif")
+        concat_U16_tiffs(source_files=before_files, dst=dst, drop_patterns=patterns_to_drop, ch_two=optimized_files)
+    if len(optimized_files_b) > 0:
+        dst = Path(f"{folder}/_summary/{folder.parts[-2]}_before_vs_optimized_hyperstack_{cam_B}{denoise_suffix}.tif")
+        concat_U16_tiffs(source_files=before_files_b, dst=dst, drop_patterns=patterns_to_drop, ch_two=optimized_files_b)
 
-    dst = Path(f"{folder}/_summary/{folder.parts[-2]}_optimized_hyperstack_{cam_A}{denoise_suffix}.tif")
-    concat_U16_tiffs(source_files=optimized_files, dst=dst, drop_patterns=patterns_to_drop)
-    dst = Path(f"{folder}/_summary/{folder.parts[-2]}_optimized_hyperstack_{cam_B}{denoise_suffix}.tif")
-    concat_U16_tiffs(source_files=optimized_files_b, dst=dst, drop_patterns=patterns_to_drop)
+    if len(optimized_files) > 0:
+        dst = Path(f"{folder}/_summary/{folder.parts[-2]}_optimized_hyperstack_{cam_A}{denoise_suffix}.tif")
+        concat_U16_tiffs(source_files=optimized_files, dst=dst, drop_patterns=patterns_to_drop)
+    if len(optimized_files_b) > 0:
+        dst = Path(f"{folder}/_summary/{folder.parts[-2]}_optimized_hyperstack_{cam_B}{denoise_suffix}.tif")
+        concat_U16_tiffs(source_files=optimized_files_b, dst=dst, drop_patterns=patterns_to_drop)
 
     dst = Path(f"{folder}/_summary/{folder.parts[-2]}_volume_used_hyperstack{denoise_suffix}.tif")
     concat_U16_tiffs(source_files=vol_used_files, dst=dst, drop_patterns=patterns_to_drop)
