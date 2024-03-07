@@ -736,12 +736,16 @@ def predict_rois(
     logger.info(f"Sample: {sample.shape}")
     
     if denoiser is not None:
-        sample = denoise_image(
-            image=sample,
-            denoiser=denoiser,
-            denoiser_window_size=denoiser_window_size,
-            batch_size=batch_size
-        )
+        if isinstance(denoiser, Path):
+            logger.info(f"Loading denoiser model: {denoiser}")
+            denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+            logger.info(f"{denoiser.name} loaded")
+        # sample = denoise_image(
+        #     image=sample,
+        #     denoiser=denoiser,
+        #     denoiser_window_size=denoiser_window_size,
+        #     batch_size=batch_size
+        # )     # takes too long to denoise the whole image.
 
     fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
 
@@ -754,6 +758,8 @@ def predict_rois(
         min_psnr=min_psnr,
         na_mask=samplepsfgen.na_mask,
         plot=plot,
+        denoiser=denoiser,
+        denoiser_window_size=denoiser_window_size
     )
     # prep = partial(
     #     backend.preprocess,

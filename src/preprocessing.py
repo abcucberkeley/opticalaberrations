@@ -1100,7 +1100,8 @@ def denoise_image(
         logger.info(f"Denoising image {image.shape} [w/ {denoiser.name}]: {n_tiles=}, {denoiser_window_size=}")
     else:
         raise Exception(f"Unknown denoiser type: {denoiser}")
-    
+
+    logger.info(f"Denoising image {image.shape} [w/ {denoiser.name}]: {n_tiles=}, {denoiser_window_size=}")
     denoised = denoiser.predict(
         image.get() if isinstance(image, cp.ndarray) else image,
         axes='ZYX',
