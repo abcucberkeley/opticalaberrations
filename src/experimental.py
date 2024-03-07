@@ -736,12 +736,16 @@ def predict_rois(
     logger.info(f"Sample: {sample.shape}")
     
     if denoiser is not None:
-        sample = denoise_image(
-            image=sample,
-            denoiser=denoiser,
-            denoiser_window_size=denoiser_window_size,
-            batch_size=batch_size
-        )
+        if isinstance(denoiser, Path):
+            logger.info(f"Loading denoiser model: {denoiser}")
+            denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+            logger.info(f"{denoiser.name} loaded")
+        # sample = denoise_image(
+        #     image=sample,
+        #     denoiser=denoiser,
+        #     denoiser_window_size=denoiser_window_size,
+        #     batch_size=batch_size
+        # )     # takes too long to denoise the whole image.
 
     fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
 
@@ -754,6 +758,8 @@ def predict_rois(
         min_psnr=min_psnr,
         na_mask=samplepsfgen.na_mask,
         plot=plot,
+        denoiser=denoiser,
+        denoiser_window_size=denoiser_window_size
     )
     # prep = partial(
     #     backend.preprocess,
@@ -787,6 +793,11 @@ def predict_rois(
     )
 
     with Path(f"{img.with_suffix('')}_rois_predictions_settings.json").open('w') as f:
+        if hasattr(denoiser, 'name'):
+            denoiser_name = str(denoiser.name)
+        else:
+            denoiser_name = str(denoiser)
+
         json = dict(
             path=str(img),
             model=str(model),
@@ -809,6 +820,9 @@ def predict_rois(
             dm_calibration=str(dm_calibration),
             psf_type=str(preloadedpsfgen.psf_type),
             ignored_tiles=[],
+            denoiser=denoiser_name,
+            denoiser_window_size=list(denoiser_window_size),
+            estimated_object_gaussian_sigma=float(estimated_object_gaussian_sigma),
         )
 
         ujson.dump(
@@ -840,7 +854,8 @@ def predict_rois(
         plot_rotations=plot_rotations,
         digital_rotations=digital_rotations,
         cpu_workers=cpu_workers,
-        save_processed_tif_file=True
+        save_processed_tif_file=True,
+        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
     )
     return predictions
 
