@@ -1,5 +1,6 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="aggregate_rois" type="PythonConfigurationType" factoryName="Python" folderName="ao">
+  <configuration default="false" name="gaussian_fit" type="PythonConfigurationType" factoryName="Python"
+                 folderName="ao">
     <module name="opticalaberrations" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
@@ -44,7 +45,7 @@
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
     <option name="PARAMETERS"
-            value="aggregate_predictions ../examples/single/single_rois_predictions.csv ../calibration/aang/15_mode_calibration.csv --current_dm None --aggregation_rule median --plot"/>
+            value="gaussian_fit $PROJECT_DIR$/data/stack_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0068527094msecAbs_-01x_-01y_-01z_0000t.tif --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --plot"/>
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

@@ -35,7 +35,9 @@ from joblib import Parallel, delayed
 from scipy.interpolate import NearestNDInterpolator
 from scipy.ndimage import shift, generate_binary_structure, binary_dilation
 from scipy.signal import correlate
-from scipy.optimize import minimize
+from scipy.optimize import minimize, curve_fit
+from skimage.feature import blob_dog, blob_log
+from skimage.morphology import extrema
 
 from csbdeep.utils.tf import limit_gpu_memory
 
@@ -51,8 +53,8 @@ from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern, fourier_embeddings
-from preprocessing import prep_sample, optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad, \
-    denoise_image
+from preprocessing import optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad
+from preprocessing import prep_sample, denoise_image, remove_background_noise
 
 import logging
 logger = logging.getLogger('')
@@ -1077,7 +1079,7 @@ def predict_tiles(
         template=template,
         pool=pool,
         estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
-        save_processed_tif_file=True
+        save_processed_tif_file=True,
     )
 
     return predictions
@@ -3054,3 +3056,273 @@ def denoise(
     
     print(f"Done! Saved Denoised file: {Path(output_path).resolve()}")  # LabVIEW searches for this "Denoised file:"
     return denoised
+
+
+@profile
+def measure_sigma(
+    peak: np.ndarray,
+    image: np.ndarray,
+    axial_voxel_size: float,
+    lateral_voxel_size: float,
+    meshgrid: Optional[np.ndarray] = None,
+    window_size: tuple = (15, 15, 15),
+    plot: Optional[Path] = None,
+):
+    def gauss_3d(meshgrid, amplitude, zc, yc, xc, background, sigma):
+        zz, yy, xx = meshgrid
+        exp = ((xx - xc) ** 2 + (yy - yc) ** 2 + (zz - zc) ** 2) / (2 * sigma ** 2)
+        g = amplitude * np.exp(-exp) + background
+        return g.ravel()
+    
+    half_width = [w // 2 for w in window_size]
+    
+    start = [
+        peak[s] - half_width[s] if peak[s] >= half_width[s] else 0
+        for s in range(3)
+    ]
+    end = [
+        peak[s] + half_width[s] + 1 if peak[s] + half_width[s] < image.shape[s] else image.shape[s]
+        for s in range(3)
+    ]
+    
+    psf = image[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
+    psf = resize_with_crop_or_pad(psf, crop_shape=window_size, mode='constant')
+    
+    # to simulate a test psf
+    # psf = utils.gaussian_kernel(kernlen=(15, 15, 15), std=2) * 10000
+    # psf += utils.normal_noise(0, 10, size=psf.shape)
+    # psf[psf < 0] = 0
+    # psf /= np.sum(psf)
+    
+    if meshgrid is None:
+        zz = np.linspace(0, psf.shape[0], psf.shape[0])
+        yy = np.linspace(0, psf.shape[1], psf.shape[1])
+        xx = np.linspace(0, psf.shape[2], psf.shape[2])
+        zgrid, ygrid, xgrid = np.meshgrid(zz, yy, xx, indexing="ij")
+    else:
+        zgrid, ygrid, xgrid = meshgrid
+    
+    bg = np.median(psf)
+    amp = np.max(psf) - bg
+    
+    try:
+        popt, pcov = curve_fit(
+            gauss_3d,
+            (zgrid, ygrid, xgrid),
+            psf.ravel(),
+            p0=[amp, *half_width, bg, 1],
+        )
+        
+        amplitude, zc, yc, xc, background, sigma = popt
+        amplitude_err, zc_err, yc_err, xc_err, background_err, sigma_err = np.sqrt(np.diag(pcov))
+        
+        if plot is not None:
+            outdir = Path(plot)
+            outdir.mkdir(exist_ok=True, parents=True)
+            
+            fitted = gauss_3d((zgrid, ygrid, xgrid), *popt)
+            fitted = fitted.reshape(*psf.shape)
+            fitted /= np.sum(fitted)
+            
+            fig, axes = plt.subplots(2, 3, figsize=(11, 8))
+            vis.plot_mip(
+                vol=psf,
+                xy=axes[0, 0],
+                xz=axes[0, 1],
+                yz=axes[0, 2],
+                dxy=lateral_voxel_size,
+                dz=axial_voxel_size,
+                label=r'Input (MIP) [$\gamma$=.5]',
+                cmap='hot',
+                colorbar=True
+            )
+            
+            vis.plot_mip(
+                vol=fitted,
+                xy=axes[-1, 0],
+                xz=axes[-1, 1],
+                yz=axes[-1, 2],
+                dxy=lateral_voxel_size,
+                dz=axial_voxel_size,
+                label=r'Fit (MIP) [$\gamma$=.5]',
+                cmap='hot',
+                colorbar=True
+            )
+            
+            axes[0, 1].set_title(f"$\sigma$={sigma}")
+            
+            vis.savesvg(fig, Path(f"{outdir}/z{peak[0]}-y{peak[1]}-x{peak[2]}.svg"))
+        
+        return [sigma, sigma_err]
+    except RuntimeError:
+        return [-1, -1]
+
+
+@profile
+def gaussian_fit(
+    img: Path,
+    axial_voxel_size: float,
+    lateral_voxel_size: float,
+    wavelength: float = .605,
+    plot: bool = False,
+    remove_background: bool = True,
+    cpu_workers: int = -1,
+    window_size: tuple = (15, 15, 15),
+    h_maxima: int = 50,
+    method: str = 'custom',
+    kde_color='grey',
+    cdf_color='k',
+    hist_color='lightgrey',
+):
+    logger.info(f"Loading file: {img.name}")
+    sample = backend.load_sample(img)
+    logger.info(f"Sample: {sample.shape}")
+    
+    if remove_background:
+        sample = remove_background_noise(sample, method='difference_of_gaussians')
+        if isinstance(sample, cp.ndarray):
+            sample = sample.get()
+    
+    zz = np.linspace(0, window_size[0], window_size[0])
+    yy = np.linspace(0, window_size[1], window_size[1])
+    xx = np.linspace(0, window_size[2], window_size[2])
+    meshgrid = np.meshgrid(zz, yy, xx, indexing="ij")
+    
+    if method == 'blob_log':
+        
+        blobs = blob_log(
+            sample,
+            min_sigma=0,
+            max_sigma=5,
+            num_sigma=20,
+            threshold_rel=0.25,
+            overlap=.05,
+            exclude_border=10,
+        )
+        
+        df = pd.DataFrame(blobs, columns=['z', 'y', 'x', 'sigma'])
+    
+    elif method == 'blob_dog':
+        
+        blobs = blob_dog(
+            sample,
+            min_sigma=0,
+            max_sigma=5,
+            threshold_rel=0.25,
+            overlap=.05,
+            exclude_border=10,
+        )
+        
+        df = pd.DataFrame(blobs, columns=['z', 'y', 'x', 'sigma'])
+    
+    else:
+        h_maxima = extrema.h_maxima(sample, h=h_maxima)
+        df = pd.DataFrame(np.transpose(np.nonzero(h_maxima)), columns=['z', 'y', 'x'])
+        
+        # detected_peaks = peak_local_max(
+        #     sample,
+        #     min_distance=5,
+        #     threshold_rel=.3,
+        #     exclude_border=10,
+        #     p_norm=2,
+        # ).astype(int)
+        #
+        # df = pd.DataFrame(detected_peaks, columns=['z', 'y', 'x'])
+        
+        estimate_sigma = partial(
+            measure_sigma,
+            image=sample,
+            axial_voxel_size=axial_voxel_size,
+            lateral_voxel_size=lateral_voxel_size,
+            meshgrid=meshgrid,
+            window_size=window_size,
+            plot=Path(f"{img.with_suffix('')}_gaussian_fits") if plot else None
+        )
+        
+        results = utils.multiprocess(
+            func=estimate_sigma,
+            jobs=df.values,
+            desc=f"Estimating sigma for [{df.shape[0]}] peaks",
+            cores=cpu_workers
+        )
+        df['sigma'] = results[..., 0]
+        df['perr'] = results[..., -1]
+    
+    df = df[(df.perr < 1) & (df.perr > -1)]  # drop detections with high error
+    df = df[df.sigma > 0]
+    df['fwhm'] = df.sigma.apply(utils.sigma2fwhm)
+    
+    print(df)
+    print(df.sigma.describe())
+    print(df.fwhm.describe())
+    
+    if plot:
+        fig, axes = plt.subplots(3, 1, figsize=(11, 8))
+        
+        vis.plot_mip(
+            vol=sample,
+            xy=axes[0],
+            xz=axes[1],
+            yz=None,
+            dxy=lateral_voxel_size,
+            dz=axial_voxel_size,
+            cmap='gray',
+            colorbar=False
+        )
+        axes[0].set_ylabel(r'Input (MIP) [$\gamma$=.5]')
+        axes[1].set_ylabel(r'Input (MIP) [$\gamma$=.5]')
+        
+        for idx, blob in df.iterrows():
+            for i in range(2):
+                if i == 0:
+                    center = (blob['x'], blob['y'])
+                elif i == 1:
+                    center = (blob['x'], blob['z'])
+                else:
+                    center = (blob['y'], blob['z'])
+                
+                r = np.sqrt(blob['fwhm'])
+                c = plt.Circle(center, r, color=f'C{idx}', linewidth=.5, fill=False)
+                axes[i].add_patch(c)
+        
+        ax1t = axes[-1].twinx()
+        ax1t = sns.histplot(
+            ax=ax1t,
+            data=df,
+            x='sigma',
+            stat='percent',
+            kde=True,
+            bins=50,
+            color=hist_color,
+            element="step",
+        )
+        ax1t.lines[0].set_color(kde_color)
+        ax1t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+        ax1t.set_ylabel('KDE', color=kde_color)
+        ax1t.set_ylim(0, 30)
+        ax1t.set_xlim(0, df.sigma.max())
+        
+        ax1 = sns.histplot(
+            ax=axes[-1],
+            data=df,
+            x='sigma',
+            stat='proportion',
+            color=cdf_color,
+            bins=50,
+            element="poly",
+            fill=False,
+            cumulative=True,
+        )
+        
+        ax1.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+        ax1.set_ylabel('CDF', color=cdf_color)
+        ax1.set_ylim(0, 1)
+        ax1.set_yticks(np.arange(0, 1.2, .2))
+        ax1.set_xlim(df.sigma.min(), df.sigma.max())
+        ax1.axvline(np.median(df['sigma']), c='C0', ls='--', lw=2, label='Median', zorder=3)
+        ax1.axvline(np.mean(df['sigma']), c='C1', ls=':', lw=2, label='Mean', zorder=3)
+        ax1.set_xlabel(r"$\sigma$")
+        ax1.legend(frameon=False, ncol=1, loc='upper left')
+        ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        
+        vis.savesvg(fig, Path(f"{img.with_suffix('')}_gaussian_fit.svg"))

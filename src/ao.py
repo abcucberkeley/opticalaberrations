@@ -39,34 +39,6 @@ def parse_args(args):
     cluster_nodes_wait_for_idle.add_argument("idle_minimum", type=int, default=4,
                                              help='Minimum number of idle nodes to wait for')
 
-    deskew = subparsers.add_parser("deskew")
-    deskew.add_argument("input", type=Path, help="path to input .tif file")
-    deskew.add_argument(
-        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
-    )
-    deskew.add_argument(
-        "--axial_voxel_size", default=.200, type=float, help='axial voxel size in microns for Z'
-    )
-    deskew.add_argument(
-        "--skew_angle", default=32.45, type=float, help='skew angle'
-    )
-    deskew.add_argument(
-        "--flipz", action='store_true',
-        help='a toggle to flip Z axis'
-    )
-    deskew.add_argument(
-        "--cluster", action='store_true',
-        help='a toggle to run predictions on our cluster'
-    )
-    deskew.add_argument(
-        "--partition", type=str, default='abc_a100',
-        help="slurm partition to use on the ABC cluster"
-    )
-    deskew.add_argument(
-        "--docker", action='store_true',
-        help='a toggle to run predictions through docker container'
-    )
-
     psnr = subparsers.add_parser("psnr")
     psnr.add_argument("input", type=Path, help="path to input .tif file")
     psnr.add_argument(
@@ -223,6 +195,40 @@ def parse_args(args):
         help="slurm partition to use on the ABC cluster"
     )
     denoise.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
+    
+    gaussian_fit = subparsers.add_parser("gaussian_fit")
+    gaussian_fit.add_argument("input", type=Path, help="path to input .tif file")
+    gaussian_fit.add_argument("--window_size", default='15-15-15', type=str,
+                              help='size of the window to denoise around each point of interest')
+    gaussian_fit.add_argument(
+        "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
+    )
+    gaussian_fit.add_argument(
+        "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
+    )
+    gaussian_fit.add_argument(
+        "--wavelength", default=.510, type=float,
+        help='wavelength in microns'
+    )
+    gaussian_fit.add_argument(
+        "--plot", action='store_true',
+        help='a toggle for plotting predictions'
+    )
+    gaussian_fit.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+    gaussian_fit.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
+    gaussian_fit.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    gaussian_fit.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
@@ -1304,6 +1310,17 @@ def main(args=None, preloaded=None):
                     model_path=args.model,
                     window_size=tuple(int(i) for i in args.window_size.split('-')),
                     batch_size=args.batch_size,
+                )
+            
+            elif args.func == 'gaussian_fit':
+                experimental.gaussian_fit(
+                    img=args.input,
+                    axial_voxel_size=args.axial_voxel_size,
+                    lateral_voxel_size=args.lateral_voxel_size,
+                    wavelength=args.wavelength,
+                    plot=args.plot,
+                    cpu_workers=args.cpu_workers,
+                    window_size=tuple(int(i) for i in args.window_size.split('-')),
                 )
 
             elif args.func == 'predict_large_fov':
