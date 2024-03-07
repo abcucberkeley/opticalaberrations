@@ -3066,7 +3066,7 @@ def measure_sigma(
     axial_voxel_size: float,
     lateral_voxel_size: float,
     meshgrid: Optional[np.ndarray] = None,
-    window_size: tuple = (15, 15, 15),
+    window_size: tuple = (9, 9, 9),
     plot: Optional[Path] = None,
 ):
     def gauss_3d(meshgrid, amplitude, zc, yc, xc, background, sigma):
@@ -3074,6 +3074,17 @@ def measure_sigma(
         exp = ((xx - xc) ** 2 + (yy - yc) ** 2 + (zz - zc) ** 2) / (2 * sigma ** 2)
         g = amplitude * np.exp(-exp) + background
         return g.ravel()
+    
+    fov_start = [
+        peak[s] - window_size[s] if peak[s] >= window_size[s] else 0
+        for s in range(3)
+    ]
+    fov_end = [
+        peak[s] + window_size[s] + 1 if peak[s] + window_size[s] < image.shape[s] else image.shape[s]
+        for s in range(3)
+    ]
+    
+    fov = image[fov_start[0]:fov_end[0], fov_start[1]:fov_end[1], fov_start[2]:fov_end[2]]
     
     half_width = [w // 2 for w in window_size]
     
@@ -3088,12 +3099,6 @@ def measure_sigma(
     
     psf = image[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
     psf = resize_with_crop_or_pad(psf, crop_shape=window_size, mode='constant')
-    
-    # to simulate a test psf
-    # psf = utils.gaussian_kernel(kernlen=(15, 15, 15), std=2) * 10000
-    # psf += utils.normal_noise(0, 10, size=psf.shape)
-    # psf[psf < 0] = 0
-    # psf /= np.sum(psf)
     
     if meshgrid is None:
         zz = np.linspace(0, psf.shape[0], psf.shape[0])
@@ -3121,19 +3126,36 @@ def measure_sigma(
             outdir = Path(plot)
             outdir.mkdir(exist_ok=True, parents=True)
             
+            filename = f"{outdir}/z{peak[0]}-y{peak[1]}-x{peak[2]}"
+            
             fitted = gauss_3d((zgrid, ygrid, xgrid), *popt)
             fitted = fitted.reshape(*psf.shape)
             fitted /= np.sum(fitted)
             
-            fig, axes = plt.subplots(2, 3, figsize=(11, 8))
+            imwrite(f"{filename}_fov.tif", fov.astype(np.float32), compression='deflate', dtype=np.float32)
+            imwrite(f"{filename}_psf.tif", psf.astype(np.float32), compression='deflate', dtype=np.float32)
+            imwrite(f"{filename}_estimated.tif", fitted.astype(np.float32), compression='deflate', dtype=np.float32)
+            
+            fig, axes = plt.subplots(3, 3, figsize=(11, 8))
             vis.plot_mip(
-                vol=psf,
+                vol=fov,
                 xy=axes[0, 0],
                 xz=axes[0, 1],
                 yz=axes[0, 2],
                 dxy=lateral_voxel_size,
                 dz=axial_voxel_size,
-                label=r'Input (MIP) [$\gamma$=.5]',
+                label=r'FOV (MIP) [$\gamma$=.5]',
+                cmap='hot',
+                colorbar=True
+            )
+            vis.plot_mip(
+                vol=psf,
+                xy=axes[1, 0],
+                xz=axes[1, 1],
+                yz=axes[1, 2],
+                dxy=lateral_voxel_size,
+                dz=axial_voxel_size,
+                label=r'PSF (MIP) [$\gamma$=.5]',
                 cmap='hot',
                 colorbar=True
             )
@@ -3152,7 +3174,7 @@ def measure_sigma(
             
             axes[0, 1].set_title(f"$\sigma$={sigma}")
             
-            vis.savesvg(fig, Path(f"{outdir}/z{peak[0]}-y{peak[1]}-x{peak[2]}.svg"))
+            vis.savesvg(fig, Path(f"{filename}.svg"))
         
         return [sigma, sigma_err]
     except RuntimeError:
@@ -3166,7 +3188,7 @@ def gaussian_fit(
     lateral_voxel_size: float,
     wavelength: float = .605,
     plot: bool = False,
-    plot_gaussian_fits: bool = False,
+    plot_gaussian_fits: bool = True,
     remove_background: bool = True,
     cpu_workers: int = -1,
     window_size: tuple = (9, 9, 9),
