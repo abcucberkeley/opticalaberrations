@@ -202,7 +202,7 @@ def parse_args(args):
     gaussian_fit = subparsers.add_parser("gaussian_fit")
     gaussian_fit.add_argument("input", type=Path, help="path to input .tif file")
     gaussian_fit.add_argument(
-        "--window_size", default='9-9-9', type=str,
+        "--window_size", default='11-11-11', type=str,
         help='size of the window to denoise around each point of interest'
     )
     gaussian_fit.add_argument(

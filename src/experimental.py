@@ -38,6 +38,7 @@ from scipy.signal import correlate
 from scipy.optimize import minimize, curve_fit
 from skimage.feature import blob_dog, blob_log
 from skimage.morphology import extrema
+from skimage.filters import window
 from matplotlib.ticker import PercentFormatter
 
 from csbdeep.utils.tf import limit_gpu_memory
@@ -3066,7 +3067,7 @@ def measure_sigma(
     axial_voxel_size: float,
     lateral_voxel_size: float,
     meshgrid: Optional[np.ndarray] = None,
-    window_size: tuple = (9, 9, 9),
+    window_size: tuple = (11, 11, 11),
     plot: Optional[Path] = None,
 ):
     def gauss_3d(meshgrid, amplitude, zc, yc, xc, background, sigma):
@@ -3084,21 +3085,12 @@ def measure_sigma(
         for s in range(3)
     ]
     
-    fov = image[fov_start[0]:fov_end[0], fov_start[1]:fov_end[1], fov_start[2]:fov_end[2]]
-    
     half_width = [w // 2 for w in window_size]
+    fov = image[fov_start[0]:fov_end[0], fov_start[1]:fov_end[1], fov_start[2]:fov_end[2]]
+    fov *= window(('tukey', 1.25), fov.shape)
     
-    start = [
-        peak[s] - half_width[s] if peak[s] >= half_width[s] else 0
-        for s in range(3)
-    ]
-    end = [
-        peak[s] + half_width[s] + 1 if peak[s] + half_width[s] < image.shape[s] else image.shape[s]
-        for s in range(3)
-    ]
-    
-    psf = image[start[0]:end[0], start[1]:end[1], start[2]:end[2]]
-    psf = resize_with_crop_or_pad(psf, crop_shape=window_size, mode='constant')
+    psf = resize_with_crop_or_pad(fov, crop_shape=window_size, mode='constant')
+    psf /= np.sum(psf)
     
     if meshgrid is None:
         zz = np.linspace(0, psf.shape[0], psf.shape[0])
@@ -3191,7 +3183,7 @@ def gaussian_fit(
     plot_gaussian_fits: bool = True,
     remove_background: bool = True,
     cpu_workers: int = -1,
-    window_size: tuple = (9, 9, 9),
+    window_size: tuple = (11, 11, 11),
     h_maxima_threshold: int = 50,
     method: str = 'custom',
     kde_color='grey',
@@ -3359,7 +3351,7 @@ def gaussian_fit(
         ax1.axvline(mean, c='C0', ls=':', lw=2, label=f'Mean={mean:.2f}', zorder=3)
         ax1.axvline(median, c='C1', ls='--', lw=2, label=f'Median={median:.2f}', zorder=3)
         ax1.axvline(mode, c='C2', ls=':', lw=2, label=f'Mode={mode:.2f}', zorder=3)
-        ax1.legend(frameon=False, ncol=1, loc='upper right')
+        ax1.legend(frameon=False, ncol=1)
         ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
         
         vis.savesvg(fig, Path(f"{img.with_suffix('')}_gaussian_fit.svg"))
