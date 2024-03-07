@@ -1537,8 +1537,8 @@ def main(args=None, preloaded=None):
 
         if os.name != 'nt' and input is not None:
             logger.info(f"Updating file permissions to {input.parent}")
-            subprocess.run(f"find {str(Path(input).parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +",
-                           shell=True)
+            subprocess.run(f"find {str(Path(input).parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +", shell=True)
+            subprocess.run(f"find {str(Path(input).parent.resolve())}" + r" -used 46261 -exec chmod a+wrx {} +", shell=True)
             logger.info(f"Updating file permissions complete.")
 
     return 0
