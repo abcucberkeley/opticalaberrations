@@ -38,6 +38,7 @@ from scipy.signal import correlate
 from scipy.optimize import minimize, curve_fit
 from skimage.feature import blob_dog, blob_log
 from skimage.morphology import extrema
+from matplotlib.ticker import PercentFormatter
 
 from csbdeep.utils.tf import limit_gpu_memory
 
@@ -3165,6 +3166,7 @@ def gaussian_fit(
     lateral_voxel_size: float,
     wavelength: float = .605,
     plot: bool = False,
+    plot_gaussian_fits: bool = False,
     remove_background: bool = True,
     cpu_workers: int = -1,
     window_size: tuple = (15, 15, 15),
@@ -3236,7 +3238,7 @@ def gaussian_fit(
             lateral_voxel_size=lateral_voxel_size,
             meshgrid=meshgrid,
             window_size=window_size,
-            plot=Path(f"{img.with_suffix('')}_gaussian_fits") if plot else None
+            plot=Path(f"{img.with_suffix('')}_gaussian_fits") if plot_gaussian_fits else None
         )
         
         results = utils.multiprocess(
@@ -3252,9 +3254,14 @@ def gaussian_fit(
     df = df[df.sigma > 0]
     df['fwhm'] = df.sigma.apply(utils.sigma2fwhm)
     
-    print(df)
-    print(df.sigma.describe())
-    print(df.fwhm.describe())
+    logger.info(df.sigma.describe())
+    logger.info(df.fwhm.describe())
+    
+    median = np.median(df['sigma'])
+    mean = np.mean(df['sigma'])
+    values, counts = np.unique(df['sigma'].round(1).values, return_counts=True)
+    mode = values[counts.argmax()]
+    logger.info(rf"$\sigma$: {mean=:.2f}, {median=:.2f}, {mode=:.2f}")
     
     if plot:
         fig, axes = plt.subplots(3, 1, figsize=(11, 8))
@@ -3299,8 +3306,9 @@ def gaussian_fit(
         ax1t.lines[0].set_color(kde_color)
         ax1t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
         ax1t.set_ylabel('KDE', color=kde_color)
-        ax1t.set_ylim(0, 30)
+        ax1t.set_ylim(0, 10)
         ax1t.set_xlim(0, df.sigma.max())
+        ax1t.yaxis.set_major_formatter(PercentFormatter())
         
         ax1 = sns.histplot(
             ax=axes[-1],
@@ -3319,9 +3327,12 @@ def gaussian_fit(
         ax1.set_ylim(0, 1)
         ax1.set_yticks(np.arange(0, 1.2, .2))
         ax1.set_xlim(df.sigma.min(), df.sigma.max())
-        ax1.axvline(np.median(df['sigma']), c='C0', ls='--', lw=2, label='Median', zorder=3)
-        ax1.axvline(np.mean(df['sigma']), c='C1', ls=':', lw=2, label='Mean', zorder=3)
         ax1.set_xlabel(r"$\sigma$")
+        
+        ax1.axvline(mean, c='C0', ls=':', lw=2, label=f'Mean={mean:.2f}', zorder=3)
+        ax1.axvline(median, c='C1', ls='--', lw=2, label=f'Median={median:.2f}', zorder=3)
+        ax1.axvline(mode, c='C2', ls=':', lw=2, label=f'Mode={mode:.2f}', zorder=3)
+        ax1.scatter([0], [0], label=f'POIs={df.shape[0]}', color='grey', facecolors='none')
         ax1.legend(frameon=False, ncol=1, loc='upper left')
         ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
         
