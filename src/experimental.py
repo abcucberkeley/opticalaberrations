@@ -3169,8 +3169,8 @@ def gaussian_fit(
     plot_gaussian_fits: bool = False,
     remove_background: bool = True,
     cpu_workers: int = -1,
-    window_size: tuple = (15, 15, 15),
-    h_maxima: int = 50,
+    window_size: tuple = (9, 9, 9),
+    h_maxima_threshold: int = 50,
     method: str = 'custom',
     kde_color='grey',
     cdf_color='k',
@@ -3218,7 +3218,7 @@ def gaussian_fit(
         df = pd.DataFrame(blobs, columns=['z', 'y', 'x', 'sigma'])
     
     else:
-        h_maxima = extrema.h_maxima(sample, h=h_maxima)
+        h_maxima = extrema.h_maxima(sample, h=h_maxima_threshold)
         df = pd.DataFrame(np.transpose(np.nonzero(h_maxima)), columns=['z', 'y', 'x'])
         
         # detected_peaks = peak_local_max(
@@ -3250,12 +3250,16 @@ def gaussian_fit(
         df['sigma'] = results[..., 0]
         df['perr'] = results[..., -1]
     
-    df = df[(df.perr < 1) & (df.perr > -1)]  # drop detections with high error
+    # drop detections with high error
+    df = df[(df.perr < 1) & (df.perr > -1)]
     df = df[df.sigma > 0]
-    df['fwhm'] = df.sigma.apply(utils.sigma2fwhm)
     
-    logger.info(df.sigma.describe())
-    logger.info(df.fwhm.describe())
+    df['fwhm'] = df.sigma.apply(utils.sigma2fwhm)
+    df['sigma_lateral_nm'] = df.sigma * lateral_voxel_size * 1000
+    df['sigma_axial_nm'] = df.sigma * axial_voxel_size * 1000
+    print(df[['sigma', 'fwhm', 'sigma_lateral_nm', 'sigma_axial_nm']].describe(
+        percentiles=[.5, .75, .85, .9, .95, .99]
+    ))
     
     median = np.median(df['sigma'])
     mean = np.mean(df['sigma'])
@@ -3329,11 +3333,11 @@ def gaussian_fit(
         ax1.set_xlim(df.sigma.min(), df.sigma.max())
         ax1.set_xlabel(r"$\sigma$")
         
+        ax1.scatter([0], [0], label=f'POIs={df.shape[0]}', color='grey', facecolors='none')
         ax1.axvline(mean, c='C0', ls=':', lw=2, label=f'Mean={mean:.2f}', zorder=3)
         ax1.axvline(median, c='C1', ls='--', lw=2, label=f'Median={median:.2f}', zorder=3)
         ax1.axvline(mode, c='C2', ls=':', lw=2, label=f'Mode={mode:.2f}', zorder=3)
-        ax1.scatter([0], [0], label=f'POIs={df.shape[0]}', color='grey', facecolors='none')
-        ax1.legend(frameon=False, ncol=1, loc='upper left')
+        ax1.legend(frameon=False, ncol=1, loc='upper right')
         ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
         
         vis.savesvg(fig, Path(f"{img.with_suffix('')}_gaussian_fit.svg"))

@@ -201,7 +201,7 @@ def parse_args(args):
     
     gaussian_fit = subparsers.add_parser("gaussian_fit")
     gaussian_fit.add_argument("input", type=Path, help="path to input .tif file")
-    gaussian_fit.add_argument("--window_size", default='15-15-15', type=str,
+    gaussian_fit.add_argument("--window_size", default='9-9-9', type=str,
                               help='size of the window to denoise around each point of interest')
     gaussian_fit.add_argument(
         "--lateral_voxel_size", default=.097, type=float, help='lateral voxel size in microns for X'
@@ -212,6 +212,10 @@ def parse_args(args):
     gaussian_fit.add_argument(
         "--wavelength", default=.510, type=float,
         help='wavelength in microns'
+    )
+    gaussian_fit.add_argument(
+	    "--h_maxima_threshold", default=50, type=int,
+	    help='threshold for detecting peaks (counts)'
     )
     gaussian_fit.add_argument(
         "--plot", action='store_true',
@@ -1318,6 +1322,7 @@ def main(args=None, preloaded=None):
                     axial_voxel_size=args.axial_voxel_size,
                     lateral_voxel_size=args.lateral_voxel_size,
                     wavelength=args.wavelength,
+	                h_maxima_threshold=args.h_maxima_threshold,
                     plot=args.plot,
                     cpu_workers=args.cpu_workers,
                     window_size=tuple(int(i) for i in args.window_size.split('-')),
