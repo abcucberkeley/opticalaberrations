@@ -250,6 +250,7 @@ def test_predict_rois(kargs):
         ignore_modes=kargs['ignore_modes'],
         window_size=kargs['window_size'],
         min_psnr=kargs['min_psnr'],
+        num_rois=kargs['num_rois'],
     )
     assert not roi_predictions.empty
 
