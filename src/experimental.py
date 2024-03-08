@@ -3321,6 +3321,7 @@ def gaussian_fit(
     # drop detections with high error
     df = df[(df.perr < 1) & (df.perr > -1)]
     df = df[df.sigma > 0]
+    df.sort_values('sigma', inplace=True)
     
     logger.info(
         f"Dropped [{num_peaks_detected - df.shape[0]}] detections with high error"
@@ -3357,20 +3358,44 @@ def gaussian_fit(
         axes[0].set_ylabel(r'Input (MIP) [$\gamma$=.5]')
         axes[1].set_ylabel(r'Input (MIP) [$\gamma$=.5]')
         
-        for idx, blob in df.iterrows():
-            for i in range(2):
-                if i == 0:
-                    center = (blob['x'], blob['y'])
-                elif i == 1:
-                    center = (blob['x'], blob['z'])
-                else:
-                    center = (blob['y'], blob['z'])
-                
-                r = np.sqrt(blob['fwhm'])
-                c = plt.Circle(center, r, color=f'C{idx}', linewidth=.5, fill=False)
-                axes[i].add_patch(c)
+        sns.scatterplot(
+            ax=axes[0],
+            data=df,
+            x=df.x,
+            y=df.y,
+            hue=df.sigma,
+            size=df.fwhm,
+            sizes=(5, 15),
+            legend=False,
+            palette='magma'
+        )
         
-        axes[-1].scatter([0], [0], label=f'POIs={num_peaks_detected}', color='grey', facecolors='none')
+        sns.scatterplot(
+            ax=axes[1],
+            data=df,
+            x=df.x,
+            y=df.z,
+            hue=df.sigma,
+            size=df.fwhm,
+            sizes=(5, 15),
+            legend=False,
+            palette='magma'
+        )
+        
+        # for idx, blob in df.iterrows():
+        #     for i in range(2):
+        #         if i == 0:
+        #             center = (blob['x'], blob['y'])
+        #         elif i == 1:
+        #             center = (blob['x'], blob['z'])
+        #         else:
+        #             center = (blob['y'], blob['z'])
+        #
+        #         r = np.sqrt(blob['fwhm'])
+        #         c = plt.Circle(center, r, color=f'C{idx}', linewidth=.5, fill=False)
+        #         axes[i].add_patch(c)
+        
+        axes[-1].scatter([0], [0], label=f'POIs={num_peaks_detected}', color='grey')
         axes[-1].axvline(mean, c='C0', ls=':', lw=2, label=f'Mean={mean:.2f}', zorder=3)
         axes[-1].axvline(median, c='C1', ls='--', lw=2, label=f'Median={median:.2f}', zorder=3)
         axes[-1].axvline(mode, c='C2', ls=':', lw=2, label=f'Mode={mode:.2f}', zorder=3)
@@ -3420,3 +3445,8 @@ def gaussian_fit(
         axes[-1].legend(handles=handles, frameon=False, ncol=1)
         
         vis.savesvg(fig, Path(f"{img.with_suffix('')}_gaussian_fit.svg"))
+    
+    df.index.name = 'id'
+    df.to_csv(f"{img.with_suffix('')}_gaussian_fit.csv")
+    
+    return df
