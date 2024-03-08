@@ -463,6 +463,7 @@ def predict_sample(
             p, std, lls_defocus = res
 
     p = Wavefront(p, order='ansi', lam_detection=wavelength)
+    std = Wavefront(std, order='ansi', lam_detection=wavelength)
 
     coefficients = [
         {'n': z.n, 'm': z.m, 'amplitude': a}
@@ -515,7 +516,24 @@ def predict_sample(
             ensure_ascii=False,
             escape_forward_slashes=False
         )
-
+    
+    if plot:
+        predicted_embeddings = fourier_embeddings(
+            psf,
+            iotf=samplepsfgen.iotf,
+            na_mask=samplepsfgen.na_mask,
+            remove_interference=False
+        )
+        
+        vis.diagnosis(
+            pred=p,
+            pred_std=std,
+            save_path=Path(f"{img.with_suffix('')}_sample_predictions_diagnosis"),
+            lls_defocus=lls_defocus,
+            predicted_psf=psf,
+            predicted_embeddings=predicted_embeddings
+        )
+        
     return df
 
 
@@ -670,6 +688,23 @@ def predict_large_fov(
             sort_keys=False,
             ensure_ascii=False,
             escape_forward_slashes=False
+        )
+    
+    if plot:
+        predicted_embeddings = fourier_embeddings(
+            psf,
+            iotf=samplepsfgen.iotf,
+            na_mask=samplepsfgen.na_mask,
+            remove_interference=False
+        )
+        
+        vis.diagnosis(
+            pred=p,
+            pred_std=std,
+            save_path=Path(f"{img.with_suffix('')}_large_fov_predictions_diagnosis"),
+            lls_defocus=lls_defocus,
+            predicted_psf=psf,
+            predicted_embeddings=predicted_embeddings
         )
 
     return df
