@@ -3220,6 +3220,7 @@ def gaussian_fit(
     cpu_workers: int = -1,
     window_size: tuple = (11, 11, 11),
     h_maxima_threshold: int = 50,
+    exclude_border: int = 11,
     method: str = 'custom',
     kde_color='grey',
     cdf_color='k',
@@ -3248,10 +3249,11 @@ def gaussian_fit(
             num_sigma=20,
             threshold_rel=0.25,
             overlap=.05,
-            exclude_border=10,
+            exclude_border=exclude_border,
         )
         
         df = pd.DataFrame(blobs, columns=['z', 'y', 'x', 'sigma'])
+        num_peaks_detected = df.shape[0]
     
     elif method == 'blob_dog':
         
@@ -3261,14 +3263,16 @@ def gaussian_fit(
             max_sigma=5,
             threshold_rel=0.25,
             overlap=.05,
-            exclude_border=10,
+            exclude_border=exclude_border,
         )
         
         df = pd.DataFrame(blobs, columns=['z', 'y', 'x', 'sigma'])
+        num_peaks_detected = df.shape[0]
     
     else:
         h_maxima = extrema.h_maxima(sample, h=h_maxima_threshold)
         df = pd.DataFrame(np.transpose(np.nonzero(h_maxima)), columns=['z', 'y', 'x'])
+        num_peaks_detected = df.shape[0]
         
         # detected_peaks = peak_local_max(
         #     sample,
@@ -3280,6 +3284,21 @@ def gaussian_fit(
         #
         # df = pd.DataFrame(detected_peaks, columns=['z', 'y', 'x'])
         
+        # drop peaks too close to the edge
+        lzedge = df['z'] >= window_size[0] // exclude_border
+        hzedge = df['z'] <= sample.shape[0] - window_size[0] // exclude_border
+        lyedge = df['y'] >= window_size[1] // exclude_border
+        hyedge = df['y'] <= sample.shape[1] - window_size[1] // exclude_border
+        lxedge = df['x'] >= window_size[2] // exclude_border
+        hxedge = df['x'] <= sample.shape[2] - window_size[2] // exclude_border
+        df = df[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
+        
+        logger.info(
+            f"Dropped [{num_peaks_detected - df.shape[0]}] detections "
+            f"because they're too close to the edge [{exclude_border=}]"
+        )
+        num_peaks_detected = df.shape[0]
+
         estimate_sigma = partial(
             measure_sigma,
             image=sample,
@@ -3302,6 +3321,11 @@ def gaussian_fit(
     # drop detections with high error
     df = df[(df.perr < 1) & (df.perr > -1)]
     df = df[df.sigma > 0]
+    
+    logger.info(
+        f"Dropped [{num_peaks_detected - df.shape[0]}] detections with high error"
+    )
+    num_peaks_detected = df.shape[0]
     
     df['fwhm'] = df.sigma.apply(utils.sigma2fwhm)
     df['sigma_lateral_nm'] = df.sigma * lateral_voxel_size * 1000
@@ -3327,7 +3351,8 @@ def gaussian_fit(
             dxy=lateral_voxel_size,
             dz=axial_voxel_size,
             cmap='gray',
-            colorbar=False
+            colorbar=False,
+            aspect=None
         )
         axes[0].set_ylabel(r'Input (MIP) [$\gamma$=.5]')
         axes[1].set_ylabel(r'Input (MIP) [$\gamma$=.5]')
@@ -3345,6 +3370,11 @@ def gaussian_fit(
                 c = plt.Circle(center, r, color=f'C{idx}', linewidth=.5, fill=False)
                 axes[i].add_patch(c)
         
+        axes[-1].scatter([0], [0], label=f'POIs={num_peaks_detected}', color='grey', facecolors='none')
+        axes[-1].axvline(mean, c='C0', ls=':', lw=2, label=f'Mean={mean:.2f}', zorder=3)
+        axes[-1].axvline(median, c='C1', ls='--', lw=2, label=f'Median={median:.2f}', zorder=3)
+        axes[-1].axvline(mode, c='C2', ls=':', lw=2, label=f'Mode={mode:.2f}', zorder=3)
+        
         ax1t = axes[-1].twinx()
         ax1t = sns.histplot(
             ax=ax1t,
@@ -3359,7 +3389,7 @@ def gaussian_fit(
         ax1t.lines[0].set_color(kde_color)
         ax1t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
         ax1t.set_ylabel('KDE', color=kde_color)
-        ax1t.set_ylim(0, 10)
+        ax1t.set_ylim(0, 15)
         ax1t.set_xlim(0, df.sigma.max())
         ax1t.yaxis.set_major_formatter(PercentFormatter())
         
@@ -3373,6 +3403,7 @@ def gaussian_fit(
             element="poly",
             fill=False,
             cumulative=True,
+            label='CDF'
         )
         
         ax1.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
@@ -3381,12 +3412,11 @@ def gaussian_fit(
         ax1.set_yticks(np.arange(0, 1.2, .2))
         ax1.set_xlim(df.sigma.min(), df.sigma.max())
         ax1.set_xlabel(r"$\sigma$")
-        
-        ax1.scatter([0], [0], label=f'POIs={df.shape[0]}', color='grey', facecolors='none')
-        ax1.axvline(mean, c='C0', ls=':', lw=2, label=f'Mean={mean:.2f}', zorder=3)
-        ax1.axvline(median, c='C1', ls='--', lw=2, label=f'Median={median:.2f}', zorder=3)
-        ax1.axvline(mode, c='C2', ls=':', lw=2, label=f'Mode={mode:.2f}', zorder=3)
-        ax1.legend(frameon=False, ncol=1)
         ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        
+        cdf = plt.Line2D([0], [0], label='KDE', color=kde_color)
+        handles, labels = axes[-1].get_legend_handles_labels()
+        handles.extend([cdf])
+        axes[-1].legend(handles=handles, frameon=False, ncol=1)
         
         vis.savesvg(fig, Path(f"{img.with_suffix('')}_gaussian_fit.svg"))
