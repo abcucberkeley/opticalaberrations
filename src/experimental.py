@@ -3103,7 +3103,7 @@ def gaussian_fit(
     remove_background: bool = True,
     cpu_workers: int = -1,
     window_size: tuple = (11, 11, 11),
-    h_maxima_threshold: int = 50,
+    h_maxima_threshold: Any = None,
 ):
     logger.info(f"Loading file: {img.name}")
     sample = backend.load_sample(img)

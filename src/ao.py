@@ -212,7 +212,7 @@ def parse_args(args):
         "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
     )
     gaussian_fit.add_argument(
-	    "--h_maxima_threshold", default=50, type=int,
+        "--h_maxima_threshold", default=None, type=int,
 	    help='threshold for detecting peaks (counts)'
     )
     gaussian_fit.add_argument(

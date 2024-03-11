@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 plt.set_loglevel('error')
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 import numpy as np
 
 import pandas as pd
@@ -376,7 +376,7 @@ def find_peaks(
 	axial_voxel_size: float,
 	lateral_voxel_size: float,
 	window_size: tuple = (11, 11, 11),
-	h_maxima_threshold: int = 50,
+	h_maxima_threshold: Any = None,
 	exclude_border: int = 11,
 	plot_gaussian_fits: bool = True,
 	cpu_workers: int = -1,
@@ -386,9 +386,11 @@ def find_peaks(
 	xx = np.linspace(0, window_size[2], window_size[2])
 	meshgrid = np.meshgrid(zz, yy, xx, indexing="ij")
 	
-	h_maxima = extrema.h_maxima(image, h=h_maxima_threshold)
+	h = np.percentile(image, 95) if h_maxima_threshold is None else h_maxima_threshold
+	h_maxima = extrema.h_maxima(image, h=h)
 	df = pd.DataFrame(np.transpose(np.nonzero(h_maxima)), columns=['z', 'y', 'x'])
 	num_peaks_detected = df.shape[0]
+	logger.info(f"Found [{num_peaks_detected}] candidates using threshold {h=:.2f}")
 	
 	# drop peaks too close to the edge
 	lzedge = df['z'] >= window_size[0] // exclude_border
@@ -400,7 +402,7 @@ def find_peaks(
 	df = df[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
 	
 	logger.info(
-		f"Dropped [{num_peaks_detected - df.shape[0]}] detections "
+		f"Dropped {num_peaks_detected - df.shape[0]}/{num_peaks_detected} detections "
 		f"because they're too close to the edge [{exclude_border=}]"
 	)
 	num_peaks_detected = df.shape[0]
@@ -430,7 +432,7 @@ def find_peaks(
 	df.sort_values('sigma', inplace=True)
 	
 	logger.info(
-		f"Dropped [{num_peaks_detected - df.shape[0]}] detections with high error"
+		f"Dropped {num_peaks_detected - df.shape[0]}/{num_peaks_detected} detections with high error"
 	)
 	return df
 
@@ -438,14 +440,14 @@ def find_peaks(
 def detect_peaks(
 	image: np.ndarray,
 	save_path: Path,
-	axial_voxel_size: float,
-	lateral_voxel_size: float,
+	axial_voxel_size: float = .200,
+	lateral_voxel_size: float = .097,
 	plot: bool = False,
-	plot_gaussian_fits: bool = True,
+	plot_gaussian_fits: bool = False,
 	remove_background: bool = True,
 	cpu_workers: int = -1,
 	window_size: tuple = (11, 11, 11),
-	h_maxima_threshold: int = 50,
+	h_maxima_threshold: Any = None,
 	exclude_border: int = 11,
 	method: str = 'find_peaks',
 ):
