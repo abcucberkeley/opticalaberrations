@@ -1815,16 +1815,23 @@ def aggregate_rois(
                 pred_std = ztile_stds.iloc[0]
 
             else:
-                if aggregation_rule == 'conf':
-                    # find ROI index with the minimum error for each zernike mode
-
-                    best_rois = ztile_stds[~ztile_stds.isin(ignore_modes)].idxmin(axis=0)
-                    # count number of confident zernike modes for each ROI, then select ROI with the most confident modes
-                    conf_roi_index = best_rois.agg(lambda x: x.value_counts().index[0])
-                    logger.info(f"ROI with the most confident predictions: {conf_roi_index}")
-
-                    pred = ztile_preds.loc[conf_roi_index]
-                    pred_std = ztile_stds.loc[conf_roi_index]
+                if aggregation_rule == 'conf':  # find ROI index with the minimum error for each zernike mode
+                    
+                    # count number of confident zernike modes for each ROI,
+                    confident_votes = ztile_stds[~ztile_stds.isin(ignore_modes)].fillna(0).astype(bool).sum(axis=1)
+                    low_conf_rois = confident_votes[confident_votes < confident_votes.mean()].index
+                    
+                    # ROI with the lowest error per mode
+                    error_per_mode = ztile_stds[~ztile_stds.isin(ignore_modes)].round(3).drop(low_conf_rois)
+                    conf_roi_per_mode = error_per_mode.idxmin(axis=0)
+                    
+                    # ROI with the most confident predictions
+                    best_roi = confident_votes.idxmax(axis=0)
+                    logger.info(f"Best ROI per mode: {conf_roi_per_mode}")
+                    logger.info(f"ROI with the most confident predictions: {best_roi}")
+                    
+                    pred = ztile_preds.loc[best_roi]
+                    pred_std = ztile_stds.loc[best_roi]
 
                 elif aggregation_rule == 'mean':
                     pred = ztile_preds.agg(pd.Series.mean, axis=0)
