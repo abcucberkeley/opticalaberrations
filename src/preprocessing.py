@@ -112,6 +112,7 @@ def resize_with_crop_or_pad(img: np.array, crop_shape: Sequence, mode: str = 're
     if all(pad_width == 0):
         return padded
     else:
+        # avoid z edges
         window_z = window(('tukey', pad_width[0]), padded.shape[0])**2
         # window_y = window(('tukey', pad_width[1]), padded.shape[1])
         # window_x = window(('tukey', pad_width[2]), padded.shape[2])
@@ -159,8 +160,8 @@ def resize_image(image, crop_shape: Union[tuple, list], interpolate: bool = Fals
 def na_and_background_filter(
     image: np.ndarray,
     na_mask: np.ndarray,  # light sheet NA mask
-    low_sigma: float,
-    high_sigma: Union[float] = None,
+    low_sigma: float,   # unused
+    high_sigma: Union[float] = None,  # high_sigma: Sets threshold for removing low frequencies (i.e. non-uniform bkgrd)
     mode: str = 'nearest',
     cval: int = 0,
     truncate: float = 4.0,
@@ -245,6 +246,7 @@ def combine_filtered_imgs(
         snr = measure_snr(filtered_img * mask, noise_img=noise_img)
         if snr > min_psnr:  # sparse, yet SNR of original image is good
             noise = np.std(original_image - im2_low_freqs_to_subtract)  # increase the bkgrd subtraction by the noise
+            # logger.info(f"Sparse, yet SNR of original image ({snr}) is above {min_psnr}), increasing bkgrd subtraction by {noise}")
             return im1_sharper - (im2_low_freqs_to_subtract + noise)
         else:  # sparse, and SNR of original image is poor
             logger.warning(f"Dropping sparse image for poor SNR {snr} < {min_psnr}")
@@ -456,7 +458,7 @@ def prep_sample(
     min_psnr: int = 5,
     expand_dims: bool = True,
     na_mask: Optional[np.ndarray] = None,
-    remove_background_noise_method: str = 'fourier_filter',
+    remove_background_noise_method: str = 'fourier_filter',  # 'fourier_filter' or 'difference_of_gaussians'
     denoiser: Optional[Union[Path, CARE]] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):
@@ -486,6 +488,7 @@ def prep_sample(
     Returns:
         _type_: 3D array (or series of 3D arrays)
     """
+    # remove_background_noise_method = 'difference_of_gaussians'
     sample_path = ''
     if isinstance(sample, Path):
         sample_path = sample.name
@@ -521,7 +524,7 @@ def prep_sample(
             yz=axes[0, 2],
             dxy=sample_voxel_size[-1],
             dz=sample_voxel_size[0],
-            label=r'Input (MIP) [$\gamma$=.5]'
+            label=rf'Input (MIP) {sample.shape} [$\gamma$=.5]'
         )
 
         axes[0, 0].set_title(
@@ -546,13 +549,14 @@ def prep_sample(
             na_mask=na_mask,
             method=remove_background_noise_method
         )
-        psnr = measure_snr(sample)
-    else:
-        psnr = measure_snr(sample)
+    psnr = measure_snr(sample)
 
+    # logger.info(f'{plot} plot min = {np.nanmin(sample)}. plot max = {np.nanmax(sample)}  plot 98th = {np.percentile(sample, 98)}  plot 5th = {np.percentile(sample, 5)}')
     if plot is not None:
         axes[1, 1].set_title(f"PSNR: {psnr}")
-
+        background_subtraction_text = remove_background_noise_method
+        background_subtraction_text = 'dog' if background_subtraction_text == 'difference_of_gaussians' else background_subtraction_text
+        background_subtraction_text = 'Fourier filter' if background_subtraction_text == 'fourier_filter' else background_subtraction_text
         plot_mip(
             vol=sample if isinstance(sample, np.ndarray) else cp.asnumpy(sample),
             xy=axes[1, 0],
@@ -560,7 +564,8 @@ def prep_sample(
             yz=axes[1, 2],
             dxy=sample_voxel_size[-1],
             dz=sample_voxel_size[0],
-            label=r'Fourier Filter [$\gamma$=.5]'
+            label=f'{background_subtraction_text} '
+                  r'[$\gamma$=.5]'
         )
 
     if model_fov is not None:
@@ -593,7 +598,7 @@ def prep_sample(
             yz=axes[-1, 2],
             dxy=sample_voxel_size[-1],
             dz=sample_voxel_size[0],
-            label=r'Processed [$\gamma$=.5]'
+            label=rf'Processed, {sample.shape} [$\gamma$=.5]'
         )
         savesvg(fig, f'{plot}_preprocessing.svg')
 
@@ -715,7 +720,7 @@ def find_roi(
                 # keep peak if we are at the border of the image
                 candidates_map[p[0], p[1], p[2]] = peak_value
                 pois.append([p[0], p[1], p[2], peak_value])
-    
+
     pois = pd.DataFrame(pois, columns=['z', 'y', 'x', 'intensity'])
     # filter out points too close to the edge
     if len(pois) > 1:
@@ -755,7 +760,7 @@ def find_roi(
         neighbor_dists = pois.columns[pois.columns.str.startswith('dist_')].tolist()  # column names
         neighbor_ids = pois.columns[pois.columns.str.startswith('nn_ids_')].tolist()  # column names
         pois['winners'] = 1
-        print(pois)
+        # print(pois)
 
         for index, row in pois.iterrows():
             if pois.loc[index, 'winners']:
