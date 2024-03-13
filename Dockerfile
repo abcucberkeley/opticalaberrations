@@ -45,7 +45,7 @@
 # https://docs.nvidia.com/deeplearning/frameworks/tensorflow-release-notes/rel-23-12.html#rel-23-12
 
 # for CUDA 12.x
-FROM nvcr.io/nvidia/tensorflow:23.12-tf2-py3 as TF_CUDA_12_3
+FROM nvcr.io/nvidia/tensorflow:24.02-tf2-py3 as TF_CUDA_12_3
 ENV RUNNING_IN_DOCKER=TRUE
 
 # Make bash colorful https://www.baeldung.com/linux/docker-container-colored-bash-output   https://ss64.com/nt/syntax-ansi.html 
@@ -125,7 +125,7 @@ ENTRYPOINT [ "/bin/bash", "-l", "-c" ]
 
 
 # for CUDA 12.x
-FROM nvcr.io/nvidia/pytorch:23.12-py3 as Torch_CUDA_12_3
+FROM nvcr.io/nvidia/pytorch:24.02-py3 as Torch_CUDA_12_3
 ENV RUNNING_IN_DOCKER=TRUE
 
 # Make bash colorful https://www.baeldung.com/linux/docker-container-colored-bash-output   https://ss64.com/nt/syntax-ansi.html 
