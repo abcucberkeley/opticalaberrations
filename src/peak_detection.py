@@ -386,7 +386,7 @@ def find_peaks(
 	xx = np.linspace(0, window_size[2], window_size[2])
 	meshgrid = np.meshgrid(zz, yy, xx, indexing="ij")
 	
-	h = np.percentile(image, 95) if h_maxima_threshold is None else h_maxima_threshold
+	h = np.percentile(image, 99) if h_maxima_threshold is None else h_maxima_threshold
 	h_maxima = extrema.h_maxima(image, h=h)
 	df = pd.DataFrame(np.transpose(np.nonzero(h_maxima)), columns=['z', 'y', 'x'])
 	num_peaks_detected = df.shape[0]
