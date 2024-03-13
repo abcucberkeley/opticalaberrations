@@ -98,6 +98,8 @@ class SyntheticPSF:
         self.rotate = rotate
         self.embedding_option = embedding_option
         self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
+        if self.psf_shape[1] != self.psf_shape[2]:
+            logger.warning(f'psf_shape X pixels ({self.psf_shape[2]} pix) is not equal to number of Y pixels ({self.psf_shape[1]})')
         self.amplitude_ranges = amplitude_ranges
         self.psf_type = psf_type
         self.pupil_mag_file = pupil_mag_file

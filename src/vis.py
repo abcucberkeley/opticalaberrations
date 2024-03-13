@@ -106,7 +106,7 @@ def plot_mip(
         else:
             v = vol[vol.shape[0]//2, :, :]
 
-        mat = xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None)
+        mat_xy = xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None)
 
         xy.set_xlabel(r'XY ($\mu$m)')
         if ticks:
@@ -158,7 +158,7 @@ def plot_mip(
         divider = make_axes_locatable(xy)
         cax = divider.append_axes("left", size="5%", pad=0.1)
         cb = plt.colorbar(
-            mat,
+            mat_xy if xy else mat,  # make colorbar out of the xy mip plot
             cax=cax,
             format=LogFormatterMathtext() if log else FormatStrFormatter("%.1f"),
         )
@@ -1154,115 +1154,6 @@ def compare_mips(
     savesvg(fig, f'{save_path}.svg')
 
 
-def plot_interference(
-        plot,
-        plot_interference_pattern,
-        pois,
-        min_distance,
-        beads,
-        convolved_psf,
-        psf_peaks,
-        corrected_psf,
-        kernel,
-        interference_pattern,
-        gamma = 0.5,
-):
-    fig, axes = plt.subplots(
-        nrows=5 if plot_interference_pattern else 4,
-        ncols=3,
-        figsize=(10, 11),
-        sharey=False,
-        sharex=False
-    )
-    transparency = 0.6
-
-    for ax in range(3):
-        for p in range(pois.shape[0]):
-            if ax == 0:
-                axes[0, ax].plot(pois[p, 2], pois[p, 1], marker='x', ls='', color=f'C{p}')
-                axes[2, ax].plot(pois[p, 2], pois[p, 1], marker='x', ls='', color=f'C{p}', alpha=transparency)
-                axes[2, ax].add_patch(patches.Rectangle(
-                    xy=(pois[p, 2] - min_distance, pois[p, 1] - min_distance),
-                    width=min_distance * 2,
-                    height=min_distance * 2,
-                    fill=None,
-                    color=f'C{p}',
-                    alpha=transparency
-                ))
-            elif ax == 1:
-                axes[0, ax].plot(pois[p, 2], pois[p, 0], marker='x', ls='', color=f'C{p}')
-                axes[2, ax].plot(pois[p, 2], pois[p, 0], marker='x', ls='', color=f'C{p}', alpha=transparency)
-                axes[2, ax].add_patch(patches.Rectangle(
-                    xy=(pois[p, 2] - min_distance, pois[p, 0] - min_distance),
-                    width=min_distance * 2,
-                    height=min_distance * 2,
-                    fill=None,
-                    color=f'C{p}',
-                    alpha=transparency
-                ))
-
-            elif ax == 2:
-                axes[0, ax].plot(pois[p, 1], pois[p, 0], marker='x', ls='', color=f'C{p}')
-                axes[2, ax].plot(pois[p, 1], pois[p, 0], marker='x', ls='', color=f'C{p}', alpha=transparency)
-                axes[2, ax].add_patch(patches.Rectangle(
-                    xy=(pois[p, 1] - min_distance, pois[p, 0] - min_distance),
-                    width=min_distance * 2,
-                    height=min_distance * 2,
-                    fill=None,
-                    color=f'C{p}',
-                    alpha=transparency
-                ))
-        m1 = axes[0, ax].imshow(np.nanmax(psf_peaks**gamma, axis=ax), cmap='hot', aspect='auto')
-        m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot', aspect='auto')
-        m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66, aspect='auto')
-
-        if plot_interference_pattern:
-            interference = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=axes[3, ax], wspace=0.05, hspace=0)
-            ax1 = fig.add_subplot(interference[0])
-            ax1.imshow(np.nanmax(beads, axis=ax), cmap='hot', aspect='auto')
-            ax1.axis('off')
-            ax1.set_title(r'$\mathcal{S}$')
-
-            ax2 = fig.add_subplot(interference[1])
-            m4 = ax2.imshow(np.nanmax(abs(interference_pattern), axis=ax), cmap='magma', aspect='auto')
-            ax2.axis('off')
-            ax2.set_title(r'$|\mathscr{F}(\mathcal{S})|$')
-
-        m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf**gamma, axis=ax), cmap='hot', aspect='auto')
-
-    for ax, m, label in zip(
-        range(5) if plot_interference_pattern else range(4),
-        [m1, m2, m3, m4, m5] if plot_interference_pattern else [m1, m2, m3, m5],
-        [
-            f'Inputs ({pois.shape[0]} peaks)\n[$\gamma$=.5]',
-            'Kernel',
-            'Peak detection',
-            'Interference',
-            'Reconstructed\n[$\gamma$=.5]'
-        ]
-        if plot_interference_pattern else [
-            f'Inputs ({pois.shape[0]} peaks)\n[$\gamma$=.5]',
-            'kernel',
-            'Peak detection',
-            'Reconstructed\n[$\gamma$=.5]'
-        ]
-    ):
-        divider = make_axes_locatable(axes[ax, -1])
-        cax = divider.append_axes("right", size="5%", pad=0.1)
-        cb = plt.colorbar(m, cax=cax)
-        cax.yaxis.set_label_position("right")
-        cax.set_ylabel(label)
-
-    for ax in axes.flatten():
-        ax.axis('off')
-
-    axes[0, 0].set_title('XY')
-    axes[0, 1].set_title('XZ')
-    axes[0, 2].set_title('YZ')
-
-    savesvg(fig, f'{plot}_interference_pattern.svg')
-
-
 @profile
 def plot_embeddings(
         inputs: np.array,
@@ -1399,7 +1290,125 @@ def plot_embeddings(
         plt.show()
     else:
         savesvg(fig, f'{save_path}_embeddings.svg')
-        plt.savefig(f'{save_path}_embeddings.png')
+        # plt.savefig(f'{save_path}_embeddings.png')
+
+
+def plot_interference(
+        plot,
+        plot_interference_pattern,
+        pois,
+        min_distance,
+        beads,
+        convolved_psf,
+        psf_peaks,
+        corrected_psf,
+        kernel,
+        interference_pattern,
+        gamma = 0.5,
+        high_snr = None,
+        estimated_object_gaussian_sigma=0,
+):
+    fig, axes = plt.subplots(
+        nrows=5 if plot_interference_pattern else 4,
+        ncols=3,
+        figsize=(10, 11),
+        sharey=False,
+        sharex=False
+    )
+    transparency = 0.6
+    aspect='equal' # 'auto'
+    for ax in range(3):
+        for p in range(pois.shape[0]):
+            if ax == 0:
+                axes[0, ax].plot(pois[p, 2], pois[p, 1], marker='x', ls='', color=f'C{p}')
+                axes[2, ax].plot(pois[p, 2], pois[p, 1], marker='x', ls='', color=f'C{p}', alpha=transparency)
+                axes[2, ax].add_patch(patches.Rectangle(
+                    xy=(pois[p, 2] - min_distance, pois[p, 1] - min_distance),
+                    width=min_distance * 2,
+                    height=min_distance * 2,
+                    fill=None,
+                    color=f'C{p}',
+                    alpha=transparency
+                ))
+            elif ax == 1:
+                axes[0, ax].plot(pois[p, 2], pois[p, 0], marker='x', ls='', color=f'C{p}')
+                axes[2, ax].plot(pois[p, 2], pois[p, 0], marker='x', ls='', color=f'C{p}', alpha=transparency)
+                axes[2, ax].add_patch(patches.Rectangle(
+                    xy=(pois[p, 2] - min_distance, pois[p, 0] - min_distance),
+                    width=min_distance * 2,
+                    height=min_distance * 2,
+                    fill=None,
+                    color=f'C{p}',
+                    alpha=transparency
+                ))
+
+            elif ax == 2:
+                axes[0, ax].plot(pois[p, 1], pois[p, 0], marker='x', ls='', color=f'C{p}')
+                axes[2, ax].plot(pois[p, 1], pois[p, 0], marker='x', ls='', color=f'C{p}', alpha=transparency)
+                axes[2, ax].add_patch(patches.Rectangle(
+                    xy=(pois[p, 1] - min_distance, pois[p, 0] - min_distance),
+                    width=min_distance * 2,
+                    height=min_distance * 2,
+                    fill=None,
+                    color=f'C{p}',
+                    alpha=transparency
+                ))
+        m1 = axes[0, ax].imshow(np.nanmax(psf_peaks**gamma, axis=ax), cmap='hot', aspect=aspect, vmin=0, vmax=1)
+        m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot', aspect=aspect)
+        m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66, aspect=aspect)
+
+        if plot_interference_pattern:
+            # interference = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=axes[3, ax], wspace=0.05, hspace=0)
+            # ax1 = fig.add_subplot(interference[0])
+            # ax1.imshow(np.nanmax(beads, axis=ax), cmap='hot', aspect=aspect)
+            # ax1.axis('off')
+            # ax1.set_title(r'$\mathcal{S}$')
+            #
+            # ax2 = fig.add_subplot(interference[1])
+            # m4 = ax2.imshow(np.nanmax(abs(interference_pattern), axis=ax), cmap='magma', aspect=aspect)
+            # ax2.axis('off')
+            # ax2.set_title(r'$|\mathscr{F}(\mathcal{S})|$')
+
+            m4 = axes[3, ax].imshow(np.nanmax(beads, axis=ax), cmap='hot', aspect=aspect)
+        m5 = axes[-1, ax].imshow(np.nanmax(corrected_psf**gamma, axis=ax), cmap='hot', aspect=aspect)
+
+    if high_snr:
+        kernel_label = 'Template'
+    else:
+        kernel_label = 'Kernel'
+
+    sigma_gauss = r"$\sigma_{gauss}$"
+    for ax, m, label in zip(
+        range(5) if plot_interference_pattern else range(4),
+        [m1, m2, m3, m4, m5] if plot_interference_pattern else [m1, m2, m3, m5],
+        [
+            f'Inputs ({pois.shape[0]} peaks)\n[$\gamma$=.5]',
+            f'{kernel_label}',
+            'Peak detection',
+            f'Interference',
+            f'Reconstructed\n[$\gamma$=.5 {sigma_gauss}={estimated_object_gaussian_sigma}]'
+        ]
+        if plot_interference_pattern else [
+            f'Inputs ({pois.shape[0]} peaks)\n[$\gamma$=.5]',
+            f'{kernel_label}',
+            'Peak detection',
+            f'Reconstructed\n[$\gamma$=.5 {sigma_gauss}={estimated_object_gaussian_sigma}]'
+        ]
+    ):
+        divider = make_axes_locatable(axes[ax, -1])
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        cb = plt.colorbar(m, cax=cax)
+        cax.yaxis.set_label_position("right")
+        cax.set_ylabel(label)
+
+    for ax in axes.flatten():
+        ax.axis('off')
+
+    axes[0, 0].set_title('XY')
+    axes[0, 1].set_title('XZ')
+    axes[0, 2].set_title('YZ')
+
+    savesvg(fig, f'{plot}_interference_pattern.svg')
 
 
 @profile
@@ -2205,9 +2214,9 @@ def compare_ao_iterations(
         ml_axz.set_title('OpticalNet (XZ)')
 
     plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=0, wspace=0)
-    plt.savefig(f'{save_path}_mips.png', bbox_inches='tight', dpi=300, pad_inches=.25)
+    # plt.savefig(f'{save_path}_mips.png', bbox_inches='tight', dpi=300, pad_inches=.25)
     plt.savefig(f'{save_path}_mips.svg', bbox_inches='tight', dpi=300, pad_inches=.25)
-    plt.savefig(f'{save_path}_mips.pdf', bbox_inches='tight', dpi=300, pad_inches=.25)
+    # plt.savefig(f'{save_path}_mips.pdf', bbox_inches='tight', dpi=300, pad_inches=.25)
 
 
 def otf_diagnosis(
