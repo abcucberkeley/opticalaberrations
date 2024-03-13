@@ -106,7 +106,7 @@ def plot_mip(
         else:
             v = vol[vol.shape[0]//2, :, :]
 
-        mat = xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None)
+        mat_xy = xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None)
 
         xy.set_xlabel(r'XY ($\mu$m)')
         if ticks:
@@ -158,7 +158,7 @@ def plot_mip(
         divider = make_axes_locatable(xy)
         cax = divider.append_axes("left", size="5%", pad=0.1)
         cb = plt.colorbar(
-            mat,
+            mat_xy if xy else mat,  # make colorbar out of the xy mip plot
             cax=cax,
             format=LogFormatterMathtext() if log else FormatStrFormatter("%.1f"),
         )
