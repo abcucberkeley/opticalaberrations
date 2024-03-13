@@ -1,6 +1,7 @@
 import subprocess
 
 import matplotlib
+
 matplotlib.use('Agg')
 
 import os
@@ -743,6 +744,7 @@ def predict_rois(
     estimated_object_gaussian_sigma: float = 0,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
+    fov_is_small: bool = True
 ):
     dm_state = utils.load_dm(dm_state)
     
@@ -789,8 +791,6 @@ def predict_rois(
         #     batch_size=batch_size
         # )     # takes too long to denoise the whole image.
 
-    fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
-    fov_is_small = True
     if not fov_is_small:
         logger.warning('fov is not small. Running large fov on tiles.')
 
@@ -806,24 +806,6 @@ def predict_rois(
         denoiser=denoiser,
         denoiser_window_size=denoiser_window_size
     )
-    # prep = partial(
-    #     backend.preprocess,
-    #     modelpsfgen=preloadedpsfgen,
-    #     samplepsfgen=samplepsfgen,
-    #     freq_strength_threshold=freq_strength_threshold,
-    #     digital_rotations=digital_rotations,
-    #     plot=plot,
-    #     no_phase=False,
-    #     remove_background=True,
-    #     normalize=True,
-    #     fov_is_small=fov_is_small,
-    #     skip_prep_sample=False,
-    #     min_psnr=min_psnr,
-    #     estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
-    #     cpu_workers=1,  # already parallelized over files
-    #     denoiser=denoiser,
-    #     denoiser_window_size=denoiser_window_size
-    # )
     
     rois, ztiles, nrows, ncols = find_roi(
         sample,
@@ -1781,6 +1763,8 @@ def aggregate_tiles(
 
 
 def aggregate_rois(
+    vol: np.ndarray,
+    pois: pd.DataFrame,
     predictions: pd.DataFrame,
     stdevs: pd.DataFrame,
     samplepsfgen: SyntheticPSF,
@@ -1806,7 +1790,9 @@ def aggregate_rois(
     valid_stdevs = stdevs.groupby('z')
     
     wavefronts, coefficients, actuators = {}, {}, {}
-    
+    wavefront_heatmap = np.zeros((expected_ztiles, *vol.shape[1:]), dtype=np.float32)
+    psf_heatmap = np.zeros((expected_ztiles, *vol.shape[1:]), dtype=np.float32)
+
     for z in range(expected_ztiles):  # basically loop through all ztiles, unless no valid predictions exist
         try:
             ztile_preds = valid_predictions.get_group(z)
@@ -1822,7 +1808,6 @@ def aggregate_rois(
             elif ztile_stds.shape[0] == 1:
                 pred = ztile_preds.iloc[0]
                 pred_std = ztile_stds.iloc[0]
-
             else:
                 if aggregation_rule == 'conf':  # find ROI index with the minimum error for each zernike mode
                     
@@ -1845,7 +1830,6 @@ def aggregate_rois(
                     
                     pred = ztile_preds.loc[best_roi]
                     pred_std = ztile_stds.loc[best_roi]
-
                 elif aggregation_rule == 'mean':
                     pred = ztile_preds.agg(pd.Series.mean, axis=0)
                     pred_std = ztile_stds.agg(pd.Series.mean, axis=0)
@@ -1867,10 +1851,47 @@ def aggregate_rois(
             
             pred = pred.fillna(0)
             pred_std = pred_std.fillna(0)
-        
+            
+            zw, yw, xw = samplepsfgen.psf_shape
+            logger.info(f"volume_size = {vol.shape}")
+            logger.info(f"window_size = {zw, yw, xw}")
+            
+            for idx in range(ztile_preds.shape[0]):
+                _, y, x = pois.index[idx]
+                zernikes = ztile_preds.iloc[idx].values
+                
+                w = Wavefront(
+                    np.nan_to_num(zernikes, nan=0, posinf=0, neginf=0),
+                    order='ansi',
+                    lam_detection=samplepsfgen.lam_detection
+                )
+                
+                abberated_psf = samplepsfgen.single_psf(w)
+                abberated_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
+                
+                start = [y - yw // 8, x - xw // 8]
+                end = [y + yw // 8, x + xw // 8]
+                
+                wavefront_heatmap[
+                z, start[0]:end[0], start[1]:end[1]
+                ] = np.nan_to_num(w.wave(end[-1] - start[-1]), nan=0)
+                
+                start = [y - yw // 2, x - xw // 2]
+                end = [y + yw // 2, x + xw // 2]
+                
+                psf_heatmap[
+                z, start[0]:end[0], start[1]:end[1]
+                ] = np.max(abberated_psf, axis=0)
+                
         except KeyError:
             pred = np.zeros(samplepsfgen.n_modes)
             pred_std = np.zeros(samplepsfgen.n_modes)
+        
+        imwrite(f"{save_path.with_suffix('')}_{postfix}_wavefronts.tif", wavefront_heatmap.astype(np.float32),
+                compression='deflate', dtype=np.float32)
+        
+        imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32),
+                compression='deflate', dtype=np.float32)
         
         agg = f'z{z}_c0'
         wavefronts[agg] = Wavefront(
@@ -2039,7 +2060,11 @@ def aggregate_predictions(
     imwrite(Path(f"{model_pred.with_suffix('')}_{postfix}_p2v_error.tif"), errormap.astype(np.float32), compression='deflate', dtype=np.float32)
     
     if roi_predictions:
+        pois = pd.read_csv(str(model_pred).replace('.csv', '_pois.csv'), header=0, index_col=['z', 'y', 'x'])
+
         predictions, stdevs = aggregate_rois(
+            vol=vol,
+            pois=pois,
             predictions=predictions,
             stdevs=stdevs,
             samplepsfgen=samplepsfgen,
@@ -3128,7 +3153,7 @@ def gaussian_fit(
     axial_voxel_size: float,
     lateral_voxel_size: float,
     plot: bool = False,
-    plot_gaussian_fits: bool = True,
+    plot_gaussian_fits: bool = False,
     remove_background: bool = True,
     cpu_workers: int = -1,
     window_size: tuple = (11, 11, 11),

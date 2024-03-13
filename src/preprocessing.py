@@ -900,7 +900,7 @@ def find_roi(
 
 
     pois = pois.head(num_rois)
-    pois.to_csv(f"{plot}_stats.csv")
+    pois.to_csv(f"{plot}_pois.csv")
 
     pois = pois[['z', 'y', 'x']].values[:num_rois]
     widths = [w // 2 for w in window_size]
@@ -1006,7 +1006,7 @@ def find_roi(
         metadata={'axes': 'ZYXS'},
         compression='deflate',
     )
-    return np.array(sorted(rois)), ztiles, ytiles, xtiles
+    return np.array(rois), ztiles, ytiles, xtiles
 
 
 def shift_poi_to_within_image(image_shape, p, window_size, verbose=False):
