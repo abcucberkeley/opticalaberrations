@@ -37,11 +37,7 @@ from joblib import Parallel, delayed
 from scipy.interpolate import NearestNDInterpolator
 from scipy.ndimage import shift, generate_binary_structure, binary_dilation
 from scipy.signal import correlate
-from scipy.optimize import minimize, curve_fit
-from skimage.feature import blob_dog, blob_log
-from skimage.morphology import extrema
-from skimage.filters import window
-from matplotlib.ticker import PercentFormatter
+from scipy.optimize import minimize
 
 from csbdeep.utils.tf import limit_gpu_memory
 
@@ -58,7 +54,8 @@ from wavefront import Wavefront
 from preloaded import Preloadedmodelclass
 from embeddings import remove_interference_pattern, fourier_embeddings
 from preprocessing import optimal_rolling_strides, find_roi, get_tiles, resize_with_crop_or_pad
-from preprocessing import prep_sample, denoise_image, remove_background_noise
+from preprocessing import prep_sample, denoise_image
+from peak_detection import detect_peaks
 
 import logging
 logger = logging.getLogger('')
@@ -1827,16 +1824,23 @@ def aggregate_rois(
                 pred_std = ztile_stds.iloc[0]
 
             else:
-                if aggregation_rule == 'conf':
-                    # find ROI index with the minimum error for each zernike mode
-
-                    best_rois = ztile_stds[~ztile_stds.isin(ignore_modes)].idxmin(axis=0)
-                    # count number of confident zernike modes for each ROI, then select ROI with the most confident modes
-                    conf_roi_index = best_rois.agg(lambda x: x.value_counts().index[0])
-                    logger.info(f"ROI with the most confident predictions: {conf_roi_index}")
-
-                    pred = ztile_preds.loc[conf_roi_index]
-                    pred_std = ztile_stds.loc[conf_roi_index]
+                if aggregation_rule == 'conf':  # find ROI index with the minimum error for each zernike mode
+                    
+                    # count number of confident zernike modes for each ROI,
+                    confident_votes = ztile_stds[~ztile_stds.isin(ignore_modes)].fillna(0).astype(bool).sum(axis=1)
+                    low_conf_rois = confident_votes[confident_votes < confident_votes.mean()].index
+                    
+                    # ROI with the lowest error per mode
+                    error_per_mode = ztile_stds[~ztile_stds.isin(ignore_modes)].round(3).drop(low_conf_rois)
+                    conf_roi_per_mode = error_per_mode.idxmin(axis=0)
+                    
+                    # ROI with the most confident predictions
+                    best_roi = confident_votes.idxmax(axis=0)
+                    logger.info(f"Best ROI per mode: {conf_roi_per_mode}")
+                    logger.info(f"ROI with the most confident predictions: {best_roi}")
+                    
+                    pred = ztile_preds.loc[best_roi]
+                    pred_std = ztile_stds.loc[best_roi]
 
                 elif aggregation_rule == 'mean':
                     pred = ztile_preds.agg(pd.Series.mean, axis=0)
@@ -3113,328 +3117,34 @@ def denoise(
     return denoised
 
 
-@profile
-def measure_sigma(
-    peak: np.ndarray,
-    image: np.ndarray,
-    axial_voxel_size: float,
-    lateral_voxel_size: float,
-    meshgrid: Optional[np.ndarray] = None,
-    window_size: tuple = (11, 11, 11),
-    plot: Optional[Path] = None,
-):
-    def gauss_3d(meshgrid, amplitude, zc, yc, xc, background, sigma):
-        zz, yy, xx = meshgrid
-        exp = ((xx - xc) ** 2 + (yy - yc) ** 2 + (zz - zc) ** 2) / (2 * sigma ** 2)
-        g = amplitude * np.exp(-exp) + background
-        return g.ravel()
-    
-    fov_start = [
-        peak[s] - window_size[s] if peak[s] >= window_size[s] else 0
-        for s in range(3)
-    ]
-    fov_end = [
-        peak[s] + window_size[s] + 1 if peak[s] + window_size[s] < image.shape[s] else image.shape[s]
-        for s in range(3)
-    ]
-    
-    half_width = [w // 2 for w in window_size]
-    fov = image[fov_start[0]:fov_end[0], fov_start[1]:fov_end[1], fov_start[2]:fov_end[2]]
-    fov *= window(('tukey', 1.25), fov.shape)
-    
-    psf = resize_with_crop_or_pad(fov, crop_shape=window_size, mode='constant')
-    psf /= np.sum(psf)
-    
-    if meshgrid is None:
-        zz = np.linspace(0, psf.shape[0], psf.shape[0])
-        yy = np.linspace(0, psf.shape[1], psf.shape[1])
-        xx = np.linspace(0, psf.shape[2], psf.shape[2])
-        zgrid, ygrid, xgrid = np.meshgrid(zz, yy, xx, indexing="ij")
-    else:
-        zgrid, ygrid, xgrid = meshgrid
-    
-    bg = np.median(psf)
-    amp = np.max(psf) - bg
-    
-    try:
-        popt, pcov = curve_fit(
-            gauss_3d,
-            (zgrid, ygrid, xgrid),
-            psf.ravel(),
-            p0=[amp, *half_width, bg, 1],
-        )
-        
-        amplitude, zc, yc, xc, background, sigma = popt
-        amplitude_err, zc_err, yc_err, xc_err, background_err, sigma_err = np.sqrt(np.diag(pcov))
-        
-        if plot is not None:
-            outdir = Path(plot)
-            outdir.mkdir(exist_ok=True, parents=True)
-            
-            filename = f"{outdir}/z{peak[0]}-y{peak[1]}-x{peak[2]}"
-            
-            fitted = gauss_3d((zgrid, ygrid, xgrid), *popt)
-            fitted = fitted.reshape(*psf.shape)
-            fitted /= np.sum(fitted)
-            
-            imwrite(f"{filename}_fov.tif", fov.astype(np.float32), compression='deflate', dtype=np.float32)
-            imwrite(f"{filename}_psf.tif", psf.astype(np.float32), compression='deflate', dtype=np.float32)
-            imwrite(f"{filename}_estimated.tif", fitted.astype(np.float32), compression='deflate', dtype=np.float32)
-            
-            fig, axes = plt.subplots(3, 3, figsize=(11, 8))
-            vis.plot_mip(
-                vol=fov,
-                xy=axes[0, 0],
-                xz=axes[0, 1],
-                yz=axes[0, 2],
-                dxy=lateral_voxel_size,
-                dz=axial_voxel_size,
-                label=r'FOV (MIP) [$\gamma$=.5]',
-                cmap='hot',
-                colorbar=True
-            )
-            vis.plot_mip(
-                vol=psf,
-                xy=axes[1, 0],
-                xz=axes[1, 1],
-                yz=axes[1, 2],
-                dxy=lateral_voxel_size,
-                dz=axial_voxel_size,
-                label=r'PSF (MIP) [$\gamma$=.5]',
-                cmap='hot',
-                colorbar=True
-            )
-            
-            vis.plot_mip(
-                vol=fitted,
-                xy=axes[-1, 0],
-                xz=axes[-1, 1],
-                yz=axes[-1, 2],
-                dxy=lateral_voxel_size,
-                dz=axial_voxel_size,
-                label=r'Fit (MIP) [$\gamma$=.5]',
-                cmap='hot',
-                colorbar=True
-            )
-            
-            axes[0, 1].set_title(f"$\sigma$={sigma}")
-            
-            vis.savesvg(fig, Path(f"{filename}.svg"))
-        
-        return [sigma, sigma_err]
-    except RuntimeError:
-        return [-1, -1]
-
 
 @profile
 def gaussian_fit(
     img: Path,
     axial_voxel_size: float,
     lateral_voxel_size: float,
-    wavelength: float = .605,
     plot: bool = False,
     plot_gaussian_fits: bool = True,
     remove_background: bool = True,
     cpu_workers: int = -1,
     window_size: tuple = (11, 11, 11),
-    h_maxima_threshold: int = 50,
-    exclude_border: int = 11,
-    method: str = 'custom',
-    kde_color='grey',
-    cdf_color='k',
-    hist_color='lightgrey',
+    h_maxima_threshold: Any = None,
 ):
     logger.info(f"Loading file: {img.name}")
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
     
-    if remove_background:
-        sample = remove_background_noise(sample, method='difference_of_gaussians')
-        if isinstance(sample, cp.ndarray):
-            sample = sample.get()
-    
-    zz = np.linspace(0, window_size[0], window_size[0])
-    yy = np.linspace(0, window_size[1], window_size[1])
-    xx = np.linspace(0, window_size[2], window_size[2])
-    meshgrid = np.meshgrid(zz, yy, xx, indexing="ij")
-    
-    if method == 'blob_log':
-        
-        blobs = blob_log(
-            sample,
-            min_sigma=0,
-            max_sigma=5,
-            num_sigma=20,
-            threshold_rel=0.25,
-            overlap=.05,
-            exclude_border=exclude_border,
-        )
-        
-        df = pd.DataFrame(blobs, columns=['z', 'y', 'x', 'sigma'])
-        num_peaks_detected = df.shape[0]
-    
-    elif method == 'blob_dog':
-        
-        blobs = blob_dog(
-            sample,
-            min_sigma=0,
-            max_sigma=5,
-            threshold_rel=0.25,
-            overlap=.05,
-            exclude_border=exclude_border,
-        )
-        
-        df = pd.DataFrame(blobs, columns=['z', 'y', 'x', 'sigma'])
-        num_peaks_detected = df.shape[0]
-    
-    else:
-        h_maxima = extrema.h_maxima(sample, h=h_maxima_threshold)
-        df = pd.DataFrame(np.transpose(np.nonzero(h_maxima)), columns=['z', 'y', 'x'])
-        num_peaks_detected = df.shape[0]
-        
-        # detected_peaks = peak_local_max(
-        #     sample,
-        #     min_distance=5,
-        #     threshold_rel=.3,
-        #     exclude_border=10,
-        #     p_norm=2,
-        # ).astype(int)
-        #
-        # df = pd.DataFrame(detected_peaks, columns=['z', 'y', 'x'])
-        
-        # drop peaks too close to the edge
-        lzedge = df['z'] >= window_size[0] // exclude_border
-        hzedge = df['z'] <= sample.shape[0] - window_size[0] // exclude_border
-        lyedge = df['y'] >= window_size[1] // exclude_border
-        hyedge = df['y'] <= sample.shape[1] - window_size[1] // exclude_border
-        lxedge = df['x'] >= window_size[2] // exclude_border
-        hxedge = df['x'] <= sample.shape[2] - window_size[2] // exclude_border
-        df = df[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
-        
-        logger.info(
-            f"Dropped [{num_peaks_detected - df.shape[0]}] detections "
-            f"because they're too close to the edge [{exclude_border=}]"
-        )
-        num_peaks_detected = df.shape[0]
-
-        estimate_sigma = partial(
-            measure_sigma,
-            image=sample,
-            axial_voxel_size=axial_voxel_size,
-            lateral_voxel_size=lateral_voxel_size,
-            meshgrid=meshgrid,
-            window_size=window_size,
-            plot=Path(f"{img.with_suffix('')}_gaussian_fits") if plot_gaussian_fits else None
-        )
-        
-        results = utils.multiprocess(
-            func=estimate_sigma,
-            jobs=df.values,
-            desc=f"Estimating sigma for [{df.shape[0]}] peaks",
-            cores=cpu_workers
-        )
-        df['sigma'] = results[..., 0]
-        df['perr'] = results[..., -1]
-    
-    # drop detections with high error
-    df = df[(df.perr < 1) & (df.perr > -1)]
-    df = df[df.sigma > 0]
-    
-    logger.info(
-        f"Dropped [{num_peaks_detected - df.shape[0]}] detections with high error"
+    df = detect_peaks(
+        image=sample,
+        save_path=img.with_suffix(''),
+        remove_background=remove_background,
+        axial_voxel_size=axial_voxel_size,
+        lateral_voxel_size=lateral_voxel_size,
+        plot=plot,
+        plot_gaussian_fits=plot_gaussian_fits,
+        cpu_workers=cpu_workers,
+        window_size=window_size,
+        h_maxima_threshold=h_maxima_threshold
     )
-    num_peaks_detected = df.shape[0]
     
-    df['fwhm'] = df.sigma.apply(utils.sigma2fwhm)
-    df['sigma_lateral_nm'] = df.sigma * lateral_voxel_size * 1000
-    df['sigma_axial_nm'] = df.sigma * axial_voxel_size * 1000
-    print(df[['sigma', 'fwhm', 'sigma_lateral_nm', 'sigma_axial_nm']].describe(
-        percentiles=[.5, .75, .85, .9, .95, .99]
-    ))
-    
-    median = np.median(df['sigma'])
-    mean = np.mean(df['sigma'])
-    values, counts = np.unique(df['sigma'].round(1).values, return_counts=True)
-    mode = values[counts.argmax()]
-    logger.info(rf"$\sigma$: {mean=:.2f}, {median=:.2f}, {mode=:.2f}")
-    
-    if plot:
-        fig, axes = plt.subplots(3, 1, figsize=(11, 8))
-        
-        vis.plot_mip(
-            vol=sample,
-            xy=axes[0],
-            xz=axes[1],
-            yz=None,
-            dxy=lateral_voxel_size,
-            dz=axial_voxel_size,
-            cmap='gray',
-            colorbar=False,
-            aspect=None
-        )
-        axes[0].set_ylabel(r'Input (MIP) [$\gamma$=.5]')
-        axes[1].set_ylabel(r'Input (MIP) [$\gamma$=.5]')
-        
-        for idx, blob in df.iterrows():
-            for i in range(2):
-                if i == 0:
-                    center = (blob['x'], blob['y'])
-                elif i == 1:
-                    center = (blob['x'], blob['z'])
-                else:
-                    center = (blob['y'], blob['z'])
-                
-                r = np.sqrt(blob['fwhm'])
-                c = plt.Circle(center, r, color=f'C{idx}', linewidth=.5, fill=False)
-                axes[i].add_patch(c)
-        
-        axes[-1].scatter([0], [0], label=f'POIs={num_peaks_detected}', color='grey', facecolors='none')
-        axes[-1].axvline(mean, c='C0', ls=':', lw=2, label=f'Mean={mean:.2f}', zorder=3)
-        axes[-1].axvline(median, c='C1', ls='--', lw=2, label=f'Median={median:.2f}', zorder=3)
-        axes[-1].axvline(mode, c='C2', ls=':', lw=2, label=f'Mode={mode:.2f}', zorder=3)
-        
-        ax1t = axes[-1].twinx()
-        ax1t = sns.histplot(
-            ax=ax1t,
-            data=df,
-            x='sigma',
-            stat='percent',
-            kde=True,
-            bins=50,
-            color=hist_color,
-            element="step",
-        )
-        ax1t.lines[0].set_color(kde_color)
-        ax1t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
-        ax1t.set_ylabel('KDE', color=kde_color)
-        ax1t.set_ylim(0, 15)
-        ax1t.set_xlim(0, df.sigma.max())
-        ax1t.yaxis.set_major_formatter(PercentFormatter())
-        
-        ax1 = sns.histplot(
-            ax=axes[-1],
-            data=df,
-            x='sigma',
-            stat='proportion',
-            color=cdf_color,
-            bins=50,
-            element="poly",
-            fill=False,
-            cumulative=True,
-            label='CDF'
-        )
-        
-        ax1.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
-        ax1.set_ylabel('CDF', color=cdf_color)
-        ax1.set_ylim(0, 1)
-        ax1.set_yticks(np.arange(0, 1.2, .2))
-        ax1.set_xlim(df.sigma.min(), df.sigma.max())
-        ax1.set_xlabel(r"$\sigma$")
-        ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-        
-        cdf = plt.Line2D([0], [0], label='KDE', color=kde_color)
-        handles, labels = axes[-1].get_legend_handles_labels()
-        handles.extend([cdf])
-        axes[-1].legend(handles=handles, frameon=False, ncol=1)
-        
-        vis.savesvg(fig, Path(f"{img.with_suffix('')}_gaussian_fit.svg"))
+    return df

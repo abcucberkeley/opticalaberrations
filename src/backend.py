@@ -309,6 +309,7 @@ def preprocess(
     interpolate_embeddings: bool = False,
     save_processed_tif_file: bool = False,
     estimated_object_gaussian_sigma: float = 0,
+    use_reconstructed_otf: bool = False
 ):
     if samplepsfgen is None:
         samplepsfgen = modelpsfgen
@@ -367,7 +368,8 @@ def preprocess(
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
             model_psf_shape=modelpsfgen.psf_shape,
-            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
+            use_reconstructed_otf=use_reconstructed_otf
         ).astype(np.float32)
         
         if save_processed_tif_file:

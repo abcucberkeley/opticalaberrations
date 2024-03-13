@@ -212,11 +212,7 @@ def parse_args(args):
         "--axial_voxel_size", default=.100, type=float, help='axial voxel size in microns for Z'
     )
     gaussian_fit.add_argument(
-        "--wavelength", default=.510, type=float,
-        help='wavelength in microns'
-    )
-    gaussian_fit.add_argument(
-	    "--h_maxima_threshold", default=50, type=int,
+        "--h_maxima_threshold", default=None, type=int,
 	    help='threshold for detecting peaks (counts)'
     )
     gaussian_fit.add_argument(
@@ -1323,7 +1319,6 @@ def main(args=None, preloaded=None):
                     img=args.input,
                     axial_voxel_size=args.axial_voxel_size,
                     lateral_voxel_size=args.lateral_voxel_size,
-                    wavelength=args.wavelength,
 	                h_maxima_threshold=args.h_maxima_threshold,
                     plot=args.plot,
                     cpu_workers=args.cpu_workers,
