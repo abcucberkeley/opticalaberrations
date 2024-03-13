@@ -200,7 +200,7 @@ def remove_interference_pattern(
         kernel_size: int = 15,
         max_num_peaks: int = 20,
         windowing: bool = True,
-        window_size: tuple = (27, 27, 27),
+        window_size: tuple = (21, 27, 27),
         plot_interference_pattern: bool = True,
         min_psnr: float = 10.0,
         zborder: int = 10,
@@ -248,6 +248,7 @@ def remove_interference_pattern(
 
     measured_snr = measure_snr(psf)
     high_snr = measured_snr > 30  # SNR good enough for template
+    high_snr=False
     if high_snr:
         # logger.info(f'Using template. {measured_snr=} > 30')
         init_pos = [p-half_length for p in template_poi]
@@ -390,17 +391,17 @@ def remove_interference_pattern(
 
     if pois.shape[0] > 0:  # found anything?
         if estimated_object_gaussian_sigma > 0:
-            kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=estimated_object_gaussian_sigma)
-            
+            object_estimation = gaussian_kernel(kernlen=[kernel_size] * 3, std=estimated_object_gaussian_sigma)
+            object_estimation /= np.max(object_estimation)
             # convolve template with the input image
             beads = convolution.convolve_fft(
                 beads,
-                kernel,
+                object_estimation,
                 allow_huge=True,
                 boundary='fill',
                 nan_treatment='fill',
                 fill_value=0,
-                normalize_kernel=np.sum
+                normalize_kernel=False
             )
 
         interference_pattern = fft(beads)
@@ -454,7 +455,9 @@ def remove_interference_pattern(
                     psf_peaks=psf_peaks,
                     corrected_psf=corrected_psf,
                     kernel=kernel,
-                    interference_pattern=interference_pattern
+                    interference_pattern=interference_pattern,
+                    high_snr=high_snr,
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
                 )
             imwrite(f'{plot}_corrected_psf.tif', data=corrected_psf.astype(np.float32), compression='deflate', dtype=np.float32)
 
