@@ -1834,9 +1834,13 @@ def aggregate_rois(
                     error_per_mode = ztile_stds[~ztile_stds.isin(ignore_modes)].round(3).drop(low_conf_rois)
                     conf_roi_per_mode = error_per_mode.idxmin(axis=0)
                     
-                    # ROI with the most confident predictions
-                    best_roi = confident_votes.idxmax(axis=0)
-                    logger.info(f"Best ROI per mode: {conf_roi_per_mode}")
+                    # ROIs with the most confident predictions
+                    winners = confident_votes[confident_votes==confident_votes.max()]
+                    # break the tie between winners using (euclidean sum of) std devs
+                    winners_std_devs = error_per_mode.loc[winners.index].pow(2).sum(axis=1).pow(0.5)
+                    best_roi = winners_std_devs.idxmin(axis=0)
+
+                    # logger.info(f"Best ROI per mode: {conf_roi_per_mode}")
                     logger.info(f"ROI with the most confident predictions: {best_roi}")
                     
                     pred = ztile_preds.loc[best_roi]
