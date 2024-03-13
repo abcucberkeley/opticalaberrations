@@ -388,7 +388,7 @@ def remove_background_noise(
         image,
         read_noise_bias: float = 5,
         method: str = 'fourier_filter',  # 'difference_of_gaussians', fourier_filter
-        high_sigma: float = 3.0,
+        high_sigma: float = 3.0,  # Removes low frequencies (i.e. non-uniform bkgrd), lowering = more filtering
         low_sigma: float = 0.7,
         min_psnr: int = 5,
         na_mask: Optional[np.ndarray] = None
