@@ -450,6 +450,13 @@ def remove_background_noise(
     else:
         raise Exception(f"Unknown method '{method}' for remove_background_noise functions.")
 
+    # image -= np.nanmin(image)
+    min_in_mip_views = min([
+        np.min(np.max(image, axis=0)),
+        np.min(np.max(image, axis=1)),
+        np.min(np.max(image, axis=2))
+    ])
+    image -= min_in_mip_views
     image[image < 0] = 0
 
     return image
@@ -614,8 +621,13 @@ def prep_sample(
                 crop_shape=number_of_desired_sample_pixels
             )
 
-    if windowing:
-        sample = tukey_window(sample)
+    if windowing: # and remove_background_noise_method != 'fourier_filter':
+        min_in_mip_views = min([
+            np.min(np.max(sample, axis=0)),
+            np.min(np.max(sample, axis=1)),
+            np.min(np.max(sample, axis=2))
+        ])
+        sample = tukey_window(sample - min_in_mip_views) + min_in_mip_views     # set the tukey_window to go to min_in_mip_views instead of zero
 
     if normalize:  # safe division to not get nans for blank images
         denominator = np.max(sample)

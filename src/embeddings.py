@@ -345,16 +345,48 @@ def remove_interference_pattern(
     pois = pois[good_psnr]  # remove points that are below peak snr
 
     psf_peaks = np.zeros_like(psf)  # create a volume masked around each peak, don't go past vol bounds
-    for p in pois:
-        psf_peaks[
-            max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
-            max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
-            max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
-        ] = psf[
-            max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
-            max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
-            max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
-        ]
+    if windowing:  # and not high_snr:
+        window_border = np.floor((otf.shape - np.array(window_size)) // 2).astype(int)
+        window_extent = otf.shape - window_border * 2
+
+        # pad needs amount on both sides of each axis.
+        window_border = np.vstack((window_border, window_border)).transpose()
+        windowing_function = np.pad(window(('tukey', 0.8), window_extent), pad_width=window_border)
+
+        # psf_peaks is a window function that will get the values from 3D array: "beads"
+        psf_peaks = convolution.convolve_fft(
+            beads,
+            windowing_function,
+            allow_huge=True,
+            boundary='fill',
+            nan_treatment='fill',
+            fill_value=0,
+            normalize_kernel=False,
+        )
+        psf_peaks = np.clip(psf_peaks, 0,1)
+
+        min_in_mip_views = min([
+            np.min(np.max(psf, axis=0)),
+            np.min(np.max(psf, axis=1)),
+            np.min(np.max(psf, axis=2))
+        ])
+        # apply window function (go to min_in_min_views, not to zero)
+        psf_peaks *= (psf - min_in_mip_views)
+        psf_peaks += min_in_mip_views
+        psf_peaks = np.clip(psf_peaks, a_max=1, a_min=0)
+        # otf = fft(psf_peaks)  # this line would remove a lot of noise, but it seems to not work with the estimated gaussian size.  I don't know why
+
+    else:
+        for p in pois:
+            psf_peaks[
+                max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
+                max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
+                max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
+            ] = psf[
+                max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
+                max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
+                max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
+            ]
 
     if pois.shape[0] > 0:  # found anything?
         if estimated_object_gaussian_sigma > 0:
@@ -392,7 +424,7 @@ def remove_interference_pattern(
         # # If we put bead at the center of 64 cube, it will have a phase ramp, so don't do the next line.
         # corrected_otf *= pix_shift_to_phase_ramp(pixel_shift_for_corrected_psf, corrected_otf.shape)
 
-        if windowing: # and not high_snr:
+        if windowing:
             window_border = np.floor((corrected_otf.shape - np.array(window_size)) // 2).astype(int)
             window_extent = corrected_otf.shape - window_border * 2
 
