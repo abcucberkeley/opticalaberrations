@@ -11,7 +11,7 @@ from functools import partial
 from typing import Any, Sequence, Union, Optional
 import numpy as np
 from scipy import stats as st
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, binary_dilation, generate_binary_structure
 import pandas as pd
 import seaborn as sns
 import zarr
@@ -182,6 +182,7 @@ def na_and_background_filter(
     Returns:
 
     """
+    na_mask = binary_dilation(na_mask, generate_binary_structure(3, 1))
     spatial_dims = image.ndim
 
     dtype = np.float32
@@ -204,11 +205,34 @@ def na_and_background_filter(
         im2 = cp_gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
 
     # fourier filter
-    fourier = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(tukey_window(image, alpha=0.1))))
+    # avoid z edges
+    window_z = window(('tukey', 0.1), image.shape[0])
+    window_z = np.ones_like(window_z)
+    window_y = window(('tukey', 0.1), image.shape[1])
+    window_x = window(('tukey', 0.1), image.shape[2])
+    if not isinstance(image, np.ndarray):
+        # GPU
+        window_z = cp.array(window_z)
+        window_y = cp.array(window_y)
+        window_x = cp.array(window_x)
+
+    zv, yv, xv = np.meshgrid(window_z, window_y, window_x, indexing='ij', copy=True)
+
+    fourier = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(image * zv * yv * xv)))
+    na_mask_middle = na_mask[na_mask.shape[0]//2]
+    na_mask_middle = na_mask_middle[np.newaxis, ...] # now a 3D array
+    na_mask = np.repeat(na_mask_middle, fourier.shape[0], axis=0)   # don't filter in Z just XY
+
     fourier[na_mask == 0] = 0
     im1 = np.real(np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(fourier))))  # needs to be 'real' not abs in this case
 
-    return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=dtype)
+    combined = combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=dtype)
+    cp_mask = (1 - tukey_window(cp.ones_like(combined), alpha=0.1)) * np.max(combined)
+    min_in_mip_views = np.nanmin(np.nanmax(combined + cp_mask, axis=0), axis=None)
+    # logger.info(f'image {min_in_mip_views=}')
+    combined -= min_in_mip_views
+    combined[combined < 0] = 0
+    return combined
     # return im2
 
 
@@ -353,7 +377,10 @@ def dog(
             im1 = np.zeros_like(image, dtype=np_dtype)
         im2 = cp_gaussian_filter(image, high_sigma, mode=mode, cval=cval, truncate=truncate, output=im2)  # blurred
 
-    return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=np_dtype)
+    if low_sigma[0] == 0:
+        return combine_filtered_imgs(image, image, im2, min_psnr=min_psnr, dtype=np_dtype)
+    else:
+        return combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=np_dtype)
 
 
 @profile
@@ -398,7 +425,12 @@ def remove_background_noise(
         image -= mode + read_noise_bias
 
     elif method == 'difference_of_gaussians' or method == 'dog':
-        image = dog(image, low_sigma=low_sigma, high_sigma=high_sigma, min_psnr=min_psnr)
+        image = dog(
+            image,
+            low_sigma=low_sigma,
+            high_sigma=high_sigma,
+            min_psnr=min_psnr,
+        )
 
     elif method == 'fourier_filter':
         if na_mask is None:
