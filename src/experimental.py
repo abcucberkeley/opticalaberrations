@@ -1,3 +1,5 @@
+import subprocess
+
 import matplotlib
 matplotlib.use('Agg')
 
@@ -755,25 +757,29 @@ def predict_rois(
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
     
+
+    outdir = Path(f"{img.with_suffix('')}_rois")
+    outdir.mkdir(exist_ok=True, parents=True)
+    [f.unlink() for f in outdir.glob("*.tif") if f.is_file()]  # remove any old tiles
+    [f.unlink() for f in outdir.glob("*.png") if f.is_file()]  # remove any old tiles
+    [f.unlink() for f in outdir.glob("*.csv") if f.is_file()]  # remove any old tiles
+    [f.unlink() for f in outdir.glob("*.svg") if f.is_file()]  # remove any old svgs
+
+    logger.info(f"Loading file: {img.name}")
+    sample = backend.load_sample(img)
+    logger.info(f"Sample: {sample.shape},  ROI size: {window_size}")
+
+    # make sample psf generator for tiles
     samplepsfgen = SyntheticPSF(
         psf_type=preloadedpsfgen.psf_type,
-        psf_shape=preloadedpsfgen.psf_shape,
+        psf_shape=window_size,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
         y_voxel_size=lateral_voxel_size,
         z_voxel_size=axial_voxel_size
     )
-    
-    outdir = Path(f"{img.with_suffix('')}_rois")
-    outdir.mkdir(exist_ok=True, parents=True)
-    [f.unlink() for f in outdir.glob("*.tif") if f.is_file()]  # remove any old tiles
-    [f.unlink() for f in outdir.glob("*.svg") if f.is_file()]  # remove any old svgs
 
-    logger.info(f"Loading file: {img.name}")
-    sample = backend.load_sample(img)
-    logger.info(f"Sample: {sample.shape}")
-    
     if denoiser is not None:
         if isinstance(denoiser, Path):
             logger.info(f"Loading denoiser model: {denoiser}")
@@ -787,6 +793,9 @@ def predict_rois(
         # )     # takes too long to denoise the whole image.
 
     fov_is_small = True if all(np.array(samplepsfgen.psf_fov) <= np.array(preloadedpsfgen.psf_fov)) else False
+    fov_is_small = True
+    if not fov_is_small:
+        logger.warning('fov is not small. Running large fov on tiles.')
 
     prep = partial(
         prep_sample,
@@ -1527,8 +1536,8 @@ def cluster_tiles(
 
     actuators = pd.DataFrame.from_dict(actuators)
     actuators.index.name = 'actuators'
-    actuators.to_csv(f"{savepath}_{postfix}_corrected_actuators.csv")
-    logger.info(f"Saved {savepath}_{postfix}_corrected_actuators.csv")
+    csv_save_path = f"{savepath}_{postfix}_corrected_actuators.csv"
+    dataframe_to_csv(actuators, csv_save_path)
     logger.info(f"with _corrected_actuators for :\ncluster  um_rms sum\n{coefficients.sum().round(3).to_string()}")
 
     return predictions, stdevs, coefficients
@@ -1900,11 +1909,18 @@ def aggregate_rois(
     
     actuators = pd.DataFrame.from_dict(actuators)
     actuators.index.name = 'actuators'
-    actuators.to_csv(f"{save_path.with_suffix('')}_{postfix}_corrected_actuators.csv")
-    logger.info(f"Saved {save_path.with_suffix('')}_{postfix}_corrected_actuators.csv")
+    csv_save_path = f"{save_path.with_suffix('')}_{postfix}_corrected_actuators.csv"
+    dataframe_to_csv(actuators, csv_save_path)
     logger.info(f"with _corrected_actuators for :\ncluster  um_rms sum\n{coefficients.sum().round(3).to_string()}")
     
     return predictions, stdevs
+
+
+def dataframe_to_csv(dataframe, csv_save_path):
+    dataframe.to_csv(csv_save_path)
+    if os.name != 'nt':
+        subprocess.run(f'chmod a+wrx {csv_save_path}', shell=True)
+    logger.info(f"Saved {csv_save_path}")
 
 
 @profile
@@ -2487,6 +2503,8 @@ def combine_tiles(
 
     if not new_acts_path.exists():
         raise Exception(f'New actuators were not written to {new_acts_path}')
+    elif os.name != 'nt':
+        subprocess.run(f'chmod a+wrx {new_acts_path}', shell=True)
 
     logger.info(f"Org actuators: {corrected_actuators_csv}")
     logger.info(f"New actuators: {new_acts_path}")
