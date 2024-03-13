@@ -697,6 +697,7 @@ def find_roi(
         p = detected_peaks[0]
         intensity = image[p[0], p[1], p[2]]
         candidates_map[p[0], p[1], p[2]] = 1
+        p = shift_poi_to_within_image(image.shape, p, window_size)
         pois.append([p[0], p[1], p[2], intensity])
     
     else:
@@ -713,25 +714,17 @@ def find_roi(
                 if np.nanmax(fov) > convolved_image[p[0], p[1], p[2]]:
                     continue  # we are not at the summit if a max nearby is available.
                 else:
+                    p = shift_poi_to_within_image(image.shape, p, window_size)
                     candidates_map[p[0], p[1], p[2]] = peak_value
                     pois.append([p[0], p[1], p[2], peak_value])  # keep peak
             
             except Exception:
                 # keep peak if we are at the border of the image
+                p = shift_poi_to_within_image(image.shape, p, window_size)
                 candidates_map[p[0], p[1], p[2]] = peak_value
                 pois.append([p[0], p[1], p[2], peak_value])
 
     pois = pd.DataFrame(pois, columns=['z', 'y', 'x', 'intensity'])
-    # filter out points too close to the edge
-    if len(pois) > 1:
-        edge = 8
-        lzedge = pois['z'] >= window_size[0]//edge
-        hzedge = pois['z'] <= image.shape[0] - window_size[0] // edge
-        lyedge = pois['y'] >= window_size[1]//edge
-        hyedge = pois['y'] <= image.shape[1] - window_size[1] // edge
-        lxedge = pois['x'] >= window_size[2]//edge
-        hxedge = pois['x'] <= image.shape[2] - window_size[2] // edge
-        pois = pois[lzedge & hzedge & lyedge & hyedge & lxedge & hxedge]
 
     if len(detected_peaks) == 0:
         p = max_poi
@@ -884,23 +877,23 @@ def find_roi(
                 if ax == 0:
                     # axes[ax].plot(pois[p, 2], pois[p, 1], marker='.', ls='', color=f'C{p}')
                     axes[ax].add_patch(patches.Rectangle(
-                        xy=(pois[p, 2] - window_size[2] // 2, pois[p, 1] - window_size[1] // 2),
-                        width=window_size[1],
-                        height=window_size[2],
+                        xy=(pois[p, 2] - 1 - window_size[2] // 2, pois[p, 1] - 1 - window_size[1] // 2),
+                        width=window_size[2],
+                        height=window_size[1],
                         fill=None,
                         color=f'C{p}',
-                        alpha=1
+                        alpha=.8
                     ))
                     axes[ax].set_title('XY')
                 elif ax == 1:
                     # axes[ax].plot(pois[p, 2], pois[p, 0], marker='.', ls='', color=f'C{p}')
                     axes[ax].add_patch(patches.Rectangle(
-                        xy=(pois[p, 2] - window_size[2] // 2, pois[p, 0] - window_size[0] // 2),
-                        width=window_size[1],
-                        height=window_size[2],
+                        xy=(pois[p, 2] - 1 - window_size[2] // 2, pois[p, 0] - 1 - window_size[0] // 2),
+                        width=window_size[2],
+                        height=window_size[0],
                         fill=None,
                         color=f'C{p}',
-                        alpha=1
+                        alpha=.8
                     ))
                     axes[ax].set_title('XZ')
         fig.tight_layout()
@@ -933,7 +926,6 @@ def find_roi(
             
             if r.size != 0:
                 z = np.floor(pois[p, 0] / zslab_size).astype(int)
-                logger.info(f'{zslab_size=}, poi located at z={pois[p, 0]}, zslab={z}')
                 y = ytiles - 1
                 x = xtiles_counter[z]
                 xtiles_counter[z] += 1
@@ -971,6 +963,21 @@ def find_roi(
         compression='deflate',
     )
     return np.array(sorted(rois)), ztiles, ytiles, xtiles
+
+
+def shift_poi_to_within_image(image_shape, p, window_size, verbose=False):
+    # shift the roi if we are too close to an edge
+    half_window = np.ceil(np.array(window_size) / 2).astype(int)
+    shifted = p.copy()
+    needed_shift = False
+    for i in range(len(p)):
+        shifted[i] = np.clip(p[i], a_min=0 + half_window[i], a_max=image_shape[i] - half_window[i] - 1)
+        if shifted[i] != p[i]:
+            needed_shift = True
+
+    if needed_shift and verbose:
+        logger.info(f'Shifting POI from {p} to {shifted}.  {window_size=}')
+    return shifted
 
 
 @profile
