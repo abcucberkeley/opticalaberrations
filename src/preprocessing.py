@@ -1,3 +1,5 @@
+import time
+
 import matplotlib
 matplotlib.use('Agg')
 
@@ -687,17 +689,21 @@ def find_roi(
     
     if isinstance(image, Path):
         image = imread(image).astype(np.float32)
-    
+
+    start_time = time.time()
     blurred_image = remove_background_noise(image, method='difference_of_gaussians', min_psnr=0)
-    blurred_image = blurred_image if isinstance(blurred_image, np.ndarray) else cp.asnumpy(blurred_image)
-    blurred_image = gaussian_filter(blurred_image, sigma=1.1)
+    if isinstance(blurred_image, np.ndarray):
+        blurred_image = gaussian_filter(blurred_image, sigma=1.1)
+    else:
+        blurred_image = cp_gaussian_filter(blurred_image, sigma=1.1)
 
     # exclude values close to the edge in Z for finding our template
     restricted_blurred = blurred_image.copy()
     restricted_blurred[0: zborder] = 0
     restricted_blurred[blurred_image.shape[0] - zborder:blurred_image.shape[0]] = 0
     max_poi = list(np.unravel_index(np.nanargmax(restricted_blurred, axis=None), restricted_blurred.shape))
-    
+    stop_time1 = time.time()
+
     kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=1)
     # init_pos = [p - kernel_size // 2 for p in max_poi]
     # kernel = blurred_image[
@@ -707,6 +713,7 @@ def find_roi(
     # ]
     
     # convolve template with the input image
+    blurred_image = blurred_image if isinstance(blurred_image, np.ndarray) else cp.asnumpy(blurred_image)
     convolved_image = convolution.convolve_fft(
         blurred_image,
         kernel,
@@ -718,7 +725,7 @@ def find_roi(
     )
     convolved_image -= st.mode(convolved_image, axis=None)[0]
     convolved_image /= np.nanmax(convolved_image)
-
+    stop_time2 = time.time()
     pois = []
     detected_peaks = peak_local_max(
         convolved_image,
@@ -728,6 +735,10 @@ def find_roi(
         p_norm=2,
         num_peaks=num_rois
     ).astype(int)
+    logger.info(f'remove background = {stop_time1 - start_time} seconds')
+    logger.info(f'cross correlate   = {stop_time2 - stop_time1} seconds')
+    logger.info(f'peak_local_max    = {time.time() - stop_time2} seconds')
+
 
     logger.info(f"Found {len(detected_peaks)} peaks from peak_local_max (limited to {num_rois})")
     candidates_map = np.zeros_like(image)
