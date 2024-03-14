@@ -151,13 +151,27 @@ def submit_slurm_job(args, command_flags, partition: str = "abc_a100"):
     subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
 
 
-def submit_docker_job(args, command_flags):
+def submit_docker_job(args=None, command_flags=None) -> int:
+    '''
+
+    Args:
+        args:
+        command_flags:
+
+    Returns:
+    return code of the command, unless Docker Run didn't execute and then that will return error code
+    '''
+
     container_repo = "/app/opticalaberrations"  # location of repo in the container
     local_repo = Path(__file__).parent.parent  # location of repo in host
     branch_name = get_active_branch_name(local_repo)
     CUDA_version = "TF_CUDA_12_3"
-    
-    flags = ' '.join(command_flags)
+
+    if command_flags is None:
+        flags = ' '.join(args)
+    else:
+        flags = ' '.join(command_flags)
+
     flags = re.sub(pattern=' --docker', repl='', string=flags)  # remove flag
     flags = paths_to_clusterfs(flags, container_repo)
     flags = re.sub(pattern=local_repo.as_posix(), repl=container_repo, string=flags)
@@ -178,8 +192,9 @@ def submit_docker_job(args, command_flags):
     docker_vars = (r' -e RUNNING_IN_DOCKER=TRUE'
                    r' -e USER=vscode ')
     docker_image = f"ghcr.io/abcucberkeley/opticalaberrations:{branch_name}_{CUDA_version}"
-    docker_job = f'{docker_run} {docker_vars} --workdir {container_repo}/src {docker_mount} {docker_image} "python ao.py {flags}"'
+    docker_job = f'{docker_run} {docker_vars} --workdir {container_repo}/src {docker_mount} {docker_image}    "python ao.py {flags}"'
     docker_remove_old = f'docker rm  --force {docker_container_name} || True'    # kill container if it was orphaned.
-    logger.info(f"Docker job: \n{docker_job}\n")
+    print(f"Docker job: \n{docker_job}\n")
     subprocess.run(docker_remove_old, shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)  # supress output
-    subprocess.run(docker_job, shell=True)
+    completedprocess = subprocess.run(docker_job, shell=True)  # docker will return command's error code unless docker fails.
+    return completedprocess.returncode
