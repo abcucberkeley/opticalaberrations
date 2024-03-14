@@ -499,7 +499,9 @@ def get_tile_confidence(
 
 
 def convert_to_windows_file_string(f):
-    return str(f).replace('/', '\\').replace("\\clusterfs\\nvme\\", "V:\\")
+    f = str(f).replace('/', '\\').replace("\\clusterfs\\nvme\\", "V:\\")
+    f = f.replace("\\clusterfs\\nvme2\\", "U:\\")
+    return f
 
 
 def convert_path_to_other_cam(src_path: Path, dst='B'):
