@@ -1851,10 +1851,17 @@ def aggregate_rois(
             
             pred = pred.fillna(0)
             pred_std = pred_std.fillna(0)
-            
+
             if plot:
+                height_of_titles = 0.1
+                height_of_plot = (vol.shape[1] + vol.shape[0]) * 2
+                height_ratios = [vol.shape[1] / height_of_plot + height_of_titles,
+                                 vol.shape[1] / height_of_plot + height_of_titles,
+                                 vol.shape[0] / height_of_plot + height_of_titles,
+                                 vol.shape[0] / height_of_plot + height_of_titles]
+
                 fig, axes = plt.subplots(
-                    4, 1, figsize=(8, 6), sharey=False, sharex=True,
+                    4, 1, figsize=(8, 6), sharey=False, sharex=True, height_ratios=height_ratios,
                 )
                 axes[0].imshow(np.nanmax(vol, axis=0) ** .5, aspect='equal', cmap='Greys_r')
                 axes[2].imshow(np.nanmax(vol, axis=1) ** .5, aspect='equal', cmap='Greys_r')
@@ -1894,7 +1901,7 @@ def aggregate_rois(
                             alpha=.8,
                             rotation_point='center'
                         ))
-                        axes[i].set_title('XY')
+
                         
                         axes[i + 2].add_patch(patches.Rectangle(
                             xy=(start[2] - 1, start[0] - 1),
@@ -1905,8 +1912,22 @@ def aggregate_rois(
                             alpha=.8,
                             rotation_point='center'
                         ))
-                        axes[i + 2].set_title('XZ')
-            
+                    coloraxes = 'midnightblue'
+                    for i in [0,1,2,3]:
+                        axes[i].spines['bottom'].set_color(coloraxes)
+                        axes[i].spines['top'].set_color(coloraxes)
+                        axes[i].spines['right'].set_color(coloraxes)
+                        axes[i].spines['left'].set_color(coloraxes)
+                        axes[i].tick_params(axis='x', colors=coloraxes)
+                        axes[i].tick_params(axis='y', colors=coloraxes)
+                        axes[i].yaxis.label.set_color(coloraxes)
+                        axes[i].xaxis.label.set_color(coloraxes)
+
+                    latex = r'_{\gamma=0.5\text{, background removed}}'
+                    latex = rf'${latex}$'
+                    axes[0].set_title(f'XY {latex}')
+                    axes[2].set_title(f'XZ {latex}')
+
         except KeyError:
             pred = np.zeros(samplepsfgen.n_modes)
             pred_std = np.zeros(samplepsfgen.n_modes)
@@ -1918,9 +1939,8 @@ def aggregate_rois(
             axes[1].imshow(np.nanmax(psf_heatmap, axis=0) ** .5, aspect='equal', cmap='Greys_r')
             axes[-1].imshow(np.nanmax(psf_heatmap, axis=1) ** .5, aspect='equal', cmap='Greys_r')
             
-            fig.tight_layout()
-            vis.savesvg(fig, f"{save_path.with_suffix('')}_{postfix}_psfs.svg")
-            logger.info(f"{save_path.with_suffix('')}_{postfix}_z{z}_psfs.svg")
+            vis.savesvg(fig, f"{save_path.with_suffix('')}_mips.svg")
+            logger.info(f"{save_path.with_suffix('')}_mips.svg")
         
         agg = f'z{z}_c0'
         wavefronts[agg] = Wavefront(
