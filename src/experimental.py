@@ -30,6 +30,7 @@ import seaborn as sns
 from tifffile import imread, imwrite, TiffFile
 from line_profiler_pycharm import profile
 from tqdm import tqdm
+import matplotlib.patches as patches
 
 from sklearn.cluster import KMeans
 from skimage.transform import resize
@@ -1790,9 +1791,8 @@ def aggregate_rois(
     valid_stdevs = stdevs.groupby('z')
     
     wavefronts, coefficients, actuators = {}, {}, {}
-    wavefront_heatmap = np.zeros((expected_ztiles, *vol.shape[1:]), dtype=np.float32)
-    psf_heatmap = np.zeros((expected_ztiles, *vol.shape[1:]), dtype=np.float32)
-
+    psf_heatmap = np.zeros(vol.shape, dtype=np.float32)
+    
     for z in range(expected_ztiles):  # basically loop through all ztiles, unless no valid predictions exist
         try:
             ztile_preds = valid_predictions.get_group(z)
@@ -1852,12 +1852,19 @@ def aggregate_rois(
             pred = pred.fillna(0)
             pred_std = pred_std.fillna(0)
             
+            if plot:
+                fig, axes = plt.subplots(
+                    4, 1, figsize=(8, 6), sharey=False, sharex=True,
+                )
+                axes[0].imshow(np.nanmax(vol, axis=0) ** .5, aspect='equal', cmap='Greys_r')
+                axes[2].imshow(np.nanmax(vol, axis=1) ** .5, aspect='equal', cmap='Greys_r')
+            
             zw, yw, xw = samplepsfgen.psf_shape
             logger.info(f"volume_size = {vol.shape}")
             logger.info(f"window_size = {zw, yw, xw}")
             
             for idx in range(ztile_preds.shape[0]):
-                _, y, x = pois.index[idx]
+                zz, yy, xx = pois.index[idx]
                 zernikes = ztile_preds.iloc[idx].values
                 
                 w = Wavefront(
@@ -1869,29 +1876,51 @@ def aggregate_rois(
                 abberated_psf = samplepsfgen.single_psf(w)
                 abberated_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
                 
-                start = [y - yw // 8, x - xw // 8]
-                end = [y + yw // 8, x + xw // 8]
-                
-                wavefront_heatmap[
-                z, start[0]:end[0], start[1]:end[1]
-                ] = np.nan_to_num(w.wave(end[-1] - start[-1]), nan=0)
-                
-                start = [y - yw // 2, x - xw // 2]
-                end = [y + yw // 2, x + xw // 2]
+                start = [zz - zw // 2, yy - yw // 2, xx - xw // 2]
+                end = [zz + zw // 2, yy + yw // 2, xx + xw // 2]
                 
                 psf_heatmap[
-                z, start[0]:end[0], start[1]:end[1]
-                ] = np.max(abberated_psf, axis=0)
+                start[0]:end[0], start[1]:end[1], start[-1]:end[-1]
+                ] = abberated_psf
                 
+                if plot:
+                    for i in [0, 1]:
+                        axes[i].add_patch(patches.Rectangle(
+                            xy=(start[2] - 1, start[1] - 1),
+                            width=xw,
+                            height=yw,
+                            fill=None,
+                            color=f'C{idx}',
+                            alpha=.8,
+                            rotation_point='center'
+                        ))
+                        axes[i].set_title('XY')
+                        
+                        axes[i + 2].add_patch(patches.Rectangle(
+                            xy=(start[2] - 1, start[0] - 1),
+                            width=xw,
+                            height=zw,
+                            fill=None,
+                            color=f'C{idx}',
+                            alpha=.8,
+                            rotation_point='center'
+                        ))
+                        axes[i + 2].set_title('XZ')
+            
         except KeyError:
             pred = np.zeros(samplepsfgen.n_modes)
             pred_std = np.zeros(samplepsfgen.n_modes)
         
-        imwrite(f"{save_path.with_suffix('')}_{postfix}_wavefronts.tif", wavefront_heatmap.astype(np.float32),
-                compression='deflate', dtype=np.float32)
-        
         imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32),
                 compression='deflate', dtype=np.float32)
+        
+        if plot:
+            axes[1].imshow(np.nanmax(psf_heatmap, axis=0) ** .5, aspect='equal', cmap='Greys_r')
+            axes[-1].imshow(np.nanmax(psf_heatmap, axis=1) ** .5, aspect='equal', cmap='Greys_r')
+            
+            fig.tight_layout()
+            vis.savesvg(fig, f"{save_path.with_suffix('')}_{postfix}_psfs.svg")
+            logger.info(f"{save_path.with_suffix('')}_{postfix}_z{z}_psfs.svg")
         
         agg = f'z{z}_c0'
         wavefronts[agg] = Wavefront(
@@ -1987,9 +2016,13 @@ def aggregate_predictions(
         raise Exception(f'Unknown prediction format {model_pred=}')
     
     vol = backend.load_sample(vol_path)
-    vol -= np.percentile(vol, 5)
-    vol /= np.percentile(vol, 98)
-    vol = np.clip(vol, 0, 1)
+    
+    vol = prep_sample(
+        vol,
+        normalize=True,
+        windowing=False,
+        remove_background_noise_method='difference_of_gaussians'
+    )
 
     with open(str(model_pred).replace('.csv', '_settings.json')) as f:
         predictions_settings = ujson.load(f)
