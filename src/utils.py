@@ -2,6 +2,7 @@ import matplotlib
 
 matplotlib.use('Agg')
 
+import pickle
 import io
 import sys, re
 import logging
@@ -620,3 +621,13 @@ def normalize_otf(otf, freq_strength_threshold: float = 0., percentile: bool = F
 
     otf = np.nan_to_num(otf, nan=0, neginf=0, posinf=0)
     return otf
+
+
+def load_pickle(path):
+    with open(path, 'rb') as f:
+        return pickle.load(f)
+
+
+def save_pickle(x, path):
+    with open(path, 'wb') as f:
+        pickle.dump(x, f, protocol=pickle.HIGHEST_PROTOCOL)
