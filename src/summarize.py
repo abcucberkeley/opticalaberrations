@@ -65,6 +65,9 @@ def concat_U16_tiffs(source_files=list([]), dst: Path = None, ch_two=None, drop_
                     f"({len(sample.pages)} x {sample.pages[0].shape[0]} x {sample.pages[0].shape[1]}) {tif.filename}")
 
     dst.parent.mkdir(parents=True, exist_ok=True)
+    if os.name != 'nt' and input is not None:
+        subprocess.run(f"chmod -R a+wrx {dst.parent}", shell=True)
+
     image_labels = [x.stem[:40] for x in source_files]
     image_labels = list(np.repeat(image_labels, z_size))  # every slice needs a label
 
@@ -77,9 +80,25 @@ def concat_U16_tiffs(source_files=list([]), dst: Path = None, ch_two=None, drop_
             'axes': axes_string,
             'Labels': image_labels,
         },
-        compression = 'deflate'
+        compression='deflate'
     )
-    print(f"Saved:\n{dst.resolve()}\n")
+    print(f"Saved:\n{dst.resolve()}")
+
+    # Make MIPs
+    dst =  Path(f"{dst.with_suffix('')}_mip.tif")
+    imwrite(
+        dst,
+        np.max(hyperstack, axis=1),
+        dtype=data_type,
+        imagej=True,
+        # metadata={
+        #     'axes': axes_string,
+        #     'Labels': image_labels,
+        # },
+        compression='deflate'
+    )
+
+    print(f"{dst.resolve()}\n")
 
 
 def parse_args(args):
@@ -207,8 +226,7 @@ def main(args=None):
 
     if os.name != 'nt':
         print(f"Updating file permissions to {dst.parent}")
-        subprocess.run(f"find {str(dst.parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +",
-                       shell=True)
+        subprocess.run(f"find {str(dst.parent.resolve())}" + r" -user $USER -exec chmod a+wrx {} +",  shell=True)
         print(f"Updating file permissions complete.")
 
 if __name__ == "__main__":
