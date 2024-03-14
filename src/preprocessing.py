@@ -827,36 +827,9 @@ def find_roi(
         logger.info(f"After winner selection, {pois['winners'].sum()} winners remain.")
     else:
         pois['winners'] = 1
-    print(pois)
+    # print(pois)
 
-    # if plot:
-    #     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-    #     sns.scatterplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], s=5, color="C0")
-    #     sns.kdeplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
-    #     axes[0].set_ylabel('Intensity')
-    #     axes[0].set_xlabel('Distance (microns)')
-    #     axes[0].set_yscale('log')
-    #     axes[0].set_ylim(10 ** 0, None)
-    #     axes[0].set_xlim(0, None)
-    #     axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-    #
-    #     x = np.sort(pois['dist_1'])
-    #     y = np.arange(len(x)) / float(len(x))
-    #     axes[1].plot(x, y, color='dimgrey')
-    #     axes[1].set_xlabel('Distance (microns)')
-    #     axes[1].set_ylabel('CDF')
-    #     axes[1].set_xlim(0, None)
-    #     axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-    #
-    #     sns.histplot(ax=axes[2], data=pois, x="dist_1", kde=True)
-    #     axes[2].set_xlabel('Distance')
-    #     axes[2].set_xlim(0, None)
-    #     axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-    #     savesvg(fig, f'{plot}_detected_rois.svg')
-
-    # if min_dist is not None:
-    #     logger.info(f'{min_dist =} um')
-    #     pois = pois[pois['dist_1'] >= min_dist]
+    # retain only winners in data frame
     pois = pois[pois['winners'] == True]
 
 
