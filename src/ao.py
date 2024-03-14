@@ -1176,7 +1176,7 @@ def main(args=None, preloaded=None):
         slurm_utils.submit_slurm_job(args, command_flags, partition=args.partition)
 
     elif args.docker:
-        slurm_utils.submit_docker_job(args, command_flags, )
+        return slurm_utils.submit_docker_job(args, command_flags, )
 
     else:
         if os.environ.get('SLURM_JOB_ID') is not None:
