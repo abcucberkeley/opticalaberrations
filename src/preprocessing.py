@@ -670,6 +670,7 @@ def find_roi(
     zborder: int = 10,
     prep: Optional[partial] = None,
 ):
+    logger.info("Looking for candidate ROIs")
     savepath.mkdir(parents=True, exist_ok=True)
     savepath_unprocessed = Path(f"{savepath}_unprocessed")
     savepath_unprocessed.mkdir(parents=True, exist_ok=True)
@@ -844,36 +845,8 @@ def find_roi(
     min_dist = np.min(window_size)*np.min(voxel_size)
     pois['neighbors'] = pois[pois[neighbors] <= min_dist].count(axis=1)
 
-
-
-    # pois = pois[pois['neighbors'] <= max_neighbor]
-
-    # if plot:
-    #     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-    #     sns.scatterplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], s=5, color="C0")
-    #     sns.kdeplot(ax=axes[0], x=pois['dist_1'], y=pois['intensity'], levels=5, color="grey", linewidths=1)
-    #     axes[0].set_ylabel('Intensity')
-    #     axes[0].set_xlabel('Distance')
-    #     axes[0].set_xlim(0, None)
-    #     axes[0].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-    #
-    #     x = np.sort(pois['dist_1'])
-    #     y = np.arange(len(x)) / float(len(x))
-    #     axes[1].plot(x, y, color='dimgrey')
-    #     axes[1].set_xlabel('Distance')
-    #     axes[1].set_ylabel('CDF')
-    #     axes[1].set_xlim(0, None)
-    #     axes[1].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-    #
-    #     sns.histplot(ax=axes[2], data=pois, x='dist_1', kde=True)
-    #     axes[2].set_xlabel('Distance')
-    #     axes[2].set_xlim(0, None)
-    #     axes[2].grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-    #     savesvg(fig, f'{plot}_selected_rois.svg')
-
-
     pois = pois.head(num_rois)
-    pois.to_csv(f"{plot}_pois.csv")
+    pois.to_csv(f"{savepath}_pois.csv")
 
     pois = pois[['z', 'y', 'x']].values[:num_rois]
     widths = [w // 2 for w in window_size]

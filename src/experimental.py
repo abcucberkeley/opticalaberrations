@@ -2113,7 +2113,8 @@ def aggregate_predictions(
     imwrite(Path(f"{model_pred.with_suffix('')}_{postfix}_p2v_error.tif"), errormap.astype(np.float32), compression='deflate', dtype=np.float32)
     
     if roi_predictions:
-        pois = pd.read_csv(str(model_pred).replace('.csv', '_pois.csv'), header=0, index_col=['z', 'y', 'x'])
+        pois = pd.read_csv(str(model_pred).replace('_predictions.csv', '_pois.csv'), header=0,
+                           index_col=['z', 'y', 'x'])
 
         predictions, stdevs = aggregate_rois(
             vol=vol,
