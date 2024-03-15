@@ -1883,17 +1883,17 @@ def aggregate_rois(
                 abberated_psf = samplepsfgen.single_psf(w)
                 abberated_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
                 
-                start = [zz - zw // 2, yy - yw // 2, xx - xw // 2]
-                end = [zz + zw // 2, yy + yw // 2, xx + xw // 2]
+                start, end = [None] * 3, [None] * 3
+                for i, (c, w) in enumerate(zip([zz, yy, xx], [zw, yw, xw])):
+                    start[i] = c - w // 2 if (c - w // 2) - 1 > 0 else 0
+                    end[i] = c + w // 2 if (c + w // 2) + 1 < psf_heatmap.shape[i] else None
                 
-                psf_heatmap[
-                start[0]:end[0], start[1]:end[1], start[-1]:end[-1]
-                ] = abberated_psf
+                psf_heatmap[start[0]:end[0], start[1]:end[1], start[-1]:end[-1]] = abberated_psf
                 
                 if plot:
                     for i in [0, 1]:
                         axes[i].add_patch(patches.Rectangle(
-                            xy=(start[2] - 1, start[1] - 1),
+                            xy=(start[2], start[1]),
                             width=xw,
                             height=yw,
                             fill=None,
@@ -1904,7 +1904,7 @@ def aggregate_rois(
 
                         
                         axes[i + 2].add_patch(patches.Rectangle(
-                            xy=(start[2] - 1, start[0] - 1),
+                            xy=(start[2], start[0]),
                             width=xw,
                             height=zw,
                             fill=None,
