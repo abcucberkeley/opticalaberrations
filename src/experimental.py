@@ -402,7 +402,7 @@ def predict_sample(
 
     samplepsfgen = SyntheticPSF(
         psf_type=preloadedpsfgen.psf_type,
-        psf_shape=sample.shape,
+        psf_shape=preloadedpsfgen.psf_shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
@@ -588,7 +588,7 @@ def predict_large_fov(
 
     samplepsfgen = SyntheticPSF(
         psf_type=preloadedpsfgen.psf_type,
-        psf_shape=sample.shape,
+        psf_shape=preloadedpsfgen.psf_shape,
         n_modes=preloadedmodel.output_shape[1],
         lam_detection=wavelength,
         x_voxel_size=lateral_voxel_size,
