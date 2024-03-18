@@ -18,7 +18,7 @@ CLUSTER='slurm'
 TIMELIMIT='24:00:00'  #hh:mm:ss
 NETWORK='prototype'
 SKIP_REMOVE_BACKGROUND=false
-APPTAINER="--apptainer ../develop_CUDA_12_3.sif"
+APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
 ESTIMATED_OBJECT_GAUSSIAN_SIGMA=0
 
 DENOISE=true
