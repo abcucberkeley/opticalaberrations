@@ -13,6 +13,7 @@ EVALSIGN="signed"
 NA=1.0
 TIMELIMIT='24:00:00'  #hh:mm:ss
 APPTAINER="--apptainer ../develop_CUDA_12_3.sif"
+CLUSTER='slurm'
 
 DENOISE=false
 DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
@@ -35,12 +36,12 @@ do
           CONFIG="${CONFIG} --num_beads 1"
         fi
 
-        python manager.py ${CLUSTER} $APPTAINER $JOB \
+        python manager.py $CLUSTER $APPTAINER $JOB \
         --task "phasenet_heatmap ${CONFIG}" \
         --taskname $NA \
         --name ${OUTDIR}/${DATASET}/phasenet/${EVALSIGN}/${EXP}
 
-        python manager.py ${CLUSTER} $APPTAINER $JOB \
+        python manager.py $CLUSTER $APPTAINER $JOB \
         --task "phaseretrieval_heatmap ${CONFIG}" \
         --taskname $NA \
         --name ${OUTDIR}/${DATASET}/phaseretrieval/${EVALSIGN}/${EXP}

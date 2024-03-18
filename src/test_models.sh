@@ -108,22 +108,22 @@ do
                 CONFIG="${CONFIG} --denoiser ${DENOISER}"
               fi
 
-              #python manager.py ${CLUSTER} $APPTAINER $JOB \
+              #python manager.py $CLUSTER $APPTAINER $JOB \
               #--task "${MODEL}.h5 $CONFIG snrheatmap" \
               #--taskname na_$NA \
               #--name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads
 
-              python manager.py ${CLUSTER} $APPTAINER $JOB \
+              python manager.py $CLUSTER $APPTAINER $JOB \
               --task "${MODEL}.h5 --num_beads 1 ${CONFIG} snrheatmap" \
               --taskname na_$NA \
               --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads-1
 
-              python manager.py ${CLUSTER} $APPTAINER $JOB \
+              python manager.py $CLUSTER $APPTAINER $JOB \
               --task "${MODEL}.h5  ${CONFIG} densityheatmap" \
               --taskname na_$NA \
               --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/densityheatmaps/mode-${PTYPE}
 
-              python manager.py ${CLUSTER} $APPTAINER $JOB \
+              python manager.py $CLUSTER $APPTAINER $JOB \
               --task "${MODEL}.h5  ${CONFIG} objectsizeheatmap" \
               --taskname na_$NA \
               --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/objectsizeheatmaps/mode-${PTYPE}
