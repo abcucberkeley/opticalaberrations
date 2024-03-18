@@ -21,8 +21,6 @@ SKIP_REMOVE_BACKGROUND=false
 APPTAINER="--apptainer ../develop_CUDA_12_3.sif"
 ESTIMATED_OBJECT_GAUSSIAN_SIGMA=0
 
-
-
 DENOISE=true
 DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
@@ -163,15 +161,3 @@ do
   #  --name $MODEL/$EVALSIGN/modalities
 
   done
-
-
-#python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem $MEM --cpus $CPUS --gpus $GPUS \
-#--task "phasenet_heatmap $DATA --no_beads --n_samples $MAX --eval_sign $EVALSIGN" \
-#--taskname $NA \
-#--name ../src/phasenet_repo/$EVALSIGN/psf
-#
-#
-#python manager.py slurm benchmark.py --partition abc --constraint 'titan' --mem $MEM --cpus $CPUS --gpus $GPUS \
-#--task "phasenet_heatmap $DATA --n_samples $MAX --eval_sign $EVALSIGN" \
-#--taskname $NA \
-#--name ../src/phasenet_repo/$EVALSIGN/bead

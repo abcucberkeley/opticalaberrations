@@ -169,3 +169,4 @@ src/all_coords_cache_3x361x6x64x64_float16.npy
 /scope_psf
 src/LV_auto_batch.bat_predict_rois
 /SyntheticPSFCache/
+/benchmarks/

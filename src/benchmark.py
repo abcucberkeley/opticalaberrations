@@ -1,12 +1,10 @@
+import logging
+import multiprocessing as mp
 import os
 import subprocess
-import multiprocessing as mp
-
-import logging
 import sys
 import time
 from pathlib import Path
-
 
 try:
     import cupy as cp
@@ -32,7 +30,7 @@ def parse_args(args):
     parser.add_argument(
         "inputs", help='path to eval dataset. Can be a folder or a .csv', type=Path
     )
-
+    
     parser.add_argument(
         "--model_codename", default=None, action='append', help='path to _predictions.csv'
     )
@@ -41,7 +39,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--outdir", default="../benchmark", type=Path, help='path to save eval'
+        "--outdir", default="../benchmarks", type=Path, help='path to save eval'
     )
 
     parser.add_argument(
@@ -73,9 +71,9 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--no_beads", action='store_true', help='evaluate on PSFs only'
+        "--num_beads", default=None, type=int, help='number of beads in the fov'
     )
-
+    
     parser.add_argument(
         "--plot", action='store_true', help='evaluate on PSFs only'
     )
@@ -130,22 +128,24 @@ def main(args=None):
     elif args.target == 'phasenet_heatmap':
         experimental_benchmarks.phasenet_heatmap(
             inputs=args.inputs,
+            outdir=args.outdir,
             distribution=args.dist,
             samplelimit=args.n_samples,
             na=args.na,
             batch_size=args.batch_size,
             eval_sign=args.eval_sign,
-            no_beads=args.no_beads,
+            num_beads=args.num_beads,
         )
-    elif args.target == 'phasenet_heatmap':
-        experimental_benchmarks.phasenet_heatmap(
+    elif args.target == 'phaseretrieval_heatmap':
+        experimental_benchmarks.phaseretrieval_heatmap(
             inputs=args.inputs,
+            outdir=args.outdir,
             distribution=args.dist,
             samplelimit=args.n_samples,
             na=args.na,
             batch_size=args.batch_size,
             eval_sign=args.eval_sign,
-            no_beads=args.no_beads,
+            num_beads=args.num_beads,
         )
     else:
         compare_models(
