@@ -735,9 +735,9 @@ def find_roi(
         p_norm=2,
         num_peaks=num_rois
     ).astype(int)
-    logger.info(f'remove background = {stop_time1 - start_time} seconds')
-    logger.info(f'cross correlate   = {stop_time2 - stop_time1} seconds')
-    logger.info(f'peak_local_max    = {time.time() - stop_time2} seconds')
+    logger.info(f'remove background = {stop_time1 - start_time:8.2f} seconds')
+    logger.info(f'cross correlate   = {stop_time2 - stop_time1:8.2f} seconds')
+    logger.info(f'peak_local_max    = {time.time() - stop_time2:8.2f} seconds')
 
 
     logger.info(f"Found {len(detected_peaks)} peaks from peak_local_max (limited to {num_rois})")

@@ -1582,19 +1582,19 @@ def aggregate_tiles(
             ~(unconfident_tiles.loc[z] | zero_confident_tiles.loc[z] | all_zeros_tiles.loc[z])
         ).sum() for z in range(num_ztiles)
     ])
-    
+
     cluster_colors = np.split(
         np.array(sns.color_palette(clusters3d_colormap, n_colors=(max_isoplanatic_clusters * num_ztiles))) * 255,
         num_ztiles,
     )  # list of colors for each z tiles
-    
+
     clusters3d_colormap = []
     for cc in cluster_colors:  # for each z tile's colors
         clusters3d_colormap.extend([zero_confident_color, *cc])  # append the same zero color (e.g. yellow) at the front
     clusters3d_colormap.extend([ignored_color])  # append the ignored color (e.g. red) to the end
     clusters3d_colormap.extend([unconfident_color])  # append the unconfident color (e.g. white) to the end
     clusters3d_colormap = np.array(clusters3d_colormap)  # yellow, blue, orange,...  yellow, ...  white, pink
-    
+
     predictions, stdevs, corrections = cluster_tiles(
         predictions=predictions,
         stdevs=stdevs,
@@ -1612,56 +1612,56 @@ def aggregate_tiles(
         minimum_number_of_tiles_per_cluster=np.maximum(np.minimum(number_of_nonzero_tiles * 0.09, 3).astype(int), 1),
         # 3 or less tiles
     )
-    
+
     for z in range(num_ztiles):
         # create a mask to get the indices for each z tile and set the mask for the rest of the tiles to False
         zmask = all_zeros_tiles.mask(all_zeros_tiles.index.get_level_values(0) != z).fillna(False)
-        
+
         predictions.loc[zmask, 'cluster'] = z * (max_isoplanatic_clusters + 1)
         stdevs.loc[zmask, 'cluster'] = z * (max_isoplanatic_clusters + 1)
-        
+
         predictions.loc[zmask, 'cluster'] = z * (max_isoplanatic_clusters + 1)
         stdevs.loc[zmask, 'cluster'] = z * (max_isoplanatic_clusters + 1)
-    
+
     # assign unconfident cluster id to last one
     predictions.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
     stdevs.loc[unconfident_tiles, 'cluster'] = len(clusters3d_colormap) - 1
-    
+
     # assign ignored_tiles cluster id to second to last one
     predictions.loc[ignored_tiles, 'cluster'] = len(clusters3d_colormap) - 2
     stdevs.loc[ignored_tiles, 'cluster'] = len(clusters3d_colormap) - 2
-    
+
     # clusterids: [0,1,2,3, 4,5,6,7, 8,9] 9 is unconfident, 8 is ignored for low SNR
     predictions.to_csv(f"{save_path.with_suffix('')}_{postfix}_clusters.csv")
-    
+
     clusters_rgb = np.full((num_ztiles, *vol.shape[1:]), len(clusters3d_colormap) - 1, dtype=np.float32)
     clusters3d_heatmap = np.full_like(vol, len(clusters3d_colormap) - 1, dtype=np.float32)
     wavefront_heatmap = np.zeros((num_ztiles, *vol.shape[1:]), dtype=np.float32)
     expected_wavefront_heatmap = np.zeros((num_ztiles, *vol.shape[1:]), dtype=np.float32)
     psf_heatmap = np.zeros((num_ztiles, *vol.shape[1:]), dtype=np.float32)
     expected_psf_heatmap = np.zeros((num_ztiles, *vol.shape[1:]), dtype=np.float32)
-    
+
     zw, yw, xw = samplepsfgen.psf_shape
     logger.info(f"volume_size = {vol.shape}")
     logger.info(f"window_size = {zw, yw, xw}")
     logger.info(f"      tiles = {num_ztiles, num_ytiles, num_xtiles}")
-    
+
     for i, (z, y, x) in enumerate(itertools.product(range(num_ztiles), range(num_ytiles), range(num_xtiles))):
         c = predictions.loc[(z, y, x), 'cluster']
         if not np.isnan(c):
             clusters_rgb[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.full((yw, xw),
                                                                                   int(c))  # cluster group id
-            
+
             if c == len(clusters3d_colormap) - 1 or c == len(
                     clusters3d_colormap) - 2:  # last codes (e.g. 8, 9) set to flat.
                 wavefront_heatmap[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.zeros((yw, xw))
                 expected_wavefront_heatmap[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.zeros((yw, xw))
-                
+
                 psf_heatmap[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.zeros((yw, xw))
                 expected_psf_heatmap[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.zeros((yw, xw))
             else:  # gets a color
                 w = wavefronts[(z, y, x)]
-                
+
                 if c != 0:
                     expected_w = Wavefront(
                         w.amplitudes_ansi - corrections[f"z{z}_c{int(c)}"].values,
@@ -1669,32 +1669,32 @@ def aggregate_tiles(
                     )
                 else:
                     expected_w = w
-                
+
                 abberated_psf = samplepsfgen.single_psf(w)
                 abberated_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
                 expected_psf = samplepsfgen.single_psf(expected_w)
                 expected_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
-                
+
                 wavefront_heatmap[
                 z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
                 ] = np.nan_to_num(w.wave(xw), nan=0)
-                
+
                 expected_wavefront_heatmap[
                 z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
                 ] = np.nan_to_num(expected_w.wave(xw), nan=0)
-                
+
                 psf_heatmap[
                 z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
                 ] = np.max(abberated_psf, axis=0)
-                
+
                 expected_psf_heatmap[
                 z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
                 ] = np.max(expected_psf, axis=0)
-            
+
             clusters3d_heatmap[z * zw:(z * zw) + zw, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.full(
                 (zw, yw, xw),
                 int(c))  # filled with cluster id 0,1,2,3, 4,5,6,7, 8] 8 is unconfident, color gets assigned later
-        
+
         imwrite(f"{save_path.with_suffix('')}_{postfix}_wavefronts.tif", wavefront_heatmap.astype(np.float32),
                 compression='deflate', dtype=np.float32)
         imwrite(f"{save_path.with_suffix('')}_{postfix}_wavefronts_expected.tif",
@@ -1703,7 +1703,7 @@ def aggregate_tiles(
                 compression='deflate', dtype=np.float32)
         imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs_expected.tif", expected_psf_heatmap.astype(np.float32),
                 compression='deflate', dtype=np.float32)
-        
+
         color_clusters(
             vol,
             clusters3d_heatmap,
@@ -1712,7 +1712,7 @@ def aggregate_tiles(
             yw=yw,
             colormap=clusters3d_colormap,
         )
-        
+
         for name, heatmap in zip(
                 ('wavefronts', 'wavefronts_expected', 'psfs', 'psfs_expected'),
                 (wavefront_heatmap, expected_wavefront_heatmap, psf_heatmap, expected_psf_heatmap),
@@ -1725,7 +1725,7 @@ def aggregate_tiles(
                 yw=yw,
                 colormap=clusters3d_colormap,
             )
-        
+
         # reconstruct_wavefront_error_landscape(
         #     wavefronts=wavefronts,
         #     xtiles=xtiles,
@@ -1740,7 +1740,7 @@ def aggregate_tiles(
         #     na=.9,
         #     tile_p2v=predictions['p2v'].values,
         # )
-        
+
         # vis.plot_volume(
         #     vol=terrain3d,
         #     results=coefficients,
@@ -1749,17 +1749,17 @@ def aggregate_tiles(
         #     dz=axial_voxel_size,
         #     save_path=f"{save_path.with_suffix('')}_{postfix}_projections.svg",
         # )
-        
+
         # vis.plot_isoplanatic_patchs(
         #     results=isoplanatic_patchs,
         #     clusters=clusters,
         #     save_path=f"{save_path.with_suffix('')}_{postfix}_isoplanatic_patchs.svg"
         # )
-        
+
         logger.info(f'Done. Waiting for plots to write for {save_path.with_suffix("")}')
         # pool.close()    # close the pool
         # pool.join()     # wait for all tasks to complete
-    
+
     return predictions, stdevs
 
 
@@ -1776,6 +1776,7 @@ def aggregate_rois(
     unconfident_tiles: pd.Series,
     zero_confident_tiles: pd.Series,
     all_zeros_tiles: pd.Series,
+    sample_voxel_size: list,
     ignored_tiles: list,
     aggregation_rule: str = 'mean',  # metric to use to combine wavefronts of all tiles in a given cluster
     dm_damping_scalar: float = 1,
@@ -1786,19 +1787,19 @@ def aggregate_rois(
 ):
     # valid_predictions = predictions.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_predictions = predictions.groupby('z')
-    
+
     # valid_stdevs = stdevs.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
     valid_stdevs = stdevs.groupby('z')
-    
+
     wavefronts, coefficients, actuators = {}, {}, {}
     psf_heatmap = np.zeros(vol.shape, dtype=np.float32)
-    
+
     for z in range(expected_ztiles):  # basically loop through all ztiles, unless no valid predictions exist
         try:
             ztile_preds = valid_predictions.get_group(z)
             ztile_preds.drop(columns=['p2v'], errors='ignore', inplace=True)
             ztile_preds = ztile_preds.mask(where_unconfident)
-            
+
             ztile_stds = valid_stdevs.get_group(z)
             ztile_stds.drop(columns=['p2v'], errors='ignore', inplace=True)
             ztile_stds = ztile_stds.mask(where_unconfident)
@@ -1810,15 +1811,15 @@ def aggregate_rois(
                 pred_std = ztile_stds.iloc[0]
             else:
                 if aggregation_rule == 'conf':  # find ROI index with the minimum error for each zernike mode
-                    
+
                     # count number of confident zernike modes for each ROI,
                     confident_votes = ztile_stds[~ztile_stds.isin(ignore_modes)].fillna(0).astype(bool).sum(axis=1)
                     low_conf_rois = confident_votes[confident_votes < confident_votes.mean()].index
-                    
+
                     # ROI with the lowest error per mode
                     error_per_mode = ztile_stds[~ztile_stds.isin(ignore_modes)].round(3).drop(low_conf_rois)
                     conf_roi_per_mode = error_per_mode.idxmin(axis=0)
-                    
+
                     # ROIs with the most confident predictions
                     winners = confident_votes[confident_votes==confident_votes.max()]
                     # break the tie between winners using (euclidean sum of) std devs
@@ -1827,7 +1828,7 @@ def aggregate_rois(
 
                     # logger.info(f"Best ROI per mode: {conf_roi_per_mode}")
                     logger.info(f"ROI with the most confident predictions: {best_roi}")
-                    
+
                     pred = ztile_preds.loc[best_roi]
                     pred_std = ztile_stds.loc[best_roi]
                 elif aggregation_rule == 'mean':
@@ -1848,48 +1849,53 @@ def aggregate_rois(
                     pred_std = ztile_stds.round(2).agg(lambda x: x.value_counts().index[0])
                 else:
                     raise Exception(f'Unknown  {aggregation_rule=}')
-            
+
             pred = pred.fillna(0)
             pred_std = pred_std.fillna(0)
 
             if plot:
-                height_of_titles = 0.1
-                height_of_plot = (vol.shape[1] + vol.shape[0]) * 2
-                height_ratios = [vol.shape[1] / height_of_plot + height_of_titles,
-                                 vol.shape[1] / height_of_plot + height_of_titles,
-                                 vol.shape[0] / height_of_plot + height_of_titles,
-                                 vol.shape[0] / height_of_plot + height_of_titles]
+
+                xz_aspect = sample_voxel_size[0] / sample_voxel_size[2]
+                xy_aspect = sample_voxel_size[1] / sample_voxel_size[2]
+                yz_aspect = sample_voxel_size[0] / sample_voxel_size[1]
+                height_of_title = 0.1 * vol.shape[1]*xy_aspect
+
+                height_of_plot = height_of_title + vol.shape[1]*xy_aspect + vol.shape[1]*xy_aspect + height_of_title + vol.shape[0]*xz_aspect + vol.shape[0]*xz_aspect
+                height_ratios = [vol.shape[1] / height_of_plot,
+                                 vol.shape[1] / height_of_plot,
+                                 vol.shape[0]*yz_aspect / height_of_plot,
+                                 vol.shape[0]*yz_aspect / height_of_plot]
 
                 fig, axes = plt.subplots(
-                    4, 1, figsize=(8, 6), sharey=False, sharex=True, height_ratios=height_ratios,
+                    4, 1, figsize=(9, 6), sharey=False, sharex=True, height_ratios=height_ratios, gridspec_kw={'hspace':0}
                 )
-                axes[0].imshow(np.nanmax(vol, axis=0) ** .5, aspect='equal', cmap='Greys_r')
-                axes[2].imshow(np.nanmax(vol, axis=1) ** .5, aspect='equal', cmap='Greys_r')
-            
+                axes[0].imshow(np.nanmax(vol, axis=0) ** .5, aspect=xy_aspect, cmap='Greys_r')
+                axes[2].imshow(np.nanmax(vol, axis=1) ** .5, aspect=xz_aspect, cmap='Greys_r')
+
             zw, yw, xw = samplepsfgen.psf_shape
             logger.info(f"volume_size = {vol.shape}")
             logger.info(f"window_size = {zw, yw, xw}")
-            
+
             for idx in range(ztile_preds.shape[0]):
                 zz, yy, xx = pois.index[idx]
                 zernikes = ztile_preds.iloc[idx].values
-                
+
                 w = Wavefront(
                     np.nan_to_num(zernikes, nan=0, posinf=0, neginf=0),
                     order='ansi',
                     lam_detection=samplepsfgen.lam_detection
                 )
-                
+
                 abberated_psf = samplepsfgen.single_psf(w)
                 abberated_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
-                
-                start, end = [None] * 3, [None] * 3
+
+                start, end = [-1] * 3, [-1] * 3
                 for i, (c, w) in enumerate(zip([zz, yy, xx], [zw, yw, xw])):
                     start[i] = c - w // 2 if (c - w // 2) - 1 > 0 else 0
-                    end[i] = c + w // 2 if (c + w // 2) + 1 < psf_heatmap.shape[i] else None
-                
+                    end[i] = start[i] + w if start[i] + w <= psf_heatmap.shape[i] else None
+
                 psf_heatmap[start[0]:end[0], start[1]:end[1], start[-1]:end[-1]] = abberated_psf
-                
+
                 if plot:
                     for i in [0, 1]:
                         axes[i].add_patch(patches.Rectangle(
@@ -1898,22 +1904,31 @@ def aggregate_rois(
                             height=yw,
                             fill=None,
                             color=f'C{idx}',
-                            alpha=.8,
-                            rotation_point='center'
+                            alpha=0.6,
+                            rotation_point='center',
+                            linewidth=0.5,
                         ))
+                        axes[i].set(xlabel='x pix', ylabel='y pix')
+                        axes[i + 2].set(xlabel='x pix', ylabel='z pix')
 
-                        
                         axes[i + 2].add_patch(patches.Rectangle(
                             xy=(start[2], start[0]),
                             width=xw,
                             height=zw,
                             fill=None,
                             color=f'C{idx}',
-                            alpha=.8,
-                            rotation_point='center'
+                            alpha=0.6,
+                            rotation_point='center',
+                            linewidth=0.5,
                         ))
+                    latex = r'_{\gamma=0.5\text{, background removed}}'
+                    latex = rf'${latex}$'
+                    axes[0].set_title(f'XY {latex}')
+                    # axes[2].set_title(f'XZ {latex}')
+
                     coloraxes = 'midnightblue'
                     for i in [0,1,2,3]:
+
                         axes[i].spines['bottom'].set_color(coloraxes)
                         axes[i].spines['top'].set_color(coloraxes)
                         axes[i].spines['right'].set_color(coloraxes)
@@ -1922,49 +1937,45 @@ def aggregate_rois(
                         axes[i].tick_params(axis='y', colors=coloraxes)
                         axes[i].yaxis.label.set_color(coloraxes)
                         axes[i].xaxis.label.set_color(coloraxes)
-
-                    latex = r'_{\gamma=0.5\text{, background removed}}'
-                    latex = rf'${latex}$'
-                    axes[0].set_title(f'XY {latex}')
-                    axes[2].set_title(f'XZ {latex}')
+                        axes[i].label_outer()
 
         except KeyError:
             pred = np.zeros(samplepsfgen.n_modes)
             pred_std = np.zeros(samplepsfgen.n_modes)
-        
+
         imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32),
                 compression='deflate', dtype=np.float32)
-        
+
         if plot:
-            axes[1].imshow(np.nanmax(psf_heatmap, axis=0) ** .5, aspect='equal', cmap='Greys_r')
-            axes[-1].imshow(np.nanmax(psf_heatmap, axis=1) ** .5, aspect='equal', cmap='Greys_r')
-            
+            axes[1].imshow(np.nanmax(psf_heatmap, axis=0) ** .5, aspect=xy_aspect, cmap='Greys_r')
+            axes[-1].imshow(np.nanmax(psf_heatmap, axis=1) ** .5, aspect=xz_aspect, cmap='Greys_r')
+
             vis.savesvg(fig, f"{save_path.with_suffix('')}_mips.svg")
             logger.info(f"{save_path.with_suffix('')}_mips.svg")
-        
+
         agg = f'z{z}_c0'
         wavefronts[agg] = Wavefront(
             np.nan_to_num(pred, nan=0, posinf=0, neginf=0),
             order='ansi',
             lam_detection=samplepsfgen.lam_detection
         )
-        
+
         coefficients[agg] = wavefronts[agg].amplitudes
-        
+
         actuators[agg] = utils.zernikies_to_actuators(
             wavefronts[agg].amplitudes,
             dm_calibration=dm_calibration,
             dm_state=dm_state,
             scalar=dm_damping_scalar
         )
-        
+
         if plot:
             pred_std = Wavefront(
                 np.nan_to_num(pred_std, nan=0, posinf=0, neginf=0),
                 order='ansi',
                 lam_detection=samplepsfgen.lam_detection
             )
-            
+
             predicted_psf = samplepsfgen.single_psf(phi=wavefronts[agg], normed=True, lls_defocus_offset=0.)
             predicted_embeddings = fourier_embeddings(
                 predicted_psf,
@@ -1972,7 +1983,7 @@ def aggregate_rois(
                 na_mask=samplepsfgen.na_mask,
                 remove_interference=False
             )
-            
+
             vis.diagnosis(
                 pred=wavefronts[agg],
                 pred_std=pred_std,
@@ -1980,17 +1991,17 @@ def aggregate_rois(
                 predicted_psf=predicted_psf,
                 predicted_embeddings=predicted_embeddings
             )
-    
+
     coefficients = pd.DataFrame.from_dict(coefficients)
     coefficients.index.name = 'ansi'
     coefficients.to_csv(f"{save_path.with_suffix('')}_{postfix}_zernike_coefficients.csv")
-    
+
     actuators = pd.DataFrame.from_dict(actuators)
     actuators.index.name = 'actuators'
     csv_save_path = f"{save_path.with_suffix('')}_{postfix}_corrected_actuators.csv"
     dataframe_to_csv(actuators, csv_save_path)
     logger.info(f"with _corrected_actuators for :\ncluster  um_rms sum\n{coefficients.sum().round(3).to_string()}")
-    
+
     return predictions, stdevs
 
 
@@ -2135,7 +2146,8 @@ def aggregate_predictions(
             plot=plot,
             postfix=postfix,
             expected_ztiles=predictions_settings['ztiles'],
-            ignore_modes=predictions_settings['ignore_modes']
+            ignore_modes=predictions_settings['ignore_modes'],
+            sample_voxel_size=predictions_settings['sample_voxel_size'],
         )
     else:
         predictions, stdevs = aggregate_tiles(
