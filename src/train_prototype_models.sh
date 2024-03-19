@@ -11,10 +11,10 @@ MODES=15
 CLUSTER='lsf'
 DEFAULT='--positional_encoding_scheme default --lr 5e-4 --wd 5e-6 --opt adamw'
 LAMB='--lr 1e-3 --wd 1e-2 --opt lamb'
-BS=4096
 APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
 H100="--partition gpu_h100 --gpus 8 --cpus 16"
 A100="--partition gpu_a100 --gpus 4 --cpus 8"
+BS=4096
 
 SUBSET='variable_object_size_fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
@@ -53,19 +53,24 @@ do
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '8' --heads '16'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P3216-R2222
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P8-R8-H16
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16-16-8' --repeats '2-2-2-2'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '8' --heads '16'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P3216168-R2222
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R8-H16
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-32-32' --repeats '2-2-2-2'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '16' --heads '16'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P32-R2222
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P8-R16-H16
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '16' --heads '16'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R16-H16
 
 done
 

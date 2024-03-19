@@ -2,11 +2,10 @@ import logging
 import sys
 from abc import ABC
 
-
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import layers, Sequential
 from scipy.special import binom
+from tensorflow.keras import layers, Sequential
 
 from base import Base
 from roi import ROI
@@ -19,82 +18,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class Stem(layers.Layer):
-    def __init__(
-            self,
-            kernel_size=7,
-            activation='gelu',
-            no_phase=False,
-            mul=False,
-            **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.kernel_size = kernel_size
-        self.activation = activation
-        self.no_phase = no_phase
-        self.mul = mul
-
-        self.conv = layers.Conv3D(
-            filters=1,
-            kernel_size=(1, self.kernel_size, self.kernel_size),
-            padding='same'
-        )
-        self.act = layers.Activation(self.activation)
-
-    def build(self, input_shape):
-        super(Stem, self).build(input_shape)
-
-    def get_config(self):
-        config = super(Stem, self).get_config()
-        config.update({
-            "kernel_size": self.kernel_size,
-            "activation": self.activation,
-            "mul": self.mul,
-            "no_phase": self.no_phase,
-        })
-        return config
-
-    def call(self, inputs, **kwargs):
-
-        if self.mul:
-            emb = layers.multiply([inputs[:, :3], inputs[:, 3:]])
-            emb = self.conv(emb)
-            emb = self.act(emb)
-            return emb
-        else:
-            if self.no_phase:
-                alpha = self.conv(inputs[:, :3])
-                alpha = self.act(alpha)
-                return alpha
-            else:  # two independent kernels for alpha and phi
-                alpha = self.conv(inputs[:, :3])
-                alpha = self.act(alpha)
-
-                phi = self.conv(inputs[:, 3:])
-                phi = self.act(phi)
-                return layers.concatenate([alpha, phi], axis=1)
-
-
 class Patchify(layers.Layer):
-    def __init__(self, patch_size, **kwargs):
+    def __init__(self, patch_size, num_patches, **kwargs):
         super().__init__(**kwargs)
         self.patch_size = patch_size
-        # self.projection = Sequential(
-        #     [
-        #         layers.Conv3D(
-        #             filters=self.patch_size**2,
-        #             kernel_size=(1, self.patch_size, self.patch_size),
-        #             strides=(1, self.patch_size, self.patch_size),
-        #             padding="VALID",
-        #             name="conv_projection",
-        #         ),
-        #         layers.Reshape(
-        #             target_shape=(-1, self.num_patches, self.patch_size**2),
-        #             name="flatten_projection",
-        #         ),
-        #     ],
-        #     name="projection",
-        # )
+        self.num_patches = num_patches
+        self.projection = Sequential(
+            [
+                layers.Conv3D(
+                    filters=self.patch_size ** 2,
+                    kernel_size=(1, self.patch_size, self.patch_size),
+                    strides=(1, self.patch_size, self.patch_size),
+                    padding="VALID",
+                    name="conv_projection",
+                ),
+                layers.Reshape(
+                    target_shape=(-1, self.num_patches, self.patch_size ** 2),
+                    name="flatten_projection",
+                ),
+            ],
+            name="projection",
+        )
         self.prenorm = layers.LayerNormalization(axis=-1, epsilon=1e-6)
 
     def build(self, input_shape):
@@ -104,50 +48,15 @@ class Patchify(layers.Layer):
         config = super(Patchify, self).get_config()
         config.update({
             "patch_size": self.patch_size,
+            "num_patches": self.num_patches,
         })
         return config
 
     def call(self, inputs, **kwargs):
-        planes = []
-        for ax in range(inputs.shape[1]):
-            i = tf.nn.space_to_depth(inputs[:, ax], self.patch_size)
-            planes.append(i)
-        patches = tf.stack(planes, axis=1)
-
+        patches = self.projection(inputs)
         patches = self.prenorm(patches)
         patches = layers.Reshape((inputs.shape[1], -1, patches.shape[-1]))(patches)
         return patches
-
-
-class Merge(layers.Layer):
-    def __init__(self, patch_size, expansion=1, **kwargs):
-        super().__init__(**kwargs)
-        self.patch_size = patch_size
-        self.expansion = expansion
-
-    def build(self, input_shape):
-        super(Merge, self).build(input_shape)
-
-    def get_config(self):
-        config = super(Merge, self).get_config()
-        config.update({
-            "patch_size": self.patch_size,
-            "expansion": self.expansion,
-        })
-        return config
-
-    def call(self, inputs, **kwargs):
-        planes = []
-        d, n, p = inputs.shape[1], inputs.shape[-2], inputs.shape[-1]//self.expansion
-        s = int(np.sqrt(n))
-
-        img = layers.Reshape((d, s, s, -1))(inputs)
-
-        for ax in range(d):
-            i = tf.nn.depth_to_space(img[:, ax], self.patch_size)
-            planes.append(i)
-
-        return tf.stack(planes, axis=1)
 
 
 class PatchEncoder(layers.Layer):
@@ -431,9 +340,9 @@ class OpticalTransformer(Base, ABC):
     def __init__(
             self,
             roi=None,
-            patches=(32, 16, 8, 8),
-            heads=(2, 4, 8, 16),
-            repeats=(2, 4, 6, 2),
+        patches=16,
+        heads=(16),
+        repeats=(24),
             depth_scalar=1.0,
             width_scalar=1.0,
             activation='gelu',
@@ -452,7 +361,7 @@ class OpticalTransformer(Base, ABC):
         super().__init__(**kwargs)
         self.roi = roi
         self.stem = stem
-        self.patches = patches
+        self.patch_size = patches[0]
         self.heads = heads
         self.repeats = repeats
         self.depth_scalar = depth_scalar
@@ -475,47 +384,29 @@ class OpticalTransformer(Base, ABC):
     def _calc_repeats(self, repeats, depth_scalar):
         return int(tf.math.ceil(depth_scalar * repeats))
 
-    def transitional_block(self, inputs, img_shape, patch_size, expansion=1, org_patch_size=None):
-        num_patches = (img_shape//patch_size) ** 2
+    def call(self, inputs, **kwargs):
         
-        if org_patch_size is not None:
-            inputs = Merge(patch_size=org_patch_size, expansion=expansion)(inputs)
+        m = inputs
 
-        m = Patchify(patch_size=patch_size)(inputs)
-
+        if self.roi is not None:
+            m = ROI(crop_shape=self.roi)(m)
+        
+        img_shape = self.roi[-1] if self.roi is not None else inputs.shape[-2]
+        num_patches = (img_shape // self.patch_size) ** 2
+        
+        m = Patchify(patch_size=self.patch_size, num_patches=num_patches)(m)
+        
         m = PatchEncoder(
             num_patches=num_patches,
-            embedding_size=self._calc_channels(patch_size**2, width_scalar=self.width_scalar),
+            embedding_size=self._calc_channels(self.patch_size ** 2, width_scalar=self.width_scalar),
             positional_encoding_scheme=self.positional_encoding_scheme,
             radial_encoding_periods=self.radial_encoding_period,
             radial_encoding_nth_order=self.radial_encoding_nth_order
         )(m)
-        return m
-
-    def call(self, inputs, **kwargs):
-
-        if self.stem:
-            m = Stem(
-                kernel_size=7,
-                activation=self.activation,
-                no_phase=self.no_phase,
-                mul=self.mul,
-            )(inputs)
-        else:
-            m = inputs
-
-        if self.roi is not None:
-            m = ROI(crop_shape=self.roi)(m)
-
-        for i, (p, h, r) in enumerate(zip(self.patches, self.heads, self.repeats)):
-            m = self.transitional_block(
-                m,
-                img_shape=self.roi[-1] if self.roi is not None else inputs.shape[-2],
-                patch_size=self.patches[i],
-                org_patch_size=None if i == 0 else self.patches[i-1],
-            )
-
+        
+        for i, (h, r) in enumerate(zip(self.heads, self.repeats)):
             res = m
+            
             for j in range(self._calc_repeats(r, depth_scalar=self.depth_scalar)):
                 if self.fixed_dropout_depth:
                     dropout_rate = self.dropout_rate
@@ -529,7 +420,9 @@ class OpticalTransformer(Base, ABC):
                     dropout_rate=dropout_rate,
                     expand_rate=self.expand_rate,
                 )(m)
-            m = layers.add([res, m])
+            
+            if len(self.repeats) > 1:
+                m = layers.add([res, m])
 
         m = self.avg(m)
         return self.regressor(m)
