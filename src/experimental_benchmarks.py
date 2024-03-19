@@ -162,7 +162,7 @@ def predict_phaseretrieval(
     plot: bool = False,
     psfgen: Optional[SyntheticPSF] = None,
     num_iterations: int = 100,
-    use_pyotf_zernikes: bool = True,
+    use_pyotf_zernikes: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.0,
 ):
