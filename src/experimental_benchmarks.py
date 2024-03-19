@@ -79,7 +79,7 @@ def download_cocoa(cocoa_path: Path = Path('cocoa_repo')):
 @profile
 def predict_phasenet(
     inputs: Path,
-    plot: bool = False,
+    plot: bool = True,
     phasenet: Any = None,
     phasenetgen: Optional[SyntheticPSF] = None,
     phasenet_path: Path = Path('phasenet_repo')
@@ -149,7 +149,7 @@ def predict_phaseretrieval(
     plot: bool = False,
     psfgen: Optional[SyntheticPSF] = None,
     num_iterations: int = 150,
-    use_pyotf_zernikes: bool = False,
+    use_pyotf_zernikes: bool = True,
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.0,
 ):
@@ -207,12 +207,13 @@ def predict_phaseretrieval(
         data_prepped = cp.asarray(data_prepped)  # use GPU. Comment this line to use CPU.
     except Exception:
         logger.warning(f"No CUDA-capable device is detected. 'image' will be type {type(data_prepped)}")
+    
     pr_result = pr.retrieve_phase(
         data_prepped,
         params,
         max_iters=num_iterations,
-        pupil_tol=1e-5,
-        mse_tol=0,
+        pupil_tol=1e-6,
+        mse_tol=1e-6,
         phase_only=False
     )
     pupil = pr_result.phase / (2 * np.pi)  # convert radians to waves
