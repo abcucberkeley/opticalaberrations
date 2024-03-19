@@ -188,7 +188,6 @@ def predict_phaseretrieval(
         )
     
     data = backend.load_sample(inputs)
-    
     crop_shape = [utils.round_to_odd(dim_len - .1) for dim_len in data.shape]
     logger.info(f'Cropping from {data.shape} to {crop_shape}')
     data = preprocessing.resize_image(data, crop_shape)  # make each dimension an odd number of voxels
@@ -202,7 +201,7 @@ def predict_phaseretrieval(
     )  # all in microns
     
     logger.info("Starting phase retrieval iterations")
-    data_prepped = prep_data_for_PR(np.flip(data, axis=0), multiplier=1.15)
+    data_prepped = prep_data_for_PR(np.flip(data.astype(int), axis=0), multiplier=1.15)
     logger.info(f"Subtracted background of: {np.max(data) - np.max(data_prepped):0.2f} counts")
     
     try:
