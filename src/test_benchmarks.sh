@@ -20,7 +20,7 @@ DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
 for (( i=1; i<=$ITERS; i++ ))
 do
-    JOB="benchmark.py --timelimit $TIMELIMIT --dependency singleton --partition abc_a100 --mem '256GB' --cpus 8 --gpus 2"
+    JOB="benchmark.py --timelimit $TIMELIMIT --dependency singleton --partition abc_a100 --mem '125GB' --cpus 4 --gpus 1"
     CONFIG="/clusterfs/nvme/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
     CONFIG="${CONFIG} --n_samples ${MAX}"
     CONFIG="${CONFIG} --niter ${i}"
