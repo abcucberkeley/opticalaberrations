@@ -1,15 +1,15 @@
 import logging
 import sys
-
-import numpy as np
-from zernike import Zernike, rho_theta, nm_polynomial
+from functools import lru_cache
 from pathlib import Path
-from tifffile import imread
 from typing import Union
 
-from distributions import uniform_weights, decayed_weights, pyramid_weights, pick_modes
+import numpy as np
+from tifffile import imread
+
 from distributions import single, bimodal, multinomial, powerlaw, dirichlet, uniform
-from functools import lru_cache
+from distributions import uniform_weights, decayed_weights, pyramid_weights, pick_modes
+from zernike import Zernike, rho_theta, nm_polynomial
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -303,8 +303,12 @@ class Wavefront:
         rho = rho[valid].flatten()
         theta = theta[valid].flatten()
         pupil_displacement = wavefront[valid].flatten()
-
-        Z = np.array([nm_polynomial(n=z.n, m=z.m, rho=rho, theta=theta) for z in zernikes])
-        coeffs, residuals, rank, s = np.linalg.lstsq(Z.T, pupil_displacement, rcond=None)
-        coeffs[self.prefixed] = 0.
+        
+        try:
+            Z = np.array([nm_polynomial(n=z.n, m=z.m, rho=rho, theta=theta) for z in zernikes])
+            coeffs, residuals, rank, s = np.linalg.lstsq(Z.T, pupil_displacement, rcond=None)
+            coeffs[self.prefixed] = 0.
+        except Exception:
+            coeffs = np.zeros_like(zernikes)
+            
         return coeffs
