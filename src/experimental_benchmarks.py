@@ -21,6 +21,11 @@ import tensorflow as tf
 from functools import partial
 from line_profiler_pycharm import profile
 
+from csbdeep.utils.tf import limit_gpu_memory
+
+limit_gpu_memory(allow_growth=True, fraction=None, total_memory=None)
+from csbdeep.models import CARE
+
 import utils
 import preprocessing
 import backend
@@ -271,7 +276,9 @@ def phasenet_heatmap(
     agg: str = 'median',
     modes: int = 15,
     num_beads: Optional[int] = None,
-    phasenet_path: Path = Path('phasenet_repo')
+    phasenet_path: Path = Path('phasenet_repo'),
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     download_phasenet(phasenet_path)
     from phasenet_repo.phasenet.model import PhaseNet
@@ -294,7 +301,13 @@ def phasenet_heatmap(
     savepath.mkdir(parents=True, exist_ok=True)
     
     phasenet = PhaseNet(None, name='16_05_2020_11_48_14_berkeley_50planes', basedir=f'{phasenet_path}/models/')
-
+    
+    if denoiser is not None:
+        if isinstance(denoiser, Path):
+            logger.info(f"Loading denoiser model: {denoiser}")
+            denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+            logger.info(f"{denoiser.name} loaded")
+            
     phasenetgen = SyntheticPSF(
         psf_type='widefield',
         lls_excitation_profile=None,
@@ -351,7 +364,9 @@ def phasenet_heatmap(
                 psfgen=phasenetgen,
                 no_phase=False,
                 digital_rotations=None,
-                no_beads=True if num_beads is None else False
+                no_beads=True if num_beads is None else False,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size
             ),
             jobs=previous['id'].values,
             desc=f'Generate samples ({savepath.resolve()})',
@@ -515,6 +530,8 @@ def phaseretrieval_heatmap(
     agg: str = 'median',
     modes: int = 15,
     num_beads: Optional[int] = None,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     try:
         import pyotf.pyotf.phaseretrieval as pr
@@ -577,6 +594,12 @@ def phaseretrieval_heatmap(
             lam_detection=psfgen.lam_detection,
         )
     
+    if denoiser is not None:
+        if isinstance(denoiser, Path):
+            logger.info(f"Loading denoiser model: {denoiser}")
+            denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+            logger.info(f"{denoiser.name} loaded")
+    
     if 'object_gaussian_sigma' not in results.columns:
         results['object_gaussian_sigma'] = 0.
     
@@ -596,7 +619,9 @@ def phaseretrieval_heatmap(
                 psfgen=psfgen,
                 no_phase=False,
                 digital_rotations=None,
-                no_beads=True if num_beads is None else False
+                no_beads=True if num_beads is None else False,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size
             ),
             jobs=previous['id'].values,
             desc=f'Generate samples ({savepath.resolve()})',

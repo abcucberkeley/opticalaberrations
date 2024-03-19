@@ -98,6 +98,11 @@ def parse_args(args):
     parser.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
+    
+    parser.add_argument(
+        '--denoiser', type=Path, default=None,
+        help='path to denoiser model'
+    )
 
     return parser.parse_args(args)
 
@@ -136,6 +141,7 @@ def main(args=None):
             eval_sign=args.eval_sign,
             num_beads=args.num_beads,
             iter_num=args.niter,
+            denoiser=args.denoiser
         )
     elif args.target == 'phaseretrieval_heatmap':
         experimental_benchmarks.phaseretrieval_heatmap(
@@ -148,6 +154,7 @@ def main(args=None):
             eval_sign=args.eval_sign,
             num_beads=args.num_beads,
             iter_num=args.niter,
+            denoiser=args.denoiser
         )
     else:
         compare_models(
