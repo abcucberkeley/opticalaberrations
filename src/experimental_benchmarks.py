@@ -34,7 +34,7 @@ import vis
 
 from wavefront import Wavefront
 from synthetic import SyntheticPSF, PsfGenerator3D
-from embeddings import remove_interference_pattern
+from scipy import stats as st
 
 try:
     import cupy as cp
@@ -89,6 +89,7 @@ def predict_phasenet(
     phasenetgen: Optional[SyntheticPSF] = None,
     phasenet_path: Path = Path('phasenet_repo')
 ):
+
     download_phasenet(phasenet_path)
     from csbdeep.utils import normalize
 
@@ -120,8 +121,15 @@ def predict_phasenet(
 
     psf = backend.load_sample(inputs)
     psf = preprocessing.resize_image(psf, crop_shape=(50, 50, 50))
+    
+    mode = st.mode(psf, axis=None).mode
+    mode = int(mode[0]) if isinstance(mode, (list, tuple, np.ndarray)) else int(mode)
+    
+    psf -= mode
     psf = np.expand_dims(normalize(psf), axis=-1)
+    
     p = list(phasenet.predict(psf))
+    
     wavefront = Wavefront(
         amplitudes=[0, 0, 0, 0] + p,
         lam_detection=phasenetgen.lam_detection,
@@ -153,7 +161,7 @@ def predict_phaseretrieval(
     inputs: Path,
     plot: bool = False,
     psfgen: Optional[SyntheticPSF] = None,
-    num_iterations: int = 150,
+    num_iterations: int = 100,
     use_pyotf_zernikes: bool = True,
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.0,
@@ -184,17 +192,6 @@ def predict_phaseretrieval(
     crop_shape = [utils.round_to_odd(dim_len - .1) for dim_len in data.shape]
     logger.info(f'Cropping from {data.shape} to {crop_shape}')
     data = preprocessing.resize_image(data, crop_shape)  # make each dimension an odd number of voxels
-    
-    psf = data / np.nanmax(data)
-    otf = utils.fft(psf)
-    otf = remove_interference_pattern(
-        psf=psf,
-        otf=otf,
-        plot=f"{inputs.with_suffix('')}_phase_retrieval" if plot else None,
-        max_num_peaks=1,
-        windowing=False,
-    )
-    data = np.int_(utils.ifft(otf) * np.nanmax(data))
     
     params = dict(
         wl=psfgen.lam_detection,
@@ -289,7 +286,7 @@ def phasenet_heatmap(
         if num_beads is None:
             savepath = savepath / 'psf'
         else:
-            savepath = savepath / f'bead-{num_beads}'
+            savepath = savepath / f'beads-{num_beads}'
         
         if distribution != '/':
             savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
@@ -548,7 +545,7 @@ def phaseretrieval_heatmap(
         if num_beads is None:
             savepath = savepath / 'psf'
         else:
-            savepath = savepath / f'bead-{num_beads}'
+            savepath = savepath / f'beads-{num_beads}'
         
         if distribution != '/':
             savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')

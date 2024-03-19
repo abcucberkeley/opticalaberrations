@@ -30,9 +30,9 @@ do
       CONFIG="${CONFIG} --denoiser ${DENOISER}"
     fi
 
-    for EXP in "psf" "bead-1"
+    for EXP in "psf" "beads-1"
     do
-        if [ $EXP = "bead-1" ];then
+        if [ $EXP = "beads-1" ];then
           CONFIG="${CONFIG} --num_beads 1"
         fi
 
