@@ -135,6 +135,7 @@ def main(args=None):
             batch_size=args.batch_size,
             eval_sign=args.eval_sign,
             num_beads=args.num_beads,
+            iter_num=args.niter,
         )
     elif args.target == 'phaseretrieval_heatmap':
         experimental_benchmarks.phaseretrieval_heatmap(
@@ -146,6 +147,7 @@ def main(args=None):
             batch_size=args.batch_size,
             eval_sign=args.eval_sign,
             num_beads=args.num_beads,
+            iter_num=args.niter,
         )
     else:
         compare_models(
