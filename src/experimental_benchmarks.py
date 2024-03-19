@@ -84,7 +84,7 @@ def download_cocoa(cocoa_path: Path = Path('cocoa_repo')):
 @profile
 def predict_phasenet(
     inputs: Path,
-    plot: bool = True,
+    plot: bool = False,
     phasenet: Any = None,
     phasenetgen: Optional[SyntheticPSF] = None,
     phasenet_path: Path = Path('phasenet_repo')
