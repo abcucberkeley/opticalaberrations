@@ -121,6 +121,11 @@ def main(args=None):
             inputs=args.inputs,
             plot=args.plot,
         )
+    elif args.target == 'phaseretrieval':
+        experimental_benchmarks.predict_phaseretrieval(
+            inputs=args.inputs,
+            plot=args.plot,
+        )
     elif args.target == 'cocoa':
         experimental_benchmarks.predict_cocoa(
             inputs=args.inputs,

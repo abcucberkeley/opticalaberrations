@@ -114,9 +114,6 @@ def predict_phasenet(
             z_voxel_size=.1,
             na_detection=1.1,
             refractive_index=1.33,
-            order='ansi',
-            distribution='mixed',
-            mode_weights='pyramid',
         )
 
     psf = backend.load_sample(inputs)
@@ -161,7 +158,7 @@ def predict_phaseretrieval(
     inputs: Path,
     plot: bool = False,
     psfgen: Optional[SyntheticPSF] = None,
-    num_iterations: int = 100,
+    num_iterations: int = 200,
     use_pyotf_zernikes: bool = False,
     ignore_modes: list = (0, 1, 2, 4),
     prediction_threshold: float = 0.0,
@@ -315,9 +312,6 @@ def phasenet_heatmap(
         z_voxel_size=.1,
         na_detection=1.1,
         refractive_index=1.33,
-        order='ansi',
-        distribution='mixed',
-        mode_weights='pyramid',
     )
 
     if inputs.suffix == '.csv':
@@ -564,9 +558,6 @@ def phaseretrieval_heatmap(
         x_voxel_size=.097,
         y_voxel_size=.097,
         z_voxel_size=.1,
-        refractive_index=1.33,
-        na_detection=1.0,
-        order='ansi',
     )
     
     if inputs.suffix == '.csv':
