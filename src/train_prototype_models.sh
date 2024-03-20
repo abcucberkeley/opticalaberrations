@@ -53,24 +53,14 @@ do
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '8' --heads '16'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '2-2-2-2' --heads '16-16-16-16'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P8-R8-H16
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P8-R8-pool
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '8' --heads '16'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '2-2-2-2' --heads '16-16-16-16'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R8-H16
-
-  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '16' --heads '16'" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P8-R16-H16
-
-  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '16' --heads '16'" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R16-H16
+  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R8-pool
 
 done
 

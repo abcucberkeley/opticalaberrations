@@ -59,6 +59,35 @@ class Patchify(layers.Layer):
         return patches
 
 
+class Pool(layers.Layer):
+    def __init__(self, pool_size=(1, 2, 2), **kwargs):
+        super().__init__(**kwargs)
+        self.pool_size = pool_size
+        
+        self.pool = layers.AveragePooling3D(
+            pool_size=self.pool_size,
+            strides=self.pool_size,
+            padding="VALID",
+            name='pooled_projections'
+        )
+
+    def build(self, input_shape):
+        super(Pool, self).build(input_shape)
+
+    def get_config(self):
+        config = super(Pool, self).get_config()
+        config.update({
+            "pool_size": self.pool_size,
+        })
+        return config
+
+    def call(self, inputs, **kwargs):
+        m = tf.expand_dims(inputs, axis=-1)
+        m = self.pool(m)
+        m = tf.squeeze(m, axis=-1)
+        return m
+
+
 class PatchEncoder(layers.Layer):
     def __init__(
             self,
@@ -338,25 +367,25 @@ class Transformer(layers.Layer):
 
 class OpticalTransformer(Base, ABC):
     def __init__(
-            self,
-            roi=None,
+        self,
+        roi=None,
         patches=16,
-        heads=(16),
-        repeats=(24),
-            depth_scalar=1.0,
-            width_scalar=1.0,
-            activation='gelu',
-            dropout_rate=0.1,
-            expand_rate=4,
-            rho=.05,
-            mul=False,
-            no_phase=False,
-            radial_encoding_period=1,
-            positional_encoding_scheme='default',
-            radial_encoding_nth_order=4,
-            fixed_dropout_depth=False,
-            stem=False,
-            **kwargs
+        heads=(16, 16, 16, 16),
+        repeats=(2, 2, 2, 2),
+        depth_scalar=1.0,
+        width_scalar=1.0,
+        activation='gelu',
+        dropout_rate=0.1,
+        expand_rate=4,
+        rho=.05,
+        mul=False,
+        no_phase=False,
+        radial_encoding_period=1,
+        positional_encoding_scheme='default',
+        radial_encoding_nth_order=4,
+        fixed_dropout_depth=False,
+        stem=False,
+        **kwargs
     ):
         super().__init__(**kwargs)
         self.roi = roi
@@ -420,9 +449,12 @@ class OpticalTransformer(Base, ABC):
                     dropout_rate=dropout_rate,
                     expand_rate=self.expand_rate,
                 )(m)
-            
+                
             if len(self.repeats) > 1:
                 m = layers.add([res, m])
+                
+                if i != len(self.repeats) - 1:
+                    m = Pool(pool_size=(1, 2, 2))(m)
 
         m = self.avg(m)
         return self.regressor(m)
