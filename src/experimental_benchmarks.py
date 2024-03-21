@@ -268,7 +268,8 @@ def phasenet_heatmap(
     eval_sign: str = 'signed',
     agg: str = 'median',
     modes: int = 15,
-    num_beads: Optional[int] = None,
+    num_beads: Optional[int] = 1,
+    simulate_psf_only: bool = True,
     phasenet_path: Path = Path('phasenet_repo'),
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
@@ -354,7 +355,7 @@ def phasenet_heatmap(
                 psfgen=phasenetgen,
                 no_phase=False,
                 digital_rotations=None,
-                no_beads=True if num_beads is None else False,
+                simulate_psf_only=simulate_psf_only,
                 denoiser=denoiser,
                 denoiser_window_size=denoiser_window_size
             ),
@@ -519,7 +520,8 @@ def phaseretrieval_heatmap(
     eval_sign: str = 'signed',
     agg: str = 'median',
     modes: int = 15,
-    num_beads: Optional[int] = None,
+    num_beads: Optional[int] = 1,
+    simulate_psf_only: bool = True,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):
@@ -606,7 +608,7 @@ def phaseretrieval_heatmap(
                 psfgen=psfgen,
                 no_phase=False,
                 digital_rotations=None,
-                no_beads=True if num_beads is None else False,
+                simulate_psf_only=simulate_psf_only,
                 denoiser=denoiser,
                 denoiser_window_size=denoiser_window_size
             ),

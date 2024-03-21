@@ -131,7 +131,7 @@ def generate_sample(
     no_phase: bool = False,
     digital_rotations: Optional[int] = None,
     plot: bool = False,
-    no_beads: bool = False,
+    simulate_psf_only: bool = False,
     preprocess: bool = False,
     file_format: str = 'tif',
     denoiser: Optional[Union[Path, CARE]] = None,
@@ -178,7 +178,7 @@ def generate_sample(
             meta=False,
         )
 
-        if no_beads:
+        if simulate_psf_only:
             noisy_img = simulate_beads(
                 psf=psf,
                 psf_type=psfgen.psf_type,
@@ -357,6 +357,7 @@ def iter_evaluate(
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
     preprocess: bool = True,
     skip_remove_background: bool = False,
+    simulate_psf_only: bool = False,
     use_theoretical_widefield_simulator: bool = False,
     denoiser: Optional[Union[Path, CARE]] = None,
     denoiser_window_size: tuple = (32, 64, 64),
@@ -443,6 +444,7 @@ def iter_evaluate(
                 plot=plot,
                 denoiser=denoiser,
                 denoiser_window_size=denoiser_window_size,
+                simulate_psf_only=simulate_psf_only,
             ),
             jobs=previous['id'].values,
             desc=f'Create samples ({savepath.resolve()})',
@@ -1668,6 +1670,7 @@ def snrheatmap(
     agg: str = 'median',
     psf_type: Optional[str] = None,
     num_beads: Optional[int] = None,
+    simulate_psf_only: bool = False,
     lam_detection: Optional[float] = .510,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
@@ -1683,11 +1686,14 @@ def snrheatmap(
 
         if psf_type is not None:
             savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
-
-        if num_beads is not None:
-            savepath = savepath / f'beads-{num_beads}'
+        
+        if simulate_psf_only:
+            savepath = savepath / 'psf'
         else:
-            savepath = savepath / 'beads'
+            if num_beads is not None:
+                savepath = savepath / f'beads-{num_beads}'
+            else:
+                savepath = savepath / 'beads'
 
         if distribution != '/':
             savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
@@ -1719,6 +1725,7 @@ def snrheatmap(
             lam_detection=lam_detection,
             skip_remove_background=skip_remove_background,
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            simulate_psf_only=simulate_psf_only,
             denoiser=denoiser,
             denoiser_window_size=denoiser_window_size,
             simulate_samples=simulate_samples,
@@ -1988,7 +1995,7 @@ def objectsizeheatmap(
     denoiser_window_size: tuple = (32, 64, 64),
     simulate_samples: bool = False,
     estimated_object_gaussian_sigma: float = 0,
-    object_gaussian_sigma_range: tuple = (.6, 1.6)
+    object_gaussian_sigma_range: tuple = (.5, 2)
 ):
     modelspecs = backend.load_metadata(modelpath)
     

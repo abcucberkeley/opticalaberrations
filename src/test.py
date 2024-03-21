@@ -142,6 +142,10 @@ def parse_args(args):
         "--estimated_object_gaussian_sigma", default=0.0, type=float,
         help='size of object for creating an ideal psf (default: 0;  single pixel)'
     )
+    
+    parser.add_argument(
+        "--simulate_psf_only", action='store_true', help='evaluate on PSFs only'
+    )
 
     return parser.parse_args(args)
 
@@ -253,7 +257,8 @@ def main(args=None):
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
                 denoiser=args.denoiser,
                 simulate_samples=True if args.niter > 1 else args.simulate_samples,
-                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma,
+                simulate_psf_only=args.simulate_psf_only
             )
         elif args.target == 'confidence_heatmap':
             savepath = eval.confidence_heatmap(

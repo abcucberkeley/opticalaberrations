@@ -16,23 +16,21 @@ NA=1.0
 ABC_A100_NODES=( "g0003.abc0" "g0004.abc0" "g0005.abc0" "g0006.abc0" )
 CLUSTER='slurm'
 TIMELIMIT='24:00:00'  #hh:mm:ss
-NETWORK='prototype'
 SKIP_REMOVE_BACKGROUND=false
 APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
 ESTIMATED_OBJECT_GAUSSIAN_SIGMA=0
-
-DENOISE=true
 DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
 TRAINED_MODELS=(
-  "YuMB_lambda510-P3216-R2222-variable-v2"
+  "opticalnet-15-YuMB-lambda510"
+  "denoise-15-YuMB-lambda510"
 )
 
 for M in ${TRAINED_MODELS[@]}
 do
-    MODEL="$PRETRAINED/$NETWORK-$MODES-$M"
+    MODEL="$PRETRAINED/$M"
 
-    if [ "${M:0:4}" = YuMB ];then
+    if [[ $M == *"YuMB"* ]];then
       declare -a PSFS=(
         "YuMB ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
         #"Gaussian ../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat"
@@ -40,7 +38,7 @@ do
         #"Sinc ../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat"
       )
 
-    elif [ "${M:0:5}" == v2Hex ];then
+    elif [[ $M == *"v2Hex"* ]];then
       declare -a PSFS=(
         "v2Hex ../lattice/v2Hex_NAexc0p50_NAsigma0p075_annulus0p60-0p40_FWHM53p0.mat"
         #"ACHex ../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat"
@@ -48,13 +46,13 @@ do
         #"v2HexRect ../lattice/v2HexRect_NAexc0p50_NAsigma0p15_annulus0p60-0p40_FWHM_56p0.mat"
       )
 
-    elif [ $M = "widefield_lambda510" ];then
+    elif [[ $M == *"widefield"* ]];then
       declare -a PSFS=( "widefield widefield" )
 
-    elif [ $M = "2photon_lambda920" ];then
+    elif [[ $M == *"2photon"* ]];then
       declare -a PSFS=( "2photon 2photon" )
 
-    elif [ $M = "confocal_lambda510" ];then
+    elif [[ $M == *"confocal"* ]];then
       declare -a PSFS=( "confocal confocal" )
 
     else
@@ -72,7 +70,7 @@ do
       echo Eval $M on $PTYPE
       echo
 
-      if [ $PTYPE = '2photon' ];then
+      if [[ $PTYPE = "2photon" ]];then
         LAM=.920
       else
         LAM=.510
@@ -81,7 +79,7 @@ do
 
       for (( i=1; i<=$ITERS; i++ ))
       do
-        if [ $CLUSTER = 'slurm' ];then
+        if [[ $CLUSTER = 'slurm' ]];then
           DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
           JOB="test.py --timelimit $TIMELIMIT --dependency singleton --partition abc_a100 --mem=500GB --cpus 16 --gpus 4 --exclusive"
         else
@@ -104,29 +102,34 @@ do
               CONFIG="${CONFIG} --eval_sign ${EVALSIGN}"
               CONFIG="${CONFIG} --estimated_object_gaussian_sigma ${ESTIMATED_OBJECT_GAUSSIAN_SIGMA}"
 
-              if $DENOISE; then
+              if [[ $M == *"denoise"* ]]; then
                 CONFIG="${CONFIG} --denoiser ${DENOISER}"
               fi
 
-              #python manager.py $CLUSTER $APPTAINER $JOB \
-              #--task "${MODEL}.h5 $CONFIG snrheatmap" \
-              #--taskname na_$NA \
-              #--name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads
+              python manager.py $CLUSTER $APPTAINER $JOB \
+              --task "${MODEL}.h5 --num_beads 1 --simulate_psf_only ${CONFIG} snrheatmap" \
+              --taskname na_$NA \
+              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/psf
 
               python manager.py $CLUSTER $APPTAINER $JOB \
               --task "${MODEL}.h5 --num_beads 1 ${CONFIG} snrheatmap" \
               --taskname na_$NA \
-              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads-1
+              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads-1
 
               python manager.py $CLUSTER $APPTAINER $JOB \
               --task "${MODEL}.h5  ${CONFIG} densityheatmap" \
               --taskname na_$NA \
-              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/densityheatmaps/mode-${PTYPE}
+              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/densityheatmaps/mode-${PTYPE}
 
               python manager.py $CLUSTER $APPTAINER $JOB \
               --task "${MODEL}.h5  ${CONFIG} objectsizeheatmap" \
               --taskname na_$NA \
-              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${NETWORK}-${MODES}-${M}/${EVALSIGN}/objectsizeheatmaps/mode-${PTYPE}
+              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/objectsizeheatmaps/mode-${PTYPE}
+
+              #python manager.py $CLUSTER $APPTAINER $JOB \
+              #--task "${MODEL}.h5 $CONFIG snrheatmap" \
+              #--taskname na_$NA \
+              #--name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads
 
               echo
           done

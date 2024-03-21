@@ -75,7 +75,11 @@ def parse_args(args):
     )
     
     parser.add_argument(
-        "--plot", action='store_true', help='evaluate on PSFs only'
+        "--plot", action='store_true', help='optional plot to show predictions for each sample'
+    )
+    
+    parser.add_argument(
+        "--simulate_psf_only", action='store_true', help='evaluate on PSFs only'
     )
 
     parser.add_argument(
@@ -146,7 +150,8 @@ def main(args=None):
             eval_sign=args.eval_sign,
             num_beads=args.num_beads,
             iter_num=args.niter,
-            denoiser=args.denoiser
+            denoiser=args.denoiser,
+            simulate_psf_only=args.simulate_psf_only
         )
     elif args.target == 'phaseretrieval_heatmap':
         experimental_benchmarks.phaseretrieval_heatmap(
@@ -159,7 +164,8 @@ def main(args=None):
             eval_sign=args.eval_sign,
             num_beads=args.num_beads,
             iter_num=args.niter,
-            denoiser=args.denoiser
+            denoiser=args.denoiser,
+            simulate_psf_only=args.simulate_psf_only
         )
     else:
         compare_models(
