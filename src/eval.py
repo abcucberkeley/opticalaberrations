@@ -146,87 +146,97 @@ def generate_sample(
         outdir.mkdir(exist_ok=True, parents=True)
         savepath = outdir / f"{f.with_suffix('').name}.{file_format}"
 
-    if savepath.exists():
-        return savepath
+    ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
+    ref = np.squeeze(data_utils.get_image(beads))
+    
+    if hashtable['object_gaussian_sigma'] > 0:
+        kernel = utils.gaussian_kernel(kernlen=[21, 21, 21], std=hashtable['object_gaussian_sigma'])
+        
+        # convolve template with the input image
+        ref = convolution.convolve_fft(
+            ref,
+            kernel,
+            allow_huge=True,
+            boundary='fill',
+            nan_treatment='fill',
+            fill_value=0,
+            normalize_kernel=np.sum
+        )
+
+    wavefront = Wavefront(
+        ys,
+        modes=psfgen.n_modes,
+        lam_detection=psfgen.lam_detection,
+    )
+
+    psf = psfgen.single_psf(
+        phi=wavefront,
+        normed=True,
+        meta=False,
+    )
+
+    if simulate_psf_only:
+        noisy_img = simulate_beads(
+            psf=psf,
+            psf_type=psfgen.psf_type,
+            beads=None,
+            fill_radius=0,
+            object_size=0,
+            photons=hashtable['photons'],
+            scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
+        )
     else:
-        ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
-        ref = np.squeeze(data_utils.get_image(beads))
+        noisy_img = simulate_beads(
+            psf=psf,
+            psf_type=psfgen.psf_type,
+            beads=ref,
+            photons=hashtable['photons'],
+            scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
+        )
+    
+    if savedir is not None:
+        init_path = Path(f"{savepath.with_suffix('')}_not_processed")
+        imwrite(init_path.with_suffix('.tif'), noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
+    
+    if preprocess:
+        noisy_img = backend.preprocess(
+            noisy_img,
+            modelpsfgen=psfgen,
+            digital_rotations=digital_rotations,
+            no_phase=no_phase,
+            remove_background=True,
+            normalize=True,
+            min_psnr=0,
+            plot=savepath.with_suffix('') if plot else None,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+        )
+    
+    if denoiser is not None and not preprocess:
+        noisy_img = denoise_image(
+            image=noisy_img,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+        )
         
-        if hashtable['object_gaussian_sigma'] > 0:
-            kernel = utils.gaussian_kernel(kernlen=[21, 21, 21], std=hashtable['object_gaussian_sigma'])
-            
-            # convolve template with the input image
-            ref = convolution.convolve_fft(
-                ref,
-                kernel,
-                allow_huge=True,
-                boundary='fill',
-                nan_treatment='fill',
-                fill_value=0,
-                normalize_kernel=np.sum
-            )
-
-        wavefront = Wavefront(
-            ys,
-            modes=psfgen.n_modes,
-            lam_detection=psfgen.lam_detection,
-        )
-
-        psf = psfgen.single_psf(
-            phi=wavefront,
-            normed=True,
-            meta=False,
-        )
-
-        if simulate_psf_only:
-            noisy_img = simulate_beads(
-                psf=psf,
-                psf_type=psfgen.psf_type,
-                beads=None,
-                fill_radius=0,
-                object_size=0,
-                photons=hashtable['photons'],
-                scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
+    if savedir is not None:
+        if file_format == 'tif':
+            imwrite(
+                savepath,
+                data=noisy_img.astype(np.float32),
+                compression='deflate',
+                dtype=np.float32,
+                imagej=True,
             )
         else:
-            noisy_img = simulate_beads(
-                psf=psf,
-                psf_type=psfgen.psf_type,
-                beads=ref,
-                photons=hashtable['photons'],
-                scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
+            np.savez_compressed(
+                Path(f"{savepath.with_suffix('')}"), noisy_img.astype(np.float32),
+                allow_pickle=True
             )
-        
-        if preprocess:
-            noisy_img = backend.preprocess(
-                noisy_img,
-                modelpsfgen=psfgen,
-                digital_rotations=digital_rotations,
-                no_phase=no_phase,
-                remove_background=True,
-                normalize=True,
-                min_psnr=0,
-                plot=savepath.with_suffix('') if plot else None,
-                denoiser=denoiser,
-                denoiser_window_size=denoiser_window_size,
-            )
-        
-        if denoiser is not None and not preprocess:
-            noisy_img = denoise_image(
-                image=noisy_img,
-                denoiser=denoiser,
-                denoiser_window_size=denoiser_window_size,
-            )
-            
-        if savedir is not None:
-            if file_format == 'tif':
-                imwrite(savepath, noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
-            else:
-                np.savez_compressed(Path(f"{savepath.with_suffix('')}"), noisy_img.astype(np.float32))
-
-            return savepath
-        else:
-            return noisy_img
+        return savepath
+    
+    else:
+        return noisy_img
 
 
 @profile
@@ -355,7 +365,7 @@ def iter_evaluate(
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
-    preprocess: bool = True,
+    preprocess: bool = False,
     skip_remove_background: bool = False,
     simulate_psf_only: bool = False,
     use_theoretical_widefield_simulator: bool = False,
@@ -375,7 +385,7 @@ def iter_evaluate(
         "results" dataframe
     """
     model = backend.load(modelpath)
-    plot = True
+
     gen = backend.load_metadata(
         modelpath,
         signed=True,
@@ -476,7 +486,8 @@ def iter_evaluate(
         skip_prep_sample=False,
         preprocessed=preprocess,
         remove_background=False if skip_remove_background else True,
-        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
+        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
+        save_processed_tif_file=True
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
