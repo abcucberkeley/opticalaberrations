@@ -544,7 +544,7 @@ def zernikes(pred: Wavefront, save_path: Path, pred_std: Any = None, lls_defocus
         ax_wavefront,
         pred_wave,
         rms=pred_rms,
-        label='Predicted wavefront',
+        label='Predicted',
         vcolorbar=True,
     )
 
@@ -686,7 +686,7 @@ def diagnosis(
         ax_wavefront,
         pred_wave,
         rms=pred_rms,
-        label='Predicted wavefront',
+        label='Predicted',
         vcolorbar=True,
     )
     
@@ -748,7 +748,7 @@ def diagnosis(
         cb = plt.colorbar(m, cax=cax)
         cax.yaxis.set_label_position("left")
         cax.yaxis.set_ticks_position('left')
-        cax.set_ylabel(r'Embedding ($\alpha$)')
+        cax.set_ylabel('Predicted\n' + r'Embedding ($\alpha$)')
         
         m = phi_axes[0].imshow(predicted_embeddings[3], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
         phi_axes[1].imshow(predicted_embeddings[4], cmap=p_cmap, vmin=p_vmin, vmax=p_vmax)
@@ -759,7 +759,7 @@ def diagnosis(
         cb = plt.colorbar(m, cax=cax, format=lambda x, _: f"{x:.1f}")
         cax.yaxis.set_label_position("left")
         cax.yaxis.set_ticks_position('left')
-        cax.set_ylabel(r'Embedding ($\varphi$)')
+        cax.set_ylabel('Predicted\n' + r'Embedding ($\varphi$)')
         
         for ax in [*alpha_axes, *phi_axes]:
             ax.axis('off')
