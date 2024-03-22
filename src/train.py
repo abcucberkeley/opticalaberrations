@@ -18,7 +18,6 @@ from datetime import datetime
 from typing import Any, Optional
 
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 import tensorflow as tf
@@ -51,31 +50,54 @@ tf.get_logger().setLevel(logging.ERROR)
 plt.set_loglevel('error')
 
 
-def plot_patches(img: np.ndarray, outdir: Path, patches: list):
+def plot_conv_patches(name: str, img: np.ndarray, outdir: Path, patch_ize: int):
+    input_img = np.expand_dims(img, axis=0)
+    vmin = np.min(input_img)
+    vmax = np.max(input_img)
+    cmap = "Spectral"
+    
     for k, label in enumerate(['xy', 'xz', 'yz']):
-        img = np.expand_dims(img[0], axis=0)
-        original = np.squeeze(img[0, k])
-
-        vmin = np.min(original)
-        vmax = np.max(original)
-        vcenter = (vmin + vmax) / 2
-        step = .01
-
-        highcmap = plt.get_cmap('YlOrRd', 256)
-        lowcmap = plt.get_cmap('YlGnBu_r', 256)
-        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
-        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
-        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
-        cmap = mcolors.ListedColormap(cmap)
+        original = np.squeeze(img[k])
 
         plt.figure(figsize=(4, 4))
         plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
         plt.axis("off")
         plt.title('Original')
-        plt.savefig(f'{outdir}/{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{outdir}/{name}_{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+        patches = opticalnet.Patchify(patch_size=patch_ize)(input_img)
+        patches = patches[0, k]
+
+        n = int(np.sqrt(patches.shape[0]))
+        plt.figure(figsize=(4, 4))
+        plt.title('Patches')
+        for i, patch in enumerate(patches):
+            ax = plt.subplot(n, n, i + 1)
+            patch_img = tf.reshape(patch, (patch_ize, patch_ize)).numpy()
+            ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
+            ax.axis("off")
+        
+        plt.axis('off')
+        plt.savefig(f'{outdir}/{name}_{label}_patches_p{patch_ize}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+def plot_multiscale_patches(name: str, img: np.ndarray, outdir: Path, patches: list):
+    input_img = np.expand_dims(img, axis=0)
+    vmin = np.min(input_img)
+    vmax = np.max(input_img)
+    cmap = "Spectral"
+    
+    for k, label in enumerate(['xy', 'xz', 'yz']):
+        original = np.squeeze(img[k])
+
+        plt.figure(figsize=(4, 4))
+        plt.imshow(original, cmap=cmap, vmin=vmin, vmax=vmax)
+        plt.axis("off")
+        plt.title('Original')
+        plt.savefig(f'{outdir}/{name}_{label}_original.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
         for p in patches:
-            patches = opticalnet.Patchify(patch_size=p)(img)
+            patches = opticalnet.Patchify(patch_size=p)(input_img)
             merged = opticalnet.Merge(patch_size=p)(patches)
 
             patches = patches[0, k]
@@ -95,8 +117,9 @@ def plot_patches(img: np.ndarray, outdir: Path, patches: list):
                 patch_img = tf.reshape(patch, (p, p)).numpy()
                 ax.imshow(patch_img, cmap=cmap, vmin=vmin, vmax=vmax)
                 ax.axis("off")
-
-            plt.savefig(f'{outdir}/{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            
+            plt.axis('off')
+            plt.savefig(f'{outdir}/{name}_{label}_patches_p{p}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
 def train_model(
@@ -208,7 +231,12 @@ def train_model(
                 for i, (img, y) in enumerate(train_data.shuffle(batch_size).take(5)):
 
                     if plot_patchfiy:
-                        plot_patches(img=img, outdir=outdir, patches=patches)
+                        if network == 'opticalnet':
+                            plot_multiscale_patches(name=f"{i+(s*5)}", img=img, outdir=outdir, patches=patches)
+                        elif network == 'prototype':
+                            plot_conv_patches(name=f"{i+(s*5)}", img=img, outdir=outdir, patch_ize=patches[0])
+                        else:
+                            logger.warning(f"Model {network} does not have a patchfiy layer")
 
                     img = np.squeeze(img, axis=-1)
 

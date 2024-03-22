@@ -139,9 +139,7 @@ def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
     except TypeError as e:
         custom_objects = {
             "ROI": ROI,
-            "Stem": prototype.Stem,
             "Patchify": prototype.Patchify,
-            "Merge": prototype.Merge,
             "PatchEncoder": prototype.PatchEncoder,
             "MLP": prototype.MLP,
             "Transformer": prototype.Transformer,
