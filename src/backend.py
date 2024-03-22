@@ -375,7 +375,9 @@ def preprocess(
                 file,
                 data=embs.astype(np.float32),
                 compression='deflate',
-                dtype=np.float32
+                dtype=np.float32,
+                imagej=True,
+                metadata={'axes': 'TZYXS'}
             )
             return file
         else:
@@ -423,7 +425,9 @@ def preprocess(
                     file,
                     data=sample.astype(np.float32),
                     compression='deflate',
-                    dtype=np.float32
+                    dtype=np.float32,
+                    imagej=True,
+                    metadata={'axes': 'TZYXS'}
                 )
                 return file
             else:
@@ -510,7 +514,9 @@ def preprocess(
                     file,
                     data=sample.astype(np.float32),
                     compression='deflate',
-                    dtype=np.float32
+                    dtype=np.float32,
+                    imagej=True,
+                    metadata={'axes': 'TZYXS'}
                 )
                 return file
             else:
