@@ -84,7 +84,8 @@ def plot_mip(
     log=False,
     mip=True,
     ticks=True,
-    normalize=False
+    normalize=False,
+    alpha=1.0
 ):
     def formatter(x, pos, dd):
         return f'{np.ceil(x * dd).astype(int):1d}'
@@ -106,7 +107,7 @@ def plot_mip(
         else:
             v = vol[vol.shape[0]//2, :, :]
 
-        mat_xy = xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None)
+        mat_xy = xy.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None, alpha=alpha)
 
         xy.set_xlabel(r'XY ($\mu$m)')
         if ticks:
@@ -124,7 +125,7 @@ def plot_mip(
         else:
             v = vol[:, vol.shape[0] // 2, :]
 
-        mat = xz.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None)
+        mat = xz.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None, alpha=alpha)
 
         xz.set_xlabel(r'XZ ($\mu$m)')
         if ticks:
@@ -142,7 +143,7 @@ def plot_mip(
         else:
             v = vol[:, :, vol.shape[0] // 2]
 
-        mat = yz.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None)
+        mat = yz.imshow(v, cmap=cmap, aspect=aspect, norm=norm if normalize else None, alpha=alpha)
 
         yz.set_xlabel(r'YZ ($\mu$m)')
         if ticks:
@@ -2292,3 +2293,206 @@ def otf_diagnosis(
     otf_diags_path = f'{save_path}_otf_diagnosis.svg'
     savesvg(fig, otf_diags_path)
     logger.info(f'OTF diagnosis saved to : {Path(otf_diags_path).resolve()}')
+
+
+
+def plot_cell_dataset(
+    results: dict,
+    savepath: Path,
+    cmap: str = 'hot',
+    gamma: float = .5,
+    dxy: float = .097,
+    dz: float = .2,
+    wavelength: float = .510,
+    pltstyle: Any = None,
+    custom_colormap: bool = True,
+    transform_to_align_to_DM: bool = False
+):
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    fig = plt.figure(figsize=(10, 6))
+    gs = fig.add_gridspec(1, 5)
+
+    for i, exp in enumerate(['junk4']):
+
+        k = results[('0000', exp)]
+        r1 = results[('0001', exp)]
+        r2 = results[('0002', exp)]
+
+        wf_mip = fig.add_subplot(gs[i, 0])
+        wf_wavefront = inset_axes(wf_mip, width="40%", height="40%", loc='lower right', borderpad=0)
+
+        ls_mip = fig.add_subplot(gs[i, 1])
+        ml_wavefront = inset_axes(ls_mip, width="40%", height="40%", loc='lower right', borderpad=0)
+
+        diff_mip = fig.add_subplot(gs[i, 2])
+        diff_wavefront = inset_axes(diff_mip, width="40%", height="40%", loc='lower right', borderpad=0)
+
+        diff_mip2 = fig.add_subplot(gs[i, 3])
+        diff_wavefront2 = inset_axes(diff_mip2, width="40%", height="40%", loc='lower right', borderpad=0)
+        
+        wf_mip2 = fig.add_subplot(gs[i, -1])
+        wf_wavefront2 = inset_axes(wf_mip2, width="40%", height="40%", loc='lower right', borderpad=0)
+
+        plot_mip(
+            xy=wf_mip,
+            xz=None,
+            yz=None,
+            gamma=gamma,
+            vol=np.transpose(np.rot90(k['gt_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+                if transform_to_align_to_DM else k['gt_img'],
+            cmap='hot',
+            dxy=dxy,
+            dz=dz,
+            colorbar=False,
+        )
+        wf_mip.axis('on')
+        wf_mip.set_title('Iteration 0\nPhaseRetrieval\nWF' if i == 0 else '')
+        wf_mip.set_ylabel(exp)
+        wf_mip.set_xlabel('')
+        wf_mip.set_yticks([])
+        wf_mip.set_xticks([])
+        
+        if i == 0:
+            scalebar = AnchoredSizeBar(
+                wf_mip.transData,
+                2/dxy,
+                r'2 $\mu$m',
+                'upper right',
+                pad=0.25,
+                color='white',
+                frameon=False,
+                size_vertical=1
+            )
+            wf_mip.add_artist(scalebar)
+
+        plot_wavefront(
+            wf_wavefront,
+            k['gt_wavefront'].wave(size=100),
+            label=None,
+            vmin=-.75,
+            vmax=.75,
+            nas=[1.0, .85],
+        )
+
+        plot_mip(
+            xy=ls_mip,
+            xz=None,
+            yz=None,
+            gamma=gamma,
+            vol=np.transpose(np.rot90(k['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+                if transform_to_align_to_DM else k['ml_img'],
+            cmap='viridis',
+            dxy=dxy,
+            dz=dz,
+            colorbar=False,
+        )
+
+        ls_mip.axis('on')
+        ls_mip.set_title('Iteration 0\nOpticalNet\nLLSM' if i == 0 else '')
+        ls_mip.set_xlabel('')
+        ls_mip.set_yticks([])
+        ls_mip.set_xticks([])
+
+        plot_wavefront(
+            ml_wavefront,
+            k['ml_wavefront'].wave(size=100),
+            label=None,
+            vmin=-.75,
+            vmax=.75,
+            nas=[1.0, .85],
+        )
+
+        plot_mip(
+            xy=diff_mip,
+            xz=None,
+            yz=None,
+            gamma=gamma,
+            vol=np.transpose(np.rot90(r1['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+                if transform_to_align_to_DM else r1['ml_img'],
+            cmap=cmap,
+            dxy=dxy,
+            dz=dz,
+            colorbar=False,
+        )
+        diff_mip.axis('on')
+        diff_mip.set_title('Iteration 1\nOpticalNet\nLLSM' if i == 0 else '')
+        diff_mip.set_xlabel('')
+        diff_mip.set_yticks([])
+        diff_mip.set_xticks([])
+
+        plot_wavefront(
+            diff_wavefront,
+            r1['ml_wavefront'].wave(size=100),
+            label=None,
+            vmin=-.75,
+            vmax=.75,
+            nas=[1.0, .85],
+        )
+
+        plot_mip(
+            xy=diff_mip2,
+            xz=None,
+            yz=None,
+            gamma=gamma,
+            vol=np.transpose(np.rot90(r2['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+                if transform_to_align_to_DM else r2['ml_img'],
+            cmap=cmap,
+            dxy=dxy,
+            dz=dz,
+            colorbar=False,
+        )
+        diff_mip2.axis('on')
+        diff_mip2.set_title('Iteration 2\nOpticalNet\nLLSM' if i == 0 else '')
+        diff_mip2.set_xlabel('')
+        diff_mip2.set_yticks([])
+        diff_mip2.set_xticks([])
+
+        plot_wavefront(
+            diff_wavefront2, r2['ml_wavefront'].wave(size=100),
+            label=None,
+            vmin=-.75,
+            vmax=.75,
+            nas=[1.0, .85],
+        )
+        
+        plot_mip(
+            xy=wf_mip2,
+            xz=None,
+            yz=None,
+            gamma=gamma,
+            vol=np.transpose(np.rot90(r2['gt_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+                if transform_to_align_to_DM else r2['gt_img'],
+            cmap='hot',
+            dxy=dxy,
+            dz=dz,
+            colorbar=False,
+        )
+        wf_mip2.axis('on')
+        wf_mip2.set_title('Iteration 2\nPhaseRetrieval\nWF' if i == 0 else '')
+        wf_mip2.set_xlabel('')
+        wf_mip2.set_yticks([])
+        wf_mip2.set_xticks([])
+
+        plot_wavefront(
+            wf_wavefront2,
+            r2['gt_wavefront'].wave(size=100),
+            label=None,
+            vmin=-.75,
+            vmax=.75,
+            nas=[1.0, .85],
+        )
+        
+        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.06, wspace=.06)
+        savesvg(plt,f'{savepath}.svg')
+        plt.savefig(f'{savepath}.png', dpi=300,  pad_inches=.25)
+        plt.savefig(f'{savepath}.pdf', dpi=300,  pad_inches=.25)
+        logger.info(f'{savepath}')

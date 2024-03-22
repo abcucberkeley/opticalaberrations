@@ -1084,6 +1084,34 @@ def parse_args(args):
         help='a toggle to run predictions through docker container'
     )
 
+
+    eval_cell_dataset = subparsers.add_parser(
+        "eval_cell_dataset",
+        help="Evaluate artificially introduced aberrations via the DM"
+    )
+    eval_cell_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
+    eval_cell_dataset.add_argument(
+        "--flat", default=None, type=Path,
+        help="path to the flat DM acts file. If this is given, then DM surface plots will be made."
+    )
+    eval_cell_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
+    eval_cell_dataset.add_argument("--precomputed", action='store_true')
+    eval_cell_dataset.add_argument(
+        "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
+    )
+    eval_cell_dataset.add_argument(
+        "--cluster", action='store_true',
+        help='a toggle to run predictions on our cluster'
+    )
+    eval_cell_dataset.add_argument(
+        "--partition", type=str, default='abc_a100',
+        help="slurm partition to use on the ABC cluster"
+    )
+    eval_cell_dataset.add_argument(
+        "--docker", action='store_true',
+        help='a toggle to run predictions through docker container'
+    )
+
     eval_ao_dataset = subparsers.add_parser(
         "eval_ao_dataset",
         help="Evaluate biologically introduced aberrations"
@@ -1518,6 +1546,13 @@ def main(args=None, preloaded=None):
                 )
             elif args.func == 'eval_dataset':
                 experimental_eval.eval_dataset(
+                    datadir=args.datadir,
+                    flat=args.flat,
+                    plot_evals=not args.skip_eval_plots,
+                    precomputed=args.precomputed,
+                )
+            elif args.func == 'eval_cell_dataset':
+                experimental_eval.eval_cell_dataset(
                     datadir=args.datadir,
                     flat=args.flat,
                     plot_evals=not args.skip_eval_plots,
