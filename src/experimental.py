@@ -1785,11 +1785,11 @@ def aggregate_rois(
     expected_ztiles: int = 1,
     ignore_modes: list = (0, 1, 2, 4),
 ):
-    # valid_predictions = predictions.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
-    valid_predictions = predictions.groupby('z')
+    valid_predictions = predictions.loc[~(unconfident_tiles)]
+    valid_predictions = valid_predictions.groupby('z')
 
-    # valid_stdevs = stdevs.loc[~(unconfident_tiles | zero_confident_tiles | all_zeros_tiles)]
-    valid_stdevs = stdevs.groupby('z')
+    valid_stdevs = stdevs.loc[~(unconfident_tiles)]
+    valid_stdevs = valid_stdevs.groupby('z')
 
     wavefronts, coefficients, actuators = {}, {}, {}
     psf_heatmap = np.zeros(vol.shape, dtype=np.float32)
@@ -1908,6 +1908,18 @@ def aggregate_rois(
                             rotation_point='center',
                             linewidth=0.5,
                         ))
+                        axes[i].annotate(
+                            f'{ztile_preds.iloc[idx].name}',
+                            xy=(start[2], start[1]+yw),
+                            xytext=(0, 0),  # 4 points vertical offset.
+                            textcoords='offset points',
+                            ha='left', va='bottom',
+                            fontsize=3,
+                            fontstretch='condensed',
+                            font='Consolas',
+                            color=f'C{idx}',
+                            alpha=0.8,
+                        )
                         axes[i].set(xlabel='x pix', ylabel='y pix')
                         axes[i + 2].set(xlabel='x pix', ylabel='z pix')
 
