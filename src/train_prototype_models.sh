@@ -53,14 +53,19 @@ do
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '2-2-2-2' --heads '16-16-16-16'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '8' --heads '8'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P8-R8-pool
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P8-R8-H8
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '2-2-2-2' --heads '16-16-16-16'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '8' --heads '8'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P16-R8-pool
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P16-R8-H8
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32' --repeats '8' --heads '8'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32-R8-H8
 
 done
 

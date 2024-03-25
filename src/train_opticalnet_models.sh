@@ -53,19 +53,34 @@ do
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2' --heads '8-8-8-8'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P3216-R2222
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R2222-H8888
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16-16-8' --repeats '2-2-2-2'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16-16-8' --repeats '2-2-2-2' --heads '8-8-8-8'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P3216168-R2222
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P3216168-R2222-H8888
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-32-32' --repeats '2-2-2-2'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16-8-8' --repeats '2-2-2-2' --heads '8-8-8-8'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/$NETWORK-$MODES-$DIR-P32-R2222
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P321688-R2222-H8888
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2' --heads '2-4-8-16'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R2222-H24816
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16-16-8' --repeats '2-2-2-2' --heads '2-4-8-16'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P3216168-R2222-H24816
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16-8-8' --repeats '2-2-2-2' --heads '2-4-8-16'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P321688-R2222-H24816
 
 done
 
