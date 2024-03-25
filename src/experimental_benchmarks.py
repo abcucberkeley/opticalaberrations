@@ -269,7 +269,7 @@ def phasenet_heatmap(
     agg: str = 'median',
     modes: int = 15,
     num_beads: Optional[int] = 1,
-    simulate_psf_only: bool = True,
+    simulate_psf_only: bool = False,
     phasenet_path: Path = Path('phasenet_repo'),
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
@@ -521,7 +521,7 @@ def phaseretrieval_heatmap(
     agg: str = 'median',
     modes: int = 15,
     num_beads: Optional[int] = 1,
-    simulate_psf_only: bool = True,
+    simulate_psf_only: bool = False,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):

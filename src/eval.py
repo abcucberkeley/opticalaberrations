@@ -2006,7 +2006,7 @@ def objectsizeheatmap(
     denoiser_window_size: tuple = (32, 64, 64),
     simulate_samples: bool = False,
     estimated_object_gaussian_sigma: float = 0,
-    object_gaussian_sigma_range: tuple = (.5, 2)
+    object_gaussian_sigma_range: tuple = (0, 2)
 ):
     modelspecs = backend.load_metadata(modelpath)
     
@@ -2054,7 +2054,9 @@ def objectsizeheatmap(
             denoiser_window_size=denoiser_window_size,
             simulate_samples=simulate_samples,
             estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
-            randomize_object_gaussian_sigma=np.arange(*object_gaussian_sigma_range, step=.1)
+            randomize_object_gaussian_sigma=np.arange(
+                object_gaussian_sigma_range[0], object_gaussian_sigma_range[1]+.1, step=.1
+            )
         )
     
     df = df[df['iter_num'] == iter_num]
