@@ -44,8 +44,8 @@ class Patchify(layers.Layer):
 	
 	def call(self, inputs, **kwargs):
 		patches = self.project(inputs)
-		patches = layers.Reshape((inputs.shape[1], -1, patches.shape[-1]))(patches)
 		patches = self.prenorm(patches)
+		patches = layers.Reshape((inputs.shape[1], -1, patches.shape[-1]))(patches)
 		return patches
 
 
