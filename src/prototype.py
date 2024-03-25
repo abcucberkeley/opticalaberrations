@@ -19,20 +19,15 @@ logger = logging.getLogger(__name__)
 
 
 class Patchify(layers.Layer):
-	def __init__(self, patch_size, num_patches, **kwargs):
+	def __init__(self, patch_size, **kwargs):
 		super().__init__(**kwargs)
 		self.patch_size = patch_size
-		self.num_patches = num_patches
 		self.project = layers.Conv3D(
 			filters=self.patch_size ** 2,
 			kernel_size=(1, self.patch_size, self.patch_size),
 			strides=(1, self.patch_size, self.patch_size),
 			padding="VALID",
 			name="conv_projection",
-		)
-		self.flat = layers.Reshape(
-			target_shape=(-1, self.num_patches, self.patch_size ** 2),
-			name="flatten_projection",
 		)
 
 		self.prenorm = layers.LayerNormalization(axis=-1, epsilon=1e-6)
@@ -44,13 +39,11 @@ class Patchify(layers.Layer):
 		config = super(Patchify, self).get_config()
 		config.update({
 			"patch_size": self.patch_size,
-			"num_patches": self.num_patches,
 		})
 		return config
 	
 	def call(self, inputs, **kwargs):
 		patches = self.project(inputs)
-		patches = self.flat(patches)
 		patches = layers.Reshape((inputs.shape[1], -1, patches.shape[-1]))(patches)
 		patches = self.prenorm(patches)
 		return patches
@@ -391,7 +384,7 @@ class OpticalTransformer(Base, ABC):
 		img_shape = self.roi[-1] if self.roi is not None else inputs.shape[-2]
 		num_patches = (img_shape // self.patch_size) ** 2
 		
-		m = Patchify(patch_size=self.patch_size, num_patches=num_patches)(m)
+		m = Patchify(patch_size=self.patch_size)(m)
 		
 		m = PatchEncoder(
 			num_patches=num_patches,
