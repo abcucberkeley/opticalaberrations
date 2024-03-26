@@ -1140,14 +1140,12 @@ def eval_cell_dataset(
     flat: Any = None,
     postfix: str = 'predictions_aggregated_zernike_coefficients.csv',
     gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv',
-    plot_evals: bool = True,
     precomputed: bool = False,
-    rerun_calc: bool = True,
 ):
     results = {}
     savepath = Path(f'{datadir}/cells_evaluation')
 
-    if rerun_calc or not Path(f'{savepath}.csv').exists:
+    if precomputed or not Path(f'{savepath}_results.npy').exists():
 
         # get model from .json file
         with open(sorted(Path(datadir / 'rotated').glob('*_predictions_settings.json'))[0]) as f:
@@ -1284,6 +1282,11 @@ def eval_cell_dataset(
         # skip calc. Reload results and just replot
         results = np.load(f'{savepath}_results.npy', allow_pickle='TRUE').item()
 
-    logger.info(f'{savepath}.csv')
-    vis.plot_cell_dataset(results, savepath=savepath)
+    logger.info(f'{savepath}_results.npy')
+    vis.plot_cell_dataset(
+        results,
+        savepath=savepath,
+        list_of_files=[datadir.name],
+        transform_to_align_to_DM=False
+    )
     

@@ -2299,6 +2299,7 @@ def otf_diagnosis(
 def plot_cell_dataset(
     results: dict,
     savepath: Path,
+    list_of_files: list,
     cmap: str = 'hot',
     gamma: float = .5,
     dxy: float = .097,
@@ -2306,7 +2307,7 @@ def plot_cell_dataset(
     wavelength: float = .510,
     pltstyle: Any = None,
     custom_colormap: bool = True,
-    transform_to_align_to_DM: bool = False
+    transform_to_align_to_DM: bool = False,
 ):
     plt.rcParams.update({
         'font.size': 12,
@@ -2319,9 +2320,9 @@ def plot_cell_dataset(
     })
 
     fig = plt.figure(figsize=(10, 6))
-    gs = fig.add_gridspec(1, 5)
+    gs = fig.add_gridspec(len(list_of_files), 5)
 
-    for i, exp in enumerate(['junk4']):
+    for i, exp in enumerate(list_of_files):
 
         k = results[('0000', exp)]
         r1 = results[('0001', exp)]
@@ -2388,7 +2389,7 @@ def plot_cell_dataset(
             xz=None,
             yz=None,
             gamma=gamma,
-            vol=np.transpose(np.rot90(k['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+            vol=np.transpose(np.rot90(k['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1, -1))
                 if transform_to_align_to_DM else k['ml_img'],
             cmap='viridis',
             dxy=dxy,
@@ -2416,7 +2417,7 @@ def plot_cell_dataset(
             xz=None,
             yz=None,
             gamma=gamma,
-            vol=np.transpose(np.rot90(r1['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+            vol=np.transpose(np.rot90(r1['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1, -1))
                 if transform_to_align_to_DM else r1['ml_img'],
             cmap=cmap,
             dxy=dxy,
@@ -2443,7 +2444,7 @@ def plot_cell_dataset(
             xz=None,
             yz=None,
             gamma=gamma,
-            vol=np.transpose(np.rot90(r2['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+            vol=np.transpose(np.rot90(r2['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1, -1))
                 if transform_to_align_to_DM else r2['ml_img'],
             cmap=cmap,
             dxy=dxy,
