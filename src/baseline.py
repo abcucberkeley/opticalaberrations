@@ -4,8 +4,9 @@ from abc import ABC
 
 import tensorflow as tf
 from tensorflow.keras import layers
-from depthwiseconv import DepthwiseConv3D
+
 from base import Base
+from depthwiseconv import DepthwiseConv3D
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -36,8 +37,8 @@ class Baseline(Base, ABC):
         return int(tf.math.ceil(depth_scalar * repeats))
 
     def _stem(self, inputs, filters):
-        dwc3 = DepthwiseConv3D(kernel_size=(3, 3, 3), depth_multiplier=filters//2, padding='same')(inputs)
-        dwc7 = DepthwiseConv3D(kernel_size=(7, 7, 7), depth_multiplier=filters//2, padding='same')(inputs)
+        dwc3 = DepthwiseConv3D(kernel_size=(1, 3, 3), depth_multiplier=filters//2, padding='same')(inputs)
+        dwc7 = DepthwiseConv3D(kernel_size=(1, 7, 7), depth_multiplier=filters//2, padding='same')(inputs)
         return layers.concatenate([dwc3, dwc7])
 
     def _attention(self, inputs, filters, ratio=.25):
@@ -57,17 +58,17 @@ class Baseline(Base, ABC):
     def call(self, inputs, training=True, **kwargs):
         m = self._stem(inputs, filters=self._calc_channels(16, width_scalar=self.width_scalar))
 
-        for i, r in enumerate([2, 4, 6, 2]):
+        for i, r in enumerate([2, 2, 2, 2]):
             if i > 0:
                 m = layers.Conv3D(
                     filters=self._calc_channels(2 * m.shape[-1], width_scalar=self.width_scalar),
-                    strides=2,
+                    strides=(1, 2, 2),
                     kernel_size=1,
                 )(m)
 
             res = m
             for _ in range(self._calc_repeats(r, depth_scalar=self.depth_scalar)):
-                m = self._cab(m, kernel_size=(7, 7, 7), filters=m.shape[-1])
+                m = self._cab(m, kernel_size=(1, 7, 7), filters=m.shape[-1])
             m = layers.add([res, m])
 
         m = self.avg(m)

@@ -175,7 +175,7 @@ def train_model(
     opt = opt.lower()
     restored = False
 
-    if network == 'baseline':
+    if network == 'realspace':
         inputs = (input_shape, input_shape, input_shape, 1)
     else:
         inputs = (3 if no_phase else 6, input_shape, input_shape, 1)
