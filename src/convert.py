@@ -8,18 +8,21 @@ from pathlib import Path
 from typing import Any
 import subprocess
 import time
-
-import tensorflow as tf
 import numpy as np
 
+subprocess.call(
+    "pip install -U --extra-index-url https://pypi.ngc.nvidia.com triton-model-navigator[tensorflow]",
+    shell=True
+)
+import model_navigator as nav
+
+import tensorflow as tf
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
 from tensorflow.python.saved_model import tag_constants, signature_constants
 from tensorflow.python.compiler.tensorrt import trt_convert as tftrt
-from tensorflow.python.keras import backend as K
- 
+
 import onnx
 import tf2onnx
-import tensorrt as trt
 import onnxruntime as ort
 import pycuda.driver as cuda
 
@@ -321,7 +324,6 @@ def optimize_model(
     dtype: Any = 'float16',
     batch_size: int = 1024,
 ):
-    import model_navigator as nav
 
     gpus = tf.config.experimental.list_physical_devices("GPU")
     for gpu in gpus:
@@ -348,7 +350,7 @@ def optimize_model(
 
     # nav.package.save(package, model_path.with_suffix('.nav'), override=True)
 
-    # convert_h5_to_onnx(model_path=model_path)
+    convert_h5_to_onnx(model_path=model_path)
      
     package = nav.onnx.optimize(
         model=model_path.with_suffix('.onnx'),   
