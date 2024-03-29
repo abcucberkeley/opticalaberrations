@@ -1195,7 +1195,8 @@ def eval_cell_dataset(
                     min_psnr=0
                 )
                 
-                cam_b_ml_img = backend.load_sample(str(cam_a_file).replace('CamA', 'CamB'))
+                cam_b_path = str(cam_a_file).replace('CamA', 'CamB').replace('488nm', '560nm')
+                cam_b_ml_img = backend.load_sample(cam_b_path)
                 cam_b_ml_img = preprocessing.prep_sample(
                     cam_b_ml_img,
                     normalize=True,
