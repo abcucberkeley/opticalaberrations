@@ -1143,7 +1143,7 @@ def eval_cell_dataset(
     precomputed: bool = False,
 ):
     results = {}
-    savepath = Path(f'{datadir}/cells_evaluation')
+    savepath = Path(f'{datadir}/{datadir.name}')
 
     if precomputed or not Path(f'{savepath}_results.npy').exists():
 
