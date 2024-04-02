@@ -1210,6 +1210,8 @@ def eval_cell_dataset(
                 ml_img = np.stack([cam_b_ml_img, cam_a_ml_img, np.zeros_like(cam_b_ml_img)], axis=-1)
                 
                 pr_img = backend.load_sample(gt_path)
+                pr_img = np.transpose(np.rot90(pr_img, k=2, axes=(1, 2)), axes=(0, 2, 1))
+                
                 pr_img = preprocessing.prep_sample(
                     pr_img,
                     normalize=True,
@@ -1288,6 +1290,5 @@ def eval_cell_dataset(
         results,
         savepath=savepath,
         list_of_files=[datadir.name],
-        transform_to_align_to_DM=False
     )
     
