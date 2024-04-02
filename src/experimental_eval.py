@@ -15,6 +15,7 @@ import seaborn as sns
 from typing import Any
 import numpy as np
 import pandas as pd
+from tifffile import imwrite
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import utils
@@ -1262,6 +1263,30 @@ def eval_cell_dataset(
                         modes=p.shape[0],
                         lam_detection=predictions_settings['wavelength']
                     )
+                    
+                    imwrite(
+                        f'{savepath}_pr_wavefront_{iter_number}.tif',
+                        gt_wavefront.astype(np.float32),
+                        compression='deflate',
+                        dtype=np.float32
+                    )
+                    
+                    imwrite(
+                        f'{savepath}_ml_wavefront_{iter_number}.tif',
+                        ml_wavefront.astype(np.float32),
+                        compression='deflate',
+                        dtype=np.float32
+                    )
+                    
+                    imwrite(
+                        f'{savepath}_diff_wavefront_{iter_number}.tif',
+                        diff_wavefront.astype(np.float32),
+                        compression='deflate',
+                        dtype=np.float32
+                    )
+                    
+                    f'{savepath}_results.tif'
+                    
                     
                     results[(iter_number, cam_a_file.parent.name)] = dict(
                         ml_img=ml_img,
