@@ -1266,21 +1266,21 @@ def eval_cell_dataset(
                     
                     imwrite(
                         f'{savepath}_pr_wavefront_{iter_number}.tif',
-                        gt_wavefront.astype(np.float32),
+                        gt_wavefront.wave().astype(np.float32),
                         compression='deflate',
                         dtype=np.float32
                     )
                     
                     imwrite(
                         f'{savepath}_ml_wavefront_{iter_number}.tif',
-                        ml_wavefront.astype(np.float32),
+                        ml_wavefront.wave().astype(np.float32),
                         compression='deflate',
                         dtype=np.float32
                     )
                     
                     imwrite(
                         f'{savepath}_diff_wavefront_{iter_number}.tif',
-                        diff_wavefront.astype(np.float32),
+                        diff_wavefront.wave().astype(np.float32),
                         compression='deflate',
                         dtype=np.float32
                     )
