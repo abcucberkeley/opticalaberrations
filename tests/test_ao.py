@@ -11,8 +11,24 @@ warnings.filterwarnings("ignore")
 
 import pytest
 from pathlib import Path
+try:
+    import cupy as cp
+    use_gpu = True
+    mempool = cp.get_default_memory_pool()
+    pinned_mempool = cp.get_default_pinned_memory_pool()
+except ImportError as e:
+    use_gpu = False
+    logging.warning(f"Cupy not supported on your system: {e}")
+
 from src import experimental
 
+
+def cleanup_mempool():
+    if use_gpu:
+        mempool.free_all_blocks()
+        pinned_mempool.free_all_blocks()
+    else:
+        pass
 
 @pytest.mark.run(order=1)
 def test_predict_tiles(kargs):
@@ -116,6 +132,7 @@ def test_predict_large_fov(kargs):
 
 @pytest.mark.run(order=6)
 def test_predict_large_fov_with_interpolated_embeddings(kargs):
+    cleanup_mempool()
     zernikes = experimental.predict_large_fov(
         model=kargs['model'],
         img=kargs['inputs'],
@@ -138,6 +155,7 @@ def test_predict_large_fov_with_interpolated_embeddings(kargs):
 
 @pytest.mark.run(order=7)
 def test_predict_folder(kargs):
+    cleanup_mempool()
     test_folder = Path(f"{kargs['repo']}/dataset/experimental_zernikes/psfs")
     number_of_files = len(sorted(test_folder.glob(kargs['prediction_filename_pattern'])))
     
@@ -179,6 +197,7 @@ def test_denoise(kargs):
 
 @pytest.mark.run(order=9)
 def test_predict_sample_with_denoising(kargs):
+    cleanup_mempool()
     zernikes = experimental.predict_sample(
         model=kargs['model'],
         img=kargs['inputs'],
@@ -202,6 +221,7 @@ def test_predict_sample_with_denoising(kargs):
 
 @pytest.mark.run(order=10)
 def test_predict_folder_with_denoising(kargs):
+    cleanup_mempool()
     test_folder = Path(f"{kargs['repo']}/dataset/experimental_zernikes/psfs")
     number_of_files = len(sorted(test_folder.glob(kargs['prediction_filename_pattern'])))
     
