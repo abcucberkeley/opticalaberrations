@@ -227,6 +227,7 @@ def test_predict_folder_with_denoising(kargs):
         min_psnr=kargs['min_psnr'],
         denoiser=kargs['denoiser'],
         denoiser_window_size=kargs['window_size'],
+        cpu_workers=kargs['big_job_cpu_workers'],
     )
     predictions = predictions.drop(columns=['mean', 'median', 'min', 'max', 'std'])
     assert predictions.shape == (kargs['num_modes'], number_of_files)
@@ -251,6 +252,7 @@ def test_predict_rois(kargs):
         window_size=kargs['window_size'],
         min_psnr=kargs['min_psnr'],
         num_rois=kargs['num_rois'],
+        cpu_workers=kargs['big_job_cpu_workers'],
     )
     assert not roi_predictions.empty
 
