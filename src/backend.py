@@ -53,6 +53,12 @@ from preprocessing import prep_sample
 from utils import round_to_even, multiprocess
 
 from roi import ROI
+from activation import MaskedActivation
+from depthwiseconv import DepthwiseConv3D
+from spatial import SpatialAttention
+from stochasticdepth import StochasticDepth
+from stem import Stem
+
 import opticalnet
 import prototype
 from warmupcosinedecay import WarmupCosineDecay
@@ -98,7 +104,7 @@ class DatasetGenerator:
 
 
 @profile
-def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
+def load(model_path: Union[Path, str], mosaic=False, model_arch=None) -> tf.keras.Model:
     model_path = Path(model_path)
 
     if mosaic:
@@ -122,32 +128,58 @@ def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
                 model_path = str(sorted(model_path.rglob('*.h5'), reverse=True)[0])
 
     logger.info(f"Loading {model_path}")
-    try:
-        custom_objects = {
-            "ROI": ROI,
-            "Stem": opticalnet.Stem,
-            "Patchify": opticalnet.Patchify,
-            "Merge": opticalnet.Merge,
-            "PatchEncoder": opticalnet.PatchEncoder,
-            "MLP": opticalnet.MLP,
-            "Transformer": opticalnet.Transformer,
-            "WarmupCosineDecay": WarmupCosineDecay,
-            "LAMB": LAMB,
-            "AdamW": AdamW,
-        }
+    custom_objects = {
+        "LAMB": LAMB,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+        "MaskedActivation": MaskedActivation,
+        "SpatialAttention": SpatialAttention,
+        "DepthwiseConv3D": DepthwiseConv3D,
+        "StochasticDepth": StochasticDepth,
+        "Stem": Stem,
+    }
+    
+    opticalnet_custom_objects = {
+        "LAMB": LAMB,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+        "Stem": opticalnet.Stem,
+        "Patchify": opticalnet.Patchify,
+        "Merge": opticalnet.Merge,
+        "PatchEncoder": opticalnet.PatchEncoder,
+        "MLP": opticalnet.MLP,
+        "Transformer": opticalnet.Transformer,
+    }
+    
+    prototype_custom_objects = {
+        "LAMB": LAMB,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+        "Patchify": prototype.Patchify,
+        "PatchEncoder": prototype.PatchEncoder,
+        "MLP": prototype.MLP,
+        "Transformer": prototype.Transformer,
+    }
+    
+    if model_arch is None:
+        
+        try:
+            return load_model(model_path, custom_objects=opticalnet_custom_objects)
+        except TypeError as e:
+            return load_model(model_path, custom_objects=prototype_custom_objects)
+        
+    elif model_arch.lower() == 'opticalnet':
+        return load_model(model_path, custom_objects=opticalnet_custom_objects)
+    
+    elif model_arch.lower() == 'prototype':
+        return load_model(model_path, custom_objects=prototype_custom_objects)
+    
+    else:
         return load_model(model_path, custom_objects=custom_objects)
-    except TypeError as e:
-        custom_objects = {
-            "ROI": ROI,
-            "Patchify": prototype.Patchify,
-            "PatchEncoder": prototype.PatchEncoder,
-            "MLP": prototype.MLP,
-            "Transformer": prototype.Transformer,
-            "WarmupCosineDecay": WarmupCosineDecay,
-            "LAMB": LAMB,
-            "AdamW": AdamW,
-        }
-        return load_model(model_path, custom_objects=custom_objects)
+        
 
 
 @profile
