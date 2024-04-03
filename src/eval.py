@@ -8,6 +8,7 @@ import shutil
 
 from multiprocessing import Pool
 
+import ujson
 import logging
 import sys
 from functools import partial
@@ -35,6 +36,7 @@ from csbdeep.models import CARE
 
 import utils
 import data_utils
+import profile_utils
 import backend
 import vis
 import multipoint_dataset
@@ -3291,156 +3293,6 @@ def confidence_heatmap(
     return savepath
 
 
-@profile
-def compare_models(
-    models_codenames: list,
-    predictions_paths: list,
-    iter_num: int = 1,
-    photon_range: tuple = (1e5, 2e5),
-    aberration_range: tuple = (1, 2),
-    outdir: Path = Path('benchmark'),
-    wavelength: float = .510
-):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'xtick.major.pad': 10
-    })
-
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    dataframes = []
-    for codename, file in zip(models_codenames, predictions_paths):
-        df = pd.read_csv(file, header=0, index_col=0)
-        df = df[df['iter_num'] == iter_num]
-        df['model'] = codename
-        dataframes.append(df)
-
-    df = pd.concat(dataframes)
-
-    for c in ['residuals', 'confidence_sum', 'confidence', ]:
-        test = df[
-            (df.photons >= photon_range[0]) &
-            (df.photons <= photon_range[1]) &
-            (df.aberration >= aberration_range[0]) &
-            (df.aberration <= aberration_range[1])
-        ]
-
-        if c == 'residuals':
-            xmax = .5  #aberration_range[1]
-            binwidth = .25
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.25, .25)
-            label = '\n'.join([
-                rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
-            ])
-            outliers = test[test[c] >= xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-        elif c == 'confidence':
-            xmax = .1
-            binwidth = .01
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.01, .01)
-            label = '\n'.join([
-                rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
-            ])
-            # outliers = test[test[c] == 0]
-            test[c].replace(0, test[c].max(), inplace=True)
-            outliers = test[test[c] >= xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-        else:
-            xmax = .1
-            binwidth = .01
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.025, .025)
-            label = '\n'.join([
-                rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
-            ])
-            # outliers = test[test[c] == 0]
-            test[c].replace(0, test[c].max(), inplace=True)
-            outliers = test[test[c] >= xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-
-        fig, ax = plt.subplots(figsize=(8, 6))
-        histax = inset_axes(
-            ax,
-            width="100%",
-            height="100%",
-            bbox_to_anchor=(.3, .1, .3, .3),
-            bbox_transform=ax.transAxes,
-            loc='lower center'
-        )
-
-        g = sns.histplot(
-            ax=ax,
-            data=test,
-            x=c,
-            hue='model',
-            # bins=bins,
-            common_norm=False,
-            common_bins=True,
-            element="poly",
-            stat='proportion',
-            fill=False,
-            cumulative=True,
-        )
-
-        # sns.violinplot(
-        #     ax=histax,
-        #     data=outliers,
-        #     x='model',
-        #     y=c,
-        #     common_norm=False,
-        #     common_bins=True,
-        #     palette="tab10",
-        # )
-
-        sns.barplot(
-            x=unconfident[models_codenames].index,
-            y=unconfident[models_codenames].values,
-            ax=histax
-        )
-
-        ax.set_xlabel(label)
-        ax.set_ylabel('CDF')
-        ax.set_xlim(0, None)
-        # ax.set_xticks(xticks)
-        ax.set_ylim(None, 1)
-        ax.set_yticks(np.arange(0, 1.1, .1))
-        ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        histax.set_ylim(unconfident.min()-.05, unconfident.max())
-        histax.set_yticks(np.arange(unconfident.min()-.05, unconfident.max()+.05, .05).round(2))
-        histax.set_xlabel(f'$i$ >= {xmax}')
-        histax.set_ylabel('Proportion')
-        histax.set_xticks([])
-        histax.spines['top'].set_visible(False)
-        histax.spines['right'].set_visible(False)
-        histax.spines['left'].set_visible(False)
-        histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        sns.move_legend(g, title='Models', frameon=False, ncol=1, loc='lower right')
-        plt.tight_layout()
-
-        savepath = Path(f'{outdir}/compare_{c}')
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
 
 def residuals_histogram(
     csv_path: Path = Path(r"C:\Users\milkied10\Desktop\na_1.0_predictions.csv"),
@@ -3886,3 +3738,274 @@ def evaluate_uniform_background(
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return savepath
+
+
+
+@profile
+def compare_models(
+    models_codenames: list,
+    predictions_paths: list,
+    iter_num: int = 1,
+    photon_range: tuple = (1e5, 2e5),
+    aberration_range: tuple = (1, 2),
+    outdir: Path = Path('benchmark'),
+    wavelength: float = .510
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    dataframes = []
+    for codename, file in zip(models_codenames, predictions_paths):
+        df = pd.read_csv(file, header=0, index_col=0)
+        df = df[df['iter_num'] == iter_num]
+        df['model'] = codename
+        dataframes.append(df)
+
+    df = pd.concat(dataframes)
+
+    for c in ['residuals', 'confidence_sum', 'confidence', ]:
+        test = df[
+            (df.photons >= photon_range[0]) &
+            (df.photons <= photon_range[1]) &
+            (df.aberration >= aberration_range[0]) &
+            (df.aberration <= aberration_range[1])
+        ]
+
+        if c == 'residuals':
+            xmax = .5  #aberration_range[1]
+            binwidth = .25
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            xticks = np.arange(0, xmax+.25, .25)
+            label = '\n'.join([
+                rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
+            ])
+            outliers = test[test[c] >= xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+        elif c == 'confidence':
+            xmax = .1
+            binwidth = .01
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            xticks = np.arange(0, xmax+.01, .01)
+            label = '\n'.join([
+                rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
+            ])
+            # outliers = test[test[c] == 0]
+            test[c].replace(0, test[c].max(), inplace=True)
+            outliers = test[test[c] >= xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+        else:
+            xmax = .1
+            binwidth = .01
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            xticks = np.arange(0, xmax+.025, .025)
+            label = '\n'.join([
+                rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
+            ])
+            # outliers = test[test[c] == 0]
+            test[c].replace(0, test[c].max(), inplace=True)
+            outliers = test[test[c] >= xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        histax = inset_axes(
+            ax,
+            width="100%",
+            height="100%",
+            bbox_to_anchor=(.3, .1, .3, .3),
+            bbox_transform=ax.transAxes,
+            loc='lower center'
+        )
+
+        g = sns.histplot(
+            ax=ax,
+            data=test,
+            x=c,
+            hue='model',
+            # bins=bins,
+            common_norm=False,
+            common_bins=True,
+            element="poly",
+            stat='proportion',
+            fill=False,
+            cumulative=True,
+        )
+
+        # sns.violinplot(
+        #     ax=histax,
+        #     data=outliers,
+        #     x='model',
+        #     y=c,
+        #     common_norm=False,
+        #     common_bins=True,
+        #     palette="tab10",
+        # )
+
+        sns.barplot(
+            x=unconfident[models_codenames].index,
+            y=unconfident[models_codenames].values,
+            ax=histax
+        )
+
+        ax.set_xlabel(label)
+        ax.set_ylabel('CDF')
+        ax.set_xlim(0, None)
+        # ax.set_xticks(xticks)
+        ax.set_ylim(None, 1)
+        ax.set_yticks(np.arange(0, 1.1, .1))
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+        histax.set_ylim(unconfident.min()-.05, unconfident.max())
+        histax.set_yticks(np.arange(unconfident.min()-.05, unconfident.max()+.05, .05).round(2))
+        histax.set_xlabel(f'$i$ >= {xmax}')
+        histax.set_ylabel('Proportion')
+        histax.set_xticks([])
+        histax.spines['top'].set_visible(False)
+        histax.spines['right'].set_visible(False)
+        histax.spines['left'].set_visible(False)
+        histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+        sns.move_legend(g, title='Models', frameon=False, ncol=1, loc='lower right')
+        plt.tight_layout()
+
+        savepath = Path(f'{outdir}/compare_{c}')
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+@profile
+def profile_models(
+    models_codenames: list,
+    predictions_paths: list,
+    outdir: Path = Path('benchmark'),
+    batch_size: int = 512
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    dataframes = []
+    for codename, modeldir in zip(models_codenames, predictions_paths):
+        savepath = Path(f'{outdir}/{codename}.csv')
+        if savepath.exists():
+            logger.info(f"Loading {savepath}")
+            df = pd.read_csv(savepath, header=0, index_col=0)
+            best = df['epoch_loss'].idxmin()
+        else:
+
+            try:
+                modeldir = Path(modeldir)
+                log = sorted(modeldir.rglob(r"*train/*tfevents*"))[0]
+                
+                df = profile_utils.load_tf_logs(log)
+                model_config = ujson.loads(df.keras[0])
+
+                best = df['epoch_loss'].idxmin()
+                
+                candidates = sorted(modeldir.rglob(rf"*keras/*epoch{best}.h5"))
+                if len(candidates) == 0:
+                    model = sorted(modeldir.rglob(rf"*keras/*.h5"))[-1]
+                else:
+                    model = candidates[0]
+                
+                model = backend.load(model, model_arch=model_config['config']['name'])
+                
+                df = df[[
+                    'step',
+                    'epoch_learning_rate',
+                    'epoch_loss',
+                    'epoch_mae',
+                    'epoch_mse',
+                    'epoch_root_mean_squared_error',
+                    'epoch_weight_decay',
+                    'wall_time'
+                ]]
+                df["wall_time"] = df.wall_time.apply(pd.Series)[0]
+                df["wall_clock"] = pd.to_datetime(df.wall_time, unit="s")
+                
+                transformers_blocks = profile_utils.count_transformer_blocks(model=model)
+                for k, v in transformers_blocks.items(): df[f'transformers_{k}'] = v
+                
+                df["training"] = (df.wall_clock - df.wall_clock[0]) / np.timedelta64(1, "h")
+                df['transformers'] = sum(transformers_blocks.values())
+                df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
+                df['gflops'] = profile_utils.measure_gflops(model)
+                df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
+                df['params'] = model.count_params()
+                df['model'] = codename
+                
+                logger.info(f"Saving {savepath}")
+                df.to_csv(f'{outdir}/{codename}.csv')
+            
+            except Exception:
+                continue
+            
+        df = df.iloc[best].to_frame().T
+        dataframes.append(df)
+    
+    df = pd.concat(dataframes).reset_index(drop=True)
+    df['throughput'] = df['throughput'].astype(int)
+    
+    coi = [
+        'epoch_loss',
+        'training',
+        'memory',
+        'throughput',
+        'gflops',
+        'params',
+    ]
+    titles = [
+        'Loss',
+        f'Training Time (H) \n8xH100s [BS=4096]',
+        f'Memory (GB) \n[BS={batch_size}]',
+        f'Throughput (P/S) \nRTX8000 [BS={batch_size}]',
+        'GFLOPs',
+        'Parameters',
+    ]
+    
+    g = sns.PairGrid(df.sort_values('epoch_loss'), x_vars=coi, y_vars=["model"], height=8, aspect=.4)
+    g.map(sns.stripplot, size=10, orient="h", jitter=False, palette="tab10", linewidth=1, edgecolor="w")
+    g.set(xlabel="", ylabel="")
+    
+    for ax, cc, title in zip(g.axes.flat, coi, titles):
+        
+        if cc == 'epoch_loss':
+            ax.set_xscale('log')
+            
+        ax.set(title=title)
+        ax.xaxis.grid(True)
+        ax.yaxis.grid(True)
+    
+    # sns.despine(left=True, bottom=True)
+    plt.tight_layout()
+    
+    savepath = Path(f'{outdir}/profiles')
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
