@@ -19,7 +19,7 @@ DENOISE=false
 DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
 HANDLER=lsf
-TITLE='variable_object_size_fourier_filter_125nm_dataset'
+TITLE='master_dataset'
 DATASET='train'
 
 if [ "$DATASET" = "train" ]; then
@@ -65,7 +65,7 @@ mkdir -p $LOGS
 if [ "$DATASET" = "train" ];then  # 2M samples
   TYPE='--emb'
   SAMPLES_PER_JOB=200
-  SAMPLES_PER_BIN=400
+  SAMPLES_PER_BIN=2000
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   OBJS=(1 2 3 4 5)  # 5 bins
   mPH=($(seq 0 20000 180000)) # 10 bins

@@ -16,7 +16,7 @@ H100="--partition gpu_h100 --gpus 8 --cpus 16"
 A100="--partition gpu_a100 --gpus 4 --cpus 8"
 BS=4096
 
-SUBSET='variable_object_size_fourier_filter_125nm_dataset'
+SUBSET='master_dataset'
 if [ $CLUSTER = 'slurm' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"
 else
@@ -52,26 +52,40 @@ do
   
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
-  #python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  #--task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2' --heads '8-8-8-8'" \
-  #--taskname $NETWORK \
-  #--name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R2222-H8888
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2' --heads '8-8-8-8' --samplelimit 500000" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R2222-H8888-5e5
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '1-1-1-1' --heads '8-8-8-8'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2' --heads '8-8-8-8' --samplelimit 1000000" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R1111-H8888
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R2222-H8888-1e6
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '4-4-4-4' --heads '8-8-8-8'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2' --heads '8-8-8-8' --samplelimit 2000000" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R4444-H8888
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R2222-H8888-2e6
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '6-6-6-6' --heads '8-8-8-8'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2' --heads '8-8-8-8' --samplelimit 4000000" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R6666-H8888
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R2222-H8888-4e6
 
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2' --heads '8-8-8-8' --samplelimit 6000000" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R2222-H8888-6e6
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2' --heads '8-8-8-8' --samplelimit 8000000" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R2222-H8888-8e6
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-32-16-16' --repeats '2-2-2-2' --heads '8-8-8-8' --samplelimit 10000000" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32321616-R2222-H8888-10e6
 done
 
 
