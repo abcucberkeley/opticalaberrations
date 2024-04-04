@@ -3897,7 +3897,7 @@ def profile_models(
     models_codenames: list,
     predictions_paths: list,
     outdir: Path = Path('benchmark'),
-    batch_size: int = 512
+    batch_size: int = 1024
 ):
     plt.rcParams.update({
         'font.size': 10,
