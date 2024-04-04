@@ -3908,7 +3908,17 @@ def profile_models(
         'legend.fontsize': 10,
         'xtick.major.pad': 10
     })
-
+    
+    models = {
+        'otfnet': 'Baseline',
+        'prototype-P8-R8-H8': '*ViT(P8)',
+        'prototype-P16-R8-H8': '*ViT(P16)',
+        'prototype-P32-R8-H8': '*ViT(P32)',
+        'opticalnet-P321688-R2222-H8888': 'Ours(P32-16-8-8)',
+        'opticalnet-P3216168-R2222-H8888': 'Ours(P32-16-16-8)',
+        'opticalnet-P32321616-R2222-H8888': 'Ours(P32-32-16-16)',
+    }
+    
     outdir.mkdir(parents=True, exist_ok=True)
     dataframes = []
     for codename, modeldir in zip(models_codenames, predictions_paths):
@@ -3916,7 +3926,6 @@ def profile_models(
         if savepath.exists():
             logger.info(f"Loading {savepath}")
             df = pd.read_csv(savepath, header=0, index_col=0)
-            best = df['epoch_loss'].idxmin()
         else:
 
             try:
@@ -3965,13 +3974,62 @@ def profile_models(
             
             except Exception:
                 continue
-            
-        df = df.iloc[best].to_frame().T
+        
         dataframes.append(df)
     
     df = pd.concat(dataframes).reset_index(drop=True)
-    df['throughput'] = df['throughput'].astype(int)
+    training_batch_size = 4096
+    dataset_size = 2000000
+    training_steps_per_epoch = dataset_size // training_batch_size
+    df['training_gflops'] = training_steps_per_epoch * training_batch_size * df['step'] * df['gflops'] * 3
+    # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
     
+    df['cat'] = 'Convolutional'
+    df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
+    df.loc[df.model.str.match(r'prototype'), 'cat'] = 'ViT*'
+    df.model = df.model.replace(models)
+    
+    steps = [1] + list(range(49, 500, 50))
+    fig, ax = plt.subplots(figsize=(8, 8))
+    for cc, colormap in zip(['Convolutional', 'ViT*', 'Ours'], ['Greys_r', 'Oranges', 'Blues']):
+        data = df[df.step.isin(steps)][df.cat == cc]
+        g = sns.lineplot(
+            data=data,
+            x="training_gflops",
+            y="epoch_loss",
+            hue="model",
+            hue_order=[m if m in data.model.unique() else None for m in models.values()],
+            # size="gflops",
+            palette=colormap,
+            dashes=False,
+            marker="o",
+            # sizes=sizes,
+            ax=ax
+        )
+    
+    ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
+    ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
+    ax.set_xlabel('Training compute (GFLOPs)')
+    ax.set_ylabel('Loss')
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlim(10 ** 8, None)
+    ax.set_ylim(10 ** -3, 1)
+    ax.legend(loc='lower left', ncol=1, title="", frameon=False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    
+    savepath = Path(f'{outdir}/compute')
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    
+    df = pd.DataFrame()
+    for d in dataframes:
+        best = d['epoch_loss'].idxmin()
+        df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
+    df.model = df.model.replace(models)
+        
     coi = [
         'epoch_loss',
         'training',
@@ -3988,21 +4046,20 @@ def profile_models(
         'GFLOPs',
         'Parameters',
     ]
-    
-    g = sns.PairGrid(df.sort_values('epoch_loss'), x_vars=coi, y_vars=["model"], height=8, aspect=.4)
+
+    g = sns.PairGrid(df.sort_values('epoch_loss'), x_vars=coi, y_vars=["model"], hue="model", height=8, aspect=.4, palette='muted')
     g.map(sns.stripplot, size=10, orient="h", jitter=False, palette="tab10", linewidth=1, edgecolor="w")
     g.set(xlabel="", ylabel="")
-    
+
     for ax, cc, title in zip(g.axes.flat, coi, titles):
-        
+
         if cc == 'epoch_loss':
             ax.set_xscale('log')
-            
+
         ax.set(title=title)
         ax.xaxis.grid(True)
         ax.yaxis.grid(True)
     
-    # sns.despine(left=True, bottom=True)
     plt.tight_layout()
     
     savepath = Path(f'{outdir}/profiles')
