@@ -386,7 +386,7 @@ def iter_evaluate(
     Returns:
         "results" dataframe
     """
-    model = backend.load(modelpath)
+    model = backend.load(modelpath, model_arch=modelpath.name.split('-')[0])
 
     gen = backend.load_metadata(
         modelpath,
