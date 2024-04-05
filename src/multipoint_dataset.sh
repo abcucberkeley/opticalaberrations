@@ -19,7 +19,7 @@ DENOISE=false
 DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
 HANDLER=lsf
-TITLE='master_dataset'
+TITLE='10m_125nm_dataset'
 DATASET='train'
 
 if [ "$DATASET" = "train" ]; then

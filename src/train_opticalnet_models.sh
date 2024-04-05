@@ -16,7 +16,7 @@ H100="--partition gpu_h100 --gpus 8 --cpus 16"
 A100="--partition gpu_a100 --gpus 4 --cpus 8"
 BS=4096
 
-SUBSET='master_dataset'
+SUBSET='10m_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"
 else
