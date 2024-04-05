@@ -1,6 +1,7 @@
 import time
 
 import matplotlib
+
 matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
@@ -229,8 +230,14 @@ def na_and_background_filter(
     im1 = np.real(np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(fourier))))  # needs to be 'real' not abs in this case
 
     combined = combine_filtered_imgs(image, im1, im2, min_psnr=min_psnr, dtype=dtype)
-    cp_mask = (1 - tukey_window(cp.ones_like(combined), alpha=0.1)) * np.max(combined)
-    min_in_mip_views = np.nanmin(np.nanmax(combined + cp_mask, axis=0), axis=None)
+    
+    if isinstance(image, np.ndarray):
+        temp = np.ones_like(combined) #CPU
+    else:
+        temp = cp.ones_like(combined) #GPU
+    
+    mask = (1 - tukey_window(temp, alpha=0.1)) * np.max(combined)
+    min_in_mip_views = np.nanmin(np.nanmax(combined + mask, axis=0), axis=None)
     # logger.info(f'image {min_in_mip_views=}')
     combined -= min_in_mip_views
     combined[combined < 0] = 0
