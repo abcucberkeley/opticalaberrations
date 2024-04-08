@@ -3975,23 +3975,24 @@ def profile_models(
             except Exception:
                 continue
         
+        training_batch_size = 4096
+        dataset_size = 2000000
+        training_steps_per_epoch = dataset_size // training_batch_size
+        df['training_gflops'] = training_steps_per_epoch * training_batch_size * df['step'] * df['gflops'] * 3
+        # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
+        df["training_gflops"] =  df["training_gflops"] * 1e-9
+        
+        df['cat'] = 'Baseline'
+        df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
+        df.loc[df.model.str.match(r'prototype'), 'cat'] = '*ViT'
+        df.model = df.model.replace(models)
+        
         dataframes.append(df)
-    
+        
     df = pd.concat(dataframes).reset_index(drop=True)
-    training_batch_size = 4096
-    dataset_size = 2000000
-    training_steps_per_epoch = dataset_size // training_batch_size
-    df['training_gflops'] = training_steps_per_epoch * training_batch_size * df['step'] * df['gflops'] * 3
-    # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
-    
-    df['cat'] = 'Convolutional'
-    df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
-    df.loc[df.model.str.match(r'prototype'), 'cat'] = 'ViT*'
-    df.model = df.model.replace(models)
-    
     steps = [1] + list(range(49, 500, 50))
     fig, ax = plt.subplots(figsize=(8, 8))
-    for cc, colormap in zip(['Convolutional', 'ViT*', 'Ours'], ['Greys_r', 'Oranges', 'Blues']):
+    for cc, colormap, cmarker in zip(['*ViT', 'Ours', 'Baseline'], ['Oranges', 'Blues', 'Greys_r'], ['C1', 'C0', 'k']):
         data = df[df.step.isin(steps)][df.cat == cc]
         g = sns.lineplot(
             data=data,
@@ -4006,14 +4007,29 @@ def profile_models(
             # sizes=sizes,
             ax=ax
         )
+        
+        best = df[df.cat == cc]['epoch_loss'].astype(np.float32).idxmin()
+        data = df.iloc[best].to_frame().T
+        g = sns.scatterplot(
+            data=data,
+            x="training_gflops",
+            y="epoch_loss",
+            c=cmarker,
+            ax=ax
+        )
+        
+        ax.text(
+            data["training_gflops"] + 0.1, data["epoch_loss"], cc,
+            horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+        )
     
     ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
     ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
-    ax.set_xlabel('Training compute (GFLOPs)')
+    ax.set_xlabel('Training compute (Billions of GFLOPs)')
     ax.set_ylabel('Loss')
-    ax.set_xscale('log')
+    # ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlim(10 ** 8, None)
+    ax.set_xlim(0, 11)
     ax.set_ylim(10 ** -3, 1)
     ax.legend(loc='lower left', ncol=1, title="", frameon=False)
     ax.spines['right'].set_visible(False)
@@ -4028,8 +4044,40 @@ def profile_models(
     for d in dataframes:
         best = d['epoch_loss'].idxmin()
         df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
-    df.model = df.model.replace(models)
+    
+    fig, ax = plt.subplots(figsize=(8, 8))
+    for cc, colormap in zip(['*ViT', 'Ours', 'Baseline'], ['C1', 'C0', 'k']):
+        best = df[df.cat == cc]['epoch_loss'].astype(np.float32).idxmin()
+        data = df.iloc[best].to_frame().T
+        g = sns.scatterplot(
+            data=data,
+            x="training_gflops",
+            y="epoch_loss",
+            c=colormap,
+            ax=ax
+        )
         
+        ax.text(
+            data["training_gflops"] + 0.1, data["epoch_loss"], cc,
+            horizontalalignment='left', size='medium', color=colormap, weight='semibold'
+        )
+            
+    ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
+    ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
+    ax.set_xlabel('Training compute (Billions of GFLOPs)')
+    ax.set_ylabel('Loss')
+    ax.set_yscale('log')
+    ax.set_xlim(0, 11)
+    ax.set_ylim(10 ** -3, 1)
+    ax.legend(loc='lower left', ncol=1, title="", frameon=False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    
+    savepath = Path(f'{outdir}/best')
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    
     coi = [
         'epoch_loss',
         'training',
