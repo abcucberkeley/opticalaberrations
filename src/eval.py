@@ -3746,7 +3746,7 @@ def compare_models(
     models_codenames: list,
     predictions_paths: list,
     iter_num: int = 1,
-    photon_range: tuple = (1e5, 2e5),
+    photon_range: tuple = (5e4, 1.5e5),
     aberration_range: tuple = (1, 2),
     outdir: Path = Path('benchmark'),
     wavelength: float = .510
@@ -3789,25 +3789,26 @@ def compare_models(
                 rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
                 rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
             ])
-            outliers = test[test[c] >= xmax]
+            outliers = test[test[c] < xmax]
             unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
 
         elif c == 'confidence':
-            xmax = .1
+            xmax = .075
             binwidth = .01
             bins = np.arange(0, xmax + binwidth, binwidth)
             xticks = np.arange(0, xmax+.01, .01)
+
             label = '\n'.join([
                 rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
                 rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
             ])
             # outliers = test[test[c] == 0]
             test[c].replace(0, test[c].max(), inplace=True)
-            outliers = test[test[c] >= xmax]
+            outliers = test[test[c] < xmax]
             unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
 
         else:
-            xmax = .1
+            xmax = .15
             binwidth = .01
             bins = np.arange(0, xmax + binwidth, binwidth)
             xticks = np.arange(0, xmax+.025, .025)
@@ -3817,7 +3818,7 @@ def compare_models(
             ])
             # outliers = test[test[c] == 0]
             test[c].replace(0, test[c].max(), inplace=True)
-            outliers = test[test[c] >= xmax]
+            outliers = test[test[c] < xmax]
             unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
 
 
@@ -3826,7 +3827,7 @@ def compare_models(
             ax,
             width="100%",
             height="100%",
-            bbox_to_anchor=(.3, .1, .3, .3),
+            bbox_to_anchor=(.4, .1, .3, .3),
             bbox_transform=ax.transAxes,
             loc='lower center'
         )
@@ -3858,9 +3859,10 @@ def compare_models(
         sns.barplot(
             x=unconfident[models_codenames].index,
             y=unconfident[models_codenames].values,
-            ax=histax
+            ax=histax,
+            palette="tab10"
         )
-
+        
         ax.set_xlabel(label)
         ax.set_ylabel('CDF')
         ax.set_xlim(0, None)
@@ -3873,15 +3875,26 @@ def compare_models(
         ax.spines['left'].set_visible(False)
         ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
-        histax.set_ylim(unconfident.min()-.05, unconfident.max())
-        histax.set_yticks(np.arange(unconfident.min()-.05, unconfident.max()+.05, .05).round(2))
-        histax.set_xlabel(f'$i$ >= {xmax}')
-        histax.set_ylabel('Proportion')
+        histax.set_ylim(unconfident.min()-.01, unconfident.max())
+        histax.set_yticks(np.arange(unconfident.min()-.01, unconfident.max()+.01, .01).round(2))
+        histax.set_xlabel(f'')
+        histax.set_ylabel('')
         histax.set_xticks([])
         histax.spines['top'].set_visible(False)
         histax.spines['right'].set_visible(False)
         histax.spines['left'].set_visible(False)
         histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        
+        m = .02 if c == 'residuals' else .005
+        axins = ax.inset_axes(
+            [.3, .075, .45, .4],
+            xlim=(xmax-xmax*m, xmax+xmax*m),
+            ylim=(unconfident.min()-.01, unconfident.max()+.02),
+        )
+        ax.indicate_inset_zoom(axins, edgecolor="k")
+        axins.set_xticks([])
+        axins.set_yticks([])
+
 
         sns.move_legend(g, title='Models', frameon=False, ncol=1, loc='lower right')
         plt.tight_layout()
@@ -3981,6 +3994,8 @@ def profile_models(
         df['training_gflops'] = training_steps_per_epoch * training_batch_size * df['step'] * df['gflops'] * 3
         # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
         df["training_gflops"] =  df["training_gflops"] * 1e-9
+        df["gflops"] =  df["gflops"]
+        df["params"] =  df["params"] * 1e-6
         
         df['cat'] = 'Baseline'
         df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
@@ -4081,6 +4096,7 @@ def profile_models(
     coi = [
         'epoch_loss',
         'training',
+	    'training_gflops',
         'memory',
         'throughput',
         'gflops',
@@ -4089,10 +4105,11 @@ def profile_models(
     titles = [
         'Loss',
         f'Training Time (H) \n8xH100s [BS=4096]',
+	    'Training GFLOPs (billions)',
         f'Memory (GB) \n[BS={batch_size}]',
         f'Throughput (P/S) \nRTX8000 [BS={batch_size}]',
         'GFLOPs',
-        'Parameters',
+        'Parameters (millions)',
     ]
 
     g = sns.PairGrid(df.sort_values('epoch_loss'), x_vars=coi, y_vars=["model"], hue="model", height=8, aspect=.4, palette='muted')
