@@ -3746,7 +3746,7 @@ def compare_models(
     models_codenames: list,
     predictions_paths: list,
     iter_num: int = 1,
-    photon_range: tuple = (5e4, 1.5e5),
+    photon_range: tuple = (5e4, 1e5),
     aberration_range: tuple = (1, 2),
     outdir: Path = Path('benchmark'),
     wavelength: float = .510
@@ -3784,23 +3784,20 @@ def compare_models(
             xmax = .5  #aberration_range[1]
             binwidth = .25
             bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.25, .25)
             label = '\n'.join([
                 rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
             ])
             outliers = test[test[c] < xmax]
             unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
 
         elif c == 'confidence':
-            xmax = .075
+            xmax = .02
             binwidth = .01
             bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.01, .01)
-
             label = '\n'.join([
                 rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0] // 1000):d}k, {int(photon_range[1] // 1000):d}k] integrated photons'
             ])
             # outliers = test[test[c] == 0]
             test[c].replace(0, test[c].max(), inplace=True)
@@ -3808,13 +3805,12 @@ def compare_models(
             unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
 
         else:
-            xmax = .15
+            xmax = .1
             binwidth = .01
             bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.025, .025)
             label = '\n'.join([
                 rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
             ])
             # outliers = test[test[c] == 0]
             test[c].replace(0, test[c].max(), inplace=True)
@@ -3866,7 +3862,6 @@ def compare_models(
         ax.set_xlabel(label)
         ax.set_ylabel('CDF')
         ax.set_xlim(0, None)
-        # ax.set_xticks(xticks)
         ax.set_ylim(None, 1)
         ax.set_yticks(np.arange(0, 1.1, .1))
         ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
@@ -3874,9 +3869,10 @@ def compare_models(
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_visible(False)
         ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
+        
+        hist_step = .05 if c == 'residuals' else .02
         histax.set_ylim(unconfident.min()-.01, unconfident.max())
-        histax.set_yticks(np.arange(unconfident.min()-.01, unconfident.max()+.01, .01).round(2))
+        histax.set_yticks(np.arange(unconfident.min()-hist_step, unconfident.max()+hist_step, hist_step).round(2))
         histax.set_xlabel(f'')
         histax.set_ylabel('')
         histax.set_xticks([])
@@ -3885,18 +3881,17 @@ def compare_models(
         histax.spines['left'].set_visible(False)
         histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
         
-        m = .02 if c == 'residuals' else .005
         axins = ax.inset_axes(
             [.3, .075, .45, .4],
-            xlim=(xmax-xmax*m, xmax+xmax*m),
-            ylim=(unconfident.min()-.01, unconfident.max()+.02),
+            xlim=(xmax, xmax),
+            ylim=(unconfident.min()-.01, unconfident.max()+.05),
         )
         ax.indicate_inset_zoom(axins, edgecolor="k")
         axins.set_xticks([])
         axins.set_yticks([])
 
 
-        sns.move_legend(g, title='Models', frameon=False, ncol=1, loc='lower right')
+        sns.move_legend(g, title='Training samples', frameon=False, ncol=1, loc='lower right')
         plt.tight_layout()
 
         savepath = Path(f'{outdir}/compare_{c}')
