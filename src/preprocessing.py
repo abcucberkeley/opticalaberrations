@@ -14,6 +14,7 @@ from typing import Any, Sequence, Union, Optional
 import numpy as np
 from scipy import stats as st
 from scipy.ndimage import gaussian_filter, binary_dilation, generate_binary_structure
+from scipy.signal import fftconvolve
 import pandas as pd
 import seaborn as sns
 import zarr
@@ -37,6 +38,7 @@ from csbdeep.models import CARE
 try:
     import cupy as cp
     from cupyx.scipy.ndimage import gaussian_filter as cp_gaussian_filter
+    from cupyx.scipy.signal import fftconvolve as cp_fftconvolve
 except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
@@ -691,11 +693,12 @@ def find_roi(
         image = imread(image).astype(np.float32)
 
     start_time = time.time()
-    blurred_image = remove_background_noise(image, method='difference_of_gaussians', min_psnr=0)
-    if isinstance(blurred_image, np.ndarray):
-        blurred_image = gaussian_filter(blurred_image, sigma=1.1)
-    else:
-        blurred_image = cp_gaussian_filter(blurred_image, sigma=1.1)
+    blurred_image = remove_background_noise(image, method='difference_of_gaussians', min_psnr=0, low_sigma=1.1, high_sigma=1.8)
+
+    # if isinstance(blurred_image, np.ndarray):
+    #     blurred_image = gaussian_filter(blurred_image, sigma=1.1)
+    # else:
+    #     blurred_image = cp_gaussian_filter(blurred_image, sigma=1.1)
 
     # exclude values close to the edge in Z for finding our template
     restricted_blurred = blurred_image.copy()
@@ -703,8 +706,9 @@ def find_roi(
     restricted_blurred[blurred_image.shape[0] - zborder:blurred_image.shape[0]] = 0
     max_poi = list(np.unravel_index(np.nanargmax(restricted_blurred, axis=None), restricted_blurred.shape))
     stop_time1 = time.time()
+    logger.info(f'remove background = {stop_time1 - start_time:8.1f} seconds')
 
-    kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=1)
+    # kernel = gaussian_kernel(kernlen=[kernel_size] * 3, std=1)
     # init_pos = [p - kernel_size // 2 for p in max_poi]
     # kernel = blurred_image[
     #     init_pos[0]:init_pos[0] + kernel_size,
@@ -713,19 +717,32 @@ def find_roi(
     # ]
     
     # convolve template with the input image
-    blurred_image = blurred_image if isinstance(blurred_image, np.ndarray) else cp.asnumpy(blurred_image)
-    convolved_image = convolution.convolve_fft(
-        blurred_image,
-        kernel,
-        allow_huge=True,
-        boundary='fill',
-        nan_treatment='fill',
-        fill_value=0,
-        normalize_kernel=False
-    )
-    convolved_image -= st.mode(convolved_image, axis=None)[0]
+    # if isinstance(blurred_image, np.ndarray):
+    #     # process on CPU
+    #     convolved_image = convolution.convolve_fft(
+    #         blurred_image,
+    #         kernel,
+    #         allow_huge=True,
+    #         boundary='fill',
+    #         nan_treatment='fill',
+    #         fill_value=0,
+    #         normalize_kernel=False,
+    #     )
+    # else:
+    #     # process on GPU
+    #     kernel = cp.array(kernel)
+    #     convolved_image = cp_fftconvolve(blurred_image, kernel, mode='same')
+
+    convolved_image = blurred_image
+    if not isinstance(convolved_image, np.ndarray):
+        convolved_image = cp.asnumpy(convolved_image)
+
+    convolved_image -= st.mode(convolved_image.astype(np.int32), axis=None)[0]
     convolved_image /= np.nanmax(convolved_image)
+
     stop_time2 = time.time()
+    logger.info(f'cross correlate   = {stop_time2 - stop_time1:8.1f} seconds')
+
     pois = []
     detected_peaks = peak_local_max(
         convolved_image,
@@ -735,10 +752,9 @@ def find_roi(
         p_norm=2,
         num_peaks=num_rois
     ).astype(int)
-    logger.info(f'remove background = {stop_time1 - start_time:8.2f} seconds')
-    logger.info(f'cross correlate   = {stop_time2 - stop_time1:8.2f} seconds')
-    logger.info(f'peak_local_max    = {time.time() - stop_time2:8.2f} seconds')
 
+    logger.info(f'peak_local_max    = {time.time() - stop_time2:8.1f} seconds')
+    logger.info(f'Total elapsed     = {time.time() - start_time:8.1f} seconds')
 
     logger.info(f"Found {len(detected_peaks)} peaks from peak_local_max (limited to {num_rois})")
     candidates_map = np.zeros_like(image)
@@ -827,7 +843,7 @@ def find_roi(
                         new_y = round((row['y'] + pois['y'][merge_id])/2)
                         new_z = round((row['z'] + pois['z'][merge_id])/2)
 
-                        logger.info(f"Merging ROI {index} with ROI {merge_id}, threshold {threshold:.1f}, shifting by "
+                        logger.info(f"Merging ROI {index:2d} with ROI {merge_id:2d}, threshold {threshold:.1f}, shifting by "
                                     f"{new_z - row['z']:3.0f}, "
                                     f"{new_y - row['y']:3.0f}, "
                                     f"{new_x - row['x']:3.0f} (Z,Y,X) pixels.")
