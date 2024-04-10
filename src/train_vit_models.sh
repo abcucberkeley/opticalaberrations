@@ -14,7 +14,7 @@ LAMB='--lr 1e-3 --wd 1e-2 --opt lamb'
 APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
 H100="--partition gpu_h100 --gpus 8 --cpus 16"
 A100="--partition gpu_a100 --gpus 4 --cpus 8"
-BS=4096
+BS=2048
 
 SUBSET='variable_object_size_fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
@@ -52,66 +52,26 @@ do
 
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
-  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '12' --heads '6' --hidden_size 384" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-S8
+  for PATCH in 32 16; do
+      python manager.py $CLUSTER $APPTAINER train.py $H100 \
+    --task "$CONFIG $LAMB --batch_size $BS --patches '${PATCH}' --repeats '6' --heads '6' --hidden_size 192" \
+    --taskname $NETWORK \
+    --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-T${PATCH}
 
-  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '12' --heads '6' --hidden_size 384" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-S16
+    python manager.py $CLUSTER $APPTAINER train.py $H100 \
+    --task "$CONFIG $LAMB --batch_size $BS --patches '${PATCH}' --repeats '8' --heads '8' --hidden_size 384" \
+    --taskname $NETWORK \
+    --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-S${PATCH}
 
-  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32' --repeats '12' --heads '6' --hidden_size 384" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-S32
+    python manager.py $CLUSTER $APPTAINER train.py $H100 \
+    --task "$CONFIG $LAMB --batch_size $BS --patches '${PATCH}' --repeats '12' --heads '12' --hidden_size 768" \
+    --taskname $NETWORK \
+    --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-B${PATCH}
 
-  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '12' --heads '12' --hidden_size 768" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-B8
-
-  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '12' --heads '12' --hidden_size 768" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-B16
-
-  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32' --repeats '12' --heads '12' --hidden_size 768" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-B32
-
-#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-#  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '24' --heads '16' --hidden_size 1024" \
-#  --taskname $NETWORK \
-#  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-L8
-#
-#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-#  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '24' --heads '16' --hidden_size 1024" \
-#  --taskname $NETWORK \
-#  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-L16
-#
-#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-#  --task "$CONFIG $LAMB --batch_size $BS --patches '32' --repeats '24' --heads '16' --hidden_size 1024" \
-#  --taskname $NETWORK \
-#  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-L32
+    #python manager.py $CLUSTER $APPTAINER train.py $H100 \
+    #--task "$CONFIG $LAMB --batch_size $BS --patches '${PATCH}' --repeats '24' --heads '16' --hidden_size 1024" \
+    #--taskname $NETWORK \
+    #--name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-L${PATCH}
+  done
 
 done
-
-
-#### FOR ABC CLUSTER
-
-#--partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
-#--partition abc_a100 --mem '500GB' --nodes 1 --gpus 4 --cpus 16 \
-#--partition abc --constraint 'titan' --mem '500GB' --nodes 3 --gpus 4 --cpus 20 \
-
-#  python multinode_manager.py train.py --partition abc_a100 --mem '500GB' --nodes 1 --gpus 4 --cpus 16 \
-#  --task "--multinode $CONFIG" \
-#  --taskname $NETWORK \
-#  --name new/$SUBSET/$NETWORK-$MODES-$DIR
-
-#python manager.py slurm train.py --partition dgx --mem '1950GB' --gpus 8 --cpus 128 \
-#  --task "$CONFIG" \
-#  --taskname $NETWORK \
-#  --name new/$SUBSET/$NETWORK-$MODES-$DIR
