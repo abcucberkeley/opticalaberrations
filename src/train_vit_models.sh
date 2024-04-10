@@ -53,10 +53,10 @@ do
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   for PATCH in 32 16; do
-      python manager.py $CLUSTER $APPTAINER train.py $H100 \
-    --task "$CONFIG $LAMB --batch_size $BS --patches '${PATCH}' --repeats '6' --heads '6' --hidden_size 192" \
-    --taskname $NETWORK \
-    --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-T${PATCH}
+    #python manager.py $CLUSTER $APPTAINER train.py $H100 \
+    #--task "$CONFIG $LAMB --batch_size $BS --patches '${PATCH}' --repeats '6' --heads '6' --hidden_size 192" \
+    #--taskname $NETWORK \
+    #--name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-T${PATCH}
 
     python manager.py $CLUSTER $APPTAINER train.py $H100 \
     --task "$CONFIG $LAMB --batch_size $BS --patches '${PATCH}' --repeats '8' --heads '8' --hidden_size 384" \
