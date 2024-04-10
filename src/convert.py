@@ -11,7 +11,7 @@ import time
 import numpy as np
 
 subprocess.call(
-    "pip install -U --extra-index-url https://pypi.ngc.nvidia.com triton-model-navigator[tensorflow]",
+    "pip install --user --extra-index-url https://pypi.ngc.nvidia.com triton-model-navigator[tensorflow]",
     shell=True
 )
 import model_navigator as nav

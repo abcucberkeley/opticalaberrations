@@ -127,7 +127,7 @@ def measure_gflops(model: tf.keras.Model):
 
 
 def load_tf_logs(path):
-	subprocess.call("pip install -U tbparse", shell=True)
+	subprocess.call("pip install --user tbparse", shell=True)
 	from tbparse import SummaryReader
 	
 	reader = SummaryReader(str(path), pivot=True, extra_columns=set(['wall_time']))
