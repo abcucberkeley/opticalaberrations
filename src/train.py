@@ -35,6 +35,7 @@ from backend import load
 import utils
 import data_utils
 import opticalnet
+import vit
 import baseline
 import otfnet
 import prototype
@@ -132,6 +133,7 @@ def train_model(
     max_amplitude: float = 1,
     input_shape: int = 64,
     batch_size: int = 32,
+    hidden_size: int = 768,
     patches: list = [32, 16, 8, 8],
     heads: list = [2, 4, 8, 16],
     repeats: list = [2, 4, 6, 2],
@@ -328,6 +330,25 @@ def train_model(
                 positional_encoding_scheme=positional_encoding_scheme,
                 radial_encoding_period=radial_encoding_period,
                 radial_encoding_nth_order=radial_encoding_nth_order,
+                fixed_dropout_depth=fixed_dropout_depth,
+            )
+        elif network == 'vit':
+            model = vit.VIT(
+                name='ViT',
+                hidden_size=hidden_size,
+                roi=roi,
+                stem=stem,
+                patches=patches,
+                heads=heads,
+                repeats=repeats,
+                modes=pmodes,
+                depth_scalar=depth_scalar,
+                width_scalar=width_scalar,
+                dropout_rate=dropout,
+                activation=activation,
+                mul=mul,
+                no_phase=no_phase,
+                positional_encoding_scheme=positional_encoding_scheme,
                 fixed_dropout_depth=fixed_dropout_depth,
             )
 
@@ -542,6 +563,10 @@ def parse_args(args):
 
     train_parser.add_argument(
         "--batch_size", default=2048, type=int, help="number of images per batch"
+    )
+    
+    train_parser.add_argument(
+        "--hidden_size", default=768, type=int, help="hidden size of transformer block"
     )
 
     train_parser.add_argument(
@@ -811,6 +836,7 @@ def main(args=None):
                     network=args.network,
                     input_shape=args.input_shape,
                     batch_size=args.batch_size,
+                    hidden_size=args.hidden_size,
                     patches=[int(i) for i in args.patches.split('-')],
                     heads=[int(i) for i in args.heads.split('-')],
                     repeats=[int(i) for i in args.repeats.split('-')],

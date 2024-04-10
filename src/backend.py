@@ -61,6 +61,7 @@ from stem import Stem
 
 import opticalnet
 import prototype
+import vit
 from warmupcosinedecay import WarmupCosineDecay
 
 
@@ -164,6 +165,17 @@ def load(model_path: Union[Path, str], mosaic=False, model_arch=None) -> tf.kera
         "Transformer": prototype.Transformer,
     }
     
+    vit_custom_objects = {
+        "LAMB": LAMB,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+        "Patchify": vit.Patchify,
+        "PatchEncoder": vit.PatchEncoder,
+        "MLP": vit.MLP,
+        "Transformer": vit.Transformer,
+    }
+    
     if model_arch is None:
         
         try:
@@ -176,6 +188,9 @@ def load(model_path: Union[Path, str], mosaic=False, model_arch=None) -> tf.kera
     
     elif model_arch.lower() == 'prototype':
         return load_model(model_path, custom_objects=prototype_custom_objects)
+    
+    elif model_arch.lower() == 'vit':
+        return load_model(model_path, custom_objects=vit_custom_objects)
     
     else:
         return load_model(model_path, custom_objects=custom_objects)

@@ -3919,12 +3919,18 @@ def profile_models(
     
     models = {
         'otfnet': 'Baseline',
-        'prototype-P8-R8-H8': '*ViT(P8)',
-        'prototype-P16-R8-H8': '*ViT(P16)',
-        'prototype-P32-R8-H8': '*ViT(P32)',
-        'opticalnet-P321688-R2222-H8888': 'Ours(P32-16-8-8)',
-        'opticalnet-P3216168-R2222-H8888': 'Ours(P32-16-16-8)',
-        'opticalnet-P32321616-R2222-H8888': 'Ours(P32-32-16-16)',
+        'vit-P8-R8-H8': '*ViT-8/8',
+        'vit-P16-R8-H8': '*ViT-8/16',
+        'vit-P32-R8-H8': '*ViT-8/32',
+        'prototype-P8-R8-H8': '*ViT-8/8',
+        'prototype-P16-R8-H8': '*ViT-8/16',
+        'prototype-P32-R8-H8': '*ViT-8/32',
+        'opticalnet-P32321616-R1111-H8888': 'Ours-4/32-16',
+        'opticalnet-P32321616-R2222-H8888': 'Ours-8/32-16',
+        'opticalnet-P32321616-R4444-H8888': 'Ours-16/32-16',
+        'opticalnet-P32321616-R6666-H8888': 'Ours-24/32-16',
+        'opticalnet-P321688-R2222-H8888': 'Ours-8/32-16-8-8',
+        'opticalnet-P3216168-R2222-H8888': 'Ours-8/32-16-16-8',
     }
     
     outdir.mkdir(parents=True, exist_ok=True)
@@ -4017,7 +4023,7 @@ def profile_models(
             # sizes=sizes,
             ax=ax
         )
-        
+
         best = df[df.cat == cc]['epoch_loss'].astype(np.float32).idxmin()
         data = df.iloc[best].to_frame().T
         g = sns.scatterplot(
@@ -4027,29 +4033,29 @@ def profile_models(
             c=cmarker,
             ax=ax
         )
-        
+
         ax.text(
             data["training_gflops"] + 0.1, data["epoch_loss"], cc,
             horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
         )
-    
+
     ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
     ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
     ax.set_xlabel('Training compute (Billions of GFLOPs)')
     ax.set_ylabel('Loss')
     # ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlim(0, 11)
+    ax.set_xlim(0, 20)
     ax.set_ylim(10 ** -3, 1)
     ax.legend(loc='lower left', ncol=1, title="", frameon=False)
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
-    
+
     savepath = Path(f'{outdir}/compute')
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-    
+
     df = pd.DataFrame()
     for d in dataframes:
         best = d['epoch_loss'].idxmin()
@@ -4066,12 +4072,12 @@ def profile_models(
             c=colormap,
             ax=ax
         )
-        
+
         ax.text(
             data["training_gflops"] + 0.1, data["epoch_loss"], cc,
             horizontalalignment='left', size='medium', color=colormap, weight='semibold'
         )
-            
+
     ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
     ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
     ax.set_xlabel('Training compute (Billions of GFLOPs)')
@@ -4082,7 +4088,7 @@ def profile_models(
     ax.legend(loc='lower left', ncol=1, title="", frameon=False)
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
-    
+
     savepath = Path(f'{outdir}/best')
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
