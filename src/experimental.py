@@ -1954,11 +1954,12 @@ def aggregate_rois(
         except KeyError:
             pred = np.zeros(samplepsfgen.n_modes)
             pred_std = np.zeros(samplepsfgen.n_modes)
+            axes = None     # give some value for axes so upcoming "if plot..." can avoid exceptions
 
         imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32),
                 compression='deflate', dtype=np.float32)
 
-        if plot:
+        if plot and axes is not None:
             axes[1].imshow(np.nanmax(psf_heatmap, axis=0) ** .5, aspect=xy_aspect, cmap='Greys_r')
             axes[-1].imshow(np.nanmax(psf_heatmap, axis=1) ** .5, aspect=xz_aspect, cmap='Greys_r')
 
