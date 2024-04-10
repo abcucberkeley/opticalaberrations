@@ -15,6 +15,7 @@ import seaborn as sns
 from typing import Any
 import numpy as np
 import pandas as pd
+from tifffile import imwrite
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import utils
@@ -1140,14 +1141,12 @@ def eval_cell_dataset(
     flat: Any = None,
     postfix: str = 'predictions_aggregated_zernike_coefficients.csv',
     gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv',
-    plot_evals: bool = True,
     precomputed: bool = False,
-    rerun_calc: bool = True,
 ):
     results = {}
-    savepath = Path(f'{datadir}/cells_evaluation')
+    savepath = Path(f'{datadir}/{datadir.name}')
 
-    if rerun_calc or not Path(f'{savepath}.csv').exists:
+    if precomputed or not Path(f'{savepath}_results.npy').exists():
 
         # get model from .json file
         with open(sorted(Path(datadir / 'rotated').glob('*_predictions_settings.json'))[0]) as f:
@@ -1197,7 +1196,8 @@ def eval_cell_dataset(
                     min_psnr=0
                 )
                 
-                cam_b_ml_img = backend.load_sample(str(cam_a_file).replace('CamA', 'CamB'))
+                cam_b_path = str(cam_a_file).replace('ch0', 'ch1').replace('CamA', 'CamB').replace('488nm', '560nm')
+                cam_b_ml_img = backend.load_sample(cam_b_path)
                 cam_b_ml_img = preprocessing.prep_sample(
                     cam_b_ml_img,
                     normalize=True,
@@ -1211,6 +1211,8 @@ def eval_cell_dataset(
                 ml_img = np.stack([cam_b_ml_img, cam_a_ml_img, np.zeros_like(cam_b_ml_img)], axis=-1)
                 
                 pr_img = backend.load_sample(gt_path)
+                pr_img = np.transpose(np.rot90(pr_img, k=2, axes=(1, 2)), axes=(0, 2, 1))
+                
                 pr_img = preprocessing.prep_sample(
                     pr_img,
                     normalize=True,
@@ -1262,6 +1264,30 @@ def eval_cell_dataset(
                         lam_detection=predictions_settings['wavelength']
                     )
                     
+                    imwrite(
+                        f'{savepath}_pr_wavefront_{iter_number}.tif',
+                        gt_wavefront.wave().astype(np.float32),
+                        compression='deflate',
+                        dtype=np.float32
+                    )
+                    
+                    imwrite(
+                        f'{savepath}_ml_wavefront_{iter_number}.tif',
+                        ml_wavefront.wave().astype(np.float32),
+                        compression='deflate',
+                        dtype=np.float32
+                    )
+                    
+                    imwrite(
+                        f'{savepath}_diff_wavefront_{iter_number}.tif',
+                        diff_wavefront.wave().astype(np.float32),
+                        compression='deflate',
+                        dtype=np.float32
+                    )
+                    
+                    f'{savepath}_results.tif'
+                    
+                    
                     results[(iter_number, cam_a_file.parent.name)] = dict(
                         ml_img=ml_img,
                         ml_wavefront=ml_wavefront,
@@ -1284,6 +1310,10 @@ def eval_cell_dataset(
         # skip calc. Reload results and just replot
         results = np.load(f'{savepath}_results.npy', allow_pickle='TRUE').item()
 
-    logger.info(f'{savepath}.csv')
-    vis.plot_cell_dataset(results, savepath=savepath)
+    logger.info(f'{savepath}_results.npy')
+    vis.plot_cell_dataset(
+        results,
+        savepath=savepath,
+        list_of_files=[datadir.name],
+    )
     

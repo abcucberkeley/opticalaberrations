@@ -46,7 +46,17 @@ def save_synthetic_sample(
     counts,
     p2v,
     avg_min_distance,
-    gen,
+    n_modes=15,
+    order='ansi',
+    x_voxel_size=.125,
+    y_voxel_size=.125,
+    z_voxel_size=.2,
+    lam_detection=.510,
+    na_detection=1.0,
+    refractive_index=1.33,
+    mode_weights='pyramid',
+    embedding_option='spatial_planes',
+    distribution='mixed',
     lls_defocus_offset=0.,
     npoints=1,
     gt=None,
@@ -77,8 +87,8 @@ def save_synthetic_sample(
         json = dict(
             path=f"{savepath}.tif",
             shape=inputs.shape,
-            n_modes=int(gen.n_modes),
-            order=str(gen.order),
+            n_modes=int(n_modes),
+            order=str(order),
             lls_defocus_offset=float(lls_defocus_offset),
             zernikes=amps.tolist(),
             photons=int(photons),
@@ -92,15 +102,15 @@ def save_synthetic_sample(
             sigma_background_noise=float(sigma_background_noise),
             electrons_per_count=float(electrons_per_count),
             quantum_efficiency=float(quantum_efficiency),
-            x_voxel_size=float(gen.x_voxel_size),
-            y_voxel_size=float(gen.y_voxel_size),
-            z_voxel_size=float(gen.z_voxel_size),
-            wavelength=float(gen.lam_detection),
-            na_detection=float(gen.na_detection),
-            refractive_index=float(gen.refractive_index),
-            mode_weights=str(gen.mode_weights),
-            embedding_option=str(gen.embedding_option),
-            distribution=str(gen.distribution),
+            x_voxel_size=float(x_voxel_size),
+            y_voxel_size=float(y_voxel_size),
+            z_voxel_size=float(z_voxel_size),
+            wavelength=float(lam_detection),
+            na_detection=float(na_detection),
+            refractive_index=float(refractive_index),
+            mode_weights=str(mode_weights),
+            embedding_option=str(embedding_option),
+            distribution=str(distribution),
             psf_type=str(psf_type)
         )
 
@@ -302,7 +312,17 @@ def simulate_image(
                 npoints=npoints,
                 p2v=p2v,
                 gt=reference,
-                gen=gen,
+                n_modes=phi.modes,
+                order=phi.order,
+                x_voxel_size=gen.x_voxel_size,
+                y_voxel_size=gen.y_voxel_size,
+                z_voxel_size=gen.z_voxel_size,
+                lam_detection=phi.lam_detection,
+                na_detection=gen.na_detection,
+                refractive_index=gen.refractive_index,
+                mode_weights=phi.mode_weights,
+                embedding_option=gen.embedding_option,
+                distribution=phi.distribution,
                 realspace=inputs,
                 realspace_noisefree=inputs_noisefree,
                 avg_min_distance=avg_min_distance,
@@ -334,7 +354,17 @@ def simulate_image(
             npoints=npoints,
             avg_min_distance=avg_min_distance,
             p2v=p2v,
-            gen=gen,
+            n_modes=phi.modes,
+            order=phi.order,
+            x_voxel_size=gen.x_voxel_size,
+            y_voxel_size=gen.y_voxel_size,
+            z_voxel_size=gen.z_voxel_size,
+            lam_detection=phi.lam_detection,
+            na_detection=gen.na_detection,
+            refractive_index=gen.refractive_index,
+            mode_weights=phi.mode_weights,
+            embedding_option=gen.embedding_option,
+            distribution=phi.distribution,
             lls_defocus_offset=lls_defocus_offset,
             sigma_background_noise=sigma_background_noise,
             mean_background_offset=mean_background_offset,
@@ -342,6 +372,8 @@ def simulate_image(
             quantum_efficiency=quantum_efficiency,
             psf_type=gen.psf_type,
         )
+    
+    logger.info(f"Saving: {outdir/filename}")
     return inputs
 
 
@@ -423,20 +455,20 @@ def create_synthetic_sample(
 
             outdir = basedir / 'noisy'
 
-            if gen.distribution == 'powerlaw':
+            if aberration.distribution == 'powerlaw':
                 outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
             else:
-                outdir = outdir / f"{gen.distribution}"
+                outdir = outdir / f"{aberration.distribution}"
 
             outdir = outdir / f"photons_{photon_range[0]}-{photon_range[1]}"
             outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
                               f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
 
             gtdir = basedir / 'gt'
-            if gen.distribution == 'powerlaw':
-                gtdir = gtdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
+            if aberration.distribution == 'powerlaw':
+                gtdir = gtdir / f"powerlaw_gamma_{str(round(aberration.gamma, 2)).replace('.', 'p')}"
             else:
-                gtdir = gtdir / f"{gen.distribution}"
+                gtdir = gtdir / f"{aberration.distribution}"
 
             gtdir = gtdir / f"photons_{photon_range[0]}-{photon_range[1]}"
             gtdir = gtdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
@@ -455,10 +487,10 @@ def create_synthetic_sample(
             outdir = outdir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
             outdir = outdir / f"z{gen.n_modes}"
 
-            if gen.distribution == 'powerlaw':
-                outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
+            if aberration.distribution == 'powerlaw':
+                outdir = outdir / f"powerlaw_gamma_{str(round(aberration.gamma, 2)).replace('.', 'p')}"
             else:
-                outdir = outdir / f"{gen.distribution}"
+                outdir = outdir / f"{aberration.distribution}"
 
             outdir = outdir / f"photons_{photon_range[0]}-{photon_range[1]}"
             outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
@@ -472,25 +504,25 @@ def create_synthetic_sample(
             r = gen.lam_detection / default_wavelength
             phi = Wavefront(
                 amplitudes=[r * z for z in aberration.amplitudes],
-                order=gen.order,
-                distribution=gen.distribution,
-                mode_weights=gen.mode_weights,
-                modes=gen.n_modes,
-                gamma=gen.gamma,
-                signed=gen.signed,
-                rotate=gen.rotate,
+                order=aberration.order,
+                distribution=aberration.distribution,
+                mode_weights=aberration.mode_weights,
+                modes=aberration.modes,
+                gamma=aberration.gamma,
+                signed=aberration.signed,
+                rotate=aberration.rotate,
                 lam_detection=gen.lam_detection,
             )
         else:
             phi = Wavefront(
                 amplitudes=aberration.amplitudes if template is None else template.amplitudes,
-                order=gen.order,
-                distribution=gen.distribution,
-                mode_weights=gen.mode_weights,
-                modes=gen.n_modes,
-                gamma=gen.gamma,
-                signed=gen.signed,
-                rotate=gen.rotate,
+                order=aberration.order,
+                distribution=aberration.distribution,
+                mode_weights=aberration.mode_weights,
+                modes=aberration.modes,
+                gamma=aberration.gamma,
+                signed=aberration.signed,
+                rotate=aberration.rotate,
                 lam_detection=gen.lam_detection,
             )
 
@@ -511,13 +543,13 @@ def create_synthetic_sample(
 
                     w = Wavefront(
                         amplitudes=amplitudes,
-                        order=gen.order,
-                        distribution=gen.distribution,
-                        mode_weights=gen.mode_weights,
-                        modes=gen.n_modes,
-                        gamma=gen.gamma,
-                        signed=gen.signed,
-                        rotate=gen.rotate,
+                        order=aberration.order,
+                        distribution=aberration.distribution,
+                        mode_weights=aberration.mode_weights,
+                        modes=aberration.modes,
+                        gamma=aberration.gamma,
+                        signed=aberration.signed,
+                        rotate=aberration.rotate,
                         lam_detection=gen.lam_detection,
                     )
 
@@ -536,13 +568,13 @@ def create_synthetic_sample(
                             # Override wavefront to generate sample again
                             wavefronts[gen.psf_type] = Wavefront(
                                 amplitudes=template_amplitudes,
-                                order=gen.order,
-                                distribution=gen.distribution,
-                                mode_weights=gen.mode_weights,
-                                modes=gen.n_modes,
-                                gamma=gen.gamma,
-                                signed=gen.signed,
-                                rotate=gen.rotate,
+                                order=aberration.order,
+                                distribution=aberration.distribution,
+                                mode_weights=aberration.mode_weights,
+                                modes=aberration.modes,
+                                gamma=aberration.gamma,
+                                signed=aberration.signed,
+                                rotate=aberration.rotate,
                                 lam_detection=gen.lam_detection,
                             )
                             raise Exception("Wavefront does not match template. Creating sample again.")

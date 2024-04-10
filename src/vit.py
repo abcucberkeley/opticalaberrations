@@ -4,7 +4,6 @@ from abc import ABC
 
 import numpy as np
 import tensorflow as tf
-from scipy.special import binom
 from tensorflow.keras import layers
 
 from base import Base
@@ -19,17 +18,18 @@ logger = logging.getLogger(__name__)
 
 
 class Patchify(layers.Layer):
-	def __init__(self, patch_size, **kwargs):
+	def __init__(self, patch_size, hidden_size, **kwargs):
 		super().__init__(**kwargs)
 		self.patch_size = patch_size
+		self.hidden_size = hidden_size
 		self.project = layers.Conv3D(
-			filters=self.patch_size ** 2,
+			filters=self.hidden_size,
 			kernel_size=(1, self.patch_size, self.patch_size),
 			strides=(1, self.patch_size, self.patch_size),
 			padding="VALID",
 			name="conv_projection",
 		)
-
+		
 		self.prenorm = layers.LayerNormalization(axis=-1, epsilon=1e-6)
 	
 	def build(self, input_shape):
@@ -39,6 +39,7 @@ class Patchify(layers.Layer):
 		config = super(Patchify, self).get_config()
 		config.update({
 			"patch_size": self.patch_size,
+			"hidden_size": self.hidden_size,
 		})
 		return config
 	
@@ -55,16 +56,12 @@ class PatchEncoder(layers.Layer):
 		num_patches,
 		embedding_size,
 		positional_encoding_scheme='default',
-		radial_encoding_periods=1,
-		radial_encoding_nth_order=4,
 		**kwargs
 	):
 		super().__init__(**kwargs)
 		self.num_patches = num_patches
 		self.embedding_size = embedding_size
 		self.positional_encoding_scheme = positional_encoding_scheme
-		self.radial_encoding_periods = radial_encoding_periods
-		self.radial_encoding_nth_order = radial_encoding_nth_order
 		
 		self.project_layer = layers.Dense(self.embedding_size)
 		self.radial_embedding_layer = layers.Dense(self.embedding_size)
@@ -82,8 +79,6 @@ class PatchEncoder(layers.Layer):
 			"num_patches": self.num_patches,
 			"embedding_size": self.embedding_size,
 			"positional_encoding_scheme": self.positional_encoding_scheme,
-			"radial_encoding_periods": self.radial_encoding_periods,
-			"radial_encoding_nth_order": self.radial_encoding_nth_order,
 		})
 		return config
 	
@@ -95,107 +90,19 @@ class PatchEncoder(layers.Layer):
 		theta = np.arctan2(ygrid.flatten(), xgrid.flatten())
 		return r.astype(np.float32), theta.astype(np.float32)
 	
-	def _nm_polynomial(self, n, m, rho, theta, normed=True):
-		def _nm_normalization(n, m):
-			""" return orthonormal zernike """
-			return np.sqrt((1. + (m == 0)) / (2. * n + 2))
-		
-		if (n - m) % 2 == 1:
-			poly = 0 * rho + 0 * theta
-			return poly.astype(np.float32)
-		
-		radial = 0
-		m0 = abs(m)
-		
-		for k in range((n - m0) // 2 + 1):
-			a = binom(n - k, k)
-			b = binom(n - 2 * k, (n - m0) // 2 - k)
-			radial += (-1.) ** k * a * b * rho ** (n - 2 * k)
-		
-		# no clipping needed here
-		# radial *= (rho <= 1.)
-		
-		if normed:  # return orthonormal zernike
-			prefac = 1. / _nm_normalization(n, m)
-		else:
-			prefac = 1.
-		
-		if m >= 0:
-			poly = prefac * radial * np.cos(m0 * theta)
-		else:
-			poly = prefac * radial * np.sin(m0 * theta)
-		
-		return poly.astype(np.float32)
-	
-	def _zernike_polynomials(self, radial_encoding_nth_order=4):
-		r, theta = self._calc_radius()
-		nm_pairs = set((n, m) for n in range(radial_encoding_nth_order + 1) for m in range(-n, n + 1, 2))
-		polynomials = np.zeros((r.shape[0], len(nm_pairs)), dtype=np.float32)
-		
-		for i, (pr, pt) in enumerate(zip(r, theta)):
-			for j, (n, m) in enumerate(nm_pairs):
-				polynomials[i, j] = self._nm_polynomial(n=n, m=m, rho=pr, theta=pt, normed=True)
-		
-		return tf.constant(polynomials)
-	
-	def _fourier_decomposition(self, periods=1):
+	def _rotational_symmetry(self):
 		r, theta = self._calc_radius()
 		r = tf.constant(r, dtype=tf.float32)
 		theta = tf.constant(theta, dtype=tf.float32)
-		
-		encodings = [r]
-		for p in range(1, periods + 1):
-			encodings.append(tf.sin(p * r))
-			encodings.append(tf.cos(p * r))
-			encodings.append(tf.sin(p * theta))
-			encodings.append(tf.cos(p * theta))
-		
-		return tf.stack(encodings, axis=-1)
-	
-	def _power_decomposition(self, periods=1, radial_encoding_nth_order=4):
-		r, theta = self._calc_radius()
-		r = tf.constant(r, dtype=tf.float32)
-		theta = tf.constant(theta, dtype=tf.float32)
-		
-		encodings = []
-		for n in range(1, radial_encoding_nth_order + 1):
-			encodings.append(tf.pow(r, n))
-		
-		for p in range(1, periods + 1):
-			encodings.append(tf.sin(p * theta))
-			encodings.append(tf.cos(p * theta))
-		
-		return tf.stack(encodings, axis=-1)
-	
-	def _rotational_symmetry(self, periods=1):
-		r, theta = self._calc_radius()
-		r = tf.constant(r, dtype=tf.float32)
-		theta = tf.constant(theta, dtype=tf.float32)
-		
-		encodings = [r]
-		for p in range(1, periods + 1):
-			encodings.append(tf.sin(p * theta))
-			encodings.append(tf.cos(p * theta))
-		
-		return tf.stack(encodings, axis=-1)
+		return tf.stack([r, tf.sin(theta), tf.cos(theta)], axis=-1)
 	
 	def _patch_number(self):
 		return tf.range(start=0, limit=self.num_patches, delta=1)
 	
-	def positional_encoding(self, inputs, scheme, periods, radial_encoding_nth_order):
+	def positional_encoding(self, inputs, scheme):
 		
 		if scheme == 'rotational_symmetry' or scheme == 'rot_sym':
-			pos = self._rotational_symmetry(periods=periods)
-		
-		elif scheme == 'fourier_decomposition':
-			pos = self._fourier_decomposition(periods=periods)
-		
-		elif scheme == 'power_decomposition':
-			pos = self._power_decomposition(periods=periods, radial_encoding_nth_order=radial_encoding_nth_order)
-		
-		elif scheme == 'zernike_polynomials':
-			pos = self._zernike_polynomials(radial_encoding_nth_order=radial_encoding_nth_order)
-		
+			pos = self._rotational_symmetry()
 		else:
 			pos = self._patch_number()
 		
@@ -211,8 +118,6 @@ class PatchEncoder(layers.Layer):
 	def call(
 		self,
 		inputs,
-		periods=None,
-		zernike_nth_order=None,
 		scheme=None,
 		**kwargs
 	):
@@ -220,16 +125,8 @@ class PatchEncoder(layers.Layer):
 		
 		if scheme is not None:
 			self.positional_encoding_scheme = scheme
-			self.radial_encoding_periods = periods
-			self.radial_encoding_nth_order = zernike_nth_order
 		
-		positional_embeddings = self.positional_encoding(
-			inputs,
-			scheme=self.positional_encoding_scheme,
-			periods=self.radial_encoding_periods,
-			radial_encoding_nth_order=self.radial_encoding_nth_order,
-		)
-		
+		positional_embeddings = self.positional_encoding(inputs, scheme=self.positional_encoding_scheme)
 		return linear_projections + positional_embeddings
 
 
@@ -326,10 +223,11 @@ class Transformer(layers.Layer):
 		return layers.Add()([s1, s2])
 
 
-class OpticalTransformer(Base, ABC):
+class VIT(Base, ABC):
 	def __init__(
 		self,
 		roi=None,
+		hidden_size=768,
 		patches=16,
 		heads=(16),
 		repeats=(24),
@@ -341,14 +239,13 @@ class OpticalTransformer(Base, ABC):
 		rho=.05,
 		mul=False,
 		no_phase=False,
-		radial_encoding_period=1,
 		positional_encoding_scheme='default',
-		radial_encoding_nth_order=4,
 		fixed_dropout_depth=False,
 		stem=False,
 		**kwargs
 	):
 		super().__init__(**kwargs)
+		self.hidden_size = hidden_size
 		self.roi = roi
 		self.stem = stem
 		self.patch_size = patches[0]
@@ -363,9 +260,7 @@ class OpticalTransformer(Base, ABC):
 		self.rho = rho
 		self.mul = mul
 		self.no_phase = no_phase
-		self.radial_encoding_period = radial_encoding_period
 		self.positional_encoding_scheme = positional_encoding_scheme
-		self.radial_encoding_nth_order = radial_encoding_nth_order
 		self.fixed_dropout_depth = fixed_dropout_depth
 	
 	def _calc_channels(self, channels, width_scalar):
@@ -384,14 +279,12 @@ class OpticalTransformer(Base, ABC):
 		img_shape = self.roi[-1] if self.roi is not None else inputs.shape[-2]
 		num_patches = (img_shape // self.patch_size) ** 2
 		
-		m = Patchify(patch_size=self.patch_size)(m)
+		m = Patchify(patch_size=self.patch_size, hidden_size=self.hidden_size)(m)
 		
 		m = PatchEncoder(
 			num_patches=num_patches,
-			embedding_size=self._calc_channels(self.patch_size ** 2, width_scalar=self.width_scalar),
+			embedding_size=self._calc_channels(self.hidden_size, width_scalar=self.width_scalar),
 			positional_encoding_scheme=self.positional_encoding_scheme,
-			radial_encoding_periods=self.radial_encoding_period,
-			radial_encoding_nth_order=self.radial_encoding_nth_order
 		)(m)
 		
 		for i, (h, r) in enumerate(zip(self.heads, self.repeats)):
@@ -405,7 +298,7 @@ class OpticalTransformer(Base, ABC):
 				
 				m = Transformer(
 					heads=self._calc_channels(h, width_scalar=self.width_scalar),
-					dims=self.patch_size ** 2,
+					dims=self.hidden_size,
 					activation=self.activation,
 					dropout_rate=dropout_rate,
 					expand_rate=self.expand_rate,

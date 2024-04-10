@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="optimize" type="PythonConfigurationType" factoryName="Python" folderName="utils">
+  <configuration default="false" name="profile_models" type="PythonConfigurationType" factoryName="Python" folderName="benchmark">
     <module name="opticalaberrations" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
@@ -38,12 +38,18 @@
             <option name="hostPath" value="$PROJECT_DIR$" />
             <option name="readOnly" value="false" />
           </DockerVolumeBindingImpl>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/betziglab/thayer/opticalaberrations" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="/run/user/1000/kio-fuse-psHtOM/smb/alshaabit%40hhmi.org@prfs.hhmi.org/betziglab/thayer/opticalaberrations" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
         </list>
       </option>
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/config.py" />
-    <option name="PARAMETERS" value="../pretrained_models/opticalnet-15-YuMB-lambda510.h5 --modelformat trt optimize" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/benchmark.py" />
+    <option name="PARAMETERS" value="profile_models /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/scaling/scaling_arch" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

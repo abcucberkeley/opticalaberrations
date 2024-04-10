@@ -1094,7 +1094,6 @@ def parse_args(args):
         "--flat", default=None, type=Path,
         help="path to the flat DM acts file. If this is given, then DM surface plots will be made."
     )
-    eval_cell_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
     eval_cell_dataset.add_argument("--precomputed", action='store_true')
     eval_cell_dataset.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
@@ -1555,7 +1554,6 @@ def main(args=None, preloaded=None):
                 experimental_eval.eval_cell_dataset(
                     datadir=args.datadir,
                     flat=args.flat,
-                    plot_evals=not args.skip_eval_plots,
                     precomputed=args.precomputed,
                 )
             elif args.func == 'eval_ao_dataset':

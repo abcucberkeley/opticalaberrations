@@ -6,7 +6,7 @@ DY=125
 DX=125
 DEFOCUS='--lls_defocus'
 DEFOCUS_ONLY='--defocus_only'
-NETWORK='opticalnet'
+NETWORK='vit'
 MODES=15
 CLUSTER='lsf'
 DEFAULT='--positional_encoding_scheme default --lr 5e-4 --wd 5e-6 --opt adamw'
@@ -49,33 +49,54 @@ do
   else
     LAM=.510
   fi
-  
+
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '3-3' --heads '6-6'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '12' --heads '6' --hidden_size 384" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-S3216
+  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-S8
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '4-4' --heads '8-8'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '12' --heads '6' --hidden_size 384" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-B3216
+  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-S16
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '6-6' --heads '12-12'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32' --repeats '12' --heads '6' --hidden_size 384" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-M3216
+  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-S32
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '12-12' --heads '16-16'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '12' --heads '12' --hidden_size 768" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-L3216
+  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-B8
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '16-16' --heads '16-16'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '12' --heads '12' --hidden_size 768" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-H3216
+  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-B16
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32' --repeats '12' --heads '12' --hidden_size 768" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-B32
+
+#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+#  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '24' --heads '16' --hidden_size 1024" \
+#  --taskname $NETWORK \
+#  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-L8
+#
+#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+#  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '24' --heads '16' --hidden_size 1024" \
+#  --taskname $NETWORK \
+#  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-L16
+#
+#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+#  --task "$CONFIG $LAMB --batch_size $BS --patches '32' --repeats '24' --heads '16' --hidden_size 1024" \
+#  --taskname $NETWORK \
+#  --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-L32
+
 done
 
 

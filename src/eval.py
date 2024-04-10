@@ -8,6 +8,7 @@ import shutil
 
 from multiprocessing import Pool
 
+import ujson
 import logging
 import sys
 from functools import partial
@@ -35,6 +36,7 @@ from csbdeep.models import CARE
 
 import utils
 import data_utils
+import profile_utils
 import backend
 import vis
 import multipoint_dataset
@@ -146,87 +148,97 @@ def generate_sample(
         outdir.mkdir(exist_ok=True, parents=True)
         savepath = outdir / f"{f.with_suffix('').name}.{file_format}"
 
-    if savepath.exists():
-        return savepath
+    ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
+    ref = np.squeeze(data_utils.get_image(beads))
+    
+    if hashtable['object_gaussian_sigma'] > 0:
+        kernel = utils.gaussian_kernel(kernlen=[21, 21, 21], std=hashtable['object_gaussian_sigma'])
+        
+        # convolve template with the input image
+        ref = convolution.convolve_fft(
+            ref,
+            kernel,
+            allow_huge=True,
+            boundary='fill',
+            nan_treatment='fill',
+            fill_value=0,
+            normalize_kernel=np.sum
+        )
+
+    wavefront = Wavefront(
+        ys,
+        modes=psfgen.n_modes,
+        lam_detection=psfgen.lam_detection,
+    )
+
+    psf = psfgen.single_psf(
+        phi=wavefront,
+        normed=True,
+        meta=False,
+    )
+
+    if simulate_psf_only:
+        noisy_img = simulate_beads(
+            psf=psf,
+            psf_type=psfgen.psf_type,
+            beads=None,
+            fill_radius=0,
+            object_size=0,
+            photons=hashtable['photons'],
+            scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
+        )
     else:
-        ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
-        ref = np.squeeze(data_utils.get_image(beads))
+        noisy_img = simulate_beads(
+            psf=psf,
+            psf_type=psfgen.psf_type,
+            beads=ref,
+            photons=hashtable['photons'],
+            scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
+        )
+    
+    if savedir is not None:
+        init_path = Path(f"{savepath.with_suffix('')}_not_processed")
+        imwrite(init_path.with_suffix('.tif'), noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
+    
+    if preprocess:
+        noisy_img = backend.preprocess(
+            noisy_img,
+            modelpsfgen=psfgen,
+            digital_rotations=digital_rotations,
+            no_phase=no_phase,
+            remove_background=True,
+            normalize=True,
+            min_psnr=0,
+            plot=savepath.with_suffix('') if plot else None,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+        )
+    
+    if denoiser is not None and not preprocess:
+        noisy_img = denoise_image(
+            image=noisy_img,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+        )
         
-        if hashtable['object_gaussian_sigma'] > 0:
-            kernel = utils.gaussian_kernel(kernlen=[21, 21, 21], std=hashtable['object_gaussian_sigma'])
-            
-            # convolve template with the input image
-            ref = convolution.convolve_fft(
-                ref,
-                kernel,
-                allow_huge=True,
-                boundary='fill',
-                nan_treatment='fill',
-                fill_value=0,
-                normalize_kernel=np.sum
-            )
-
-        wavefront = Wavefront(
-            ys,
-            modes=psfgen.n_modes,
-            lam_detection=psfgen.lam_detection,
-        )
-
-        psf = psfgen.single_psf(
-            phi=wavefront,
-            normed=True,
-            meta=False,
-        )
-
-        if simulate_psf_only:
-            noisy_img = simulate_beads(
-                psf=psf,
-                psf_type=psfgen.psf_type,
-                beads=None,
-                fill_radius=0,
-                object_size=0,
-                photons=hashtable['photons'],
-                scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
+    if savedir is not None:
+        if file_format == 'tif':
+            imwrite(
+                savepath,
+                data=noisy_img.astype(np.float32),
+                compression='deflate',
+                dtype=np.float32,
+                imagej=True,
             )
         else:
-            noisy_img = simulate_beads(
-                psf=psf,
-                psf_type=psfgen.psf_type,
-                beads=ref,
-                photons=hashtable['photons'],
-                scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
+            np.savez_compressed(
+                Path(f"{savepath.with_suffix('')}"), noisy_img.astype(np.float32),
+                allow_pickle=True
             )
-        
-        if preprocess:
-            noisy_img = backend.preprocess(
-                noisy_img,
-                modelpsfgen=psfgen,
-                digital_rotations=digital_rotations,
-                no_phase=no_phase,
-                remove_background=True,
-                normalize=True,
-                min_psnr=0,
-                plot=savepath.with_suffix('') if plot else None,
-                denoiser=denoiser,
-                denoiser_window_size=denoiser_window_size,
-            )
-        
-        if denoiser is not None and not preprocess:
-            noisy_img = denoise_image(
-                image=noisy_img,
-                denoiser=denoiser,
-                denoiser_window_size=denoiser_window_size,
-            )
-            
-        if savedir is not None:
-            if file_format == 'tif':
-                imwrite(savepath, noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
-            else:
-                np.savez_compressed(Path(f"{savepath.with_suffix('')}"), noisy_img.astype(np.float32))
-
-            return savepath
-        else:
-            return noisy_img
+        return savepath
+    
+    else:
+        return noisy_img
 
 
 @profile
@@ -355,7 +367,7 @@ def iter_evaluate(
     psf_type: Optional[str] = None,
     lam_detection: Optional[float] = .510,
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
-    preprocess: bool = True,
+    preprocess: bool = False,
     skip_remove_background: bool = False,
     simulate_psf_only: bool = False,
     use_theoretical_widefield_simulator: bool = False,
@@ -374,8 +386,8 @@ def iter_evaluate(
     Returns:
         "results" dataframe
     """
-    model = backend.load(modelpath)
-    plot = True
+    model = backend.load(modelpath, model_arch=modelpath.name.split('-')[0])
+
     gen = backend.load_metadata(
         modelpath,
         signed=True,
@@ -476,7 +488,8 @@ def iter_evaluate(
         skip_prep_sample=False,
         preprocessed=preprocess,
         remove_background=False if skip_remove_background else True,
-        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
+        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
+        save_processed_tif_file=True
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
@@ -1995,7 +2008,7 @@ def objectsizeheatmap(
     denoiser_window_size: tuple = (32, 64, 64),
     simulate_samples: bool = False,
     estimated_object_gaussian_sigma: float = 0,
-    object_gaussian_sigma_range: tuple = (.5, 2)
+    object_gaussian_sigma_range: tuple = (0, 2)
 ):
     modelspecs = backend.load_metadata(modelpath)
     
@@ -2043,7 +2056,9 @@ def objectsizeheatmap(
             denoiser_window_size=denoiser_window_size,
             simulate_samples=simulate_samples,
             estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
-            randomize_object_gaussian_sigma=np.arange(*object_gaussian_sigma_range, step=.1)
+            randomize_object_gaussian_sigma=np.arange(
+                object_gaussian_sigma_range[0], object_gaussian_sigma_range[1]+.1, step=.1
+            )
         )
     
     df = df[df['iter_num'] == iter_num]
@@ -3278,156 +3293,6 @@ def confidence_heatmap(
     return savepath
 
 
-@profile
-def compare_models(
-    models_codenames: list,
-    predictions_paths: list,
-    iter_num: int = 1,
-    photon_range: tuple = (1e5, 2e5),
-    aberration_range: tuple = (1, 2),
-    outdir: Path = Path('benchmark'),
-    wavelength: float = .510
-):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'xtick.major.pad': 10
-    })
-
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    dataframes = []
-    for codename, file in zip(models_codenames, predictions_paths):
-        df = pd.read_csv(file, header=0, index_col=0)
-        df = df[df['iter_num'] == iter_num]
-        df['model'] = codename
-        dataframes.append(df)
-
-    df = pd.concat(dataframes)
-
-    for c in ['residuals', 'confidence_sum', 'confidence', ]:
-        test = df[
-            (df.photons >= photon_range[0]) &
-            (df.photons <= photon_range[1]) &
-            (df.aberration >= aberration_range[0]) &
-            (df.aberration <= aberration_range[1])
-        ]
-
-        if c == 'residuals':
-            xmax = .5  #aberration_range[1]
-            binwidth = .25
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.25, .25)
-            label = '\n'.join([
-                rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
-            ])
-            outliers = test[test[c] >= xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-        elif c == 'confidence':
-            xmax = .1
-            binwidth = .01
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.01, .01)
-            label = '\n'.join([
-                rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
-            ])
-            # outliers = test[test[c] == 0]
-            test[c].replace(0, test[c].max(), inplace=True)
-            outliers = test[test[c] >= xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-        else:
-            xmax = .1
-            binwidth = .01
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.025, .025)
-            label = '\n'.join([
-                rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
-            ])
-            # outliers = test[test[c] == 0]
-            test[c].replace(0, test[c].max(), inplace=True)
-            outliers = test[test[c] >= xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-
-        fig, ax = plt.subplots(figsize=(8, 6))
-        histax = inset_axes(
-            ax,
-            width="100%",
-            height="100%",
-            bbox_to_anchor=(.3, .1, .3, .3),
-            bbox_transform=ax.transAxes,
-            loc='lower center'
-        )
-
-        g = sns.histplot(
-            ax=ax,
-            data=test,
-            x=c,
-            hue='model',
-            # bins=bins,
-            common_norm=False,
-            common_bins=True,
-            element="poly",
-            stat='proportion',
-            fill=False,
-            cumulative=True,
-        )
-
-        # sns.violinplot(
-        #     ax=histax,
-        #     data=outliers,
-        #     x='model',
-        #     y=c,
-        #     common_norm=False,
-        #     common_bins=True,
-        #     palette="tab10",
-        # )
-
-        sns.barplot(
-            x=unconfident[models_codenames].index,
-            y=unconfident[models_codenames].values,
-            ax=histax
-        )
-
-        ax.set_xlabel(label)
-        ax.set_ylabel('CDF')
-        ax.set_xlim(0, None)
-        # ax.set_xticks(xticks)
-        ax.set_ylim(None, 1)
-        ax.set_yticks(np.arange(0, 1.1, .1))
-        ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        histax.set_ylim(unconfident.min()-.05, unconfident.max())
-        histax.set_yticks(np.arange(unconfident.min()-.05, unconfident.max()+.05, .05).round(2))
-        histax.set_xlabel(f'$i$ >= {xmax}')
-        histax.set_ylabel('Proportion')
-        histax.set_xticks([])
-        histax.spines['top'].set_visible(False)
-        histax.spines['right'].set_visible(False)
-        histax.spines['left'].set_visible(False)
-        histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        sns.move_legend(g, title='Models', frameon=False, ncol=1, loc='lower right')
-        plt.tight_layout()
-
-        savepath = Path(f'{outdir}/compare_{c}')
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
 
 def residuals_histogram(
     csv_path: Path = Path(r"C:\Users\milkied10\Desktop\na_1.0_predictions.csv"),
@@ -3873,3 +3738,397 @@ def evaluate_uniform_background(
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return savepath
+
+
+
+@profile
+def compare_models(
+    models_codenames: list,
+    predictions_paths: list,
+    iter_num: int = 1,
+    photon_range: tuple = (5e4, 1e5),
+    aberration_range: tuple = (1, 2),
+    outdir: Path = Path('benchmark'),
+    wavelength: float = .510
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    dataframes = []
+    for codename, file in zip(models_codenames, predictions_paths):
+        df = pd.read_csv(file, header=0, index_col=0)
+        df = df[df['iter_num'] == iter_num]
+        df['model'] = codename
+        dataframes.append(df)
+
+    df = pd.concat(dataframes)
+
+    for c in ['residuals', 'confidence_sum', 'confidence', ]:
+        test = df[
+            (df.photons >= photon_range[0]) &
+            (df.photons <= photon_range[1]) &
+            (df.aberration >= aberration_range[0]) &
+            (df.aberration <= aberration_range[1])
+        ]
+
+        if c == 'residuals':
+            xmax = .5  #aberration_range[1]
+            binwidth = .25
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            label = '\n'.join([
+                rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
+            ])
+            outliers = test[test[c] < xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+        elif c == 'confidence':
+            xmax = .02
+            binwidth = .01
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            label = '\n'.join([
+                rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0] // 1000):d}k, {int(photon_range[1] // 1000):d}k] integrated photons'
+            ])
+            # outliers = test[test[c] == 0]
+            test[c].replace(0, test[c].max(), inplace=True)
+            outliers = test[test[c] < xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+        else:
+            xmax = .1
+            binwidth = .01
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            label = '\n'.join([
+                rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
+            ])
+            # outliers = test[test[c] == 0]
+            test[c].replace(0, test[c].max(), inplace=True)
+            outliers = test[test[c] < xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        histax = inset_axes(
+            ax,
+            width="100%",
+            height="100%",
+            bbox_to_anchor=(.4, .1, .3, .3),
+            bbox_transform=ax.transAxes,
+            loc='lower center'
+        )
+
+        g = sns.histplot(
+            ax=ax,
+            data=test,
+            x=c,
+            hue='model',
+            # bins=bins,
+            common_norm=False,
+            common_bins=True,
+            element="poly",
+            stat='proportion',
+            fill=False,
+            cumulative=True,
+        )
+
+        # sns.violinplot(
+        #     ax=histax,
+        #     data=outliers,
+        #     x='model',
+        #     y=c,
+        #     common_norm=False,
+        #     common_bins=True,
+        #     palette="tab10",
+        # )
+
+        sns.barplot(
+            x=unconfident[models_codenames].index,
+            y=unconfident[models_codenames].values,
+            ax=histax,
+            palette="tab10"
+        )
+        
+        ax.set_xlabel(label)
+        ax.set_ylabel('CDF')
+        ax.set_xlim(0, None)
+        ax.set_ylim(None, 1)
+        ax.set_yticks(np.arange(0, 1.1, .1))
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        
+        hist_step = .05 if c == 'residuals' else .02
+        histax.set_ylim(unconfident.min()-.01, unconfident.max())
+        histax.set_yticks(np.arange(unconfident.min()-hist_step, unconfident.max()+hist_step, hist_step).round(2))
+        histax.set_xlabel(f'')
+        histax.set_ylabel('')
+        histax.set_xticks([])
+        histax.spines['top'].set_visible(False)
+        histax.spines['right'].set_visible(False)
+        histax.spines['left'].set_visible(False)
+        histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        
+        axins = ax.inset_axes(
+            [.3, .075, .45, .4],
+            xlim=(xmax, xmax),
+            ylim=(unconfident.min()-.01, unconfident.max()+.05),
+        )
+        ax.indicate_inset_zoom(axins, edgecolor="k")
+        axins.set_xticks([])
+        axins.set_yticks([])
+
+
+        sns.move_legend(g, title='Training samples', frameon=False, ncol=1, loc='lower right')
+        plt.tight_layout()
+
+        savepath = Path(f'{outdir}/compare_{c}')
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+@profile
+def profile_models(
+    models_codenames: list,
+    predictions_paths: list,
+    outdir: Path = Path('benchmark'),
+    batch_size: int = 1024
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+    
+    models = {
+        'otfnet': 'Baseline',
+        'vit-P8-R8-H8': '*ViT-8/8',
+        'vit-P16-R8-H8': '*ViT-8/16',
+        'vit-P32-R8-H8': '*ViT-8/32',
+        'prototype-P8-R8-H8': '*ViT-8/8',
+        'prototype-P16-R8-H8': '*ViT-8/16',
+        'prototype-P32-R8-H8': '*ViT-8/32',
+        'opticalnet-P32321616-R1111-H8888': 'Ours-4/32-16',
+        'opticalnet-P32321616-R2222-H8888': 'Ours-8/32-16',
+        'opticalnet-P32321616-R4444-H8888': 'Ours-16/32-16',
+        'opticalnet-P32321616-R6666-H8888': 'Ours-24/32-16',
+        'opticalnet-P321688-R2222-H8888': 'Ours-8/32-16-8-8',
+        'opticalnet-P3216168-R2222-H8888': 'Ours-8/32-16-16-8',
+    }
+    
+    outdir.mkdir(parents=True, exist_ok=True)
+    dataframes = []
+    for codename, modeldir in zip(models_codenames, predictions_paths):
+        savepath = Path(f'{outdir}/{codename}.csv')
+        if savepath.exists():
+            logger.info(f"Loading {savepath}")
+            df = pd.read_csv(savepath, header=0, index_col=0)
+        else:
+
+            try:
+                modeldir = Path(modeldir)
+                log = sorted(modeldir.rglob(r"*train/*tfevents*"))[0]
+                
+                df = profile_utils.load_tf_logs(log)
+                model_config = ujson.loads(df.keras[0])
+
+                best = df['epoch_loss'].idxmin()
+                
+                candidates = sorted(modeldir.rglob(rf"*keras/*epoch{best}.h5"))
+                if len(candidates) == 0:
+                    model = sorted(modeldir.rglob(rf"*keras/*.h5"))[-1]
+                else:
+                    model = candidates[0]
+                
+                model = backend.load(model, model_arch=model_config['config']['name'])
+                
+                df = df[[
+                    'step',
+                    'epoch_learning_rate',
+                    'epoch_loss',
+                    'epoch_mae',
+                    'epoch_mse',
+                    'epoch_root_mean_squared_error',
+                    'epoch_weight_decay',
+                    'wall_time'
+                ]]
+                df["wall_time"] = df.wall_time.apply(pd.Series)[0]
+                df["wall_clock"] = pd.to_datetime(df.wall_time, unit="s")
+                
+                transformers_blocks = profile_utils.count_transformer_blocks(model=model)
+                for k, v in transformers_blocks.items(): df[f'transformers_{k}'] = v
+                
+                df["training"] = (df.wall_clock - df.wall_clock[0]) / np.timedelta64(1, "h")
+                df['transformers'] = sum(transformers_blocks.values())
+                df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
+                df['gflops'] = profile_utils.measure_gflops(model)
+                df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
+                df['params'] = model.count_params()
+                df['model'] = codename
+                
+                logger.info(f"Saving {savepath}")
+                df.to_csv(f'{outdir}/{codename}.csv')
+            
+            except Exception:
+                continue
+        
+        training_batch_size = 4096
+        dataset_size = 2000000
+        training_steps_per_epoch = dataset_size // training_batch_size
+        df['training_gflops'] = training_steps_per_epoch * training_batch_size * df['step'] * df['gflops'] * 3
+        # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
+        df["training_gflops"] =  df["training_gflops"] * 1e-9
+        df["gflops"] =  df["gflops"]
+        df["params"] =  df["params"] * 1e-6
+        
+        df['cat'] = 'Baseline'
+        df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
+        df.loc[df.model.str.match(r'prototype'), 'cat'] = '*ViT'
+        df.model = df.model.replace(models)
+        
+        dataframes.append(df)
+        
+    df = pd.concat(dataframes).reset_index(drop=True)
+    steps = [1] + list(range(49, 500, 50))
+    fig, ax = plt.subplots(figsize=(8, 8))
+    for cc, colormap, cmarker in zip(['*ViT', 'Ours', 'Baseline'], ['Oranges', 'Blues', 'Greys_r'], ['C1', 'C0', 'k']):
+        data = df[df.step.isin(steps)][df.cat == cc]
+        g = sns.lineplot(
+            data=data,
+            x="training_gflops",
+            y="epoch_loss",
+            hue="model",
+            hue_order=[m if m in data.model.unique() else None for m in models.values()],
+            # size="gflops",
+            palette=colormap,
+            dashes=False,
+            marker="o",
+            # sizes=sizes,
+            ax=ax
+        )
+
+        best = df[df.cat == cc]['epoch_loss'].astype(np.float32).idxmin()
+        data = df.iloc[best].to_frame().T
+        g = sns.scatterplot(
+            data=data,
+            x="training_gflops",
+            y="epoch_loss",
+            c=cmarker,
+            ax=ax
+        )
+
+        ax.text(
+            data["training_gflops"] + 0.1, data["epoch_loss"], cc,
+            horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+        )
+
+    ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
+    ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
+    ax.set_xlabel('Training compute (Billions of GFLOPs)')
+    ax.set_ylabel('Loss')
+    # ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlim(0, 20)
+    ax.set_ylim(10 ** -3, 1)
+    ax.legend(loc='lower left', ncol=1, title="", frameon=False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+    savepath = Path(f'{outdir}/compute')
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    df = pd.DataFrame()
+    for d in dataframes:
+        best = d['epoch_loss'].idxmin()
+        df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
+    
+    fig, ax = plt.subplots(figsize=(8, 8))
+    for cc, colormap in zip(['*ViT', 'Ours', 'Baseline'], ['C1', 'C0', 'k']):
+        best = df[df.cat == cc]['epoch_loss'].astype(np.float32).idxmin()
+        data = df.iloc[best].to_frame().T
+        g = sns.scatterplot(
+            data=data,
+            x="training_gflops",
+            y="epoch_loss",
+            c=colormap,
+            ax=ax
+        )
+
+        ax.text(
+            data["training_gflops"] + 0.1, data["epoch_loss"], cc,
+            horizontalalignment='left', size='medium', color=colormap, weight='semibold'
+        )
+
+    ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
+    ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
+    ax.set_xlabel('Training compute (Billions of GFLOPs)')
+    ax.set_ylabel('Loss')
+    ax.set_yscale('log')
+    ax.set_xlim(0, 11)
+    ax.set_ylim(10 ** -3, 1)
+    ax.legend(loc='lower left', ncol=1, title="", frameon=False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+    savepath = Path(f'{outdir}/best')
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    
+    coi = [
+        'epoch_loss',
+        'training',
+	    'training_gflops',
+        'memory',
+        'throughput',
+        'gflops',
+        'params',
+    ]
+    titles = [
+        'Loss',
+        f'Training Time (H) \n8xH100s [BS=4096]',
+	    'Training GFLOPs (billions)',
+        f'Memory (GB) \n[BS={batch_size}]',
+        f'Throughput (P/S) \nRTX8000 [BS={batch_size}]',
+        'GFLOPs',
+        'Parameters (millions)',
+    ]
+
+    g = sns.PairGrid(df.sort_values('epoch_loss'), x_vars=coi, y_vars=["model"], hue="model", height=8, aspect=.4, palette='muted')
+    g.map(sns.stripplot, size=10, orient="h", jitter=False, palette="tab10", linewidth=1, edgecolor="w")
+    g.set(xlabel="", ylabel="")
+
+    for ax, cc, title in zip(g.axes.flat, coi, titles):
+
+        if cc == 'epoch_loss':
+            ax.set_xscale('log')
+
+        ax.set(title=title)
+        ax.xaxis.grid(True)
+        ax.yaxis.grid(True)
+    
+    plt.tight_layout()
+    
+    savepath = Path(f'{outdir}/profiles')
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)

@@ -58,6 +58,10 @@ def kargs():
         min_psnr=5,
         denoiser=repo / f"pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64",
         denoiser_window_size=(32, 64, 64),
+        # limit the number of cpu workers to hopefully avoid "cupy.cuda.memory.OutOfMemoryError: Out of memory"
+        # during "emb = rotate_embeddings(...)"
+        big_job_cpu_workers=3,
+
     )
 
     return kargs

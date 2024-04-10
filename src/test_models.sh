@@ -122,7 +122,7 @@ do
               --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/densityheatmaps/mode-${PTYPE}
 
               python manager.py $CLUSTER $APPTAINER $JOB \
-              --task "${MODEL}.h5  ${CONFIG} objectsizeheatmap" \
+              --task "${MODEL}.h5  --num_beads 1 ${CONFIG} objectsizeheatmap" \
               --taskname na_$NA \
               --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/objectsizeheatmaps/mode-${PTYPE}
 

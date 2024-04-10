@@ -31,22 +31,25 @@ do
       CONFIG="${CONFIG} --denoiser ${DENOISER}"
     fi
 
-    for EXP in "psf" "beads-1"
-    do
-        if [[ $EXP == psf ]];then
-          CONFIG="${CONFIG} --simulate_psf_only"
-        fi
+    python manager.py $CLUSTER $APPTAINER $JOB \
+    --task "phasenet_heatmap ${CONFIG} --simulate_psf_only" \
+    --taskname $NA \
+    --name ${OUTDIR}/${DATASET}/phasenet/${EVALSIGN}/psf
 
-        python manager.py $CLUSTER $APPTAINER $JOB \
-        --task "phasenet_heatmap ${CONFIG}" \
-        --taskname $NA \
-        --name ${OUTDIR}/${DATASET}/phasenet/${EVALSIGN}/${EXP}
+    python manager.py $CLUSTER $APPTAINER $JOB \
+    --task "phasenet_heatmap ${CONFIG}" \
+    --taskname $NA \
+    --name ${OUTDIR}/${DATASET}/phasenet/${EVALSIGN}/beads-1
 
-        python manager.py $CLUSTER $APPTAINER $JOB \
-        --task "phaseretrieval_heatmap ${CONFIG}" \
-        --taskname $NA \
-        --name ${OUTDIR}/${DATASET}/phaseretrieval/${EVALSIGN}/${EXP}
+    python manager.py $CLUSTER $APPTAINER $JOB \
+    --task "phaseretrieval_heatmap ${CONFIG} --simulate_psf_only" \
+    --taskname $NA \
+    --name ${OUTDIR}/${DATASET}/phaseretrieval/${EVALSIGN}/psf
 
-        echo
-    done
+    python manager.py $CLUSTER $APPTAINER $JOB \
+    --task "phaseretrieval_heatmap ${CONFIG}" \
+    --taskname $NA \
+    --name ${OUTDIR}/${DATASET}/phaseretrieval/${EVALSIGN}/beads-1
+
+    echo
 done
