@@ -701,6 +701,8 @@ def find_roi(
 
     start_time = time.time()
     blurred_image = remove_background_noise(image, method='difference_of_gaussians', min_psnr=0, low_sigma=1.1, high_sigma=1.8)
+    if np.nanmax(blurred_image) == 0:
+        raise(Exception(f'Image dropped because of lack of signal'))
 
     # if isinstance(blurred_image, np.ndarray):
     #     blurred_image = gaussian_filter(blurred_image, sigma=1.1)
@@ -766,6 +768,8 @@ def find_roi(
     logger.info(f"Found {len(detected_peaks)} peaks from peak_local_max (limited to {num_rois})")
     candidates_map = np.zeros_like(image)
     if len(detected_peaks) == 0:
+        max_poi = max_poi.get() if isinstance(max_poi, cp.ndarray) else max_poi
+        print(max_poi)
         p = max_poi
         intensity = image[p[0], p[1], p[2]]
         
