@@ -208,9 +208,9 @@ def encoder_transformer_flops(image_size, patch_size, layers, embed_dim, heads):
 	num_tokens = np.product([s // p for s, p in zip(image_size, patch_size)])
 	mlp_dim = 4 * embed_dim
 	# num_tokens += 1  # class embedding
-
-	flops = patchify_flops(num_tokens, patch_size, embed_dim)
-	flops += layers * encoder_flops(num_tokens, embed_dim, heads, mlp_dim)
+	
+	flops = layers * encoder_flops(num_tokens, embed_dim, heads, mlp_dim)
+	# flops += patchify_flops(num_tokens, patch_size, embed_dim)
 	
 	gflops = np.round(flops / 1e9, 3)
 	logger.info(f"{flops:,} FLOPs = {gflops} GFLOPs")
@@ -222,8 +222,8 @@ def decoder_transformer_flops(image_size, patch_size, layers, embed_dim, heads):
 	mlp_dim = 4 * embed_dim
 	# num_tokens += 1  # class embedding
 	
-	flops = patchify_flops(num_tokens, patch_size, embed_dim)
-	flops += layers * decoder_flops(num_tokens, embed_dim, heads, mlp_dim)
+	flops = layers * decoder_flops(num_tokens, embed_dim, heads, mlp_dim)
+	# flops += patchify_flops(num_tokens, patch_size, embed_dim)
 	
 	gflops = np.round(flops / 1e9, 3)
 	logger.info(f"{flops:,} FLOPs = {gflops} GFLOPs")
@@ -239,6 +239,10 @@ def encoder_transformer_params(layers, embed_dim):
 	encoder_mparams = np.round(encoder / 1e6, 0).astype(int)
 	
 	logger.info(f"{encoder:,} params = {encoder_mparams} M params")
+	# feed_forward = 8 * embed_dim**2 + 5 * embed_dim
+	# attention = (4 * embed_dim ** 2 + 4 * embed_dim) * 1
+	# layer_norm = (2 * embed_dim) * 2
+	# params = 12 * embed_dim**2 + 13 * embed_dim
 	return encoder
 
 def decoder_transformer_params(layers, embed_dim):
@@ -251,6 +255,10 @@ def decoder_transformer_params(layers, embed_dim):
 	decoder_mparams = np.round(decoder / 1e6, 0).astype(int)
 	
 	logger.info(f"{decoder:,} params = {decoder_mparams} M params")
+	# feed_forward = 8 * embed_dim**2 + 5 * embed_dim
+	# attention = 8 * embed_dim ** 2 + 8 * embed_dim
+	# layer_norm = 6 * embed_dim
+	# params = 16 * embed_dim**2 + 19 * embed_dim
 	return decoder
 
 
@@ -307,3 +315,26 @@ def data_memory_footprint(image_size, batch_size=1, dtype='float32'):
 	
 	logger.info(f"{mem:,d} B = {gbytes} GB using ({dtype})")
 	return gbytes
+
+def compute_time(flops, gpu="H100", unit="seconds"):
+	
+	if gpu == "A100":
+		# https://images.nvidia.com/aem-dam/en-zz/Solutions/data-center/nvidia-ampere-architecture-whitepaper.pdf
+		peak_BF16 = 39 * 10**12                 # FLOPS (FLOP per S)
+		peak_tensor_cores_BF16 = 312 * 10**12
+	
+	elif gpu == "H100":
+		# https://resources.nvidia.com/en-us-tensor-core
+		peak_BF16 = 102 * 10**12
+		peak_tensor_cores_BF16 = 756 * 10**12
+	else:
+		raise Exception("Unknown GPU device")
+	
+	time = flops / peak_tensor_cores_BF16
+	if unit == "hours":
+		time = time / (60 * 60)
+	elif unit == "minutes":
+		time = time / 60
+	return time
+	
+	
