@@ -117,10 +117,10 @@ def main():
                 dtype=dtype,
             )
             
-            for transformer in ["encoder", "decoder"]:
-                layers = 1
-                heads = 1
-                embedding = 256
+            for transformer in ["encoder", "decoder", "autoencoder"]:
+                layers = 6
+                heads = 6
+                embedding = 384
 
     
                 if transformer == "encoder":
@@ -135,7 +135,7 @@ def main():
                         embed_dim=embedding,
                         heads=heads,
                     )
-                else:
+                elif transformer == "decoder":
                     params = profile_utils.decoder_transformer_params(
                         layers=layers,
                         embed_dim=embedding,
@@ -147,6 +147,35 @@ def main():
                         embed_dim=embedding,
                         heads=heads,
                     )
+                else:
+                    eparams = profile_utils.encoder_transformer_params(
+                        layers=layers,
+                        embed_dim=embedding,
+                    )
+                    dparams = profile_utils.decoder_transformer_params(
+                        layers=layers,
+                        embed_dim=embedding,
+                    )
+                    params = eparams + dparams
+                    
+                    eflops = profile_utils.encoder_transformer_flops(
+                        image_size=image_size,
+                        patch_size=patch_size,
+                        layers=layers,
+                        embed_dim=embedding,
+                        heads=heads,
+                    )
+                    
+                    dflops = profile_utils.decoder_transformer_flops(
+                        image_size=image_size,
+                        patch_size=patch_size,
+                        layers=layers,
+                        embed_dim=embedding,
+                        heads=heads,
+                    )
+                    
+                    flops = eflops + dflops
+                    
                 
                 gflops = np.round(flops / 1e9, 3)
                 
@@ -160,7 +189,7 @@ def main():
                     dtype=dtype
                 )
                 
-                configs[f"{dims}/{patch}"] = {
+                configs[f"{dims}/{patch} {transformer}"] = {
                     "transformer": transformer,
                     "layers": layers,
                     "heads": heads,
