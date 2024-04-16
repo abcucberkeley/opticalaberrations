@@ -204,9 +204,8 @@ def patchify_flops(num_tokens, patch_size, embed_dim):
 	return flops
 
 
-def encoder_transformer_flops(image_size, patch_size, layers, embed_dim, heads):
+def encoder_transformer_flops(image_size, patch_size, layers, embed_dim, heads, mlp_dim):
 	num_tokens = np.product([s // p for s, p in zip(image_size, patch_size)])
-	mlp_dim = 4 * embed_dim
 	# num_tokens += 1  # class embedding
 	
 	flops = layers * encoder_flops(num_tokens, embed_dim, heads, mlp_dim)
@@ -217,9 +216,8 @@ def encoder_transformer_flops(image_size, patch_size, layers, embed_dim, heads):
 	return flops
 
 
-def decoder_transformer_flops(image_size, patch_size, layers, embed_dim, heads):
+def decoder_transformer_flops(image_size, patch_size, layers, embed_dim, heads, mlp_dim):
 	num_tokens = np.product([s // p for s, p in zip(image_size, patch_size)])
-	mlp_dim = 4 * embed_dim
 	# num_tokens += 1  # class embedding
 	
 	flops = layers * decoder_flops(num_tokens, embed_dim, heads, mlp_dim)
@@ -229,8 +227,7 @@ def decoder_transformer_flops(image_size, patch_size, layers, embed_dim, heads):
 	logger.info(f"{flops:,} FLOPs = {gflops} GFLOPs")
 	return flops
 
-def encoder_transformer_params(layers, embed_dim):
-	mlp_dim = 4 * embed_dim
+def encoder_transformer_params(layers, embed_dim, mlp_dim):
 	attention = 4 * (embed_dim ** 2 + embed_dim)
 	feed_forward = 2 * embed_dim * mlp_dim + embed_dim + mlp_dim
 	layer_norm = 2 * embed_dim
@@ -245,8 +242,7 @@ def encoder_transformer_params(layers, embed_dim):
 	# params = 12 * embed_dim**2 + 13 * embed_dim
 	return encoder
 
-def decoder_transformer_params(layers, embed_dim):
-	mlp_dim = 4 * embed_dim
+def decoder_transformer_params(layers, embed_dim, mlp_dim):
 	attention = 4 * (embed_dim ** 2 + embed_dim)
 	feed_forward = 2 * embed_dim * mlp_dim + embed_dim + mlp_dim
 	layer_norm = 2 * embed_dim
@@ -318,15 +314,34 @@ def data_memory_footprint(image_size, batch_size=1, dtype='float32'):
 
 def compute_time(flops, gpu="H100", unit="seconds"):
 	
-	if gpu == "A100":
+	if gpu == "TPUv3":
+		# https://cloud.google.com/tpu/docs/v3
+		peak_tensor_cores_BF16 = 123 * 10**12 # FLOPS (FLOP per S)
+	
+	elif gpu == "TPUv4":
+		# https://cloud.google.com/tpu/docs/v4
+		peak_tensor_cores_BF16 = 275 * 10**12 # FLOPS (FLOP per S)
+	
+	elif gpu == "TPUv5e":
+		# https://cloud.google.com/tpu/docs/v5e
+		peak_tensor_cores_BF16 = 197 * 10**12 # FLOPS (FLOP per S)
+	
+	elif gpu == "TPUv5p":
+		# https://cloud.google.com/tpu/docs/v5p
+		peak_tensor_cores_BF16 = 459 * 10**12 # FLOPS (FLOP per S)
+	
+	elif gpu == "V100":
+		# https://khairy2011.medium.com/tpu-vs-gpu-vs-cerebras-vs-graphcore-a-fair-comparison-between-ml-hardware-3f5a19d89e38
+		peak_tensor_cores_BF16 = 125 * 10**12
+	
+	elif gpu == "A100":
 		# https://images.nvidia.com/aem-dam/en-zz/Solutions/data-center/nvidia-ampere-architecture-whitepaper.pdf
-		peak_BF16 = 39 * 10**12                 # FLOPS (FLOP per S)
 		peak_tensor_cores_BF16 = 312 * 10**12
 	
 	elif gpu == "H100":
 		# https://resources.nvidia.com/en-us-tensor-core
-		peak_BF16 = 102 * 10**12
 		peak_tensor_cores_BF16 = 756 * 10**12
+		
 	else:
 		raise Exception("Unknown GPU device")
 	
