@@ -28,16 +28,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 tf.get_logger().setLevel(logging.ERROR)
-    
 
-def scaling_transformers(dtype = 'float16', batch_size = 1, outdir=Path("../scaling")):
+
+def scaling_transformers(dtype = 'float16', outdir=Path("../scaling")):
     dimensions = {
         "2D(g)": {"t": 1, "z": 1, "y": 256, "x": 256, "c": 1},
         "2D(rgb)": {"t": 1, "z": 1, "y": 256, "x": 256, "c": 3},
         "3D(g)": {"t": 1, "z": 256, "y": 256, "x": 256, "c": 1},
         "3D(rgb)": {"t": 1, "z": 256, "y": 256, "x": 256, "c": 3},
-        "4D(g)": {"t": 64, "z": 256, "y": 256, "x": 256, "c": 1},
-        "4D(rgb)": {"t": 64, "z": 256, "y": 256, "x": 256, "c": 3}
+        "4D(g)": {"t": 8, "z": 256, "y": 256, "x": 256, "c": 1},
+        "4D(rgb)": {"t": 8, "z": 256, "y": 256, "x": 256, "c": 3}
     }
     configs = {
         "S": {"layers": 12, "heads": 6, "embedding": 384, "mlp": 1536},
@@ -51,14 +51,14 @@ def scaling_transformers(dtype = 'float16', batch_size = 1, outdir=Path("../scal
     }
     
     transformer_configs, vit_configs = {}, {}
-    for patch in [8, 16, 32]:
+    for patch in [14, 16]:
         patches = {
             "2D(g)": {"t": 1, "z": 1, "y": patch, "x": patch, "c": 1},
             "2D(rgb)": {"t": 1, "z": 1, "y": patch, "x": patch, "c": 3},
             "3D(g)": {"t": 1, "z": patch, "y": patch, "x": patch, "c": 1},
             "3D(rgb)": {"t": 1, "z": patch, "y": patch, "x": patch, "c": 3},
-            "4D(g)": {"t": patch, "z": patch, "y": patch, "x": patch, "c": 1},
-            "4D(rgb)": {"t": patch, "z": patch, "y": patch, "x": patch, "c": 3}
+            "4D(g)": {"t": 2, "z": patch, "y": patch, "x": patch, "c": 1},
+            "4D(rgb)": {"t": 2, "z": patch, "y": patch, "x": patch, "c": 3}
         }
         
         for dims in dimensions.keys():
@@ -68,7 +68,7 @@ def scaling_transformers(dtype = 'float16', batch_size = 1, outdir=Path("../scal
             
             memory_per_image = profile_utils.data_memory_footprint(
                 image_size=image_size,
-                batch_size=batch_size,
+                batch_size=1,
                 dtype=dtype,
             )
             
@@ -148,27 +148,32 @@ def scaling_transformers(dtype = 'float16', batch_size = 1, outdir=Path("../scal
                         flops_per_token = eflops_per_token + dflops_per_token
     
                     gflops = np.round(flops / 1e9, 3)
-                    gflops_per_token = np.round(flops_per_token / 1e9, 3)
+                    gflops_per_patch = np.round(flops_per_token / 1e9, 3)
     
-                    model_inference_memory_per_image = profile_utils.transformer_inference_memory_footprint(
+                    model_inference_memory = profile_utils.transformer_inference_memory_footprint(
                         params=params,
                         dtype=dtype
                     )
     
-                    model_training_memory_per_image = profile_utils.transformer_training_memory_footprint(
+                    model_training_memory = profile_utils.transformer_training_memory_footprint(
                         params=params,
                         dtype=dtype
                     )
     
-                    inference_time_per_batch = profile_utils.compute_time(flops=flops, gpu="H100", unit="seconds")
-                    training_time_per_batch = profile_utils.compute_time(flops=3*flops, gpu="H100", unit="seconds")
-    
+                    inference_time_per_image = profile_utils.compute_time(flops=flops, gpu="H100", unit="seconds")
+                    training_time_per_image = profile_utils.compute_time(flops=3*flops, gpu="H100", unit="seconds")
+                    
+                    patches_per_image = np.product([s // p for s, p in zip(image_size, patch_size)])
+                    pixels_per_patch = np.product(patch_size)
+                    images_per_h100 = 80 // memory_per_image
+                    
                     transformer_configs[f"{dims} {c}/{patch} {transformer}"] = {
                         "data": dims,
                         "class": f"{c}/{patch}",
-                        "transformer": transformer,
+                        "transformer": "encoder",
                         "layers": layers,
                         "heads": heads,
+                        "mlp": mlp,
                         "embedding": embedding,
                         "t": dimensions[dims]["t"],
                         "x": dimensions[dims]["x"],
@@ -180,27 +185,26 @@ def scaling_transformers(dtype = 'float16', batch_size = 1, outdir=Path("../scal
                         "py": patches[dims]["y"],
                         "pz": patches[dims]["z"],
                         "pc": patches[dims]["c"],
-                        "parameters": params,
-                        "inference_flops_per_image": flops,
-                        "inference_gflops_per_image": gflops,
-                        "training_flops_per_image": 3 * flops,
-                        "training_glops_per_image": 3 * gflops,
-                        "flops_per_token": flops_per_token,
-                        "gflops_per_token": gflops_per_token,
-                        "model_inference_memory": model_inference_memory_per_image,
-                        "model_training_memory": model_training_memory_per_image,
+                        "patches_per_image": patches_per_image,
+                        "pixels_per_patch": pixels_per_patch,
+                        "images_per_h100": images_per_h100,
                         "memory_per_image": memory_per_image,
-                        "inference_time_per_batch": inference_time_per_batch,
-                        "training_time_per_batch": training_time_per_batch,
+                        "parameters": params,
+                        "inference_gflops_per_image": gflops,
+                        "training_glops_per_image": 3 * gflops,
+                        "gflops_per_patch": gflops_per_patch,
+                        "model_inference_memory": model_inference_memory,
+                        "model_training_memory": model_training_memory,
+                        "inference_time_per_image": inference_time_per_image,
+                        "training_time_per_image": training_time_per_image,
                     }
     
     transformer_scaling = pd.DataFrame.from_dict(transformer_configs, orient='index')
-    transformer_scaling = transformer_scaling.sort_values(['px', 'layers'], ascending=[True, True])
+    transformer_scaling = transformer_scaling.sort_values(['px', 'parameters', 'layers', 'heads'], ascending=[True, True, True, True])
     transformer_scaling.to_csv(outdir/"transformers.csv")
-    print(transformer_scaling)
     return transformer_scaling
     
-def scaling_vit(dtype = 'float16', batch_size = 1, outdir=Path("../scaling"), dataset_size = 10000000):
+def scaling_vit(dtype = 'float16', outdir=Path("../scaling")):
     
     vit_dimensions = {
         "2D(g)": {"t": 1, "z": 1, "y": 224, "x": 224, "c": 1},
@@ -239,7 +243,7 @@ def scaling_vit(dtype = 'float16', batch_size = 1, outdir=Path("../scaling"), da
             
             memory_per_image = profile_utils.data_memory_footprint(
                 image_size=image_size,
-                batch_size=batch_size,
+                batch_size=1,
                 dtype=dtype,
             )
             
@@ -266,12 +270,12 @@ def scaling_vit(dtype = 'float16', batch_size = 1, outdir=Path("../scaling"), da
                 )
                 flops_per_patch = layers * profile_utils.encoder_flops(1, embedding, heads, mlp)
                 
-                model_inference_memory_per_image = profile_utils.transformer_inference_memory_footprint(
+                model_inference_memory = profile_utils.transformer_inference_memory_footprint(
                     params=params,
                     dtype=dtype
                 )
                 
-                model_training_memory_per_image = profile_utils.transformer_training_memory_footprint(
+                model_training_memory = profile_utils.transformer_training_memory_footprint(
                     params=params,
                     dtype=dtype
                 )
@@ -284,8 +288,6 @@ def scaling_vit(dtype = 'float16', batch_size = 1, outdir=Path("../scaling"), da
                 patches_per_image = np.product([s // p for s, p in zip(image_size, patch_size)])
                 pixels_per_patch = np.product(patch_size)
                 images_per_h100 = 80 // memory_per_image
-                number_h100_for_4096 = np.ceil(model_training_memory_per_image + (memory_per_image * 4096) / 80)
-                number_h100_for_2048 = np.ceil(model_training_memory_per_image + (memory_per_image * 2048) / 80)
                 
                 """
                     ViT L/16: https://arxiv.org/pdf/2010.11929.pdf (table 6)
@@ -297,16 +299,13 @@ def scaling_vit(dtype = 'float16', batch_size = 1, outdir=Path("../scaling"), da
                     training_time_per_image = (783 * 10^18) / 7 / 303,000,000 / (123 * 10**12)
                     training_time_per_image = 0.00300134543
                 """
-                training_h100_days_per_epoch = dataset_size * training_time_per_image / 3600 / 24
-                multigpu_training_per_epoch = training_h100_days_per_epoch / number_h100_for_4096
-                multigpu_1024_training_per_epoch = training_h100_days_per_epoch / 1024
-                
                 vit_configs[f"{dims} ViT {v}/{patch}"] = {
                     "data": dims,
                     "class": f"{v}/{patch}",
                     "transformer": "encoder",
                     "layers": layers,
                     "heads": heads,
+                    "mlp": mlp,
                     "embedding": embedding,
                     "t": vit_dimensions[dims]["t"],
                     "x": vit_dimensions[dims]["x"],
@@ -318,32 +317,26 @@ def scaling_vit(dtype = 'float16', batch_size = 1, outdir=Path("../scaling"), da
                     "py": patches[dims]["y"],
                     "pz": patches[dims]["z"],
                     "pc": patches[dims]["c"],
-                    "parameters": params,
-                    "inference_gflops_per_image": gflops,
-                    "training_glops_per_image": 3 * gflops,
-                    "gflops_per_patch": gflops_per_patch,
-                    "model_inference_memory": model_inference_memory_per_image,
-                    "model_training_memory": model_training_memory_per_image,
-                    "inference_time_per_image": inference_time_per_image,
-                    "training_time_per_image": training_time_per_image,
-                    "training_h100_days_per_epoch": training_h100_days_per_epoch,
-                    "memory_per_image": memory_per_image,
                     "patches_per_image": patches_per_image,
                     "pixels_per_patch": pixels_per_patch,
                     "images_per_h100": images_per_h100,
-                    "number_h100_for_2048": number_h100_for_2048,
-                    "number_h100_for_4096": number_h100_for_4096,
-                    "multigpu_training_time_per_epoch": multigpu_training_per_epoch,
-                    "multigpu_1024_training_time_per_epoch": multigpu_1024_training_per_epoch,
+                    "memory_per_image": memory_per_image,
+                    "parameters": params,
+                    "inference_gflops_per_image": gflops,
+                    "training_gflops_per_image": 3 * gflops,
+                    "gflops_per_patch": gflops_per_patch,
+                    "model_inference_memory": model_inference_memory,
+                    "model_training_memory": model_training_memory,
+                    "inference_time_per_image": inference_time_per_image,
+                    "training_time_per_image": training_time_per_image,
                 }
     
     vit_scaling = pd.DataFrame.from_dict(vit_configs, orient='index')
     vit_scaling = vit_scaling.sort_values(['px', 'parameters', 'layers', 'heads'], ascending=[True, True, True, True])
     vit_scaling.to_csv(outdir/"vits.csv")
-    print(vit_scaling)
     return vit_scaling
 
-def plot_gflops(df, outdir):
+def plot_parameter_scaling(df, outdir, dataset_size, batch_size):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -354,37 +347,63 @@ def plot_gflops(df, outdir):
         'xtick.major.pad': 10
     })
     
-    fig, ax = plt.subplots(figsize=(8, 8))
-    for cc, colormap in zip(['S/8', 'B/8', 'L/8', 'H/8', 'G/8'], ['C0', 'C1', 'C2', 'C3', 'C4']):
-        data = df[df.cat == cc]
-        g = sns.scatterplot(
+    df["number_h100_for_batch"] = np.ceil(df["model_training_memory"] + (df["memory_per_image"] * batch_size) / 80)
+    df["training_h100_hours_per_step"] = batch_size * df["training_time_per_image"] / 3600
+    df["training_h100_days_per_epoch"] = dataset_size * df["training_time_per_image"] / 3600 / 24
+    df["multigpu_training_days_per_epoch"] = df["training_h100_days_per_epoch"] / df["number_h100_for_batch"]
+    df["multigpu_256_training_days_per_epoch"] = df["training_h100_days_per_epoch"] / 256
+    df["gpu_compute_cost_per_epoch"] = df["training_h100_days_per_epoch"] * 24 * 2
+    
+    fois = {
+        "training_gflops_per_image": "Training GFLOPs per image",
+        "training_time_per_image": "Training H100 seconds per image",
+        "number_h100_for_batch": "Number of H100s needed for a batch (4096)",
+        "training_h100_hours_per_step": "Training H100 hours per batch (4096)",
+        "training_h100_days_per_epoch": "Training H100 days per epoch",
+        "gpu_compute_cost_per_epoch": "H100 compute cost per epoch ($2/hr)",
+    }
+    for ff, ll in fois.items():
+        fig, ax = plt.subplots(figsize=(8, 8))
+        data = df.loc[df['data'].str.match(r'.*\(rgb\)')]
+        g = sns.lineplot(
             data=data,
             x="parameters",
-            y="inference_gflops_per_image",
-            c=colormap,
-            ax=ax
+            y=ff,
+            hue='data',
+            style="px",
+            hue_order=['4D(rgb)', '3D(rgb)', '2D(rgb)'],
+            ax=ax,
+            legend=True,
+            markers=True
         )
-
-        # ax.text(
-        #     data["training_gflops"] + 0.1, data["epoch_loss"], cc,
-        #     horizontalalignment='left', size='medium', color=colormap, weight='semibold'
-        # )
-
-    ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
-    ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
-    # ax.set_xlabel('Training compute (Billions of GFLOPs)')
-    # ax.set_ylabel('Loss')
-    # ax.set_yscale('log')
-    # ax.set_xlim(0, 11)
-    # ax.set_ylim(10 ** -3, 1)
-    ax.legend(loc='lower left', ncol=1, title="", frameon=False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-
-    savepath = Path(f'{outdir}/best')
-    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        
+        if ff in ["training_h100_days_per_epoch", "gpu_compute_cost_per_epoch"]:
+            ax.set_title(f'Dataset: {dataset_size:,} images')
+        
+        ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
+        ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
+        ax.set_ylabel(ll)
+        ax.set_xlabel('Model size (non-embedding parameters)')
+        ax.set_yscale('log')
+        ax.set_xscale('log')
+        ax.legend(loc='lower left', ncol=1, title="", frameon=False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.legend(loc='lower right', ncol=1, title="", frameon=False)
+        legend_handles, _ = g.get_legend_handles_labels()
+        ax.legend(
+            legend_handles, [
+                'Data', '4D(rgb)', '3D(rgb)', '2D(rgb)',
+                'Patch (t, x, y, z, c)', f'(2, 14, 14, 14, 3)', f'(2, 16, 16, 16, 3)',
+            ],
+            loc='lower right', ncol=1, title="", frameon=False
+        )
+    
+        savepath = Path(f'{outdir}/{ff}')
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    
     
 def main():
     timeit = time.time()
@@ -392,62 +411,16 @@ def main():
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
     
-    # model = vit.VIT(
-    #     name='ViT',
-    #     hidden_size=348,
-    #     patches=[16],
-    #     heads=[12],
-    #     repeats=[12],
-    # )
-    
-    # model = prototype.OpticalTransformer(
-    #     name='Prototype',
-    #     patches=[16],
-    #     heads=[16],
-    #     repeats=[16],
-    # )
-    
-    # model = opticalnet.OpticalTransformer(
-    #     name='OpticalNet',
-    #     patches=[32, 16],
-    #     heads=[8, 8],
-    #     repeats=[8, 8],
-    # )
-    # model = model.build(input_shape=embeddings_shape)
-    
-
-    # num_tokens = np.product([s // p for s, p in zip(context_window, patch_size)])
-    # embedding = np.product(patch_size)
-    # embedding_shape =  (num_tokens, embedding)
-    
-    # logger.info(f"{context_window=}, {patch_size=}, {embedding_shape=}")
-    
-    # model = tf.keras.models.Sequential([
-    #     tf.keras.layers.Input(shape=embedding_shape, dtype=tf.float16),
-    #     vit.Transformer(heads=1, dims=embedding, expand_rate=4, activation='gelu', dropout_rate=0.),
-    # ])
-    # model.summary()
-    #
-    # profile_utils.measure_gflops(model)
-    # profile_utils.measure_memory_usage(model, batch_size=batch_size)
-    
-    # profile_utils.transformer_encoder_flops(
-    #     num_tokens=num_tokens,
-    #     embedding=embedding,
-    #     heads=1,
-    #     mlp_dim=4*embedding,
-    # )
-    
     dtype = 'float16'
-    batch_size = 1
+    batch_size = 4096
     dataset_size = 303000000
     
     outdir = Path("../scaling")
     outdir.mkdir(parents=True, exist_ok=True)
     
-    vit_scaling = scaling_vit(dtype=dtype, batch_size=batch_size, outdir=outdir, dataset_size=dataset_size)
-    transformer_scaling = scaling_transformers(dtype=dtype, batch_size=batch_size, outdir=outdir)
-    # plot_gflops(vit_scaling, outdir=outdir)
+    # transformer_scaling = scaling_transformers(dtype=dtype, outdir=outdir)
+    vit_scaling = scaling_vit(dtype=dtype, outdir=outdir)
+    plot_parameter_scaling(vit_scaling, outdir=outdir, dataset_size=dataset_size, batch_size=batch_size)
     
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

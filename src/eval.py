@@ -4013,7 +4013,7 @@ def profile_models(
         g = sns.lineplot(
             data=data,
             x="training_gflops",
-            y="epoch_loss",
+            y="epoch_mse",
             hue="model",
             hue_order=[m if m in data.model.unique() else None for m in models.values()],
             # size="gflops",
@@ -4024,25 +4024,25 @@ def profile_models(
             ax=ax
         )
 
-        best = df[df.cat == cc]['epoch_loss'].astype(np.float32).idxmin()
+        best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
         data = df.iloc[best].to_frame().T
         g = sns.scatterplot(
             data=data,
             x="training_gflops",
-            y="epoch_loss",
+            y="epoch_mse",
             c=cmarker,
             ax=ax
         )
 
         ax.text(
-            data["training_gflops"] + 0.1, data["epoch_loss"], cc,
+            data["training_gflops"] + 0.1, data["epoch_mse"], cc,
             horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
         )
 
     ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
     ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
     ax.set_xlabel('Training compute (Billions of GFLOPs)')
-    ax.set_ylabel('Loss')
+    ax.set_ylabel('MSE')
     # ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlim(0, 20)
@@ -4058,30 +4058,30 @@ def profile_models(
 
     df = pd.DataFrame()
     for d in dataframes:
-        best = d['epoch_loss'].idxmin()
+        best = d['epoch_mse'].idxmin()
         df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
     
     fig, ax = plt.subplots(figsize=(8, 8))
     for cc, colormap in zip(['*ViT', 'Ours', 'Baseline'], ['C1', 'C0', 'k']):
-        best = df[df.cat == cc]['epoch_loss'].astype(np.float32).idxmin()
+        best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
         data = df.iloc[best].to_frame().T
         g = sns.scatterplot(
             data=data,
             x="training_gflops",
-            y="epoch_loss",
+            y="epoch_mse",
             c=colormap,
             ax=ax
         )
 
         ax.text(
-            data["training_gflops"] + 0.1, data["epoch_loss"], cc,
+            data["training_gflops"] + 0.1, data["epoch_mse"], cc,
             horizontalalignment='left', size='medium', color=colormap, weight='semibold'
         )
 
     ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
     ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
     ax.set_xlabel('Training compute (Billions of GFLOPs)')
-    ax.set_ylabel('Loss')
+    ax.set_ylabel('MSE')
     ax.set_yscale('log')
     ax.set_xlim(0, 11)
     ax.set_ylim(10 ** -3, 1)
@@ -4095,7 +4095,7 @@ def profile_models(
     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
     
     coi = [
-        'epoch_loss',
+        'epoch_mse',
         'training',
 	    'training_gflops',
         'memory',
@@ -4104,7 +4104,7 @@ def profile_models(
         'params',
     ]
     titles = [
-        'Loss',
+        'MSE',
         f'Training Time (H) \n8xH100s [BS=4096]',
 	    'Training GFLOPs (billions)',
         f'Memory (GB) \n[BS={batch_size}]',
@@ -4113,13 +4113,13 @@ def profile_models(
         'Parameters (millions)',
     ]
 
-    g = sns.PairGrid(df.sort_values('epoch_loss'), x_vars=coi, y_vars=["model"], hue="model", height=8, aspect=.4, palette='muted')
+    g = sns.PairGrid(df.sort_values('epoch_mse'), x_vars=coi, y_vars=["model"], hue="model", height=8, aspect=.4, palette='muted')
     g.map(sns.stripplot, size=10, orient="h", jitter=False, palette="tab10", linewidth=1, edgecolor="w")
     g.set(xlabel="", ylabel="")
 
     for ax, cc, title in zip(g.axes.flat, coi, titles):
 
-        if cc == 'epoch_loss':
+        if cc == 'epoch_mse':
             ax.set_xscale('log')
 
         ax.set(title=title)
