@@ -223,6 +223,48 @@ def scaling_vit(dtype = 'float16', outdir=Path("../scaling")):
         "G": {"layers": 48, "heads": 16, "embedding": 1664, "mlp": 8192},
         "e": {"layers": 56, "heads": 16, "embedding": 1792, "mlp": 15360},
         "22B": {"layers": 48, "heads": 48, "embedding": 6144, "mlp": 24576},
+
+        # "B196": {"layers": 12, "heads": 12, "embedding": 196, "mlp": 4*196},
+        # "B588": {"layers": 12, "heads": 12, "embedding": 588, "mlp": 4*588},
+        # "B2744": {"layers": 12, "heads": 12, "embedding": 2744, "mlp": 4*2744},
+        # "B8232": {"layers": 12, "heads": 12, "embedding": 8232, "mlp": 4*8232},
+        # "B5488": {"layers": 12, "heads": 12, "embedding": 5488, "mlp": 4*5488},
+        # "B16464": {"layers": 12, "heads": 12, "embedding": 16464, "mlp": 4*16464},
+        #
+        # "L196": {"layers": 24, "heads": 16, "embedding": 196, "mlp": 4 * 196},
+        # "L588": {"layers": 24, "heads": 16, "embedding": 588, "mlp": 4 * 588},
+        # "L2744": {"layers": 24, "heads": 16, "embedding": 2744, "mlp": 4 * 2744},
+        # "L8232": {"layers": 24, "heads": 16, "embedding": 8232, "mlp": 4 * 8232},
+        # "L5488": {"layers": 24, "heads": 16, "embedding": 5488, "mlp": 4 * 5488},
+        # "L16464": {"layers": 24, "heads": 16, "embedding": 16464, "mlp": 4 * 16464},
+        #
+        # "H196": {"layers": 32, "heads": 16, "embedding": 196, "mlp": 4 * 196},
+        # "H588": {"layers": 32, "heads": 16, "embedding": 588, "mlp": 4 * 588},
+        # "H2744": {"layers": 32, "heads": 16, "embedding": 2744, "mlp": 4 * 2744},
+        # "H8232": {"layers": 32, "heads": 16, "embedding": 8232, "mlp": 4 * 8232},
+        # "H5488": {"layers": 32, "heads": 16, "embedding": 5488, "mlp": 4 * 5488},
+        # "H16464": {"layers": 32, "heads": 16, "embedding": 16464, "mlp": 4 * 16464},
+        #
+        # "G196": {"layers": 48, "heads": 16, "embedding": 196, "mlp": 4 * 196},
+        # "G588": {"layers": 48, "heads": 16, "embedding": 588, "mlp": 4 * 588},
+        # "G2744": {"layers": 48, "heads": 16, "embedding": 2744, "mlp": 4 * 2744},
+        # "G8232": {"layers": 48, "heads": 16, "embedding": 8232, "mlp": 4 * 8232},
+        # "G5488": {"layers": 48, "heads": 16, "embedding": 5488, "mlp": 4 * 5488},
+        # "G16464": {"layers": 48, "heads": 16, "embedding": 16464, "mlp": 4 * 16464},
+        #
+        # "E196": {"layers": 56, "heads": 32, "embedding": 196, "mlp": 4 * 196},
+        # "E588": {"layers": 56, "heads": 32, "embedding": 588, "mlp": 4 * 588},
+        # "E2744": {"layers": 56, "heads": 32, "embedding": 2744, "mlp": 4 * 2744},
+        # "E8232": {"layers": 56, "heads": 32, "embedding": 8232, "mlp": 4 * 8232},
+        # "E5488": {"layers": 56, "heads": 32, "embedding": 5488, "mlp": 4 * 5488},
+        # "E16464": {"layers": 56, "heads": 32, "embedding": 16464, "mlp": 4 * 16464},
+        #
+        # "T196": {"layers": 64, "heads": 48, "embedding": 196, "mlp": 4 * 196},
+        # "T588": {"layers": 64, "heads": 48, "embedding": 588, "mlp": 4 * 588},
+        # "T2744": {"layers": 64, "heads": 48, "embedding": 2744, "mlp": 4 * 2744},
+        # "T8232": {"layers": 64, "heads": 48, "embedding": 8232, "mlp": 4 * 8232},
+        # "T5488": {"layers": 64, "heads": 48, "embedding": 5488, "mlp": 4 * 5488},
+        # "T16464": {"layers": 64, "heads": 48, "embedding": 16464, "mlp": 4 * 16464},
     }
     
     transformer_configs, vit_configs = {}, {}
@@ -336,7 +378,16 @@ def scaling_vit(dtype = 'float16', outdir=Path("../scaling")):
     vit_scaling.to_csv(outdir/"vits.csv")
     return vit_scaling
 
-def plot_parameter_scaling(df, outdir, dataset_size, batch_size):
+def plot_parameter_scaling(
+    df,
+    outdir,
+    x="parameters",
+    y="gflops",
+    xlabel='Model size (non-embedding parameters)',
+    ylabel='GFLOPS',
+    dataset_size=None,
+    palette='muted'
+):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -347,62 +398,59 @@ def plot_parameter_scaling(df, outdir, dataset_size, batch_size):
         'xtick.major.pad': 10
     })
     
-    df["number_h100_for_batch"] = np.ceil(df["model_training_memory"] + (df["memory_per_image"] * batch_size) / 80)
-    df["training_h100_hours_per_step"] = batch_size * df["training_time_per_image"] / 3600
-    df["training_h100_days_per_epoch"] = dataset_size * df["training_time_per_image"] / 3600 / 24
-    df["multigpu_training_days_per_epoch"] = df["training_h100_days_per_epoch"] / df["number_h100_for_batch"]
-    df["multigpu_256_training_days_per_epoch"] = df["training_h100_days_per_epoch"] / 256
-    df["gpu_compute_cost_per_epoch"] = df["training_h100_days_per_epoch"] * 24 * 2
+    fig, ax = plt.subplots(figsize=(8, 8))
+    data = df.loc[df['data'].str.match(r'.*\(rgb\)')]
+    g = sns.lineplot(
+        data=data,
+        x=x,
+        y=y,
+        hue='data',
+        hue_order=['4D(rgb)', '3D(rgb)', '2D(rgb)'],
+        style="px",
+        ax=ax,
+        legend=True,
+        markers=True,
+        palette=palette
+    )
     
-    fois = {
-        "training_gflops_per_image": "Training GFLOPs per image",
-        "training_time_per_image": "Training H100 seconds per image",
-        "number_h100_for_batch": "Number of H100s needed for a batch (4096)",
-        "training_h100_hours_per_step": "Training H100 hours per batch (4096)",
-        "training_h100_days_per_epoch": "Training H100 days per epoch",
-        "gpu_compute_cost_per_epoch": "H100 compute cost per epoch ($2/hr)",
-    }
-    for ff, ll in fois.items():
-        fig, ax = plt.subplots(figsize=(8, 8))
-        data = df.loc[df['data'].str.match(r'.*\(rgb\)')]
-        g = sns.lineplot(
-            data=data,
-            x="parameters",
-            y=ff,
-            hue='data',
-            style="px",
-            hue_order=['4D(rgb)', '3D(rgb)', '2D(rgb)'],
-            ax=ax,
-            legend=True,
-            markers=True
-        )
+    for dd, cc in zip(['4D(rgb)', '3D(rgb)', '2D(rgb)'], ['C0', 'C1', 'C2']):
+        d = data[(data['data'] == dd) & (data['px'] == 14)]
         
-        if ff in ["training_h100_days_per_epoch", "gpu_compute_cost_per_epoch"]:
-            ax.set_title(f'Dataset: {dataset_size:,} images')
-        
-        ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
-        ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
-        ax.set_ylabel(ll)
-        ax.set_xlabel('Model size (non-embedding parameters)')
-        ax.set_yscale('log')
-        ax.set_xscale('log')
-        ax.legend(loc='lower left', ncol=1, title="", frameon=False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.legend(loc='lower right', ncol=1, title="", frameon=False)
-        legend_handles, _ = g.get_legend_handles_labels()
-        ax.legend(
-            legend_handles, [
-                'Data', '4D(rgb)', '3D(rgb)', '2D(rgb)',
-                'Patch (t, x, y, z, c)', f'(2, 14, 14, 14, 3)', f'(2, 16, 16, 16, 3)',
-            ],
-            loc='lower right', ncol=1, title="", frameon=False
-        )
+        for line in range(0, d.shape[0]):
+            plt.text(
+                d[x][line], d[y][line], d['class'][line].strip('/14'),
+                horizontalalignment='left', size='medium', color='dimgrey', weight='semibold'
+            )
+
+    ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
+    ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel(xlabel)
     
-        savepath = Path(f'{outdir}/{ff}')
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    # if 'seconds' not in ylabel.lower() and 'hours' not in ylabel.lower() and 'days' not in ylabel.lower():
+    ax.set_yscale('log')
+        
+    ax.set_xscale('log')
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    legend_handles, _ = g.get_legend_handles_labels()
+    ax.legend(
+        legend_handles, [
+            'Data', '4D(rgb)', '3D(rgb)', '2D(rgb)',
+            'Patch (t, x, y, z, c)', f'(2, 14, 14, 14, 3)', f'(2, 16, 16, 16, 3)',
+        ],
+        loc='upper left', ncol=1, title="", frameon=False
+    )
+
+    if dataset_size is not None:
+        ax.set_title(f'Dataset: {dataset_size:,} images')
+        savepath = Path(f'{outdir}/{y}_{dataset_size}')
+    else:
+        savepath = Path(f'{outdir}/{y}')
+        
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
     
     
 def main():
@@ -413,14 +461,53 @@ def main():
     
     dtype = 'float16'
     batch_size = 4096
-    dataset_size = 303000000
     
     outdir = Path("../scaling")
     outdir.mkdir(parents=True, exist_ok=True)
     
     # transformer_scaling = scaling_transformers(dtype=dtype, outdir=outdir)
     vit_scaling = scaling_vit(dtype=dtype, outdir=outdir)
-    plot_parameter_scaling(vit_scaling, outdir=outdir, dataset_size=dataset_size, batch_size=batch_size)
+    vit_scaling["number_h100_for_batch"] = np.ceil(vit_scaling["model_training_memory"] + (vit_scaling["memory_per_image"] * batch_size) / 80)
+    vit_scaling["training_h100_hours_per_step"] = batch_size * vit_scaling["training_time_per_image"] / 3600
+    vit_scaling["training_tflops_per_image"] = vit_scaling["training_gflops_per_image"] / 1000
+    
+    fois = {
+        f"training_gflops_per_image": f"Training GFLOPs per image",
+        f"training_time_per_image": f"Training H100 seconds per image",
+        f"number_h100_for_batch": f"Number of H100s needed for a batch ({batch_size})",
+        f"training_h100_hours_per_step": f"Training H100 hours per batch ({batch_size})",
+
+    }
+    for y, ylabel in fois.items():
+        plot_parameter_scaling(
+            vit_scaling,
+            outdir=outdir,
+            x="parameters",
+            xlabel="Model size (non-embedding parameters)",
+            y=y,
+            ylabel=ylabel,
+        )
+    
+    fois ={
+        f"training_h100_days_per_epoch": f"Training H100 days per epoch",
+        f"gpu_compute_cost_per_epoch": f"H100 compute cost per epoch ($2/hr)",
+    }
+    for dataset_size in [1000000, 10000000, 100000000, 303000000]:
+        vit_scaling["training_h100_days_per_epoch"] = dataset_size * vit_scaling["training_time_per_image"] / 3600 / 24
+        vit_scaling["multigpu_training_days_per_epoch"] = vit_scaling["training_h100_days_per_epoch"] / vit_scaling["number_h100_for_batch"]
+        vit_scaling["multigpu_256_training_days_per_epoch"] = vit_scaling["training_h100_days_per_epoch"] / 256
+        vit_scaling["gpu_compute_cost_per_epoch"] = vit_scaling["training_h100_days_per_epoch"] * 24 * 2
+        
+        for y, ylabel in fois.items():
+            plot_parameter_scaling(
+                vit_scaling,
+                outdir=outdir,
+                x="parameters",
+                xlabel="Model size (non-embedding parameters)",
+                y=y,
+                ylabel=ylabel,
+                dataset_size=dataset_size
+            )
     
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
