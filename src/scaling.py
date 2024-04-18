@@ -48,6 +48,48 @@ def scaling_transformers(dtype = 'float16', outdir=Path("../scaling")):
         "G": {"layers": 48, "heads": 16, "embedding": 1664, "mlp": 8192},
         "e": {"layers": 56, "heads": 16, "embedding": 1792, "mlp": 15360},
         "22B": {"layers": 48, "heads": 48, "embedding": 6144, "mlp": 24576},
+        
+        # "B196": {"layers": 12, "heads": 12, "embedding": 196, "mlp": 4*196},
+        # "B588": {"layers": 12, "heads": 12, "embedding": 588, "mlp": 4*588},
+        # "B2744": {"layers": 12, "heads": 12, "embedding": 2744, "mlp": 4*2744},
+        # "B8232": {"layers": 12, "heads": 12, "embedding": 8232, "mlp": 4*8232},
+        # "B5488": {"layers": 12, "heads": 12, "embedding": 5488, "mlp": 4*5488},
+        # "B16464": {"layers": 12, "heads": 12, "embedding": 16464, "mlp": 4*16464},
+        #
+        # "L196": {"layers": 24, "heads": 16, "embedding": 196, "mlp": 4 * 196},
+        # "L588": {"layers": 24, "heads": 16, "embedding": 588, "mlp": 4 * 588},
+        # "L2744": {"layers": 24, "heads": 16, "embedding": 2744, "mlp": 4 * 2744},
+        # "L8232": {"layers": 24, "heads": 16, "embedding": 8232, "mlp": 4 * 8232},
+        # "L5488": {"layers": 24, "heads": 16, "embedding": 5488, "mlp": 4 * 5488},
+        # "L16464": {"layers": 24, "heads": 16, "embedding": 16464, "mlp": 4 * 16464},
+        #
+        # "H196": {"layers": 32, "heads": 16, "embedding": 196, "mlp": 4 * 196},
+        # "H588": {"layers": 32, "heads": 16, "embedding": 588, "mlp": 4 * 588},
+        # "H2744": {"layers": 32, "heads": 16, "embedding": 2744, "mlp": 4 * 2744},
+        # "H8232": {"layers": 32, "heads": 16, "embedding": 8232, "mlp": 4 * 8232},
+        # "H5488": {"layers": 32, "heads": 16, "embedding": 5488, "mlp": 4 * 5488},
+        # "H16464": {"layers": 32, "heads": 16, "embedding": 16464, "mlp": 4 * 16464},
+        #
+        # "G196": {"layers": 48, "heads": 16, "embedding": 196, "mlp": 4 * 196},
+        # "G588": {"layers": 48, "heads": 16, "embedding": 588, "mlp": 4 * 588},
+        # "G2744": {"layers": 48, "heads": 16, "embedding": 2744, "mlp": 4 * 2744},
+        # "G8232": {"layers": 48, "heads": 16, "embedding": 8232, "mlp": 4 * 8232},
+        # "G5488": {"layers": 48, "heads": 16, "embedding": 5488, "mlp": 4 * 5488},
+        # "G16464": {"layers": 48, "heads": 16, "embedding": 16464, "mlp": 4 * 16464},
+        #
+        # "E196": {"layers": 56, "heads": 32, "embedding": 196, "mlp": 4 * 196},
+        # "E588": {"layers": 56, "heads": 32, "embedding": 588, "mlp": 4 * 588},
+        # "E2744": {"layers": 56, "heads": 32, "embedding": 2744, "mlp": 4 * 2744},
+        # "E8232": {"layers": 56, "heads": 32, "embedding": 8232, "mlp": 4 * 8232},
+        # "E5488": {"layers": 56, "heads": 32, "embedding": 5488, "mlp": 4 * 5488},
+        # "E16464": {"layers": 56, "heads": 32, "embedding": 16464, "mlp": 4 * 16464},
+        #
+        # "T196": {"layers": 64, "heads": 48, "embedding": 196, "mlp": 4 * 196},
+        # "T588": {"layers": 64, "heads": 48, "embedding": 588, "mlp": 4 * 588},
+        # "T2744": {"layers": 64, "heads": 48, "embedding": 2744, "mlp": 4 * 2744},
+        # "T8232": {"layers": 64, "heads": 48, "embedding": 8232, "mlp": 4 * 8232},
+        # "T5488": {"layers": 64, "heads": 48, "embedding": 5488, "mlp": 4 * 5488},
+        # "T16464": {"layers": 64, "heads": 48, "embedding": 16464, "mlp": 4 * 16464},
     }
     
     transformer_configs, vit_configs = {}, {}
@@ -223,51 +265,9 @@ def scaling_vit(dtype = 'float16', outdir=Path("../scaling")):
         "G": {"layers": 48, "heads": 16, "embedding": 1664, "mlp": 8192},
         "e": {"layers": 56, "heads": 16, "embedding": 1792, "mlp": 15360},
         "22B": {"layers": 48, "heads": 48, "embedding": 6144, "mlp": 24576},
-
-        # "B196": {"layers": 12, "heads": 12, "embedding": 196, "mlp": 4*196},
-        # "B588": {"layers": 12, "heads": 12, "embedding": 588, "mlp": 4*588},
-        # "B2744": {"layers": 12, "heads": 12, "embedding": 2744, "mlp": 4*2744},
-        # "B8232": {"layers": 12, "heads": 12, "embedding": 8232, "mlp": 4*8232},
-        # "B5488": {"layers": 12, "heads": 12, "embedding": 5488, "mlp": 4*5488},
-        # "B16464": {"layers": 12, "heads": 12, "embedding": 16464, "mlp": 4*16464},
-        #
-        # "L196": {"layers": 24, "heads": 16, "embedding": 196, "mlp": 4 * 196},
-        # "L588": {"layers": 24, "heads": 16, "embedding": 588, "mlp": 4 * 588},
-        # "L2744": {"layers": 24, "heads": 16, "embedding": 2744, "mlp": 4 * 2744},
-        # "L8232": {"layers": 24, "heads": 16, "embedding": 8232, "mlp": 4 * 8232},
-        # "L5488": {"layers": 24, "heads": 16, "embedding": 5488, "mlp": 4 * 5488},
-        # "L16464": {"layers": 24, "heads": 16, "embedding": 16464, "mlp": 4 * 16464},
-        #
-        # "H196": {"layers": 32, "heads": 16, "embedding": 196, "mlp": 4 * 196},
-        # "H588": {"layers": 32, "heads": 16, "embedding": 588, "mlp": 4 * 588},
-        # "H2744": {"layers": 32, "heads": 16, "embedding": 2744, "mlp": 4 * 2744},
-        # "H8232": {"layers": 32, "heads": 16, "embedding": 8232, "mlp": 4 * 8232},
-        # "H5488": {"layers": 32, "heads": 16, "embedding": 5488, "mlp": 4 * 5488},
-        # "H16464": {"layers": 32, "heads": 16, "embedding": 16464, "mlp": 4 * 16464},
-        #
-        # "G196": {"layers": 48, "heads": 16, "embedding": 196, "mlp": 4 * 196},
-        # "G588": {"layers": 48, "heads": 16, "embedding": 588, "mlp": 4 * 588},
-        # "G2744": {"layers": 48, "heads": 16, "embedding": 2744, "mlp": 4 * 2744},
-        # "G8232": {"layers": 48, "heads": 16, "embedding": 8232, "mlp": 4 * 8232},
-        # "G5488": {"layers": 48, "heads": 16, "embedding": 5488, "mlp": 4 * 5488},
-        # "G16464": {"layers": 48, "heads": 16, "embedding": 16464, "mlp": 4 * 16464},
-        #
-        # "E196": {"layers": 56, "heads": 32, "embedding": 196, "mlp": 4 * 196},
-        # "E588": {"layers": 56, "heads": 32, "embedding": 588, "mlp": 4 * 588},
-        # "E2744": {"layers": 56, "heads": 32, "embedding": 2744, "mlp": 4 * 2744},
-        # "E8232": {"layers": 56, "heads": 32, "embedding": 8232, "mlp": 4 * 8232},
-        # "E5488": {"layers": 56, "heads": 32, "embedding": 5488, "mlp": 4 * 5488},
-        # "E16464": {"layers": 56, "heads": 32, "embedding": 16464, "mlp": 4 * 16464},
-        #
-        # "T196": {"layers": 64, "heads": 48, "embedding": 196, "mlp": 4 * 196},
-        # "T588": {"layers": 64, "heads": 48, "embedding": 588, "mlp": 4 * 588},
-        # "T2744": {"layers": 64, "heads": 48, "embedding": 2744, "mlp": 4 * 2744},
-        # "T8232": {"layers": 64, "heads": 48, "embedding": 8232, "mlp": 4 * 8232},
-        # "T5488": {"layers": 64, "heads": 48, "embedding": 5488, "mlp": 4 * 5488},
-        # "T16464": {"layers": 64, "heads": 48, "embedding": 16464, "mlp": 4 * 16464},
     }
     
-    transformer_configs, vit_configs = {}, {}
+    vit_configs = {}
     for patch in [14, 16]:
         patches = {
             "2D(g)": {"t": 1, "z": 1, "y": patch, "x": patch, "c": 1},
@@ -386,7 +386,10 @@ def plot_parameter_scaling(
     xlabel='Model size (non-embedding parameters)',
     ylabel='GFLOPS',
     dataset_size=None,
-    palette='muted'
+    palette='muted',
+    published_models_only=False,
+    xlog=True,
+    ylog=True,
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -399,19 +402,37 @@ def plot_parameter_scaling(
     })
     
     fig, ax = plt.subplots(figsize=(8, 8))
-    data = df.loc[df['data'].str.match(r'.*\(rgb\)')]
-    g = sns.lineplot(
-        data=data,
-        x=x,
-        y=y,
-        hue='data',
-        hue_order=['4D(rgb)', '3D(rgb)', '2D(rgb)'],
-        style="px",
-        ax=ax,
-        legend=True,
-        markers=True,
-        palette=palette
-    )
+    
+    if published_models_only:
+        data = df.loc[df['data'].str.match(r'2D\(rgb\)')]
+    else:
+        data = df.loc[df['data'].str.match(r'.*\(rgb\)')]
+    
+    if published_models_only:
+        g = sns.lineplot(
+            data=data,
+            x=x,
+            y=y,
+            hue='data',
+            style="px",
+            ax=ax,
+            legend=True,
+            markers=True,
+            palette='Greys_r'
+        )
+    else:
+        g = sns.lineplot(
+            data=data,
+            x=x,
+            y=y,
+            hue='data',
+            hue_order=['4D(rgb)', '3D(rgb)', '2D(rgb)'],
+            style="px",
+            ax=ax,
+            legend=True,
+            markers=True,
+            palette=palette
+        )
     
     for dd, cc in zip(['4D(rgb)', '3D(rgb)', '2D(rgb)'], ['C0', 'C1', 'C2']):
         d = data[(data['data'] == dd) & (data['px'] == 14)]
@@ -427,20 +448,32 @@ def plot_parameter_scaling(
     ax.set_ylabel(ylabel)
     ax.set_xlabel(xlabel)
     
-    # if 'seconds' not in ylabel.lower() and 'hours' not in ylabel.lower() and 'days' not in ylabel.lower():
-    ax.set_yscale('log')
+    if xlog:
+        ax.set_xscale('log')
+    
+    if ylog:
+        ax.set_yscale('log')
         
-    ax.set_xscale('log')
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
     legend_handles, _ = g.get_legend_handles_labels()
-    ax.legend(
-        legend_handles, [
-            'Data (t, x, y, z, c)', '4D (8, 224, 224, 224, 3)', '3D (1, 224, 224, 224, 3)', '2D (1, 224, 224, 1, 3)',
-            'Patch (t, x, y, z, c)', f'(2, 14, 14, 14, 3)', f'(2, 16, 16, 16, 3)',
-        ],
-        loc='upper left', ncol=1, title="", frameon=False
-    )
+    
+    if published_models_only:
+        ax.legend(
+            legend_handles, [
+                'Data (x, y, c)', '2D (224, 224, 3)',
+                'Patch (x, y, c)', f'(14, 14, 3)', f'(16, 16, 3)',
+            ],
+            loc='upper left', ncol=1, title="", frameon=False
+        )
+    else:
+        ax.legend(
+            legend_handles, [
+                'Data (t, x, y, z, c)', '4D (8, 224, 224, 224, 3)', '3D (1, 224, 224, 224, 3)', '2D (1, 224, 224, 1, 3)',
+                'Patch (t, x, y, z, c)', f'(2, 14, 14, 14, 3)', f'(2, 16, 16, 16, 3)',
+            ],
+            loc='upper left', ncol=1, title="", frameon=False
+        )
 
     if dataset_size is not None:
         ax.set_title(f'Dataset: {dataset_size:,} images')
@@ -468,13 +501,15 @@ def main():
     # transformer_scaling = scaling_transformers(dtype=dtype, outdir=outdir)
     vit_scaling = scaling_vit(dtype=dtype, outdir=outdir)
     vit_scaling["number_h100_for_batch"] = np.ceil(vit_scaling["model_training_memory"] + (vit_scaling["memory_per_image"] * batch_size) / 80)
+    vit_scaling["cost_h100_for_batch"] = vit_scaling["number_h100_for_batch"] * 37500
     vit_scaling["training_h100_hours_per_step"] = batch_size * vit_scaling["training_time_per_image"] / 3600
     vit_scaling["training_tflops_per_image"] = vit_scaling["training_gflops_per_image"] / 1000
     
     fois = {
         f"training_gflops_per_image": f"Training GFLOPs per image",
         f"training_time_per_image": f"Training H100 seconds per image",
-        f"number_h100_for_batch": f"Number of H100s needed for a batch ({batch_size})",
+        f"number_h100_for_batch": f"Minimum number of H100s needed for a batch ({batch_size})",
+        f"cost_h100_for_batch": f"Cost of H100s needed for a batch ({batch_size}, $37,500 each)",
         f"training_h100_hours_per_step": f"Training H100 hours per batch ({batch_size})",
 
     }
@@ -508,6 +543,44 @@ def main():
                 ylabel=ylabel,
                 dataset_size=dataset_size
             )
+    
+    df = vit_scaling.loc[vit_scaling['data'].str.match(r'2D\(rgb\)')]
+    datasets = {
+        "S": {"dataset": "ImageNet-21K", "dataset_size": 14000000, "epochs": 7, "steps": 1000000, "batch_size": 4096},
+        "B": {"dataset": "ImageNet-21K", "dataset_size": 14000000, "epochs": 7, "steps": 1000000, "batch_size": 4096},
+        "L": {"dataset": "JFT-300M", "dataset_size": 300000000, "epochs": 14, "steps": 1000000, "batch_size": 4096},
+        "H": {"dataset": "JFT-300M", "dataset_size": 300000000,  "epochs": 14, "steps": 1000000, "batch_size": 4096},
+        "g": {"dataset": "JFT-1B", "dataset_size": 1000000000, "epochs": 5, "steps": 500000, "batch_size": 32768},
+        "G": {"dataset": "JFT-3B", "dataset_size": 3000000000,  "epochs": 5, "steps": 500000, "batch_size": 32768},
+        "e": {"dataset": "JFT-3B", "dataset_size": 3000000000,  "epochs": 5, "steps": 1000000, "batch_size": 16384},
+        "22B": {"dataset": "JFT-4B", "dataset_size": 4000000000, "epochs": 3, "steps": 177000, "batch_size": 65000},
+    }
+    cols = list(datasets['S'].keys())
+    df[cols] = np.nan
+    for k in datasets.keys():
+        idx = df.loc[df['class'].str.match(k)].index
+        df.loc[idx, cols] =  datasets[k].values()
+    
+    df["dataset_size"] = df["dataset_size"] // 1000000
+    df["training_compute"] = df[f"training_gflops_per_image"] * df["batch_size"] * df["steps"]
+    df["training_time"] = df[f"training_time_per_image"] * df["batch_size"] * df["steps"] / 3600 / 24
+    
+    fois ={
+        f"dataset_size": f"Training dataset size (millions of images)",
+        f"training_time": f"Training H100 days",
+        f"training_compute": f"Training GFLOPs",
+    }
+    for y, ylabel in fois.items():
+        plot_parameter_scaling(
+            df,
+            outdir=outdir,
+            x="parameters",
+            xlabel="Model size (non-embedding parameters)",
+            y=y,
+            ylabel=ylabel,
+            published_models_only=True,
+            ylog=False if y == "dataset_size" else True,
+        )
     
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
