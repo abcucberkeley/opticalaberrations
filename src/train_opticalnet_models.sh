@@ -76,6 +76,11 @@ do
   --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '16-16' --heads '16-16'" \
   --taskname $NETWORK \
   --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-H3216
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '24-24' --heads '24-24'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-G3216
 done
 
 
