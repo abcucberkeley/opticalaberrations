@@ -436,7 +436,7 @@ def plot_parameter_scaling(
     legend_handles, _ = g.get_legend_handles_labels()
     ax.legend(
         legend_handles, [
-            'Data', '4D(rgb)', '3D(rgb)', '2D(rgb)',
+            'Data (t, x, y, z, c)', '4D (8, 224, 224, 224, 3)', '3D (1, 224, 224, 224, 3)', '2D (1, 224, 224, 1, 3)',
             'Patch (t, x, y, z, c)', f'(2, 14, 14, 14, 3)', f'(2, 16, 16, 16, 3)',
         ],
         loc='upper left', ncol=1, title="", frameon=False
