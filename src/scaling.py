@@ -382,99 +382,127 @@ def plot_parameter_scaling(
     xlog=True,
     ylog=True,
 ):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'xtick.major.pad': 10
-    })
-    
-    fig, ax = plt.subplots(figsize=(8, 8))
-    
-    if published_models_only:
-        data = df.loc[df['data'].str.match(r'2D\(rgb\)')]
-    else:
-        data = df.loc[df['data'].str.match(r'.*\(rgb\)')]
-    
-    if published_models_only:
-        g = sns.lineplot(
-            data=data,
-            x=x,
-            y=y,
-            hue='data',
-            style="px",
-            ax=ax,
-            legend=True,
-            markers=True,
-            palette='Greys_r'
-        )
-    else:
-        g = sns.lineplot(
-            data=data,
-            x=x,
-            y=y,
-            hue='data',
-            hue_order=['4D(rgb)', '3D(rgb)', '2D(rgb)'],
-            style="px",
-            ax=ax,
-            legend=True,
-            markers=True,
-            palette=palette
-        )
-    
-    for dd, cc in zip(['4D(rgb)', '3D(rgb)', '2D(rgb)'], ['C0', 'C1', 'C2']):
-        d = data[(data['data'] == dd) & (data['px'] == 14)]
+    for background in ["default", "dark_background"]:
+        plt.style.use(background)
+        plt.rcParams.update({
+            'font.size': 10,
+            'axes.titlesize': 12,
+            'axes.labelsize': 12,
+            'xtick.labelsize': 10,
+            'ytick.labelsize': 10,
+            'legend.fontsize': 10,
+            'xtick.major.pad': 10
+        })
+        
+        fig, ax = plt.subplots(figsize=(8, 8))
+        
+        if published_models_only:
+            data = df.loc[df['data'].str.match(r'2D\(rgb\)')]
+        else:
+            data = df.loc[df['data'].str.match(r'.*\(rgb\)')]
+        
+        if published_models_only:
+            g = sns.lineplot(
+                data=data,
+                x=x,
+                y=y,
+                hue='data',
+                style="px",
+                ax=ax,
+                legend=True,
+                markers=True,
+                palette='Greys_r',
+                markeredgecolor='dimgrey' if background == 'default' else 'lightgrey',
+                markeredgewidth=.5
+            )
+        else:
+            g = sns.lineplot(
+                data=data,
+                x=x,
+                y=y,
+                hue='data',
+                hue_order=['4D(rgb)', '3D(rgb)', '2D(rgb)'],
+                style="px",
+                ax=ax,
+                legend=True,
+                markers=True,
+                palette=palette,
+                markeredgecolor='dimgrey' if background == 'default' else 'lightgrey',
+                markeredgewidth=.5
+            )
+        
+        d = data[(data['data'] == '2D(rgb)') & (data['px'] == 14)]
         
         for line in range(0, d.shape[0]):
-            plt.text(
-                d[x][line], d[y][line], d['class'][line].strip('/14'),
-                horizontalalignment='left', size='medium', color='dimgrey', weight='semibold'
+            xx = d[x][line]
+            yy = d[y][line]
+            
+            if published_models_only:
+                if y == 'dataset_size':
+                    y_text_offset = 100
+                    x_text_offset = xx * .2
+                else:
+                    y_text_offset = yy * .2
+                    x_text_offset = xx * .2
+            else:
+                x_text_offset = 0
+                if yy < 10:
+                    y_text_offset = yy * .35
+                elif yy < 50:
+                    y_text_offset = yy * .25
+                elif yy < 100:
+                    y_text_offset = yy * .15
+                else:
+                    y_text_offset = yy * .25
+                
+            ax.annotate(
+                d['class'][line].strip('/14'),
+                (xx, yy),
+                xytext=(xx-x_text_offset, yy+y_text_offset),
+                arrowprops=dict(alpha=0),
             )
-
-    ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
-    ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
-    ax.set_ylabel(ylabel)
-    ax.set_xlabel(xlabel)
     
-    if xlog:
-        ax.set_xscale('log')
-    
-    if ylog:
-        ax.set_yscale('log')
+        ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
+        ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
+        ax.set_ylabel(ylabel)
+        ax.set_xlabel(xlabel)
         
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    legend_handles, _ = g.get_legend_handles_labels()
-    
-    if published_models_only:
-        ax.legend(
-            legend_handles, [
-                'Data (x, y, c)', '2D (224, 224, 3)',
-                'Patch (x, y, c)', f'(14, 14, 3)', f'(16, 16, 3)',
-            ],
-            loc='upper left', ncol=1, title="", frameon=False
-        )
-    else:
-        ax.legend(
-            legend_handles, [
-                'Data (t, x, y, z, c)', '4D (8, 224, 224, 224, 3)', '3D (1, 224, 224, 224, 3)', '2D (1, 224, 224, 1, 3)',
-                'Patch (t, x, y, z, c)', f'(2, 14, 14, 14, 3)', f'(2, 16, 16, 16, 3)',
-            ],
-            loc='upper left', ncol=1, title="", frameon=False
-        )
-
-    if dataset_size is not None:
-        ax.set_title(f'Dataset: {dataset_size:,} images')
-        savepath = Path(f'{outdir}/{y}_{dataset_size}')
-    else:
-        savepath = Path(f'{outdir}/{y}')
+        if xlog:
+            ax.set_xscale('log')
         
-    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        if ylog:
+            ax.set_yscale('log')
+            
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        legend_handles, _ = g.get_legend_handles_labels()
+        
+        if published_models_only:
+            ax.legend(
+                legend_handles, [
+                    'Data (x, y, c)', '2D (224, 224, 3)',
+                    'Patch (x, y, c)', f'(14, 14, 3)', f'(16, 16, 3)',
+                ],
+                loc='upper left', ncol=1, title="", frameon=False
+            )
+        else:
+            ax.legend(
+                legend_handles, [
+                    'Data (t, x, y, z, c)', '4D (8, 224, 224, 224, 3)', '3D (1, 224, 224, 224, 3)', '2D (1, 224, 224, 1, 3)',
+                    'Patch (t, x, y, z, c)', f'(2, 14, 14, 14, 3)', f'(2, 16, 16, 16, 3)',
+                ],
+                loc='upper left', ncol=1, title="", frameon=False
+            )
+    
+        if dataset_size is not None:
+            ax.set_title(f'Dataset: {dataset_size:,} images')
+            savepath = Path(f'{outdir}/{y}_{dataset_size}_{background}')
+        else:
+            savepath = Path(f'{outdir}/{y}_{background}')
+            
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
     
     
 def main():
