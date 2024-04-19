@@ -441,6 +441,9 @@ def plot_parameter_scaling(
                 if y == 'dataset_size':
                     y_text_offset = 100
                     x_text_offset = xx * .2
+                elif y == 'training_images':
+                    y_text_offset = .5
+                    x_text_offset = xx * .1
                 else:
                     y_text_offset = yy * .2
                     x_text_offset = xx * .2
