@@ -3986,7 +3986,8 @@ def profile_models(
                 logger.info(f"Saving {savepath}")
                 df.to_csv(f'{outdir}/{codename}.csv')
             
-            except Exception:
+            except Exception as e:
+                logger.error(e)
                 continue
         
         training_batch_size = 4096
