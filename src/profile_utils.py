@@ -2,14 +2,13 @@ import matplotlib
 matplotlib.use('Agg')
 
 import time
-import subprocess
 import sys
 import logging
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.profiler.model_analyzer import profile as tf_profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
-
+from tbparse import SummaryReader
 
 try:
 	from keras import backend as K
@@ -127,9 +126,6 @@ def measure_gflops(model: tf.keras.Model):
 
 
 def load_tf_logs(path):
-	subprocess.call("pip install --user tbparse", shell=True)
-	from tbparse import SummaryReader
-	
 	reader = SummaryReader(str(path), pivot=True, extra_columns=set(['wall_time']))
 	df = reader.tensors
 	return df

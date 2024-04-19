@@ -40,15 +40,6 @@ def scaling_transformers(dtype = 'float16', outdir=Path("../scaling")):
         "4D(rgb)": {"t": 8, "z": 256, "y": 256, "x": 256, "c": 3}
     }
     configs = {
-        "S": {"layers": 12, "heads": 6, "embedding": 384, "mlp": 1536},
-        "B": {"layers": 12, "heads": 12, "embedding": 768, "mlp": 3072},
-        "L": {"layers": 24, "heads": 16, "embedding": 1024, "mlp": 4096},
-        "H": {"layers": 32, "heads": 16, "embedding": 1280, "mlp": 5120},
-        "g": {"layers": 40, "heads": 16, "embedding": 1408, "mlp": 6144},
-        "G": {"layers": 48, "heads": 16, "embedding": 1664, "mlp": 8192},
-        "e": {"layers": 56, "heads": 16, "embedding": 1792, "mlp": 15360},
-        "22B": {"layers": 48, "heads": 48, "embedding": 6144, "mlp": 24576},
-        
         # "B196": {"layers": 12, "heads": 12, "embedding": 196, "mlp": 4*196},
         # "B588": {"layers": 12, "heads": 12, "embedding": 588, "mlp": 4*588},
         # "B2744": {"layers": 12, "heads": 12, "embedding": 2744, "mlp": 4*2744},

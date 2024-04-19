@@ -22,3 +22,4 @@ onnxruntime-gpu
 nvidia-pyindex
 nvidia-pytriton
 dask_cuda
+tbparse
