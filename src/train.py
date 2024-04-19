@@ -424,7 +424,7 @@ def train_model(
     )
 
     h5_checkpoints = ModelCheckpoint(
-        filepath=str(outdir/"keras"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}-epoch{{epoch:03d}}.h5"),
+        filepath=str(outdir/"keras"/f"{datetime.now().strftime('%Y-%m-%d-%H-%M')}.h5"),
         monitor="loss",
         verbose=1,
         save_best_only=True,
