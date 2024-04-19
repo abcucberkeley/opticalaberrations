@@ -537,14 +537,14 @@ def main():
     
     df = vit_scaling.loc[vit_scaling['data'].str.match(r'2D\(rgb\)')]
     datasets = {
-        "S": {"dataset": "ImageNet-21K", "dataset_size": 14000000, "epochs": 7, "steps": 1000000, "batch_size": 4096},
-        "B": {"dataset": "ImageNet-21K", "dataset_size": 14000000, "epochs": 7, "steps": 1000000, "batch_size": 4096},
-        "L": {"dataset": "JFT-300M", "dataset_size": 300000000, "epochs": 14, "steps": 1000000, "batch_size": 4096},
-        "H": {"dataset": "JFT-300M", "dataset_size": 300000000,  "epochs": 14, "steps": 1000000, "batch_size": 4096},
-        "g": {"dataset": "JFT-1B", "dataset_size": 1000000000, "epochs": 5, "steps": 500000, "batch_size": 32768},
-        "G": {"dataset": "JFT-3B", "dataset_size": 3000000000,  "epochs": 5, "steps": 500000, "batch_size": 32768},
-        "e": {"dataset": "JFT-3B", "dataset_size": 3000000000,  "epochs": 5, "steps": 1000000, "batch_size": 16384},
-        "22B": {"dataset": "JFT-4B", "dataset_size": 4000000000, "epochs": 3, "steps": 177000, "batch_size": 65000},
+        "S": {"dataset": "ImageNet-21K", "dataset_size": 14197122, "epochs": 7, "steps": 14197122*7/4096, "batch_size": 4096},
+        "B": {"dataset": "ImageNet-21K", "dataset_size": 14197122, "epochs": 7, "steps": 14197122*7/4096, "batch_size": 4096},
+        "L": {"dataset": "JFT-300M", "dataset_size": 303000000, "epochs": 14, "steps": 1000000, "batch_size": 4096},
+        "H": {"dataset": "JFT-300M", "dataset_size": 303000000,  "epochs": 14, "steps": 1000000, "batch_size": 4096},
+        "g": {"dataset": "JFT-1B", "dataset_size": 3000000000, "epochs": 4000000*4096/3000000000, "steps": 4000000, "batch_size": 4096},
+        "G": {"dataset": "JFT-3B", "dataset_size": 3000000000,  "epochs": 5000000*4096/3000000000, "steps": 5000000, "batch_size": 4096},
+        "e": {"dataset": "JFT-3B", "dataset_size": 3000000000,  "epochs": 1000000*16384/3000000000, "steps": 1000000, "batch_size": 16384},
+        "22B": {"dataset": "JFT-4B", "dataset_size": 4000000000, "epochs": 177000*65000/4000000000, "steps": 177000, "batch_size": 65000},
     }
     cols = list(datasets['S'].keys())
     df[cols] = np.nan
@@ -552,12 +552,14 @@ def main():
         idx = df.loc[df['class'].str.match(k)].index
         df.loc[idx, cols] =  datasets[k].values()
     
-    df["dataset_size"] = df["dataset_size"] // 1000000
+    df["training_images"] = df["steps"] * df["batch_size"] // 1000000000  # convert to billions
+    df["dataset_size"] = df["dataset_size"] // 1000000 # convert to millions
     df["training_compute"] = df[f"training_gflops_per_image"] * df["batch_size"] * df["steps"]
     df["training_time"] = df[f"training_time_per_image"] * df["batch_size"] * df["steps"] / 3600 / 24
     
     fois ={
         f"dataset_size": f"Training dataset size (millions of images)",
+        f"training_images": f"Training images seen (billions)",
         f"training_time": f"Training H100 days",
         f"training_compute": f"Training GFLOPs",
     }
@@ -570,7 +572,7 @@ def main():
             y=y,
             ylabel=ylabel,
             published_models_only=True,
-            ylog=False if y == "dataset_size" else True,
+            ylog=False if y == "dataset_size" or y == "training_images" else True,
         )
     
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
