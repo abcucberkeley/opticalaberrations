@@ -177,8 +177,9 @@ def main(args=None):
             args.outdir = args.inputs
             args.model_codename, args.model_predictions = [], []
             for m in args.inputs.glob("*/"):
-                args.model_codename.append(m.name.replace("-15-YuMB_lambda510", ""))
-                args.model_predictions.append(m)
+                if m.is_dir():
+                    args.model_codename.append(m.name.replace("-15-YuMB_lambda510", ""))
+                    args.model_predictions.append(m)
         
         profile_models(
             models_codenames=args.model_codename,

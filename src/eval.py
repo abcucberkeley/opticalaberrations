@@ -3919,16 +3919,19 @@ def profile_models(
     
     models = {
         'otfnet': 'Baseline',
-        'vit-P8-R8-H8': '*ViT-8/8',
-        'vit-P16-R8-H8': '*ViT-8/16',
-        'vit-P32-R8-H8': '*ViT-8/32',
-        'prototype-P8-R8-H8': '*ViT-8/8',
-        'prototype-P16-R8-H8': '*ViT-8/16',
-        'prototype-P32-R8-H8': '*ViT-8/32',
-        'opticalnet-P32321616-R1111-H8888': 'Ours-4/32-16',
-        'opticalnet-P32321616-R2222-H8888': 'Ours-8/32-16',
-        'opticalnet-P32321616-R4444-H8888': 'Ours-16/32-16',
-        'opticalnet-P32321616-R6666-H8888': 'Ours-24/32-16',
+        'vit-S32': '*ViT-S/32',
+        'vit-S16': '*ViT-S/16',
+        'vit-B32': '*ViT-B/32',
+        'vit-B16': '*ViT-B/16',
+        'vit-L32': '*ViT-L/32',
+        'vit-L16': '*ViT-L/16',
+        'opticalnet-S3216': 'Ours-S',
+        'opticalnet-B3216': 'Ours-B',
+        'opticalnet-M3216': 'Ours-M',
+        'opticalnet-L3216': 'Ours-L',
+        'opticalnet-H3216': 'Ours-H',
+        'opticalnet-G3216': 'Ours-G',
+        'opticalnet-P32321616-R2222-H8888': 'Ours-8/32-32-16-16',
         'opticalnet-P321688-R2222-H8888': 'Ours-8/32-16-8-8',
         'opticalnet-P3216168-R2222-H8888': 'Ours-8/32-16-16-8',
     }
@@ -3936,7 +3939,10 @@ def profile_models(
     outdir.mkdir(parents=True, exist_ok=True)
     dataframes = []
     for codename, modeldir in zip(models_codenames, predictions_paths):
+        logger.info(f"Processing {codename} @ {modeldir.name}")
+        
         savepath = Path(f'{outdir}/{codename}.csv')
+        
         if savepath.exists():
             logger.info(f"Loading {savepath}")
             df = pd.read_csv(savepath, header=0, index_col=0)
@@ -3949,7 +3955,7 @@ def profile_models(
                 df = profile_utils.load_tf_logs(log)
                 model_config = ujson.loads(df.keras[0])
 
-                best = df['epoch_loss'].idxmin()
+                best = df['epoch_mse'].idxmin()
                 
                 candidates = sorted(modeldir.rglob(rf"*keras/*epoch{best}.h5"))
                 if len(candidates) == 0:
@@ -3996,104 +4002,142 @@ def profile_models(
         df['training_gflops'] = training_steps_per_epoch * training_batch_size * df['step'] * df['gflops'] * 3
         # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
         df["training_gflops"] =  df["training_gflops"] * 1e-9
-        df["gflops"] =  df["gflops"]
-        df["params"] =  df["params"] * 1e-6
+        df['inference_time'] = 1e6 / df['throughput'] / 60 # convert to minutes
         
         df['cat'] = 'Baseline'
         df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
-        df.loc[df.model.str.match(r'prototype'), 'cat'] = '*ViT'
+        df.loc[df.model.str.match(r'vit.*16'), 'cat'] = '*ViT/16'
+        df.loc[df.model.str.match(r'vit.*32'), 'cat'] = '*ViT/32'
         df.model = df.model.replace(models)
         
         dataframes.append(df)
         
     df = pd.concat(dataframes).reset_index(drop=True)
     steps = [1] + list(range(49, 500, 50))
-    fig, ax = plt.subplots(figsize=(8, 8))
-    for cc, colormap, cmarker in zip(['*ViT', 'Ours', 'Baseline'], ['Oranges', 'Blues', 'Greys_r'], ['C1', 'C0', 'k']):
-        data = df[df.step.isin(steps)][df.cat == cc]
-        g = sns.lineplot(
-            data=data,
-            x="training_gflops",
-            y="epoch_mse",
-            hue="model",
-            hue_order=[m if m in data.model.unique() else None for m in models.values()],
-            # size="gflops",
-            palette=colormap,
-            dashes=False,
-            marker="o",
-            # sizes=sizes,
-            ax=ax
-        )
+    
+    for x in ['training', 'training_gflops']:
+        fig, ax = plt.subplots(figsize=(8, 8))
+        # axtwin = ax.twiny()
+        for cc, colormap, cmarker in zip(['Baseline', '*ViT/16', '*ViT/32', 'Ours'], ['Greys_r', 'Oranges', 'Greens', 'Blues'], ['k', 'C1', 'C2', 'C0']):
+            data = df[df.step.isin(steps)][df.cat == cc]
 
-        best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
-        data = df.iloc[best].to_frame().T
-        g = sns.scatterplot(
-            data=data,
-            x="training_gflops",
-            y="epoch_mse",
-            c=cmarker,
-            ax=ax
-        )
-
-        ax.text(
-            data["training_gflops"] + 0.1, data["epoch_mse"], cc,
-            horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
-        )
-
-    ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
-    ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
-    ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
-    ax.set_ylabel('MSE')
-    # ax.set_xscale('log')
-    ax.set_yscale('log')
-    ax.set_xlim(0, 20)
-    ax.set_ylim(10 ** -3, 1)
-    ax.legend(loc='lower left', ncol=1, title="", frameon=False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-
-    savepath = Path(f'{outdir}/compute')
-    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+            g = sns.lineplot(
+                data=data,
+                x=x,
+                y="epoch_mse",
+                hue="model",
+                hue_order=[m if m in data.model.unique() else None for m in models.values()],
+                # size="gflops",
+                palette=colormap,
+                dashes=False,
+                marker="o",
+                # sizes=sizes,
+                ax=ax
+            )
+    
+            best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
+            data = df.iloc[best].to_frame().T
+            g = sns.scatterplot(
+                data=data,
+                x=x,
+                y="epoch_mse",
+                c=cmarker,
+                ax=ax
+            )
+    
+            ax.text(
+                data[x] + 0.1, data["epoch_mse"], cc,
+                horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+            )
+    
+        ax.grid(True, which="major", axis='both', lw=.1, ls='--', zorder=0)
+        ax.grid(True, which="minor", axis='both', lw=.05, ls='--', zorder=0)
+        
+        if x == 'training':
+            ax.set_xlabel('Training hours 8xH100s')
+            ax.set_xlim(0, 120)
+        elif x == 'training_gflops':
+            ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
+            ax.set_xlim(0, 35)
+        
+        ax.set_ylabel('MSE ($\mu$m rms)')
+        ax.set_yscale('log')
+        ax.set_ylim(10 ** -7, 10 ** -1)
+        ax.legend(loc='upper right', ncol=1, title="", frameon=False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+    
+        savepath = Path(f'{outdir}/{x}')
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     df = pd.DataFrame()
     for d in dataframes:
         best = d['epoch_mse'].idxmin()
         df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
     
-    fig, ax = plt.subplots(figsize=(8, 8))
-    for cc, colormap in zip(['*ViT', 'Ours', 'Baseline'], ['C1', 'C0', 'k']):
-        best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
-        data = df.iloc[best].to_frame().T
-        g = sns.scatterplot(
-            data=data,
-            x="training_gflops",
+    for x in ['training', 'training_gflops', 'gflops', 'params', 'memory', 'inference_time']:
+        fig, ax = plt.subplots(figsize=(8, 8))
+        g = sns.lineplot(
+            data=df,
+            x=x,
             y="epoch_mse",
-            c=colormap,
+            hue='cat',
+            hue_order=['Baseline', '*ViT/16', '*ViT/32', 'Ours'],
+            palette=['k', 'C1', 'C2', 'C0'],
+            dashes=False,
+            marker="o",
             ax=ax
         )
+            
+        if x == 'training':
+            ax.set_xlabel('Training hours 8xH100s')
+            ax.set_xlim(0, 120)
+        elif x == 'training_gflops':
+            ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
+            ax.set_xlim(0, 35)
+        elif x == 'gflops':
+            ax.set_xlabel('GFLOPs')
+            ax.set_xlim(0, 12)
+        elif x == 'params':
+            ax.set_xlabel('Model size (non-embedding parameters)')
+            ax.set_xscale('log')
+        elif x == 'memory':
+            ax.set_xlabel(f'Memory footprint (GB) [BS={batch_size}]')
+            ax.set_xlim(0, 10)
+        else:
+            ax.set_xlabel(f'Inference time for 1M images (minutes) using RTX8000 [BS={batch_size}]')
+            ax.set_xlim(0, 200)
+            
+        for cc, cmarker in zip(['Baseline', '*ViT/16', '*ViT/32', 'Ours'], ['k', 'C1', 'C2', 'C0']):
 
-        ax.text(
-            data["training_gflops"] + 0.1, data["epoch_mse"], cc,
-            horizontalalignment='left', size='medium', color=colormap, weight='semibold'
-        )
+            best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
+            best_data = df.iloc[best].to_frame().T
+            ax.text(
+                best_data[x] + 0.1, best_data["epoch_mse"] - 5e-8, df.iloc[best]['model'],
+                horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+            )
+            
+            worst = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmax()
+            worst_data = df.iloc[worst].to_frame().T
+            ax.text(
+                worst_data[x] + 0.1, worst_data["epoch_mse"] + 5e-8, df.iloc[worst]['model'],
+                horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+            )
 
-    ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
-    ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
-    ax.set_xlabel('Training compute (Billions of GFLOPs)')
-    ax.set_ylabel('MSE')
-    ax.set_yscale('log')
-    ax.set_xlim(0, 11)
-    ax.set_ylim(10 ** -3, 1)
-    ax.legend(loc='lower left', ncol=1, title="", frameon=False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-
-    savepath = Path(f'{outdir}/best')
-    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        ax.grid(True, which="major", axis='both', lw=.1, ls='--', zorder=0)
+        ax.grid(True, which="minor", axis='both', lw=.05, ls='--', zorder=0)
+        ax.set_ylabel('MSE ($\mu$m rms)')
+        ax.set_yscale('log')
+        ax.legend(loc='upper right', ncol=1, title="", frameon=False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+    
+        savepath = Path(f'{outdir}/best_{x}')
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
     
     coi = [
         'epoch_mse',
@@ -4111,7 +4155,7 @@ def profile_models(
         f'Memory (GB) \n[BS={batch_size}]',
         f'Throughput (P/S) \nRTX8000 [BS={batch_size}]',
         'GFLOPs',
-        'Parameters (millions)',
+        'Parameters',
     ]
 
     g = sns.PairGrid(df.sort_values('epoch_mse'), x_vars=coi, y_vars=["model"], hue="model", height=8, aspect=.4, palette='muted')
