@@ -8,6 +8,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.profiler.model_analyzer import profile as tf_profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
+
+import subprocess
+subprocess.call("pip install -U tbparse", shell=True)
 from tbparse import SummaryReader
 
 try:
@@ -309,39 +312,33 @@ def data_memory_footprint(image_size, batch_size=1, dtype='float32'):
 	return gbytes
 
 def compute_time(flops, gpu="H100", unit="seconds"):
-	
+	"""
+	Google benchmark
+	https://github.com/GoogleCloudPlatform/vertex-ai-samples/blob/main/community-content/vertex_model_garden/benchmarking_reports/jax_vit_benchmarking_report.md
+	# g/14 533, GFLOPs, 1066 training GFLOPs
+	# GFLOPS = GFLOPs / sec/img/GPU
+	"""
 	if gpu == "TPUv3":
 		# https://cloud.google.com/tpu/docs/v3
-		peak_tensor_cores_BF16 = 123 * 10**12 # FLOPS (FLOP per S)
-	
-	elif gpu == "TPUv4":
-		# https://cloud.google.com/tpu/docs/v4
-		peak_tensor_cores_BF16 = 275 * 10**12 # FLOPS (FLOP per S)
-	
-	elif gpu == "TPUv5e":
-		# https://cloud.google.com/tpu/docs/v5e
-		peak_tensor_cores_BF16 = 197 * 10**12 # FLOPS (FLOP per S)
-	
-	elif gpu == "TPUv5p":
-		# https://cloud.google.com/tpu/docs/v5p
-		peak_tensor_cores_BF16 = 459 * 10**12 # FLOPS (FLOP per S)
-	
-	elif gpu == "V100":
-		# https://khairy2011.medium.com/tpu-vs-gpu-vs-cerebras-vs-graphcore-a-fair-comparison-between-ml-hardware-3f5a19d89e38
-		peak_tensor_cores_BF16 = 125 * 10**12
+		# 18 images/sec
+		# t = 0.055268 sec/img/GPU
+		average_utilization = 19 * 10 ** 12
 	
 	elif gpu == "A100":
 		# https://images.nvidia.com/aem-dam/en-zz/Solutions/data-center/nvidia-ampere-architecture-whitepaper.pdf
-		peak_tensor_cores_BF16 = 312 * 10**12
+		# 51 images/sec
+		# t = 0.019608 sec/img/GPU
+		average_utilization = 54 * 10 ** 12
 	
 	elif gpu == "H100":
 		# https://resources.nvidia.com/en-us-tensor-core
-		peak_tensor_cores_BF16 = 756 * 10**12
+		# x2 A100
+		average_utilization  = 109 * 10 ** 12
 		
 	else:
 		raise Exception("Unknown GPU device")
 	
-	time = flops / peak_tensor_cores_BF16
+	time = flops / average_utilization
 	if unit == "hours":
 		time = time / (60 * 60)
 	elif unit == "minutes":

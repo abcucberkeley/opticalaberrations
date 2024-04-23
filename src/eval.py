@@ -4042,7 +4042,7 @@ def profile_models(
 
     ax.grid(True, which="major", axis='both', lw=.5, ls='--', zorder=0)
     ax.grid(True, which="minor", axis='both', lw=.25, ls='--', zorder=0)
-    ax.set_xlabel('Training compute (Billions of GFLOPs)')
+    ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
     ax.set_ylabel('MSE')
     # ax.set_xscale('log')
     ax.set_yscale('log')
