@@ -3917,6 +3917,127 @@ def profile_models(
         'xtick.major.pad': 10
     })
     
+    def plot_training_curves(df):
+        steps = [1] + list(range(49, 500, 50))
+        for x in ['training', 'training_gflops']:
+            fig, ax = plt.subplots(figsize=(8, 8))
+            for cc, colormap, cmarker in zip(['Baseline', '*ViT/16', '*ViT/32', 'Ours'],
+                                             ['Greys_r', 'Oranges', 'Greens', 'Blues'], ['k', 'C1', 'C2', 'C0']):
+                data = df[df.step.isin(steps)][df.cat == cc]
+                
+                g = sns.lineplot(
+                    data=data,
+                    x=x,
+                    y="epoch_mse",
+                    hue="model",
+                    hue_order=[m if m in data.model.unique() else None for m in models.values()],
+                    # size="gflops",
+                    palette=colormap,
+                    dashes=False,
+                    marker="o",
+                    # sizes=sizes,
+                    ax=ax
+                )
+                
+                best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
+                data = df.iloc[best].to_frame().T
+                g = sns.scatterplot(
+                    data=data,
+                    x=x,
+                    y="epoch_mse",
+                    c=cmarker,
+                    ax=ax
+                )
+                
+                ax.text(
+                    data[x] + 0.1, data["epoch_mse"], cc,
+                    horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+                )
+            
+            ax.grid(True, which="major", axis='both', lw=.1, ls='--', zorder=0)
+            ax.grid(True, which="minor", axis='both', lw=.05, ls='--', zorder=0)
+            
+            if x == 'training':
+                ax.set_xlabel('Training hours 8xH100s')
+                ax.set_xlim(0, 120)
+            elif x == 'training_gflops':
+                ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
+                ax.set_xlim(0, 35)
+            
+            ax.set_ylabel('MSE ($\mu$m rms)')
+            ax.set_yscale('log')
+            ax.set_ylim(10 ** -7, 10 ** -1)
+            ax.legend(loc='upper right', ncol=1, title="", frameon=False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            
+            savepath = Path(f'{outdir}/{x}')
+            plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    
+    def plot_scaling_parameters(df):
+        for x in ['training', 'training_gflops', 'gflops', 'params', 'memory', 'inference_time']:
+            fig, ax = plt.subplots(figsize=(8, 8))
+            g = sns.lineplot(
+                data=df,
+                x=x,
+                y="epoch_mse",
+                hue='cat',
+                hue_order=['Baseline', '*ViT/16', '*ViT/32', 'Ours'],
+                palette=['k', 'C1', 'C2', 'C0'],
+                dashes=False,
+                marker="o",
+                ax=ax
+            )
+            
+            if x == 'training':
+                ax.set_xlabel('Training hours 8xH100s')
+                ax.set_xlim(0, 120)
+            elif x == 'training_gflops':
+                ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
+                ax.set_xlim(0, 35)
+            elif x == 'gflops':
+                ax.set_xlabel('GFLOPs')
+                ax.set_xlim(0, 12)
+            elif x == 'params':
+                ax.set_xlabel('Model size (non-embedding parameters)')
+                ax.set_xscale('log')
+            elif x == 'memory':
+                ax.set_xlabel(f'Memory footprint (GB) [BS={batch_size}]')
+                ax.set_xlim(0, 10)
+            else:
+                ax.set_xlabel(f'Inference time for 1M images (minutes) using RTX8000 [BS={batch_size}]')
+                ax.set_xlim(0, 200)
+            
+            for cc, cmarker in zip(['Baseline', '*ViT/16', '*ViT/32', 'Ours'], ['k', 'C1', 'C2', 'C0']):
+                best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
+                best_data = df.iloc[best].to_frame().T
+                ax.text(
+                    best_data[x] + 0.1, best_data["epoch_mse"] - 5e-8, df.iloc[best]['model'],
+                    horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+                )
+                
+                worst = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmax()
+                worst_data = df.iloc[worst].to_frame().T
+                ax.text(
+                    worst_data[x] + 0.1, worst_data["epoch_mse"] + 5e-8, df.iloc[worst]['model'],
+                    horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+                )
+            
+            ax.grid(True, which="major", axis='both', lw=.1, ls='--', zorder=0)
+            ax.grid(True, which="minor", axis='both', lw=.05, ls='--', zorder=0)
+            ax.set_ylabel('MSE ($\mu$m rms)')
+            ax.set_yscale('log')
+            ax.legend(loc='upper right', ncol=1, title="", frameon=False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            
+            savepath = Path(f'{outdir}/best_{x}')
+            plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    
     models = {
         'otfnet': 'Baseline',
         'vit-S32': '*ViT-S/32',
@@ -4012,166 +4133,89 @@ def profile_models(
         
         dataframes.append(df)
         
-    df = pd.concat(dataframes).reset_index(drop=True)
-    steps = [1] + list(range(49, 500, 50))
+    # plot_training_curves(df=pd.concat(dataframes).reset_index(drop=True))
     
-    for x in ['training', 'training_gflops']:
-        fig, ax = plt.subplots(figsize=(8, 8))
-        # axtwin = ax.twiny()
-        for cc, colormap, cmarker in zip(['Baseline', '*ViT/16', '*ViT/32', 'Ours'], ['Greys_r', 'Oranges', 'Greens', 'Blues'], ['k', 'C1', 'C2', 'C0']):
-            data = df[df.step.isin(steps)][df.cat == cc]
-
-            g = sns.lineplot(
-                data=data,
-                x=x,
-                y="epoch_mse",
-                hue="model",
-                hue_order=[m if m in data.model.unique() else None for m in models.values()],
-                # size="gflops",
-                palette=colormap,
-                dashes=False,
-                marker="o",
-                # sizes=sizes,
-                ax=ax
-            )
-    
-            best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
-            data = df.iloc[best].to_frame().T
-            g = sns.scatterplot(
-                data=data,
-                x=x,
-                y="epoch_mse",
-                c=cmarker,
-                ax=ax
-            )
-    
-            ax.text(
-                data[x] + 0.1, data["epoch_mse"], cc,
-                horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
-            )
-    
-        ax.grid(True, which="major", axis='both', lw=.1, ls='--', zorder=0)
-        ax.grid(True, which="minor", axis='both', lw=.05, ls='--', zorder=0)
-        
-        if x == 'training':
-            ax.set_xlabel('Training hours 8xH100s')
-            ax.set_xlim(0, 120)
-        elif x == 'training_gflops':
-            ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
-            ax.set_xlim(0, 35)
-        
-        ax.set_ylabel('MSE ($\mu$m rms)')
-        ax.set_yscale('log')
-        ax.set_ylim(10 ** -7, 10 ** -1)
-        ax.legend(loc='upper right', ncol=1, title="", frameon=False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-    
-        savepath = Path(f'{outdir}/{x}')
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
     df = pd.DataFrame()
     for d in dataframes:
         best = d['epoch_mse'].idxmin()
         df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
     
-    for x in ['training', 'training_gflops', 'gflops', 'params', 'memory', 'inference_time']:
-        fig, ax = plt.subplots(figsize=(8, 8))
-        g = sns.lineplot(
-            data=df,
-            x=x,
-            y="epoch_mse",
-            hue='cat',
-            hue_order=['Baseline', '*ViT/16', '*ViT/32', 'Ours'],
-            palette=['k', 'C1', 'C2', 'C0'],
-            dashes=False,
-            marker="o",
-            ax=ax
-        )
-            
-        if x == 'training':
-            ax.set_xlabel('Training hours 8xH100s')
-            ax.set_xlim(0, 120)
-        elif x == 'training_gflops':
-            ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
-            ax.set_xlim(0, 35)
-        elif x == 'gflops':
-            ax.set_xlabel('GFLOPs')
-            ax.set_xlim(0, 12)
-        elif x == 'params':
-            ax.set_xlabel('Model size (non-embedding parameters)')
-            ax.set_xscale('log')
-        elif x == 'memory':
-            ax.set_xlabel(f'Memory footprint (GB) [BS={batch_size}]')
-            ax.set_xlim(0, 10)
-        else:
-            ax.set_xlabel(f'Inference time for 1M images (minutes) using RTX8000 [BS={batch_size}]')
-            ax.set_xlim(0, 200)
-            
-        for cc, cmarker in zip(['Baseline', '*ViT/16', '*ViT/32', 'Ours'], ['k', 'C1', 'C2', 'C0']):
+    # plot_scaling_parameters(df)
 
-            best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
-            best_data = df.iloc[best].to_frame().T
-            ax.text(
-                best_data[x] + 0.1, best_data["epoch_mse"] - 5e-8, df.iloc[best]['model'],
-                horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
-            )
-            
-            worst = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmax()
-            worst_data = df.iloc[worst].to_frame().T
-            ax.text(
-                worst_data[x] + 0.1, worst_data["epoch_mse"] + 5e-8, df.iloc[worst]['model'],
-                horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
-            )
-
-        ax.grid(True, which="major", axis='both', lw=.1, ls='--', zorder=0)
-        ax.grid(True, which="minor", axis='both', lw=.05, ls='--', zorder=0)
-        ax.set_ylabel('MSE ($\mu$m rms)')
-        ax.set_yscale('log')
-        ax.legend(loc='upper right', ncol=1, title="", frameon=False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-    
-        savepath = Path(f'{outdir}/best_{x}')
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-    
     coi = [
         'epoch_mse',
         'training',
 	    'training_gflops',
         'memory',
-        'throughput',
+        'inference_time',
         'gflops',
         'params',
     ]
     titles = [
-        'MSE',
+        'MSE\n($\mu$m rms)',
         f'Training Time (H) \n8xH100s [BS=4096]',
-	    'Training GFLOPs (billions)',
+	    'Training EFLOPs',
         f'Memory (GB) \n[BS={batch_size}]',
-        f'Throughput (P/S) \nRTX8000 [BS={batch_size}]',
+        f'Inference time\n1M images (minutes)',
         'GFLOPs',
-        'Parameters',
+        'Non-embedding\nparameters',
     ]
-
-    g = sns.PairGrid(df.sort_values('epoch_mse'), x_vars=coi, y_vars=["model"], hue="model", height=8, aspect=.4, palette='muted')
-    g.map(sns.stripplot, size=10, orient="h", jitter=False, palette="tab10", linewidth=1, edgecolor="w")
-    g.set(xlabel="", ylabel="")
-
-    for ax, cc, title in zip(g.axes.flat, coi, titles):
-
-        if cc == 'epoch_mse':
-            ax.set_xscale('log')
-
-        ax.set(title=title)
-        ax.xaxis.grid(True)
-        ax.yaxis.grid(True)
     
-    plt.tight_layout()
+    df = df.sort_values('epoch_mse')
+    
+    fig, axes = plt.subplots(len(coi), 1, figsize=(10, 15), sharex=True)
+    
+    for i, ax in enumerate(axes):
+        ax = sns.barplot(
+            data=df,
+            x='model',
+            y=coi[i],
+            hue='cat',
+            palette="muted",
+            ax=ax,
+            legend=False
+            # log_scale=True if coi[i] == 'epoch_mse' or coi[i] == 'params' else False,
+        )
+        
+        ax.set_ylabel(titles[i])
+        ax.set_xlabel('')
+        for c in range(len(ax.containers)):
+            if coi[i] == 'epoch_mse' or coi[i] == 'params':
+                fmt = '%.2g'
+            else:
+                fmt = '%.1f'
+            
+            ax.bar_label(ax.containers[c], fontsize=8, fmt=fmt)
+
+        ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
+        ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
+        
+        if coi[i] == 'epoch_mse':
+            ax.set_yscale('log')
+            ax.set_ylim(1e-7, 5e-6)
+            ax.axhline(1e-7, color="k", clip_on=False)
+        elif coi[i] == 'training':
+            ax.set_ylim(0, 120)
+            ax.axhline(0, color="k", clip_on=False)
+        elif coi[i] == 'training_gflops':
+            ax.set_ylim(0, 40)
+            ax.axhline(0, color="k", clip_on=False)
+        elif coi[i] == 'gflops':
+            ax.set_ylim(0, 13)
+            ax.axhline(0, color="k", clip_on=False)
+        elif coi[i] == 'params':
+            ax.set_yscale('log')
+            ax.set_ylim(1e7, 2e9)
+            ax.axhline(1e7, color="k", clip_on=False)
+        elif coi[i] == 'memory':
+            ax.set_ylim(0, 10)
+            ax.axhline(0, color="k", clip_on=False)
+        else:
+            ax.set_ylim(0, 200)
+            ax.axhline(0, color="k", clip_on=False)
+    
+    plt.tight_layout(h_pad=1)
+    sns.despine(bottom=True)
     
     savepath = Path(f'{outdir}/profiles')
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
