@@ -62,7 +62,7 @@ def count_transformer_blocks(model: tf.keras.Model):
 		layer_type = l.__class__.__name__
 		
 		if layer_type.lower() == 'transformer':
-			patch_size = int(np.sqrt(l.output_shape[-1]))
+			patch_size = int(np.sqrt((model.input_shape[-2]**2/l.input_shape[2])))
 			
 			if counter.get(f"p{patch_size}") is None:
 				counter[f"p{patch_size}"] = 1
@@ -116,6 +116,17 @@ def measure_memory_usage(model: tf.keras.Model, batch_size: int = 1):
 
 
 def measure_gflops(model: tf.keras.Model):
+	# input_shape = (1, *model.input_shape[1:])
+	# inputs = [tf.TensorSpec(input_shape, tf.float32)]
+	# real_model = tf.function(model).get_concrete_function(inputs)
+	# frozen_func, _ = convert_variables_to_constants_v2_as_graph(real_model)
+	# run_meta = tf.compat.v1.RunMetadata()
+	# opts = tf.compat.v1.profiler.ProfileOptionBuilder.float_operation()
+	# stats = tf.compat.v1.profiler.profile(
+	# 	graph=frozen_func.graph, run_meta=run_meta, cmd="scope", options=opts
+	# )
+	# flops = stats.total_float_ops
+	
 	graph = tf.function(
 		model.call,
 		input_signature=[tf.TensorSpec(shape=(1, *model.input_shape[1:]))]
