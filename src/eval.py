@@ -3921,8 +3921,8 @@ def profile_models(
         steps = [1] + list(range(49, 500, 50))
         for x in ['training', 'training_gflops']:
             fig, ax = plt.subplots(figsize=(8, 8))
-            for cc, colormap, cmarker in zip(['Baseline', '*ViT/16', '*ViT/32', 'Ours'],
-                                             ['Greys_r', 'Oranges', 'Greens', 'Blues'], ['k', 'C1', 'C2', 'C0']):
+            for cc, colormap, cmarker in zip(['ViT/16', 'ViT/32', 'Ours'],
+                                             ['Oranges', 'Greens', 'Blues'], ['C1', 'C2', 'C0']):
                 data = df[df.step.isin(steps)][df.cat == cc]
                 
                 g = sns.lineplot(
@@ -3977,19 +3977,35 @@ def profile_models(
             plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
     
     def plot_scaling_parameters(df):
-        for x in ['training', 'training_gflops', 'gflops', 'params', 'memory', 'inference_time']:
+        for x in [
+            'training', 'training_gflops', 'gflops', 'params', 'memory',
+            'inference_time', 'num_tokens', 'transformers'
+        ]:
             fig, ax = plt.subplots(figsize=(8, 8))
-            g = sns.lineplot(
-                data=df,
-                x=x,
-                y="epoch_mse",
-                hue='cat',
-                hue_order=['Baseline', '*ViT/16', '*ViT/32', 'Ours'],
-                palette=['k', 'C1', 'C2', 'C0'],
-                dashes=False,
-                marker="o",
-                ax=ax
-            )
+            
+            if x == 'num_tokens':
+                g = sns.scatterplot(
+                    data=df,
+                    x=x,
+                    y="epoch_mse",
+                    style='cat',
+                    hue='cat',
+                    hue_order=['ViT/16', 'ViT/32', 'Ours'],
+                    palette=['C1', 'C2', 'C0'],
+                    ax=ax
+                )
+            else:
+                g = sns.lineplot(
+                    data=df,
+                    x=x,
+                    y="epoch_mse",
+                    hue='cat',
+                    hue_order=['ViT/16', 'ViT/32', 'Ours'],
+                    palette=['C1', 'C2', 'C0'],
+                    dashes=False,
+                    marker="o",
+                    ax=ax
+                )
             
             if x == 'training':
                 ax.set_xlabel('Training hours 8xH100s')
@@ -4006,29 +4022,44 @@ def profile_models(
             elif x == 'memory':
                 ax.set_xlabel(f'Memory footprint (GB) [BS={batch_size}]')
                 ax.set_xlim(0, 10)
+            elif x == 'num_tokens':
+                ax.set_xlabel(f'Number of patches')
+                ax.set_xlim(0, 2000)
+            elif x == 'transformers':
+                ax.set_xlabel(f'Number of transformers')
+                ax.set_xlim(0, 50)
             else:
                 ax.set_xlabel(f'Inference time for 1M images (minutes) using RTX8000 [BS={batch_size}]')
                 ax.set_xlim(0, 200)
             
-            for cc, cmarker in zip(['Baseline', '*ViT/16', '*ViT/32', 'Ours'], ['k', 'C1', 'C2', 'C0']):
-                best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
-                best_data = df.iloc[best].to_frame().T
-                ax.text(
-                    best_data[x] + 0.1, best_data["epoch_mse"] - 5e-8, df.iloc[best]['model'],
-                    horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
-                )
-                
-                worst = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmax()
-                worst_data = df.iloc[worst].to_frame().T
-                ax.text(
-                    worst_data[x] + 0.1, worst_data["epoch_mse"] + 5e-8, df.iloc[worst]['model'],
-                    horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
-                )
+            for cc, cmarker in zip(['ViT/16', 'ViT/32', 'Ours'], ['C1', 'C2', 'C0']):
+                if x == 'num_tokens':
+                    for index, row in df[df.cat == cc].iterrows():
+                        ax.text(
+                            row[x], row["epoch_mse"] + 5e-8, row['model'],
+                            horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+                        )
+                    
+                else:
+                    best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
+                    best_data = df.iloc[best].to_frame().T
+                    ax.text(
+                        best_data[x], best_data["epoch_mse"] - 1e-9, df.iloc[best]['model'],
+                        horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+                    )
+                    
+                    worst = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmax()
+                    worst_data = df.iloc[worst].to_frame().T
+                    ax.text(
+                        worst_data[x], worst_data["epoch_mse"] + 1e-9, df.iloc[worst]['model'],
+                        horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+                    )
             
             ax.grid(True, which="major", axis='both', lw=.1, ls='--', zorder=0)
             ax.grid(True, which="minor", axis='both', lw=.05, ls='--', zorder=0)
             ax.set_ylabel('MSE ($\mu$m rms)')
             ax.set_yscale('log')
+            ax.set_ylim(1e-7, 1e-5)
             ax.legend(loc='upper right', ncol=1, title="", frameon=False)
             ax.spines['right'].set_visible(False)
             ax.spines['top'].set_visible(False)
@@ -4040,28 +4071,29 @@ def profile_models(
     
     models = {
         'otfnet': 'Baseline',
-        'vit-S32': '*ViT-S/32',
-        'vit-S16': '*ViT-S/16',
-        'vit-B32': '*ViT-B/32',
-        'vit-B16': '*ViT-B/16',
-        'vit-L32': '*ViT-L/32',
-        'vit-L16': '*ViT-L/16',
+        'vit-S32': 'ViT-S/32',
+        'vit-S16': 'ViT-S/16',
+        'vit-B32': 'ViT-B/32',
+        'vit-B16': 'ViT-B/16',
+        'vit-L32': 'ViT-L/32',
+        'vit-L16': 'ViT-L/16',
         'opticalnet-S3216': 'Ours-S',
         'opticalnet-B3216': 'Ours-B',
         'opticalnet-M3216': 'Ours-M',
         'opticalnet-L3216': 'Ours-L',
         'opticalnet-H3216': 'Ours-H',
         'opticalnet-G3216': 'Ours-G',
-        'opticalnet-P32321616-R2222-H8888': 'Ours-8/32-32-16-16',
-        'opticalnet-P321688-R2222-H8888': 'Ours-8/32-16-8-8',
-        'opticalnet-P3216168-R2222-H8888': 'Ours-8/32-16-16-8',
+        'opticalnet-P32323216-R2222-H8888': 'Ours-B/32-32-32-16',
+        'opticalnet-P32321616-R2222-H8888': 'Ours-B/32-32-16-16',
+        'opticalnet-P32161616-R2222-H8888': 'Ours-B/32-16-16-16',
+        'opticalnet-P3216168-R2222-H8888': 'Ours-B/32-16-16-8',
+        'opticalnet-P321688-R2222-H8888': 'Ours-B/32-16-8-8',
     }
     
     outdir.mkdir(parents=True, exist_ok=True)
     dataframes = []
     for codename, modeldir in zip(models_codenames, predictions_paths):
-        logger.info(f"Processing {codename} @ {modeldir.name}")
-        
+        logger.info(f"Processing {codename}")
         savepath = Path(f'{outdir}/{codename}.csv')
         
         if savepath.exists():
@@ -4100,8 +4132,19 @@ def profile_models(
                 df["wall_clock"] = pd.to_datetime(df.wall_time, unit="s")
                 
                 transformers_blocks = profile_utils.count_transformer_blocks(model=model)
-                for k, v in transformers_blocks.items(): df[f'transformers_{k}'] = v
                 
+                num_tokens = 0
+                for k, v in transformers_blocks.items():
+                    ps = int(k.strip('p'))
+                    df[f'transformers_{k}'] = v
+                    tokens = v * model.input_shape[1] * np.product([
+                        s // p for s, p in zip(model.input_shape[2:], (ps, ps))
+                    ])
+                    logger.info(f"{tokens=}")
+                    df[f'transformers_{k}_tokens'] = tokens
+                    num_tokens += tokens
+                
+                df['num_tokens'] = num_tokens
                 df["training"] = (df.wall_clock - df.wall_clock[0]) / np.timedelta64(1, "h")
                 df['transformers'] = sum(transformers_blocks.values())
                 df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
@@ -4127,20 +4170,20 @@ def profile_models(
         
         df['cat'] = 'Baseline'
         df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
-        df.loc[df.model.str.match(r'vit.*16'), 'cat'] = '*ViT/16'
-        df.loc[df.model.str.match(r'vit.*32'), 'cat'] = '*ViT/32'
+        df.loc[df.model.str.match(r'vit.*16'), 'cat'] = 'ViT/16'
+        df.loc[df.model.str.match(r'vit.*32'), 'cat'] = 'ViT/32'
         df.model = df.model.replace(models)
         
         dataframes.append(df)
         
-    # plot_training_curves(df=pd.concat(dataframes).reset_index(drop=True))
+    plot_training_curves(df=pd.concat(dataframes).reset_index(drop=True))
     
     df = pd.DataFrame()
     for d in dataframes:
         best = d['epoch_mse'].idxmin()
         df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
     
-    # plot_scaling_parameters(df)
+    plot_scaling_parameters(df)
 
     coi = [
         'epoch_mse',
@@ -4150,6 +4193,7 @@ def profile_models(
         'inference_time',
         'gflops',
         'params',
+        'num_tokens',
     ]
     titles = [
         'MSE\n($\mu$m rms)',
@@ -4158,7 +4202,8 @@ def profile_models(
         f'Memory (GB) \n[BS={batch_size}]',
         f'Inference time\n1M images (minutes)',
         'GFLOPs',
-        'Non-embedding\nparameters',
+        'Parameters',
+        'Patches',
     ]
     
     df = df.sort_values('epoch_mse')
@@ -4174,7 +4219,6 @@ def profile_models(
             palette="muted",
             ax=ax,
             legend=False
-            # log_scale=True if coi[i] == 'epoch_mse' or coi[i] == 'params' else False,
         )
         
         ax.set_ylabel(titles[i])
@@ -4182,6 +4226,8 @@ def profile_models(
         for c in range(len(ax.containers)):
             if coi[i] == 'epoch_mse' or coi[i] == 'params':
                 fmt = '%.2g'
+            elif coi[i] == 'num_tokens':
+                fmt = '%d'
             else:
                 fmt = '%.1f'
             
@@ -4192,26 +4238,35 @@ def profile_models(
         
         if coi[i] == 'epoch_mse':
             ax.set_yscale('log')
-            ax.set_ylim(1e-7, 5e-6)
+            ax.set_ylim(1e-7, 6e-6)
             ax.axhline(1e-7, color="k", clip_on=False)
         elif coi[i] == 'training':
             ax.set_ylim(0, 120)
+            # ax.set_ylim(0, 25)
             ax.axhline(0, color="k", clip_on=False)
-        elif coi[i] == 'training_gflops':
+        elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
             ax.set_ylim(0, 40)
+            # ax.set_ylim(0, 10)
             ax.axhline(0, color="k", clip_on=False)
-        elif coi[i] == 'gflops':
-            ax.set_ylim(0, 13)
+        elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
+            ax.set_ylim(0, 15)
+            # ax.set_ylim(0, 5)
             ax.axhline(0, color="k", clip_on=False)
         elif coi[i] == 'params':
             ax.set_yscale('log')
             ax.set_ylim(1e7, 2e9)
+            # ax.set_ylim(1e7, 1e8)
             ax.axhline(1e7, color="k", clip_on=False)
         elif coi[i] == 'memory':
             ax.set_ylim(0, 10)
+            # ax.set_ylim(0, 3)
+            ax.axhline(0, color="k", clip_on=False)
+        elif coi[i] == 'num_tokens':
+            ax.set_ylim(0, 2000)
             ax.axhline(0, color="k", clip_on=False)
         else:
             ax.set_ylim(0, 200)
+            # ax.set_ylim(0, 30)
             ax.axhline(0, color="k", clip_on=False)
     
     plt.tight_layout(h_pad=1)
