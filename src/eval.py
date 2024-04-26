@@ -3979,7 +3979,7 @@ def profile_models(
     def plot_scaling_parameters(df):
         for x in [
             'training', 'training_gflops', 'gflops', 'params', 'memory',
-            'inference_time', 'num_tokens', 'transformers'
+            'inference_time', 'num_tokens', 'transformers', 'throughput', 'latency'
         ]:
             fig, ax = plt.subplots(figsize=(8, 8))
             
@@ -4028,6 +4028,12 @@ def profile_models(
             elif x == 'transformers':
                 ax.set_xlabel(f'Number of transformers')
                 ax.set_xlim(0, 50)
+            elif x == 'latency':
+                ax.set_xlabel(f'Latency\n(ms/image)')
+                ax.set_xlim(0, 200)
+            elif x == 'throughput':
+                ax.set_xlabel(f'Throughput\n(images/s) [BS={batch_size}]')
+                ax.set_xlim(0, 200)
             else:
                 ax.set_xlabel(f'Inference time for 1M images (minutes) using RTX8000 [BS={batch_size}]')
                 ax.set_xlim(0, 200)
@@ -4150,6 +4156,7 @@ def profile_models(
                 df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
                 df['gflops'] = profile_utils.measure_gflops(model)
                 df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
+                df['latency'] = profile_utils.measure_latency(model, number_of_samples=1024)
                 df['params'] = model.count_params()
                 df['model'] = codename
                 
@@ -4167,6 +4174,7 @@ def profile_models(
         # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
         df["training_gflops"] =  df["training_gflops"] * 1e-9
         df['inference_time'] = 1e6 / df['throughput'] / 60 # convert to minutes
+        df['latency'] *= 1000 # convert to milliseconds
         
         df['cat'] = 'Baseline'
         df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
@@ -4191,16 +4199,20 @@ def profile_models(
 	    'training_gflops',
         'memory',
         'inference_time',
+        'throughput',
+        'latency',
         'gflops',
         'params',
         'num_tokens',
     ]
     titles = [
         'MSE\n($\mu$m rms)',
-        f'Training Time (H) \n8xH100s [BS=4096]',
+        f'Training Time (H)\n[BS=4096]\n8xH100s',
 	    'Training EFLOPs',
         f'Memory (GB) \n[BS={batch_size}]',
-        f'Inference time\n1M images (minutes)',
+        f'Inference time\n1M images\n(minutes)',
+        f'Throughput\n(images/s)\n[BS=4096]',
+        f'Latency\n(ms/image)',
         'GFLOPs',
         'Parameters',
         'Patches',
@@ -4217,6 +4229,8 @@ def profile_models(
             y=coi[i],
             hue='cat',
             palette="muted",
+            # hue='model',
+            # palette="rocket_r",
             ax=ax,
             legend=False
         )
@@ -4264,6 +4278,12 @@ def profile_models(
         elif coi[i] == 'num_tokens':
             ax.set_ylim(0, 2000)
             ax.axhline(0, color="k", clip_on=False)
+        elif coi[i] == 'latency':
+	        ax.set_xlim(0, 15)
+	        ax.axhline(0, color="k", clip_on=False)
+        elif coi[i] == 'throughput':
+	        ax.set_xlim(0, 1500)
+	        ax.axhline(0, color="k", clip_on=False)
         else:
             ax.set_ylim(0, 200)
             # ax.set_ylim(0, 30)

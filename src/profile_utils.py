@@ -55,6 +55,27 @@ def measure_throughput(model: tf.keras.Model, number_of_samples=10*1024, batch_s
 	logger.info(f"TF backend: {predictions_per_second:.0f} prediction/sec.")
 	return predictions_per_second
 
+
+def measure_latency(model: tf.keras.Model, number_of_samples=1024):
+	dataset = tf.data.Dataset.from_tensor_slices(
+		np.random.random((number_of_samples, *model.input_shape[1:])).astype('float32')
+	)
+	dataset = dataset.cache()
+	dataset = dataset.batch(1)
+	dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
+	options = tf.data.Options()
+	options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+	dataset = dataset.with_options(options)
+	
+	start_time = time.time()
+	model.predict(dataset)
+	timeit = time.time() - start_time
+	seconds_per_prediction = timeit/number_of_samples
+	
+	logger.info(f"Runtime for {number_of_samples} samples")
+	logger.info(f"TF backend: {seconds_per_prediction:.3f} sec/prediction.")
+	return seconds_per_prediction
+
 def count_transformer_blocks(model: tf.keras.Model):
 	counter = {}
 
