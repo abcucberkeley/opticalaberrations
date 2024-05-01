@@ -43,7 +43,7 @@
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/multipoint_dataset.py" />
-    <option name="PARAMETERS" value="--outdir ../dataset/aang --emb --npoints 10 --alpha_val abs --phi_val angle --dist mixed --mode_dist pyramid --iters 10 --signed --rotate --noise --normalize --modes 15 --input_shape 64 --min_photons 10000 --max_photons 50000 --min_amplitude 0.1 --max_amplitude 0.2 --min_lls_defocus_offset -0 --max_lls_defocus_offset 0 --filename 1 --x_voxel_size .097 --y_voxel_size .097 --z_voxel_size .200 --na_detection 1.0 --fill_radius 0.66 --lam_detection .510 --cpu_workers 1 --embedding_option spatial_planes --override --plot" />
+    <option name="PARAMETERS" value="--outdir ../dataset/example_dataset --emb --npoints 10 --alpha_val abs --phi_val angle --dist powerlaw --mode_dist pyramid --iters 10 --signed --rotate --noise --normalize --modes 15 --input_shape 64 --min_photons 10000 --max_photons 50000 --min_amplitude 0.1 --max_amplitude 0.2 --min_lls_defocus_offset -0 --max_lls_defocus_offset 0 --filename 1 --x_voxel_size .097 --y_voxel_size .097 --z_voxel_size .200 --na_detection 1.0 --fill_radius 0.66 --lam_detection .510 --cpu_workers 1 --embedding_option spatial_planes --override --plot" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

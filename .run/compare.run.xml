@@ -38,12 +38,24 @@
             <option name="hostPath" value="$PROJECT_DIR$" />
             <option name="readOnly" value="false" />
           </DockerVolumeBindingImpl>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/betziglab/thayer/opticalaberrations" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="/run/user/1000/kio-fuse-psHtOM/smb/alshaabit%40hhmi.org@prfs.hhmi.org/betziglab/thayer/opticalaberrations" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/clusterfs" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="/clusterfs" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
         </list>
       </option>
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/benchmark.py" />
-    <option name="PARAMETERS" value="compare ../ --model_codename PatchID --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-nostem/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename RotationalSymmetryP1 --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-rotational-symmetry-p1/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename RotationalSymmetryP4 --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-rotational-symmetry-p4/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename RotationalSymmetryP16 --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-rotational-symmetry-p16/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename PowerDecomposition --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-power-decomposition-4p16/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename FourierDecomposition --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-fourier-decomposition-p16/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename ZernikePolynomials4 --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-zernike-polynomials-4/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename ZernikePolynomials10 --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-YuMB_lambda510-zernike-polynomials-10/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename SpatialPlanes10 --model_predictions $USER_HOME$/clusterfs/nvme/thayer/opticalaberrations/pretrained_models/opticalnet-15-spatial_planes10/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv" />
+    <option name="PARAMETERS" value="compare ../ --model_codename 5e5 --model_predictions /clusterfs/nvme/thayer/opticalaberrations/evaluations/97nm_dataset_extended/opticalnet-15-YuMB_lambda510-P32321616-R2222-H8888-5e5/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename 1e6 --model_predictions /clusterfs/nvme/thayer/opticalaberrations/evaluations/97nm_dataset_extended/opticalnet-15-YuMB_lambda510-P32321616-R2222-H8888-1e6/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename 2e6 --model_predictions /clusterfs/nvme/thayer/opticalaberrations/evaluations/97nm_dataset_extended/opticalnet-15-YuMB_lambda510-P32321616-R2222-H8888-2e6/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv --model_codename 4e6 --model_predictions /clusterfs/nvme/thayer/opticalaberrations/evaluations/97nm_dataset_extended/opticalnet-15-YuMB_lambda510-P32321616-R2222-H8888-4e6/signed/snrheatmaps/mode-YuMB/beads-1/na_1.0_predictions.csv" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

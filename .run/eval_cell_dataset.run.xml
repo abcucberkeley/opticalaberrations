@@ -43,7 +43,7 @@
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="eval_cell_dataset $PROJECT_DIR$/data/junk4 --skip_eval_plots --precomputed" />
+    <option name="PARAMETERS" value="eval_cell_dataset /clusterfs/nvme2/Data/TestsForThayer/20240328_ap2/0p5NA_pos0p1A_5ab/" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

@@ -43,8 +43,7 @@
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/config.py" />
-    <option name="PARAMETERS"
-            value="../pretrained_models/prototype-15-YuMB_lambda510-P3216168-R2222.h5 --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat --n_modes 15 --wavelength .510 --x_voxel_size .125 --y_voxel_size .125 --z_voxel_size .2 --embedding_option spatial_planes metadata"/>
+    <option name="PARAMETERS" value="$PROJECT_DIR$/models/opticalnet-15-YuMB_lambda510-S3216-5e5.h5 --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat --n_modes 15 --wavelength .510 --x_voxel_size .125 --y_voxel_size .125 --z_voxel_size .2 --embedding_option spatial_planes metadata" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
