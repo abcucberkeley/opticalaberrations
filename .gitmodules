@@ -4,5 +4,5 @@
 	branch = master
 [submodule "src/VideoSwin"]
 	path = src/VideoSwin
-	url = https://github.com/innat/VideoSwin
+	url = https://github.com/thayerAlshaabi/VideoSwin
 	branch = tfkeras
