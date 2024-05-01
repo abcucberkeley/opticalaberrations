@@ -2,3 +2,7 @@
 	path = src/pyotf
 	url = https://github.com/dmilkie/pyotf
 	branch = master
+[submodule "src/VideoSwin"]
+	path = src/VideoSwin
+	url = https://github.com/innat/VideoSwin
+	branch = tfkeras

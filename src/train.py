@@ -36,6 +36,7 @@ import utils
 import data_utils
 import opticalnet
 import vit
+import swin
 import baseline
 import otfnet
 import prototype
@@ -351,7 +352,23 @@ def train_model(
                 positional_encoding_scheme=positional_encoding_scheme,
                 fixed_dropout_depth=fixed_dropout_depth,
             )
-
+        elif network == 'swin':
+            model = swin.Swin(
+                name='Swin',
+                hidden_size=hidden_size,
+                roi=roi,
+                patches=patches,
+                heads=heads,
+                repeats=repeats,
+                modes=pmodes,
+                depth_scalar=depth_scalar,
+                width_scalar=width_scalar,
+                dropout_rate=dropout,
+                activation=activation,
+                mul=mul,
+                no_phase=no_phase,
+            )
+            
         elif network == 'opticalnet':
             model = opticalnet.OpticalTransformer(
                 name='OpticalNet',

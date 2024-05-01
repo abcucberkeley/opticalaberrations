@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="profile_models" type="PythonConfigurationType" factoryName="Python" folderName="benchmark">
+  <configuration default="false" name="train_swin" type="PythonConfigurationType" factoryName="Python" folderName="utils">
     <module name="opticalaberrations" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
@@ -38,18 +38,12 @@
             <option name="hostPath" value="$PROJECT_DIR$" />
             <option name="readOnly" value="false" />
           </DockerVolumeBindingImpl>
-          <DockerVolumeBindingImpl>
-            <option name="containerPath" value="/betziglab/thayer/opticalaberrations" />
-            <option name="editable" value="true" />
-            <option name="hostPath" value="/run/user/1000/kio-fuse-psHtOM/smb/alshaabit%40hhmi.org@prfs.hhmi.org/betziglab/thayer/opticalaberrations" />
-            <option name="readOnly" value="false" />
-          </DockerVolumeBindingImpl>
         </list>
       </option>
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/benchmark.py" />
-    <option name="PARAMETERS" value="profile_models /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/scaling/scaling_arch" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/train.py" />
+    <option name="PARAMETERS" value="--batch_size 1 --modes 15 --network swin --epochs 25 --warmup 5 --patches 1-8-8 --repeats 2-2-18-2 --heads 6-12-24-48 --hidden_size 192 --outdir ../models/swin --dataset ../dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

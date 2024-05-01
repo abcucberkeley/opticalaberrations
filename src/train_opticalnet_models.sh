@@ -16,7 +16,7 @@ H100="--partition gpu_h100 --gpus 8 --cpus 16"
 A100="--partition gpu_a100 --gpus 4 --cpus 8"
 BS=4096
 
-SUBSET='variable_object_size_fourier_filter_125nm_dataset'
+SUBSET='10m_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"
 else
@@ -53,34 +53,64 @@ do
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '3-3' --heads '6-6'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '3-3' --heads '6-6' --samplelimit 500000" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-S3216
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-S3216-5e5
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '4-4' --heads '8-8'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '3-3' --heads '6-6' --samplelimit 1000000" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-B3216
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-S3216-1e6
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '6-6' --heads '12-12'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '3-3' --heads '6-6' --samplelimit 2000000" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-M3216
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-S3216-2e6
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '12-12' --heads '16-16'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '3-3' --heads '6-6' --samplelimit 4000000" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-L3216
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-S3216-4e6
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '16-16' --heads '16-16'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '3-3' --heads '6-6' --samplelimit 6000000" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-H3216
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-S3216-6e6
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '24-24' --heads '24-24'" \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '3-3' --heads '6-6' --samplelimit 8000000" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-G3216
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-S3216-8e6
+
+#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+#  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '3-3' --heads '6-6'" \
+#  --taskname $NETWORK \
+#  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-S3216
+#
+#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+#  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '4-4' --heads '8-8'" \
+#  --taskname $NETWORK \
+#  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-B3216
+#
+#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+#  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '6-6' --heads '12-12'" \
+#  --taskname $NETWORK \
+#  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-M3216
+#
+#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+#  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '12-12' --heads '16-16'" \
+#  --taskname $NETWORK \
+#  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-L3216
+#
+#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+#  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '16-16' --heads '16-16'" \
+#  --taskname $NETWORK \
+#  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-H3216
+#
+#  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+#  --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '24-24' --heads '24-24'" \
+#  --taskname $NETWORK \
+#  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-G3216
 done
 
 

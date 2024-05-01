@@ -176,6 +176,13 @@ def load(model_path: Union[Path, str], mosaic=False, model_arch=None) -> tf.kera
         "Transformer": vit.Transformer,
     }
     
+    swin_custom_objects = {
+        "LAMB": LAMB,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+    }
+    
     if model_arch is None:
         
         try:
@@ -191,6 +198,9 @@ def load(model_path: Union[Path, str], mosaic=False, model_arch=None) -> tf.kera
     
     elif model_arch.lower() == 'vit':
         return load_model(model_path, custom_objects=vit_custom_objects)
+    
+    elif model_arch.lower() == 'swin':
+        return load_model(model_path, custom_objects=swin_custom_objects)
     
     else:
         return load_model(model_path, custom_objects=custom_objects)
