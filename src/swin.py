@@ -41,7 +41,7 @@ class Swin(Base, ABC):
 		qk_scale=None,
 		dropout_rate=0.,
 		attn_drop_rate=0.,
-		drop_path_rate=0.2,
+		drop_path_rate=0.,
 		**kwargs
 	):
 		super().__init__(**kwargs)

@@ -363,7 +363,6 @@ def train_model(
                 modes=pmodes,
                 depth_scalar=depth_scalar,
                 width_scalar=width_scalar,
-                dropout_rate=dropout,
                 activation=activation,
                 mul=mul,
                 no_phase=no_phase,

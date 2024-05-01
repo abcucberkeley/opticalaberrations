@@ -217,7 +217,7 @@ class Baseline(Base):
         repeats=(3, 3, 27, 3),
         heads=(128, 256, 512, 1024), # channel projections
         layer_scale_init_value=1e-6,
-        dropout_rate=.1,
+        dropath_rate=0.,
         num_stages=4,
         **kwargs
     ):
@@ -231,7 +231,7 @@ class Baseline(Base):
         # This is referred from the original ConvNeXt codebase:
         # https://github.com/facebookresearch/ConvNeXt/blob/main/models/convnext.py#L86
         self.depth_drop_rates = [
-            float(x) for x in np.linspace(0.0, dropout_rate, sum(repeats))
+            float(x) for x in np.linspace(0.0, dropath_rate, sum(repeats))
         ]
         
         self.stem = Sequential(
