@@ -14,7 +14,7 @@ LAMB='--lr 1e-3 --wd 1e-2 --opt lamb'
 APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
 H100="--partition gpu_h100 --gpus 8 --cpus 16"
 A100="--partition gpu_a100 --gpus 4 --cpus 8"
-BS=2048
+BS=4096
 
 SUBSET='variable_object_size_fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then

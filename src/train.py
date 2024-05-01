@@ -394,9 +394,8 @@ def train_model(
             model = baseline.Baseline(
                 name='Baseline',
                 modes=pmodes,
-                depth_scalar=depth_scalar,
-                width_scalar=width_scalar,
-                activation=activation,
+                repeats=repeats,
+                heads=heads,
             )
 
         elif network == 'otfnet':
