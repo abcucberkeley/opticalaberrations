@@ -1,17 +1,60 @@
-import logging
-import sys
-"""ConvNeXt models for Keras.
+"""
+Adopted 2D ConvNextV2 from pytorch to 3D ConvNextV2 in tensorflow
 
-References:
+MIT License
+=======================================================================
 
-- [A ConvNet for the 2020s](https://arxiv.org/abs/2201.03545)
-  (CVPR 2022)
+Copyright (c) Meta Platforms, Inc. and affiliates.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+=======================================================================
+
+Attribution-NonCommercial 4.0 International
+
+=======================================================================
+
+Creative Commons is not a party to its public
+licenses. Notwithstanding, Creative Commons may elect to apply one of
+its public licenses to material it publishes and in those instances
+will be considered the “Licensor.” The text of the Creative Commons
+public licenses is dedicated to the public domain under the CC0 Public
+Domain Dedication. Except for the limited purpose of indicating that
+material is shared under a Creative Commons public license or as
+otherwise permitted by the Creative Commons policies published at
+creativecommons.org/policies, Creative Commons does not authorize the
+use of the trademark "Creative Commons" or any other trademark or logo
+of Creative Commons without its prior written consent including,
+without limitation, in connection with any unauthorized modifications
+to any of its public licenses or any other arrangements,
+understandings, or agreements concerning use of licensed material. For
+the avoidance of doubt, this paragraph does not form part of the
+public licenses.
+
+Creative Commons may be contacted at creativecommons.org.
+
 """
 
-import numpy as np
-import tensorflow as tf
 
-from tensorflow.keras import initializers
+import logging
+import sys
+
+import tensorflow as tf
 from tensorflow.keras import layers, Sequential
 
 from base import Base
@@ -23,253 +66,155 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
 
+class GRN(layers.Layer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
+        self.epsilon = 1e-6
 
-BASE_DOCSTRING = """Instantiates the {name} architecture.
+    def build(self, input_shape):
 
-  References:
-    - [A ConvNet for the 2020s](https://arxiv.org/abs/2201.03545)
-    (CVPR 2022)
-
-  For image classification use cases, see
-  [this page for detailed examples](
-  https://keras.io/api/applications/#usage-examples-for-image-classification-models).
-  For transfer learning use cases, make sure to read the
-  [guide to transfer learning & fine-tuning](
-    https://keras.io/guides/transfer_learning/).
-
-  The `base`, `large`, and `xlarge` models were first pre-trained on the
-  ImageNet-21k dataset and then fine-tuned on the ImageNet-1k dataset. The
-  pre-trained parameters of the models were assembled from the
-  [official repository](https://github.com/facebookresearch/ConvNeXt). To get a
-  sense of how these parameters were converted to Keras compatible parameters,
-  please refer to
-  [this repository](https://github.com/sayakpaul/keras-convnext-conversion).
-
-  Note: Each Keras Application expects a specific kind of input preprocessing.
-  For ConvNeXt, preprocessing is included in the model using a `Normalization`
-  layer.  ConvNeXt models expect their inputs to be float or uint8 tensors of
-  pixels with values in the [0-255] range.
-
-  When calling the `summary()` method after instantiating a ConvNeXt model,
-  prefer setting the `expand_nested` argument `summary()` to `True` to better
-  investigate the instantiated model.
-
-  Returns:
-    A `keras.Model` instance.
-"""
+        self.gamma = self.add_weight(
+            name=f"gamma_{self.name}",
+            shape=(1, 1, 1, 1, input_shape[-1]),
+            initializer=tf.zeros_initializer(),
+        )
+        self.beta = self.add_weight(
+            name=f"beta_{self.name}",
+            shape=(1, 1, 1, 1, input_shape[-1]),
+            initializer=tf.zeros_initializer(),
+        )
+    
+    def get_config(self):
+        config = super(GRN, self).get_config()
+        return config
+    def call(self, inputs):
+        gamma = tf.cast(self.gamma, tf.float32)
+        beta = tf.cast(self.beta, tf.float32)
+        x = tf.cast(inputs, tf.float32)
+        
+        Gx = tf.pow(
+            (tf.reduce_sum(tf.pow(x, 2), axis=(1, 2, 3), keepdims=True) + self.epsilon),
+            0.5,
+        )
+        Nx = Gx / tf.reduce_mean(Gx, axis=-1, keepdims=True) + self.epsilon
+        
+        result = gamma * (x * Nx) + beta + x
+        return tf.cast(result, inputs.dtype)
 
 
 class StochasticDepth(layers.Layer):
     """Stochastic Depth module.
-
-    It performs batch-wise dropping rather than sample-wise. In libraries like
-    `timm`, it's similar to `DropPath` layers that drops residual paths
-    sample-wise.
-
+    It is also referred to as Drop Path in `timm`.
     References:
-      - https://github.com/rwightman/pytorch-image-models
-
-    Args:
-      drop_path_rate (float): Probability of dropping paths. Should be within
-        [0, 1].
-
-    Returns:
-      Tensor either with the residual path dropped or kept.
+        (1) github.com:rwightman/pytorch-image-models
     """
 
-    def __init__(self, drop_path_rate, **kwargs):
-        super().__init__(**kwargs)
-        self.drop_path_rate = drop_path_rate
-
-    def call(self, x, training=None):
+    def __init__(self, drop_path, **kwargs):
+        super(StochasticDepth, self).__init__(**kwargs)
+        self.drop_path = drop_path
+    
+    def get_config(self):
+        config = super(StochasticDepth, self).get_config()
+        config.update({
+            "drop_path": self.drop_path,
+        })
+        return config
+    
+    def call(self, inputs, training=None):
         if training:
-            keep_prob = 1 - self.drop_path_rate
-            # Random bernoulli variable indicating whether the branch should be kept or not or not
-            b_l = tf.keras.backend.random_bernoulli([], p=keep_prob, dtype=x.dtype)
-            return x * b_l
-        else:
-            return x
-
-    def get_config(self):
-        config = super().get_config()
-        config.update({"drop_path_rate": self.drop_path_rate})
-        return config
+            keep_prob = 1 - self.drop_path
+            shape = (tf.shape(inputs)[0],) + (1,) * (len(tf.shape(inputs)) - 1)
+            random_tensor = keep_prob + tf.random.uniform(shape, 0, 1)
+            random_tensor = tf.floor(random_tensor)
+            return (inputs / keep_prob) * random_tensor
+        return inputs
 
 
-class LayerScale(layers.Layer):
-    """Layer scale module.
-
-    References:
-      - https://arxiv.org/abs/2103.17239
-
-    Args:
-      init_values (float): Initial value for layer scale. Should be within
-        [0, 1].
-      projection_dim (int): Projection dimensionality.
-
-    Returns:
-      Tensor multiplied to the scale.
-    """
-
-    def __init__(self, init_values, projection_dim, **kwargs):
-        super().__init__(**kwargs)
-        self.init_values = init_values
-        self.projection_dim = projection_dim
-
+class Block(layers.Layer):
+    def __init__(self, dim, drop_path=0.0):
+        super().__init__()
+        self.dim = dim
+        self.drop_path = drop_path
+        
+        self.dwconv = layers.Conv3D(dim, kernel_size=(1, 7, 7), padding="same", groups=dim)
+        self.norm = layers.LayerNormalization(epsilon=1e-6)
+        self.pwconv1 = layers.Dense(dim * 4)
+        self.act = layers.Activation("gelu")
+        self.grn = GRN()
+        self.pwconv2 = layers.Dense(dim)
+        
+        self.drop_path = (
+            StochasticDepth(drop_path)
+            if drop_path > 0.0
+            else layers.Activation("linear")
+        )
+    
     def build(self, input_shape):
-        self.gamma = self.add_weight(
-            name="gamma",
-            shape=(self.projection_dim,),
-            initializer=initializers.Constant(self.init_values),
-            trainable=True,
-        )
-
-    def call(self, x):
-        return x * self.gamma
-
+        super(Block, self).build(input_shape)
+    
     def get_config(self):
-        config = super().get_config()
-        config.update(
-            {
-                "init_values": self.init_values,
-                "projection_dim": self.projection_dim,
-            }
-        )
+        config = super(Block, self).get_config()
+        config.update({
+            "dim": self.dim,
+            "drop_path": self.drop_path,
+        })
         return config
-
-
-def ConvNeXtBlock(
-    projection_dim,
-    drop_path_rate=0.0,
-    layer_scale_init_value=1e-6,
-):
-    """ConvNeXt block.
-
-    References:
-    - https://arxiv.org/abs/2201.03545
-    - https://github.com/facebookresearch/ConvNeXt/blob/main/models/convnext.py
-
-    Notes:
-      In the original ConvNeXt implementation (linked above), the authors use
-      `Dense` layers for pointwise convolutions for increased efficiency.
-      Following that, this implementation also uses the same.
-
-    Args:
-      projection_dim (int): Number of filters for convolution layers. In the
-        ConvNeXt paper, this is referred to as projection dimension.
-      drop_path_rate (float): Probability of dropping paths. Should be within
-        [0, 1].
-      layer_scale_init_value (float): Layer scale value. Should be a small float
-        number.
-      name: name to path to the keras layer.
-
-    Returns:
-      A function representing a ConvNeXtBlock block.
-    """
-    def apply(inputs):
-        x = inputs
-
-        x = layers.Conv3D(
-            filters=projection_dim,
-            kernel_size=7,
-            padding="same",
-            groups=projection_dim,
-        )(x)
-        x = layers.LayerNormalization(epsilon=1e-6)(x)
-        x = layers.Dense(4 * projection_dim)(x)
-        x = layers.Activation("gelu")(x)
-        x = layers.Dense(projection_dim)(x)
-
-        if layer_scale_init_value is not None:
-            x = LayerScale(
-                layer_scale_init_value,
-                projection_dim,
-            )(x)
-        if drop_path_rate:
-            layer = StochasticDepth(drop_path_rate)
-        else:
-            layer = layers.Activation("linear")
-
-        return inputs + layer(x)
-
-    return apply
+    
+    def call(self, inputs, training=None):
+        shortcut = inputs
+        x = self.dwconv(inputs)
+        x = self.norm(x)
+        x = self.pwconv1(x)
+        x = self.act(x)
+        x = self.grn(x)
+        x = self.pwconv2(x)
+        return shortcut + self.drop_path(x)
 
 
 class Baseline(Base):
     def __init__(
         self,
         repeats=(3, 3, 27, 3),
-        heads=(128, 256, 512, 1024), # channel projections
-        layer_scale_init_value=1e-6,
-        dropath_rate=0.,
-        num_stages=4,
+        heads=(96, 192, 384, 768), # channel projections
+        drop_path_rate=0.,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.heads = heads
         self.repeats = repeats
-        self.layer_scale_init_value = layer_scale_init_value
-        self.num_stages = num_stages
-        
-        # Stochastic depth schedule.
-        # This is referred from the original ConvNeXt codebase:
-        # https://github.com/facebookresearch/ConvNeXt/blob/main/models/convnext.py#L86
-        self.depth_drop_rates = [
-            float(x) for x in np.linspace(0.0, dropath_rate, sum(repeats))
-        ]
-        
-        self.stem = Sequential(
-            [
-                layers.Conv3D(
-                    heads[0],
-                    kernel_size=(1, 8, 8),
-                    strides=(1, 8, 8),
-                ),
-                layers.LayerNormalization(
-                    epsilon=1e-6,
-                ),
-            ],
-        )
-        
-        self.norm = layers.LayerNormalization(axis=-1, epsilon=1e-6)
-        self.avg = layers.GlobalAveragePooling3D()
+        self.drop_path_rate = drop_path_rate
+        self.dp_rates = [d for d in tf.linspace(0.0, self.drop_path_rate, sum(self.repeats))]
         
     def call(self, inputs, **kwargs):
 
-        m = inputs
-        
+        x = inputs
+
         cur = 0
-        for i in range(self.num_stages):
+        for i in range(4):
             if i == 0:
-                m = self.stem(m)
+                x = Sequential(
+                    [
+                        layers.Conv3D(self.heads[i], kernel_size=(1, 4, 4), strides=(1, 4, 4)),
+                        layers.LayerNormalization(epsilon=1e-6),
+                    ]
+                )(x)
             else:
-                m = layers.LayerNormalization(epsilon=1e-6)(m)
-                m = layers.Conv3D(self.heads[i], kernel_size=(1, 2, 2), strides=(1, 2, 2))(m)
-        
+                x = Sequential(
+                    [
+                        layers.LayerNormalization(epsilon=1e-6),
+                        layers.Conv3D(self.heads[i], kernel_size=(1, 2, 2), strides=(1, 2, 2)),
+                    ]
+                )(x)
+
             for j in range(self.repeats[i]):
-                m = ConvNeXtBlock(
-                    projection_dim=self.heads[i],
-                    drop_path_rate=self.depth_drop_rates[cur + j],
-                    layer_scale_init_value=self.layer_scale_init_value,
-                )(m)
+                x = Block(
+                    dim=self.heads[i],
+                    drop_path=self.dp_rates[cur + j],
+                )(x)
             cur += self.repeats[i]
         
-        m = self.norm(m)
-        m = self.avg(m)
-        return self.regressor(m)
+        x = layers.GlobalAvgPool3D()(x)
+        x = layers.LayerNormalization(epsilon=1e-6)(x)
+        return self.regressor(x)

@@ -295,7 +295,7 @@ def train_model(
     if opt == 'lamb':
         opt = LAMB(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99, clipnorm=1.0)
     elif opt.lower() == 'adamw':
-        opt = AdamW(learning_rate=scheduler, weight_decay=wd)
+        opt = AdamW(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99)
     else:
         opt = Adam(learning_rate=scheduler)
 
@@ -356,16 +356,10 @@ def train_model(
             model = swin.Swin(
                 name='Swin',
                 hidden_size=hidden_size,
-                roi=roi,
                 patches=patches,
                 heads=heads,
                 repeats=repeats,
                 modes=pmodes,
-                depth_scalar=depth_scalar,
-                width_scalar=width_scalar,
-                activation=activation,
-                mul=mul,
-                no_phase=no_phase,
             )
             
         elif network == 'opticalnet':

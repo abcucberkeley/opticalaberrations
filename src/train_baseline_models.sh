@@ -9,8 +9,7 @@ DEFOCUS_ONLY='--defocus_only'
 NETWORK='baseline'
 MODES=15
 CLUSTER='lsf'
-DEFAULT='--positional_encoding_scheme default --lr 5e-4 --wd 5e-6 --opt adamw'
-LAMB='--lr 1e-3 --wd 1e-2 --opt lamb'
+DEFAULT='--lr 5e-5 --wd 1e-8 --opt adamw'
 APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
 H100="--partition gpu_h100 --gpus 8 --cpus 16"
 A100="--partition gpu_a100 --gpus 4 --cpus 8"
@@ -53,28 +52,33 @@ do
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --repeats '3-3-9-3' --heads '96-192-384-768'" \
+  --task "$CONFIG $DEFAULT --batch_size $BS --repeats '2-2-6-2' --heads '40-80-160-320'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-Atto
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $DEFAULT --batch_size $BS --repeats '2-2-6-2' --heads '64-128-256-512'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-Pico
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $DEFAULT --batch_size $BS --repeats '3-3-9-3' --heads '96-192-384-768'" \
   --taskname $NETWORK \
   --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-T
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --repeats '3-3-27-3' --heads '96-192-384-768'" \
+  --task "$CONFIG $DEFAULT --batch_size $BS --repeats '3-3-27-3' --heads '96-192-384-768'" \
   --taskname $NETWORK \
   --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-S
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --repeats '3-3-27-3' --heads '128-256-512-1024'" \
+  --task "$CONFIG $DEFAULT --batch_size $BS --repeats '3-3-27-3' --heads '128-256-512-1024'" \
   --taskname $NETWORK \
   --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-B
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --repeats '3-3-27-3' --heads '192-384-768-1536'" \
+  --task "$CONFIG $DEFAULT --batch_size $BS --repeats '3-3-27-3' --heads '192-384-768-1536'" \
   --taskname $NETWORK \
   --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-L
-
-  python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $LAMB --batch_size $BS --repeats '3-3-27-3' --heads '256-512-1024-2048'" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-XL
 
 done
