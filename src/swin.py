@@ -3,10 +3,10 @@ import sys
 from abc import ABC
 from functools import partial
 
-import tensorflow as tf
+import numpy as np
 from tensorflow.keras import layers
 
-from VideoSwin.videoswin.blocks import SwinLayer
+from VideoSwin.videoswin.blocks import SwinStage
 from VideoSwin.videoswin.layers import TFPatchEmbed3D, TFPatchMerging
 from base import Base
 
@@ -32,7 +32,7 @@ class Swin(Base, ABC):
 		qk_scale=None,
 		dropout_rate=0.,
 		attn_drop_rate=0.,
-		drop_path_rate=0.,
+		drop_path_rate=.1,
 		**kwargs
 	):
 		super().__init__(**kwargs)
@@ -50,8 +50,7 @@ class Swin(Base, ABC):
 		self.dropout_rate = dropout_rate
 		self.attn_drop_rate = attn_drop_rate
 		self.drop_path_rate = drop_path_rate
-		
-		self.dpr = tf.linspace(0., self.drop_path_rate, sum(self.repeats)).numpy().tolist()
+		self.dpr = np.linspace(0., self.drop_path_rate, sum(self.repeats)).tolist()
 		self.avg_pool = layers.GlobalAveragePooling3D()
 
 	def call(self, inputs, **kwargs):
@@ -63,7 +62,7 @@ class Swin(Base, ABC):
 		)(inputs)
 		
 		for i in range(self.num_layers):
-			m = SwinLayer(
+			m = SwinStage(
 				dim=int(self.hidden_size * 2 ** i),
 				depth=self.repeats[i],
 				num_heads=self.heads[i],

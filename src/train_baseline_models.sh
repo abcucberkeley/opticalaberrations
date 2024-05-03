@@ -54,26 +54,26 @@ do
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $DEFAULT --batch_size $BS --repeats '2-2-6-2' --heads '64-128-256-512'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-Pico
+  --name new/$SUBSET/baseline-lamb/$NETWORK-$MODES-$DIR-Pico
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $DEFAULT --batch_size $BS --repeats '3-3-9-3' --heads '96-192-384-768'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-T
+  --name new/$SUBSET/baseline-lamb/$NETWORK-$MODES-$DIR-T
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $DEFAULT --batch_size $BS --repeats '3-3-27-3' --heads '96-192-384-768'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-S
+  --name new/$SUBSET/baseline-lamb/$NETWORK-$MODES-$DIR-S
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $DEFAULT --batch_size $BS --repeats '3-3-27-3' --heads '128-256-512-1024'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-B
+  --name new/$SUBSET/baseline-lamb/$NETWORK-$MODES-$DIR-B
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $DEFAULT --batch_size $BS --repeats '3-3-27-3' --heads '192-384-768-1536'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-L
+  --name new/$SUBSET/baseline-lamb/$NETWORK-$MODES-$DIR-L
 
 done

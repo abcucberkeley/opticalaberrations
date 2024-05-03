@@ -43,7 +43,7 @@
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/train.py" />
-    <option name="PARAMETERS" value="--lr 5e-5 --wd 1e-8 --opt adamw --batch_size 128 --modes 15 --network swin --epochs 25 --warmup 5 --patches 1-4-4 --repeats 2-2-18-2 --heads 4-8-16-32 --hidden_size 128 --outdir ../models/swin --dataset ../dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15" />
+    <option name="PARAMETERS" value="--lr 5e-5 --wd 1e-8 --opt adamw --batch_size 128 --modes 15 --network swin --epochs 25 --warmup 5 --patches 1-4-4 --repeats 2-2-6-2 --heads 3-6-12-24 --hidden_size 96 --outdir ../models/swin --dataset ../dataset/training/YuMB_lambda510/z64-y64-x64/z15" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
