@@ -54,8 +54,9 @@ Creative Commons may be contacted at creativecommons.org.
 import logging
 import sys
 
+import numpy as np
 import tensorflow as tf
-from tensorflow.keras import layers, Sequential
+from tensorflow.keras import layers
 
 from base import Base
 
@@ -69,8 +70,7 @@ logger = logging.getLogger(__name__)
 
 class GRN(layers.Layer):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
+        super(GRN, self).__init__(**kwargs)
         self.epsilon = 1e-6
 
     def build(self, input_shape):
@@ -114,38 +114,38 @@ class StochasticDepth(layers.Layer):
     def __init__(self, drop_path, **kwargs):
         super(StochasticDepth, self).__init__(**kwargs)
         self.drop_path = drop_path
-    
+
     def get_config(self):
         config = super(StochasticDepth, self).get_config()
         config.update({
             "drop_path": self.drop_path,
         })
         return config
-    
+
     def call(self, inputs, training=None):
         if training:
-            keep_prob = 1 - self.drop_path
+            keep_prob = tf.cast(1 - self.drop_path, inputs.dtype)
             shape = (tf.shape(inputs)[0],) + (1,) * (len(tf.shape(inputs)) - 1)
-            random_tensor = keep_prob + tf.random.uniform(shape, 0, 1)
+            random_tensor = keep_prob + tf.random.uniform(shape, 0, 1, dtype=inputs.dtype)
             random_tensor = tf.floor(random_tensor)
             return (inputs / keep_prob) * random_tensor
         return inputs
 
 
 class Block(layers.Layer):
-    def __init__(self, dim, drop_path=0.0):
-        super().__init__()
+    def __init__(self, dim, kernel_size=(1, 7, 7), drop_path=0.0, **kwargs):
+        super(Block, self).__init__(**kwargs)
         self.dim = dim
         self.drop_path = drop_path
+        self.kernel_size = kernel_size
         
-        self.dwconv = layers.Conv3D(dim, kernel_size=(1, 7, 7), padding="same", groups=dim)
+        self.dwconv = layers.Conv3D(dim, kernel_size=kernel_size, padding="same", groups=dim)
         self.norm = layers.LayerNormalization(epsilon=1e-6)
         self.pwconv1 = layers.Dense(dim * 4)
         self.act = layers.Activation("gelu")
         self.grn = GRN()
         self.pwconv2 = layers.Dense(dim)
-        
-        self.drop_path = (
+        self.drop = (
             StochasticDepth(drop_path)
             if drop_path > 0.0
             else layers.Activation("linear")
@@ -159,6 +159,7 @@ class Block(layers.Layer):
         config.update({
             "dim": self.dim,
             "drop_path": self.drop_path,
+            "kernel_size": self.kernel_size,
         })
         return config
     
@@ -170,22 +171,26 @@ class Block(layers.Layer):
         x = self.act(x)
         x = self.grn(x)
         x = self.pwconv2(x)
-        return shortcut + self.drop_path(x)
+        x = shortcut + self.drop(x)
+        return x
 
 
 class Baseline(Base):
     def __init__(
         self,
-        repeats=(3, 3, 27, 3),
-        heads=(96, 192, 384, 768), # channel projections
-        drop_path_rate=0.,
+        kernel_size=(1, 7, 7),
+        downscale=(1, 2, 2),
+        repeats=(2, 2, 6, 2),
+        projections=(64, 128, 256, 512),
+        drop_path_rate=0.1,
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.heads = heads
+        self.kernel_size = kernel_size
+        self.downscale = downscale
+        self.projections = projections
         self.repeats = repeats
-        self.drop_path_rate = drop_path_rate
-        self.dp_rates = [d for d in tf.linspace(0.0, self.drop_path_rate, sum(self.repeats))]
+        self.dp_rates = [d for d in np.linspace(0.0, drop_path_rate, sum(self.repeats))]
         
     def call(self, inputs, **kwargs):
 
@@ -194,27 +199,19 @@ class Baseline(Base):
         cur = 0
         for i in range(4):
             if i == 0:
-                x = Sequential(
-                    [
-                        layers.Conv3D(self.heads[i], kernel_size=(1, 4, 4), strides=(1, 4, 4)),
-                        layers.LayerNormalization(epsilon=1e-6),
-                    ]
-                )(x)
+                x = layers.Conv3D(self.projections[i], kernel_size=(1, 4, 4), strides=(1, 4, 4))(x)
+                x = layers.LayerNormalization(epsilon=1e-6)(x)
             else:
-                x = Sequential(
-                    [
-                        layers.LayerNormalization(epsilon=1e-6),
-                        layers.Conv3D(self.heads[i], kernel_size=(1, 2, 2), strides=(1, 2, 2)),
-                    ]
-                )(x)
+                x = layers.LayerNormalization(epsilon=1e-6)(x)
+                x = layers.Conv3D(self.projections[i], kernel_size=self.downscale, strides=self.downscale)(x)
 
             for j in range(self.repeats[i]):
                 x = Block(
-                    dim=self.heads[i],
+                    dim=self.projections[i],
                     drop_path=self.dp_rates[cur + j],
+                    kernel_size=self.kernel_size,
                 )(x)
             cur += self.repeats[i]
         
         x = layers.GlobalAvgPool3D()(x)
-        x = layers.LayerNormalization(epsilon=1e-6)(x)
         return self.regressor(x)

@@ -52,11 +52,6 @@ do
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
-  --task "$CONFIG $DEFAULT --batch_size $BS --repeats '2-2-6-2' --heads '40-80-160-320'" \
-  --taskname $NETWORK \
-  --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-Atto
-
-  python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $DEFAULT --batch_size $BS --repeats '2-2-6-2' --heads '64-128-256-512'" \
   --taskname $NETWORK \
   --name new/$SUBSET/baseline/$NETWORK-$MODES-$DIR-Pico
