@@ -21,15 +21,13 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 import tensorflow as tf
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.optimizers.experimental import AdamW
-from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping
+from tensorflow.keras.optimizers import Adam, AdamW
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint, EarlyStopping, LearningRateScheduler
 from tensorflow_addons.optimizers import LAMB
+from tensorflow.keras.optimizers.schedules import CosineDecay
 
-from warmupcosinedecay import WarmupCosineDecay
 from callbacks import Defibrillator
 from callbacks import TensorBoardCallback
-from callbacks import LRLogger
 from backend import load
 
 import utils
@@ -280,24 +278,36 @@ def train_model(
         scheduler = lr
         logger.info(f"Training steps: [{steps_per_epoch * epochs}]")
     else:
-        warmup_steps = warmup * steps_per_epoch
-        decay_steps = (epochs - warmup) * steps_per_epoch
-        logger.info(f"Training steps [{steps_per_epoch * epochs}] = ({warmup_steps=}) + ({decay_steps=})")
-
-        scheduler = WarmupCosineDecay(
-            initial_learning_rate=0.,
-            decay_steps=decay_steps,
-            warmup_target=lr,
-            warmup_steps=warmup_steps,
-            alpha=.01,
-        )
+        if warmup > 0:
+            warmup_steps = warmup * steps_per_epoch
+            decay_steps = (epochs - warmup) * steps_per_epoch
+            logger.info(f"Training steps [{epochs}: {steps_per_epoch * epochs}] = "
+                        f"({warmup}: {warmup_steps=}) + ({epochs-warmup}: {decay_steps=})")
+            
+            scheduler = CosineDecay(
+                initial_learning_rate=0.,
+                decay_steps=epochs - warmup,
+                warmup_target=lr,
+                warmup_steps=warmup,
+                alpha=.01,
+            )
+        else:
+            logger.info(f"Training steps [{epochs}: {steps_per_epoch * epochs}]")
+            
+            scheduler = CosineDecay(
+                initial_learning_rate=lr,
+                decay_steps=epochs,
+                alpha=.01,
+                warmup_target=None,
+                warmup_steps=0
+            )
 
     if opt == 'lamb':
-        opt = LAMB(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99, clipnorm=1.0)
+        opt = LAMB(learning_rate=lr, weight_decay=wd, beta_1=0.9, beta_2=0.99, clipnorm=1.0)
     elif opt.lower() == 'adamw':
-        opt = AdamW(learning_rate=scheduler, weight_decay=wd, beta_1=0.9, beta_2=0.99)
+        opt = AdamW(learning_rate=lr, weight_decay=wd, beta_1=0.9, beta_2=0.99)
     else:
-        opt = Adam(learning_rate=scheduler)
+        opt = Adam(learning_rate=lr)
 
     try:  # check if model already exists
         model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent  # sort models to get the latest checkpoint
@@ -388,7 +398,7 @@ def train_model(
                 name='Baseline',
                 modes=pmodes,
                 repeats=repeats,
-                heads=heads,
+                projections=heads,
             )
 
         elif network == 'otfnet':
@@ -460,9 +470,9 @@ def train_model(
         histogram_freq=1,
         profile_batch=100000000
     )
-
-    lrlogger = LRLogger()
-
+    
+    lrScheduler = LearningRateScheduler(scheduler, verbose=1)
+    
     model.fit(
         train_data,
         steps_per_epoch=steps_per_epoch,
@@ -476,7 +486,7 @@ def train_model(
             h5_checkpoints,
             earlystopping,
             defibrillator,
-            lrlogger
+            lrScheduler,
         ],
     )
 
