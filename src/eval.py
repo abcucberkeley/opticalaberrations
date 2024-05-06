@@ -3921,8 +3921,11 @@ def profile_models(
         steps = [1] + list(range(49, 500, 50))
         for x in ['training', 'training_gflops']:
             fig, ax = plt.subplots(figsize=(8, 8))
-            for cc, colormap, cmarker in zip(['ViT/16', 'ViT/32', 'Ours'],
-                                             ['Oranges', 'Greens', 'Blues'], ['C1', 'C2', 'C0']):
+            for cc, colormap, cmarker in zip(
+                ['ConvNext', 'ViT/16', 'ViT/32', 'Ours'],
+                ['Blues', 'Oranges', 'Greens', 'Greys'],
+                ['C0', 'C1', 'C2', 'k']
+            ):
                 data = df[df.step.isin(steps)][df.cat == cc]
                 
                 g = sns.lineplot(
@@ -3990,8 +3993,8 @@ def profile_models(
                     y="epoch_mse",
                     style='cat',
                     hue='cat',
-                    hue_order=['ViT/16', 'ViT/32', 'Ours'],
-                    palette=['C1', 'C2', 'C0'],
+                    hue_order=['ConvNext', 'ViT/16', 'ViT/32', 'Ours'],
+                    palette=['C0', 'C1', 'C2', 'k'],
                     ax=ax
                 )
             else:
@@ -4000,8 +4003,8 @@ def profile_models(
                     x=x,
                     y="epoch_mse",
                     hue='cat',
-                    hue_order=['ViT/16', 'ViT/32', 'Ours'],
-                    palette=['C1', 'C2', 'C0'],
+                    hue_order=['ConvNext', 'ViT/16', 'ViT/32', 'Ours'],
+                    palette=['C0', 'C1', 'C2', 'k'],
                     dashes=False,
                     marker="o",
                     ax=ax
@@ -4009,7 +4012,7 @@ def profile_models(
             
             if x == 'training':
                 ax.set_xlabel('Training hours 8xH100s')
-                ax.set_xlim(0, 120)
+                ax.set_xlim(0, 125)
             elif x == 'training_gflops':
                 ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
                 ax.set_xlim(0, 35)
@@ -4037,10 +4040,10 @@ def profile_models(
                 ax.set_xlabel(f'Throughput (images/s) [BS={batch_size}]')
                 ax.set_xlim(0, 2000)
             else:
-                ax.set_xlabel(f'Inference time for 1M images using RTX8000 [BS={batch_size}] (minutes)')
+                ax.set_xlabel(f'Inference minutes for 1M images using RTX8000 [BS={batch_size}]')
                 ax.set_xlim(0, 200)
             
-            for cc, cmarker in zip(['ViT/16', 'ViT/32', 'Ours'], ['C1', 'C2', 'C0']):
+            for cc, cmarker in zip(['ConvNext', 'ViT/16', 'ViT/32', 'Ours'], ['C0', 'C1', 'C2', 'k']):
                 if x == 'num_tokens':
                     for index, row in df[df.cat == cc].iterrows():
                         ax.text(
@@ -4066,10 +4069,10 @@ def profile_models(
             ax.grid(True, which="major", axis='both', lw=.1, ls='--', zorder=0)
             ax.grid(True, which="minor", axis='both', lw=.05, ls='--', zorder=0)
             ax.set_ylabel('MSE ($\mu$m rms)')
-            # ax.set_yscale('log')
-            ax.set_ylim(1e-7, 4e-6)
-            ax.set_yticks([1e-7, .5e-6, 1e-6, 1.5e-6, 2e-6, 2.5e-6, 3e-6, 3.5e-6, 4e-6], minor=False)
-            ax.set_yticks([.25e-6, .75e-6, 1.25e-6, 1.75e-6, 2.25e-6, 2.75e-6, 3.25e-6, 3.75e-6], minor=True)
+            ax.set_yscale('log')
+            ax.set_ylim(1e-7, 1e-5)
+            # ax.set_yticks(np.arange(1e-7, 1e-5, .5e-6), minor=False)
+            # ax.set_yticks(np.arange(1e-7, 1e-5, .25e-6), minor=True)
             
             ax.legend(loc='best', ncol=1, title="", frameon=False)
             ax.spines['right'].set_visible(False)
@@ -4082,12 +4085,18 @@ def profile_models(
     
     models = {
         'otfnet': 'Baseline',
+        'vit-s32': 'ViT-s/32',
         'vit-S32': 'ViT-S/32',
         'vit-S16': 'ViT-S/16',
         'vit-B32': 'ViT-B/32',
         'vit-B16': 'ViT-B/16',
         'vit-L32': 'ViT-L/32',
         'vit-L16': 'ViT-L/16',
+        'baseline-P': 'ConvNext-P',
+        'baseline-T': 'ConvNext-T',
+        'baseline-S': 'ConvNext-S',
+        'baseline-B': 'ConvNext-B',
+        'baseline-L': 'ConvNext-L',
         'opticalnet-S3216': 'Ours-S',
         'opticalnet-B3216': 'Ours-B',
         'opticalnet-M3216': 'Ours-M',
@@ -4105,7 +4114,7 @@ def profile_models(
     dataframes = []
     for codename, modeldir in zip(models_codenames, predictions_paths):
         logger.info(f"Processing {codename}")
-        savepath = Path(f'{outdir}/{codename}.csv')
+        savepath = Path(f'{Path(modeldir).parent}/{codename}.csv')
         
         if savepath.exists():
             logger.info(f"Loading {savepath}")
@@ -4166,7 +4175,7 @@ def profile_models(
                 df['model'] = codename
                 
                 logger.info(f"Saving {savepath}")
-                df.to_csv(f'{outdir}/{codename}.csv')
+                df.to_csv(f'{Path(modeldir).parent}/{codename}.csv')
             
             except Exception as e:
                 logger.error(e)
@@ -4186,18 +4195,19 @@ def profile_models(
         df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
         df.loc[df.model.str.match(r'vit.*16'), 'cat'] = 'ViT/16'
         df.loc[df.model.str.match(r'vit.*32'), 'cat'] = 'ViT/32'
+        df.loc[df.model.str.match(r'baseline'), 'cat'] = 'ConvNext'
         df.model = df.model.replace(models)
         
         dataframes.append(df)
         
-    # plot_training_curves(df=pd.concat(dataframes).reset_index(drop=True))
+    plot_training_curves(df=pd.concat(dataframes).reset_index(drop=True))
     
     df = pd.DataFrame()
     for d in dataframes:
         best = d['epoch_mse'].idxmin()
         df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
     
-    # plot_scaling_parameters(df)
+    plot_scaling_parameters(df)
 
     coi = [
         'epoch_mse',
@@ -4213,25 +4223,25 @@ def profile_models(
     ]
     titles = [
         'MSE\n($\mu$m rms)',
-        f'Training Time (H)\n[BS=4096]\n8xH100s',
+        f'Training hours\n8xH100s',
 	    'Training EFLOPs',
         f'Memory (GB) \n[BS={batch_size}]',
-        f'Inference time\n1M images\n(minutes)',
-        f'Throughput\n(images/s)\n[BS=4096]',
+        f'Inference minutes\n1M images\n[BS={batch_size}]',
+        f'Throughput\n(images/s)\n[BS={batch_size}]',
         f'Latency\n(ms/image)',
         'GFLOPs',
-        'Parameters',
-        'Patches',
+        'Parameters (M)',
+        'Total patches',
     ]
     
-    colormaps = ['Greens_r', 'Oranges_r', 'Blues_r']
+    colormaps = ['Blues_r', 'Oranges_r', 'Greens_r', 'Greys_r']
     
     df = df.sort_values('epoch_mse')
     
-    fig, axes = plt.subplots(len(coi), len(df.cat.unique()), figsize=(10, 15), sharex=False, sharey=False)
+    fig, axes = plt.subplots(len(coi), len(df.cat.unique()), figsize=(12, 15), sharex=False, sharey=False)
     
     for i, cc in enumerate(coi):
-        for j, cat in enumerate(['ViT/16', 'ViT/32', 'Ours']):
+        for j, cat in enumerate(['ConvNext', 'ViT/16', 'ViT/32', 'Ours']):
             ax = axes[i, j]
             data = df[df.cat == cat]
             ax = sns.barplot(
@@ -4276,10 +4286,13 @@ def profile_models(
             ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
             
             if coi[i] == 'epoch_mse':
-                ax.set_ylim(1e-7, 4e-6)
+                ax.set_ylim(1e-7, 1e-5)
+                # ax.set_yticks(np.arange(1e-7, 1e-5, 2e-6))
+                ax.set_yscale('log')
                 ax.axhline(1e-7, color="k", clip_on=False)
             elif coi[i] == 'training':
-                ax.set_ylim(0, 120)
+                ax.set_ylim(0, 125)
+                ax.set_yticks(range(0, 150, 25))
                 # ax.set_ylim(0, 25)
                 ax.axhline(0, color="k", clip_on=False)
             elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':

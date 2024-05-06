@@ -14,7 +14,6 @@ LAMB='--lr 1e-3 --wd 1e-2 --opt lamb'
 APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
 H100="--partition gpu_h100 --gpus 8 --cpus 16"
 A100="--partition gpu_a100 --gpus 4 --cpus 8"
-BS=2048
 
 SUBSET='variable_object_size_fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
@@ -54,22 +53,22 @@ do
 
   for PATCH in 32 16; do
     #python manager.py $CLUSTER $APPTAINER train.py $H100 \
-    #--task "$CONFIG $LAMB --batch_size $BS --patches '${PATCH}' --repeats '6' --heads '6' --hidden_size 192" \
+    #--task "$CONFIG $LAMB --batch_size 4096 --patches '${PATCH}' --repeats '6' --heads '6' --hidden_size 192" \
     #--taskname $NETWORK \
     #--name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-T${PATCH}
 
     python manager.py $CLUSTER $APPTAINER train.py $H100 \
-    --task "$CONFIG $LAMB --batch_size $BS --patches '${PATCH}' --repeats '8' --heads '8' --hidden_size 384" \
+    --task "$CONFIG $LAMB --batch_size 4096 --patches '${PATCH}' --repeats '8' --heads '8' --hidden_size 384" \
     --taskname $NETWORK \
     --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-S${PATCH}
 
     python manager.py $CLUSTER $APPTAINER train.py $H100 \
-    --task "$CONFIG $LAMB --batch_size $BS --patches '${PATCH}' --repeats '12' --heads '12' --hidden_size 768" \
+    --task "$CONFIG $LAMB --batch_size 2048 --patches '${PATCH}' --repeats '12' --heads '12' --hidden_size 768" \
     --taskname $NETWORK \
     --name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-B${PATCH}
 
     #python manager.py $CLUSTER $APPTAINER train.py $H100 \
-    #--task "$CONFIG $LAMB --batch_size $BS --patches '${PATCH}' --repeats '24' --heads '16' --hidden_size 1024" \
+    #--task "$CONFIG $LAMB --batch_size 1024 --patches '${PATCH}' --repeats '24' --heads '16' --hidden_size 1024" \
     #--taskname $NETWORK \
     #--name new/$SUBSET/vit/$NETWORK-$MODES-$DIR-L${PATCH}
   done

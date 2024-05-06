@@ -171,7 +171,7 @@ class Block(layers.Layer):
         x = self.act(x)
         x = self.grn(x)
         x = self.pwconv2(x)
-        x = shortcut + self.drop(x)
+        x = shortcut + tf.cast(self.drop(x), inputs.dtype)
         return x
 
 

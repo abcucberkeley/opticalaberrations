@@ -59,6 +59,7 @@ from spatial import SpatialAttention
 from stochasticdepth import StochasticDepth
 from stem import Stem
 
+import baseline
 import opticalnet
 import prototype
 import vit
@@ -183,6 +184,16 @@ def load(model_path: Union[Path, str], mosaic=False, model_arch=None) -> tf.kera
         "ROI": ROI,
     }
     
+    baseline_custom_objects = {
+        "LAMB": LAMB,
+        "GRN": baseline.GRN,
+        "StochasticDepth": baseline.StochasticDepth,
+        "Block": baseline.Block,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+    }
+    
     if model_arch is None:
         
         try:
@@ -198,6 +209,9 @@ def load(model_path: Union[Path, str], mosaic=False, model_arch=None) -> tf.kera
     
     elif model_arch.lower() == 'vit':
         return load_model(model_path, custom_objects=vit_custom_objects)
+    
+    elif model_arch.lower() == 'baseline':
+        return load_model(model_path, custom_objects=baseline_custom_objects)
     
     elif model_arch.lower() == 'swin':
         return load_model(model_path, custom_objects=swin_custom_objects)
