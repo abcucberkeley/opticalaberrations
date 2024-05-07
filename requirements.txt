@@ -23,3 +23,7 @@ nvidia-pyindex
 nvidia-pytriton
 dask_cuda
 tbparse
+accelerate
+torchinfo
+timm
+apex
