@@ -1,6 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="predict_tiles" type="PythonConfigurationType" factoryName="Python" folderName="ao">
     <module name="opticalaberrations" />
+    <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
@@ -11,9 +12,38 @@
     <option name="IS_MODULE_SDK" value="true" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="DockerContainerSettingsRunConfigurationExtension">
+      <option name="envVars">
+        <list />
+      </option>
+      <option name="extraHosts">
+        <list />
+      </option>
+      <option name="links">
+        <list />
+      </option>
+      <option name="networkDisabled" value="false" />
+      <option name="networkMode" value="bridge" />
+      <option name="portBindings">
+        <list />
+      </option>
+      <option name="publishAllPorts" value="false" />
+      <option name="runCliOptions" value="--entrypoint= --rm --gpu all" />
+      <option name="version" value="2" />
+      <option name="volumeBindings">
+        <list>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/opt/project" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="$PROJECT_DIR$" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
+        </list>
+      </option>
+    </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="predict_tiles ../pretrained_models/opticalnet-15-YuMB-lambda510.h5 ../examples/test/test.tif ../calibration/aang/15_mode_calibration.csv --current_dm None --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --window_size 64-64-64 --freq_strength_threshold 0.01 --batch_size 400 --prev None" />
+    <option name="PARAMETERS" value="predict_tiles ../pretrained_models/opticalnet-15-YuMB-lambda510.h5 ../data/exp4-R2462/before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0281650622msecAbs_-01x_-01y_-01z_0000t.tif ../calibration/aang/15_mode_calibration.csv --current_dm None --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --window_size 64-64-64 --freq_strength_threshold 0.01 --batch_size 896 --prev None --plot --plot_rotations" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

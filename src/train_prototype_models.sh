@@ -1,7 +1,4 @@
 #!/bin/bash
-#--partition gpu_a100 --gpus 4 --cpus 8 \
-#--partition gpu_h100 --gpus 8 --cpus 8 \
-#--partition gpu_rtx8000 --gpus 8 --cpus 16 \
 
 SHAPE=64
 DZ=200
@@ -12,10 +9,14 @@ DEFOCUS_ONLY='--defocus_only'
 NETWORK='prototype'
 MODES=15
 CLUSTER='lsf'
-DEFAULT='--positional_encoding_scheme default --batch_size 2048 --lr 5e-4 --wd 5e-6 --opt adamw'
-LAMB='--batch_size 2048 --lr 1e-3 --wd 1e-2 --opt lamb'
+DEFAULT='--positional_encoding_scheme default --lr 5e-4 --wd 5e-6 --opt adamw'
+LAMB='--lr 1e-3 --wd 1e-2 --opt lamb'
+APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
+H100="--partition gpu_h100 --gpus 8 --cpus 16"
+A100="--partition gpu_a100 --gpus 4 --cpus 8"
+BS=4096
 
-SUBSET='fourier_filter_125nm_dataset'
+SUBSET='variable_object_size_fourier_filter_125nm_dataset'
 if [ $CLUSTER = 'slurm' ];then
   DATASET="/clusterfs/nvme/thayer/dataset"
 else
@@ -41,7 +42,7 @@ for S in `seq 1 ${#PSF_DATASETS[@]}`
 do
   DIR="${PSF_DATASETS[$S-1]}"
   PTYPE="${PSF_TYPES[$S-1]}"
-  DATA="$DATASET/$SUBSET/train/$DIR/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
+  DATA="$DATASET/$SUBSET/train/$DIR/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
 
   if [ $PTYPE = '2photon' ];then
     LAM=.920
@@ -51,21 +52,21 @@ do
   
   CONFIG=" --psf_type ${PTYPE} --wavelength ${LAM} --network ${NETWORK} --modes ${MODES} --dataset ${DATA} --input_shape ${SHAPE} "
 
-  for HEADS in '2-4-8-16' '3-6-12-24' '16-16-16-16'
-  do 
-    for REPEATS in '2-4-6-2' '1-4-6-2' '1-2-4-2' '1-2-8-4' 
-    do
-      python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-      --task "$CONFIG $LAMB --heads $HEADS --repeats $REPEATS" \
-      --taskname $NETWORK \
-      --name new/$SUBSET/$NETWORK-$MODES-$DIR-H-${HEADS}-R-${REPEATS}
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '8' --repeats '8' --heads '8'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P8-R8-H8
 
-      # python manager.py $CLUSTER train.py --partition gpu_a100 --gpus 4 --cpus 8 \
-      # --task "$CONFIG $DEFAULT" \
-      # --taskname $NETWORK \
-      # --name new/$SUBSET/$NETWORK-$MODES-$DIR-default
-    done
-  done
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '16' --repeats '8' --heads '8'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P16-R8-H8
+
+  python manager.py $CLUSTER $APPTAINER train.py $H100 \
+  --task "$CONFIG $LAMB --batch_size $BS --patches '32' --repeats '8' --heads '8'" \
+  --taskname $NETWORK \
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-P32-R8-H8
+
 done
 
 

@@ -151,10 +151,6 @@ dmypy.json
 # Profiler
 *.pclprof
 
-#Pretrained models
-
-pretrained_models/**/*.*
-!pretrained_models/**/*.h5
 examples/DM_State_510nm.csv
 src/pycharm.lnk
 src/LabVIEW_Shortcut.lnk
@@ -162,6 +158,7 @@ src/LV_auto_batch.bat
 login.bat
 *.bat
 /examples/largefov/before_tiles/
+/examples
 src/all_coords_cache_3x361x6x64x64_float16.npy
 /src/phasenet_repo/
 /src/phasenet_repo/**/*.*
@@ -170,3 +167,8 @@ src/all_coords_cache_3x361x6x64x64_float16.npy
 /src/cocoa_repo/**/*.*
 /src/cocoa_repo/**/**/*.*
 /scope_psf
+src/LV_auto_batch.bat_predict_rois
+/SyntheticPSFCache/
+/benchmarks/
+/scaling/
+*.npy

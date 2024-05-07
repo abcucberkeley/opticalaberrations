@@ -1,9 +1,3 @@
-import pip
-pip.main(['install', 'onnx'])
-pip.main(['install', 'tf2onnx'])
-pip.main(['install', 'onnxruntime-gpu'])
-pip.main(['install', 'pycuda'])
-
 import matplotlib
 matplotlib.use('Agg')
 
@@ -14,19 +8,23 @@ from pathlib import Path
 from typing import Any
 import subprocess
 import time
+import numpy as np
+
+subprocess.call(
+    "pip install --user --extra-index-url https://pypi.ngc.nvidia.com triton-model-navigator[tensorflow]",
+    shell=True
+)
+import model_navigator as nav
+
+import tensorflow as tf
+from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
+from tensorflow.python.saved_model import tag_constants, signature_constants
+from tensorflow.python.compiler.tensorrt import trt_convert as tftrt
 
 import onnx
 import tf2onnx
 import onnxruntime as ort
-import tensorrt as trt
-import tensorflow as tf
-import numpy as np
 import pycuda.driver as cuda
-
-from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2
-from tensorflow.python.saved_model import tag_constants, signature_constants
-from tensorflow.python.compiler.tensorrt import trt_convert as tftrt
-from tensorflow.python.keras import backend as K
 
 import backend
 import trt_utils
@@ -124,7 +122,6 @@ def convert_pb_to_tftrt(
 
 def convert_h5_to_onnx(
     model_path: Path,
-    dtype: Any = 'float16',
     optimal_batch_size: int = 128,
 ):
     timeit = time.time()
@@ -238,7 +235,7 @@ def benchmark(path, dataset, modelformat='tftrt'):
     return predictions, time.time() - timeit
 
 
-def optimize_model(
+def convert_model(
     model_path: Path,
     dtype: Any = 'float16',
     modelformat: str = 'trt',
@@ -263,7 +260,6 @@ def optimize_model(
     elif modelformat == 'onnx':
         convert_h5_to_onnx(
             model_path=model_path,
-            dtype=dtype,
             optimal_batch_size=batch_size
         )
     elif modelformat == 'trt':
@@ -311,3 +307,57 @@ def optimize_model(
     print(f"TF backend: {number_of_samples/timer_tf:.0f} prediction/sec.")
     print(f"{modelformat.upper()} backend: {number_of_samples/timer:.0f} prediction/sec.")
     np.testing.assert_allclose(preds_tf, preds, rtol=1e-3, atol=1e-3)
+
+
+def verify_func(ys_runner, ys_expected):
+    """Define verify function that compares outputs of the original model and the optimized model."""
+    for y_runner, y_expected in zip(ys_runner, ys_expected):
+        if not all(
+            np.allclose(a, b, atol=1.0e-3) for a, b in zip(y_runner.values(), y_expected.values())
+        ):
+            return False
+    return True
+
+
+def optimize_model(
+    model_path: Path,
+    dtype: Any = 'float16',
+    batch_size: int = 1024,
+):
+
+    gpus = tf.config.experimental.list_physical_devices("GPU")
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+
+    model = backend.load(model_path)
+    embeddings = [{"input__0": np.random.rand(1, *model.input_shape[1:]).astype(dtype)} for _ in range(10)]
+    # embeddings = [np.random.uniform(size=(batch_size, *model.input_shape[1:])).astype(dtype)]
+    
+    # package = nav.tensorflow.optimize(
+    #     model=model,
+    #     verify_func=verify_func,
+    #     dataloader=embeddings,
+    #     custom_configs=(
+    #         nav.TensorRTConfig(
+    #             precision=(nav.TensorRTPrecision.FP16,), #nav.TensorRTPrecision.FP32),
+    #             # run_max_batch_size_search=True
+    #         ),
+    #     ),
+    #     verbose=True,
+    #     debug=True,
+    #     batching=True
+    # )
+
+    # nav.package.save(package, model_path.with_suffix('.nav'), override=True)
+
+    convert_h5_to_onnx(model_path=model_path)
+     
+    package = nav.onnx.optimize(
+        model=model_path.with_suffix('.onnx'),   
+        dataloader=embeddings,
+        target_formats=(nav.Format.TENSORRT,),
+        optimization_profile=nav.OptimizationProfile(max_batch_size=batch_size),
+        custom_configs=[nav.TensorRTConfig(precision=(nav.TensorRTPrecision.FP16,))],
+        verbose=True,
+    )
+    nav.package.save(package, model_path.with_suffix('.nav'), override=True)

@@ -7,6 +7,7 @@ from typing import Any, Union, Optional
 from functools import lru_cache
 
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 plt.set_loglevel('error')
 from tifffile import imwrite
 
@@ -17,8 +18,7 @@ from pathlib import Path
 from skimage.filters import window
 from skimage.restoration import unwrap_phase
 from skimage.feature import peak_local_max
-from skimage.transform import resize
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.interpolate import RegularGridInterpolator
 from line_profiler_pycharm import profile
 from scipy import ndimage
@@ -32,7 +32,7 @@ except ImportError as e:
     from scipy.ndimage import rotate, map_coordinates
     logging.warning(f"Cupy not supported on your system: {e}")
 
-from preprocessing import resize_with_crop_or_pad, measure_snr, measure_noise
+from preprocessing import resize_image, measure_snr, measure_noise
 from utils import multiprocess, gaussian_kernel, fft, ifft, normalize_otf
 from vis import savesvg, plot_interference, plot_embeddings
 
@@ -200,10 +200,11 @@ def remove_interference_pattern(
         kernel_size: int = 15,
         max_num_peaks: int = 20,
         windowing: bool = True,
-        window_size: tuple = (21, 21, 21),
-        plot_interference_pattern: bool = False,
+        window_size: tuple = (21, 27, 27),
+        plot_interference_pattern: bool = True,
         min_psnr: float = 10.0,
-        zborder: int = 10
+        zborder: int = 10,
+        estimated_object_gaussian_sigma: float = 0,
 ):
     """
     Normalize interference pattern from the given FFT
@@ -230,12 +231,13 @@ def remove_interference_pattern(
 
     blured_psf = ndimage.gaussian_filter(psf, sigma=1.1)
 
-    # exclude values close to the egde in Z for finding our template
-    blured_psf[0: zborder] = 0
-    blured_psf[blured_psf.shape[0]-zborder:blured_psf.shape[0]] = 0
+    # exclude values close to the edge in Z for finding our template
+    restricted_blurred = blured_psf.copy()
+    restricted_blurred[0: zborder] = 0
+    restricted_blurred[blured_psf.shape[0]-zborder:blured_psf.shape[0]] = 0
 
-    # get max pixel in the image
-    max_poi = list(np.unravel_index(np.nanargmax(blured_psf, axis=None), blured_psf.shape))
+    # get max pixel in the restricted_blurred image
+    max_poi = list(np.unravel_index(np.nanargmax(restricted_blurred, axis=None), restricted_blurred.shape))
 
     # crop a window around the object for template matching
     template_poi = max_poi.copy()
@@ -244,10 +246,11 @@ def remove_interference_pattern(
     template_poi[1] = np.clip(template_poi[1], a_min=half_length, a_max=(psf.shape[1] - half_length) - 1)
     template_poi[2] = np.clip(template_poi[2], a_min=half_length, a_max=(psf.shape[2] - half_length) - 1)
 
-    high_snr = measure_snr(psf) > 30  # SNR good enough for template
-
+    measured_snr = measure_snr(psf)
+    high_snr = measured_snr > 30  # SNR good enough for template
+    high_snr=False
     if high_snr:
-        # logger.info('Using template')
+        # logger.info(f'Using template. {measured_snr=} > 30')
         init_pos = [p-half_length for p in template_poi]
         kernel = blured_psf[
             init_pos[0]:init_pos[0]+kernel_size,
@@ -256,7 +259,7 @@ def remove_interference_pattern(
         ]
         effective_kernel_width = kernel_size // 2
     else:  # SNR isn't good enough for template, use a gaussian kernel
-        # logger.info('Using gaussian kernel')
+        # logger.info(f'Using gaussian kernel. {measured_snr=} <= 30')
         effective_kernel_width = 1
         kernel = gaussian_kernel(kernlen=[kernel_size]*3, std=effective_kernel_width)
 
@@ -343,20 +346,65 @@ def remove_interference_pattern(
     pois = pois[good_psnr]  # remove points that are below peak snr
 
     psf_peaks = np.zeros_like(psf)  # create a volume masked around each peak, don't go past vol bounds
-    for p in pois:
-        psf_peaks[
-            max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
-            max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
-            max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
-        ] = psf[
-            max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
-            max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
-            max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
-        ]
+    if windowing:  # and not high_snr:
+        window_border = np.floor((otf.shape - np.array(window_size)) // 2).astype(int)
+        window_extent = otf.shape - window_border * 2
+
+        # pad needs amount on both sides of each axis.
+        window_border = np.vstack((window_border, window_border)).transpose()
+        windowing_function = np.pad(window(('tukey', 0.8), window_extent), pad_width=window_border)
+
+        # psf_peaks is a window function that will get the values from 3D array: "beads"
+        psf_peaks = convolution.convolve_fft(
+            beads,
+            windowing_function,
+            allow_huge=True,
+            boundary='fill',
+            nan_treatment='fill',
+            fill_value=0,
+            normalize_kernel=False,
+        )
+        psf_peaks = np.clip(psf_peaks, 0,1)
+
+        min_in_mip_views = min([
+            np.min(np.max(psf, axis=0)),
+            np.min(np.max(psf, axis=1)),
+            np.min(np.max(psf, axis=2))
+        ])
+        # apply window function (go to min_in_min_views, not to zero)
+        psf_peaks *= (psf - min_in_mip_views)
+        psf_peaks += min_in_mip_views
+        psf_peaks = np.clip(psf_peaks, a_max=1, a_min=0)
+        # otf = fft(psf_peaks)  # this line would remove a lot of noise, but it seems to not work with the estimated gaussian size.  I don't know why
+
+    else:
+        for p in pois:
+            psf_peaks[
+                max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
+                max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
+                max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
+            ] = psf[
+                max(0, p[0] - (min_distance + 1)):min(psf.shape[0], p[0] + (min_distance + 1)),
+                max(0, p[1] - (min_distance + 1)):min(psf.shape[1], p[1] + (min_distance + 1)),
+                max(0, p[2] - (min_distance + 1)):min(psf.shape[2], p[2] + (min_distance + 1)),
+            ]
 
     if pois.shape[0] > 0:  # found anything?
-        interference_pattern = fft(beads)
+        if estimated_object_gaussian_sigma > 0:
+            object_estimation = gaussian_kernel(kernlen=[kernel_size] * 3, std=estimated_object_gaussian_sigma)
+            object_estimation /= np.max(object_estimation)
+            # convolve template with the input image
+            beads = convolution.convolve_fft(
+                beads,
+                object_estimation,
+                allow_huge=True,
+                boundary='fill',
+                nan_treatment='fill',
+                fill_value=0,
+                normalize_kernel=False
+            )
 
+        interference_pattern = fft(beads)
         if np.all(beads == 0) or np.all(interference_pattern == 0):
             logger.error("Bad interference pattern")
             return otf
@@ -377,7 +425,7 @@ def remove_interference_pattern(
         # # If we put bead at the center of 64 cube, it will have a phase ramp, so don't do the next line.
         # corrected_otf *= pix_shift_to_phase_ramp(pixel_shift_for_corrected_psf, corrected_otf.shape)
 
-        if windowing: # and not high_snr:
+        if windowing:
             window_border = np.floor((corrected_otf.shape - np.array(window_size)) // 2).astype(int)
             window_extent = corrected_otf.shape - window_border * 2
 
@@ -407,7 +455,9 @@ def remove_interference_pattern(
                     psf_peaks=psf_peaks,
                     corrected_psf=corrected_psf,
                     kernel=kernel,
-                    interference_pattern=interference_pattern
+                    interference_pattern=interference_pattern,
+                    high_snr=high_snr,
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
                 )
             imwrite(f'{plot}_corrected_psf.tif', data=corrected_psf.astype(np.float32), compression='deflate', dtype=np.float32)
 
@@ -423,18 +473,54 @@ def remove_interference_pattern(
                 sharey=False,
                 sharex=False
             )
-
+            transparency = 0.6
+            marker_color = 'blue'
             for ax in range(3):
-                m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='hot')
-                m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot')
-                m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66)
+                if ax == 0:
+                    axes[0, ax].plot(p[2], p[1], marker='x', ls='', color=marker_color)
+                    axes[2, ax].plot(p[2], p[1], marker='x', ls='', color=marker_color, alpha=transparency)
+                    axes[2, ax].add_patch(patches.Rectangle(
+                        xy=(p[2] - min_distance, p[1] - min_distance),
+                        width=min_distance * 2,
+                        height=min_distance * 2,
+                        fill=None,
+                        color=marker_color,
+                        alpha=transparency
+                    ))
+                elif ax == 1:
+                    axes[0, ax].plot(p[2], p[0], marker='x', ls='', color=marker_color)
+                    axes[2, ax].plot(p[2], p[0], marker='x', ls='', color=marker_color, alpha=transparency)
+                    axes[2, ax].add_patch(patches.Rectangle(
+                        xy=(p[2] - min_distance, p[0] - min_distance),
+                        width=min_distance * 2,
+                        height=min_distance * 2,
+                        fill=None,
+                        color=marker_color,
+                        alpha=transparency
+                    ))
+
+                elif ax == 2:
+                    axes[0, ax].plot(p[1], p[0], marker='x', ls='', color=marker_color)
+                    axes[2, ax].plot(p[1], p[0], marker='x', ls='', color=marker_color, alpha=transparency)
+                    axes[2, ax].add_patch(patches.Rectangle(
+                        xy=(p[1] - min_distance, p[0] - min_distance),
+                        width=min_distance * 2,
+                        height=min_distance * 2,
+                        fill=None,
+                        color=marker_color,
+                        alpha=transparency
+                    ))
+                m1 = axes[0, ax].imshow(np.nanmax(psf, axis=ax), cmap='hot', aspect='auto')
+                m2 = axes[1, ax].imshow(np.nanmax(kernel, axis=ax), cmap='hot', aspect='auto')
+                m3 = axes[2, ax].imshow(np.nanmax(convolved_psf, axis=ax), cmap='Greys_r', alpha=.66, aspect='auto')
 
             for ax, m, label in zip(
                     range(3),
                     [m1, m2, m3],
                     [f'Inputs (MIP)', 'Kernel', 'Peak detection\n(No objects were detected)']
             ):
-                cax = inset_axes(axes[ax, -1], width="10%", height="100%", loc='center right', borderpad=-3)
+                divider = make_axes_locatable(axes[ax, -1])
+                cax = divider.append_axes("right", size="5%", pad=0.1)
                 cb = plt.colorbar(m, cax=cax)
                 cax.yaxis.set_label_position("right")
                 cax.set_ylabel(label)
@@ -447,7 +533,7 @@ def remove_interference_pattern(
             axes[0, 2].set_title('YZ')
             savesvg(fig, f'{plot}_interference_pattern.svg')
 
-        return otf
+        return np.zeros_like(otf)
 
 
 def pix_shift_to_phase_ramp(pix_shift, array_shape):
@@ -473,6 +559,7 @@ def pix_shift_to_phase_ramp(pix_shift, array_shape):
     return np.exp(1j*ramp3d)
 
 
+
 @profile
 def compute_emb(
         otf: np.ndarray,
@@ -484,7 +571,8 @@ def compute_emb(
         log10: bool = False,
         embedding_option: Any = 'spatial_planes',
         freq_strength_threshold: float = 0.,
-        model_psf_shape: tuple = (64, 64, 64)
+    model_psf_shape: tuple = (64, 64, 64),
+    interpolate_embeddings: bool = False
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -519,23 +607,6 @@ def compute_emb(
     else:
         na_mask = na_mask.astype(bool)
 
-    if otf.shape != model_psf_shape:  # psf should be the same FOV size in um, then we crop the otf to the iotf shape
-        real = resize_with_crop_or_pad(np.real(otf), crop_shape=model_psf_shape, mode='constant')  # only center crop
-        imag = resize_with_crop_or_pad(np.imag(otf), crop_shape=model_psf_shape, mode='constant')  # only center crop
-        otf = real + 1j * imag
-
-    if iotf.shape != model_psf_shape:
-        iotf = resize_with_crop_or_pad(iotf, crop_shape=model_psf_shape, mode='constant')  # only center crop
-
-    if na_mask.shape != model_psf_shape:
-        na_mask = resize_with_crop_or_pad(
-            na_mask.astype(float), crop_shape=model_psf_shape, mode='constant'
-        ).astype(bool)
-
-    if norm:
-        otf = normalize_otf(otf, freq_strength_threshold=freq_strength_threshold)
-
-
     if val == 'real':
         emb = np.real(otf)
 
@@ -545,26 +616,41 @@ def compute_emb(
     elif val == 'angle':
         emb = np.angle(otf)
         emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
+    
+    elif val == 'abs':
+        emb = np.abs(otf).astype(np.float32)
 
+    else:
+        raise Exception(f'invalid choice, {val=}, for compute_emb')
+    
+    if emb.shape != model_psf_shape:
+        emb = resize_image(emb, crop_shape=model_psf_shape, interpolate=interpolate_embeddings)
+    
+    if norm:
+        emb = normalize_otf(emb, freq_strength_threshold=freq_strength_threshold)
+
+    if ratio:
+        iotf = np.abs(iotf).astype(np.float32)
+        
+        if iotf.shape != emb.shape:
+            iotf = resize_image(iotf, crop_shape=emb.shape, interpolate=interpolate_embeddings)
+        
+        emb /= iotf
+        emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
+    
+    if na_mask.shape != emb.shape:
+        na_mask = resize_image(na_mask, crop_shape=emb.shape, interpolate=interpolate_embeddings)
+    
+    if val == 'angle':
         try:
             # unwrap phase if we have at least 100 nonzero points left in emb.
             if len(np.ma.nonzero(emb)[0]) > 100:
-                emb = np.ma.masked_array(emb, mask=~na_mask, fill_value=0)
+                emb = np.ma.masked_array(emb, mask=~na_mask.astype(bool), fill_value=0)
                 emb = unwrap_phase(emb)
                 emb = emb.filled(0)
                 emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
         except TimeoutError as e:
             logger.warning(f"`unwrap_phase`: {e}")
-
-    elif val == 'abs':
-        emb = np.abs(otf)
-
-    else:
-        raise Exception(f'invalid choice, {val=}, for compute_emb')
-
-    if ratio:
-        emb /= np.abs(iotf)
-        emb = np.nan_to_num(emb, nan=0, neginf=0, posinf=0)
 
     emb *= na_mask
 
@@ -601,7 +687,7 @@ def compute_emb(
         return emb.astype(np.float32)
 
 
-@lru_cache(maxsize=361, typed=True)
+@lru_cache(typed=True)
 def rotate_coords(
     shape: Union[tuple, np.ndarray],
     digital_rotations: int,
@@ -708,10 +794,18 @@ def rotate_embeddings(
 
     if gpu_support:
         emb = cp.asnumpy(
-            map_coordinates(cp.array(emb), coordinates=coordinates, output=cp.float32, order=1, prefilter=False)
+            map_coordinates(cp.array(emb),
+                            coordinates=coordinates,
+                            output=cp.float32,
+                            order=1,
+                            prefilter=False)
         )
     else:
-        emb = map_coordinates(emb, coordinates=coordinates, output=np.float32, order=1, prefilter=False)
+        emb = map_coordinates(emb,
+                              coordinates=coordinates,
+                              output=np.float32,
+                              order=1,
+                              prefilter=False)
 
     if debug_rotations and plot:
         rotation_labels = np.linspace(0, 360, digital_rotations)
@@ -729,25 +823,29 @@ def rotate_embeddings(
 
 @profile
 def fourier_embeddings(
-        inputs: Union[np.array, tuple],
-        iotf: np.array,
-        na_mask: Optional[np.ndarray] = None,
-        ratio: bool = True,
-        norm: bool = True,
-        padsize: Any = None,
-        no_phase: bool = False,
-        alpha_val: str = 'abs',
-        phi_val: str = 'angle',
-        plot: Any = None,
-        log10: bool = False,
-        input_coverage: float = 1.0,
-        freq_strength_threshold: float = 0.01,
-        pois: Any = None,
-        remove_interference: bool = True,
-        embedding_option: str = 'spatial_planes',
-        digital_rotations: Optional[int] = None,
-        model_psf_shape: tuple = (64, 64, 64),
-        debug_rotations: bool = False
+    inputs: Union[np.array, tuple],
+    iotf: np.array,
+    na_mask: Optional[np.ndarray] = None,
+    ratio: bool = True,
+    norm: bool = True,
+    padsize: Any = None,
+    no_phase: bool = False,
+    alpha_val: str = 'abs',
+    phi_val: str = 'angle',
+    plot: Any = None,
+    log10: bool = False,
+    input_coverage: float = 1.0,
+    freq_strength_threshold: float = 0.01,
+    pois: Any = None,
+    remove_interference: bool = True,
+    plot_interference: bool = True,  # because it's broken.
+    embedding_option: str = 'spatial_planes',
+    digital_rotations: Optional[int] = None,
+    model_psf_shape: tuple = (64, 64, 64),
+    debug_rotations: bool = False,
+    interpolate_embeddings: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
+    use_reconstructed_otf: bool = False
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -775,6 +873,9 @@ def fourier_embeddings(
             Capitalizing on the radial symmetry of the FFT,
             we have a few options to minimize the size of the embedding.
         debug_rotations: Print out the rotations if true
+        interpolate_embeddings: downsample/upsample embeddings to match model's input size
+        estimated_object_gaussian_sigma: to simulate ideal OTF for objects bigger than diffraction limit
+        use_reconstructed_otf: option to use reconstructed otf for alpha embedding
     """
 
     if isinstance(inputs, tuple):
@@ -788,8 +889,8 @@ def fourier_embeddings(
         otf = np.squeeze(otf)
 
     if input_coverage != 1.:
-        psf = resize_with_crop_or_pad(psf, crop_shape=[int(s * input_coverage) for s in psf.shape])
-
+        psf = resize_image(psf, crop_shape=[int(s * input_coverage) for s in psf.shape])
+    
     if np.all(psf == 0):
         if digital_rotations is not None:
             emb = np.zeros((digital_rotations, 3, *model_psf_shape[1:])) \
@@ -799,10 +900,13 @@ def fourier_embeddings(
                 if no_phase else np.zeros((6, *model_psf_shape[1:]))
 
     else:
-        # bead = gaussian_kernel(kernlen=iotf.shape, std=fwhm2sigma(3))
-        # bead_fft = fft(bead)
-        # iotf = normalize_otf(iotf*bead_fft, iotf, freq_strength_threshold=0.05)
-
+        if na_mask.shape != otf.shape:
+            na_mask_otf = resize_image(na_mask, crop_shape=otf.shape, interpolate=interpolate_embeddings)
+        else:
+            na_mask_otf = na_mask
+        
+        otf *= na_mask_otf
+        
         if no_phase:
             emb = compute_emb(
                 otf,
@@ -814,9 +918,21 @@ def fourier_embeddings(
                 log10=log10,
                 embedding_option=embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
-                model_psf_shape=model_psf_shape
+                model_psf_shape=model_psf_shape,
+                interpolate_embeddings=interpolate_embeddings
             )
         else:
+            
+            if remove_interference and use_reconstructed_otf:
+                otf = remove_interference_pattern(
+                    psf,
+                    otf,
+                    plot=plot if plot_interference else None,
+                    pois=pois,
+                    windowing=True,
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
+                )
+
             alpha = compute_emb(
                 otf,
                 iotf,
@@ -827,16 +943,18 @@ def fourier_embeddings(
                 log10=log10,
                 embedding_option=embedding_option,
                 freq_strength_threshold=freq_strength_threshold,
-                model_psf_shape=model_psf_shape
+                model_psf_shape=model_psf_shape,
+                interpolate_embeddings=interpolate_embeddings
             )
 
-            if remove_interference:
+            if remove_interference and not use_reconstructed_otf:
                 otf = remove_interference_pattern(
                     psf,
                     otf,
-                    plot=plot,
+                    plot=plot if plot_interference else None,
                     pois=pois,
-                    windowing=True
+                    windowing=True,
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                 )
 
             phi = compute_emb(
@@ -849,14 +967,11 @@ def fourier_embeddings(
                 log10=False,
                 embedding_option='spatial_planes',
                 freq_strength_threshold=freq_strength_threshold,
-                model_psf_shape=model_psf_shape
+                model_psf_shape=model_psf_shape,
+                interpolate_embeddings=interpolate_embeddings
             )
 
             emb = np.concatenate([alpha, phi], axis=0)
-
-        if emb.shape[1:] != model_psf_shape[1:]:
-            emb = resize(emb, output_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
-            # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
 
         if plot is not None:
             plt.style.use("default")
@@ -898,10 +1013,12 @@ def rolling_fourier_embeddings(
         model_psf_shape: tuple = (64, 64, 64),
         debug_rotations: bool = False,
         remove_interference: bool = True,
+        plot_interference: bool = False,
         cpu_workers: int = -1,
         nrows: Optional[int] = None,
         ncols: Optional[int] = None,
-        ztiles: Optional[int] = None
+        ztiles: Optional[int] = None,
+        estimated_object_gaussian_sigma: float = 0,
 ):
     """
     Gives the "lower dimension" representation of the data that will be shown to the model.
@@ -936,6 +1053,8 @@ def rolling_fourier_embeddings(
                 if no_phase else np.zeros((6, *model_psf_shape[1:]))
 
     else:  # filter out blank images
+        if plot is not None:
+            original_rois = rois.copy() # save a copy to plot correct order of tiles
         rois = rois[[~np.all(r == 0) for r in rois]].astype(np.float32)
 
         otfs = multiprocess(
@@ -944,10 +1063,20 @@ def rolling_fourier_embeddings(
             cores=cpu_workers,
             desc='Compute FFTs'
         )
-
+        avg_otf = np.nanmean(otfs, axis=0)
+        
+        if avg_otf.shape != model_psf_shape:
+            avg_otf = resize_image(avg_otf, crop_shape=model_psf_shape)
+        
+        if iotf.shape != model_psf_shape:
+            iotf = resize_image(iotf, crop_shape=model_psf_shape)
+        
+        if na_mask.shape != iotf.shape:
+            na_mask = resize_image(na_mask.astype(np.float32), crop_shape=iotf.shape)
+        
         if no_phase:
             emb = compute_emb(
-                resize_with_crop_or_pad(np.nanmean(np.abs(otfs), axis=0), crop_shape=iotf.shape),
+                np.abs(avg_otf),
                 iotf,
                 na_mask=na_mask,
                 val=alpha_val,
@@ -959,7 +1088,7 @@ def rolling_fourier_embeddings(
             )
         else:
             alpha = compute_emb(
-                np.nanmean(np.abs(otfs), axis=0),
+                np.abs(avg_otf),
                 iotf,
                 na_mask=na_mask,
                 val=alpha_val,
@@ -977,6 +1106,7 @@ def rolling_fourier_embeddings(
                     plot=None,
                     windowing=True,
                     window_size=window_size,
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                 )
                 phi_otfs = multiprocess(
                     func=interference,
@@ -992,9 +1122,9 @@ def rolling_fourier_embeddings(
 
                 phi_otfs = phi_otfs[found_spots_in_tile]
                 avg_otf = np.nanmean(phi_otfs, axis=0)
-                avg_otf = resize_with_crop_or_pad(avg_otf, crop_shape=iotf.shape)
+                avg_otf = resize_image(avg_otf, crop_shape=iotf.shape)
 
-                if plot:
+                if plot_interference:
                     gamma = 0.5
                     avg_psf = ifft(avg_otf)  # this will have ipsf voxel size (a different voxel size than sample).
 
@@ -1007,13 +1137,14 @@ def rolling_fourier_embeddings(
                     )
                     for row in range(min(3, phi_otfs.shape[0])):
                         # this will have ipsf voxel size (a different voxel size than sample).
-                        phi_psf = ifft(resize_with_crop_or_pad(phi_otfs[row], crop_shape=window_size))
+                        phi_psf = ifft(resize_image(phi_otfs[row], crop_shape=window_size))
                         for ax in range(3):
                             m5 = axes[row, ax].imshow(np.nanmax(phi_psf, axis=ax)**gamma, cmap='magma')
 
                         label = f'Reconstructed\nTile {row} of {phi_otfs.shape[0]}. $\gamma$={gamma}'
 
-                        cax = inset_axes(axes[row, -1], width="10%", height="90%", loc='center right', borderpad=-2)
+                        divider = make_axes_locatable(axes[row, -1])
+                        cax = divider.append_axes("right", size="5%", pad=0.1)
                         cb = plt.colorbar(m5, cax=cax)
                         cax.yaxis.set_label_position("right")
                         cax.set_ylabel(label)
@@ -1023,7 +1154,8 @@ def rolling_fourier_embeddings(
 
                     label = f'Reconstructed\navg $\gamma$={gamma}'
 
-                    cax = inset_axes(axes[-1, -1], width="10%", height="90%", loc='center right', borderpad=-2)
+                    divider = make_axes_locatable(axes[-1, -1])
+                    cax = divider.append_axes("right", size="5%", pad=0.1)
                     cb = plt.colorbar(m5, cax=cax)
                     cax.yaxis.set_label_position("right")
                     cax.set_ylabel(label)
@@ -1035,8 +1167,6 @@ def rolling_fourier_embeddings(
                     axes[0, 1].set_title('XZ')
                     axes[0, 2].set_title('YZ')
                     savesvg(fig, f'{plot}_avg_interference_pattern.svg')
-            else:
-                avg_otf = resize_with_crop_or_pad(np.nanmean(otfs, axis=0), crop_shape=iotf.shape)
 
             phi = compute_emb(
                 avg_otf,
@@ -1053,13 +1183,12 @@ def rolling_fourier_embeddings(
             emb = np.concatenate([alpha, phi], axis=0)
 
         if emb.shape[1:] != model_psf_shape[1:]:
-            emb = resize(emb, output_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
-            # emb = resize_with_crop_or_pad(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]))
+            emb = resize_image(emb, crop_shape=(3 if no_phase else 6, *model_psf_shape[1:]), interpolate=True)
 
         if plot is not None:
             plt.style.use("default")
             plot_embeddings(
-                inputs=rois,
+                inputs=original_rois,
                 emb=emb,
                 save_path=plot,
                 nrows=nrows,

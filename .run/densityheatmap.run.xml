@@ -1,6 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="densityheatmap" type="PythonConfigurationType" factoryName="Python" folderName="eval">
     <module name="opticalaberrations" />
+    <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
@@ -11,9 +12,39 @@
     <option name="IS_MODULE_SDK" value="true" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="DockerContainerSettingsRunConfigurationExtension">
+      <option name="envVars">
+        <list />
+      </option>
+      <option name="extraHosts">
+        <list />
+      </option>
+      <option name="links">
+        <list />
+      </option>
+      <option name="networkDisabled" value="false" />
+      <option name="networkMode" value="bridge" />
+      <option name="portBindings">
+        <list />
+      </option>
+      <option name="publishAllPorts" value="false" />
+      <option name="runCliOptions" value="--entrypoint= --rm --gpu all" />
+      <option name="version" value="2" />
+      <option name="volumeBindings">
+        <list>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/opt/project" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="$PROJECT_DIR$" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
+        </list>
+      </option>
+    </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/test.py" />
-    <option name="PARAMETERS" value="../pretrained_models/opticalnet-15-YuMB-lambda510.h5 --datadir ../dataset/test/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/ --digital_rotations --eval_sign signed densityheatmap" />
+      <option name="PARAMETERS"
+              value="../pretrained_models/prototype-15-YuMB_lambda510-P3216-R2222.h5 --datadir ../dataset/training_dataset/YuMB_lambda510/z200-y97-x97/z64-y64-x64/z15/ --digital_rotations --eval_sign signed --simulate_samples --min_photons 50000 --max_photons 200000 --denoiser ../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64 densityheatmap"/>
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

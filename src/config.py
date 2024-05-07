@@ -90,14 +90,21 @@ def main(args=None):
             use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator
         )
 
-    elif args.target == "optimize":
+    elif args.target == "convert":
 
         import convert
-        convert.optimize_model(
+        convert.convert_model(
             model_path=args.model,
             modelformat=args.modelformat
         )
 
+    elif args.target == "optimize":
+
+        import convert
+        convert.optimize_model(
+            model_path=args.model
+        )
+        
     else:
         logging.error("Error: unknown action!")
 

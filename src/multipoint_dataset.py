@@ -7,6 +7,7 @@ import logging
 import sys
 import os
 import time
+import uuid
 import ujson
 from functools import partial
 from typing import Any, Optional, Union
@@ -15,6 +16,7 @@ from tifffile import TiffFile
 from tifffile import imwrite
 import numpy as np
 from scipy import stats as st
+from csbdeep.models import CARE
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -44,7 +46,17 @@ def save_synthetic_sample(
     counts,
     p2v,
     avg_min_distance,
-    gen,
+    n_modes=15,
+    order='ansi',
+    x_voxel_size=.125,
+    y_voxel_size=.125,
+    z_voxel_size=.2,
+    lam_detection=.510,
+    na_detection=1.0,
+    refractive_index=1.33,
+    mode_weights='pyramid',
+    embedding_option='spatial_planes',
+    distribution='mixed',
     lls_defocus_offset=0.,
     npoints=1,
     gt=None,
@@ -75,8 +87,8 @@ def save_synthetic_sample(
         json = dict(
             path=f"{savepath}.tif",
             shape=inputs.shape,
-            n_modes=int(gen.n_modes),
-            order=str(gen.order),
+            n_modes=int(n_modes),
+            order=str(order),
             lls_defocus_offset=float(lls_defocus_offset),
             zernikes=amps.tolist(),
             photons=int(photons),
@@ -90,15 +102,15 @@ def save_synthetic_sample(
             sigma_background_noise=float(sigma_background_noise),
             electrons_per_count=float(electrons_per_count),
             quantum_efficiency=float(quantum_efficiency),
-            x_voxel_size=float(gen.x_voxel_size),
-            y_voxel_size=float(gen.y_voxel_size),
-            z_voxel_size=float(gen.z_voxel_size),
-            wavelength=float(gen.lam_detection),
-            na_detection=float(gen.na_detection),
-            refractive_index=float(gen.refractive_index),
-            mode_weights=str(gen.mode_weights),
-            embedding_option=str(gen.embedding_option),
-            distribution=str(gen.distribution),
+            x_voxel_size=float(x_voxel_size),
+            y_voxel_size=float(y_voxel_size),
+            z_voxel_size=float(z_voxel_size),
+            wavelength=float(lam_detection),
+            na_detection=float(na_detection),
+            refractive_index=float(refractive_index),
+            mode_weights=str(mode_weights),
+            embedding_option=str(embedding_option),
+            distribution=str(distribution),
             psf_type=str(psf_type)
         )
 
@@ -121,7 +133,7 @@ def beads(
     zborder: int = 10,
     kernlen: int = 21,
     kernhalfwidth: int = 10,
-    uniform_background: int = 0
+    uniform_background: int = 0,
 ):
     """
     Args:
@@ -138,11 +150,11 @@ def beads(
         num_objs = int(randuniform((1, 50)))
     else:
         num_objs = int(num_objs)
-
+    
     if object_size == 0:
         bead = photons
     elif object_size == -1:  # bead size will be randomly selected
-        pick_random_bead_size = lambda: np.random.uniform(low=1, high=5)
+        pick_random_fwhm = lambda: fwhm2sigma(np.random.choice([1, 2, 3, 4]))
     else:  # all beads will have the same size
         bead = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=fwhm2sigma(object_size)) * photons
 
@@ -161,10 +173,7 @@ def beads(
             reference[z, y, x] = bead
 
         elif object_size == -1:  # bead size will be randomly selected
-            bead = gaussian_kernel(
-                kernlen=(kernlen, kernlen, kernlen),
-                std=fwhm2sigma(pick_random_bead_size())
-            ) * photons
+            bead = gaussian_kernel(kernlen=(kernlen, kernlen, kernlen), std=pick_random_fwhm()) * photons
 
             reference[
                 max(0, z-kernhalfwidth):min(reference.shape[0], z+kernhalfwidth+1),
@@ -207,6 +216,8 @@ def simulate_image(
     plot: bool = False,
     gtdir: Optional[Path] = None,
     skip_remove_background: bool = False,
+    denoiser: Optional[CARE] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     outdir.mkdir(exist_ok=True, parents=True)
 
@@ -264,6 +275,11 @@ def simulate_image(
             odir = outdir/e
             odir.mkdir(exist_ok=True, parents=True)
 
+            if denoiser is not None:
+                n_tiles = np.ceil(np.array(inputs.shape) / np.array(denoiser_window_size)).astype(int)
+                inputs = denoiser.predict(inputs, axes='ZYX', n_tiles=n_tiles)
+                inputs[inputs < 0.0] = 0.0
+
             processed = prep_sample(
                 inputs,
                 sample_voxel_size=gen.voxel_size,
@@ -296,7 +312,17 @@ def simulate_image(
                 npoints=npoints,
                 p2v=p2v,
                 gt=reference,
-                gen=gen,
+                n_modes=phi.modes,
+                order=phi.order,
+                x_voxel_size=gen.x_voxel_size,
+                y_voxel_size=gen.y_voxel_size,
+                z_voxel_size=gen.z_voxel_size,
+                lam_detection=phi.lam_detection,
+                na_detection=gen.na_detection,
+                refractive_index=gen.refractive_index,
+                mode_weights=phi.mode_weights,
+                embedding_option=gen.embedding_option,
+                distribution=phi.distribution,
                 realspace=inputs,
                 realspace_noisefree=inputs_noisefree,
                 avg_min_distance=avg_min_distance,
@@ -308,6 +334,12 @@ def simulate_image(
                 psf_type=gen.psf_type,
             )
     else:
+        if denoiser is not None:
+            imwrite(f"{outdir / filename}_raw.tif", inputs.astype(np.float32), compression='deflate')
+            n_tiles = np.ceil(np.array(inputs.shape) / np.array(denoiser_window_size)).astype(int)
+            inputs = denoiser.predict(inputs, axes='ZYX', n_tiles=n_tiles)
+            inputs[inputs < 0.0] = 0.0
+
         save_synthetic_sample(
             savepath=outdir/filename,
             inputs=inputs,
@@ -322,7 +354,17 @@ def simulate_image(
             npoints=npoints,
             avg_min_distance=avg_min_distance,
             p2v=p2v,
-            gen=gen,
+            n_modes=phi.modes,
+            order=phi.order,
+            x_voxel_size=gen.x_voxel_size,
+            y_voxel_size=gen.y_voxel_size,
+            z_voxel_size=gen.z_voxel_size,
+            lam_detection=phi.lam_detection,
+            na_detection=gen.na_detection,
+            refractive_index=gen.refractive_index,
+            mode_weights=phi.mode_weights,
+            embedding_option=gen.embedding_option,
+            distribution=phi.distribution,
             lls_defocus_offset=lls_defocus_offset,
             sigma_background_noise=sigma_background_noise,
             mean_background_offset=mean_background_offset,
@@ -330,6 +372,8 @@ def simulate_image(
             quantum_efficiency=quantum_efficiency,
             psf_type=gen.psf_type,
         )
+    
+    logger.info(f"Saving: {outdir/filename}")
     return inputs
 
 
@@ -344,7 +388,7 @@ def create_synthetic_sample(
     mode_dist: str,
     gamma: float,
     signed: bool,
-    randomize_voxel_size: bool,
+    randomize_object_size: bool,
     rotate: bool,
     min_amplitude: float,
     max_amplitude: float,
@@ -367,8 +411,9 @@ def create_synthetic_sample(
     denoising_dataset: bool = False,
     uniform_background: int = 0,
     skip_remove_background: bool = False,
+    denoiser: Optional[CARE] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
-
     aberration = Wavefront(
         amplitudes=(min_amplitude, max_amplitude),
         order='ansi',
@@ -389,10 +434,10 @@ def create_synthetic_sample(
     reference = beads(
         image_shape=image_shape,
         photons=photons,
-        object_size=object_size,
+        object_size=-1 if randomize_object_size else object_size,
         num_objs=npoints,
         fill_radius=fill_radius,
-        uniform_background=uniform_background
+        uniform_background=uniform_background,
     )
 
     inputs, wavefronts = {}, {}
@@ -404,25 +449,48 @@ def create_synthetic_sample(
             template = wavefronts.get("../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat")
 
         if denoising_dataset:
-            outdir = savedir / 'noisy'
-            outdir.mkdir(exist_ok=True, parents=True)
+            basedir = savedir / rf"{re.sub(r'.*/lattice/', '', str(gen.psf_type)).split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
+            basedir = basedir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
+            basedir = basedir / f"z{gen.n_modes}"
 
-            gtdir = savedir / 'gt'
+            outdir = basedir / 'noisy'
+
+            if aberration.distribution == 'powerlaw':
+                outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
+            else:
+                outdir = outdir / f"{aberration.distribution}"
+
+            outdir = outdir / f"photons_{photon_range[0]}-{photon_range[1]}"
+            outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
+            gtdir = basedir / 'gt'
+            if aberration.distribution == 'powerlaw':
+                gtdir = gtdir / f"powerlaw_gamma_{str(round(aberration.gamma, 2)).replace('.', 'p')}"
+            else:
+                gtdir = gtdir / f"{aberration.distribution}"
+
+            gtdir = gtdir / f"photons_{photon_range[0]}-{photon_range[1]}"
+            gtdir = gtdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
+                              f"-{str(round(max_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}"
+
+            outdir.mkdir(exist_ok=True, parents=True)
             gtdir.mkdir(exist_ok=True, parents=True)
+
         else:
             gtdir = None
             outdir = savedir / rf"{re.sub(r'.*/lattice/', '', str(gen.psf_type)).split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
-
-            if not randomize_voxel_size:
+            
+            if not randomize_object_size:
                 outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
 
             outdir = outdir / f"z{gen.psf_shape[0]}-y{gen.psf_shape[0]}-x{gen.psf_shape[0]}"
             outdir = outdir / f"z{gen.n_modes}"
 
-            if gen.distribution == 'powerlaw':
-                outdir = outdir / f"powerlaw_gamma_{str(round(gen.gamma, 2)).replace('.', 'p')}"
+            if aberration.distribution == 'powerlaw':
+                outdir = outdir / f"powerlaw_gamma_{str(round(aberration.gamma, 2)).replace('.', 'p')}"
             else:
-                outdir = outdir / f"{gen.distribution}"
+                outdir = outdir / f"{aberration.distribution}"
 
             outdir = outdir / f"photons_{photon_range[0]}-{photon_range[1]}"
             outdir = outdir / f"amp_{str(round(min_amplitude, 3)).replace('0.', 'p').replace('-', 'neg')}" \
@@ -436,31 +504,30 @@ def create_synthetic_sample(
             r = gen.lam_detection / default_wavelength
             phi = Wavefront(
                 amplitudes=[r * z for z in aberration.amplitudes],
-                order=gen.order,
-                distribution=gen.distribution,
-                mode_weights=gen.mode_weights,
-                modes=gen.n_modes,
-                gamma=gen.gamma,
-                signed=gen.signed,
-                rotate=gen.rotate,
+                order=aberration.order,
+                distribution=aberration.distribution,
+                mode_weights=aberration.mode_weights,
+                modes=aberration.modes,
+                gamma=aberration.gamma,
+                signed=aberration.signed,
+                rotate=aberration.rotate,
                 lam_detection=gen.lam_detection,
             )
         else:
             phi = Wavefront(
                 amplitudes=aberration.amplitudes if template is None else template.amplitudes,
-                order=gen.order,
-                distribution=gen.distribution,
-                mode_weights=gen.mode_weights,
-                modes=gen.n_modes,
-                gamma=gen.gamma,
-                signed=gen.signed,
-                rotate=gen.rotate,
+                order=aberration.order,
+                distribution=aberration.distribution,
+                mode_weights=aberration.mode_weights,
+                modes=aberration.modes,
+                gamma=aberration.gamma,
+                signed=aberration.signed,
+                rotate=aberration.rotate,
                 lam_detection=gen.lam_detection,
             )
 
         if emb:
             try:  # check if file already exists and not corrupted
-
                 if override:
                     raise Exception(f'Override {filename}')
 
@@ -476,13 +543,13 @@ def create_synthetic_sample(
 
                     w = Wavefront(
                         amplitudes=amplitudes,
-                        order=gen.order,
-                        distribution=gen.distribution,
-                        mode_weights=gen.mode_weights,
-                        modes=gen.n_modes,
-                        gamma=gen.gamma,
-                        signed=gen.signed,
-                        rotate=gen.rotate,
+                        order=aberration.order,
+                        distribution=aberration.distribution,
+                        mode_weights=aberration.mode_weights,
+                        modes=aberration.modes,
+                        gamma=aberration.gamma,
+                        signed=aberration.signed,
+                        rotate=aberration.rotate,
                         lam_detection=gen.lam_detection,
                     )
 
@@ -501,13 +568,13 @@ def create_synthetic_sample(
                             # Override wavefront to generate sample again
                             wavefronts[gen.psf_type] = Wavefront(
                                 amplitudes=template_amplitudes,
-                                order=gen.order,
-                                distribution=gen.distribution,
-                                mode_weights=gen.mode_weights,
-                                modes=gen.n_modes,
-                                gamma=gen.gamma,
-                                signed=gen.signed,
-                                rotate=gen.rotate,
+                                order=aberration.order,
+                                distribution=aberration.distribution,
+                                mode_weights=aberration.mode_weights,
+                                modes=aberration.modes,
+                                gamma=aberration.gamma,
+                                signed=aberration.signed,
+                                rotate=aberration.rotate,
                                 lam_detection=gen.lam_detection,
                             )
                             raise Exception("Wavefront does not match template. Creating sample again.")
@@ -536,7 +603,9 @@ def create_synthetic_sample(
                     scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
                     if gen.psf_type == 'widefield' else None,
                     plot=plot,
-                    skip_remove_background=skip_remove_background
+                    skip_remove_background=skip_remove_background,
+                    denoiser=denoiser,
+                    denoiser_window_size=denoiser_window_size
                 )
         else:
             wavefronts[gen.psf_type] = phi
@@ -562,7 +631,9 @@ def create_synthetic_sample(
                 scale_by_maxcounts=np.max(inputs['../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat'])
                 if gen.psf_type == 'widefield' else None,
                 plot=plot,
-                skip_remove_background=skip_remove_background
+                skip_remove_background=skip_remove_background,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size
             )
 
     return inputs
@@ -675,7 +746,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        '--randomize_voxel_size', action='store_true',
+        '--randomize_object_size', action='store_true',
         help='optional flag to randomize voxel size during training'
     )
 
@@ -769,6 +840,11 @@ def parse_args(args):
         help='optional toggle to skip preprocessing input data using the DoG filter'
     )
 
+    parser.add_argument(
+        '--denoiser', type=Path, default=None,
+        help='path to denoiser model'
+    )
+
     return parser.parse_args(args)
 
 
@@ -824,6 +900,12 @@ def main(args=None):
             skip_remove_background_ideal_psf=args.skip_remove_background
         )
 
+    if args.denoiser is not None:
+        logger.info(f"Loading denoiser model: {args.denoiser}")
+        denoiser = CARE(config=None, name=args.denoiser.name, basedir=args.denoiser.parent)
+    else:
+        denoiser = None
+
     sample = partial(
         create_synthetic_sample,
         generators=generators,
@@ -842,7 +924,7 @@ def main(args=None):
         random_crop=args.random_crop,
         gamma=args.gamma,
         signed=args.signed,
-        randomize_voxel_size=args.randomize_voxel_size,
+        randomize_object_size=args.randomize_object_size,
         rotate=args.rotate,
         min_amplitude=args.min_amplitude,
         max_amplitude=args.max_amplitude,
@@ -856,10 +938,16 @@ def main(args=None):
         plot=args.plot,
         denoising_dataset=args.denoising_dataset,
         uniform_background=args.uniform_background,
-        skip_remove_background=args.skip_remove_background
+        skip_remove_background=args.skip_remove_background,
+        denoiser=denoiser
     )
     logger.info(f"Output folder: {Path(args.outdir).resolve()}")
-    jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]
+
+    if args.denoising_dataset:
+        jobs = [f"{uuid.uuid4()}" for k in range(args.iters)]
+    else:
+        jobs = [f"{int(args.filename) + k}" for k in range(args.iters)]
+
     multiprocess(func=sample, jobs=jobs, cores=args.cpu_workers)
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 

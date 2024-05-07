@@ -2,6 +2,7 @@ import matplotlib
 
 matplotlib.use('Agg')
 
+import pickle
 import io
 import sys, re
 import logging
@@ -92,8 +93,7 @@ def multiprocess(
                 file=sys.stdout,
             ))
     else:
-        logging.error('Jobs must be a positive integer')
-        return False
+        raise Exception(f'No data found in {jobs=}')
 
     return np.array(results)
 
@@ -500,7 +500,9 @@ def get_tile_confidence(
 
 
 def convert_to_windows_file_string(f):
-    return str(f).replace('/', '\\').replace("\\clusterfs\\nvme\\", "V:\\")
+    f = str(f).replace('/', '\\').replace("\\clusterfs\\nvme\\", "V:\\")
+    f = f.replace("\\clusterfs\\nvme2\\", "U:\\")
+    return f
 
 
 def convert_path_to_other_cam(src_path: Path, dst='B'):
@@ -619,3 +621,13 @@ def normalize_otf(otf, freq_strength_threshold: float = 0., percentile: bool = F
 
     otf = np.nan_to_num(otf, nan=0, neginf=0, posinf=0)
     return otf
+
+
+def load_pickle(path):
+    with open(path, 'rb') as f:
+        return pickle.load(f)
+
+
+def save_pickle(x, path):
+    with open(path, 'wb') as f:
+        pickle.dump(x, f, protocol=pickle.HIGHEST_PROTOCOL)

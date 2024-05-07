@@ -1,6 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="combine_tiles" type="PythonConfigurationType" factoryName="Python" folderName="ao">
     <module name="opticalaberrations" />
+    <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
@@ -11,6 +12,35 @@
     <option name="IS_MODULE_SDK" value="true" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="DockerContainerSettingsRunConfigurationExtension">
+      <option name="envVars">
+        <list />
+      </option>
+      <option name="extraHosts">
+        <list />
+      </option>
+      <option name="links">
+        <list />
+      </option>
+      <option name="networkDisabled" value="false" />
+      <option name="networkMode" value="bridge" />
+      <option name="portBindings">
+        <list />
+      </option>
+      <option name="publishAllPorts" value="false" />
+      <option name="runCliOptions" value="--entrypoint= --rm --gpu all" />
+      <option name="version" value="2" />
+      <option name="volumeBindings">
+        <list>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/opt/project" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="$PROJECT_DIR$" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
+        </list>
+      </option>
+    </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
     <option name="PARAMETERS" value="combine_tiles U:\Data\TestsForThayer\20230817_ap2\exp2\rotated\before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0050565672msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_corrected_actuators.csv --corrections  U:\Data\TestsForThayer\20230817_ap2\exp2\rotated\before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0050565672msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif --corrections  U:\Data\TestsForThayer\20230817_ap2\exp2\rotated\after_threestacks_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0050803886msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif --corrections  U:\Data\TestsForThayer\20230817_ap2\exp2\rotated\after_threestacks_Iter_0000_CamA_ch0_CAM1_stack0001_488nm_0039511msec_0050843397msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif --corrections  U:\Data\TestsForThayer\20230817_ap2\exp2\rotated\after_threestacks_Iter_0000_CamA_ch0_CAM1_stack0002_488nm_0079022msec_0050882908msecAbs_-01x_-01y_-01z_0000t_tiles_predictions_aggregated_p2v_error.tif" />

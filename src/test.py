@@ -1,16 +1,16 @@
+import logging
+import multiprocessing as mp
 import os
 import subprocess
-import multiprocessing as mp
-
-import logging
 import sys
 import time
 from pathlib import Path
+
 import tensorflow as tf
+import ujson
 
 import cli
 import eval
-import ujson
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -67,7 +67,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--max_amplitude", default=.5, type=float, help="max amplitude for the zernike coefficients"
+        "--max_amplitude", default=1, type=float, help="max amplitude for the zernike coefficients"
     )
 
     parser.add_argument(
@@ -87,11 +87,11 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--photons_min", default=1e5, type=float, help='min number of photons to use'
+        "--min_photons", default=5e4, type=float, help='min number of photons to use'
     )
 
     parser.add_argument(
-        "--photons_max", default=1.5e5, type=float, help='max number of photons to use'
+        "--max_photons", default=1e5, type=float, help='max number of photons to use'
     )
 
     parser.add_argument(
@@ -127,6 +127,25 @@ def parse_args(args):
         '--use_theoretical_widefield_simulator', action='store_true',
         help='optional toggle to calculate 3D PSF without amplitude attenuation (cosine factor)'
     )
+    
+    parser.add_argument(
+        '--denoiser', type=Path, default=None,
+        help='path to denoiser model'
+    )
+    
+    parser.add_argument(
+        '--simulate_samples', action='store_true',
+        help='optional toggle to simulate PSFs to do iterative eval'
+    )
+    
+    parser.add_argument(
+        "--estimated_object_gaussian_sigma", default=0.0, type=float,
+        help='size of object for creating an ideal psf (default: 0;  single pixel)'
+    )
+    
+    parser.add_argument(
+        "--simulate_psf_only", action='store_true', help='evaluate on PSFs only'
+    )
 
     return parser.parse_args(args)
 
@@ -155,7 +174,7 @@ def main(args=None):
     if gpu_workers > 0 and gpu_model.find('A100') >= 0:  # update batchsize automatically
         batch_size = 896 * gpu_workers
     elif gpu_workers > 0 and gpu_model.find('RTX') >= 0:
-        batch_size = 512 * gpu_workers
+        batch_size = 896 * gpu_workers
     else:
         batch_size = args.batch_size
 
@@ -165,17 +184,25 @@ def main(args=None):
         if args.target == 'modes':
             savepath = eval.evaluate_modes(
                 args.model,
+                outdir=args.outdir,
                 eval_sign=args.eval_sign,
                 num_objs=args.num_objs,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                denoiser=args.denoiser,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
+        elif args.target == 'templates':
+            savepath = eval.plot_templates(args.model)
         elif args.target == 'sizes':
             savepath = eval.evaluate_object_sizes(
                 args.model,
+                outdir=args.outdir,
                 eval_sign=args.eval_sign,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                denoiser=args.denoiser,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == 'background':
             savepath = eval.evaluate_uniform_background(
@@ -183,6 +210,7 @@ def main(args=None):
                 eval_sign=args.eval_sign,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == "random":
             savepath = eval.random_samples(
@@ -190,6 +218,7 @@ def main(args=None):
                 eval_sign=args.eval_sign,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == "modalities":
             savepath = eval.eval_modalities(
@@ -197,6 +226,7 @@ def main(args=None):
                 eval_sign=args.eval_sign,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == "confidence":
             savepath = eval.eval_confidence(
@@ -204,6 +234,7 @@ def main(args=None):
                 eval_sign=args.eval_sign,
                 batch_size=batch_size,
                 digital_rotations=args.digital_rotations,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == 'snrheatmap':
             savepath = eval.snrheatmap(
@@ -224,6 +255,10 @@ def main(args=None):
                 num_beads=args.num_beads,
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma,
+                simulate_psf_only=args.simulate_psf_only
             )
         elif args.target == 'confidence_heatmap':
             savepath = eval.confidence_heatmap(
@@ -243,6 +278,9 @@ def main(args=None):
                 lam_detection=args.wavelength,
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == 'densityheatmap':
             savepath = eval.densityheatmap(
@@ -256,7 +294,7 @@ def main(args=None):
                 batch_size=batch_size,
                 eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
-                photons_range=(args.photons_min, args.photons_max),
+                photons_range=(args.min_photons, args.max_photons),
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
@@ -264,6 +302,33 @@ def main(args=None):
                 num_beads=args.num_beads,
                 skip_remove_background=args.skip_remove_background,
                 use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
+            )
+        elif args.target == 'objectsizeheatmap':
+            savepath = eval.objectsizeheatmap(
+                iter_num=args.niter,
+                modelpath=args.model,
+                datadir=args.datadir,
+                outdir=args.outdir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=batch_size,
+                eval_sign=args.eval_sign,
+                digital_rotations=args.digital_rotations,
+                photons_range=(args.min_photons, args.max_photons),
+                plot=args.plot,
+                plot_rotations=args.plot_rotations,
+                psf_type=args.psf_type,
+                lam_detection=args.wavelength,
+                num_beads=args.num_beads,
+                skip_remove_background=args.skip_remove_background,
+                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
         elif args.target == 'iterheatmap':
             savepath = eval.iterheatmap(
@@ -277,13 +342,16 @@ def main(args=None):
                 batch_size=batch_size,
                 eval_sign=args.eval_sign,
                 digital_rotations=args.digital_rotations,
-                photons_range=(args.photons_min, args.photons_max),
+                photons_range=(args.min_photons, args.max_photons),
                 plot=args.plot,
                 plot_rotations=args.plot_rotations,
                 psf_type=args.psf_type,
                 lam_detection=args.wavelength,
                 skip_remove_background=args.skip_remove_background,
-                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator
+                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma
             )
 
         if savepath is not None:
@@ -298,8 +366,8 @@ def main(args=None):
                     batch_size=int(batch_size),
                     eval_sign=bool(args.eval_sign),
                     digital_rotations=bool(args.digital_rotations),
-                    photons_min=float(args.photons_min),
-                    photons_max=float(args.photons_max),
+                    min_photons=float(args.min_photons),
+                    max_photons=float(args.max_photons),
                     psf_type=args.psf_type,
                     lam_detection=args.wavelength,
                 )

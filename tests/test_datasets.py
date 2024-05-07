@@ -2,6 +2,7 @@
 import sys
 
 import numpy as np
+from tqdm import trange
 
 sys.path.append('.')
 sys.path.append('./src')
@@ -328,20 +329,21 @@ def test_random_aberrated_defocused_psf(kargs):
 @pytest.mark.run(order=6)
 def test_psf_dataset(kargs):
     gen = get_synthetic_generator(kargs)
-
-    sample = psf_dataset.create_synthetic_sample(
-        filename='1',
-        gen=gen,
-        savedir=Path(f"{kargs['repo']}/dataset/psfs"),
-        noise=True,
-        normalize=True,
-        min_amplitude=.1,
-        max_amplitude=.2,
-        min_lls_defocus_offset=-2,
-        max_lls_defocus_offset=2,
-        min_photons=100000,
-        max_photons=200000,
-    )
+    
+    for i in trange(10, file=sys.stdout):
+        sample = psf_dataset.create_synthetic_sample(
+            filename=f'{i + 1}',
+            gen=gen,
+            savedir=Path(f"{kargs['repo']}/dataset/psfs"),
+            noise=True,
+            normalize=True,
+            min_amplitude=.1,
+            max_amplitude=.2,
+            min_lls_defocus_offset=-2,
+            max_lls_defocus_offset=2,
+            min_photons=100000,
+            max_photons=200000,
+        )
 
     assert sample.shape == gen.psf_shape
 
@@ -349,38 +351,74 @@ def test_psf_dataset(kargs):
 @pytest.mark.run(order=7)
 def test_multipoint_dataset(kargs):
     gen = get_synthetic_generator(kargs)
-
-    sample = multipoint_dataset.create_synthetic_sample(
-        filename='1',
-        npoints=5,
-        fill_radius=.66,
-        generators={str(kargs['psf_type']): gen},
-        upsampled_generators={str(kargs['psf_type']): gen},
-        modes=kargs['num_modes'],
-        savedir=Path(f"{kargs['repo']}/dataset/beads"),
-        distribution=gen.distribution,
-        mode_dist=gen.mode_weights,
-        gamma=.75,
-        randomize_voxel_size=False,
-        emb=False,
-        signed=True,
-        random_crop=None,
-        embedding_option=set(),
-        rotate=True,
-        noise=True,
-        normalize=True,
-        min_amplitude=.1,
-        max_amplitude=.2,
-        min_lls_defocus_offset=-2,
-        max_lls_defocus_offset=2,
-        min_photons=100000,
-        max_photons=200000,
-    )
+    
+    for i in trange(10, file=sys.stdout):
+        sample = multipoint_dataset.create_synthetic_sample(
+            filename=f'{i + 1}',
+            npoints=5,
+            fill_radius=.66,
+            generators={str(kargs['psf_type']): gen},
+            upsampled_generators={str(kargs['psf_type']): gen},
+            modes=kargs['num_modes'],
+            savedir=Path(f"{kargs['repo']}/dataset/beads"),
+            distribution=gen.distribution,
+            mode_dist=gen.mode_weights,
+            gamma=.75,
+            randomize_object_size=False,
+            emb=False,
+            signed=True,
+            random_crop=None,
+            embedding_option=set(),
+            rotate=True,
+            noise=True,
+            normalize=True,
+            min_amplitude=.1,
+            max_amplitude=.2,
+            min_lls_defocus_offset=-2,
+            max_lls_defocus_offset=2,
+            min_photons=100000,
+            max_photons=200000,
+        )
 
     assert sample[kargs['psf_type']].shape == gen.psf_shape
 
 
 @pytest.mark.run(order=8)
+def test_randomize_object_size_dataset(kargs):
+    gen = get_synthetic_generator(kargs)
+    
+    for i in trange(10, file=sys.stdout):
+        sample = multipoint_dataset.create_synthetic_sample(
+            randomize_object_size=True,
+            filename=f'{i + 1}',
+            npoints=10,
+            fill_radius=.66,
+            generators={str(kargs['psf_type']): gen},
+            upsampled_generators={str(kargs['psf_type']): gen},
+            modes=kargs['num_modes'],
+            savedir=Path(f"{kargs['repo']}/dataset/objects"),
+            distribution=gen.distribution,
+            mode_dist=gen.mode_weights,
+            gamma=.75,
+            emb=False,
+            signed=True,
+            random_crop=None,
+            embedding_option=set(),
+            rotate=True,
+            noise=True,
+            normalize=True,
+            min_amplitude=.1,
+            max_amplitude=.2,
+            min_lls_defocus_offset=-2,
+            max_lls_defocus_offset=2,
+            min_photons=100000,
+            max_photons=200000,
+        )
+    
+    assert sample[kargs['psf_type']].shape == gen.psf_shape
+
+
+@pytest.mark.run(order=9)
 def test_multimodal_dataset(kargs):
 
     psf_types = [
@@ -428,33 +466,34 @@ def test_multimodal_dataset(kargs):
             y_voxel_size=generators[psf].y_voxel_size,
             z_voxel_size=generators[psf].z_voxel_size,
         )
-
-    samples = multipoint_dataset.create_synthetic_sample(
-        filename='1',
-        npoints=5,
-        fill_radius=.66,
-        generators=generators,
-        upsampled_generators=upsampled_generators,
-        modes=kargs['num_modes'],
-        savedir=Path(f"{kargs['repo']}/dataset/modalities"),
-        distribution='mixed',
-        mode_dist='pyramid',
-        gamma=.75,
-        randomize_voxel_size=False,
-        emb=False,
-        signed=True,
-        random_crop=None,
-        embedding_option=set(),
-        rotate=True,
-        noise=True,
-        normalize=True,
-        min_amplitude=.1,
-        max_amplitude=.2,
-        min_lls_defocus_offset=-2,
-        max_lls_defocus_offset=2,
-        min_photons=100000,
-        max_photons=200000,
-    )
+    
+    for i in trange(10, file=sys.stdout):
+        samples = multipoint_dataset.create_synthetic_sample(
+            filename=f'{i + 1}',
+            npoints=5,
+            fill_radius=.66,
+            generators=generators,
+            upsampled_generators=upsampled_generators,
+            modes=kargs['num_modes'],
+            savedir=Path(f"{kargs['repo']}/dataset/modalities"),
+            distribution='mixed',
+            mode_dist='pyramid',
+            gamma=.75,
+            randomize_object_size=False,
+            emb=False,
+            signed=True,
+            random_crop=None,
+            embedding_option=set(),
+            rotate=True,
+            noise=True,
+            normalize=True,
+            min_amplitude=.1,
+            max_amplitude=.2,
+            min_lls_defocus_offset=-2,
+            max_lls_defocus_offset=2,
+            min_photons=100000,
+            max_photons=200000,
+        )
 
     for psf in psf_types:
         assert samples[psf].shape == generators[psf].psf_shape

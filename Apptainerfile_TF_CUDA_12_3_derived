@@ -1,0 +1,24 @@
+# derivative.def
+# Install apptainer and sylabs cloud
+# 
+# sudo apt update; sudo apt install -y software-properties-common; sudo add-apt-repository -y ppa:apptainer/ppa; sudo apt update; sudo apt install -y apptainer; apptainer remote add --no-login SylabsCloud cloud.sycloud.io; apptainer remote use SylabsCloud; apptainer remote list;
+# 
+# singularity pull --arch amd64 library://dmilkie/opticalaberrations/opticalaberrations:develop_tf_cuda_12_3
+
+Bootstrap: library
+From: dmilkie/opticalaberrations/opticalaberrations:develop_tf_cuda_12_3    # this gets built using Sylabs Cloud: https://cloud.sylabs.io/builder
+%post
+# Add commands here:
+#   apt-get update
+
+%environment
+BRANCH_NAME=develop
+export BRANCH_NAME
+export TERM=xterm-256color
+export cloneit="git clone -b {{BRANCH_NAME}} --recurse-submodules https://github.com/abcucberkeley/opticalaberrations.git"
+%runscript
+cd /app
+exec /bin/bash -l -c "$@"
+%startscript
+cd /app
+exec /bin/bash -l -c "$@"

@@ -1,6 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="metadata" type="PythonConfigurationType" factoryName="Python" folderName="utils">
     <module name="opticalaberrations" />
+    <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
@@ -11,9 +12,38 @@
     <option name="IS_MODULE_SDK" value="true" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="DockerContainerSettingsRunConfigurationExtension">
+      <option name="envVars">
+        <list />
+      </option>
+      <option name="extraHosts">
+        <list />
+      </option>
+      <option name="links">
+        <list />
+      </option>
+      <option name="networkDisabled" value="false" />
+      <option name="networkMode" value="bridge" />
+      <option name="portBindings">
+        <list />
+      </option>
+      <option name="publishAllPorts" value="false" />
+      <option name="runCliOptions" value="--entrypoint= --rm --gpu all" />
+      <option name="version" value="2" />
+      <option name="volumeBindings">
+        <list>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/opt/project" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="$PROJECT_DIR$" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
+        </list>
+      </option>
+    </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/config.py" />
-    <option name="PARAMETERS" value="$PROJECT_DIR$/models/new/fixed_density/opticalnet-15-YuMB_lambda510-default --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat --n_modes 15 --wavelength .510 --x_voxel_size .097 --y_voxel_size .097 --z_voxel_size .2 --embedding_option spatial_planes metadata" />
+    <option name="PARAMETERS" value="$PROJECT_DIR$/models/opticalnet-15-YuMB_lambda510-S3216-8e6.h5 --psf_type ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat --n_modes 15 --wavelength .510 --x_voxel_size .125 --y_voxel_size .125 --z_voxel_size .2 --embedding_option spatial_planes metadata" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

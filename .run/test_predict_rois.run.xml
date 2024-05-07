@@ -1,0 +1,56 @@
+<component name="ProjectRunConfigurationManager">
+    <configuration default="false" name="test_predict_rois" type="PythonConfigurationType" factoryName="Python"
+                   folderName="tests" focusToolWindowBeforeRun="true">
+        <module name="opticalaberrations"/>
+        <option name="ENV_FILES" value=""/>
+        <option name="INTERPRETER_OPTIONS" value=""/>
+        <option name="PARENT_ENVS" value="true"/>
+        <envs>
+            <env name="PYTHONUNBUFFERED" value="1"/>
+        </envs>
+        <option name="SDK_HOME" value=""/>
+        <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/"/>
+        <option name="IS_MODULE_SDK" value="true"/>
+        <option name="ADD_CONTENT_ROOTS" value="true"/>
+        <option name="ADD_SOURCE_ROOTS" value="true"/>
+        <EXTENSION ID="DockerContainerSettingsRunConfigurationExtension">
+            <option name="envVars">
+                <list/>
+            </option>
+            <option name="extraHosts">
+                <list/>
+            </option>
+            <option name="links">
+                <list/>
+            </option>
+            <option name="networkDisabled" value="false"/>
+            <option name="networkMode" value="bridge"/>
+            <option name="portBindings">
+                <list/>
+            </option>
+            <option name="publishAllPorts" value="false"/>
+            <option name="runCliOptions" value="--entrypoint= --rm --gpu all"/>
+            <option name="version" value="2"/>
+            <option name="volumeBindings">
+                <list>
+                    <DockerVolumeBindingImpl>
+                        <option name="containerPath" value="/opt/project"/>
+                        <option name="editable" value="true"/>
+                        <option name="hostPath" value="$PROJECT_DIR$"/>
+                        <option name="readOnly" value="false"/>
+                    </DockerVolumeBindingImpl>
+                </list>
+            </option>
+        </EXTENSION>
+        <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py"/>
+        <option name="SCRIPT_NAME" value="pytest"/>
+        <option name="PARAMETERS"
+                value="-s -v --disable-pytest-warnings --color=yes tests/test_ao.py -k test_predict_rois"/>
+        <option name="SHOW_COMMAND_LINE" value="false"/>
+        <option name="EMULATE_TERMINAL" value="false"/>
+        <option name="MODULE_MODE" value="true"/>
+        <option name="REDIRECT_INPUT" value="false"/>
+        <option name="INPUT_FILE" value=""/>
+        <method v="2"/>
+    </configuration>
+</component>

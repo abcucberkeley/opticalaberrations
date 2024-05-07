@@ -1,9 +1,12 @@
+import time
+
 import matplotlib
+
 matplotlib.use('Agg')
 
 import logging
 import sys
-from typing import Any, Union
+from typing import Any
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -20,7 +23,7 @@ from typing import Optional
 from psf import PsfGenerator3D
 from wavefront import Wavefront
 from preprocessing import prep_sample
-from utils import randuniform, round_to_even, fft, normalize_otf
+from utils import randuniform, round_to_even, fft, normalize_otf, load_pickle, save_pickle
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -79,88 +82,119 @@ class SyntheticPSF:
             cpu_workers: number of CPU threads to use for generating PSFs
             embedding_option: type of fourier embedding to use
         """
-
-        self.n_modes = n_modes
-        self.order = order
-        self.refractive_index = refractive_index
-        self.lam_detection = lam_detection  # wavelength in microns
-        self.na_detection = na_detection
-        self.batch_size = batch_size
-        self.x_voxel_size = x_voxel_size  # desired voxel size
-        self.y_voxel_size = y_voxel_size
-        self.z_voxel_size = z_voxel_size
-        self.voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
-        self.cpu_workers = cpu_workers
-        self.distribution = distribution
-        self.mode_weights = mode_weights
-        self.gamma = gamma
-        self.signed = signed
-        self.rotate = rotate
-        self.embedding_option = embedding_option
-        self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
-        self.amplitude_ranges = amplitude_ranges
-        self.psf_type = psf_type
-        self.pupil_mag_file = pupil_mag_file
-        self.skip_remove_background_ideal_psf = skip_remove_background_ideal_psf
-        self.use_theoretical_widefield_simulator = use_theoretical_widefield_simulator
-
-        yumb_axial_support_index, yumb_lateral_support_index = self.calc_max_support_index(
-            psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-            wavelength=.510,
+        timeit = time.time()
+        
+        outdir = Path(__file__).parent.parent.resolve() / f'SyntheticPSFCache'
+        psf_type_str = str(psf_type).replace("/", "_").replace("\\", "_")
+        cache_path = outdir / (
+            f'{psf_type_str}'
+            f'_shape_{"-".join([str(s) for s in psf_shape])}'
+            f'_lam_{lam_detection}'
+            f'_na_{na_detection}'
+            f'_ri_{refractive_index}'
+            f'_x_{x_voxel_size}'
+            f'_y_{y_voxel_size}'
+            f'_z_{z_voxel_size}'
+            f'_twd_simulator_{use_theoretical_widefield_simulator}'
         )
-
-        axial_support_index, lateral_support_index = self.calc_max_support_index(
-            psf_type=self.psf_type,
-            wavelength=self.lam_detection,
-        )
-
-        if axial_support_index != 0:
-            self.axial_scalar = 1 if self.psf_type == 'widefield' else yumb_axial_support_index / axial_support_index
+        
+        if cache_path.exists():
+            print(f'Loading cached SyntheticPSF instance from {cache_path}')
+            self.__dict__ = load_pickle(cache_path)
         else:
-            self.axial_scalar = 1
-
-        if lateral_support_index != 0:
-            self.lateral_scalar = yumb_lateral_support_index / lateral_support_index
-        else:
-            self.lateral_scalar = 1
-
-        self.fov_scaler = (self.axial_scalar, self.lateral_scalar, self.lateral_scalar)
-        logger.info(f"FOV scalar: {self.psf_type} => (axial: {self.axial_scalar:.2f}), (lateral: {self.lateral_scalar:.2f})")
-
-        self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size) * np.array(self.fov_scaler))
-        self.adjusted_psf_shape = tuple(round_to_even(i) for i in np.array(self.psf_shape) * np.array(self.fov_scaler))  # same physical fov
-
-        self.psfgen = PsfGenerator3D(
-            psf_shape=self.adjusted_psf_shape,
-            units=self.voxel_size,
-            lam_detection=self.lam_detection,
-            n=self.refractive_index,
-            na_detection=self.na_detection,
-            psf_type=self.psf_type,
-            lls_excitation_profile=lls_excitation_profile,
-            pupil_mag_file=self.pupil_mag_file,
-        )
-        self.lls_excitation_profile = self.psfgen.lls_excitation_profile
-
-        # ideal psf (theoretical, no noise)
-        self.ipsf = self.theoretical_psf(normed=True)
-        self.na_mask = self.create_na_mask(ipsf=self.ipsf)
-
-        # preprocess ideal PSF with DoG filter
-        if not skip_remove_background_ideal_psf:
-            self.ipsf = prep_sample(
-                self.ipsf,
-                sample_voxel_size=self.voxel_size,
-                model_fov=self.psf_fov,
-                remove_background=True,
-                normalize=True,
-                min_psnr=0,
-                na_mask=self.na_mask
+            logger.info('Creating SyntheticPSF instance from scratch')
+            self.n_modes = n_modes
+            self.order = order
+            self.refractive_index = refractive_index
+            self.lam_detection = lam_detection  # wavelength in microns
+            self.na_detection = na_detection
+            self.batch_size = batch_size
+            self.x_voxel_size = x_voxel_size  # desired voxel size
+            self.y_voxel_size = y_voxel_size
+            self.z_voxel_size = z_voxel_size
+            self.voxel_size = (z_voxel_size, y_voxel_size, x_voxel_size)
+            self.cpu_workers = cpu_workers
+            self.distribution = distribution
+            self.mode_weights = mode_weights
+            self.gamma = gamma
+            self.signed = signed
+            self.rotate = rotate
+            self.embedding_option = embedding_option
+            self.psf_shape = (psf_shape[0], psf_shape[1], psf_shape[2])
+            if self.psf_shape[1] != self.psf_shape[2]:
+                logger.warning(
+                    f'psf_shape X pixels ({self.psf_shape[2]} pix) is not equal to number of Y pixels ({self.psf_shape[1]})')
+            self.amplitude_ranges = amplitude_ranges
+            self.psf_type = psf_type
+            self.pupil_mag_file = pupil_mag_file
+            self.skip_remove_background_ideal_psf = skip_remove_background_ideal_psf
+            self.use_theoretical_widefield_simulator = use_theoretical_widefield_simulator
+            
+            yumb_axial_support_index, yumb_lateral_support_index = self.calc_max_support_index(
+                psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+                wavelength=.510,
             )
-
-        self.iotf = fft(self.ipsf, padsize=None)
-        self.iotf = normalize_otf(self.iotf)
-        self.iotf *= self.na_mask
+            
+            axial_support_index, lateral_support_index = self.calc_max_support_index(
+                psf_type=self.psf_type,
+                wavelength=self.lam_detection,
+            )
+            
+            if axial_support_index != 0:
+                self.axial_scalar = 1 if self.psf_type == 'widefield' else yumb_axial_support_index / axial_support_index
+            else:
+                self.axial_scalar = 1
+            
+            if lateral_support_index != 0:
+                self.lateral_scalar = yumb_lateral_support_index / lateral_support_index
+            else:
+                self.lateral_scalar = 1
+            
+            self.fov_scaler = (self.axial_scalar, self.lateral_scalar, self.lateral_scalar)
+            logger.info(
+                f"FOV scalar: {self.psf_type} => (axial: {self.axial_scalar:.2f}), (lateral: {self.lateral_scalar:.2f})")
+            
+            self.psf_fov = tuple(np.array(self.psf_shape) * np.array(self.voxel_size) * np.array(self.fov_scaler))
+            self.adjusted_psf_shape = tuple(
+                round_to_even(i) for i in np.array(self.psf_shape) * np.array(self.fov_scaler))  # same physical fov
+            
+            self.psfgen = PsfGenerator3D(
+                psf_shape=self.adjusted_psf_shape,
+                units=self.voxel_size,
+                lam_detection=self.lam_detection,
+                n=self.refractive_index,
+                na_detection=self.na_detection,
+                psf_type=self.psf_type,
+                lls_excitation_profile=lls_excitation_profile,
+                pupil_mag_file=self.pupil_mag_file,
+            )
+            self.lls_excitation_profile = self.psfgen.lls_excitation_profile
+            
+            # ideal psf (theoretical, no noise)
+            self.ipsf = self.theoretical_psf(normed=True)
+            self.na_mask = self.create_na_mask(ipsf=self.ipsf)
+            
+            # preprocess ideal PSF with DoG filter
+            if not skip_remove_background_ideal_psf:
+                self.ipsf = prep_sample(
+                    self.ipsf,
+                    sample_voxel_size=self.voxel_size,
+                    model_fov=self.psf_fov,
+                    remove_background=True,
+                    normalize=True,
+                    min_psnr=0,
+                    na_mask=self.na_mask
+                )
+            
+            self.iotf = fft(self.ipsf, padsize=None)
+            self.iotf = normalize_otf(self.iotf)
+            self.iotf *= self.na_mask
+            
+            logger.info(f"Caching SyntheticPSF instance {cache_path}")
+            outdir.mkdir(exist_ok=True, parents=True)
+            save_pickle(self.__dict__, cache_path)
+        
+        logger.info(f"SyntheticPSF initialization {time.time() - timeit:.2f} sec.")
 
     @profile
     def calc_max_support_index(

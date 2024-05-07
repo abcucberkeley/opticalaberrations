@@ -31,13 +31,15 @@ from tqdm import tqdm
 import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
 from tensorflow_addons.optimizers import AdamW, LAMB  # keep for old models trained with TF2.5
+from csbdeep.models import CARE
 
 import psutil
 import multiprocessing as mp
 if platform.system() != "Windows":
     from dask_cuda import LocalCUDACluster  # Only Linux is supported by Dask-CUDA at this time
 
-from dask.distributed import LocalCluster, Client, progress
+from dask.distributed import LocalCluster, Client
+
 mp.set_start_method('spawn', force=True)
 
 import utils
@@ -48,11 +50,20 @@ from synthetic import SyntheticPSF
 from wavefront import Wavefront
 from embeddings import fourier_embeddings, rolling_fourier_embeddings
 from preprocessing import prep_sample
-from utils import round_to_even
+from utils import round_to_even, multiprocess
 
 from roi import ROI
+from activation import MaskedActivation
+from depthwiseconv import DepthwiseConv3D
+from spatial import SpatialAttention
+from stochasticdepth import StochasticDepth
+from stem import Stem
+
+import baseline
 import opticalnet
 import prototype
+import vit
+import swin
 from warmupcosinedecay import WarmupCosineDecay
 
 
@@ -96,7 +107,7 @@ class DatasetGenerator:
 
 
 @profile
-def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
+def load(model_path: Union[Path, str], mosaic=False, model_arch=None) -> tf.keras.Model:
     model_path = Path(model_path)
 
     if mosaic:
@@ -120,30 +131,101 @@ def load(model_path: Union[Path, str], mosaic=False) -> tf.keras.Model:
                 model_path = str(sorted(model_path.rglob('*.h5'), reverse=True)[0])
 
     logger.info(f"Loading {model_path}")
-    try:
-        custom_objects = {
-            "ROI": ROI,
-            "Stem": opticalnet.Stem,
-            "Patchify": opticalnet.Patchify,
-            "Merge": opticalnet.Merge,
-            "PatchEncoder": opticalnet.PatchEncoder,
-            "MLP": opticalnet.MLP,
-            "Transformer": opticalnet.Transformer,
-            "WarmupCosineDecay": WarmupCosineDecay,
-        }
+    custom_objects = {
+        "LAMB": LAMB,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+        "MaskedActivation": MaskedActivation,
+        "SpatialAttention": SpatialAttention,
+        "DepthwiseConv3D": DepthwiseConv3D,
+        "StochasticDepth": StochasticDepth,
+        "Stem": Stem,
+    }
+    
+    opticalnet_custom_objects = {
+        "LAMB": LAMB,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+        "Stem": opticalnet.Stem,
+        "Patchify": opticalnet.Patchify,
+        "Merge": opticalnet.Merge,
+        "PatchEncoder": opticalnet.PatchEncoder,
+        "MLP": opticalnet.MLP,
+        "Transformer": opticalnet.Transformer,
+    }
+    
+    prototype_custom_objects = {
+        "LAMB": LAMB,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+        "Patchify": prototype.Patchify,
+        "PatchEncoder": prototype.PatchEncoder,
+        "MLP": prototype.MLP,
+        "Transformer": prototype.Transformer,
+    }
+    
+    vit_custom_objects = {
+        "LAMB": LAMB,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+        "Patchify": vit.Patchify,
+        "PatchEncoder": vit.PatchEncoder,
+        "MLP": vit.MLP,
+        "Transformer": vit.Transformer,
+    }
+    
+    swin_custom_objects = {
+        "LAMB": LAMB,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+        "StochasticDepth": StochasticDepth,
+        "Mlp": swin.Mlp,
+        "WindowAttention3D": swin.WindowAttention3D,
+        "PatchEmbed": swin.PatchEmbed,
+        "PatchMerging": swin.PatchMerging,
+        "SwinTransformerBlock": swin.SwinTransformerBlock,
+    }
+    
+    baseline_custom_objects = {
+        "LAMB": LAMB,
+        "GRN": baseline.GRN,
+        "StochasticDepth": baseline.StochasticDepth,
+        "Block": baseline.Block,
+        "AdamW": AdamW,
+        "WarmupCosineDecay": WarmupCosineDecay,
+        "ROI": ROI,
+    }
+    
+    if model_arch is None:
+        
+        try:
+            return load_model(model_path, custom_objects=opticalnet_custom_objects)
+        except TypeError as e:
+            return load_model(model_path, custom_objects=prototype_custom_objects)
+        
+    elif model_arch.lower() == 'opticalnet':
+        return load_model(model_path, custom_objects=opticalnet_custom_objects)
+    
+    elif model_arch.lower() == 'prototype':
+        return load_model(model_path, custom_objects=prototype_custom_objects)
+    
+    elif model_arch.lower() == 'vit':
+        return load_model(model_path, custom_objects=vit_custom_objects)
+    
+    elif model_arch.lower() == 'baseline':
+        return load_model(model_path, custom_objects=baseline_custom_objects)
+    
+    elif model_arch.lower() == 'swin':
+        return load_model(model_path, custom_objects=swin_custom_objects)
+    
+    else:
         return load_model(model_path, custom_objects=custom_objects)
-    except TypeError as e:
-        custom_objects = {
-            "ROI": ROI,
-            "Stem": prototype.Stem,
-            "Patchify": prototype.Patchify,
-            "Merge": prototype.Merge,
-            "PatchEncoder": prototype.PatchEncoder,
-            "MLP": prototype.MLP,
-            "Transformer": prototype.Transformer,
-            "WarmupCosineDecay": WarmupCosineDecay,
-        }
-        return load_model(model_path, custom_objects=custom_objects)
+        
 
 
 @profile
@@ -297,7 +379,13 @@ def preprocess(
     rolling_strides: Optional[tuple] = None,
     skip_prep_sample: bool = False,
     min_psnr: int = 10,
-    object_gaussian_kernel_width: float = 0  # to simulate ideal OTF for objects bigger than diffraction limit
+    cpu_workers: int = -1,
+    denoiser: Optional[Union[Path, CARE]] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    interpolate_embeddings: bool = False,
+    save_processed_tif_file: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
+    use_reconstructed_otf: bool = False
 ):
     if samplepsfgen is None:
         samplepsfgen = modelpsfgen
@@ -309,20 +397,25 @@ def preprocess(
         plot = file.with_suffix('')
 
     sample = load_sample(file)
-
-    if object_gaussian_kernel_width != 0:
-        gaussian_sigma = object_gaussian_kernel_width / (2 * np.sqrt(2*np.log(2)))  # convert from FWHM to std dev
-        kernel = utils.gaussian_kernel(kernlen=(21, 21, 21), std=gaussian_sigma)
-        ipsf = utils.fftconvolution(sample=modelpsfgen.ipsf, kernel=kernel).astype(np.float32)
-        ipsf /= np.max(ipsf)
-        if plot:
-            imwrite(f"{plot.with_suffix('')}_ipsf.tif", ipsf, compression='deflate', dtype=np.float32)
-        iotf = utils.fft(ipsf)
-        iotf = utils.normalize_otf(iotf)
-
-    else:
-        iotf = modelpsfgen.iotf
-
+    
+    # if estimated_object_gaussian_sigma != 0:
+    #     kernel = utils.gaussian_kernel(kernlen=(21, 21, 21), std=estimated_object_gaussian_sigma)
+    #     ipsf = utils.fftconvolution(
+    #         sample=modelpsfgen.ipsf,
+    #         kernel=kernel,
+    #         boundary='fill',
+    #         nan_treatment='fill',
+    #         fill_value=0,
+    #         normalize_kernel=np.sum
+    #     ).astype(np.float32)
+    #     ipsf /= np.max(ipsf)
+    #
+    #     iotf = utils.fft(ipsf)
+    #     iotf = utils.normalize_otf(iotf)
+    #
+    # else:
+    #     iotf = modelpsfgen.iotf
+    
     if fov_is_small:  # only going to center crop and predict on that single FOV (fourier_embeddings)
 
         if not skip_prep_sample:
@@ -335,12 +428,14 @@ def preprocess(
                 read_noise_bias=read_noise_bias,
                 min_psnr=min_psnr,
                 plot=plot if plot else None,
-                na_mask=samplepsfgen.na_mask
+                na_mask=samplepsfgen.na_mask,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size,
             )
-
-        return fourier_embeddings(
+        
+        embs = fourier_embeddings(
             sample,
-            iotf=iotf,
+            iotf=modelpsfgen.iotf,
             na_mask=modelpsfgen.na_mask,
             plot=plot if plot else None,
             no_phase=no_phase,
@@ -348,75 +443,163 @@ def preprocess(
             embedding_option=modelpsfgen.embedding_option,
             freq_strength_threshold=freq_strength_threshold,
             digital_rotations=digital_rotations,
-            model_psf_shape=modelpsfgen.psf_shape
+            model_psf_shape=modelpsfgen.psf_shape,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
+            use_reconstructed_otf=use_reconstructed_otf
         ).astype(np.float32)
+        
+        if save_processed_tif_file:
+            imwrite(
+                file,
+                data=embs.astype(np.float32),
+                compression='deflate',
+                dtype=np.float32,
+                imagej=True,
+                metadata={'axes': 'TZYXS'}
+            )
+            return file
+        else:
+            return embs
 
     else:  # at least one tile fov dimension is larger than model fov
-        model_window_size = (
-            round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
-            round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
-            round_to_even(modelpsfgen.psf_fov[2] / samplepsfgen.voxel_size[2]),
-        )   # number of sample voxels that make up a model psf.
+        if interpolate_embeddings:
+            if not skip_prep_sample:
+                voxel_size_scalar = np.array(modelpsfgen.voxel_size) ** 2 / np.array(samplepsfgen.voxel_size)
+                adjusted_pov = tuple(
+                    voxel_size_scalar * np.array(sample.shape) * np.array(samplepsfgen.fov_scaler)
+                )
+                
+                sample = prep_sample(
+                    sample,
+                    model_fov=adjusted_pov,
+                    sample_voxel_size=samplepsfgen.voxel_size,
+                    remove_background=remove_background,
+                    normalize=normalize,
+                    read_noise_bias=read_noise_bias,
+                    min_psnr=min_psnr,
+                    plot=plot if plot else None,
+                    na_mask=samplepsfgen.na_mask,
+                    denoiser=denoiser,
+                    denoiser_window_size=denoiser_window_size,
+                )
+            
+            embs = fourier_embeddings(
+                sample,
+                iotf=modelpsfgen.iotf,
+                na_mask=modelpsfgen.na_mask,
+                plot=plot if plot else None,
+                no_phase=no_phase,
+                remove_interference=True,
+                embedding_option=modelpsfgen.embedding_option,
+                freq_strength_threshold=freq_strength_threshold,
+                digital_rotations=digital_rotations,
+                model_psf_shape=modelpsfgen.psf_shape,
+                interpolate_embeddings=interpolate_embeddings,
+                estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
+            ).astype(np.float32)
+            
+            if save_processed_tif_file:
+                imwrite(
+                    file,
+                    data=sample.astype(np.float32),
+                    compression='deflate',
+                    dtype=np.float32,
+                    imagej=True,
+                    metadata={'axes': 'TZYXS'}
+                )
+                return file
+            else:
+                return embs
 
-        model_window_size = np.minimum(model_window_size, sample.shape)
+        
+        else:  # average FFTs
+            model_window_size = (
+                round_to_even(modelpsfgen.psf_fov[0] / samplepsfgen.voxel_size[0]),
+                round_to_even(modelpsfgen.psf_fov[1] / samplepsfgen.voxel_size[1]),
+                round_to_even(modelpsfgen.psf_fov[2] / samplepsfgen.voxel_size[2]),
+            )  # number of sample voxels that make up a model psf.
+            
+            model_window_size = np.minimum(model_window_size, sample.shape)
+            
+            # how many non-overlapping rois can we split this tile fov into (round down)
+            rois = sliding_window_view(
+                sample,
+                window_shape=model_window_size
+            )  # stride = 1.
+            
+            # decimate from all available windows to the stride we want (either rolling_strides or model_window_size)
+            if rolling_strides is not None:
+                strides = rolling_strides
+            else:
+                strides = model_window_size
+            
+            rois = rois[
+                   ::strides[0],
+                   ::strides[1],
+                   ::strides[2]
+                   ]
+            
+            throwaway = np.array(sample.shape) - ((np.array(rois.shape[:3]) - 1) * strides + rois.shape[-3:])
+            if any(throwaway > (np.array(sample.shape) / 4)):
+                raise Exception(f'You are throwing away {throwaway} voxels out of {sample.shape}, with stride length'
+                                f'{strides}. Change rolling_strides.')
+            
+            ztiles, nrows, ncols = rois.shape[:3]
+            rois = np.reshape(rois, (-1, *model_window_size))
+            
+            if not skip_prep_sample:
+                prep = partial(
+                    prep_sample,
+                    sample_voxel_size=samplepsfgen.voxel_size,
+                    remove_background=remove_background,
+                    normalize=normalize,
+                    read_noise_bias=read_noise_bias,
+                    na_mask=samplepsfgen.na_mask,
+                    min_psnr=min_psnr,
+                    denoiser=denoiser,
+                    denoiser_window_size=denoiser_window_size,
+                )
+                
+                rois = utils.multiprocess(
+                    func=prep,
+                    jobs=rois,
+                    desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
+                         f'roi size, {rois.shape[-3:]}, '
+                         f'stride length {strides}, '
+                         f'throwing away {throwaway} voxels'
+                )
+            
+            embs = rolling_fourier_embeddings(  # aka "large_fov"
+                rois,
+                iotf=modelpsfgen.iotf,
+                na_mask=modelpsfgen.na_mask,
+                plot=plot,
+                no_phase=no_phase,
+                remove_interference=True,
+                embedding_option=modelpsfgen.embedding_option,
+                freq_strength_threshold=freq_strength_threshold,
+                digital_rotations=digital_rotations,
+                model_psf_shape=modelpsfgen.psf_shape,
+                nrows=nrows,
+                ncols=ncols,
+                ztiles=ztiles,
+                cpu_workers=cpu_workers,
+                estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
+            ).astype(np.float32)
+            
+            if save_processed_tif_file:
+                imwrite(
+                    file,
+                    data=sample.astype(np.float32),
+                    compression='deflate',
+                    dtype=np.float32,
+                    imagej=True,
+                    metadata={'axes': 'TZYXS'}
+                )
+                return file
+            else:
+                return embs
 
-        # how many non-overlapping rois can we split this tile fov into (round down)
-        rois = sliding_window_view(
-            sample,
-            window_shape=model_window_size
-        )   # stride = 1.
-
-        # decimate from all available windows to the stride we want (either rolling_strides or model_window_size)
-        if rolling_strides is not None:
-            strides = rolling_strides
-        else:
-            strides = model_window_size
-
-        rois = rois[
-           ::strides[0],
-           ::strides[1],
-           ::strides[2]
-        ]
-
-        throwaway = np.array(sample.shape) - ((np.array(rois.shape[:3])-1) * strides + rois.shape[-3:])
-        if any(throwaway > (np.array(sample.shape) / 4)):
-            raise Exception(f'You are throwing away {throwaway} voxels out of {sample.shape}, with stride length'
-                            f'{strides}. Change rolling_strides.')
-
-        ztiles, nrows, ncols = rois.shape[:3]
-        rois = np.reshape(rois, (-1, *model_window_size))
-
-        if not skip_prep_sample:
-            prep = partial(
-                prep_sample,
-                sample_voxel_size=samplepsfgen.voxel_size,
-                remove_background=remove_background,
-                normalize=normalize,
-                read_noise_bias=read_noise_bias,
-                na_mask=samplepsfgen.na_mask
-            )
-
-            rois = utils.multiprocess(func=prep, jobs=rois,
-                                      desc=f'Preprocessing, {rois.shape[0]} rois per tile, '
-                                           f'roi size, {rois.shape[-3:]}, '
-                                           f'stride length {strides}, '
-                                           f'throwing away {throwaway} voxels')
-
-        return rolling_fourier_embeddings(  # aka "large_fov"
-            rois,
-            iotf=iotf,
-            na_mask=modelpsfgen.na_mask,
-            plot=plot,
-            no_phase=no_phase,
-            remove_interference=True,
-            embedding_option=modelpsfgen.embedding_option,
-            freq_strength_threshold=freq_strength_threshold,
-            digital_rotations=digital_rotations,
-            model_psf_shape=modelpsfgen.psf_shape,
-            nrows=nrows,
-            ncols=ncols,
-            ztiles=ztiles
-        ).astype(np.float32)
 
 
 @profile
@@ -581,6 +764,7 @@ def eval_rotation(
     preds = np.zeros(psfgen.n_modes)
     stdevs = np.zeros(psfgen.n_modes)
     wavefront = Wavefront(preds)
+    mses = np.zeros(len(wavefront.twins.items()))
     results = []
 
     for row, (mode, twin) in enumerate(wavefront.twins.items()):
@@ -707,7 +891,7 @@ def eval_rotation(
                     confident = 1
                     rho = 0  # confident-Z
                 else:
-                    confident = np.abs(rho) / std_rho > 1  # is SNR above 1?
+                    confident = np.abs(rho) / std_rho > 4   # is SNR above 4?
 
                 if confident and np.abs(rho) > 0:  # confident-A
                     preds[mode.index_ansi] = rho
@@ -744,7 +928,27 @@ def eval_rotation(
 
     if plot is not None:
         vis.plot_rotations(Path(f'{plot}_rotations.csv'))
-
+        
+        p = Wavefront(preds, order='ansi', lam_detection=psfgen.lam_detection)
+        std = Wavefront(stdevs, order='ansi', lam_detection=psfgen.lam_detection)
+        
+        predicted_psf = psfgen.single_psf(phi=p, normed=True, lls_defocus_offset=0.)
+        predicted_embeddings = fourier_embeddings(
+            predicted_psf,
+            iotf=psfgen.iotf,
+            na_mask=psfgen.na_mask,
+            remove_interference=False
+        )
+        
+        vis.diagnosis(
+            pred=p,
+            pred_std=std,
+            save_path=Path(f"{plot}_diagnosis"),
+            lls_defocus=0.,
+            predicted_psf=predicted_psf,
+            predicted_embeddings=predicted_embeddings
+        )
+        
     return preds, stdevs
 
 
@@ -807,7 +1011,7 @@ def predict_rotation(
             inputs,
             iotf=psfgen.iotf,
             na_mask=psfgen.na_mask,
-            plot=plot,
+            # plot=plot,
             padsize=padsize,
             no_phase=no_phase,
             alpha_val=alpha_val,
@@ -1137,7 +1341,7 @@ def predict_dataset(
                 p.starmap(
                     eval_rotation,  # order matters future thayer
                     zip(
-                        preds,                               # init_preds
+                        preds,  # init_preds
                         repeat(digital_rotations),                      # rotations
                         repeat(psfgen),                                 # psfgen
                         save_path,                                      # save_path
@@ -1189,21 +1393,10 @@ def predict_files(
     template: Optional[pd.DataFrame] = None,
     pool: Optional[mp.Pool] = None,
     min_psnr: int = 5,
-    object_gaussian_kernel_width: float = 0
+    estimated_object_gaussian_sigma: float = 0,
+    save_processed_tif_file: bool = False
 ):
-
-    if preprocessed:
-        inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
-        inputs = inputs.map(
-            lambda x: tf.py_function(
-                load_sample,
-                inp=[x],
-                Tout=tf.float32,
-            ),
-            num_parallel_calls=tf.data.AUTOTUNE,
-            deterministic=True,
-        )
-    else:
+    if not preprocessed:
         generate_fourier_embeddings = partial(
             preprocess,
             modelpsfgen=modelpsfgen,
@@ -1218,26 +1411,36 @@ def predict_files(
             rolling_strides=rolling_strides,
             skip_prep_sample=skip_prep_sample,
             min_psnr=min_psnr,
-            object_gaussian_kernel_width=object_gaussian_kernel_width
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
+            cpu_workers=1,  # already parallelized over files
+            save_processed_tif_file=save_processed_tif_file
         )
-
-        inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
-
-        inputs = inputs.map(
-            lambda x: tf.py_function(
-                generate_fourier_embeddings,
-                inp=[x],
-                Tout=tf.float32,
-            ),
-            num_parallel_calls=tf.data.AUTOTUNE,
-            deterministic=True,
+        
+        paths = multiprocess(
+            func=generate_fourier_embeddings,
+            jobs=paths,
+            cores=cpu_workers,
+            desc='Generate fourier embeddings',
+            unit=' .tif file'
         )
-
-        # inputs = tf.data.Dataset.from_generator(
-        #     DatasetGenerator(paths=paths, load_preprocess_func=generate_fourier_embeddings),
-        #     output_types=(tf.float32),
-        #     output_shapes=(digital_rotations, *model.input_shape[1:])
-        # )
+    
+    inputs = tf.data.Dataset.from_tensor_slices(np.vectorize(str)(paths))
+    
+    inputs = inputs.map(
+        lambda x: tf.py_function(
+            load_sample,
+            inp=[x],
+            Tout=tf.float32,
+        ),
+        num_parallel_calls=tf.data.AUTOTUNE,
+        deterministic=True,
+    )
+    
+    # inputs = tf.data.Dataset.from_generator(
+    #     DatasetGenerator(paths=paths, load_preprocess_func=generate_fourier_embeddings),
+    #     output_types=(tf.float32),
+    #     output_shapes=(digital_rotations, *model.input_shape[1:])
+    # )
 
     num_predictions = paths.shape[0] * digital_rotations if digital_rotations else paths.shape[0]
 
@@ -1265,9 +1468,15 @@ def predict_files(
     )
 
     if template is not None:
+        # initialize predictions dataframe with NaNs, the ignored tiles (dropped from poor SNR) will remain as NaNs.
+        # NaNs in the _predictions.csv will appear as blank.
+        # ignored tiles will be written to _settings.json and read in from aggregate from there.
         tile_names = [f.stem for f in paths]
-        predictions = pd.DataFrame(np.zeros((preds.shape[1], template.shape[1])), columns=template.columns)
-        predictions[tile_names] = preds.T
+        predictions = pd.DataFrame(
+            np.full((preds.shape[1], template.shape[1]), fill_value=np.NaN),
+            columns=template.columns
+        )
+        predictions[tile_names] = preds.T   # overwrite with predictions
 
         stdevs = pd.DataFrame(np.zeros((std.shape[1], template.shape[1])), columns=template.columns)
         stdevs[tile_names] = std.T

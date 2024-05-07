@@ -1,16 +1,19 @@
 import itertools
+
 import matplotlib
+
 matplotlib.use('Agg')
 import tempfile
 import shutil
 
 from multiprocessing import Pool
 
+import ujson
 import logging
 import sys
 from functools import partial
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from matplotlib.ticker import FormatStrFormatter, PercentFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import matplotlib.colors as mcolors
@@ -23,15 +26,21 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from line_profiler_pycharm import profile
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from tifffile import imwrite
+from astropy import convolution
+from csbdeep.utils.tf import limit_gpu_memory
+
+limit_gpu_memory(allow_growth=True, fraction=None, total_memory=None)
+from csbdeep.models import CARE
 
 import utils
 import data_utils
+import profile_utils
 import backend
 import vis
 import multipoint_dataset
-
+from preprocessing import denoise_image
 from wavefront import Wavefront
 from synthetic import SyntheticPSF
 
@@ -124,9 +133,11 @@ def generate_sample(
     no_phase: bool = False,
     digital_rotations: Optional[int] = None,
     plot: bool = False,
-    no_beads: bool = False,
+    simulate_psf_only: bool = False,
     preprocess: bool = False,
-    file_format: str = 'tif'
+    file_format: str = 'tif',
+    denoiser: Optional[Union[Path, CARE]] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
 ):
     hashtable = data[data['id'] == image_id].iloc[0].to_dict()
     f = Path(str(hashtable['file']))
@@ -137,64 +148,97 @@ def generate_sample(
         outdir.mkdir(exist_ok=True, parents=True)
         savepath = outdir / f"{f.with_suffix('').name}.{file_format}"
 
-    if savepath.exists():
-        return savepath
+    ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
+    ref = np.squeeze(data_utils.get_image(beads))
+    
+    if hashtable['object_gaussian_sigma'] > 0:
+        kernel = utils.gaussian_kernel(kernlen=[21, 21, 21], std=hashtable['object_gaussian_sigma'])
+        
+        # convolve template with the input image
+        ref = convolution.convolve_fft(
+            ref,
+            kernel,
+            allow_huge=True,
+            boundary='fill',
+            nan_treatment='fill',
+            fill_value=0,
+            normalize_kernel=np.sum
+        )
+
+    wavefront = Wavefront(
+        ys,
+        modes=psfgen.n_modes,
+        lam_detection=psfgen.lam_detection,
+    )
+
+    psf = psfgen.single_psf(
+        phi=wavefront,
+        normed=True,
+        meta=False,
+    )
+
+    if simulate_psf_only:
+        noisy_img = simulate_beads(
+            psf=psf,
+            psf_type=psfgen.psf_type,
+            beads=None,
+            fill_radius=0,
+            object_size=0,
+            photons=hashtable['photons'],
+            scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
+        )
     else:
-        ys = [hashtable[cc] for cc in data.columns[data.columns.str.endswith('_residual')]]
-        ref = np.squeeze(data_utils.get_image(beads))
-
-        wavefront = Wavefront(
-            ys,
-            modes=psfgen.n_modes,
-            lam_detection=psfgen.lam_detection,
+        noisy_img = simulate_beads(
+            psf=psf,
+            psf_type=psfgen.psf_type,
+            beads=ref,
+            photons=hashtable['photons'],
+            scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
         )
-
-        psf = psfgen.single_psf(
-            phi=wavefront,
-            normed=True,
-            meta=False,
+    
+    if savedir is not None:
+        init_path = Path(f"{savepath.with_suffix('')}_not_processed")
+        imwrite(init_path.with_suffix('.tif'), noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
+    
+    if preprocess:
+        noisy_img = backend.preprocess(
+            noisy_img,
+            modelpsfgen=psfgen,
+            digital_rotations=digital_rotations,
+            no_phase=no_phase,
+            remove_background=True,
+            normalize=True,
+            min_psnr=0,
+            plot=savepath.with_suffix('') if plot else None,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
         )
-
-        if no_beads:
-            noisy_img = simulate_beads(
-                psf=psf,
-                psf_type=psfgen.psf_type,
-                beads=None,
-                fill_radius=0,
-                object_size=0,
-                photons=hashtable['photons'],
-                scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
+    
+    if denoiser is not None and not preprocess:
+        noisy_img = denoise_image(
+            image=noisy_img,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+        )
+        
+    if savedir is not None:
+        if file_format == 'tif':
+            imwrite(
+                savepath,
+                data=noisy_img.astype(np.float32),
+                compression='deflate',
+                dtype=np.float32,
+                imagej=True,
             )
         else:
-            noisy_img = simulate_beads(
-                psf=psf,
-                psf_type=psfgen.psf_type,
-                beads=ref,
-                photons=hashtable['photons'],
-                scale_by_maxcounts=hashtable['counts_p100'] if psfgen.psf_type == 'widefield' else None
+            np.savez_compressed(
+                Path(f"{savepath.with_suffix('')}"), noisy_img.astype(np.float32),
+                allow_pickle=True
             )
-
-        if preprocess:
-            noisy_img = backend.preprocess(
-                noisy_img,
-                modelpsfgen=psfgen,
-                digital_rotations=digital_rotations,
-                no_phase=no_phase,
-                remove_background=True,
-                normalize=True,
-                min_psnr=0,
-                plot=savepath.with_suffix('') if plot else None
-            )
-
-        if savedir is not None:
-            if file_format == 'tif':
-                imwrite(savepath, noisy_img.astype(np.float32), compression='deflate', dtype=np.float32)
-            else:
-                np.savez_compressed(Path(f"{savepath.with_suffix('')}"), noisy_img.astype(np.float32))
-
-            return savepath
-        else:
-            return noisy_img
+        return savepath
+    
+    else:
+        return noisy_img
 
 
 @profile
@@ -204,6 +248,7 @@ def eval_template(shape, psf_type, lam_detection):
         'id': np.arange(shape[0], dtype=int),
         'iter_num': np.zeros(shape[0], dtype=int),          # iteration index.
         'aberration': np.zeros(shape[0], dtype=float),      # initial p2v aberration. Constant over iterations.
+        'aberration_umRMS': np.zeros(shape[0], dtype=float),  # initial rms aberration. Constant over iterations.
         'residuals': np.zeros(shape[0], dtype=float),       # remaining p2v aberration after ML correction.
         'residuals_umRMS': np.zeros(shape[0], dtype=float), # remaining umRMS aberration after ML correction.
         'confidence': np.zeros(shape[0], dtype=float),      # model's confidence for the primary mode (waves)
@@ -225,7 +270,8 @@ def eval_template(shape, psf_type, lam_detection):
 
 def collect_data(
     datapath,
-    model,
+    model_output_shape: int,
+    model_input_shape: tuple,
     samplelimit: int = 1,
     distribution: str = '/',
     no_phase: bool = False,
@@ -237,30 +283,23 @@ def collect_data(
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif"
 ):
 
-    if isinstance(model, tf.keras.Model):
-        predicted_modes = model.output_shape[-1]
-    elif isinstance(model, int):
-        predicted_modes = model
-    else:
-        predicted_modes = 15
-
     dataset = data_utils.collect_dataset(
         datapath,
         metadata=True,
-        modes=predicted_modes,
+        modes=model_output_shape,
         samplelimit=samplelimit,
         distribution=distribution,
         no_phase=no_phase,
         photons_range=photons_range,
         npoints_range=npoints_range,
         filename_pattern=filename_pattern,
-        model_input_shape=model.input_shape[1:]
+        model_input_shape=model_input_shape
     )
 
     # This runs multiple samples (aka images) at a time.
     # ys is a 2D array, rows are each sample, columns give aberration in zernike coefficients
     dataset = np.array(list(dataset.take(-1)), dtype=object)
-    ys = np.zeros((dataset.shape[0], predicted_modes))
+    ys = np.zeros((dataset.shape[0], model_output_shape))
     counts_percentiles = np.zeros((dataset.shape[0], 100))
     results = eval_template(shape=dataset.shape, psf_type=psf_type, lam_detection=lam_detection)
 
@@ -268,7 +307,7 @@ def collect_data(
     for i in range(dataset.shape[0]):
 
         # rescale zernike amplitudes to maintain the same peak2valley for different PSFs
-        ys[i] = lam_detection / default_wavelength * dataset[i, 0].numpy()[:predicted_modes]
+        ys[i] = lam_detection / default_wavelength * dataset[i, 0].numpy()[:model_output_shape]
         results['residuals_umRMS'][i] = np.linalg.norm(ys[i])
 
         results['photons'][i] = dataset[i, 1].numpy()
@@ -277,6 +316,7 @@ def collect_data(
 
         counts_percentiles[i] = dataset[i, 4].numpy()
 
+        results['aberration_umRMS'][i] = np.linalg.norm(ys[i])
         results['aberration'][i] = dataset[i, 5].numpy()
         results['residuals'][i] = results['aberration'][i]
 
@@ -329,7 +369,13 @@ def iter_evaluate(
     filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
     preprocess: bool = False,
     skip_remove_background: bool = False,
+    simulate_psf_only: bool = False,
     use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Union[Path, CARE]] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
+    randomize_object_gaussian_sigma: Optional[np.ndarray | list | tuple] = None,
 ):
     """
     Gathers the set of .tif files that meet the input criteria.
@@ -340,7 +386,7 @@ def iter_evaluate(
     Returns:
         "results" dataframe
     """
-    model = backend.load(modelpath)
+    model = backend.load(modelpath, model_arch=modelpath.name.split('-')[0])
 
     gen = backend.load_metadata(
         modelpath,
@@ -353,7 +399,7 @@ def iter_evaluate(
         skip_remove_background_ideal_psf=skip_remove_background,
         use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
     )
-
+    
     if Path(f'{savepath}_predictions.csv').exists():
         # continue from previous results, ignoring criteria
         results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
@@ -365,7 +411,8 @@ def iter_evaluate(
         # on first call, setup the dataframe with the 0th iteration stuff
         results = collect_data(
             datapath=datapath,
-            model=model,
+            model_output_shape=model.output_shape[-1],
+            model_input_shape=model.input_shape[1:],
             samplelimit=samplelimit,
             distribution=distribution,
             no_phase=no_phase,
@@ -375,32 +422,50 @@ def iter_evaluate(
             lam_detection=gen.lam_detection,
             filename_pattern=filename_pattern
         )
-
+    
+    if 'object_gaussian_sigma' not in results.columns:
+        results['object_gaussian_sigma'] = 0.
+    
+    if randomize_object_gaussian_sigma is not None:
+        results['object_gaussian_sigma'] = np.random.choice(randomize_object_gaussian_sigma, size=results.shape[0])
+    
     prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
     confidence_cols = [col for col in results.columns if col.endswith('_confidence')]
     ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
     residual_cols = [col for col in results.columns if col.endswith('_residual')]
     previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
-
+    
+    if denoiser is not None:
+        logger.info(f"Loading denoiser model: {denoiser}")
+        denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+        logger.info(f"{denoiser.name} loaded")
+    
+    print(previous)
     # create realspace images for the current iteration
-    paths = utils.multiprocess(
-        func=partial(
-            generate_sample,
-            iter_number=iter_num,
-            savedir=savepath.resolve(),
-            data=previous,
-            psfgen=gen,
-            no_phase=no_phase,
-            digital_rotations=rotations if digital_rotations else None,
-            preprocess=preprocess,
-            plot=plot
-        ),
-        jobs=previous['id'].values,
-        desc=f'Create samples ({savepath.resolve()})',
-        unit=' sample',
-        cores=-1
-    )
-
+    if simulate_samples:
+        paths = utils.multiprocess(
+            func=partial(
+                generate_sample,
+                iter_number=iter_num,
+                savedir=savepath.resolve(),
+                data=previous,
+                psfgen=gen,
+                no_phase=no_phase,
+                digital_rotations=rotations if digital_rotations else None,
+                preprocess=preprocess,
+                plot=plot,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size,
+                simulate_psf_only=simulate_psf_only,
+            ),
+            jobs=previous['id'].values,
+            desc=f'Create samples ({savepath.resolve()})',
+            unit=' sample',
+            cores=-1
+        )
+    else:
+        paths = previous.file.values
+    
     current = previous.copy()
     current['iter_num'] = iter_num
     current['file'] = paths
@@ -421,8 +486,10 @@ def iter_evaluate(
         digital_rotations=rotations if digital_rotations else None,
         min_psnr=0,
         skip_prep_sample=False,
-        preprocessed=True if preprocess else False,
+        preprocessed=preprocess,
         remove_background=False if skip_remove_background else True,
+        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
+        save_processed_tif_file=True
     )
     current[prediction_cols] = predictions.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
     current[confidence_cols] = stdevs.T.values[:paths.shape[0]]  # drop (mean, median, min, max, and std)
@@ -460,6 +527,7 @@ def iter_evaluate(
         lambda row: np.linalg.norm(row[confidence_cols].values),
         axis=1
     )
+    print(current)
 
     results = pd.concat([results, current], ignore_index=True, sort=False)
 
@@ -475,6 +543,106 @@ def iter_evaluate(
 
 
 @profile
+def plot_coverage(
+    dataframe,
+    wavelength,
+    savepath:Path,
+    label='Integrated photons per object',
+    lims=(0, 100),
+    ax=None,
+    cax=None,
+    sci=False,
+    p2v=False,
+    cmap='viridis'
+):
+    try:
+        dataframe = dataframe.sort_index().interpolate()
+    except ValueError:
+        pass
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+    if cax is None:
+        cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
+
+    contours = ax.contourf(
+        dataframe.columns.values,
+        dataframe.index.values,
+        dataframe.values,
+        cmap=cmap,
+        extend='max',
+        linewidths=2,
+        linestyles='dashed',
+    )
+
+    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+
+    cbar = plt.colorbar(
+        contours,
+        cax=cax,
+        fraction=0.046,
+        pad=0.04,
+        extend='both',
+        spacing='proportional',
+        format=FormatStrFormatter("%.2f"),
+    )
+    cbar.ax.set_ylabel(fr'Number of test samples')
+    cbar.ax.yaxis.set_ticks_position('right')
+    cbar.ax.yaxis.set_label_position('left')
+
+    if label == 'Integrated photons' or label == 'Integrated photoelectrons':
+        ax.set_xticks(np.arange(lims[0], lims[1]+5e4, 5e4), minor=False)
+        ax.set_xticks(np.arange(lims[0], lims[1]+2.5e4, 2.5e4), minor=True)
+    elif label == 'Number of iterations':
+        ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
+
+    if sci:
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0), useMathText=True)
+
+    ax.set_xlabel(label)
+    ax.set_xlim(lims)
+
+    if p2v:
+        ax.set_ylabel(rf'Initial aberration (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)')
+        ax.set_yticks(np.arange(0, 6, .5), minor=True)
+        ax.set_yticks(np.arange(0, 6, 1))
+        ax.set_ylim(0, 5)
+    else:
+        ax.set_ylabel(rf'Initial aberration ($\lambda$ RMS, $\lambda = {int(wavelength * 1000)}~nm$)')
+        ax.set_yticks(np.arange(0, 1.1, .05), minor=True)
+        ax.set_yticks(np.arange(0, 1.1, .1))
+        ax.set_ylim(0, 1)
+
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    plt.tight_layout()
+
+    if p2v:
+        savepath = Path(f'{savepath}_p2v')
+    else:
+        savepath = Path(f'{savepath}_umRMS')
+
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    logger.info(f'Saved: {savepath.resolve()}.png  .pdf  .svg')
+    return ax
+
+
+@profile
 def plot_heatmap_p2v(
     dataframe,
     wavelength,
@@ -486,12 +654,17 @@ def plot_heatmap_p2v(
     ax=None,
     cax=None,
     agg='mean',
+    sci=False,
     histograms: Optional[pd.DataFrame] = None,
     kde_color='grey',
     cdf_color='k',
     hist_color='lightgrey',
-    sci=False
 ):
+    try:
+        dataframe = dataframe.sort_index().interpolate()
+    except ValueError:
+        pass
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -835,7 +1008,7 @@ def plot_heatmap_p2v(
 
             x = histograms[
                 (histograms.iter_num == 1) &
-                (histograms.aberration >= 2.5) & (histograms.aberration <= 3.5)
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
             ]
             ax1 = sns.histplot(
                 ax=ax1,
@@ -879,7 +1052,7 @@ def plot_heatmap_p2v(
 
             x = histograms[
                 (histograms.iter_num == 2) &
-                (histograms.aberration >= 2.5) & (histograms.aberration <= 3.5)
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
             ]
             ax2 = sns.histplot(
                 ax=ax2,
@@ -919,7 +1092,7 @@ def plot_heatmap_p2v(
 
             x = histograms[
                 (histograms.iter_num == 5) &
-                (histograms.aberration >= 2.5) & (histograms.aberration <= 3.5)
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
             ]
             ax3 = sns.histplot(
                 ax=ax3,
@@ -997,16 +1170,28 @@ def plot_heatmap_p2v(
 
 
 @profile
-def plot_heatmap_umRMS(
+def plot_heatmap_rms(
     dataframe,
     wavelength,
     savepath:Path,
-    label='Integrated photons per object',
+    label='Integrated photoelectrons',
+    color_label='Residuals',
+    hist_col='confidence',
     lims=(0, 100),
     ax=None,
     cax=None,
     agg='mean',
+    sci=False,
+    histograms: Optional[pd.DataFrame] = None,
+    kde_color='grey',
+    cdf_color='k',
+    hist_color='lightgrey',
 ):
+    try:
+        dataframe = dataframe.sort_index().interpolate()
+    except ValueError:
+        pass
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -1018,21 +1203,27 @@ def plot_heatmap_umRMS(
     })
 
     if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 6))
+        if histograms is not None:
+            fig = plt.figure(figsize=(12, 8))
+            gs = fig.add_gridspec(3, 4)
+            ax = fig.add_subplot(gs[:, 1:])
+            ax1 = fig.add_subplot(gs[0, 0])
+            ax2 = fig.add_subplot(gs[1, 0])
+            ax3 = fig.add_subplot(gs[2, 0])
+        else:
+            fig, ax = plt.subplots(figsize=(8, 6))
 
     if cax is None:
         cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
 
     levels = np.array([
-        0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
-        .5, .6, .7, .8, .9,
-        1, 1.25, 1.5, 1.75, 2., 2.5,
-        3., 4., 5.,
+        0, .025, .05, .075, .1, .125, .15, .175, .2, .225,
+        .25, .3, .35, .4, .45,
+        .5, .55, .6, .65, .7,
+        .75, .8, .9, 1,
     ])
 
-    umRMS_per_p2v_factor = round(np.percentile(dataframe.to_numpy(), 98) / np.max(levels), 2)
-    levels *= umRMS_per_p2v_factor
-    vmin, vmax, vcenter, step = levels[0], levels[-1], levels[10], levels[1] - levels[0]
+    vmin, vmax, vcenter, step = levels[0], levels[-1], .25, levels[1] - levels[0]
     highcmap = plt.get_cmap('magma_r', 256)
     lowcmap = plt.get_cmap('GnBu_r', 256)
     low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -1051,8 +1242,6 @@ def plot_heatmap_umRMS(
         linestyles='dashed',
     )
 
-    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
-
     cbar = plt.colorbar(
         contours,
         cax=cax,
@@ -1061,24 +1250,406 @@ def plot_heatmap_umRMS(
         extend='both',
         spacing='proportional',
         format=FormatStrFormatter("%.2f"),
-        ticks=np.array([0, .15, .3, .5, .75, 1., 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]) * umRMS_per_p2v_factor,
+        # ticks=np.arange(vmin, vmax+.05, .05),
+        ticks=[
+            0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
+            .5, .6, .7, .8, .9, 1,
+        ],
     )
-    cbar.ax.set_ylabel(fr'Residuals ({agg} $\mu$mRMS)')
+    cbar.ax.set_ylabel(fr'Residuals ({agg} $\lambda$ RMS)')
     cbar.ax.yaxis.set_ticks_position('right')
     cbar.ax.yaxis.set_label_position('left')
+    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
 
-    if label == 'Integrated photons per object':
-        ax.set_xticks(np.arange(0, 1e6+1e5, 1e5), minor=False)
-        ax.set_xticks(np.arange(0, 1e6+10e4, 5e4), minor=True)
+    if histograms is not None:
+        if label == 'Integrated photons' or label == 'Integrated photoelectrons':
+            x = histograms[
+                (histograms.pbins <= 1e5) &
+                (histograms.ibins >= .4) & (histograms.ibins <= .6)
+            ]
+
+            if color_label == 'Residuals':
+                xmax = .3
+                binwidth = .02
+                bins = np.arange(0, xmax + binwidth, binwidth)
+                xticks = np.arange(0, xmax+.05, .05)
+            else:
+                if hist_col == 'confidence':
+                    xmax = .15
+                    binwidth = .01
+                    bins = np.arange(0, xmax + binwidth, binwidth)
+                    xticks = np.arange(0, xmax+.05, .05)
+                else:
+                    xmax = .3
+                    binwidth = .025
+                    bins = np.arange(0, xmax + binwidth, binwidth)
+                    xticks = np.arange(0, xmax+.05, .05)
+
+            try:
+                ax1t = ax1.twinx()
+                ax1t = sns.histplot(
+                    ax=ax1t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax1t.lines[0].set_color(kde_color)
+                ax1t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax1t.set_ylabel('KDE', color=kde_color)
+                ax1t.set_ylim(0, 50)
+
+                ax1 = sns.histplot(
+                    ax=ax1,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color=cdf_color,
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                )
+
+                ax1.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax1.set_ylabel('CDF', color=cdf_color)
+                ax1.set_ylim(0, 1)
+                ax1.set_yticks(np.arange(0, 1.2, .2))
+                ax1.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, label='Median', zorder=3)
+                ax1.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, label='Mean', zorder=3)
+                ax1.set_xlim(0, xmax)
+                ax1.set_xticks(xticks)
+                ax1.set_xlabel(color_label)
+                ax1.text(
+                    .9, .8, 'I',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax1.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((0, .4), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .1, .5, 'I',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            x = histograms[
+                (histograms.pbins >= 2e5) & (histograms.pbins <= 3e5) &
+                (histograms.ibins >= .4) & (histograms.ibins <= .6)
+            ]
+
+            try:
+                ax2t = ax2.twinx()
+                ax2t = sns.histplot(
+                    ax=ax2t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax2t.lines[0].set_color(kde_color)
+                ax2t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax2t.set_ylabel('KDE', color=kde_color)
+                ax2t.set_ylim(0, 50)
+
+                ax2 = sns.histplot(
+                    ax=ax2,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color=cdf_color,
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                )
+                ax2.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax2.set_ylabel('CDF', color=cdf_color)
+                ax2.set_ylim(0, 1)
+                ax2.set_yticks(np.arange(0, 1.2, .2))
+                ax2.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+                ax2.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
+                ax2.set_xlim(0, xmax)
+                ax2.set_xticks(xticks)
+                ax2.set_xlabel(color_label)
+                ax2.text(
+                    .9, .8, 'II',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax2.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((.4, .4), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .5, .5, 'II',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            x = histograms[
+                (histograms.pbins >= 4e5) & (histograms.pbins <= 5e5) &
+                (histograms.ibins >= .4) & (histograms.ibins <= .6)
+            ]
+
+            try:
+                ax3t = ax3.twinx()
+                ax3t = sns.histplot(
+                    ax=ax3t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax3t.lines[0].set_color(kde_color)
+                ax3t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax3t.set_ylabel('KDE', color=kde_color)
+                ax3t.set_ylim(0, 50)
+
+                ax3 = sns.histplot(
+                    ax=ax3,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color='k',
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                    zorder=3
+                )
+                ax3.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax3.set_ylabel('CDF', color=cdf_color)
+                ax3.set_ylim(0, 1)
+                ax3.set_yticks(np.arange(0, 1.2, .2))
+                ax3.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+                ax3.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
+                ax3.set_xlim(0, xmax)
+                ax3.set_xticks(xticks)
+                ax3.set_xlabel(color_label)
+                ax3.text(
+                    .9, .8, 'III',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax3.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((.8, .4), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+
+            ax.text(
+                .9, .5, 'III',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            if color_label == 'Residuals':
+                ax1.legend(frameon=False, ncol=1, loc='upper left')
+            else:
+                ax1.legend(frameon=False, ncol=1, loc='center right')
+
+            ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax2.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+            ax1.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+            ax2.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+            ax3.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+
+            ax1t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax2t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax3t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+
+            ax1.set_zorder(ax1t.get_zorder()+1)
+            ax1.patch.set_visible(False)
+            ax2.set_zorder(ax2t.get_zorder()+1)
+            ax2.patch.set_visible(False)
+            ax3.set_zorder(ax3t.get_zorder()+1)
+            ax3.patch.set_visible(False)
+
+        elif label == f'Number of iterations':
+
+            x = histograms[
+                (histograms.iter_num == 1) &
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
+            ]
+            ax1 = sns.histplot(
+                ax=ax1,
+                data=x,
+                x=hist_col,
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
+            ax1.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2, label='Median')
+            ax1.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2, label='Mean')
+            ax1.set_ylim(0, 80)
+            ax1.set_xlim(0, 5)
+            ax1.set_xlabel(color_label)
+            ax1.set_ylabel('')
+            ax1.text(
+                .9, .8, 'I',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax1.transAxes
+            )
+
+            ax.add_patch(
+                plt.Rectangle((.05, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .1, .6, 'I',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            x = histograms[
+                (histograms.iter_num == 2) &
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
+            ]
+            ax2 = sns.histplot(
+                ax=ax2,
+                data=x,
+                x=hist_col,
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+            ax2.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2)
+            ax2.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2)
+            ax2.set_ylim(0, 80)
+            ax2.set_xlim(0, 5)
+            ax2.set_xlabel(color_label)
+            ax2.set_ylabel('')
+            ax2.text(
+                .9, .8, 'II',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax2.transAxes
+            )
+
+            ax.add_patch(
+                plt.Rectangle((.15, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .2, .6, 'II',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            x = histograms[
+                (histograms.iter_num == 5) &
+                (histograms.ibins >= 2.5) & (histograms.ibins <= 3.5)
+            ]
+            ax3 = sns.histplot(
+                ax=ax3,
+                data=x,
+                x=hist_col,
+                stat='percent',
+                kde=True,
+                bins=25,
+                color='dimgrey'
+            )
+            ax3.axvline(np.median(x[hist_col]), c='C0', ls='-', lw=2, label='Median')
+            ax3.axvline(np.mean(x[hist_col]), c='C1', ls='--', lw=2, label='Mean')
+            ax3.set_ylim(0, 80)
+            ax3.set_xlim(0, 5)
+            ax3.set_xlabel(color_label)
+            ax3.set_ylabel('')
+            ax3.text(
+                .9, .8, 'III',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax3.transAxes
+            )
+
+            ax.add_patch(
+                plt.Rectangle((.45, .5), .1, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .5, .6, 'III',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            ax1.legend(frameon=False, ncol=1, loc='upper center')
+            ax1.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax2.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax2.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax3.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+    if label == 'Integrated photons' or label == 'Integrated photoelectrons':
+        ax.set_xticks(np.arange(lims[0], lims[1]+5e4, 5e4), minor=False)
+        ax.set_xticks(np.arange(lims[0], lims[1]+2.5e4, 2.5e4), minor=True)
     elif label == 'Number of iterations':
-        ax.set_xticks(np.arange(0, dataframe.columns.values.max() + 1, 1), minor=False)
+        ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
+
+    if sci:
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0), useMathText=True)
 
     ax.set_xlabel(label)
     ax.set_xlim(lims)
 
-    ax.set_ylabel(fr'Initial aberration ({agg} $\mu$mRMS)')
-    ax.set_yticks(np.arange(0, 6, .5) * umRMS_per_p2v_factor, minor=True)
-    ax.set_yticks(np.arange(0, 6, 1) * umRMS_per_p2v_factor)
+    ax.set_ylabel(rf'Initial aberration ({agg} $\lambda$ RMS, $\lambda = {int(wavelength * 1000)}~nm$)')
+    ax.set_yticks(np.arange(0, 2, .05), minor=True)
+    ax.set_yticks(np.arange(0, 2, .1))
     ax.set_ylim(0, levels[-1])
 
     ax.spines['right'].set_visible(False)
@@ -1112,9 +1683,14 @@ def snrheatmap(
     agg: str = 'median',
     psf_type: Optional[str] = None,
     num_beads: Optional[int] = None,
+    simulate_psf_only: bool = False,
     lam_detection: Optional[float] = .510,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1123,11 +1699,14 @@ def snrheatmap(
 
         if psf_type is not None:
             savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
-
-        if num_beads is not None:
-            savepath = savepath / f'beads-{num_beads}'
+        
+        if simulate_psf_only:
+            savepath = savepath / 'psf'
         else:
-            savepath = savepath / 'beads'
+            if num_beads is not None:
+                savepath = savepath / f'beads-{num_beads}'
+            else:
+                savepath = savepath / 'beads'
 
         if distribution != '/':
             savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
@@ -1159,9 +1738,20 @@ def snrheatmap(
             lam_detection=lam_detection,
             skip_remove_background=skip_remove_background,
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            simulate_psf_only=simulate_psf_only,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
         )
 
-    df = df[df['iter_num'] == iter_num]
+    if 'aberration_umRMS' not in df.columns.values:
+        df['aberration_umRMS'] = np.nan
+        for idx in df.id.values:
+            df.loc[df.id == idx, 'aberration_umRMS'] = df[df.id == idx].iloc[0]['residuals_umRMS']
+
+    backup = df.copy()
+    df = backup[backup['iter_num'] == iter_num]
     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
 
     for x in ['photons', 'photoelectrons', 'counts', 'counts_p100', 'counts_p99']:
@@ -1188,22 +1778,50 @@ def snrheatmap(
             pbins = np.arange(lims[0], lims[-1]+50, 25)
 
         df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
-        bins = np.arange(0, 10.25, .25).round(2)
-        df['ibins'] = pd.cut(
-            df['aberration'],
-            bins,
-            labels=bins[1:],
-            include_lowest=True
-        )
 
         for agg in ['mean', 'median']:
+            bins = np.arange(0, 2.55, .05).round(2)
+            df['ibins'] = pd.cut(
+                df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection)),
+                bins,
+                labels=bins[1:],
+                include_lowest=True
+            )
+            rms_dataframe = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc=agg)
+            rms_dataframe = rms_dataframe.applymap(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
+            rms_dataframe.insert(0, 0, rms_dataframe.index.values.astype(df['residuals'].dtype))
+
+            plot_heatmap_rms(
+                rms_dataframe,
+                histograms=df if x == 'photons' else None,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{agg}"),
+                label=label,
+                lims=lims,
+                agg=agg,
+                sci=True,
+            )
+
+            coverage = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc='count')
+            plot_coverage(
+                coverage,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_coverage"),
+                label=label,
+                lims=lims,
+                sci=True,
+                p2v=False
+            )
+
+            bins = np.arange(0, 10.25, .25).round(2)
+            df['ibins'] = pd.cut(
+                df['aberration'],
+                bins,
+                labels=bins[1:],
+                include_lowest=True
+            )
             dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
             dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
-
-            try:
-                dataframe = dataframe.sort_index().interpolate()
-            except ValueError:
-                pass
 
             dataframe.to_csv(f'{savepath}_{x}_{agg}.csv')
             logger.info(f'Saved: {savepath.resolve()}_{x}_{agg}.csv')
@@ -1220,15 +1838,21 @@ def snrheatmap(
                 agg=agg
             )
 
+            coverage = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc='count')
+            plot_coverage(
+                coverage,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_coverage"),
+                label=label,
+                lims=lims,
+                sci=True,
+                p2v=True
+            )
+
             try:
                 for c in ['confidence', 'confidence_sum']:
                     dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
                     dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
-
-                    try:
-                        dataframe = dataframe.sort_index().interpolate()
-                    except ValueError:
-                        pass
 
                     # replace unconfident predictions with max std
                     dataframe.replace(0, dataframe.max(), inplace=True)
@@ -1274,6 +1898,10 @@ def densityheatmap(
     lam_detection: Optional[float] = .510,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1316,7 +1944,11 @@ def densityheatmap(
             psf_type=psf_type,
             lam_detection=lam_detection,
             skip_remove_background=skip_remove_background,
-            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -1336,12 +1968,6 @@ def densityheatmap(
     ):
         dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns=col, aggfunc=agg)
         dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
-
-        try:
-            dataframe = dataframe.sort_index().interpolate()
-        except ValueError:
-            pass
-
         dataframe.to_csv(f'{savepath}.csv')
         logger.info(f'Saved: {savepath.resolve()}.csv')
 
@@ -1354,6 +1980,111 @@ def densityheatmap(
             agg=agg
         )
 
+    return savepath
+
+
+@profile
+def objectsizeheatmap(
+    modelpath: Path,
+    datadir: Path,
+    outdir: Path,
+    iter_num: int = 1,
+    distribution: str = '/',
+    na: float = 1.0,
+    samplelimit: Any = None,
+    batch_size: int = 100,
+    eval_sign: str = 'signed',
+    digital_rotations: bool = False,
+    plot: Any = None,
+    plot_rotations: bool = False,
+    agg: str = 'median',
+    num_beads: Optional[int] = None,
+    photons_range: Optional[tuple] = None,
+    psf_type: Optional[str] = None,
+    lam_detection: Optional[float] = .510,
+    skip_remove_background: bool = False,
+    use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
+    object_gaussian_sigma_range: tuple = (0, 2)
+):
+    modelspecs = backend.load_metadata(modelpath)
+    
+    if outdir == Path('../evaluations'):
+        savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'objectsizeheatmaps'
+        
+        if psf_type is not None:
+            savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+        
+        if num_beads is not None:
+            savepath = savepath / f'beads-{num_beads}'
+        
+        if distribution != '/':
+            savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+        else:
+            savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+    else:
+        savepath = outdir
+    
+    savepath.mkdir(parents=True, exist_ok=True)
+    
+    if datadir.suffix == '.csv':
+        df = pd.read_csv(datadir, header=0, index_col=0)
+    else:
+        df = iter_evaluate(
+            iter_num=iter_num,
+            modelpath=modelpath,
+            datapath=datadir,
+            savepath=savepath,
+            samplelimit=samplelimit,
+            distribution=distribution,
+            na=na,
+            photons_range=photons_range,
+            npoints_range=(1, num_beads) if num_beads is not None else None,
+            batch_size=batch_size,
+            eval_sign=eval_sign,
+            digital_rotations=digital_rotations,
+            plot=plot,
+            plot_rotations=plot_rotations,
+            psf_type=psf_type,
+            lam_detection=lam_detection,
+            skip_remove_background=skip_remove_background,
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma,
+            randomize_object_gaussian_sigma=np.arange(
+                object_gaussian_sigma_range[0], object_gaussian_sigma_range[1]+.1, step=.1
+            )
+        )
+    
+    df = df[df['iter_num'] == iter_num]
+    
+    bins = np.arange(0, 10.25, .25).round(2)
+    df['ibins'] = pd.cut(
+        df['aberration'],
+        bins,
+        labels=bins[1:],
+        include_lowest=True
+    )
+    
+    dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='object_gaussian_sigma', aggfunc=agg)
+    dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
+    dataframe.to_csv(f'{savepath}.csv')
+    logger.info(f'Saved: {savepath.resolve()}.csv')
+    
+    plot_heatmap_p2v(
+        dataframe,
+        wavelength=modelspecs.lam_detection,
+        savepath=Path(f'{savepath}_iter_{iter_num}_gaussian_sigma'),
+        label=r'Gaussian $\sigma$',
+        lims=object_gaussian_sigma_range,
+        agg=agg
+    )
+    
     return savepath
 
 
@@ -1378,6 +2109,10 @@ def iterheatmap(
     lam_detection: Optional[float] = .510,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -1421,7 +2156,11 @@ def iterheatmap(
             psf_type=psf_type,
             lam_detection=lam_detection,
             skip_remove_background=skip_remove_background,
-            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
         )
 
     max_iter = df['iter_num'].max()
@@ -1435,7 +2174,6 @@ def iterheatmap(
         dataframe.index.name = 'bins'
         dataframe = dataframe.groupby("bins").agg(agg)
         dataframe.loc[0] = pd.Series({cc: 0 for cc in dataframe.columns})
-        dataframe = dataframe.sort_index().interpolate()
         dataframe.to_csv(f'{savepath}.csv')
         logger.info(f'Saved: {savepath.resolve()}.csv')
 
@@ -1450,7 +2188,7 @@ def iterheatmap(
                 agg=agg,
             )
         elif value == 'residuals_umRMS':
-            plot_heatmap_umRMS(
+            plot_heatmap_rms(
                 dataframe,
                 wavelength=modelspecs.lam_detection,
                 savepath=savepath,
@@ -1471,6 +2209,7 @@ def random_samples(
     batch_size: int = 512,
     eval_sign: str = 'signed',
     digital_rotations: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     m = backend.load(model)
     m.summary()
@@ -1534,6 +2273,7 @@ def random_samples(
                         normalize=True,
                         plot=save_path / f'{s}',
                         min_psnr=0,
+                        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                     )
 
                     if digital_rotations:
@@ -1615,40 +2355,42 @@ def random_samples(
     return save_path
 
 
-def plot_templates(model: Path, num_objs: Optional[int] = 1):
+def plot_templates(model: Path):
     plt.rcParams.update({
-        'font.size': 12,
-        'axes.titlesize': 14,
-        'axes.labelsize': 14,
-        'xtick.labelsize': 12,
-        'ytick.labelsize': 12,
-        'legend.fontsize': 12,
+        'font.size': 10,
+        'axes.titlesize': 10,
+        'axes.labelsize': 10,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
         'axes.autolimit_mode': 'round_numbers'
     })
 
-    num_objs = 1 if num_objs is None else num_objs
-
-    outdir = model.with_suffix('') / 'evalmodes' / 'templates' / f'num_objs_{num_objs}'
+    outdir = model.with_suffix('') / 'templates'
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
-    photons = np.arange(0, 1e6+5e4, 5e4)
-    photons[0] = 1e4
-    waves = np.arange(1e-5, .55, step=.05).round(2)
+    photon_step = 10e3
+    photons = np.arange(photon_step, 1e5+photon_step, photon_step).astype(int)
+    waves = np.arange(0, .55, step=.05).round(2)
 
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
 
     # plot templates
-    for i in range(3, modelspecs.n_modes):
+    for i in trange(3, modelspecs.n_modes):
         if i == 4:
             continue
 
         savepath = outdir / f"m{i}"
 
-        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(14, 10))
+        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(12, 14))
 
-        for t, a in enumerate(waves[::-1]):
+        for t, a in tqdm(
+            enumerate(waves[::-1]),
+            desc=f'Simulating aberrations for [{len(waves)}] AMP bins & [{len(photons)}] PH bins',
+            total=len(waves)
+        ):
             for j, ph in enumerate(photons):
                 phi = np.zeros_like(aberrations[0])
                 phi[i] = a
@@ -1663,22 +2405,41 @@ def plot_templates(model: Path, num_objs: Optional[int] = 1):
                     photons=ph,
                     # maxcounts=ph,
                     noise=True,
-                    fill_radius=0
+                    fill_radius=0,
                 )
+                imwrite(f'{savepath}_ph{ph}_a{str(a).replace("0.", "p")}.tif', img.astype(np.float32))
+                img -= 100
+                img[img < 0] = 0
+                # img = imread(f'{savepath}_ph{ph}_a{str(a).replace("0.", "p")}.tif').astype(np.float32)
 
                 axes[t, j].imshow(np.max(img, axis=0) ** .5, cmap='hot')
-                axes[t, j].axis('off')
+                axes[t, j].set_xticks([])
+                axes[t, j].set_yticks([])
+
                 axes[t, j].set_title(
                     f"{int(np.max(img) / 1e3)}$\\times 10^3$" if np.max(img) > 1e4 else int(np.max(img)),
                     # f"{int(np.sum(img)/1e6)}$\\times 10^6$" if np.sum(img) > 1e6 else int(np.sum(img)),
-                    fontsize=8,
                     pad=1
                 )
+
+                if j == 0:
+                    p2v = np.round(w.peak2valley(), 1)
+                    axes[t, j].set_ylabel(f'{p2v:.1f}$\lambda$ (p2v)\n{a:.2f}$\mu$m (rms)')
+
+                # if j == len(photons) - 1:
+                #     tax = axes[t, j].twinx()
+                #     tax.set_yticks([])
+                #     tax.set_xticks([])
+                #     tax.set_ylabel(f'{a:.2f}$\mu$m\n')
+
+                if t == len(waves) - 1:
+                    axes[t, j].set_xlabel(f"{int(ph / 1e3)}$\\times 10^3$\nphotons")
 
         plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.15, wspace=.15)
         plt.savefig(f'{savepath}_templateheatmap.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}_templateheatmap.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}_templateheatmap.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+        logger.info(f'Saved: {savepath}_templateheatmap.png  .pdf  .svg')
 
 
 def create_samples(
@@ -1690,6 +2451,7 @@ def create_samples(
     object_size: int = 0,
 ):
     kernels = [gen.single_psf(phi=w, normed=True) for w in wavefronts]
+    # amps = [np.max(w.amplitudes) for w in wavefronts]
 
     if Path(f"{savepath}_inputs.npy").exists():
         inputs = np.load(f"{savepath}_inputs.npy")
@@ -1705,6 +2467,7 @@ def create_samples(
                     noise=True,
                     fill_radius=0 if num_objs == 1 else .66
                 )
+            # imread(f'{savepath}_ph{ph}_a{str(amps[k]).replace("0.", "p")}.tif').astype(np.float32)
             for k, ph in tqdm(
                 itertools.product(range(len(kernels)), photons),
                 desc='Generating samples',
@@ -1728,7 +2491,10 @@ def eval_object(
     savepath: Any = None,
     psf_type: Any = None,
     digital_rotations: Optional[int] = 361,
-    object_size: int = 0
+    object_size: int = 0,
+    denoiser: Optional[CARE] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    estimated_object_gaussian_sigma: float = 0,
 ):
     model = backend.load(modelpath)
     gen = backend.load_metadata(
@@ -1736,6 +2502,14 @@ def eval_object(
         psf_type=psf_type,
         psf_shape=3*[model.input_shape[2]],
         rotate=False
+    )
+    samplepsfgen = backend.load_metadata(
+        modelpath,
+        psf_type=psf_type,
+        psf_shape=3*[model.input_shape[2]],
+        rotate=False,
+        x_voxel_size=.097,
+        y_voxel_size=.097
     )
 
     if not isinstance(wavefronts[0], Wavefront):
@@ -1746,7 +2520,7 @@ def eval_object(
     inputs = create_samples(
         wavefronts=wavefronts,
         photons=photons,
-        gen=gen,
+        gen=samplepsfgen,
         savepath=savepath,
         num_objs=num_objs,
         object_size=object_size,
@@ -1757,14 +2531,19 @@ def eval_object(
     else:
         embeddings = np.stack([
             backend.preprocess(
-                i,
+                inputs[i],
                 modelpsfgen=gen,
+                samplepsfgen=samplepsfgen,
                 digital_rotations=digital_rotations,
                 remove_background=True,
                 normalize=True,
                 min_psnr=0,
+                plot=f"{savepath}_{a}_{ph}",
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size,
+                estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
             )
-            for i in tqdm(inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout)
+            for i, (a, ph) in enumerate(itertools.product(p2v, photons))
         ], axis=0)
         np.save(f"{savepath}_embeddings", embeddings)
 
@@ -1782,7 +2561,7 @@ def eval_object(
             batch_size=batch_size,
             save_path=[f"{savepath}_{a}_{ph}" for a, ph in itertools.product(p2v, photons)],
             digital_rotations=digital_rotations,
-            # plot_rotations=True
+            plot_rotations=True
         )
 
         try:
@@ -1816,11 +2595,15 @@ def eval_object(
 @profile
 def evaluate_modes(
     model: Path,
+    outdir: Path,
     eval_sign: str = 'signed',
     batch_size: int = 512,
     num_objs: Optional[int] = 1,
     digital_rotations: bool = True,
-    agg: str = 'median'
+    agg: str = 'median',
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    estimated_object_gaussian_sigma: float = 0,
 ):
     plt.rcParams.update({
         'font.size': 12,
@@ -1833,18 +2616,22 @@ def evaluate_modes(
     })
 
     num_objs = 1 if num_objs is None else num_objs
-
-    outdir = model.with_suffix('') / eval_sign / 'evalmodes' / f'num_objs_{num_objs}'
+    
+    outdir = outdir / model.with_suffix('').name / eval_sign / 'evalmodes' / f'test'
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
+    
+    if denoiser is not None:
+        logger.info(f"Loading denoiser model: {denoiser}")
+        denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+    else:
+        denoiser = None
 
-    photons = np.arange(0, 1e6+5e4, 5e4)
-    photons[0] = 1e4
-    waves = np.arange(1e-5, .55, step=.05).round(2)
+    photon_step = 10e3
+    photons = np.arange(1, 1e5 + photon_step, photon_step).astype(int)
+    waves = np.arange(0, .35, step=.05).round(2)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
-
-    # plot_templates(model=model, num_objs=1)
 
     levels = [
         0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
@@ -1882,13 +2669,16 @@ def evaluate_modes(
                 batch_size=batch_size,
                 eval_sign=eval_sign,
                 savepath=savepath,
-                digital_rotations=361 if digital_rotations else None
+                digital_rotations=361 if digital_rotations else None,
+                denoiser=denoiser,
+                denoiser_window_size=denoiser_window_size,
+                estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
             )
 
         df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
 
         x, y = 'photons', 'aberration'
-        xstep, ystep = 5e4, .25
+        xstep, ystep = 1e4, .25
 
         ybins = np.arange(0, df[y].max()+ystep, ystep)
         df['ybins'] = pd.cut(df[y], ybins, labels=ybins[1:], include_lowest=True)
@@ -1902,6 +2692,7 @@ def evaluate_modes(
 
         dataframe = pd.pivot_table(df, values='residuals', index='ybins', columns='xbins', aggfunc=agg)
         dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
+        dataframe.drop(columns=[1], inplace=True)
 
         try:
             dataframe = dataframe.sort_index().interpolate()
@@ -1952,7 +2743,7 @@ def evaluate_modes(
         axt.set_ylim(ybins[0], ybins[-1])
 
         # axt.set_xscale('log')
-        axt.set_xlim(xbins[0], xbins[-1])
+        axt.set_xlim(0, xbins[-1])
         axt.set_xlabel(f'{x}')
 
         axt.spines['right'].set_visible(False)
@@ -1994,6 +2785,7 @@ def eval_modalities(
     digital_rotations: bool = False,
     num_objs: int = 1,
     psf_shape: tuple = (128, 128, 128),  # needs to be large enough for 2photon
+    estimated_object_gaussian_sigma: float = 0,
     modalities: tuple = (
         '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
         '../lattice/ACHex_NAexc0p40_NAsigma0p075_annulus0p6-0p2_crop0p1_FWHM52p0.mat',
@@ -2094,6 +2886,7 @@ def eval_modalities(
                         normalize=True,
                         plot=save_path / f'{z}',
                         min_psnr=0,
+                        estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                     )
                     imwrite(save_path / f'{z}_embeddings.tif', embeddings.astype(np.float32), imagej=True, compression='deflate', dtype=np.float32)
 
@@ -2226,6 +3019,7 @@ def eval_confidence(
     eval_sign: str = 'signed',
     dist: str = 'single',
     digital_rotations: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     pool = Pool(processes=4)  # plotting = 2*calculation time, so shouldn't need more than 2-4 processes to keep up.
 
@@ -2293,6 +3087,7 @@ def eval_confidence(
                             normalize=True,
                             plot=save_path / f'{s}',
                             min_psnr=0,
+                            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                         )
 
                         if digital_rotations:
@@ -2393,6 +3188,10 @@ def confidence_heatmap(
     lam_detection: Optional[float] = .510,
     skip_remove_background: bool = False,
     use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -2432,6 +3231,10 @@ def confidence_heatmap(
             lam_detection=lam_detection,
             skip_remove_background=skip_remove_background,
             use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
         )
 
     df = df[df['iter_num'] == iter_num]
@@ -2472,12 +3275,6 @@ def confidence_heatmap(
         for c in ['confidence', 'confidence_sum']:
             dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
             dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
-
-            try:
-                dataframe = dataframe.sort_index().interpolate()
-            except ValueError:
-                pass
-
             dataframe.to_csv(f'{savepath}_{x}_{c}.csv')
             logger.info(f'Saved: {savepath.resolve()}_{x}_{c}.csv')
 
@@ -2495,156 +3292,6 @@ def confidence_heatmap(
 
     return savepath
 
-
-@profile
-def compare_models(
-    models_codenames: list,
-    predictions_paths: list,
-    iter_num: int = 1,
-    photon_range: tuple = (1e5, 2e5),
-    aberration_range: tuple = (1, 2),
-    outdir: Path = Path('benchmark'),
-    wavelength: float = .510
-):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'xtick.major.pad': 10
-    })
-
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    dataframes = []
-    for codename, file in zip(models_codenames, predictions_paths):
-        df = pd.read_csv(file, header=0, index_col=0)
-        df = df[df['iter_num'] == iter_num]
-        df['model'] = codename
-        dataframes.append(df)
-
-    df = pd.concat(dataframes)
-
-    for c in ['residuals', 'confidence_sum', 'confidence', ]:
-        test = df[
-            (df.photons >= photon_range[0]) &
-            (df.photons <= photon_range[1]) &
-            (df.aberration >= aberration_range[0]) &
-            (df.aberration <= aberration_range[1])
-        ]
-
-        if c == 'residuals':
-            xmax = .5  #aberration_range[1]
-            binwidth = .25
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.25, .25)
-            label = '\n'.join([
-                rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
-            ])
-            outliers = test[test[c] >= xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-        elif c == 'confidence':
-            xmax = .1
-            binwidth = .01
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.01, .01)
-            label = '\n'.join([
-                rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
-            ])
-            # outliers = test[test[c] == 0]
-            test[c].replace(0, test[c].max(), inplace=True)
-            outliers = test[test[c] >= xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-        else:
-            xmax = .1
-            binwidth = .01
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            xticks = np.arange(0, xmax+.025, .025)
-            label = '\n'.join([
-                rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{photon_range[0]:.0e}, {photon_range[1]:.0e}] integrated photons'
-            ])
-            # outliers = test[test[c] == 0]
-            test[c].replace(0, test[c].max(), inplace=True)
-            outliers = test[test[c] >= xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-
-        fig, ax = plt.subplots(figsize=(8, 6))
-        histax = inset_axes(
-            ax,
-            width="100%",
-            height="100%",
-            bbox_to_anchor=(.3, .1, .3, .3),
-            bbox_transform=ax.transAxes,
-            loc='lower center'
-        )
-
-        g = sns.histplot(
-            ax=ax,
-            data=test,
-            x=c,
-            hue='model',
-            # bins=bins,
-            common_norm=False,
-            common_bins=True,
-            element="poly",
-            stat='proportion',
-            fill=False,
-            cumulative=True,
-        )
-
-        # sns.violinplot(
-        #     ax=histax,
-        #     data=outliers,
-        #     x='model',
-        #     y=c,
-        #     common_norm=False,
-        #     common_bins=True,
-        #     palette="tab10",
-        # )
-
-        sns.barplot(
-            x=unconfident[models_codenames].index,
-            y=unconfident[models_codenames].values,
-            ax=histax
-        )
-
-        ax.set_xlabel(label)
-        ax.set_ylabel('CDF')
-        ax.set_xlim(0, None)
-        # ax.set_xticks(xticks)
-        ax.set_ylim(None, 1)
-        ax.set_yticks(np.arange(0, 1.1, .1))
-        ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        histax.set_ylim(unconfident.min()-.05, unconfident.max())
-        histax.set_yticks(np.arange(unconfident.min()-.05, unconfident.max()+.05, .05).round(2))
-        histax.set_xlabel(f'$i$ >= {xmax}')
-        histax.set_ylabel('Proportion')
-        histax.set_xticks([])
-        histax.spines['top'].set_visible(False)
-        histax.spines['right'].set_visible(False)
-        histax.spines['left'].set_visible(False)
-        histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        sns.move_legend(g, title='Models', frameon=False, ncol=1, loc='lower right')
-        plt.tight_layout()
-
-        savepath = Path(f'{outdir}/compare_{c}')
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
 def residuals_histogram(
@@ -2742,14 +3389,19 @@ def residuals_histogram(
 @profile
 def evaluate_object_sizes(
     model: Path,
+    outdir: Path,
     eval_sign: str = 'signed',
     batch_size: int = 256,
     num_objs: Optional[int] = 1,
     digital_rotations: bool = True,
     agg: str = 'median',
     na: float = 1.0,
-    photons: int = 1000000,
+    photons: int = 40000,
     override: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    amp: float = .15,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -2771,22 +3423,23 @@ def evaluate_object_sizes(
     )
     samplegen = backend.load_metadata(
         model,
-        psf_shape=(72, 72, 72),
+        psf_shape=(96, 96, 96),
         rotate=False,
         # psf_type='widefield',
         x_voxel_size=.097,
         y_voxel_size=.097,
         z_voxel_size=.2,
+        use_theoretical_widefield_simulator=True,
     )
     w = Wavefront(np.zeros(15))
-
-    outdir = model.with_suffix('') / eval_sign / 'evalobjects' / f'num_objs_{num_objs}'
+    
+    outdir = outdir / model.with_suffix('').name / eval_sign / 'evalobjects' / f'num_objs_{num_objs}'
 
     for i, (mode, twin) in enumerate(w.twins.items()):
         if mode.index_ansi == 4: continue
 
         zernikes = np.zeros(15)
-        zernikes[mode.index_ansi] = .1
+        zernikes[mode.index_ansi] = amp
 
         if np.all(zernikes == 0):
             savepath = outdir / f"z0"
@@ -2795,8 +3448,8 @@ def evaluate_object_sizes(
 
         savepath.mkdir(parents=True, exist_ok=True)
         savepath = savepath / f"ph{photons}"
-
-        sizes = np.arange(0, 5.25, .25).round(2)
+        
+        sizes = np.arange(0, 6.5, .25).round(2)
         wavefront = Wavefront(zernikes, lam_detection=samplegen.lam_detection, rotate=False)
         psf = samplegen.single_psf(phi=wavefront, normed=True)
         psf /= np.sum(psf)
@@ -2833,6 +3486,9 @@ def evaluate_object_sizes(
                     normalize=True,
                     min_psnr=0,
                     plot=Path(f"{savepath}_{sizes[w]}"),
+                    denoiser=denoiser,
+                    denoiser_window_size=denoiser_window_size,
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                 )
                 for w, i in enumerate(tqdm(
                     inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout
@@ -2865,7 +3521,7 @@ def evaluate_object_sizes(
             np.save(f"{savepath}_predictions", preds)
 
         residuals = ys - preds
-
+        sizes = [s * samplegen.x_voxel_size * 1000 for s in sizes]
         df = pd.DataFrame([w for w in sizes], columns=['size'])
         df['prediction'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in preds]
         df['residuals'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in residuals]
@@ -2886,20 +3542,20 @@ def evaluate_object_sizes(
             color=".2",
             ax=ax
         )
-
-        ax.set_yticks(np.arange(-.1, .11, .01))
+        
+        ax.set_yticks(np.arange(-1 * amp, amp + .025, .025))
+        ax.set_ylim(-1 * amp, amp)
         ax.set_xlim(0, sizes[-1])
-        ax.set_ylim(-.1, .1)
         ax.axhline(y=0, color='r')
-        ax.set_ylabel(r'Residuals ($y - \hat{y}$)')
+        ax.set_ylabel(r'Residuals ($y - \hat{y}$) $\mu$m RMS')
         # ax.set_ylabel(rf'Residuals ($\lambda = {int(gen.lam_detection * 1000)}~nm$)')
-        ax.set_xlabel(r'Gaussian kernel full width at half maximum (FWHM) $w$')
+        ax.set_xlabel(r'Gaussian kernel full width at half maximum (FWHM) $w$ [nm]')
         ax.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0, alpha=.5)
         ax.spines.right.set_visible(False)
         ax.spines.top.set_visible(False)
 
         secax = ax.secondary_xaxis('top', functions=(utils.fwhm2sigma, utils.sigma2fwhm))
-        secax.set_xlabel(r'Gaussian kernel $\sigma$ ($\sigma = w / 2 \sqrt{2 \ln{2}}$)')
+        secax.set_xlabel(r'Gaussian kernel ($\sigma = w / 2 \sqrt{2 \ln{2}}$) $\sigma$ [nm]')
 
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
@@ -2919,7 +3575,8 @@ def evaluate_uniform_background(
     na: float = 1.0,
     photons: int = 20000,
     override: bool = False,
-    amplutide: float = .0
+    amplutide: float = .0,
+    estimated_object_gaussian_sigma: float = 0,
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -3011,6 +3668,7 @@ def evaluate_uniform_background(
                     normalize=True,
                     min_psnr=0,
                     plot=Path(f"{savepath}_{backgrounds[w]}"),
+                    estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
                 )
                 for w, i in enumerate(tqdm(
                     inputs, desc='Generating fourier embeddings', total=inputs.shape[0], file=sys.stdout
@@ -3080,3 +3738,605 @@ def evaluate_uniform_background(
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return savepath
+
+
+
+@profile
+def compare_models(
+    models_codenames: list,
+    predictions_paths: list,
+    iter_num: int = 1,
+    photon_range: tuple = (5e4, 1e5),
+    aberration_range: tuple = (1, 2),
+    outdir: Path = Path('benchmark'),
+    wavelength: float = .510
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    dataframes = []
+    for codename, file in zip(models_codenames, predictions_paths):
+        df = pd.read_csv(file, header=0, index_col=0)
+        df = df[df['iter_num'] == iter_num]
+        df['model'] = codename
+        dataframes.append(df)
+
+    df = pd.concat(dataframes)
+
+    for c in ['residuals', 'confidence_sum', 'confidence', ]:
+        test = df[
+            (df.photons >= photon_range[0]) &
+            (df.photons <= photon_range[1]) &
+            (df.aberration >= aberration_range[0]) &
+            (df.aberration <= aberration_range[1])
+        ]
+
+        if c == 'residuals':
+            xmax = .5  #aberration_range[1]
+            binwidth = .25
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            label = '\n'.join([
+                rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
+            ])
+            outliers = test[test[c] < xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+        elif c == 'confidence':
+            xmax = .02
+            binwidth = .01
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            label = '\n'.join([
+                rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0] // 1000):d}k, {int(photon_range[1] // 1000):d}k] integrated photons'
+            ])
+            # outliers = test[test[c] == 0]
+            test[c].replace(0, test[c].max(), inplace=True)
+            outliers = test[test[c] < xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+        else:
+            xmax = .1
+            binwidth = .01
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            label = '\n'.join([
+                rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
+            ])
+            # outliers = test[test[c] == 0]
+            test[c].replace(0, test[c].max(), inplace=True)
+            outliers = test[test[c] < xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        histax = inset_axes(
+            ax,
+            width="100%",
+            height="100%",
+            bbox_to_anchor=(.4, .1, .3, .3),
+            bbox_transform=ax.transAxes,
+            loc='lower center'
+        )
+
+        g = sns.histplot(
+            ax=ax,
+            data=test,
+            x=c,
+            hue='model',
+            # bins=bins,
+            common_norm=False,
+            common_bins=True,
+            element="poly",
+            stat='proportion',
+            fill=False,
+            cumulative=True,
+        )
+
+        # sns.violinplot(
+        #     ax=histax,
+        #     data=outliers,
+        #     x='model',
+        #     y=c,
+        #     common_norm=False,
+        #     common_bins=True,
+        #     palette="tab10",
+        # )
+
+        sns.barplot(
+            x=unconfident[models_codenames].index,
+            y=unconfident[models_codenames].values,
+            ax=histax,
+            palette="tab10"
+        )
+        
+        ax.set_xlabel(label)
+        ax.set_ylabel('CDF')
+        ax.set_xlim(0, None)
+        ax.set_ylim(None, 1)
+        ax.set_yticks(np.arange(0, 1.1, .1))
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        
+        hist_step = .05 if c == 'residuals' else .02
+        histax.set_ylim(unconfident.min()-.01, unconfident.max())
+        histax.set_yticks(np.arange(unconfident.min()-hist_step, unconfident.max()+hist_step, hist_step).round(2))
+        histax.set_xlabel(f'')
+        histax.set_ylabel('')
+        histax.set_xticks([])
+        histax.spines['top'].set_visible(False)
+        histax.spines['right'].set_visible(False)
+        histax.spines['left'].set_visible(False)
+        histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+        
+        axins = ax.inset_axes(
+            [.3, .075, .45, .4],
+            xlim=(xmax, xmax),
+            ylim=(unconfident.min()-.01, unconfident.max()+.05),
+        )
+        ax.indicate_inset_zoom(axins, edgecolor="k")
+        axins.set_xticks([])
+        axins.set_yticks([])
+
+
+        sns.move_legend(g, title='Training samples', frameon=False, ncol=1, loc='lower right')
+        plt.tight_layout()
+
+        savepath = Path(f'{outdir}/compare_{c}')
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+@profile
+def profile_models(
+    models_codenames: list,
+    predictions_paths: list,
+    outdir: Path = Path('benchmark'),
+    batch_size: int = 1024
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+    
+    def plot_training_curves(df):
+        steps = [1] + list(range(49, 500, 50))
+        for x in ['training', 'training_gflops']:
+            fig, ax = plt.subplots(figsize=(8, 8))
+            for cc, colormap, cmarker in zip(
+                ['ConvNext', 'ViT/16', 'ViT/32', 'Ours'],
+                ['Blues', 'Oranges', 'Greens', 'Greys'],
+                ['C0', 'C1', 'C2', 'k']
+            ):
+                data = df[df.step.isin(steps)][df.cat == cc]
+                
+                g = sns.lineplot(
+                    data=data,
+                    x=x,
+                    y="epoch_mse",
+                    hue="model",
+                    hue_order=[m if m in data.model.unique() else None for m in models.values()],
+                    # size="gflops",
+                    palette=colormap,
+                    dashes=False,
+                    marker="o",
+                    # sizes=sizes,
+                    ax=ax
+                )
+                
+                best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
+                data = df.iloc[best].to_frame().T
+                g = sns.scatterplot(
+                    data=data,
+                    x=x,
+                    y="epoch_mse",
+                    c=cmarker,
+                    ax=ax
+                )
+                
+                ax.text(
+                    data[x] + 0.1, data["epoch_mse"], cc,
+                    horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+                )
+            
+            ax.grid(True, which="major", axis='both', lw=.1, ls='--', zorder=0)
+            ax.grid(True, which="minor", axis='both', lw=.05, ls='--', zorder=0)
+            
+            if x == 'training':
+                ax.set_xlabel('Training hours 8xH100s')
+                ax.set_xlim(0, 120)
+            elif x == 'training_gflops':
+                ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
+                ax.set_xlim(0, 35)
+            
+            ax.set_ylabel('MSE ($\mu$m rms)')
+            ax.set_yscale('log')
+            ax.set_ylim(10 ** -7, 10 ** -1)
+            ax.legend(loc='upper right', ncol=1, title="", frameon=False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            
+            savepath = Path(f'{outdir}/{x}')
+            plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    
+    def plot_scaling_parameters(df):
+        for x in [
+            'training', 'training_gflops', 'gflops', 'params', 'memory',
+            'inference_time', 'num_tokens', 'transformers', 'throughput', 'latency'
+        ]:
+            fig, ax = plt.subplots(figsize=(8, 8))
+            
+            if x == 'num_tokens':
+                g = sns.scatterplot(
+                    data=df,
+                    x=x,
+                    y="epoch_mse",
+                    style='cat',
+                    hue='cat',
+                    hue_order=['ConvNext', 'ViT/16', 'ViT/32', 'Ours'],
+                    palette=['C0', 'C1', 'C2', 'k'],
+                    ax=ax
+                )
+            else:
+                g = sns.lineplot(
+                    data=df,
+                    x=x,
+                    y="epoch_mse",
+                    hue='cat',
+                    hue_order=['ConvNext', 'ViT/16', 'ViT/32', 'Ours'],
+                    palette=['C0', 'C1', 'C2', 'k'],
+                    dashes=False,
+                    marker="o",
+                    ax=ax
+                )
+            
+            if x == 'training':
+                ax.set_xlabel('Training hours 8xH100s')
+                ax.set_xlim(0, 125)
+            elif x == 'training_gflops':
+                ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
+                ax.set_xlim(0, 35)
+            elif x == 'gflops':
+                ax.set_xlabel('GFLOPs')
+                ax.set_xlim(0, 12)
+            elif x == 'params':
+                ax.set_xlabel('Parameters (millions)')
+                ax.set_xlim(0, 2000)
+                ax.set_xticks(range(0, 2200, 200), minor=False)
+                ax.set_xticks(range(0, 2000, 50), minor=True)
+            elif x == 'memory':
+                ax.set_xlabel(f'Memory footprint (GB) [BS={batch_size}]')
+                ax.set_xlim(0, 10)
+            elif x == 'num_tokens':
+                ax.set_xlabel(f'Number of patches')
+                ax.set_xlim(0, 2000)
+            elif x == 'transformers':
+                ax.set_xlabel(f'Number of transformers')
+                ax.set_xlim(0, 50)
+            elif x == 'latency':
+                ax.set_xlabel(f'Latency (ms/image)')
+                ax.set_xlim(0, 45)
+            elif x == 'throughput':
+                ax.set_xlabel(f'Throughput (images/s) [BS={batch_size}]')
+                ax.set_xlim(0, 2000)
+            else:
+                ax.set_xlabel(f'Inference minutes for 1M images using RTX8000 [BS={batch_size}]')
+                ax.set_xlim(0, 200)
+            
+            for cc, cmarker in zip(['ConvNext', 'ViT/16', 'ViT/32', 'Ours'], ['C0', 'C1', 'C2', 'k']):
+                if x == 'num_tokens':
+                    for index, row in df[df.cat == cc].iterrows():
+                        ax.text(
+                            row[x], row["epoch_mse"] + 5e-8, row['model'],
+                            horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+                        )
+                    
+                else:
+                    best = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmin()
+                    best_data = df.iloc[best].to_frame().T
+                    ax.text(
+                        best_data[x], best_data["epoch_mse"] - 1e-9, df.iloc[best]['model'],
+                        horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+                    )
+                    
+                    worst = df[df.cat == cc]['epoch_mse'].astype(np.float32).idxmax()
+                    worst_data = df.iloc[worst].to_frame().T
+                    ax.text(
+                        worst_data[x], worst_data["epoch_mse"] + 1e-9, df.iloc[worst]['model'],
+                        horizontalalignment='left', size='medium', color=cmarker, weight='semibold'
+                    )
+            
+            ax.grid(True, which="major", axis='both', lw=.1, ls='--', zorder=0)
+            ax.grid(True, which="minor", axis='both', lw=.05, ls='--', zorder=0)
+            ax.set_ylabel('MSE ($\mu$m rms)')
+            ax.set_yscale('log')
+            ax.set_ylim(1e-7, 1e-5)
+            # ax.set_yticks(np.arange(1e-7, 1e-5, .5e-6), minor=False)
+            # ax.set_yticks(np.arange(1e-7, 1e-5, .25e-6), minor=True)
+            
+            ax.legend(loc='best', ncol=1, title="", frameon=False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            
+            savepath = Path(f'{outdir}/best_{x}')
+            plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    
+    models = {
+        'otfnet': 'Baseline',
+        'vit-s32': 'ViT-s/32',
+        'vit-S32': 'ViT-S/32',
+        'vit-S16': 'ViT-S/16',
+        'vit-B32': 'ViT-B/32',
+        'vit-B16': 'ViT-B/16',
+        'vit-L32': 'ViT-L/32',
+        'vit-L16': 'ViT-L/16',
+        'baseline-P': 'ConvNext-P',
+        'baseline-T': 'ConvNext-T',
+        'baseline-S': 'ConvNext-S',
+        'baseline-B': 'ConvNext-B',
+        'baseline-L': 'ConvNext-L',
+        'opticalnet-S3216': 'Ours-S',
+        'opticalnet-B3216': 'Ours-B',
+        'opticalnet-M3216': 'Ours-M',
+        'opticalnet-L3216': 'Ours-L',
+        'opticalnet-H3216': 'Ours-H',
+        'opticalnet-G3216': 'Ours-G',
+        'opticalnet-P32323216-R2222-H8888': 'Ours-B/32-32-32-16',
+        'opticalnet-P32321616-R2222-H8888': 'Ours-B/32-32-16-16',
+        'opticalnet-P32161616-R2222-H8888': 'Ours-B/32-16-16-16',
+        'opticalnet-P3216168-R2222-H8888': 'Ours-B/32-16-16-8',
+        'opticalnet-P321688-R2222-H8888': 'Ours-B/32-16-8-8',
+    }
+    
+    outdir.mkdir(parents=True, exist_ok=True)
+    dataframes = []
+    for codename, modeldir in zip(models_codenames, predictions_paths):
+        logger.info(f"Processing {codename}")
+        savepath = Path(f'{Path(modeldir).parent}/{codename}.csv')
+        
+        if savepath.exists():
+            logger.info(f"Loading {savepath}")
+            df = pd.read_csv(savepath, header=0, index_col=0)
+        else:
+
+            try:
+                modeldir = Path(modeldir)
+                log = sorted(modeldir.rglob(r"*train/*tfevents*"))[0]
+                
+                df = profile_utils.load_tf_logs(log)
+                model_config = ujson.loads(df.keras[0])
+
+                best = df['epoch_mse'].idxmin()
+                
+                candidates = sorted(modeldir.rglob(rf"*keras/*epoch{best}.h5"))
+                if len(candidates) == 0:
+                    model = sorted(modeldir.rglob(rf"*keras/*.h5"))[-1]
+                else:
+                    model = candidates[0]
+                
+                model = backend.load(model, model_arch=model_config['config']['name'])
+                
+                df = df[[
+                    'step',
+                    'epoch_learning_rate',
+                    'epoch_loss',
+                    'epoch_mae',
+                    'epoch_mse',
+                    'epoch_root_mean_squared_error',
+                    'epoch_weight_decay',
+                    'wall_time'
+                ]]
+                df["wall_time"] = df.wall_time.apply(pd.Series)[0]
+                df["wall_clock"] = pd.to_datetime(df.wall_time, unit="s")
+                
+                transformers_blocks = profile_utils.count_transformer_blocks(model=model)
+                
+                num_tokens = 0
+                for k, v in transformers_blocks.items():
+                    ps = int(k.strip('p'))
+                    df[f'transformers_{k}'] = v
+                    tokens = v * model.input_shape[1] * np.product([
+                        s // p for s, p in zip(model.input_shape[2:], (ps, ps))
+                    ])
+                    logger.info(f"{tokens=}")
+                    df[f'transformers_{k}_tokens'] = tokens
+                    num_tokens += tokens
+                
+                df['num_tokens'] = num_tokens
+                df["training"] = (df.wall_clock - df.wall_clock[0]) / np.timedelta64(1, "h")
+                df['transformers'] = sum(transformers_blocks.values())
+                df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
+                df['gflops'] = profile_utils.measure_gflops(model)
+                df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
+                df['latency'] = profile_utils.measure_latency(model, number_of_samples=1024)
+                df['params'] = model.count_params()
+                df['model'] = codename
+                
+                logger.info(f"Saving {savepath}")
+                df.to_csv(f'{Path(modeldir).parent}/{codename}.csv')
+            
+            except Exception as e:
+                logger.error(e)
+                continue
+        
+        training_batch_size = 4096
+        dataset_size = 2000000
+        training_steps_per_epoch = dataset_size // training_batch_size
+        df['training_gflops'] = training_steps_per_epoch * training_batch_size * df['step'] * df['gflops'] * 3
+        # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
+        df["training_gflops"] =  df["training_gflops"] * 1e-9
+        df['inference_time'] = 1e6 / df['throughput'] / 60 # convert to minutes
+        df['latency'] *= 1000 # convert to milliseconds
+        df['params'] /= 1000000 # convert to millions
+        
+        df['cat'] = 'Baseline'
+        df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
+        df.loc[df.model.str.match(r'vit.*16'), 'cat'] = 'ViT/16'
+        df.loc[df.model.str.match(r'vit.*32'), 'cat'] = 'ViT/32'
+        df.loc[df.model.str.match(r'baseline'), 'cat'] = 'ConvNext'
+        df.model = df.model.replace(models)
+        
+        dataframes.append(df)
+        
+    plot_training_curves(df=pd.concat(dataframes).reset_index(drop=True))
+    
+    df = pd.DataFrame()
+    for d in dataframes:
+        best = d['epoch_mse'].idxmin()
+        df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
+    
+    plot_scaling_parameters(df)
+
+    coi = [
+        'epoch_mse',
+        'training',
+	    'training_gflops',
+        'memory',
+        'inference_time',
+        'throughput',
+        'latency',
+        'gflops',
+        'params',
+        'num_tokens',
+    ]
+    titles = [
+        'MSE\n($\mu$m rms)',
+        f'Training hours\n8xH100s',
+	    'Training EFLOPs',
+        f'Memory (GB) \n[BS={batch_size}]',
+        f'Inference minutes\n1M images\n[BS={batch_size}]',
+        f'Throughput\n(images/s)\n[BS={batch_size}]',
+        f'Latency\n(ms/image)',
+        'GFLOPs',
+        'Parameters (M)',
+        'Total patches',
+    ]
+    
+    colormaps = ['Blues_r', 'Oranges_r', 'Greens_r', 'Greys_r']
+    
+    df = df.sort_values('epoch_mse')
+    
+    fig, axes = plt.subplots(len(coi), len(df.cat.unique()), figsize=(12, 15), sharex=False, sharey=False)
+    
+    for i, cc in enumerate(coi):
+        for j, cat in enumerate(['ConvNext', 'ViT/16', 'ViT/32', 'Ours']):
+            ax = axes[i, j]
+            data = df[df.cat == cat]
+            ax = sns.barplot(
+                data=data,
+                x='model',
+                y=coi[i],
+                hue='model',
+                palette=colormaps[j],
+                ax=ax,
+                legend=False,
+                width=.4,
+                dodge=False,
+                native_scale=False,
+            )
+            
+            if i == 0:
+                ax.set_title(cat)
+                
+            if j == 0:
+                ax.set_ylabel(titles[i])
+            else:
+                ax.set_ylabel('')
+            
+            ax.set_xlabel('')
+            
+            if i == len(coi) - 1:
+                ax.set_xticklabels(data.model)
+            else:
+                ax.set_xticklabels([])
+            
+            for c in range(len(ax.containers)):
+                if coi[i] == 'epoch_mse':
+                    fmt = '%.2g'
+                elif coi[i] == 'num_tokens' or coi[i] == 'params' or coi[i] == 'throughput':
+                    fmt = '%d'
+                else:
+                    fmt = '%.1f'
+                
+                ax.bar_label(ax.containers[c], fontsize=8, fmt=fmt)
+    
+            ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
+            ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
+            
+            if coi[i] == 'epoch_mse':
+                ax.set_ylim(1e-7, 1e-5)
+                # ax.set_yticks(np.arange(1e-7, 1e-5, 2e-6))
+                ax.set_yscale('log')
+                ax.axhline(1e-7, color="k", clip_on=False)
+            elif coi[i] == 'training':
+                ax.set_ylim(0, 125)
+                ax.set_yticks(range(0, 150, 25))
+                # ax.set_ylim(0, 25)
+                ax.axhline(0, color="k", clip_on=False)
+            elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
+                ax.set_ylim(0, 40)
+                # ax.set_ylim(0, 10)
+                ax.axhline(0, color="k", clip_on=False)
+            elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
+                ax.set_ylim(0, 15)
+                # ax.set_ylim(0, 5)
+                ax.axhline(0, color="k", clip_on=False)
+            elif coi[i] == 'params':
+                ax.set_ylim(1, 2000)
+                ax.axhline(1, color="k", clip_on=False)
+            elif coi[i] == 'memory':
+                ax.set_ylim(0, 10)
+                # ax.set_ylim(0, 3)
+                ax.axhline(0, color="k", clip_on=False)
+            elif coi[i] == 'num_tokens':
+                ax.set_ylim(0, 2000)
+                ax.axhline(0, color="k", clip_on=False)
+            elif coi[i] == 'latency':
+                ax.set_ylim(0, 50)
+                ax.set_yticks(range(0, 60, 10))
+                ax.axhline(0, color="k", clip_on=False)
+            elif coi[i] == 'throughput':
+                ax.set_ylim(0, 2000)
+                ax.axhline(0, color="k", clip_on=False)
+            else:
+                ax.set_ylim(0, 200)
+                # ax.set_ylim(0, 30)
+                ax.axhline(0, color="k", clip_on=False)
+            
+            if j == 0:
+                ax.spines['left'].set_visible(True)
+            else:
+                ax.spines['left'].set_visible(False)
+                ax.set_yticklabels([])
+                
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            
+    plt.tight_layout()
+    
+    savepath = Path(f'{outdir}/profiles')
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)

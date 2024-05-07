@@ -2,7 +2,7 @@ Bootstrap: docker
 From: us-docker.pkg.dev/deeplearning-platform-release/gcr.io/tf2-gpu.2-12.py310 
 
 %files
-requirements_CUDA_11_8.txt requirements.txt
+
 %post
 
 TERM=xterm-256color

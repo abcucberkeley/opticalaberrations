@@ -1,7 +1,6 @@
 
-import sys
 import logging
-import numpy as np
+import sys
 
 sys.path.append('.')
 sys.path.append('./src')
@@ -12,9 +11,24 @@ warnings.filterwarnings("ignore")
 
 import pytest
 from pathlib import Path
-import pandas as pd
+try:
+    import cupy as cp
+    use_gpu = True
+    mempool = cp.get_default_memory_pool()
+    pinned_mempool = cp.get_default_pinned_memory_pool()
+except ImportError as e:
+    use_gpu = False
+    logging.warning(f"Cupy not supported on your system: {e}")
+
 from src import experimental
 
+
+def cleanup_mempool():
+    if use_gpu:
+        mempool.free_all_blocks()
+        pinned_mempool.free_all_blocks()
+    else:
+        pass
 
 @pytest.mark.run(order=1)
 def test_predict_tiles(kargs):
@@ -30,8 +44,8 @@ def test_predict_tiles(kargs):
         axial_voxel_size=kargs['axial_voxel_size'],
         lateral_voxel_size=kargs['lateral_voxel_size'],
         wavelength=kargs['wavelength'],
-        plot=kargs['plot'],
-        plot_rotations=kargs['plot_rotations'],
+        plot=False,
+        plot_rotations=False,
         batch_size=kargs['batch_size'],
         ignore_modes=kargs['ignore_modes'],
         window_size=kargs['window_size'],
@@ -117,11 +131,39 @@ def test_predict_large_fov(kargs):
 
 
 @pytest.mark.run(order=6)
+def test_predict_large_fov_with_interpolated_embeddings(kargs):
+    cleanup_mempool()
+    zernikes = experimental.predict_large_fov(
+        model=kargs['model'],
+        img=kargs['inputs'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        prev=kargs['prev'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=kargs['plot'],
+        plot_rotations=kargs['plot_rotations'],
+        batch_size=kargs['batch_size'],
+        ignore_modes=kargs['ignore_modes'],
+        prediction_threshold=kargs['prediction_threshold'],
+        min_psnr=kargs['min_psnr'],
+        interpolate_embeddings=True
+    )
+    assert zernikes.shape[0] == kargs['num_modes']
+
+
+@pytest.mark.run(order=7)
 def test_predict_folder(kargs):
+    cleanup_mempool()
     test_folder = Path(f"{kargs['repo']}/dataset/experimental_zernikes/psfs")
     number_of_files = len(sorted(test_folder.glob(kargs['prediction_filename_pattern'])))
-    logging.info(f"Pytest will assert that 'folder_predictions' has output shape of: "
-                f"(num_modes={kargs['num_modes']}, number_of_files={number_of_files})")                
+    
+    logging.info(
+        f"Pytest will assert that 'folder_predictions' has output shape of: "
+        f"(num_modes={kargs['num_modes']}, number_of_files={number_of_files})"
+    )
+    
     predictions = experimental.predict_folder(
         model=kargs['model'],
         folder=test_folder,
@@ -140,3 +182,113 @@ def test_predict_folder(kargs):
     )
     predictions = predictions.drop(columns=['mean', 'median', 'min', 'max', 'std'])
     assert predictions.shape == (kargs['num_modes'], number_of_files)
+
+
+@pytest.mark.run(order=8)
+def test_denoise(kargs):
+    denoised_image = experimental.denoise(
+        input_path=kargs['inputs'],
+        model_path=kargs['denoiser'],
+        window_size=kargs['window_size'],
+        batch_size=kargs['batch_size'],
+    )
+    assert denoised_image.shape == kargs['input_shape']
+
+
+@pytest.mark.run(order=9)
+def test_predict_sample_with_denoising(kargs):
+    cleanup_mempool()
+    zernikes = experimental.predict_sample(
+        model=kargs['model'],
+        img=kargs['inputs'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        prev=kargs['prev'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=kargs['plot'],
+        plot_rotations=kargs['plot_rotations'],
+        batch_size=kargs['batch_size'],
+        ignore_modes=kargs['ignore_modes'],
+        prediction_threshold=kargs['prediction_threshold'],
+        min_psnr=kargs['min_psnr'],
+        denoiser=kargs['denoiser'],
+        denoiser_window_size=kargs['window_size'],
+    )
+    assert zernikes.shape[0] == kargs['num_modes']
+
+
+@pytest.mark.run(order=10)
+def test_predict_folder_with_denoising(kargs):
+    cleanup_mempool()
+    test_folder = Path(f"{kargs['repo']}/dataset/experimental_zernikes/psfs")
+    number_of_files = len(sorted(test_folder.glob(kargs['prediction_filename_pattern'])))
+    
+    logging.info(
+        f"Pytest will assert that 'folder_predictions' has output shape of: "
+        f"(num_modes={kargs['num_modes']}, number_of_files={number_of_files})"
+    )
+    
+    predictions = experimental.predict_folder(
+        model=kargs['model'],
+        folder=test_folder,
+        filename_pattern=kargs['prediction_filename_pattern'],
+        prev=kargs['prev'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=kargs['plot'],
+        plot_rotations=kargs['plot_rotations'],
+        batch_size=kargs['batch_size'],
+        ignore_modes=kargs['ignore_modes'],
+        min_psnr=kargs['min_psnr'],
+        denoiser=kargs['denoiser'],
+        denoiser_window_size=kargs['window_size'],
+        cpu_workers=kargs['big_job_cpu_workers'],
+    )
+    predictions = predictions.drop(columns=['mean', 'median', 'min', 'max', 'std'])
+    assert predictions.shape == (kargs['num_modes'], number_of_files)
+
+
+@pytest.mark.run(order=11)
+def test_predict_rois(kargs):
+
+    roi_predictions = experimental.predict_rois(
+        model=kargs['model'],
+        img=kargs['inputs'],
+        prev=kargs['prev'],
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        axial_voxel_size=kargs['axial_voxel_size'],
+        lateral_voxel_size=kargs['lateral_voxel_size'],
+        wavelength=kargs['wavelength'],
+        plot=False,
+        plot_rotations=False,
+        batch_size=kargs['batch_size'],
+        ignore_modes=kargs['ignore_modes'],
+        window_size=kargs['window_size'],
+        min_psnr=kargs['min_psnr'],
+        num_rois=kargs['num_rois'],
+        cpu_workers=kargs['big_job_cpu_workers'],
+    )
+    assert not roi_predictions.empty
+
+@pytest.mark.run(order=12)
+def test_aggregate_rois(kargs):
+    zernikes = experimental.aggregate_predictions(
+        model_pred=Path(f"{kargs['inputs'].with_suffix('')}_rois_predictions.csv"),
+        dm_calibration=kargs['dm_calibration'],
+        dm_state=kargs['dm_state'],
+        prediction_threshold=kargs['prediction_threshold'],
+        majority_threshold=kargs['majority_threshold'],
+        min_percentile=kargs['min_percentile'],
+        max_percentile=kargs['max_percentile'],
+        aggregation_rule=kargs['aggregation_rule'],
+        max_isoplanatic_clusters=kargs['max_isoplanatic_clusters'],
+        ignore_tile=kargs['ignore_tile'],
+        plot=kargs['plot'],
+    )
+    assert not zernikes.empty

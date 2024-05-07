@@ -17,14 +17,22 @@
 	// "forwardPorts": [],
 
 	// Uncomment the next line to run commands after the container is created.
-	// "postCreateCommand": "cat /etc/os-release",
+
 
 	// Configure tool-specific properties.
 	// "customizations": {},
 
+	"remoteEnv.windows": {
+ 	 "LOCAL_USER_PATH": "${localEnv:USERPROFILE}"
+	},
+
 	"workspaceMount": "source=${localWorkspaceFolder},target=/app/opticalaberrations,type=bind",
 	"workspaceFolder": "/app/opticalaberrations",
-	// "remoteUser": "1000",
+//	"remoteUser": "1000",	// comment this line to run as root in the container
+
+
+	"onCreateCommand":  "sudo mkdir /clusterfs && sudo chmod a+wrx /clusterfs/ && sudo chown 1000:1000 -R /sshkey/ && sshfs thayeralshaabi@master.abc.berkeley.edu:/clusterfs  /clusterfs -o IdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null && ls /clusterfs",
+	"postCreateCommand": "cat /etc/os-release",
 
 	// Uncomment to connect as an existing user other than the container default. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "devcontainer"
@@ -32,7 +40,10 @@
 		"--gpus","all",
 		"--ipc", "host",
 		"--ulimit",  "memlock=-1",
-		"--ulimit", "stack=67108864"
+		"--ulimit", "stack=67108864",
+		"-v", "${env:USERPROFILE}/.ssh:/sshkey",
+		"--privileged=true",
+		"-e DEV_CONTAINER=True",
 	],
 	"customizations": {
 		"vscode": {
@@ -49,4 +60,3 @@
 		}
 	}
 } 
-

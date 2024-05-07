@@ -9,11 +9,12 @@ import os
 import time
 import ujson
 from functools import partial
-from typing import Any
+from typing import Any, Optional
 from pathlib import Path
 from tifffile import imwrite
 import numpy as np
 from scipy import stats as st
+from csbdeep.models import CARE
 
 import matplotlib.pyplot as plt
 plt.set_loglevel('error')
@@ -113,6 +114,8 @@ def simulate_psf(
     quantum_efficiency: float = .82,
     plot: bool = False,
     skip_remove_background: bool = False,
+        denoiser: Optional[CARE] = None,
+        denoiser_window_size: tuple = (32, 64, 64),
 ):
     outdir.mkdir(exist_ok=True, parents=True)
     np.random.seed(os.getpid()+np.random.randint(low=0, high=10**6))
@@ -148,6 +151,11 @@ def simulate_psf(
 
     if normalize:
         inputs /= np.max(inputs)
+
+    if denoiser is not None:
+        n_tiles = np.ceil(np.array(inputs.shape) / np.array(denoiser_window_size)).astype(int)
+        inputs = denoiser.predict(inputs, axes='ZYX', n_tiles=n_tiles)
+        inputs[inputs < 0.0] = 0.0
 
     if emb:
         embeddings = prep_sample(
@@ -225,6 +233,8 @@ def create_synthetic_sample(
     max_lls_defocus_offset: float = 0.,
     emb: bool = False,
     skip_remove_background: bool = False,
+        denoiser: Optional[CARE] = None,
+        denoiser_window_size: tuple = (32, 64, 64),
 ):
     outdir = savedir / rf"{re.sub(r'.*/lattice/', '', str(gen.psf_type)).split('_')[0]}_lambda{round(gen.lam_detection * 1000)}"
     outdir = outdir / f"z{round(gen.z_voxel_size * 1000)}-y{round(gen.y_voxel_size * 1000)}-x{round(gen.x_voxel_size * 1000)}"
@@ -269,7 +279,9 @@ def create_synthetic_sample(
         noise=noise,
         normalize=normalize,
         skip_remove_background=skip_remove_background,
-        lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset)
+        lls_defocus_offset=(min_lls_defocus_offset, max_lls_defocus_offset),
+        denoiser=denoiser,
+        denoiser_window_size=denoiser_window_size
     )
 
 
@@ -420,6 +432,11 @@ def parse_args(args):
         help='optional toggle to skip preprocessing input data using the DoG filter'
     )
 
+    parser.add_argument(
+        '--denoiser', type=Path, default=None,
+        help='path to denoiser model'
+    )
+
     return parser.parse_args(args)
 
 
@@ -450,6 +467,12 @@ def main(args=None):
         skip_remove_background_ideal_psf=args.skip_remove_background
     )
 
+    if args.denoiser is not None:
+        logger.info(f"Loading denoiser model: {args.denoiser}")
+        denoiser = CARE(config=None, name=args.denoiser.name, basedir=args.denoiser.parent)
+    else:
+        denoiser = None
+
     sample = partial(
         create_synthetic_sample,
         gen=gen,
@@ -463,7 +486,8 @@ def main(args=None):
         max_lls_defocus_offset=args.max_lls_defocus_offset,
         min_photons=args.min_photons,
         max_photons=args.max_photons,
-        skip_remove_background=args.skip_remove_background
+        skip_remove_background=args.skip_remove_background,
+        denoiser=denoiser
     )
 
     jobs = [f"{int(args.filename)+k}" for k in range(args.iters)]

@@ -1,5 +1,4 @@
 #!/bin/bash
-ENV=~/anaconda3/envs/ml/bin/python
 
 LAMBDA=.510
 NA=1.0
@@ -10,18 +9,28 @@ CPUS=1
 TIMELIMIT='1:00'
 SHAPE=64
 MAX_LLS_OFFSET=0
-RAND_VSIZE=false
+RAND_OBJECT_SIZE=true
 SKIP_REMOVE_BACKGROUND=false
 USE_THEORETICAL_WIDEFIELD_SIMULATOR=false
-
 MODES=15
-xVOXEL=.125
-yVOXEL=.125
-zVOXEL=.200
-TITLE='fourier_filter_125nm_dataset'
-DATASET='train'
 MODE_DIST='pyramid'
+
+DENOISE=false
+DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
+
 HANDLER=lsf
+TITLE='10m_125nm_dataset'
+DATASET='train'
+
+if [ "$DATASET" = "train" ]; then
+  xVOXEL=.125
+  yVOXEL=.125
+  zVOXEL=.200
+else
+  xVOXEL=.097
+  yVOXEL=.097
+  zVOXEL=.200
+fi
 
 MODALITIES=(
   "../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
@@ -32,12 +41,22 @@ MODALITIES=(
 )
 
 if [ $HANDLER = 'lsf' ];then
-  OUTDIR="/groups/betzig/betziglab/thayer/dataset/${TITLE}/${DATASET}"
+  MYDIR="/groups/betzig/betziglab/thayer"
+  OUTDIR="${MYDIR}/dataset/${TITLE}/${DATASET}"
+  REPO="${MYDIR}/opticalaberrations"
+  APPTAINER="${REPO}/develop_TF_CUDA_12_3.sif"
+  ENV="apptainer exec --nv --bind ${MYDIR}:${MYDIR} --pwd ${REPO}/src -e ${APPTAINER} python"
 elif [ $HANDLER = 'slurm' ]; then
-  OUTDIR="/clusterfs/nvme/thayer/dataset/${TITLE}/${DATASET}"
+  MYDIR="/clusterfs/nvme/thayer"
+  OUTDIR="${MYDIR}/dataset/${TITLE}/${DATASET}"
+  REPO="${MYDIR}/opticalaberrations/"
+  APPTAINER="${REPO}/develop_TF_CUDA_12_3.sif"
+  ENV="apptainer exec --nv --bind /clusterfs:/clusterfs --pwd ${REPO}/src -e ${APPTAINER} python"
 else
   OUTDIR="~/dataset/${TITLE}/${DATASET}"
+  ENV="~/anaconda3/envs/ml/bin/python"
 fi
+
 
 LOGS="${OUTDIR}/logs"
 mkdir -p $OUTDIR
@@ -45,26 +64,26 @@ mkdir -p $LOGS
 
 if [ "$DATASET" = "train" ];then  # 2M samples
   TYPE='--emb'
-  SAMPLES_PER_JOB=400
-  SAMPLES_PER_BIN=400
+  SAMPLES_PER_JOB=200
+  SAMPLES_PER_BIN=2000
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   OBJS=(1 2 3 4 5)  # 5 bins
-  mPH=($(seq 50000 25000 275000)) # 10 bins
-  xPH=($(seq 75000 25000 300000))
+  mPH=($(seq 0 20000 180000)) # 10 bins
+  xPH=($(seq 20000 20000 200000))
   amps1=($(seq 0 .01 .24))  # 25 bins
   amps2=($(seq .01 .01 .25))
   DISTRIBUTIONS=(single bimodal powerlaw dirichlet) # 4 bins
   FILL_RADIUS=0.66
 else
   TYPE=''
-  SAMPLES_PER_JOB=25
-  SAMPLES_PER_BIN=25
+  SAMPLES_PER_JOB=50
+  SAMPLES_PER_BIN=50
   SAMPLES=($(seq 1 $SAMPLES_PER_JOB $SAMPLES_PER_BIN))
   OBJS=(1 2 3 5 10 25 50 100 125 150)
   mPH=($(seq     1 25000 500000))
   xPH=($(seq 25000 25000 500000))
-  amps1=($(seq    0 .025 .475))
-  amps2=($(seq .025 .025 .50))
+  amps1=($(seq    0 .025 .975))
+  amps2=($(seq .025 .025 1))
   DISTRIBUTIONS=(mixed)
   FILL_RADIUS=0.66
 fi
@@ -90,24 +109,19 @@ do
       do
         for S in `seq 1 ${#SAMPLES[@]}`
         do
-
-#            if [ $HANDLER = 'lsf' ];then
-#                while [ $(bjobs -u $USER | wc -l) -gt 25000 ]
-#                do
-#                  sleep 10s
-#                done
-#
-#            elif [ $HANDLER = 'slurm' ]; then
-#                while [ $(squeue -u $USER -h -t pending -r | wc -l) -gt 500 ]
-#                do
-#                  sleep 10s
-#                done
-#
-#            else
-#                sleep 10s
-#
-#            fi
-
+            #if [ $HANDLER = 'lsf' ];then
+            #    while [ $(bjobs -u $USER | wc -l) -gt 25000 ]
+            #    do
+            #      sleep 10s
+            #    done
+            #elif [ $HANDLER = 'slurm' ]; then
+            #    while [ $(squeue -u $USER -h -t pending -r | wc -l) -gt 500 ]
+            #    do
+            #      sleep 10s
+            #    done
+            #else
+            #    sleep 10s
+            #fi
 
             (( JOB_COUNTER=JOB_COUNTER+1 ))
 
@@ -144,12 +158,16 @@ do
               j="${j} --use_theoretical_widefield_simulator"
             fi
 
+            if $DENOISE; then
+              j="${j} --denoiser ${DENOISER}"
+            fi
+
             if $SKIP_REMOVE_BACKGROUND; then
               j="${j} --skip_remove_background"
             fi
 
-            if $RAND_VSIZE; then
-              j="${j} --randomize_voxel_size"
+            if $RAND_OBJECT_SIZE; then
+              j="${j} --randomize_object_size"
             fi
 
             for e in spatial_planes

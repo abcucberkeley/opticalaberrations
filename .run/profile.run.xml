@@ -1,0 +1,60 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="profile" type="PythonConfigurationType" factoryName="Python" folderName="benchmark">
+    <module name="opticalaberrations" />
+    <option name="ENV_FILES" value="" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+    </envs>
+    <option name="SDK_HOME" value="" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+    <option name="IS_MODULE_SDK" value="true" />
+    <option name="ADD_CONTENT_ROOTS" value="true" />
+    <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="DockerContainerSettingsRunConfigurationExtension">
+      <option name="envVars">
+        <list />
+      </option>
+      <option name="extraHosts">
+        <list />
+      </option>
+      <option name="links">
+        <list />
+      </option>
+      <option name="networkDisabled" value="false" />
+      <option name="networkMode" value="bridge" />
+      <option name="portBindings">
+        <list />
+      </option>
+      <option name="publishAllPorts" value="false" />
+      <option name="runCliOptions" value="--entrypoint= --rm --gpu all" />
+      <option name="version" value="2" />
+      <option name="volumeBindings">
+        <list>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/opt/project" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="$PROJECT_DIR$" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/betziglab/thayer/opticalaberrations" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="/run/user/1000/kio-fuse-psHtOM/smb/alshaabit%40hhmi.org@prfs.hhmi.org/betziglab/thayer/opticalaberrations" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
+        </list>
+      </option>
+    </EXTENSION>
+    <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/benchmark.py" />
+    <option name="PARAMETERS" value="profile_models ../ --outdir /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/ --model_codename opticalnet-S3216 --model_predictions /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/scaling/opticalnet-15-YuMB_lambda510-S3216 --model_codename opticalnet-B3216 --model_predictions /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/scaling/opticalnet-15-YuMB_lambda510-B3216 --model_codename opticalnet-M3216 --model_predictions /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/scaling/opticalnet-15-YuMB_lambda510-M3216 --model_codename opticalnet-L3216 --model_predictions /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/scaling/opticalnet-15-YuMB_lambda510-L3216 --model_codename opticalnet-H3216 --model_predictions /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/scaling/opticalnet-15-YuMB_lambda510-H3216 --model_codename vit-S16 --model_predictions /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/vit/vit-S16 --model_codename vit-B16 --model_predictions /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/vit/vit-15-YuMB_lambda510-B16 --model_codename vit-S32 --model_predictions /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/vit/vit-15-YuMB_lambda510-S32 --model_codename vit-B32 --model_predictions /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/vit/vit-15-YuMB_lambda510-B32 --model_codename vit-L32 --model_predictions /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/vit/vit-15-YuMB_lambda510-L32 --model_codename baseline-T --model_predictions /betziglab/thayer/opticalaberrations/models/new/variable_object_size_fourier_filter_125nm_dataset/baseline-lamb/baseline-15-YuMB_lambda510-T" />
+    <option name="SHOW_COMMAND_LINE" value="false" />
+    <option name="EMULATE_TERMINAL" value="false" />
+    <option name="MODULE_MODE" value="false" />
+    <option name="REDIRECT_INPUT" value="false" />
+    <option name="INPUT_FILE" value="" />
+    <method v="2" />
+  </configuration>
+</component>
