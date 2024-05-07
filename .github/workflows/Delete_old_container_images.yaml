@@ -37,7 +37,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Delete old images
-        uses: snok/container-retention-policy@v2
+        # uses: snok/container-retention-policy@v2
+        uses: snok/container-retention-policy@main
         with:
           image-names: opticalaberrations
           cut-off: One week ago UTC
