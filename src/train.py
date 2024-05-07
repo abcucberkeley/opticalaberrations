@@ -275,7 +275,7 @@ def train_model(
         steps_per_epoch = tf.data.experimental.cardinality(train_data).numpy()
 
     if fixedlr:
-        scheduler = lr
+        def scheduler(epoch, lr): return lr
         logger.info(f"Training steps: [{steps_per_epoch * epochs}]")
     else:
         if warmup > 0:
