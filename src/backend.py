@@ -63,6 +63,7 @@ import baseline
 import opticalnet
 import prototype
 import vit
+import swin
 from warmupcosinedecay import WarmupCosineDecay
 
 
@@ -182,6 +183,12 @@ def load(model_path: Union[Path, str], mosaic=False, model_arch=None) -> tf.kera
         "AdamW": AdamW,
         "WarmupCosineDecay": WarmupCosineDecay,
         "ROI": ROI,
+        "StochasticDepth": StochasticDepth,
+        "Mlp": swin.Mlp,
+        "WindowAttention3D": swin.WindowAttention3D,
+        "PatchEmbed": swin.PatchEmbed,
+        "PatchMerging": swin.PatchMerging,
+        "SwinTransformerBlock": swin.SwinTransformerBlock,
     }
     
     baseline_custom_objects = {
