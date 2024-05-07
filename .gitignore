@@ -170,3 +170,5 @@ src/all_coords_cache_3x361x6x64x64_float16.npy
 src/LV_auto_batch.bat_predict_rois
 /SyntheticPSFCache/
 /benchmarks/
+/scaling/
+*.npy
