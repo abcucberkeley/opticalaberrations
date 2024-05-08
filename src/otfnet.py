@@ -1,10 +1,7 @@
-
 import logging
 import sys
-from abc import ABC
-
-from tensorflow.keras import layers
-from base import Base
+import torch
+import torch.nn as nn
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -14,41 +11,60 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class OTFNet(Base, ABC):
+class OTFNet(nn.Module):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, input_shape=(1, 6, 64, 64, 1), modes=15, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.input_shape = input_shape
+        self.modes = modes
+        
         self.kernel_size = (1, 3, 3)
         self.pool_size = (1, 2, 2)
-        self.activation = 'tanh'
+        self.activation = nn.Tanh
         self.padding = 'same'
 
-    def call(self, inputs, training=True, **kwargs):
-        m = layers.Conv3D(8, kernel_size=self.kernel_size, activation=self.activation, padding=self.padding)(inputs)
-        m = layers.Conv3D(8, kernel_size=self.kernel_size, activation=self.activation, padding=self.padding)(m)
-        m = layers.MaxPooling3D(pool_size=self.pool_size)(m)
+        
+        self.features = nn.Sequential(
+            nn.Conv3d(1, 8, kernel_size=self.kernel_size, padding=self.padding),
+            self.activation(),
+            nn.Conv3d(8, 8, kernel_size=self.kernel_size, padding=self.padding),
+            self.activation(),
+            nn.MaxPool3d(kernel_size=self.pool_size),
 
-        m = layers.Conv3D(16, kernel_size=self.kernel_size, activation=self.activation, padding=self.padding)(m)
-        m = layers.Conv3D(16, kernel_size=self.kernel_size, activation=self.activation, padding=self.padding)(m)
-        m = layers.MaxPooling3D(pool_size=self.pool_size)(m)
+            nn.Conv3d(8, 16, kernel_size=self.kernel_size, padding=self.padding),
+            self.activation(),
+            nn.Conv3d(16, 16, kernel_size=self.kernel_size, padding=self.padding),
+            self.activation(),
+            nn.MaxPool3d(kernel_size=self.pool_size),
 
-        m = layers.Conv3D(32, kernel_size=self.kernel_size, activation=self.activation, padding=self.padding)(m)
-        m = layers.Conv3D(32, kernel_size=self.kernel_size, activation=self.activation, padding=self.padding)(m)
-        m = layers.MaxPooling3D(pool_size=self.pool_size)(m)
+            nn.Conv3d(16, 32, kernel_size=self.kernel_size, padding=self.padding),
+            self.activation(),
+            nn.Conv3d(32, 32, kernel_size=self.kernel_size, padding=self.padding),
+            self.activation(),
+            nn.MaxPool3d(kernel_size=self.pool_size),
 
-        m = layers.Conv3D(64, kernel_size=self.kernel_size, activation=self.activation, padding=self.padding)(m)
-        m = layers.Conv3D(64, kernel_size=self.kernel_size, activation=self.activation, padding=self.padding)(m)
-        m = layers.MaxPooling3D(pool_size=self.pool_size)(m)
+            nn.Conv3d(32, 64, kernel_size=self.kernel_size, padding=self.padding),
+            self.activation(),
+            nn.Conv3d(64, 64, kernel_size=self.kernel_size, padding=self.padding),
+            self.activation(),
+            nn.MaxPool3d(kernel_size=self.pool_size),
 
-        m = layers.Conv3D(128, kernel_size=self.kernel_size, activation=self.activation, padding=self.padding)(m)
-        m = layers.Conv3D(128, kernel_size=self.kernel_size, activation=self.activation, padding=self.padding)(m)
+            nn.Conv3d(64, 128, kernel_size=self.kernel_size, padding=self.padding),
+            self.activation(),
+            nn.Conv3d(128, 128, kernel_size=self.kernel_size, padding=self.padding),
+            self.activation(),
+            nn.MaxPool3d(kernel_size=(2, 2, 2)),
+            
+            nn.Flatten(),
+            nn.Linear(1536, 64),
+            self.activation(),
+            nn.Linear(64, 64),
+            self.activation(),
+        )
+        
+        self.regressor = nn.Linear(64, self.modes)
 
-        if inputs.shape[0] == 1:
-            m = layers.MaxPooling3D(pool_size=(1, 2, 2))(m)
-        else:
-            m = layers.MaxPooling3D(pool_size=(2, 2, 2))(m)
-
-        m = self.flat(m)
-        m = layers.Dense(64, activation=self.activation)(m)
-        m = layers.Dense(64, activation=self.activation)(m)
-        return self.regressor(m)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = torch.permute(x, (0, -1, 1, 2, 3))
+        x = self.features(x)
+        return self.regressor(x)
