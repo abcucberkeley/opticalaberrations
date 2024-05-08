@@ -1,6 +1,5 @@
-import time
-
 import matplotlib
+import time
 
 matplotlib.use('Agg')
 
@@ -15,7 +14,6 @@ from typing import Any, Sequence, Union, Optional
 import numpy as np
 from scipy import stats as st
 from scipy.ndimage import gaussian_filter, binary_dilation, generate_binary_structure
-from scipy.signal import fftconvolve
 import pandas as pd
 import seaborn as sns
 import zarr
@@ -28,13 +26,9 @@ import matplotlib.patches as patches
 from line_profiler_pycharm import profile
 from skimage.filters import window
 from tifffile import TiffFile
-from astropy import convolution
 from skimage.feature import peak_local_max
-from csbdeep.utils.tf import limit_gpu_memory
 from skimage.transform import resize
 
-limit_gpu_memory(allow_growth=True, fraction=None, total_memory=None)
-from csbdeep.models import CARE
 
 try:
     import cupy as cp
@@ -44,7 +38,7 @@ except ImportError as e:
     logging.warning(f"Cupy not supported on your system: {e}")
 
 from vis import plot_mip, savesvg
-from utils import round_to_even, gaussian_kernel
+from utils import round_to_even
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -509,7 +503,7 @@ def prep_sample(
     expand_dims: bool = True,
     na_mask: Optional[np.ndarray] = None,
     remove_background_noise_method: str = 'fourier_filter',  # 'fourier_filter' or 'difference_of_gaussians'
-    denoiser: Optional[Union[Path, CARE]] = None,
+    denoiser: Optional[Union[Path]] = None,
     denoiser_window_size: tuple = (32, 64, 64),
 ):
     """ Input 3D array (or series of 3D arrays) is preprocessed in this order:
@@ -1123,7 +1117,7 @@ def optimal_rolling_strides(model_psf_fov, sample_voxel_size, sample_shape, over
 
 def denoise_image(
     image: np.ndarray,
-    denoiser: Union[Path, CARE],
+    denoiser: Union[Path],
     denoiser_window_size: tuple = (32, 64, 64),
     batch_size: int = 96
 ):
