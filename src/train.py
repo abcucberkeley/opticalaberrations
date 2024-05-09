@@ -182,15 +182,18 @@ def train_model(
     model_logbook['eval_bytes'] =  model_logbook['input_bytes'] + model_logbook['eval_model_bytes']
     model_logbook['training_bytes'] = model_logbook['input_bytes'] +  model_logbook['training_model_bytes']
     
+    model_logbook['layers'] = {}
     for layer in train_stats.summary_list:
         if layer.is_leaf_layer:
-            model_logbook[f'{layer.class_name}_{layer.var_name}_macs'] = layer.macs
-            model_logbook[f'{layer.class_name}_{layer.var_name}_params'] = max(layer.num_params, 0)
-            model_logbook[f'{layer.class_name}_{layer.var_name}_param_bytes'] = layer.param_bytes
-            model_logbook[f'{layer.class_name}_{layer.var_name}_forward_pass_bytes'] = layer.output_bytes
-            model_logbook[f'{layer.class_name}_{layer.var_name}_forward_backward_pass_bytes'] = layer.output_bytes * 2 #x2 for gradients
-            model_logbook[f'{layer.class_name}_{layer.var_name}_output_shape'] = layer.output_size
-    
+            model_logbook['layers'][f'{layer.class_name}_{layer.var_name}'] = {
+                'macs': layer.macs,
+                'params': max(layer.num_params, 0),
+                'param_bytes': layer.param_bytes,
+                'forward_pass_bytes': layer.output_bytes,
+                'forward_backward_pass_bytes': layer.output_bytes * 2, # x2 for gradients
+                'output_shape': layer.output_size,
+            }
+            
     with Path(logdir/'model_logbook.json').open('w') as f:
         ujson.dump(
             model_logbook,
