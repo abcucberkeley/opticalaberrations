@@ -9,8 +9,10 @@ import torch.optim as optim
 from torchinfo import summary
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration
-from torch.optim.lr_scheduler import OneCycleLR, LinearLR
+from torch.optim.lr_scheduler import LRScheduler, OneCycleLR, LinearLR
 from apex.optimizers import FusedLAMB
+from torch.utils.data import DataLoader
+from accelerate.logging import get_logger
 
 import logging
 import ujson
@@ -97,6 +99,116 @@ def summarize_model(model: nn.Module, inputs: tuple, batch_size: int, logdir: Pa
         )
 
 
+def train(
+    model: nn.Module,
+    opt: optim.Optimizer,
+    scheduler: LRScheduler,
+    train_dataloader: DataLoader,
+    epochs: int,
+    steps_per_epoch: int,
+    outdir: Path,
+    logdir: Path,
+    loss_fn = nn.MSELoss(reduction='sum'),
+    mse_fn = nn.MSELoss(reduction='mean'),
+):
+    restored = False
+
+    config = ProjectConfiguration(
+        project_dir=outdir,
+        logging_dir=logdir,
+        automatic_checkpoint_naming=True,
+        total_limit=5,
+    )
+
+    accelerator = Accelerator(
+        mixed_precision='bf16',
+        log_with="tensorboard",
+        project_dir=outdir,
+        project_config=config,
+        device_placement=True,
+        gradient_accumulation_steps=1
+    )
+    logger = get_logger(__name__)
+
+    model, opt, train_dataloader, scheduler = accelerator.prepare(model, opt, train_dataloader, scheduler)
+
+    accelerator.init_trackers(outdir)
+    accelerator.register_for_checkpointing(scheduler)
+
+    step_logbook, epoch_logbook = {}, {}
+    best_loss, overall_step, starting_epoch = np.inf, 0, 0
+    for epoch in range(epochs):
+        epoch_time = time.time()
+        model.train()
+        loss, mse = 0, 0
+
+        if restored:
+            # We need to skip steps until we reach the resumed step
+            active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+            overall_step += starting_epoch * steps_per_epoch
+        else:
+            # After the first iteration though, we need to go back to the original dataloader
+            active_dataloader = train_dataloader
+
+        step_times = []
+        for step, (inputs, zernikes) in enumerate(active_dataloader):
+            with accelerator.accumulate(model):
+                step_time = time.time()
+                lr = scheduler.get_lr()[0]
+
+                outputs = model(inputs)
+                step_loss = loss_fn(outputs, zernikes)
+                loss += step_loss.detach().float()
+
+                step_mse = mse_fn(outputs, zernikes)
+                mse += step_mse.detach().float()
+
+                accelerator.backward(step_loss)
+                opt.step()
+                opt.zero_grad()
+                overall_step += 1
+                step_timer = time.time() - step_time
+                step_times.append(step_timer)
+
+                step_logbook[overall_step] = {
+                    "step_loss": step_loss,
+                    "step_mse": step_mse,
+                    "step_lr": lr,
+                    "step_timer": step_timer,
+                }
+                accelerator.log(step_logbook[overall_step], step=overall_step)
+
+        scheduler.step()
+        loss = loss.item() / steps_per_epoch
+        mse = mse.item() / steps_per_epoch
+        step_timer = np.mean(step_times)
+        epoch_timer = time.time() - epoch_time
+        remaining_epochs = epochs - (epoch + 1)
+        eta = epoch_timer * remaining_epochs / 3600
+
+        logger.info(
+            f"[Epochs left {remaining_epochs} | ETA {eta:.2f}hrs] ({epoch}): "
+            f"{step_timer * 1000:.0f}ms/step - {epoch_timer:.0f}s/epoch - {loss=:.4g} - {mse=:.4g} - {lr=:.4g}",
+            main_process_only=True
+        )
+        epoch_logbook[epoch] = {
+            "epoch_loss": loss,
+            "epoch_mse": mse,
+            "epoch_lr": lr,
+            "epoch_timer": epoch_timer,
+        }
+        accelerator.log(epoch_logbook[epoch], step=epoch)
+        df = pd.DataFrame.from_dict(epoch_logbook, orient='index')
+        df.to_csv(logdir / 'logbook.csv')
+
+        if loss < best_loss:
+            best_loss = loss
+            accelerator.save_state(outdir)
+
+    accelerator.save_model(model, f'{outdir}/final_model')
+    accelerator.end_training()
+
+
 def train_model(
     dataset: Path,
     outdir: Path,
@@ -150,28 +262,9 @@ def train_model(
     outdir.mkdir(exist_ok=True, parents=True)
     logdir = outdir / 'logs'
     logdir.mkdir(exist_ok=True, parents=True)
-    
-    config = ProjectConfiguration(
-        project_dir=outdir,
-        logging_dir=logdir,
-        automatic_checkpoint_naming=True,
-        total_limit=5,
-    )
-
-    accelerator = Accelerator(
-        mixed_precision='bf16',
-        log_with="tensorboard",
-        project_dir=outdir,
-        project_config=config,
-        device_placement=True,
-        gradient_accumulation_steps=1
-    )
 
     network = network.lower()
     opt = opt.lower()
-    restored = False
-    loss_fn = nn.MSELoss(reduction='sum')
-    mse_fn = nn.MSELoss(reduction='mean')
 
     if network == 'realspace':
         inputs = (batch_size, input_shape, input_shape, input_shape, channels)
@@ -225,14 +318,14 @@ def train_model(
             end_factor=1.0,
             total_iters=epochs,
         )
-        accelerator.print(f"Training steps: [{steps_per_epoch * epochs}]")
+        logger.info(f"Training steps: [{steps_per_epoch * epochs}]")
     else:
         decay_epochs = epochs - warmup
         total_steps = epochs * steps_per_epoch
         warmup_steps = warmup * steps_per_epoch
         decay_steps = total_steps - warmup_steps
         
-        accelerator.print(
+        logger.info(
             f"Training [{epochs=}: {total_steps=}] = "
             f"({warmup=}: {warmup_steps=}) + ({decay_epochs=}: {decay_steps=})"
         )
@@ -246,81 +339,16 @@ def train_model(
             pct_start=warmup_steps/total_steps,
         )
 
-    model, opt, train_dataloader, scheduler = accelerator.prepare(model, opt, train_dataloader, scheduler)
-
-    accelerator.init_trackers(outdir)
-    accelerator.register_for_checkpointing(scheduler)
-
-    step_logbook, epoch_logbook = {}, {}
-    best_loss, overall_step, starting_epoch = np.inf, 0, 0
-    for epoch in range(epochs):
-        epoch_time = time.time()
-        model.train()
-        loss, mse = 0, 0
-        
-        if restored:
-            # We need to skip steps until we reach the resumed step
-            active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
-            overall_step += starting_epoch * steps_per_epoch
-        else:
-            # After the first iteration though, we need to go back to the original dataloader
-            active_dataloader = train_dataloader
-        
-        step_times = []
-        for step, (inputs, zernikes) in enumerate(active_dataloader):
-            with accelerator.accumulate(model):
-                step_time = time.time()
-                lr = scheduler.get_lr()[0]
-                
-                outputs = model(inputs)
-                step_loss = loss_fn(outputs, zernikes)
-                loss += step_loss.detach().float()
-                
-                step_mse = mse_fn(outputs, zernikes)
-                mse += step_mse.detach().float()
-                
-                accelerator.backward(step_loss)
-                opt.step()
-                opt.zero_grad()
-                overall_step += 1
-                step_timer = time.time() - step_time
-                step_times.append(step_timer)
-                
-                step_logbook[overall_step] = {
-                    "step_loss": step_loss,
-                    "step_mse": step_mse,
-                    "step_lr": lr,
-                    "step_timer": step_timer,
-                }
-                accelerator.log(step_logbook[overall_step], step=overall_step)
-        
-        scheduler.step()
-        loss = loss.item() / steps_per_epoch
-        mse = mse.item() / steps_per_epoch
-        step_timer = np.mean(step_times)
-        epoch_timer = time.time()-epoch_time
-        eta = epoch_timer * (epochs - epoch) / 3600
-        
-        accelerator.print(
-            f" ETA: {eta:.2f}hrs | ({epoch}) [{step_timer*1000:.0f}ms/step | {epoch_timer:.0f}s/epoch]: "
-            f"{loss=:.4g} - {mse=:.4g} - {lr=:.4g}"
-        )
-        epoch_logbook[epoch] = {
-            "epoch_loss": loss,
-            "epoch_mse": mse,
-            "epoch_lr": lr,
-            "epoch_timer": epoch_timer,
-        }
-        accelerator.log(epoch_logbook[epoch], step=epoch)
-        df = pd.DataFrame.from_dict(epoch_logbook, orient='index')
-        df.to_csv(logdir/'logbook.csv')
-        
-        if loss < best_loss:
-            best_loss = loss
-            accelerator.save_state(outdir)
-    
-    accelerator.save_model(model, f'{outdir}/final_model')
-    accelerator.end_training()
+    train(
+        model=model,
+        opt=opt,
+        scheduler=scheduler,
+        train_dataloader=train_dataloader,
+        epochs=epochs,
+        steps_per_epoch=steps_per_epoch,
+        outdir=outdir,
+        logdir=logdir,
+    )
 
 
 def eval_model(

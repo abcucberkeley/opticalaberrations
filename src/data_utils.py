@@ -1,30 +1,27 @@
 import logging
-import sys, os
+import os
+import sys
 from functools import partial
-from line_profiler_pycharm import profile
-from sympy import Union
-
-import torch
-from torch.utils.data import Dataset, DataLoader, random_split
-from torch.utils.data.distributed import DistributedSampler
-
-import pandas as pd
-from tifffile import TiffFile
 from pathlib import Path
-import numpy as np
+
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
-
+import numpy as np
+import pandas as pd
 import seaborn as sns
-from tqdm import tqdm
+import torch
 import ujson
+from line_profiler_pycharm import profile
+from tifffile import TiffFile
+from torch.utils.data import Dataset, DataLoader, random_split
+from tqdm import tqdm
 
 import embeddings
+import vis
+from preprocessing import resize_with_crop_or_pad
+from utils import multiprocess
 from wavefront import Wavefront
 from zernike import Zernike
-from utils import multiprocess
-from preprocessing import resize_with_crop_or_pad
-import vis
 
 logging.basicConfig(
     stream=sys.stdout,
