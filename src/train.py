@@ -13,9 +13,11 @@ from torch.optim.lr_scheduler import OneCycleLR, LinearLR
 from apex.optimizers import FusedLAMB
 
 import logging
+import ujson
 import sys
 import time
 import numpy as np
+import pandas as pd
 from pathlib import Path
 from typing import Any, Optional
 
@@ -82,9 +84,12 @@ def train_model(
     channels: int = 1,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
+    logdir = outdir / 'logs'
+    logdir.mkdir(exist_ok=True, parents=True)
+    
     config = ProjectConfiguration(
         project_dir=outdir,
-        logging_dir=outdir/'logs',
+        logging_dir=logdir,
         automatic_checkpoint_naming=True,
         total_limit=5,
     )
@@ -137,7 +142,18 @@ def train_model(
     model = OTFNet()
     model = model
     
-    summary(
+    model_logbook = {}
+    model_stats = summary(
+        model=model,
+        input_size=(1, *inputs[1:]),
+        depth=5,
+        col_width=25,
+        col_names=["kernel_size", "output_size", "num_params"],
+        row_settings=["var_names"],
+        verbose=0,
+        mode='eval'
+    )
+    train_stats = summary(
         model=model,
         input_size=inputs,
         depth=5,
@@ -147,6 +163,43 @@ def train_model(
         verbose=1,
         mode='train'
     )
+    
+    model_logbook['training_batch_size'] = batch_size
+    model_logbook['input_bytes'] = model_stats.total_input
+    model_logbook['total_params'] = model_stats.total_params
+    model_logbook['trainable_params'] = model_stats.trainable_params
+    model_logbook['param_bytes'] = model_stats.total_param_bytes
+    
+    model_logbook['eval_macs'] = model_stats.total_mult_adds
+    model_logbook['training_macs'] = train_stats.total_mult_adds
+
+    model_logbook['forward_pass_bytes'] = model_stats.total_output_bytes
+    model_logbook['forward_backward_pass_bytes'] = train_stats.total_output_bytes
+    
+    model_logbook['eval_model_bytes'] = model_logbook['param_bytes'] + model_logbook['forward_pass_bytes']
+    model_logbook['training_model_bytes'] = model_logbook['param_bytes'] + model_logbook['forward_backward_pass_bytes']
+    
+    model_logbook['eval_bytes'] =  model_logbook['input_bytes'] + model_logbook['eval_model_bytes']
+    model_logbook['training_bytes'] = model_logbook['input_bytes'] +  model_logbook['training_model_bytes']
+    
+    for layer in train_stats.summary_list:
+        if layer.is_leaf_layer:
+            model_logbook[f'{layer.class_name}_{layer.var_name}_macs'] = layer.macs
+            model_logbook[f'{layer.class_name}_{layer.var_name}_params'] = max(layer.num_params, 0)
+            model_logbook[f'{layer.class_name}_{layer.var_name}_param_bytes'] = layer.param_bytes
+            model_logbook[f'{layer.class_name}_{layer.var_name}_forward_pass_bytes'] = layer.output_bytes
+            model_logbook[f'{layer.class_name}_{layer.var_name}_forward_backward_pass_bytes'] = layer.output_bytes * 2 #x2 for gradients
+            model_logbook[f'{layer.class_name}_{layer.var_name}_output_shape'] = layer.output_size
+    
+    with Path(logdir/'model_logbook.json').open('w') as f:
+        ujson.dump(
+            model_logbook,
+            f,
+            indent=4,
+            sort_keys=False,
+            ensure_ascii=False,
+            escape_forward_slashes=False
+        )
     
     if opt == 'lamb':
         opt = FusedLAMB(model.parameters(), lr=lr, weight_decay=wd, betas=(0.9, 0.99))
@@ -188,6 +241,7 @@ def train_model(
     accelerator.init_trackers(outdir)
     accelerator.register_for_checkpointing(scheduler)
     
+    step_logbook, epoch_logbook = {}, {}
     best_loss, overall_step, starting_epoch = np.inf, 0, 0
     for epoch in range(epochs):
         epoch_time = time.time()
@@ -222,15 +276,13 @@ def train_model(
                 step_timer = time.time() - step_time
                 step_times.append(step_timer)
                 
-                accelerator.log(
-                    {
-                        "step_loss": step_loss,
-                        "step_mse": step_mse,
-                        "step_lr": lr,
-                        "step_timer": step_timer,
-                    },
-                    step=overall_step,
-                )
+                step_logbook[overall_step] = {
+                    "step_loss": step_loss,
+                    "step_mse": step_mse,
+                    "step_lr": lr,
+                    "step_timer": step_timer,
+                }
+                accelerator.log(step_logbook[overall_step], step=overall_step)
         
         scheduler.step()
         loss = loss.item() / steps_per_epoch
@@ -242,15 +294,15 @@ def train_model(
             f"Epoch {epoch} [{step_timer*1000:.0f}ms/step | {epoch_timer:.0f}s/epoch]: "
             f"{loss=:.4g} | {mse=:.4g} | {lr=:.4g}"
         )
-        accelerator.log(
-            {
-                "epoch_loss": loss,
-                "epoch_mse": mse,
-                "epoch_lr": lr,
-                "epoch_timer": epoch_timer,
-            },
-            step=epoch,
-        )
+        epoch_logbook[epoch] = {
+            "epoch_loss": loss,
+            "epoch_mse": mse,
+            "epoch_lr": lr,
+            "epoch_timer": epoch_timer,
+        }
+        accelerator.log(epoch_logbook[epoch], step=epoch)
+        df = pd.DataFrame.from_dict(epoch_logbook, orient='index')
+        df.to_csv(logdir/'logbook.csv')
         
         if loss < best_loss:
             best_loss = loss
