@@ -33,6 +33,70 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def summarize_model(model: nn.Module, inputs: tuple, batch_size: int, logdir: Path):
+    model_logbook = {}
+    model_stats = summary(
+        model=model,
+        input_size=(1, *inputs[1:]),
+        depth=5,
+        col_width=25,
+        col_names=["kernel_size", "output_size", "num_params"],
+        row_settings=["var_names"],
+        verbose=0,
+        mode='eval'
+    )
+    train_stats = summary(
+        model=model,
+        input_size=inputs,
+        depth=5,
+        col_width=25,
+        col_names=["kernel_size", "output_size", "num_params"],
+        row_settings=["var_names"],
+        verbose=1,
+        mode='train'
+    )
+
+    model_logbook['training_batch_size'] = batch_size
+    model_logbook['input_bytes'] = model_stats.total_input
+    model_logbook['total_params'] = model_stats.total_params
+    model_logbook['trainable_params'] = model_stats.trainable_params
+    model_logbook['param_bytes'] = model_stats.total_param_bytes
+
+    model_logbook['eval_macs'] = model_stats.total_mult_adds
+    model_logbook['training_macs'] = train_stats.total_mult_adds
+
+    model_logbook['forward_pass_bytes'] = model_stats.total_output_bytes
+    model_logbook['forward_backward_pass_bytes'] = train_stats.total_output_bytes
+
+    model_logbook['eval_model_bytes'] = model_logbook['param_bytes'] + model_logbook['forward_pass_bytes']
+    model_logbook['training_model_bytes'] = model_logbook['param_bytes'] + model_logbook['forward_backward_pass_bytes']
+
+    model_logbook['eval_bytes'] = model_logbook['input_bytes'] + model_logbook['eval_model_bytes']
+    model_logbook['training_bytes'] = model_logbook['input_bytes'] + model_logbook['training_model_bytes']
+
+    model_logbook['layers'] = {}
+    for layer in train_stats.summary_list:
+        if layer.is_leaf_layer:
+            model_logbook['layers'][f'{layer.class_name}_{layer.var_name}'] = {
+                'macs': layer.macs,
+                'params': max(layer.num_params, 0),
+                'param_bytes': layer.param_bytes,
+                'forward_pass_bytes': layer.output_bytes,
+                'forward_backward_pass_bytes': layer.output_bytes * 2,  # x2 for gradients
+                'output_shape': layer.output_size,
+            }
+
+    with Path(logdir / 'model_logbook.json').open('w') as f:
+        ujson.dump(
+            model_logbook,
+            f,
+            indent=4,
+            sort_keys=False,
+            ensure_ascii=False,
+            escape_forward_slashes=False
+        )
+
+
 def train_model(
     dataset: Path,
     outdir: Path,
@@ -140,69 +204,12 @@ def train_model(
     steps_per_epoch = len(train_dataloader)
     
     model = OTFNet()
-    model = model
-    
-    model_logbook = {}
-    model_stats = summary(
+    summarize_model(
         model=model,
-        input_size=(1, *inputs[1:]),
-        depth=5,
-        col_width=25,
-        col_names=["kernel_size", "output_size", "num_params"],
-        row_settings=["var_names"],
-        verbose=0,
-        mode='eval'
+        inputs=inputs,
+        batch_size=batch_size,
+        logdir=logdir,
     )
-    train_stats = summary(
-        model=model,
-        input_size=inputs,
-        depth=5,
-        col_width=25,
-        col_names=["kernel_size", "output_size", "num_params"],
-        row_settings=["var_names"],
-        verbose=1,
-        mode='train'
-    )
-    
-    model_logbook['training_batch_size'] = batch_size
-    model_logbook['input_bytes'] = model_stats.total_input
-    model_logbook['total_params'] = model_stats.total_params
-    model_logbook['trainable_params'] = model_stats.trainable_params
-    model_logbook['param_bytes'] = model_stats.total_param_bytes
-    
-    model_logbook['eval_macs'] = model_stats.total_mult_adds
-    model_logbook['training_macs'] = train_stats.total_mult_adds
-
-    model_logbook['forward_pass_bytes'] = model_stats.total_output_bytes
-    model_logbook['forward_backward_pass_bytes'] = train_stats.total_output_bytes
-    
-    model_logbook['eval_model_bytes'] = model_logbook['param_bytes'] + model_logbook['forward_pass_bytes']
-    model_logbook['training_model_bytes'] = model_logbook['param_bytes'] + model_logbook['forward_backward_pass_bytes']
-    
-    model_logbook['eval_bytes'] =  model_logbook['input_bytes'] + model_logbook['eval_model_bytes']
-    model_logbook['training_bytes'] = model_logbook['input_bytes'] +  model_logbook['training_model_bytes']
-    
-    model_logbook['layers'] = {}
-    for layer in train_stats.summary_list:
-        if layer.is_leaf_layer:
-            model_logbook['layers'][f'{layer.class_name}_{layer.var_name}'] = {
-                'macs': layer.macs,
-                'params': max(layer.num_params, 0),
-                'param_bytes': layer.param_bytes,
-                'forward_pass_bytes': layer.output_bytes,
-                'forward_backward_pass_bytes': layer.output_bytes * 2, # x2 for gradients
-                'output_shape': layer.output_size,
-            }
-            
-    with Path(logdir/'model_logbook.json').open('w') as f:
-        ujson.dump(
-            model_logbook,
-            f,
-            indent=4,
-            sort_keys=False,
-            ensure_ascii=False,
-            escape_forward_slashes=False
-        )
     
     if opt == 'lamb':
         opt = FusedLAMB(model.parameters(), lr=lr, weight_decay=wd, betas=(0.9, 0.99))
