@@ -1,5 +1,6 @@
 import logging
 import sys
+
 import torch
 import torch.nn as nn
 
@@ -13,11 +14,11 @@ logger = logging.getLogger(__name__)
 
 class OTFNet(nn.Module):
 
-    def __init__(self, input_shape=(1, 6, 64, 64, 1), modes=15, *args, **kwargs):
+    def __init__(self, name='OTFNet', input_shape=(1, 6, 64, 64, 1), modes=15, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.name = name
         self.input_shape = input_shape
         self.modes = modes
-        
         self.kernel_size = (1, 3, 3)
         self.pool_size = (1, 2, 2)
         self.activation = nn.Tanh
@@ -25,7 +26,7 @@ class OTFNet(nn.Module):
 
         
         self.features = nn.Sequential(
-            nn.Conv3d(1, 8, kernel_size=self.kernel_size, padding=self.padding),
+            nn.Conv3d(self.input_shape[-1], 8, kernel_size=self.kernel_size, padding=self.padding),
             self.activation(),
             nn.Conv3d(8, 8, kernel_size=self.kernel_size, padding=self.padding),
             self.activation(),

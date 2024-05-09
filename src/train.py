@@ -99,6 +99,7 @@ def summarize_model(model: nn.Module, inputs: tuple, batch_size: int, logdir: Pa
             escape_forward_slashes=False
         )
 
+
 def train(
     model: nn.Module,
     opt: optim.Optimizer,
@@ -254,31 +255,28 @@ def train_model(
     dropout: float = .1,
     warmup: int = 2,
     epochs: int = 5,
-    wavelength: float = .510,
-    psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-    x_voxel_size: float = .125,
-    y_voxel_size: float = .125,
-    z_voxel_size: float = .2,
     modes: int = 15,
     pmodes: Optional[int] = None,
     min_photons: int = 1,
     max_photons: int = 1000000,
     roi: Any = None,
-    refractive_index: float = 1.33,
     no_phase: bool = False,
-    plot_patchfiy: bool = False,
     lls_defocus: bool = False,
     defocus_only: bool = False,
     radial_encoding_period: int = 16,
     radial_encoding_nth_order: int = 4,
     positional_encoding_scheme: str = 'rotational_symmetry',
     fixed_dropout_depth: bool = False,
-    steps_per_epoch: Optional[int] = None,
     stem: bool = False,
     mul: bool = False,
     finetune: Optional[Path] = None,
     cpu_workers: int = -1,
-    channels: int = 1,
+    wavelength: float = .510,
+    psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+    x_voxel_size: float = .125,
+    y_voxel_size: float = .125,
+    z_voxel_size: float = .2,
+    refractive_index: float = 1.33,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
     logdir = outdir / 'logs'
@@ -290,9 +288,9 @@ def train_model(
     opt = opt.lower()
 
     if network == 'realspace':
-        inputs = (batch_size, input_shape, input_shape, input_shape, channels)
+        inputs = (batch_size, input_shape, input_shape, input_shape, 1)
     else:
-        inputs = (batch_size, 3 if no_phase else 6, input_shape, input_shape, channels)
+        inputs = (batch_size, 3 if no_phase else 6, input_shape, input_shape, 1)
 
     if defocus_only:  # only predict LLS defocus offset
         pmodes = 1
@@ -318,8 +316,100 @@ def train_model(
         batch_size=batch_size
     )
     steps_per_epoch = len(train_dataloader)
-    
-    model = OTFNet()
+
+    # if network == 'prototype':
+    #     model = OpticalTransformer(
+    #         name='Prototype',
+    #         input_shape=inputs,
+    #         roi=roi,
+    #         stem=stem,
+    #         patches=patches,
+    #         heads=heads,
+    #         repeats=repeats,
+    #         modes=pmodes,
+    #         depth_scalar=depth_scalar,
+    #         width_scalar=width_scalar,
+    #         dropout_rate=dropout,
+    #         activation=activation,
+    #         mul=mul,
+    #         no_phase=no_phase,
+    #         positional_encoding_scheme=positional_encoding_scheme,
+    #         radial_encoding_period=radial_encoding_period,
+    #         radial_encoding_nth_order=radial_encoding_nth_order,
+    #         fixed_dropout_depth=fixed_dropout_depth,
+    #     )
+    # elif network == 'vit':
+    #     model = VIT(
+    #         name='ViT',
+    #         input_shape=inputs,
+    #         hidden_size=hidden_size,
+    #         roi=roi,
+    #         stem=stem,
+    #         patches=patches,
+    #         heads=heads,
+    #         repeats=repeats,
+    #         modes=pmodes,
+    #         depth_scalar=depth_scalar,
+    #         width_scalar=width_scalar,
+    #         dropout_rate=dropout,
+    #         activation=activation,
+    #         mul=mul,
+    #         no_phase=no_phase,
+    #         positional_encoding_scheme=positional_encoding_scheme,
+    #         fixed_dropout_depth=fixed_dropout_depth,
+    #     )
+    # elif network == 'swin':
+    #     model = Swin(
+    #         name='Swin',
+    #         input_shape=inputs,
+    #         hidden_size=hidden_size,
+    #         patches=patches,
+    #         heads=heads,
+    #         repeats=repeats,
+    #         modes=pmodes,
+    #     )
+    #
+    # elif network == 'opticalnet':
+    #     model = OpticalTransformer(
+    #         name='OpticalNet',
+    #         input_shape=inputs,
+    #         roi=roi,
+    #         stem=stem,
+    #         patches=patches,
+    #         heads=heads,
+    #         repeats=repeats,
+    #         modes=pmodes,
+    #         depth_scalar=depth_scalar,
+    #         width_scalar=width_scalar,
+    #         dropout_rate=dropout,
+    #         activation=activation,
+    #         mul=mul,
+    #         no_phase=no_phase,
+    #         positional_encoding_scheme=positional_encoding_scheme,
+    #         radial_encoding_period=radial_encoding_period,
+    #         radial_encoding_nth_order=radial_encoding_nth_order,
+    #         fixed_dropout_depth=fixed_dropout_depth,
+    #     )
+    #
+    # elif network == 'baseline':
+    #     model = Baseline(
+    #         name='Baseline',
+    #         input_shape=inputs,
+    #         modes=pmodes,
+    #         repeats=repeats,
+    #         projections=heads,
+    #     )
+
+    if network == 'otfnet':
+        model = OTFNet(
+            name='OTFNet',
+            input_shape=inputs,
+            modes=pmodes
+        )
+
+    else:
+        raise Exception(f'Network "{network}" is unknown.')
+
     summarize_model(
         model=model,
         inputs=inputs,
@@ -675,7 +765,6 @@ def main(args=None):
             heads=[int(i) for i in args.heads.split('-')],
             repeats=[int(i) for i in args.repeats.split('-')],
             roi=[int(i) for i in args.roi.split('-')] if args.roi is not None else args.roi,
-            steps_per_epoch=args.steps_per_epoch,
             psf_type=args.psf_type,
             x_voxel_size=args.x_voxel_size,
             y_voxel_size=args.y_voxel_size,
