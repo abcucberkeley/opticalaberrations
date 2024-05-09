@@ -196,6 +196,7 @@ jobs:
             test_framework: "tensorflow"
           - CUDA_VERSION: "Torch_CUDA_12_3"
             test_framework: "pytorch"
+      fail-fast: false  # do the other tests in the matrix even if one of them fails
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif
     steps:
