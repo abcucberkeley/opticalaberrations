@@ -193,9 +193,9 @@ jobs:
       matrix:
         include:
           - CUDA_VERSION: "TF_CUDA_12_3"
-            test_framework: "test_tensorflow.py"
+            test_framework: "tensorflow"
           - CUDA_VERSION: "Torch_CUDA_12_3"
-            test_framework: "test_pytorch.py"
+            test_framework: "pytorch"
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif
     steps:
@@ -212,8 +212,8 @@ jobs:
       - name: Test NVIDIA-SMI
         run:  ${{ env.APPTAINER_RUN }} nvidia-smi
               
-      - name: Test TensorFlow
-        run: ${{ env.APPTAINER_RUN }} ${{ env.PYTEST }} ${{ github.workspace }}/tests/${{ matrix.test_framework }}
+      - name: Test ${{ matrix.test_framework }}
+        run: ${{ env.APPTAINER_RUN }} ${{ env.PYTEST }} ${{ github.workspace }}/tests/test_${{ matrix.test_framework }}.py
 
       - name: Test Cupy
         run: ${{ env.APPTAINER_RUN }} ${{ env.PYTEST }} ${{ github.workspace }}/tests/test_cupy.py
