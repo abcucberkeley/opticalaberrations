@@ -16,6 +16,7 @@ from accelerate.logging import get_logger
 
 import logging
 import ujson
+import os
 import sys
 import time
 import numpy as np
@@ -98,7 +99,6 @@ def summarize_model(model: nn.Module, inputs: tuple, batch_size: int, logdir: Pa
             escape_forward_slashes=False
         )
 
-
 def train(
     model: nn.Module,
     opt: optim.Optimizer,
@@ -108,15 +108,38 @@ def train(
     steps_per_epoch: int,
     outdir: Path,
     logdir: Path,
+    checkpointdir: Path,
     loss_fn = nn.MSELoss(reduction='sum'),
     mse_fn = nn.MSELoss(reduction='mean'),
+    finetune: Optional[Path] = None,
 ):
-    restored = False
+    logger = logging.getLogger(__name__)
+    try:  # check if model already exists
+        checkpoints = [d for d in checkpointdir.glob('*') if d.is_dir()]
+        checkpoints.sort(key=os.path.getctime)
+        latest_checkpoint = checkpoints[-1]
+
+        training_history = pd.read_csv(logdir / 'logbook.csv', header=0, index_col=0)
+        logger.info(f"Training history\n{training_history}")
+
+        starting_epoch = training_history.index.values[-1]
+        overall_step = starting_epoch * steps_per_epoch
+        best_loss = training_history.loc[starting_epoch, 'epoch_loss']
+        starting_epoch += 1
+        step_logbook = {}
+        epoch_logbook = training_history.to_dict(orient='index')
+        restored = True
+
+    except Exception as e:
+        restored = False
+        logger.warning(f"No model found in {outdir}")
+        best_loss, overall_step, starting_epoch = np.inf, 0, 0
+        step_logbook, epoch_logbook = {}, {}
 
     config = ProjectConfiguration(
         project_dir=outdir,
         logging_dir=logdir,
-        automatic_checkpoint_naming=True,
+        automatic_checkpoint_naming=False if restored or finetune is not None else True,
         total_limit=5,
     )
 
@@ -135,23 +158,21 @@ def train(
     accelerator.init_trackers(outdir)
     accelerator.register_for_checkpointing(scheduler)
 
-    step_logbook, epoch_logbook = {}, {}
-    best_loss, overall_step, starting_epoch = np.inf, 0, 0
-    for epoch in range(epochs):
+
+    if finetune is not None:
+        logger.info(f"Finetuning pretrained model @ {finetune}")
+        accelerator.load_state(finetune)
+    elif restored:
+        logger.info(f"Loading pretrained model @ {latest_checkpoint}")
+        accelerator.load_state(latest_checkpoint)
+
+    for epoch in range(starting_epoch, epochs, 1):
         epoch_time = time.time()
         model.train()
         loss, mse = 0, 0
 
-        if restored:
-            # We need to skip steps until we reach the resumed step
-            active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
-            overall_step += starting_epoch * steps_per_epoch
-        else:
-            # After the first iteration though, we need to go back to the original dataloader
-            active_dataloader = train_dataloader
-
         step_times = []
-        for step, (inputs, zernikes) in enumerate(active_dataloader):
+        for step, (inputs, zernikes) in enumerate(train_dataloader):
             with accelerator.accumulate(model):
                 step_time = time.time()
                 lr = scheduler.get_lr()[0]
@@ -199,11 +220,11 @@ def train(
         }
         accelerator.log(epoch_logbook[epoch], step=epoch)
         df = pd.DataFrame.from_dict(epoch_logbook, orient='index')
-        df.to_csv(logdir / 'logbook.csv')
+        df.to_csv(logdir/'logbook.csv')
 
         if loss < best_loss:
             best_loss = loss
-            accelerator.save_state(outdir)
+            accelerator.save_state(checkpointdir/f'checkpoint_{epoch}')
 
     accelerator.save_model(model, f'{outdir}/final_model')
     accelerator.end_training()
@@ -261,6 +282,8 @@ def train_model(
 ):
     outdir.mkdir(exist_ok=True, parents=True)
     logdir = outdir / 'logs'
+    checkpointdir = outdir / 'checkpoints'
+    checkpointdir.mkdir(exist_ok=True, parents=True)
     logdir.mkdir(exist_ok=True, parents=True)
 
     network = network.lower()
@@ -348,6 +371,8 @@ def train_model(
         steps_per_epoch=steps_per_epoch,
         outdir=outdir,
         logdir=logdir,
+        checkpointdir=checkpointdir,
+        finetune=finetune
     )
 
 
