@@ -243,7 +243,7 @@ def train_model(
 
     accelerator.init_trackers(outdir)
     accelerator.register_for_checkpointing(scheduler)
-    
+
     step_logbook, epoch_logbook = {}, {}
     best_loss, overall_step, starting_epoch = np.inf, 0, 0
     for epoch in range(epochs):
@@ -292,10 +292,11 @@ def train_model(
         mse = mse.item() / steps_per_epoch
         step_timer = np.mean(step_times)
         epoch_timer = time.time()-epoch_time
+        eta = epoch_timer * (epochs - epoch) / 3600
         
         accelerator.print(
-            f"Epoch {epoch} [{step_timer*1000:.0f}ms/step | {epoch_timer:.0f}s/epoch]: "
-            f"{loss=:.4g} | {mse=:.4g} | {lr=:.4g}"
+            f" ETA: {eta:.2f}hrs | ({epoch}) [{step_timer*1000:.0f}ms/step | {epoch_timer:.0f}s/epoch]: "
+            f"{loss=:.4g} - {mse=:.4g} - {lr=:.4g}"
         )
         epoch_logbook[epoch] = {
             "epoch_loss": loss,
