@@ -66,6 +66,6 @@ class OTFNet(nn.Module):
         self.regressor = nn.Linear(64, self.modes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = torch.permute(x, (0, -1, 1, 2, 3))
+        x = torch.permute(x, (0, -1, 1, 2, 3))  # (B, Z, Y, X, C) -> (B, C, Z, Y, X)
         x = self.features(x)
         return self.regressor(x)
