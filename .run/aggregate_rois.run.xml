@@ -28,7 +28,7 @@
         <list />
       </option>
       <option name="publishAllPorts" value="false" />
-      <option name="runCliOptions" value="--entrypoint= --rm --gpu all --ipc=host --cap-add=SYS_ADMIN --privileged=true --security-opt seccomp=unconfined --ulimit memlock=-1 --ulimit stack=67108864  -u 1000" />
+      <option name="runCliOptions" value="--entrypoint= --rm --gpu all -u 1000 --privileged --ipc host --env PYTHONUNBUFFERED=1 --ipc=host --cap-add=SYS_ADMIN --privileged=true --security-opt seccomp=unconfined --ulimit memlock=-1 --ulimit stack=67108864  -u 1000" />
       <option name="version" value="2" />
       <option name="volumeBindings">
         <list>
