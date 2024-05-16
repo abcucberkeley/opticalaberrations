@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from otfnet import OTFNet
+from convnext import ConvNeXtV2
 import data_utils
 import cli
 
@@ -317,7 +318,21 @@ def train_model(
     )
     steps_per_epoch = len(train_dataloader)
 
-    # if network == 'prototype':
+    if network == 'otfnet':
+        model = OTFNet(
+            name='OTFNet',
+            input_shape=inputs,
+            modes=pmodes
+        )
+    elif network == 'convnext':
+        model = ConvNeXtV2(
+            name='ConvNeXtV2',
+            input_shape=inputs,
+            modes=pmodes,
+            depths=repeats,
+            dims=heads,
+        )
+    # elif network == 'prototype':
     #     model = OpticalTransformer(
     #         name='Prototype',
     #         input_shape=inputs,
@@ -399,14 +414,6 @@ def train_model(
     #         repeats=repeats,
     #         projections=heads,
     #     )
-
-    if network == 'otfnet':
-        model = OTFNet(
-            name='OTFNet',
-            input_shape=inputs,
-            modes=pmodes
-        )
-
     else:
         raise Exception(f'Network "{network}" is unknown.')
 
