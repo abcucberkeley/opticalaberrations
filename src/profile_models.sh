@@ -31,12 +31,11 @@ do
     P=$2
 
     echo Profile $M
-    echo python manager.py $CLUSTER $APPTAINER $JOB \
-    --task \""profile_models ../ --outdir ${OUTDIR} --model_codename ${M} --model_predictions ${PRETRAINED}/${P}"\" \
+    python manager.py $CLUSTER $APPTAINER $JOB \
+    --task "profile_models ../ --outdir ${OUTDIR} --model_codename ${M} --model_predictions ${PRETRAINED}/${P}" \
     --taskname profile_models \
     --name ${OUTDIR}/${M}
 
     echo '----------------'
     echo
 done
-
