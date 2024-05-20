@@ -30,7 +30,7 @@
                 <list/>
             </option>
             <option name="publishAllPorts" value="false"/>
-            <option name="runCliOptions" value="--entrypoint= --rm --gpu all"/>
+            <option name="runCliOptions" value="--entrypoint= --rm --gpu all -u 1000 --privileged --ipc host --env PYTHONUNBUFFERED=1"/>
             <option name="version" value="2"/>
             <option name="volumeBindings">
                 <list>

@@ -6,6 +6,8 @@ import sys
 import time
 from pathlib import Path
 
+import tensorflow as tf
+
 try:
     import cupy as cp
 except ImportError as e:
@@ -119,80 +121,103 @@ def main(args=None):
         mp.set_executable(subprocess.run("where python", capture_output=True).stdout.decode('utf-8').split()[0])
 
     timeit = time.time()
-    
-    if args.target == 'phasenet':
-        experimental_benchmarks.predict_phasenet(
-            inputs=args.inputs,
-            plot=args.plot,
-        )
-    
-    elif args.target == 'phaseretrieval':
-        experimental_benchmarks.predict_phaseretrieval(
-            inputs=args.inputs,
-            plot=args.plot,
-        )
-    
-    elif args.target == 'cocoa':
-        experimental_benchmarks.predict_cocoa(
-            inputs=args.inputs,
-            axial_voxel_size=args.axial_voxel_size,
-            lateral_voxel_size=args.lateral_voxel_size,
-            na_detection=args.na,
-            psf_type=args.psf_type,
-            plot=args.plot,
-        )
-    
-    elif args.target == 'phasenet_heatmap':
-        experimental_benchmarks.phasenet_heatmap(
-            inputs=args.inputs,
-            outdir=args.outdir,
-            distribution=args.dist,
-            samplelimit=args.n_samples,
-            na=args.na,
-            batch_size=args.batch_size,
-            eval_sign=args.eval_sign,
-            num_beads=args.num_beads,
-            iter_num=args.niter,
-            denoiser=args.denoiser,
-            simulate_psf_only=args.simulate_psf_only
-        )
-    
-    elif args.target == 'phaseretrieval_heatmap':
-        experimental_benchmarks.phaseretrieval_heatmap(
-            inputs=args.inputs,
-            outdir=args.outdir,
-            distribution=args.dist,
-            samplelimit=args.n_samples,
-            na=args.na,
-            batch_size=args.batch_size,
-            eval_sign=args.eval_sign,
-            num_beads=args.num_beads,
-            iter_num=args.niter,
-            denoiser=args.denoiser,
-            simulate_psf_only=args.simulate_psf_only
-        )
-    
-    elif args.target == 'profile_models':
-        if args.model_codename is None:
-            args.outdir = args.inputs
-            args.model_codename, args.model_predictions = [], []
-            for m in args.inputs.glob("*/"):
-                if m.is_dir():
-                    args.model_codename.append(m.name.replace("-15-YuMB_lambda510", ""))
-                    args.model_predictions.append(m)
-        
-        profile_models(
-            models_codenames=args.model_codename,
-            predictions_paths=args.model_predictions,
-            outdir=args.outdir
-        )
+
+    tf.keras.backend.set_floatx('float32')
+    physical_devices = tf.config.list_physical_devices('GPU')
+    for gpu_instance in physical_devices:
+        tf.config.experimental.set_memory_growth(gpu_instance, True)
+
+    strategy = tf.distribute.MirroredStrategy(
+        devices=[f"{physical_devices[i].device_type}:{i}" for i in range(len(physical_devices))]
+    )
+
+    gpu_workers = strategy.num_replicas_in_sync
+    gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
+
+    if gpu_workers > 0 and gpu_model.find('A100') >= 0:  # update batchsize automatically
+        batch_size = 896 * gpu_workers
+    elif gpu_workers > 0 and gpu_model.find('RTX') >= 0:
+        batch_size = 896 * gpu_workers
     else:
-        compare_models(
-            models_codenames=args.model_codename,
-            predictions_paths=args.model_predictions,
-            iter_num=args.niter,
-            outdir=args.outdir
-        )
+        batch_size = args.batch_size
+
+    logging.info(f'Number of active GPUs: {gpu_workers}, {gpu_model}, batch_size={batch_size}')
+
+    with strategy.scope():
+    
+        if args.target == 'phasenet':
+            experimental_benchmarks.predict_phasenet(
+                inputs=args.inputs,
+                plot=args.plot,
+            )
+
+        elif args.target == 'phaseretrieval':
+            experimental_benchmarks.predict_phaseretrieval(
+                inputs=args.inputs,
+                plot=args.plot,
+            )
+
+        elif args.target == 'cocoa':
+            experimental_benchmarks.predict_cocoa(
+                inputs=args.inputs,
+                axial_voxel_size=args.axial_voxel_size,
+                lateral_voxel_size=args.lateral_voxel_size,
+                na_detection=args.na,
+                psf_type=args.psf_type,
+                plot=args.plot,
+            )
+
+        elif args.target == 'phasenet_heatmap':
+            experimental_benchmarks.phasenet_heatmap(
+                inputs=args.inputs,
+                outdir=args.outdir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=args.batch_size,
+                eval_sign=args.eval_sign,
+                num_beads=args.num_beads,
+                iter_num=args.niter,
+                denoiser=args.denoiser,
+                simulate_psf_only=args.simulate_psf_only
+            )
+
+        elif args.target == 'phaseretrieval_heatmap':
+            experimental_benchmarks.phaseretrieval_heatmap(
+                inputs=args.inputs,
+                outdir=args.outdir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=args.batch_size,
+                eval_sign=args.eval_sign,
+                num_beads=args.num_beads,
+                iter_num=args.niter,
+                denoiser=args.denoiser,
+                simulate_psf_only=args.simulate_psf_only
+            )
+
+        elif args.target == 'profile_models':
+            if args.model_codename is None:
+                args.outdir = args.inputs
+                args.model_codename, args.model_predictions = [], []
+                for m in args.inputs.glob("*/"):
+                    if m.is_dir():
+                        args.model_codename.append(m.name.replace("-15-YuMB_lambda510", ""))
+                        args.model_predictions.append(m)
+
+            profile_models(
+                models_codenames=args.model_codename,
+                predictions_paths=args.model_predictions,
+                outdir=args.outdir
+            )
+        else:
+            compare_models(
+                models_codenames=args.model_codename,
+                predictions_paths=args.model_predictions,
+                iter_num=args.niter,
+                outdir=args.outdir
+            )
 
     logging.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
 
