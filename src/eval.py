@@ -3966,7 +3966,7 @@ def profile_models(
                 ax.set_xticks(range(0, 192, 24))
             elif x == 'training_gflops':
                 ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
-                ax.set_xlim(0, 100)
+                ax.set_xlim(0, 125)
             
             ax.set_ylabel('MSE ($\mu$m rms)')
             ax.set_yscale('log')
@@ -3983,7 +3983,7 @@ def profile_models(
     def plot_scaling_parameters(df):
         for x in [
             'training', 'training_gflops', 'gflops', 'params', 'memory',
-            'inference_time', 'num_tokens', 'transformers', 'throughput', 'latency'
+            'num_tokens', 'transformers', 'throughput', 'latency'
         ]:
             fig, ax = plt.subplots(figsize=(8, 8))
             
@@ -4017,10 +4017,10 @@ def profile_models(
                 ax.set_xticks(range(0, 192, 24))
             elif x == 'training_gflops':
                 ax.set_xlabel('Training EFLOPs ($10^{18}$ FLOPs)')
-                ax.set_xlim(0, 100)
+                ax.set_xlim(0, 125)
             elif x == 'gflops':
                 ax.set_xlabel('GFLOPs')
-                ax.set_xlim(0, 40)
+                ax.set_xlim(0, 35)
             elif x == 'params':
                 ax.set_xlabel('Parameters (millions)')
                 ax.set_xlim(0, 2000)
@@ -4037,12 +4037,12 @@ def profile_models(
                 ax.set_xlim(0, 50)
             elif x == 'latency':
                 ax.set_xlabel(f'Latency (ms/image)')
-                ax.set_xlim(0, 300)
+                ax.set_xlim(0, 35)
             elif x == 'throughput':
                 ax.set_xlabel(f'Throughput (images/s) [BS={batch_size}]')
                 ax.set_xlim(0, 2000)
             else:
-                ax.set_xlabel(f'Inference minutes for 1M images using RTX8000 [BS={batch_size}]')
+                ax.set_xlabel(f'Inference minutes for 1M images using A100 [BS={batch_size}]')
                 ax.set_xlim(0, 1440)
                 ax.set_xticks(range(0, 1500, 60))
             
@@ -4300,11 +4300,11 @@ def profile_models(
                     # ax.set_ylim(0, 25)
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
-                    ax.set_ylim(0, 100)
+                    ax.set_ylim(0, 125)
                     # ax.set_ylim(0, 10)
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
-                    ax.set_ylim(0, 40)
+                    ax.set_ylim(0, 35)
                     # ax.set_ylim(0, 5)
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'params':
@@ -4318,8 +4318,8 @@ def profile_models(
                     ax.set_ylim(0, 2000)
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'latency':
-                    ax.set_ylim(0, 300)
-                    ax.set_yticks(range(0, 350, 50))
+                    ax.set_ylim(0, 30)
+                    ax.set_yticks(range(0, 35, 5))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'throughput':
                     ax.set_ylim(0, 2000)
