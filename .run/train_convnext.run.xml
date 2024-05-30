@@ -1,8 +1,8 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="train_baseline" type="PythonConfigurationType" factoryName="Python" folderName="utils">
+  <configuration default="false" name="train_convnext" type="PythonConfigurationType" factoryName="Python" folderName="utils">
     <module name="opticalaberrations" />
     <option name="ENV_FILES" value="" />
-    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="INTERPRETER_OPTIONS" value="-u -m accelerate.commands.launch --config_file /opt/project/src/deepspeed_config.yaml" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
       <env name="PYTHONUNBUFFERED" value="1" />
@@ -43,7 +43,7 @@
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/train.py" />
-    <option name="PARAMETERS" value="--epochs 25 --warmup 5 --batch_size 128 --modes 15 --network baseline --repeats 2-2-6-2 --heads 64-128-256-512 --outdir ../models/baseline --dataset ../dataset/training/YuMB_lambda510/z64-y64-x64/z15" />
+    <option name="PARAMETERS" value="--epochs 25 --warmup 5 --batch_size 1024 --modes 15 --network convnext --repeats 2-2-6-2 --heads 64-128-256-512 --outdir ../models/convnext --dataset ../dataset/training/YuMB_lambda510/z64-y64-x64/z15" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

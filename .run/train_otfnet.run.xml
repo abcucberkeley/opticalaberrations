@@ -2,7 +2,7 @@
   <configuration default="false" name="train_otfnet" type="PythonConfigurationType" factoryName="Python" folderName="utils">
     <module name="opticalaberrations" />
     <option name="ENV_FILES" value="" />
-    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="INTERPRETER_OPTIONS" value="-u -m accelerate.commands.launch --config_file /opt/project/src/deepspeed_config.yaml" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
       <env name="PYTHONUNBUFFERED" value="1" />

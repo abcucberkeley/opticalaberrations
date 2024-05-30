@@ -27,3 +27,4 @@ accelerate
 torchinfo
 timm
 apex
+deepspeed

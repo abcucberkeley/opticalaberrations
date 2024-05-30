@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Any, Optional
+from tqdm import tqdm
 
 from otfnet import OTFNet
 from convnext import ConvNeXtV2
@@ -146,90 +147,95 @@ def train(
     )
 
     accelerator = Accelerator(
-        mixed_precision='bf16',
+        mixed_precision='no',
         log_with="tensorboard",
         project_dir=outdir,
         project_config=config,
         device_placement=True,
-        gradient_accumulation_steps=1
     )
     logger = get_logger(__name__)
+    logger.info(accelerator.distributed_type, main_process_only=True)
 
     model, opt, train_dataloader, scheduler = accelerator.prepare(model, opt, train_dataloader, scheduler)
 
     accelerator.init_trackers(outdir)
     accelerator.register_for_checkpointing(scheduler)
 
-
     if finetune is not None:
-        logger.info(f"Finetuning pretrained model @ {finetune}")
+        logger.info(f"Finetuning pretrained model @ {finetune}", main_process_only=True)
         accelerator.load_state(finetune)
     elif restored:
-        logger.info(f"Loading pretrained model @ {latest_checkpoint}")
+        logger.info(f"Loading pretrained model @ {latest_checkpoint}", main_process_only=True)
         accelerator.load_state(latest_checkpoint)
 
-    for epoch in range(starting_epoch, epochs, 1):
-        epoch_time = time.time()
-        model.train()
-        loss, mse = 0, 0
+    with accelerator.autocast():
+        for epoch in range(starting_epoch, epochs, 1):
+            epoch_time = time.time()
+            model.train()
+            loss, mse = 0, 0
 
-        step_times = []
-        for step, (inputs, zernikes) in enumerate(train_dataloader):
-            with accelerator.accumulate(model):
-                step_time = time.time()
-                lr = scheduler.get_lr()[0]
+            step_times = []
+            for step, (inputs, zernikes) in tqdm(
+                enumerate(train_dataloader),
+                total=len(train_dataloader),
+                desc=f"Epoch {epoch}/{epochs}",
+                disable=not accelerator.is_local_main_process,
+            ):
+                with accelerator.accumulate(model):
+                    step_time = time.time()
+                    lr = scheduler.get_lr()[0]
 
-                outputs = model(inputs)
-                step_loss = loss_fn(outputs, zernikes)
-                loss += step_loss.detach().float()
+                    outputs = model(inputs)
+                    step_loss = loss_fn(outputs, zernikes)
+                    loss += step_loss.detach().float()
 
-                step_mse = mse_fn(outputs, zernikes)
-                mse += step_mse.detach().float()
+                    step_mse = mse_fn(outputs, zernikes)
+                    mse += step_mse.detach().float()
 
-                accelerator.backward(step_loss)
-                opt.step()
-                opt.zero_grad()
-                overall_step += 1
-                step_timer = time.time() - step_time
-                step_times.append(step_timer)
+                    accelerator.backward(step_loss)
+                    opt.step()
+                    opt.zero_grad()
+                    overall_step += 1
+                    step_timer = time.time() - step_time
+                    step_times.append(step_timer)
 
-                step_logbook[overall_step] = {
-                    "step_loss": step_loss,
-                    "step_mse": step_mse,
-                    "step_lr": lr,
-                    "step_timer": step_timer,
-                }
-                accelerator.log(step_logbook[overall_step], step=overall_step)
+                    step_logbook[overall_step] = {
+                        "step_loss": step_loss,
+                        "step_mse": step_mse,
+                        "step_lr": lr,
+                        "step_timer": step_timer,
+                    }
+                    accelerator.log(step_logbook[overall_step], step=overall_step)
 
-        scheduler.step()
-        loss = loss.item() / steps_per_epoch
-        mse = mse.item() / steps_per_epoch
-        step_timer = np.mean(step_times)
-        epoch_timer = time.time() - epoch_time
-        remaining_epochs = epochs - (epoch + 1)
-        eta = epoch_timer * remaining_epochs / 3600
+            scheduler.step()
+            loss = loss.item() / steps_per_epoch
+            mse = mse.item() / steps_per_epoch
+            step_timer = np.mean(step_times)
+            epoch_timer = time.time() - epoch_time
+            remaining_epochs = epochs - (epoch + 1)
+            eta = epoch_timer * remaining_epochs / 3600
 
-        logger.info(
-            f"[Epochs left {remaining_epochs} | ETA {eta:.2f}hrs] ({epoch}): "
-            f"{step_timer * 1000:.0f}ms/step - {epoch_timer:.0f}s/epoch - {loss=:.4g} - {mse=:.4g} - {lr=:.4g}",
-            main_process_only=True
-        )
-        epoch_logbook[epoch] = {
-            "epoch_loss": loss,
-            "epoch_mse": mse,
-            "epoch_lr": lr,
-            "epoch_timer": epoch_timer,
-        }
-        accelerator.log(epoch_logbook[epoch], step=epoch)
-        df = pd.DataFrame.from_dict(epoch_logbook, orient='index')
-        df.to_csv(logdir/'logbook.csv')
+            logger.info(
+                f"[Epochs left {remaining_epochs} | ETA {eta:.2f}hrs] ({epoch}): "
+                f"{step_timer * 1000:.0f}ms/step - {epoch_timer:.0f}s/epoch - {loss=:.4g} - {mse=:.4g} - {lr=:.4g}",
+                main_process_only=True
+            )
+            epoch_logbook[epoch] = {
+                "epoch_loss": loss,
+                "epoch_mse": mse,
+                "epoch_lr": lr,
+                "epoch_timer": epoch_timer,
+            }
+            accelerator.log(epoch_logbook[epoch], step=epoch)
+            df = pd.DataFrame.from_dict(epoch_logbook, orient='index')
+            df.to_csv(logdir/'logbook.csv')
 
-        if loss < best_loss:
-            best_loss = loss
-            accelerator.save_state(checkpointdir/f'checkpoint_{epoch}')
+            if loss < best_loss:
+                best_loss = loss
+                accelerator.save_state(checkpointdir/f'checkpoint_{epoch}')
 
-    accelerator.save_model(model, f'{outdir}/final_model')
-    accelerator.end_training()
+        accelerator.save_model(model, f'{outdir}/final_model')
+        accelerator.end_training()
 
 
 def train_model(
@@ -642,7 +648,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--opt", default='lamb', type=str, help='optimizer to use for training'
+        "--opt", default='adamw', type=str, help='optimizer to use for training'
     )
 
     train_parser.add_argument(

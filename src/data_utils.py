@@ -541,8 +541,7 @@ def collect_dataset(
         metadata=True -> (amps, photons, counts, peak2peak, umRMS, npoints, avg_min_distance, filename)
         metadata=False-> img & zern
     """
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    
+
     dataset = DataFinder(
         datadir=datadir,
         distribution=distribution,
@@ -572,15 +571,13 @@ def collect_dataset(
             train,
             batch_size=batch_size,
             shuffle=True,
-            pin_memory=True,
-            # num_workers=cpu_workers
+            pin_memory=True
         )
         val = DataLoader(
             val,
             batch_size=batch_size,
             shuffle=False,
-            pin_memory=True,
-            # num_workers=cpu_workers
+            pin_memory=True
         )
         
         i = next(iter(train))
@@ -597,9 +594,7 @@ def collect_dataset(
             dataset,
             batch_size=batch_size,
             shuffle=True,
-            pin_memory=True,
-            # num_workers=cpu_workers,
-            # sampler=DistributedSampler(dataset)
+            pin_memory=True
         )
         
         if not metadata:
