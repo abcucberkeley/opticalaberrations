@@ -23,7 +23,7 @@ DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 
 TRAINED_MODELS=(
   "opticalnet-15-YuMB-lambda510"
-  "denoise-15-YuMB-lambda510"
+  #"denoise-15-YuMB-lambda510"
 )
 
 for M in ${TRAINED_MODELS[@]}
@@ -32,7 +32,8 @@ do
 
     if [[ $M == *"YuMB"* ]];then
       declare -a PSFS=(
-        "YuMB ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
+        #"YuMB ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
+        "YuMB5 ../lattice/YuMB_NAlattice0p5_NAAnnulusMax0p40_NAsigma0p1.mat"
         #"Gaussian ../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat"
         #"MBSq ../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat"
         #"Sinc ../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat"
