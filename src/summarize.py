@@ -1,13 +1,15 @@
-from pathlib import Path
 import os
-import sys
-import cli
 import subprocess
-import pandas as pd
-import numpy as np
-from tifffile import TiffFile, imwrite, imread, TiffWriter
+import sys
+from pathlib import Path
 
+import numpy as np
+import pandas as pd
+from tifffile import TiffFile, imwrite
+
+import cli
 from slurm_utils import paths_to_clusterfs
+
 
 def concat_U16_tiffs(source_files=list([]), dst: Path = None, ch_two=None, drop_patterns=list([])):
     """
@@ -124,7 +126,7 @@ def main(args=None):
     if os.name != 'nt' and not Path('/clusterfs').exists():
         mount_clusterfs = (r"sudo mkdir /clusterfs && sudo chmod a+wrx /clusterfs/ && "  # make empty directory
                            r"sudo chown 1000:1000 -R /sshkey/ && "  # make /sshkeys (was mounted from host) avail to user 1000
-                           r"sshfs thayeralshaabi@master.abc.berkeley.edu:/clusterfs /clusterfs -oIdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null ")  # sshfs mount without user input
+                           r"sshfs thayeralshaabi@login.abc.berkeley.edu:/clusterfs /clusterfs -oIdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null ")  # sshfs mount without user input
         subprocess.run(mount_clusterfs, shell=True)
         subprocess.run('ls /clusterfs', shell=True)
 

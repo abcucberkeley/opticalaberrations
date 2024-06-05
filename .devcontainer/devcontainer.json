@@ -31,7 +31,7 @@
 //	"remoteUser": "1000",	// comment this line to run as root in the container
 
 
-	"onCreateCommand":  "sudo mkdir /clusterfs && sudo chmod a+wrx /clusterfs/ && sudo chown 1000:1000 -R /sshkey/ && sshfs thayeralshaabi@master.abc.berkeley.edu:/clusterfs  /clusterfs -o IdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null && ls /clusterfs",
+	"onCreateCommand":  "sudo mkdir /clusterfs && sudo chmod a+wrx /clusterfs/ && sudo chown 1000:1000 -R /sshkey/ && sshfs thayeralshaabi@login.abc.berkeley.edu:/clusterfs  /clusterfs -o IdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null && ls /clusterfs",
 	"postCreateCommand": "cat /etc/os-release",
 
 	// Uncomment to connect as an existing user other than the container default. More info: https://aka.ms/dev-containers-non-root.

@@ -1181,7 +1181,7 @@ def main(args=None, preloaded=None):
     if os.name != 'nt' and not Path('/clusterfs').exists():
         mount_clusterfs = (r"sudo mkdir /clusterfs && sudo chmod a+wrx /clusterfs/ && "     # make empty directory
                            r"sudo chown 1000:1000 -R /sshkey/ && "  # make /sshkeys (was mounted from host) avail to user 1000
-                           r"sshfs thayeralshaabi@master.abc.berkeley.edu:/clusterfs /clusterfs -oIdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null ") # sshfs mount without user input
+                           r"sshfs thayeralshaabi@login.abc.berkeley.edu:/clusterfs /clusterfs -oIdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null ") # sshfs mount without user input
         subprocess.run(mount_clusterfs, shell=True)
         subprocess.run('ls /clusterfs', shell=True)
 

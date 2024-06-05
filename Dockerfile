@@ -19,7 +19,7 @@
 # docker plugin install vieux/sshfs sshkey.source=/c/Users/Mosaic/.ssh/id_rsa
 # docker plugin set vieux/sshfs sshkey.source=/c/Users/Mosaic/.ssh/id_rsa
 # docker plugin enable vieux/sshfs
-# docker volume create -d vieux/sshfs -o sshcmd=thayeralshaabi@master.abc.berkeley.edu:/clustersfs sshvolume
+# docker volume create -d vieux/sshfs -o sshcmd=thayeralshaabi@login.abc.berkeley.edu:/clustersfs sshvolume
 # [-o IdentityFile=/root/.ssh/<key>] [-o port=<port>] [-o <any_sshfs_-o_option> ] 
 
 # NSIGHT NOT WORKING YET, Doesn't show GPU METRICS
@@ -34,7 +34,7 @@
 # this works to mount using ssh keys
 # to mount clusterfs using ssh keys (1. copy keys from /.ssh on host to /sshkey in container, 2. make mount point and change permissions for local user, 3. sshfs with that key and no user input):
 # docker run --rm -it --gpus all --ipc=host --cap-add=SYS_ADMIN --privileged=true --security-opt seccomp=unconfined --ulimit memlock=-1 --ulimit stack=67108864  -u 1000 -v ${HOME}/.ssh:/sshkey -v ${PWD}:/app/opticalaberrations  ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3 /bin/bash
-# sudo mkdir /clusterfs; sudo chmod a+wrx /clusterfs/; sudo chown 1000:1000 -R /sshkey/; sshfs thayeralshaabi@master.abc.berkeley.edu:/clusterfs  /clusterfs -o IdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null
+# sudo mkdir /clusterfs; sudo chmod a+wrx /clusterfs/; sudo chown 1000:1000 -R /sshkey/; sshfs thayeralshaabi@login.abc.berkeley.edu:/clusterfs  /clusterfs -o IdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null
 
 # this works to make an apptainer version
 # docker run --rm kaczmarj/apptainer pull develop_TF_CUDA_12_3.sif docker://ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3

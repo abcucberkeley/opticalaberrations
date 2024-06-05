@@ -9,7 +9,7 @@ import pandas as pd
 
 logger = logging.getLogger('')
 
-hostname = "master.abc.berkeley.edu"
+hostname = "login.abc.berkeley.edu"
 username = "thayeralshaabi"
 
 
