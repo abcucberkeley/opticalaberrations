@@ -95,10 +95,10 @@ do
       do
         if [[ $CLUSTER = 'slurm' ]];then
           DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
-          JOB="test.py --batch_size $BATCH --timelimit $TIMELIMIT --dependency singleton --partition abc_a100 --mem=500GB --cpus 16 --gpus 4 --exclusive"
+          JOB="test.py --timelimit $TIMELIMIT --dependency singleton --partition abc_a100 --mem=500GB --cpus 16 --gpus 4 --exclusive"
         else
           DATA="/groups/betzig/betziglab/thayer/dataset/$DATASET/test/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
-          JOB="test.py --batch_size $BATCH --timelimit $TIMELIMIT --dependency singleton --partition gpu_a100 --cpus 8 --gpus 4"
+          JOB="test.py --timelimit $TIMELIMIT --dependency singleton --partition gpu_a100 --cpus 8 --gpus 4"
         fi
 
         for SIM in '' #'--use_theoretical_widefield_simulator'
@@ -107,6 +107,7 @@ do
           do
               CONFIG="${SIM} ${PREP} ${ROTATIONS}"
               CONFIG="${CONFIG} --simulate_samples"
+              CONFIG="${CONFIG} --batch_size ${BATCH}"
               CONFIG="${CONFIG} --n_samples ${MAX}"
               CONFIG="${CONFIG} --datadir ${DATA}"
               CONFIG="${CONFIG} --niter ${i}"
