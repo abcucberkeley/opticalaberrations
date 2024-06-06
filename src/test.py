@@ -55,7 +55,7 @@ def parse_args(args):
     )
 
     parser.add_argument(
-        "--batch_size", default=512, type=int, help='number of samples per batch'
+        "--batch_size", default=-1, type=int, help='number of samples per batch'
     )
 
     parser.add_argument(
@@ -171,10 +171,11 @@ def main(args=None):
     gpu_workers = strategy.num_replicas_in_sync
     gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
 
-    if gpu_workers > 0 and gpu_model.find('A100') >= 0:  # update batchsize automatically
-        batch_size = 896 * gpu_workers
-    elif gpu_workers > 0 and gpu_model.find('RTX') >= 0:
-        batch_size = 896 * gpu_workers
+    if args.batch_size == -1:
+        if gpu_workers > 0 and gpu_model.find('A100') >= 0:  # update batchsize automatically
+            batch_size = 896 * gpu_workers
+        elif gpu_workers > 0 and gpu_model.find('RTX') >= 0:
+            batch_size = 896 * gpu_workers
     else:
         batch_size = args.batch_size
 
