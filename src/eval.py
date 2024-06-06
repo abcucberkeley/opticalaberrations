@@ -4238,9 +4238,9 @@ def profile_models(
             'Total patches',
         ]
 
-        colormaps = ['Blues_r', 'Oranges_r', 'Greens_r', 'Greys_r']
+        colormaps = ['Blues', 'Oranges', 'Greens', 'Greys']
 
-        df = df.sort_values('epoch_mse')
+        df = df.sort_values('epoch_mse', ascending=False)
 
         fig, axes = plt.subplots(len(coi), len(df.cat.unique()), figsize=(16, 16), sharex=False, sharey=False)
 
@@ -4304,7 +4304,7 @@ def profile_models(
                     # ax.set_ylim(0, 10)
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
-                    ax.set_ylim(0, 35)
+                    ax.set_ylim(0, 40)
                     # ax.set_ylim(0, 5)
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'params':
