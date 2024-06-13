@@ -3746,10 +3746,11 @@ def compare_models(
     models_codenames: list,
     predictions_paths: list,
     iter_num: int = 1,
-    photon_range: tuple = (5e4, 1e5),
+    photon_range: tuple = (5e4, 2e5),
     aberration_range: tuple = (1, 2),
     outdir: Path = Path('benchmark'),
-    wavelength: float = .510
+    wavelength: float = .510,
+    colormap: str = "tab20"
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -3763,14 +3764,112 @@ def compare_models(
 
     outdir.mkdir(parents=True, exist_ok=True)
 
+    stats = []
     dataframes = []
     for codename, file in zip(models_codenames, predictions_paths):
-        df = pd.read_csv(file, header=0, index_col=0)
-        df = df[df['iter_num'] == iter_num]
+        df = pd.read_csv(file, header=0, index_col=0).drop_duplicates()
         df['model'] = codename
+
+        logger.info(codename)
+        s = df[
+            (df.photons >= photon_range[0]) &
+            (df.photons <= photon_range[1]) &
+            (df.aberration >= aberration_range[0]) &
+            (df.aberration <= aberration_range[1])
+        ]
+        stats.append(s.groupby(['model', 'iter_num'])['residuals'].describe(percentiles=[.5, .75, .85, .95]).T)
+        df = df[df['iter_num'] == iter_num]
         dataframes.append(df)
 
     df = pd.concat(dataframes)
+    stats = pd.concat(stats, axis=1).T.reset_index()
+    stats['cat'] = 'Baseline'
+    stats.loc[stats.model.str.match(r'Ours'), 'cat'] = 'Ours'
+    stats.loc[stats.model.str.match(r'ViT.*16'), 'cat'] = 'ViT/16'
+    stats.loc[stats.model.str.match(r'ViT.*32'), 'cat'] = 'ViT/32'
+    stats.loc[stats.model.str.match(r'ConvNext'), 'cat'] = 'ConvNext'
+    print(stats.round(2))
+    stats.to_csv(f'{outdir}/compare.csv')
+
+    cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
+    colormaps = ['Blues', 'Oranges', 'Greens', 'Greys']
+    fig, axes = plt.subplots(3, len(cats), figsize=(9, 6), sharex=False, sharey=False)
+
+    label = '\n'.join([
+        rf'Average residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
+        rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0] // 1000):d}k, {int(photon_range[1] // 1000):d}k] photons'
+    ])
+
+    for i, iter_num in enumerate(range(1, 4)):
+        for j, cat in enumerate(cats):
+            ax = axes[i, j]
+            data = stats[(stats['cat'] == cat) & (stats['iter_num'] == iter_num)]
+
+            ax = sns.barplot(
+                data=data,
+                x='model',
+                y='mean',
+                hue='model',
+                palette=colormaps[j],
+                ax=ax,
+                legend=False,
+                width=.4,
+                dodge=False,
+                native_scale=False,
+            )
+
+            if i == 0:
+                ax.set_title(cat)
+
+            if j == 0:
+                if iter_num == 2:
+                    ax.set_ylabel(f"{label}\nIteration {iter_num}")
+                else:
+                    ax.set_ylabel(f"Iteration {iter_num}")
+            else:
+                ax.set_ylabel('')
+
+            ax.set_xlabel('')
+
+            if i == 2:
+                ax.set_xticklabels(data.model, rotation=90)
+            else:
+                ax.set_xticklabels([])
+
+            for c in range(len(ax.containers)):
+                ax.bar_label(ax.containers[c], fontsize=8, fmt='%.2f')
+
+            ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
+            ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
+
+            if iter_num == 1:
+                ax.set_ylim(0, .8)
+                ax.set_yticks(np.arange(0, .8, .1))
+            elif iter_num == 2:
+                ax.set_ylim(0, .6)
+                ax.set_yticks(np.arange(0, .6, .1))
+            else:
+                ax.set_ylim(0, .5)
+                ax.set_yticks(np.arange(0, .5, .1))
+
+            ax.axhline(0, color="k", clip_on=False)
+
+            if j == 0:
+                ax.spines['left'].set_visible(True)
+            else:
+                ax.spines['left'].set_visible(False)
+                ax.set_yticklabels([])
+
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+
+    plt.tight_layout()
+
+    savepath = Path(f'{outdir}/compare')
+    logger.info(savepath)
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     for c in ['residuals', 'confidence_sum', 'confidence', ]:
         test = df[
@@ -3781,7 +3880,7 @@ def compare_models(
         ]
 
         if c == 'residuals':
-            xmax = .5  #aberration_range[1]
+            xmax = aberration_range[0]
             binwidth = .25
             bins = np.arange(0, xmax + binwidth, binwidth)
             label = '\n'.join([
@@ -3840,23 +3939,14 @@ def compare_models(
             stat='proportion',
             fill=False,
             cumulative=True,
+            palette=colormap
         )
-
-        # sns.violinplot(
-        #     ax=histax,
-        #     data=outliers,
-        #     x='model',
-        #     y=c,
-        #     common_norm=False,
-        #     common_bins=True,
-        #     palette="tab10",
-        # )
 
         sns.barplot(
             x=unconfident[models_codenames].index,
             y=unconfident[models_codenames].values,
             ax=histax,
-            palette="tab10"
+            palette=colormap
         )
         
         ax.set_xlabel(label)
@@ -3872,7 +3962,7 @@ def compare_models(
         
         hist_step = .05 if c == 'residuals' else .02
         histax.set_ylim(unconfident.min()-.01, unconfident.max())
-        histax.set_yticks(np.arange(unconfident.min()-hist_step, unconfident.max()+hist_step, hist_step).round(2))
+        histax.set_yticks(np.arange(unconfident.min()-hist_step, unconfident.max()+hist_step, hist_step))
         histax.set_xlabel(f'')
         histax.set_ylabel('')
         histax.set_xticks([])
@@ -3890,14 +3980,15 @@ def compare_models(
         axins.set_xticks([])
         axins.set_yticks([])
 
-
-        sns.move_legend(g, title='Training samples', frameon=False, ncol=1, loc='lower right')
+        sns.move_legend(g, title='Model', frameon=False, ncol=1, loc='lower right')
         plt.tight_layout()
 
         savepath = Path(f'{outdir}/compare_{c}')
+        logger.info(savepath)
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
 
 
 @profile
@@ -3905,7 +3996,8 @@ def profile_models(
     models_codenames: list,
     predictions_paths: list,
     outdir: Path = Path('benchmark'),
-    batch_size: int = 1024
+    batch_size: int = 1024,
+    wavelength: float = .510
 ):
     plt.rcParams.update({
         'font.size': 10,
@@ -4214,6 +4306,7 @@ def profile_models(
         plot_scaling_parameters(df)
 
         coi = [
+            'mean',
             'epoch_mse',
             'training',
             'training_gflops',
@@ -4226,7 +4319,8 @@ def profile_models(
             'num_tokens',
         ]
         titles = [
-            'MSE\n($\mu$m rms)',
+            f'Testing P2V\n$i\in${{$1\lambda\\to2\lambda$}}\n($\lambda={int(wavelength * 1000)}nm$)',
+            'Training MSE\n($\mu$m rms)',
             f'Training hours\n8xH100s',
             'Training EFLOPs',
             f'Memory (GB) \n[BS={batch_size}]',
@@ -4237,15 +4331,19 @@ def profile_models(
             'Parameters (M)',
             'Total patches',
         ]
-
+        cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
         colormaps = ['Blues', 'Oranges', 'Greens', 'Greys']
-
         df = df.sort_values('epoch_mse', ascending=False)
 
-        fig, axes = plt.subplots(len(coi), len(df.cat.unique()), figsize=(16, 16), sharex=False, sharey=False)
+        eval_csv = pd.read_csv(Path('../evaluations/compare.csv'), index_col=0, header=0)
+        eval_csv = eval_csv[eval_csv['iter_num'] == 1].drop(columns='cat')
+        df = pd.merge(df, eval_csv, on='model', how='outer')
+
+
+        fig, axes = plt.subplots(len(coi), len(cats), figsize=(16, 16), sharex=False, sharey=False)
 
         for i, cc in enumerate(coi):
-            for j, cat in enumerate(['ConvNext', 'ViT/16', 'ViT/32', 'Ours']):
+            for j, cat in enumerate(cats):
                 ax = axes[i, j]
                 data = df[df.cat == cat]
                 ax = sns.barplot(
@@ -4277,7 +4375,9 @@ def profile_models(
                     ax.set_xticklabels([])
 
                 for c in range(len(ax.containers)):
-                    if coi[i] == 'epoch_mse':
+                    if coi[i] == 'mean':
+                        fmt = '%.1f'
+                    elif coi[i] == 'epoch_mse':
                         fmt = '%.2g'
                     elif coi[i] == 'num_tokens' or coi[i] == 'params' or coi[i] == 'throughput':
                         fmt = '%d'
@@ -4289,7 +4389,11 @@ def profile_models(
                 ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
                 ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
 
-                if coi[i] == 'epoch_mse':
+                if coi[i] == 'mean':
+                    ax.set_ylim(0, .7)
+                    ax.set_yticks(np.arange(0, .8, .1))
+                    ax.axhline(0, color="k", clip_on=False)
+                elif coi[i] == 'epoch_mse':
                     ax.set_ylim(1e-7, 1e-5)
                     # ax.set_yticks(np.arange(1e-7, 1e-5, 2e-6))
                     ax.set_yscale('log')
@@ -4341,6 +4445,13 @@ def profile_models(
         plt.tight_layout()
 
         savepath = Path(f'{outdir}/profiles')
+        logger.info(savepath)
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+        for i, cat in enumerate(cats):
+            d = df[df.cat == cat]
+            d = d.set_index('model', drop=True)
+            d = d[coi].rename(columns={c: t for c, t in zip(coi, titles)}).astype(float)
+            print(d.to_latex(float_format="%.4g"))

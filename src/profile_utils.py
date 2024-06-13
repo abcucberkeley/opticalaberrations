@@ -328,7 +328,9 @@ def transformer_training_memory_footprint(params, dtype = 'float32'):
 
 
 def data_memory_footprint(image_size, batch_size=1, dtype='float32'):
-	if dtype == 'float16':
+	if dtype == 'float8':
+		s = 1.0
+	elif dtype == 'float16':
 		s = 2.0
 	elif dtype == 'float32':
 		s = 4.0
