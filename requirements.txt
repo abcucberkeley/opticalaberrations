@@ -4,7 +4,7 @@ scikit-image
 scikit-spatial
 pytest
 pytest-order
-matplotlib>=3.8
+matplotlib==3.8.4
 ujson
 zarr
 pycudadecon
