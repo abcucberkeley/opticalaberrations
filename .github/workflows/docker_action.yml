@@ -4,11 +4,7 @@ name: Docker-ubuntu-build
 on:
   push:
     branches:
-      - 'main'
-      - 'develop'
-      - 'releases/**'
-      - 'release/**'
-      - 'release'
+      - '*'
     tags:
       - '*'
   pull_request:
