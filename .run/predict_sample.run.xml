@@ -33,7 +33,7 @@
       <option name="volumeBindings">
         <list>
           <DockerVolumeBindingImpl>
-            <option name="containerPath" value="/opt/project" />
+            <option name="containerPath" value="/app/opticalaberrations" />
             <option name="editable" value="true" />
             <option name="hostPath" value="$PROJECT_DIR$" />
             <option name="readOnly" value="false" />
@@ -49,7 +49,7 @@
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="predict_sample ../pretrained_models/prototype-15-YuMB_lambda510-P3216-R2222.h5 &quot;U:\Data\TestsForThayer\20240223_nup\exp7_trefoil\rotated\stack_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0000059776msecAbs_-01x_-01y_-01z_0000t_rois_unprocessed\z0-y0-x4.tif&quot; ../calibration/aang/15_mode_calibration.csv --denoiser ../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/ --current_dm None --dm_damping_scalar 1.0 --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --prediction_threshold 0. --batch_size 96 --prev None --plot --plot_rotations --min_psnr 0" />
+    <option name="PARAMETERS" value="predict_sample ../pretrained_models/opticalnet-15-YuMB-lambda510.h5 ../examples/single/single.tif ../calibration/aang/15_mode_calibration.csv --current_dm None --dm_damping_scalar 1.0 --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --prediction_threshold 0. --batch_size 96 --prev None --plot --plot_rotations --min_psnr 0" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

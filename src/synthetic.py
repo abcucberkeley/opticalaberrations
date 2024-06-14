@@ -99,8 +99,12 @@ class SyntheticPSF:
         )
         
         if cache_path.exists():
+            backup_pupil_mag_file = ls
+            pupil_mag_file
             print(f'Loading cached SyntheticPSF instance from {cache_path}')
             self.__dict__ = load_pickle(cache_path)
+            if not self.pupil_mag_file.exists():
+                self.pupil_mag_file = backup_pupil_mag_file
         else:
             logger.info('Creating SyntheticPSF instance from scratch')
             self.n_modes = n_modes

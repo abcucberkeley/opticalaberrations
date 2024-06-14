@@ -95,7 +95,7 @@ RUN git checkout HEAD requirements.txt
 # ADD requirements.txt requirements.txt 
 RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off  &&  pip cache purge || true
 
-# Our repo location will be /app/opticalabberations
+# Our repo location will be /app/opticalaberrations
 # You can switch to this location with "repo" alias command
 # This location is typically mounted from your local filesystem when doing "docker run" and the -v flag.
 # Otherwise run "cloneit" alias command from an interactive terminal to use git to clone the repo
@@ -175,7 +175,7 @@ WORKDIR /docker_install/opticalaberrations
 RUN git checkout HEAD requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt  --progress-bar off  &&  pip cache purge || true
 
-# Our repo location will be /app/opticalabberations
+# Our repo location will be /app/opticalaberrations
 # You can switch to this location with "repo" alias command
 # This location is typically mounted from your local filesystem when doing "docker run" and the -v flag.
 # Otherwise run "cloneit" alias command from an interactive terminal to use git to clone the repo

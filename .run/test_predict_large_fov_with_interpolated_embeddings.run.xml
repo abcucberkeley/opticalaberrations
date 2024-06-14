@@ -35,7 +35,7 @@
             <option name="volumeBindings">
                 <list>
                     <DockerVolumeBindingImpl>
-                        <option name="containerPath" value="/opt/project"/>
+                        <option name="containerPath" value="/app/opticalaberrations"/>
                         <option name="editable" value="true"/>
                         <option name="hostPath" value="$PROJECT_DIR$"/>
                         <option name="readOnly" value="false"/>
