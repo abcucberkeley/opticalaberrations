@@ -396,7 +396,7 @@ def predict_sample(
     )
     no_phase = True if preloadedmodel.input_shape[1] == 3 else False
 
-    logger.info(f"Loading file: {img.name}")
+    logger.info(f"Loading file: {img}")
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
 
@@ -765,7 +765,7 @@ def predict_rois(
     [f.unlink() for f in outdir.glob("*.csv") if f.is_file()]  # remove any old tiles
     [f.unlink() for f in outdir.glob("*.svg") if f.is_file()]  # remove any old svgs
 
-    logger.info(f"Loading file: {img.name}")
+    logger.info(f"Loading file: {img}")
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape},  ROI size: {window_size}")
 
@@ -894,7 +894,7 @@ def predict_snr_map(
     save_files: bool = False
 ):
 
-    logger.info(f"Loading file: {img.name}")
+    logger.info(f"Loading file: {img}")
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
 
@@ -975,7 +975,7 @@ def predict_tiles(
         ideal_empirical_psf_voxel_size=(axial_voxel_size, lateral_voxel_size, lateral_voxel_size)
     )
 
-    logger.info(f"Loading file: {img.name}")
+    logger.info(f"Loading file: {img}")
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
 
@@ -1892,9 +1892,13 @@ def aggregate_rois(
                 start, end = [-1] * 3, [-1] * 3
                 for i, (c, w) in enumerate(zip([zz, yy, xx], [zw, yw, xw])):
                     start[i] = c - w // 2 if (c - w // 2) - 1 > 0 else 0
-                    end[i] = start[i] + w if start[i] + w <= psf_heatmap.shape[i] else None
+                    end[i] = start[i] + w if start[i] + w <= psf_heatmap.shape[i] else psf_heatmap.shape[i]
 
-                psf_heatmap[start[0]:end[0], start[1]:end[1], start[-1]:end[-1]] = abberated_psf
+                heatmap_sizes = np.array(end) - np.array(start)
+                psf_heatmap[start[0]:end[0], start[1]:end[1], start[-1]:end[-1]] = abberated_psf[
+                                                                                   0:heatmap_sizes[0],
+                                                                                   0:heatmap_sizes[1],
+                                                                                   0:heatmap_sizes[2]]
 
                 if plot:
                     for i in [0, 1]:
@@ -3238,7 +3242,7 @@ def gaussian_fit(
     window_size: tuple = (11, 11, 11),
     h_maxima_threshold: Any = None,
 ):
-    logger.info(f"Loading file: {img.name}")
+    logger.info(f"Loading file: {img}")
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
     

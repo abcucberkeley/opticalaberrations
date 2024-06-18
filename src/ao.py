@@ -1183,6 +1183,7 @@ def main(args=None, preloaded=None):
                            r"sudo chown 1000:1000 -R /sshkey/ && "  # make /sshkeys (was mounted from host) avail to user 1000
                            r"sshfs thayeralshaabi@login.abc.berkeley.edu:/clusterfs /clusterfs -oIdentityFile=/sshkey/id_rsa -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null ") # sshfs mount without user input
         subprocess.run(mount_clusterfs, shell=True)
+        logger.info("Listing filesystem mounts that we just sshfs mounted at /clusterfs (abc, fiona, nvme, nvme2, vast, ...)")
         subprocess.run('ls /clusterfs', shell=True)
 
     if args.func == 'cluster_nodes_idle':

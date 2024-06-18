@@ -713,7 +713,10 @@ def find_roi(
     restricted_blurred = blurred_image.copy()
     restricted_blurred[0: zborder] = 0
     restricted_blurred[blurred_image.shape[0] - zborder:blurred_image.shape[0]] = 0
-    max_poi = list(np.unravel_index(np.nanargmax(restricted_blurred, axis=None), restricted_blurred.shape))
+    max_poi = np.nanargmax(restricted_blurred, axis=None)
+    max_poi = max_poi.get() if isinstance(max_poi, cp.ndarray) else max_poi
+    max_poi = list(np.unravel_index(max_poi, restricted_blurred.shape))
+    logger.info(f'max_poi = {max_poi}  arg max {np.nanargmax(restricted_blurred, axis=None).get()}')
     stop_time1 = time.time()
     logger.info(f'remove background = {stop_time1 - start_time:8.1f} seconds')
 
@@ -769,8 +772,9 @@ def find_roi(
     candidates_map = np.zeros_like(image)
     if len(detected_peaks) == 0:
         max_poi = max_poi.get() if isinstance(max_poi, cp.ndarray) else max_poi
-        print(max_poi)
+        logger.warning(f"Didn't find any peaks from peak_local_max! Using just the max intensity point: {max_poi}.")
         p = max_poi
+        p = shift_poi_to_within_image(image.shape, p, window_size)
         intensity = image[p[0], p[1], p[2]]
         
         candidates_map[p[0], p[1], p[2]] = 1
