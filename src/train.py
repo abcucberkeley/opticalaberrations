@@ -133,16 +133,16 @@ def train_model(
     input_shape: int = 64,
     batch_size: int = 32,
     hidden_size: int = 768,
-    patches: list = [32, 16, 8, 8],
-    heads: list = [2, 4, 8, 16],
-    repeats: list = [2, 4, 6, 2],
+    patches: list = [32, 16],
+    heads: list = [8, 8],
+    repeats: list = [4, 4],
     depth_scalar: float = 1.,
     width_scalar: float = 1.,
     activation: str = 'gelu',
     fixedlr: bool = False,
-    opt: str = 'AdamW',
-    lr: float = 5e-4,
-    wd: float = 5e-6,
+    opt: str = 'lamb',
+    lr: float = 1e-3,
+    wd: float = 1e-2,
     dropout: float = .1,
     warmup: int = 2,
     epochs: int = 5,
@@ -311,7 +311,7 @@ def train_model(
 
     try:  # check if model already exists
         model_path = sorted(outdir.rglob('saved_model.pb'))[::-1][0].parent  # sort models to get the latest checkpoint
-        model = load(model_path)
+        model = load(model_path, model_arch=network)
 
         if isinstance(model, tf.keras.Model):
             restored = True
@@ -414,7 +414,7 @@ def train_model(
         logger.info(f"Continue training {model.name} restored from {model_path} using {opt.get_config()}")
     else:
         if finetune is not None:
-            model = load(finetune)
+            model = load(finetune, model_arch=network)
             logger.info(model.summary(line_length=125, expand_nested=True))
             logger.info(f"Finetuning {model.name}; {opt.get_config()}")
 

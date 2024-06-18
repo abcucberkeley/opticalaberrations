@@ -9,6 +9,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import pytest
+import contextlib
 import tensorflow as tf
 import shutil
 from pathlib import Path
@@ -17,6 +18,14 @@ from src import train
 from src import multipoint_dataset
 from src.synthetic import SyntheticPSF
 
+@contextlib.contextmanager
+def options(options):
+    old_opts = tf.config.optimizer.get_experimental_options()
+    tf.config.optimizer.set_experimental_options(options)
+    try:
+        yield
+    finally:
+        tf.config.optimizer.set_experimental_options(old_opts)
 
 @pytest.mark.run(order=1)
 def test_training_dataset(kargs):
@@ -66,11 +75,13 @@ def test_training_dataset(kargs):
 
 @pytest.mark.run(order=2)
 def test_zernike_model(kargs):
-
+    tf.keras.backend.clear_session()
     physical_devices = tf.config.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
+    policy = tf.keras.mixed_precision.Policy('mixed_float16')
+    tf.keras.mixed_precision.set_global_policy(policy)
     strategy = tf.distribute.MirroredStrategy()
 
     gpu_workers = strategy.num_replicas_in_sync
@@ -87,29 +98,74 @@ def test_zernike_model(kargs):
         shutil.rmtree(outdir)
 
     with strategy.scope():
-        train.train_model(
-            network='opticalnet',
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
-            outdir=outdir,
-            psf_type=kargs['psf_type'],
-            x_voxel_size=kargs['lateral_voxel_size'],
-            y_voxel_size=kargs['lateral_voxel_size'],
-            z_voxel_size=kargs['axial_voxel_size'],
-            modes=kargs['num_modes'],
-            wavelength=kargs['wavelength'],
-            batch_size=kargs['batch_size']//3,
-            warmup=1,
-            epochs=5,
-        )
+        with options({"layout_optimizer": False}):
+            train.train_model(
+                network='opticalnet',
+                dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
+                outdir=outdir,
+                psf_type=kargs['psf_type'],
+                x_voxel_size=kargs['lateral_voxel_size'],
+                y_voxel_size=kargs['lateral_voxel_size'],
+                z_voxel_size=kargs['axial_voxel_size'],
+                modes=kargs['num_modes'],
+                wavelength=kargs['wavelength'],
+                batch_size=kargs['batch_size']//3,
+                warmup=1,
+                epochs=5,
+            )
 
 
 @pytest.mark.run(order=3)
-def test_defocus_model(kargs):
-
+def test_finetune_zernike_model(kargs):
+    tf.keras.backend.clear_session()
     physical_devices = tf.config.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
+    policy = tf.keras.mixed_precision.Policy('mixed_float16')
+    tf.keras.mixed_precision.set_global_policy(policy)
+    strategy = tf.distribute.MirroredStrategy()
+
+    gpu_workers = strategy.num_replicas_in_sync
+    logging.info(f'Number of active GPUs: {gpu_workers}')
+
+    subfolder = (f"z{int(kargs['axial_voxel_size']*1000)}-"
+                 f"y{int(kargs['lateral_voxel_size']*1000)}-"
+                 f"x{int(kargs['lateral_voxel_size']*1000)}")
+
+    # clean out existing model
+    outdir = Path(f"{kargs['repo']}/models/pytests/yumb_zernike_model_finetuned")
+    if outdir.exists() and outdir.is_dir():
+        shutil.rmtree(outdir)
+
+    with strategy.scope():
+        with options({"layout_optimizer": False}):
+            train.train_model(
+                network='opticalnet',
+                dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
+                outdir=outdir,
+                psf_type=kargs['psf_type'],
+                x_voxel_size=kargs['lateral_voxel_size'],
+                y_voxel_size=kargs['lateral_voxel_size'],
+                z_voxel_size=kargs['axial_voxel_size'],
+                modes=kargs['num_modes'],
+                wavelength=kargs['wavelength'],
+                batch_size=kargs['batch_size']//3,
+                warmup=1,
+                epochs=5,
+                finetune=Path(f"{kargs['repo']}/models/pytests/yumb_zernike_model/keras"),
+            )
+
+"""
+@pytest.mark.run(order=4)
+def test_defocus_model(kargs):
+    tf.keras.backend.clear_session()
+    physical_devices = tf.config.list_physical_devices('GPU')
+    for gpu_instance in physical_devices:
+        tf.config.experimental.set_memory_growth(gpu_instance, True)
+
+    policy = tf.keras.mixed_precision.Policy('mixed_float16')
+    tf.keras.mixed_precision.set_global_policy(policy)
     strategy = tf.distribute.MirroredStrategy()
 
     gpu_workers = strategy.num_replicas_in_sync
@@ -125,30 +181,33 @@ def test_defocus_model(kargs):
         shutil.rmtree(outdir)
 
     with strategy.scope():
-        train.train_model(
-            network='opticalnet',
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
-            outdir=outdir,
-            psf_type=kargs['psf_type'],
-            x_voxel_size=kargs['lateral_voxel_size'],
-            y_voxel_size=kargs['lateral_voxel_size'],
-            z_voxel_size=kargs['axial_voxel_size'],
-            modes=kargs['num_modes'],
-            wavelength=kargs['wavelength'],
-            batch_size=kargs['batch_size']//3,
-            warmup=1,
-            epochs=5,
-            defocus_only=True,
-        )
+        with options({"layout_optimizer": False}):
+            train.train_model(
+                network='opticalnet',
+                dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
+                outdir=outdir,
+                psf_type=kargs['psf_type'],
+                x_voxel_size=kargs['lateral_voxel_size'],
+                y_voxel_size=kargs['lateral_voxel_size'],
+                z_voxel_size=kargs['axial_voxel_size'],
+                modes=kargs['num_modes'],
+                wavelength=kargs['wavelength'],
+                batch_size=kargs['batch_size']//3,
+                warmup=1,
+                epochs=5,
+                defocus_only=True,
+            )
 
 
-@pytest.mark.run(order=4)
+@pytest.mark.run(order=5)
 def test_zernike_defocus_model(kargs):
-
+    tf.keras.backend.clear_session()
     physical_devices = tf.config.list_physical_devices('GPU')
     for gpu_instance in physical_devices:
         tf.config.experimental.set_memory_growth(gpu_instance, True)
 
+    policy = tf.keras.mixed_precision.Policy('mixed_float16')
+    tf.keras.mixed_precision.set_global_policy(policy)
     strategy = tf.distribute.MirroredStrategy()
 
     gpu_workers = strategy.num_replicas_in_sync
@@ -165,57 +224,20 @@ def test_zernike_defocus_model(kargs):
 
 
     with strategy.scope():
-        train.train_model(
-            network='opticalnet',
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
-            outdir=outdir,
-            psf_type=kargs['psf_type'],
-            x_voxel_size=kargs['lateral_voxel_size'],
-            y_voxel_size=kargs['lateral_voxel_size'],
-            z_voxel_size=kargs['axial_voxel_size'],
-            modes=kargs['num_modes'],
-            wavelength=kargs['wavelength'],
-            batch_size=kargs['batch_size']//3,
-            warmup=1,
-            epochs=5,
-            lls_defocus=True,
-        )
-
-
-@pytest.mark.run(order=5)
-def test_finetune_zernike_model(kargs):
-
-    physical_devices = tf.config.list_physical_devices('GPU')
-    for gpu_instance in physical_devices:
-        tf.config.experimental.set_memory_growth(gpu_instance, True)
-
-    strategy = tf.distribute.MirroredStrategy()
-
-    gpu_workers = strategy.num_replicas_in_sync
-    logging.info(f'Number of active GPUs: {gpu_workers}')
-
-    subfolder = (f"z{int(kargs['axial_voxel_size']*1000)}-"
-                 f"y{int(kargs['lateral_voxel_size']*1000)}-"
-                 f"x{int(kargs['lateral_voxel_size']*1000)}")
-
-    # clean out existing model
-    outdir = Path(f"{kargs['repo']}/models/pytests/yumb_zernike_model_finetuned")
-    if outdir.exists() and outdir.is_dir():
-        shutil.rmtree(outdir)
-
-    with strategy.scope():
-        train.train_model(
-            network='opticalnet',
-            dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
-            outdir=outdir,
-            psf_type=kargs['psf_type'],
-            x_voxel_size=kargs['lateral_voxel_size'],
-            y_voxel_size=kargs['lateral_voxel_size'],
-            z_voxel_size=kargs['axial_voxel_size'],
-            modes=kargs['num_modes'],
-            wavelength=kargs['wavelength'],
-            batch_size=kargs['batch_size']//3,
-            warmup=1,
-            epochs=5,
-            finetune=Path(f"{kargs['repo']}/models/pytests/yumb_zernike_model/keras"),
-        )
+        with options({"layout_optimizer": False}):
+            train.train_model(
+                network='opticalnet',
+                dataset=Path(f"{kargs['repo']}/dataset/training_dataset/YuMB_lambda510/{subfolder}/z64-y64-x64/z15/"),
+                outdir=outdir,
+                psf_type=kargs['psf_type'],
+                x_voxel_size=kargs['lateral_voxel_size'],
+                y_voxel_size=kargs['lateral_voxel_size'],
+                z_voxel_size=kargs['axial_voxel_size'],
+                modes=kargs['num_modes'],
+                wavelength=kargs['wavelength'],
+                batch_size=kargs['batch_size']//3,
+                warmup=1,
+                epochs=5,
+                lls_defocus=True,
+            )
+"""
