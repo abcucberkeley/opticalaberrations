@@ -111,10 +111,10 @@ def paths_to_clusterfs(flags:str, local_repo):
 
 
 def submit_slurm_job(args, command_flags, partition: str = "abc_a100"):
-    # cluster_env = f"~/anaconda3/envs/ml/bin/python"
-    CUDA_version = "TF_CUDA_12_3"
+    framework = "tensorflow_TF"  # "develop_Torch"
+    CUDA_version = "CUDA_12_3"
     cluster_repo = f"/clusterfs/nvme/thayer/opticalaberrations"
-    cluster_env = f"apptainer exec --bind /clusterfs --nv {cluster_repo}/develop_{CUDA_version}.sif python "
+    cluster_env = f"apptainer exec --bind /clusterfs --nv {cluster_repo}/{framework}_{CUDA_version}.sif python "
     script = f"{cluster_repo}/src/ao.py"
     
     flags = ' '.join(command_flags)
