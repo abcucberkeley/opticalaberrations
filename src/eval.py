@@ -4320,7 +4320,7 @@ def profile_models(
         ]
         titles = [
             f'Testing P2V\n$i\in${{$1\lambda\\to2\lambda$}}\n($\lambda={int(wavelength * 1000)}nm$)',
-            'Training MSE\n($\mu$m rms)',
+            'Loss\n($\mu$m rms)',
             f'Training hours\n8xH100s',
             'Training EFLOPs',
             f'Memory (GB) \n[BS={batch_size}]',
@@ -4450,8 +4450,7 @@ def profile_models(
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-        for i, cat in enumerate(cats):
-            d = df[df.cat == cat]
-            d = d.set_index('model', drop=True)
-            d = d[coi].rename(columns={c: t for c, t in zip(coi, titles)}).astype(float)
-            print(d.to_latex(float_format="%.4g"))
+        table = df.set_index(['cat', 'model'], drop=False)
+        table = table.loc[cats][coi].astype(float)
+        print(table)
+        print(table.to_latex(float_format="%.2g"))
