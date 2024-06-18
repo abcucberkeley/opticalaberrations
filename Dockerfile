@@ -63,6 +63,7 @@ RUN apt-get update \
   winbind \
   smbclient \
   sshfs \
+  iputils-ping \
   && rm -rf /var/lib/apt/lists/*
 
 # Git-lfs install
@@ -71,9 +72,9 @@ RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.d
 # LabVIEW Linux run-time      # https://www.ni.com/en/support/downloads/software-products/download.labview.html#521764
 # RUN git checkout HEAD ${LabVIEW_runtime}
 WORKDIR /docker_install
-ARG LabVIEW_runtime=ni-labview-2024-runtime-engine_24.1.0.49394-0+f242-ubuntu2204_all.deb 
-ADD ${LabVIEW_runtime} ${LabVIEW_runtime}
-RUN sudo apt install ./${LabVIEW_runtime}; sudo apt update; sudo apt install libncurses5 libopenal1 libxinerama1 libgl1-mesa-glx libglu1-mesa labview-2024-rte -y; rm -rf /var/lib/apt/lists/*
+# ARG LabVIEW_runtime=ni-labview-2024-runtime-engine_24.1.0.49394-0+f242-ubuntu2204_all.deb 
+# ADD ${LabVIEW_runtime} ${LabVIEW_runtime}
+# RUN sudo apt install ./${LabVIEW_runtime}; sudo apt update; sudo apt install libncurses5 libopenal1 libxinerama1 libgl1-mesa-glx libglu1-mesa labview-2024-rte -y; rm -rf /var/lib/apt/lists/*
 
 # Make the dockerfile use the current branch (passed in as a command line argument to "docker build")
 ARG BRANCH_NAME
@@ -143,6 +144,7 @@ RUN apt-get update \
   winbind \
   smbclient \
   sshfs \
+  iputils-ping \
   && rm -rf /var/lib/apt/lists/*
 
 # Git-lfs install
@@ -151,9 +153,9 @@ RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.d
 # LabVIEW Linux run-time      # https://www.ni.com/en/support/downloads/software-products/download.labview.html#521764
 # RUN git checkout HEAD ${LabVIEW_runtime}
 WORKDIR /docker_install
-ARG LabVIEW_runtime=ni-labview-2024-runtime-engine_24.1.0.49394-0+f242-ubuntu2204_all.deb 
-ADD ${LabVIEW_runtime} ${LabVIEW_runtime}
-RUN sudo apt install ./${LabVIEW_runtime}; sudo apt update; sudo apt install libncurses5 libopenal1 libxinerama1 libgl1-mesa-glx libglu1-mesa labview-2024-rte -y; rm -rf /var/lib/apt/lists/*
+# ARG LabVIEW_runtime=ni-labview-2024-runtime-engine_24.1.0.49394-0+f242-ubuntu2204_all.deb 
+# ADD ${LabVIEW_runtime} ${LabVIEW_runtime}
+# RUN sudo apt install ./${LabVIEW_runtime}; sudo apt update; sudo apt install libncurses5 libopenal1 libxinerama1 libgl1-mesa-glx libglu1-mesa labview-2024-rte -y; rm -rf /var/lib/apt/lists/*
 
 
 # Make the dockerfile use the current branch (passed in as a command line argument to "docker build")

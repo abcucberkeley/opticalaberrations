@@ -51,9 +51,9 @@ jobs:
     runs-on: self-hosted
     strategy:
       matrix:
-        include:
-          - CUDA_VERSION: "Torch_CUDA_12_3"
-          - CUDA_VERSION: "TF_CUDA_12_3"
+        CUDA_VERSION: ["Torch_CUDA_12_3", "TF_CUDA_12_3"]
+        exclude:
+          - CUDA_VERSION: ${{ github.ref != 'refs/heads/develop' && 'Torch_CUDA_12_3' }}
     steps:
       - name: Dump GitHub context
         env:
@@ -146,9 +146,9 @@ jobs:
     runs-on: self-hosted
     strategy:
       matrix:
-        include:
-          - CUDA_VERSION: "Torch_CUDA_12_3"
-          - CUDA_VERSION: "TF_CUDA_12_3"          
+        CUDA_VERSION: ["Torch_CUDA_12_3", "TF_CUDA_12_3"]
+        exclude:
+          - CUDA_VERSION: ${{ github.ref != 'refs/heads/develop' && 'Torch_CUDA_12_3' }}       
     steps:
       - name: List files in the directory
         run: |
@@ -187,8 +187,9 @@ jobs:
     runs-on: self-hosted
     strategy:
       matrix:
-        include:
-          - CUDA_VERSION: "TF_CUDA_12_3"
+        CUDA_VERSION: ["Torch_CUDA_12_3", "TF_CUDA_12_3"]
+        exclude:
+          - CUDA_VERSION: ${{ github.ref != 'refs/heads/develop' && 'Torch_CUDA_12_3' }}
     env: 
       APPTAINER_RUN: apptainer exec --nv ${{ github.workspace }}/${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}.sif
     steps:
@@ -232,8 +233,9 @@ jobs:
   test_train-apptainer:
     strategy:
       matrix:
-        include:
-          - CUDA_VERSION: "TF_CUDA_12_3"          
+        CUDA_VERSION: ["Torch_CUDA_12_3", "TF_CUDA_12_3"]
+        exclude:
+          - CUDA_VERSION: ${{ github.ref != 'refs/heads/develop' && 'Torch_CUDA_12_3' }}        
     needs: test-apptainer # need to wait for test-docker to finish otherwise GPU will be utilized.
     runs-on: self-hosted
     env: 
@@ -282,9 +284,10 @@ jobs:
   #   needs: setup-job2 # needs to run after apptainer because this is going to write root files.
   #   runs-on: self-hosted
   #   strategy:
-  #     matrix:
-  #       include:
-  #         - CUDA_VERSION: "TF_CUDA_12_3"
+    # matrix:
+    #   CUDA_VERSION: ["Torch_CUDA_12_3", "TF_CUDA_12_3"]
+    #   exclude:
+    #     - CUDA_VERSION: ${{ github.ref != 'refs/heads/develop' && 'Torch_CUDA_12_3' }}
   #   container: 
   #     image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}   # pull image 'latest-tf' or 'develop' that we just built
   #     credentials:
@@ -335,9 +338,10 @@ jobs:
   #   needs: test-docker
   #   runs-on: self-hosted
   #   strategy:
-  #     matrix:
-  #       include:
-  #         - CUDA_VERSION: "TF_CUDA_12_3"
+        # matrix:
+        #   CUDA_VERSION: ["Torch_CUDA_12_3", "TF_CUDA_12_3"]
+        #   exclude:
+        #     - CUDA_VERSION: ${{ github.ref != 'refs/heads/develop' && 'Torch_CUDA_12_3' }}
   #   container: 
   #     image: ghcr.io/${{ github.repository }}:${{ github.head_ref || github.ref_name }}_${{ matrix.CUDA_VERSION }}   # pull image 'latest-tf' or 'develop' that we just built
   #     credentials:
@@ -359,9 +363,10 @@ jobs:
   #   if: always()
   #   runs-on: self-hosted
   #   strategy:
-  #     matrix:
-  #       include:
-  #         - CUDA_VERSION: "TF_CUDA_12_3"
+    # matrix:
+    #   CUDA_VERSION: ["Torch_CUDA_12_3", "TF_CUDA_12_3"]
+    #   exclude:
+    #     - CUDA_VERSION: ${{ github.ref != 'refs/heads/develop' && 'Torch_CUDA_12_3' }}
   #   steps:          
   #     # Login against a Docker registry except on PR
   #     # https://github.com/docker/login-action
