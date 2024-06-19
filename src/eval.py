@@ -4304,12 +4304,18 @@ def profile_models(
             df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
 
         plot_scaling_parameters(df)
+        df['training_batch'] = [
+            4096, 4096, 4096, 4096, 4096,
+            2048, 2048, 2048, 2048, 2048,
+            4096, 2048, 2048, 1024
+        ]
 
         coi = [
             'mean',
             'epoch_mse',
-            'training',
             'training_gflops',
+            'training',
+            'training_batch',
             'memory',
             # 'inference_time',
             'throughput',
@@ -4320,15 +4326,16 @@ def profile_models(
         ]
         titles = [
             f'Testing P2V\n$i\in${{$1\lambda\\to2\lambda$}}\n($\lambda={int(wavelength * 1000)}nm$)',
-            'Loss\n($\mu$m rms)',
-            f'Training hours\n8xH100s',
-            'Training EFLOPs',
+            'Training loss\n($\mu$m rms)',
+            'Training cost\n(EFLOPs)',
+            'Training hours\n8xH100s',
+            'Training\nbatch size',
             f'Memory (GB) \n[BS={batch_size}]',
             # f'Inference minutes\n1M images\n[BS={batch_size}]',
             f'Throughput\n(images/s)\n[BS={batch_size}]',
-            f'Latency\n(ms/image)',
-            'GFLOPs',
-            'Parameters (M)',
+            'Latency\n(ms/image)',
+            'Inference cost\n(GFLOPs)',
+            'Parameters\n(millions)',
             'Total patches',
         ]
         cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
@@ -4379,7 +4386,7 @@ def profile_models(
                         fmt = '%.1f'
                     elif coi[i] == 'epoch_mse':
                         fmt = '%.2g'
-                    elif coi[i] == 'num_tokens' or coi[i] == 'params' or coi[i] == 'throughput':
+                    elif coi[i] == 'num_tokens' or coi[i] == 'params' or coi[i] == 'throughput' or coi[i] == 'training_batch':
                         fmt = '%d'
                     else:
                         fmt = '%.1f'
@@ -4402,6 +4409,10 @@ def profile_models(
                     ax.set_ylim(0, 168) # (1 week of training)
                     ax.set_yticks(range(0, 192, 24))
                     # ax.set_ylim(0, 25)
+                    ax.axhline(0, color="k", clip_on=False)
+                elif coi[i] == 'training_batch':
+                    ax.set_ylim(0, 4096)
+                    ax.set_yticks(range(0, 4096+1024, 1024))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
                     ax.set_ylim(0, 125)
