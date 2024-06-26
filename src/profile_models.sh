@@ -1,10 +1,10 @@
 #!/bin/bash
 
-OUTDIR='../benchmarks'
+OUTDIR='../models/new/variable_object_size_fourier_filter_125nm_dataset/'
 PRETRAINED="../models/new/variable_object_size_fourier_filter_125nm_dataset"
 CLUSTER='slurm'
 TIMELIMIT='24:00:00'  #hh:mm:ss
-APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
+APPTAINER="--apptainer ../tensorflow_TF_CUDA_12_3.sif"
 JOB="benchmark.py --timelimit $TIMELIMIT --partition abc_a100 --mem=125GB --cpus 4 --gpus 1"
 
 TRAINED_MODELS=(

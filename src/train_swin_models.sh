@@ -10,7 +10,7 @@ NETWORK='swin'
 MODES=15
 CLUSTER='lsf'
 DEFAULT='--lr 5e-5 --wd 1e-8 --opt adamw'
-APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
+APPTAINER="--apptainer ../tensorflow_TF_CUDA_12_3.sif"
 H100="--partition gpu_h100 --gpus 8 --cpus 16"
 A100="--partition gpu_a100 --gpus 4 --cpus 8"
 

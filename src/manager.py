@@ -1,5 +1,6 @@
 from pathlib import Path
 from subprocess import call
+
 import cli
 
 
@@ -183,7 +184,7 @@ def parse_args(args):
     )
 
     docker.add_argument(
-        "--image", default='ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3', type=str,
+        "--image", default='ghcr.io/abcucberkeley/opticalaberrations:tensorflow_TF_CUDA_12_3', type=str,
         help='docker image to use for this job'
     )
 

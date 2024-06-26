@@ -44,13 +44,13 @@ if [ $HANDLER = 'lsf' ];then
   MYDIR="/groups/betzig/betziglab/thayer"
   OUTDIR="${MYDIR}/dataset/${TITLE}/${DATASET}"
   REPO="${MYDIR}/opticalaberrations"
-  APPTAINER="${REPO}/develop_TF_CUDA_12_3.sif"
+  APPTAINER="${REPO}/tensorflow_TF_CUDA_12_3.sif"
   ENV="apptainer exec --nv --bind ${MYDIR}:${MYDIR} --pwd ${REPO}/src -e ${APPTAINER} python"
 elif [ $HANDLER = 'slurm' ]; then
   MYDIR="/clusterfs/nvme/thayer"
   OUTDIR="${MYDIR}/dataset/${TITLE}/${DATASET}"
   REPO="${MYDIR}/opticalaberrations/"
-  APPTAINER="${REPO}/develop_TF_CUDA_12_3.sif"
+  APPTAINER="${REPO}/tensorflow_TF_CUDA_12_3.sif"
   ENV="apptainer exec --nv --bind /clusterfs:/clusterfs --pwd ${REPO}/src -e ${APPTAINER} python"
 else
   OUTDIR="~/dataset/${TITLE}/${DATASET}"

@@ -12,7 +12,7 @@ DATASET="97nm_dataset_extended"
 EVALSIGN="signed"
 NA=1.0
 TIMELIMIT='24:00:00'  #hh:mm:ss
-APPTAINER="--apptainer ../develop_TF_CUDA_12_3.sif"
+APPTAINER="--apptainer ../tensorflow_TF_CUDA_12_3.sif"
 CLUSTER='slurm'
 
 DENOISE=false
