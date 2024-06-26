@@ -4180,6 +4180,8 @@ def profile_models(
     
     models = {
         'otfnet': 'Baseline',
+        'vit-NEW16': 'ViT-NEW/16',
+        'vit-NEW32': 'ViT-NEW/32',
         'vit-b16': 'ViT-b/16',
         'vit-b32': 'ViT-b/32',
         'vit-S32': 'ViT-S/32',
@@ -4458,8 +4460,8 @@ def profile_models(
                     ax.set_yticks(range(0, 40, 5))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'throughput':
-                    ax.set_ylim(0, 2000)
-                    ax.set_yticks(range(0, 2500, 500))
+                    ax.set_ylim(0, 3500)
+                    ax.set_yticks(range(0, 4000, 500))
                     ax.axhline(0, color="k", clip_on=False)
                 else:
                     ax.set_ylim(0, 1440)
