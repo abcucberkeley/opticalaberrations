@@ -56,17 +56,17 @@ do
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '3-3' --heads '6-6'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-S3216
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-T3216
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '4-4' --heads '8-8'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-B3216
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-S3216
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '6-6' --heads '12-12'" \
   --taskname $NETWORK \
-  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-M3216
+  --name new/$SUBSET/scaling/$NETWORK-$MODES-$DIR-B3216
 
   python manager.py $CLUSTER $APPTAINER train.py $H100 \
   --task "$CONFIG $LAMB --batch_size $BS --patches '32-16' --repeats '12-12' --heads '16-16'" \

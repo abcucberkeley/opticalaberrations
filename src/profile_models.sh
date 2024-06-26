@@ -17,9 +17,9 @@ TRAINED_MODELS=(
   "baseline-S baseline/baseline-15-YuMB_lambda510-S"
   "baseline-B baseline/baseline-15-YuMB_lambda510-B"
   "baseline-L baseline/baseline-15-YuMB_lambda510-L"
+  "opticalnet-T3216 scaling/opticalnet-15-YuMB_lambda510-T3216"
   "opticalnet-S3216 scaling/opticalnet-15-YuMB_lambda510-S3216"
   "opticalnet-B3216 scaling/opticalnet-15-YuMB_lambda510-B3216"
-  "opticalnet-M3216 scaling/opticalnet-15-YuMB_lambda510-M3216"
   "opticalnet-L3216 scaling/opticalnet-15-YuMB_lambda510-L3216"
   "opticalnet-H3216 scaling/opticalnet-15-YuMB_lambda510-H3216"
 )
