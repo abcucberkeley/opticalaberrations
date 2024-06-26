@@ -4180,7 +4180,8 @@ def profile_models(
     
     models = {
         'otfnet': 'Baseline',
-        'vit-s32': 'ViT-s/32',
+        'vit-b16': 'ViT-b/16',
+        'vit-b32': 'ViT-b/32',
         'vit-S32': 'ViT-S/32',
         'vit-S16': 'ViT-S/16',
         'vit-B32': 'ViT-B/32',
@@ -4218,9 +4219,17 @@ def profile_models(
 
             try:
                 modeldir = Path(modeldir)
-                log = sorted(modeldir.rglob(r"*train/*tfevents*"))[0]
-                
-                df = profile_utils.load_tf_logs(log)
+                configfile = sorted(modeldir.rglob(r"*train/*tfevents*"))[0]
+                logfile = sorted(modeldir.rglob(r"*train.log"))[0]
+
+                with open(logfile) as f:
+                    log = f.readlines()
+                    train_config = "\n".join(s for s in log if 'namespace' in s.lower())
+                    train_config = train_config[train_config.find('Namespace') + 10:-2].split(',')
+                    train_config = [name.split('=') for name in train_config]
+                    train_config = dict((k.strip(), eval(v.strip().replace('PosixPath', 'Path'))) for k, v in train_config)
+
+                df = profile_utils.load_tf_logs(configfile)
                 model_config = ujson.loads(df.keras[0])
 
                 best = df['epoch_mse'].idxmin()
@@ -4259,6 +4268,8 @@ def profile_models(
                     df[f'transformers_{k}_tokens'] = tokens
                     num_tokens += tokens
                 
+                df['dataset'] = train_config['dataset']
+                df['batch_size'] = train_config['batch_size']
                 df['num_tokens'] = num_tokens
                 df["training"] = (df.wall_clock - df.wall_clock[0]) / np.timedelta64(1, "h")
                 df['transformers'] = sum(transformers_blocks.values())
@@ -4275,11 +4286,10 @@ def profile_models(
             except Exception as e:
                 logger.error(e)
                 continue
-        
-        training_batch_size = 4096
+
         dataset_size = 2000000
-        training_steps_per_epoch = dataset_size // training_batch_size
-        df['training_gflops'] = training_steps_per_epoch * training_batch_size * df['step'] * df['gflops'] * 3
+        training_steps_per_epoch = dataset_size // df['batch_size']
+        df['training_gflops'] = training_steps_per_epoch * df['batch_size'] * df['step'] * df['gflops'] * 3
         # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
         df["training_gflops"] =  df["training_gflops"] * 1e-9
         df['inference_time'] = 1e6 / df['throughput'] / 60 # convert to minutes
@@ -4304,11 +4314,6 @@ def profile_models(
             df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
 
         plot_scaling_parameters(df)
-        df['training_batch'] = [
-            4096, 4096, 4096, 4096, 4096,
-            2048, 2048, 2048, 2048, 2048,
-            4096, 2048, 2048, 1024
-        ]
 
         coi = [
             'mean',
@@ -4317,11 +4322,11 @@ def profile_models(
             'training',
             'training_batch',
             'memory',
-            # 'inference_time',
             'throughput',
             'latency',
             'gflops',
             'params',
+            'transformers'
             'num_tokens',
         ]
         titles = [
@@ -4331,11 +4336,11 @@ def profile_models(
             'Training hours\n8xH100s',
             'Training\nbatch size',
             f'Memory (GB) \n[BS={batch_size}]',
-            # f'Inference minutes\n1M images\n[BS={batch_size}]',
             f'Throughput\n(images/s)\n[BS={batch_size}]',
             'Latency\n(ms/image)',
             'Inference cost\n(GFLOPs)',
             'Parameters\n(millions)',
+            'Transformers',
             'Total patches',
         ]
         cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
@@ -4386,7 +4391,7 @@ def profile_models(
                         fmt = '%.1f'
                     elif coi[i] == 'epoch_mse':
                         fmt = '%.2g'
-                    elif coi[i] == 'num_tokens' or coi[i] == 'params' or coi[i] == 'throughput' or coi[i] == 'training_batch':
+                    elif coi[i] in ['num_tokens', 'params', 'throughput', 'training_batch', 'transformers']:
                         fmt = '%d'
                     else:
                         fmt = '%.1f'
@@ -4432,12 +4437,15 @@ def profile_models(
                 elif coi[i] == 'num_tokens':
                     ax.set_ylim(0, 2000)
                     ax.axhline(0, color="k", clip_on=False)
+                elif coi[i] == 'transformers':
+                    ax.set_ylim(0, 32)
+                    ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'latency':
-                    ax.set_ylim(0, 30)
-                    ax.set_yticks(range(0, 35, 5))
+                    ax.set_ylim(0, 35)
+                    ax.set_yticks(range(0, 40, 5))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'throughput':
-                    ax.set_ylim(0, 2000)
+                    ax.set_ylim(0, 2500)
                     ax.axhline(0, color="k", clip_on=False)
                 else:
                     ax.set_ylim(0, 1440)
