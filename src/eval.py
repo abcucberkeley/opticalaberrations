@@ -4224,7 +4224,7 @@ def profile_models(
 
                 with open(logfile) as f:
                     log = f.readlines()
-                    train_config = "\n".join(s for s in log if 'namespace' in s.lower())
+                    train_config = [s for s in log if 'namespace' in s.lower()][-1]
                     train_config = train_config[train_config.find('Namespace') + 10:-2].split(',')
                     train_config = [name.split('=') for name in train_config]
                     train_config = dict((k.strip(), eval(v.strip().replace('PosixPath', 'Path'))) for k, v in train_config)
