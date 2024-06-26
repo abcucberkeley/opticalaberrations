@@ -4256,23 +4256,28 @@ def profile_models(
                 df["wall_clock"] = pd.to_datetime(df.wall_time, unit="s")
                 
                 transformers_blocks = profile_utils.count_transformer_blocks(model=model)
-                
-                num_tokens = 0
-                for k, v in transformers_blocks.items():
+                heads = train_config['heads'].split('-')
+
+                num_heads, num_tokens = 0, 0
+                for i, (k, v) in enumerate(transformers_blocks.items()):
                     ps = int(k.strip('p'))
                     df[f'transformers_{k}'] = v
+                    df[f'heads_{k}'] = v * int(heads[i])
+
                     tokens = v * model.input_shape[1] * np.product([
                         s // p for s, p in zip(model.input_shape[2:], (ps, ps))
                     ])
                     logger.info(f"{tokens=}")
                     df[f'transformers_{k}_tokens'] = tokens
                     num_tokens += tokens
+                    num_heads += df[f'heads_{k}']
                 
                 df['dataset'] = train_config['dataset']
                 df['batch_size'] = train_config['batch_size']
                 df['num_tokens'] = num_tokens
                 df["training"] = (df.wall_clock - df.wall_clock[0]) / np.timedelta64(1, "h")
                 df['transformers'] = sum(transformers_blocks.values())
+                df['heads'] = num_heads
                 df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
                 df['gflops'] = profile_utils.measure_gflops(model)
                 df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
@@ -4320,13 +4325,14 @@ def profile_models(
             'epoch_mse',
             'training_gflops',
             'training',
-            'training_batch',
+            'batch_size',
             'memory',
             'throughput',
             'latency',
             'gflops',
             'params',
-            'transformers'
+            'transformers',
+            'heads',
             'num_tokens',
         ]
         titles = [
@@ -4340,7 +4346,8 @@ def profile_models(
             'Latency\n(ms/image)',
             'Inference cost\n(GFLOPs)',
             'Parameters\n(millions)',
-            'Transformers',
+            'Transformers\n(blocks)',
+            'Transformers\n(heads)',
             'Total patches',
         ]
         cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
@@ -4391,7 +4398,7 @@ def profile_models(
                         fmt = '%.1f'
                     elif coi[i] == 'epoch_mse':
                         fmt = '%.2g'
-                    elif coi[i] in ['num_tokens', 'params', 'throughput', 'training_batch', 'transformers']:
+                    elif coi[i] in ['num_tokens', 'params', 'throughput', 'batch_size', 'transformers', 'heads']:
                         fmt = '%d'
                     else:
                         fmt = '%.1f'
@@ -4415,7 +4422,7 @@ def profile_models(
                     ax.set_yticks(range(0, 192, 24))
                     # ax.set_ylim(0, 25)
                     ax.axhline(0, color="k", clip_on=False)
-                elif coi[i] == 'training_batch':
+                elif coi[i] == 'batch_size':
                     ax.set_ylim(0, 4096)
                     ax.set_yticks(range(0, 4096+1024, 1024))
                     ax.axhline(0, color="k", clip_on=False)
@@ -4439,6 +4446,11 @@ def profile_models(
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'transformers':
                     ax.set_ylim(0, 32)
+                    ax.set_yticks([0, 6, 12, 18, 24, 30, 36])
+                    ax.axhline(0, color="k", clip_on=False)
+                elif coi[i] == 'heads':
+                    ax.set_ylim(0, 512)
+                    ax.set_yticks([0, 32, 64, 128, 256, 512])
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'latency':
                     ax.set_ylim(0, 35)
