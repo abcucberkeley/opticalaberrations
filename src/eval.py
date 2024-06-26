@@ -4396,6 +4396,8 @@ def profile_models(
                         fmt = '%.1f'
                     elif coi[i] == 'epoch_mse':
                         fmt = '%.2g'
+                    elif coi[i] == 'params':
+                        fmt = '%dM'
                     elif coi[i] in ['num_tokens', 'params', 'throughput', 'batch_size', 'transformers', 'heads']:
                         fmt = '%d'
                     else:
@@ -4426,18 +4428,19 @@ def profile_models(
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
                     ax.set_ylim(0, 125)
-                    # ax.set_ylim(0, 10)
+                    ax.set_yticks(range(0, 150, 25))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
                     ax.set_ylim(0, 40)
-                    # ax.set_ylim(0, 5)
+                    ax.set_yticks(range(0, 50, 10))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'params':
-                    ax.set_ylim(1, 2000)
-                    ax.axhline(1, color="k", clip_on=False)
+                    ax.set_ylim(10, 2000)
+                    ax.set_yscale('log')
+                    ax.axhline(10, color="k", clip_on=False)
                 elif coi[i] == 'memory':
                     ax.set_ylim(0, 20)
-                    # ax.set_ylim(0, 3)
+                    ax.set_yticks(range(0, 25, 5))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'num_tokens':
                     ax.set_ylim(0, 2000)
