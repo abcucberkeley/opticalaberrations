@@ -4333,7 +4333,6 @@ def profile_models(
             'params',
             'transformers',
             'heads',
-            'num_tokens',
         ]
         titles = [
             f'Testing P2V\n$i\in${{$1\lambda\\to2\lambda$}}\n($\lambda={int(wavelength * 1000)}nm$)',
@@ -4348,14 +4347,13 @@ def profile_models(
             'Parameters\n(millions)',
             'Transformers\n(blocks)',
             'Transformers\n(heads)',
-            'Total patches',
         ]
         cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
         colormaps = ['Blues', 'Oranges', 'Greens', 'Greys']
         df = df.sort_values('epoch_mse', ascending=False)
 
         eval_csv = pd.read_csv(Path('../evaluations/compare.csv'), index_col=0, header=0)
-        eval_csv = eval_csv[eval_csv['iter_num'] == 1].drop(columns='cat')
+        eval_csv = eval_csv[eval_csv['iter_num'] == 2].drop(columns='cat')
         df = pd.merge(df, eval_csv, on='model', how='outer')
 
 
@@ -4409,8 +4407,8 @@ def profile_models(
                 ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
 
                 if coi[i] == 'mean':
-                    ax.set_ylim(0, .7)
-                    ax.set_yticks(np.arange(0, .8, .1))
+                    ax.set_ylim(0, .5)
+                    ax.set_yticks(np.arange(0, .6, .1))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'epoch_mse':
                     ax.set_ylim(1e-7, 1e-5)
@@ -4449,15 +4447,16 @@ def profile_models(
                     ax.set_yticks([0, 6, 12, 18, 24, 30, 36])
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'heads':
-                    ax.set_ylim(0, 512)
-                    ax.set_yticks([0, 32, 64, 128, 256, 512])
+                    ax.set_ylim(0, 600)
+                    ax.set_yticks(range(0, 700, 100))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'latency':
                     ax.set_ylim(0, 35)
                     ax.set_yticks(range(0, 40, 5))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'throughput':
-                    ax.set_ylim(0, 2500)
+                    ax.set_ylim(0, 2000)
+                    ax.set_yticks(range(0, 2500, 500))
                     ax.axhline(0, color="k", clip_on=False)
                 else:
                     ax.set_ylim(0, 1440)
