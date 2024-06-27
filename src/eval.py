@@ -15,7 +15,6 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Optional, Union
 from matplotlib.ticker import FormatStrFormatter, PercentFormatter
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import matplotlib.colors as mcolors
 import seaborn as sns
 
@@ -3764,32 +3763,37 @@ def compare_models(
 
     outdir.mkdir(parents=True, exist_ok=True)
 
-    stats = []
-    dataframes = []
-    for codename, file in zip(models_codenames, predictions_paths):
-        df = pd.read_csv(file, header=0, index_col=0).drop_duplicates()
-        df['model'] = codename
+    results_path = Path(f'{outdir}/compare.csv')
+    if results_path.exists():
+        stats = pd.read_csv(results_path, index_col=0, header=0)
+        print(stats.round(2))
+    else:
+        stats = []
+        dataframes = []
+        for codename, file in zip(models_codenames, predictions_paths):
+            df = pd.read_csv(file, header=0, index_col=0).drop_duplicates()
+            df['model'] = codename
 
-        logger.info(codename)
-        s = df[
-            (df.photons >= photon_range[0]) &
-            (df.photons <= photon_range[1]) &
-            (df.aberration >= aberration_range[0]) &
-            (df.aberration <= aberration_range[1])
-        ]
-        stats.append(s.groupby(['model', 'iter_num'])['residuals'].describe(percentiles=[.5, .75, .85, .95]).T)
-        df = df[df['iter_num'] == iter_num]
-        dataframes.append(df)
+            logger.info(codename)
+            s = df[
+                (df.photons >= photon_range[0]) &
+                (df.photons <= photon_range[1]) &
+                (df.aberration >= aberration_range[0]) &
+                (df.aberration <= aberration_range[1])
+            ]
+            stats.append(s.groupby(['model', 'iter_num'])['residuals'].describe(percentiles=[.5, .75, .85, .95]).T)
+            df = df[df['iter_num'] == iter_num]
+            dataframes.append(df)
 
-    df = pd.concat(dataframes)
-    stats = pd.concat(stats, axis=1).T.reset_index()
-    stats['cat'] = 'Baseline'
-    stats.loc[stats.model.str.match(r'Ours'), 'cat'] = 'Ours'
-    stats.loc[stats.model.str.match(r'ViT.*16'), 'cat'] = 'ViT/16'
-    stats.loc[stats.model.str.match(r'ViT.*32'), 'cat'] = 'ViT/32'
-    stats.loc[stats.model.str.match(r'ConvNext'), 'cat'] = 'ConvNext'
-    print(stats.round(2))
-    stats.to_csv(f'{outdir}/compare.csv')
+        df = pd.concat(dataframes)
+        stats = pd.concat(stats, axis=1).T.reset_index()
+        stats['cat'] = 'Baseline'
+        stats.loc[stats.model.str.match(r'Ours'), 'cat'] = 'Ours'
+        stats.loc[stats.model.str.match(r'ViT.*16'), 'cat'] = 'ViT/16'
+        stats.loc[stats.model.str.match(r'ViT.*32'), 'cat'] = 'ViT/32'
+        stats.loc[stats.model.str.match(r'ConvNext'), 'cat'] = 'ConvNext'
+        print(stats.round(2))
+        stats.to_csv(f'{outdir}/compare.csv')
 
     cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
     colormaps = ['Blues', 'Oranges', 'Greens', 'Greys']
@@ -3804,6 +3808,8 @@ def compare_models(
         for j, cat in enumerate(cats):
             ax = axes[i, j]
             data = stats[(stats['cat'] == cat) & (stats['iter_num'] == iter_num)]
+            data['model'] = data['model'].str.replace(r'.*-', '', regex=True)
+            data['model'] = data['model'].str.replace(r'/.*', '', regex=True)
 
             ax = sns.barplot(
                 data=data,
@@ -3832,7 +3838,7 @@ def compare_models(
             ax.set_xlabel('')
 
             if i == 2:
-                ax.set_xticklabels(data.model, rotation=90)
+                ax.set_xticklabels(data.model)#, rotation=90)
             else:
                 ax.set_xticklabels([])
 
@@ -3843,13 +3849,13 @@ def compare_models(
             ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
 
             if iter_num == 1:
-                ax.set_ylim(0, .8)
+                ax.set_ylim(0, .7)
                 ax.set_yticks(np.arange(0, .8, .1))
             elif iter_num == 2:
-                ax.set_ylim(0, .6)
+                ax.set_ylim(0, .5)
                 ax.set_yticks(np.arange(0, .6, .1))
             else:
-                ax.set_ylim(0, .5)
+                ax.set_ylim(0, .4)
                 ax.set_yticks(np.arange(0, .5, .1))
 
             ax.axhline(0, color="k", clip_on=False)
@@ -3871,124 +3877,124 @@ def compare_models(
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-    for c in ['residuals', 'confidence_sum', 'confidence', ]:
-        test = df[
-            (df.photons >= photon_range[0]) &
-            (df.photons <= photon_range[1]) &
-            (df.aberration >= aberration_range[0]) &
-            (df.aberration <= aberration_range[1])
-        ]
-
-        if c == 'residuals':
-            xmax = aberration_range[0]
-            binwidth = .25
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            label = '\n'.join([
-                rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
-            ])
-            outliers = test[test[c] < xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-        elif c == 'confidence':
-            xmax = .02
-            binwidth = .01
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            label = '\n'.join([
-                rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0] // 1000):d}k, {int(photon_range[1] // 1000):d}k] integrated photons'
-            ])
-            # outliers = test[test[c] == 0]
-            test[c].replace(0, test[c].max(), inplace=True)
-            outliers = test[test[c] < xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-        else:
-            xmax = .1
-            binwidth = .01
-            bins = np.arange(0, xmax + binwidth, binwidth)
-            label = '\n'.join([
-                rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
-            ])
-            # outliers = test[test[c] == 0]
-            test[c].replace(0, test[c].max(), inplace=True)
-            outliers = test[test[c] < xmax]
-            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-
-
-        fig, ax = plt.subplots(figsize=(8, 6))
-        histax = inset_axes(
-            ax,
-            width="100%",
-            height="100%",
-            bbox_to_anchor=(.4, .1, .3, .3),
-            bbox_transform=ax.transAxes,
-            loc='lower center'
-        )
-
-        g = sns.histplot(
-            ax=ax,
-            data=test,
-            x=c,
-            hue='model',
-            # bins=bins,
-            common_norm=False,
-            common_bins=True,
-            element="poly",
-            stat='proportion',
-            fill=False,
-            cumulative=True,
-            palette=colormap
-        )
-
-        sns.barplot(
-            x=unconfident[models_codenames].index,
-            y=unconfident[models_codenames].values,
-            ax=histax,
-            palette=colormap
-        )
-        
-        ax.set_xlabel(label)
-        ax.set_ylabel('CDF')
-        ax.set_xlim(0, None)
-        ax.set_ylim(None, 1)
-        ax.set_yticks(np.arange(0, 1.1, .1))
-        ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-        
-        hist_step = .05 if c == 'residuals' else .02
-        histax.set_ylim(unconfident.min()-.01, unconfident.max())
-        histax.set_yticks(np.arange(unconfident.min()-hist_step, unconfident.max()+hist_step, hist_step))
-        histax.set_xlabel(f'')
-        histax.set_ylabel('')
-        histax.set_xticks([])
-        histax.spines['top'].set_visible(False)
-        histax.spines['right'].set_visible(False)
-        histax.spines['left'].set_visible(False)
-        histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-        
-        axins = ax.inset_axes(
-            [.3, .075, .45, .4],
-            xlim=(xmax, xmax),
-            ylim=(unconfident.min()-.01, unconfident.max()+.05),
-        )
-        ax.indicate_inset_zoom(axins, edgecolor="k")
-        axins.set_xticks([])
-        axins.set_yticks([])
-
-        sns.move_legend(g, title='Model', frameon=False, ncol=1, loc='lower right')
-        plt.tight_layout()
-
-        savepath = Path(f'{outdir}/compare_{c}')
-        logger.info(savepath)
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
+    # for c in ['residuals', 'confidence_sum', 'confidence', ]:
+    #     test = df[
+    #         (df.photons >= photon_range[0]) &
+    #         (df.photons <= photon_range[1]) &
+    #         (df.aberration >= aberration_range[0]) &
+    #         (df.aberration <= aberration_range[1])
+    #     ]
+    #
+    #     if c == 'residuals':
+    #         xmax = aberration_range[0]
+    #         binwidth = .25
+    #         bins = np.arange(0, xmax + binwidth, binwidth)
+    #         label = '\n'.join([
+    #             rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
+    #             rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
+    #         ])
+    #         outliers = test[test[c] < xmax]
+    #         unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+    #
+    #     elif c == 'confidence':
+    #         xmax = .02
+    #         binwidth = .01
+    #         bins = np.arange(0, xmax + binwidth, binwidth)
+    #         label = '\n'.join([
+    #             rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+    #             rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0] // 1000):d}k, {int(photon_range[1] // 1000):d}k] integrated photons'
+    #         ])
+    #         # outliers = test[test[c] == 0]
+    #         test[c].replace(0, test[c].max(), inplace=True)
+    #         outliers = test[test[c] < xmax]
+    #         unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+    #
+    #     else:
+    #         xmax = .1
+    #         binwidth = .01
+    #         bins = np.arange(0, xmax + binwidth, binwidth)
+    #         label = '\n'.join([
+    #             rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+    #             rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
+    #         ])
+    #         # outliers = test[test[c] == 0]
+    #         test[c].replace(0, test[c].max(), inplace=True)
+    #         outliers = test[test[c] < xmax]
+    #         unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+    #
+    #
+    #     fig, ax = plt.subplots(figsize=(8, 6))
+    #     histax = inset_axes(
+    #         ax,
+    #         width="100%",
+    #         height="100%",
+    #         bbox_to_anchor=(.4, .1, .3, .3),
+    #         bbox_transform=ax.transAxes,
+    #         loc='lower center'
+    #     )
+    #
+    #     g = sns.histplot(
+    #         ax=ax,
+    #         data=test,
+    #         x=c,
+    #         hue='model',
+    #         # bins=bins,
+    #         common_norm=False,
+    #         common_bins=True,
+    #         element="poly",
+    #         stat='proportion',
+    #         fill=False,
+    #         cumulative=True,
+    #         palette=colormap
+    #     )
+    #
+    #     sns.barplot(
+    #         x=unconfident[models_codenames].index,
+    #         y=unconfident[models_codenames].values,
+    #         ax=histax,
+    #         palette=colormap
+    #     )
+    #
+    #     ax.set_xlabel(label)
+    #     ax.set_ylabel('CDF')
+    #     ax.set_xlim(0, None)
+    #     ax.set_ylim(None, 1)
+    #     ax.set_yticks(np.arange(0, 1.1, .1))
+    #     ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+    #     ax.spines['top'].set_visible(False)
+    #     ax.spines['right'].set_visible(False)
+    #     ax.spines['left'].set_visible(False)
+    #     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    #
+    #     hist_step = .05 if c == 'residuals' else .02
+    #     histax.set_ylim(unconfident.min()-.01, unconfident.max())
+    #     histax.set_yticks(np.arange(unconfident.min()-hist_step, unconfident.max()+hist_step, hist_step))
+    #     histax.set_xlabel(f'')
+    #     histax.set_ylabel('')
+    #     histax.set_xticks([])
+    #     histax.spines['top'].set_visible(False)
+    #     histax.spines['right'].set_visible(False)
+    #     histax.spines['left'].set_visible(False)
+    #     histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    #
+    #     axins = ax.inset_axes(
+    #         [.3, .075, .45, .4],
+    #         xlim=(xmax, xmax),
+    #         ylim=(unconfident.min()-.01, unconfident.max()+.05),
+    #     )
+    #     ax.indicate_inset_zoom(axins, edgecolor="k")
+    #     axins.set_xticks([])
+    #     axins.set_yticks([])
+    #
+    #     sns.move_legend(g, title='Model', frameon=False, ncol=1, loc='lower right')
+    #     plt.tight_layout()
+    #
+    #     savepath = Path(f'{outdir}/compare_{c}')
+    #     logger.info(savepath)
+    #     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    #     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    #     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+    #
 
 
 @profile
