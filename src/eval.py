@@ -4457,12 +4457,12 @@ def profile_models(
                     ax.set_yticks(range(0, 700, 100))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'latency':
-                    ax.set_ylim(0, 35)
-                    ax.set_yticks(range(0, 40, 5))
+                    ax.set_ylim(0, 40)
+                    ax.set_yticks(range(0, 50, 10))
                     ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'throughput':
-                    ax.set_ylim(0, 3500)
-                    ax.set_yticks(range(0, 4000, 500))
+                    ax.set_ylim(0, 3000)
+                    ax.set_yticks(range(0, 3500, 500))
                     ax.axhline(0, color="k", clip_on=False)
                 else:
                     ax.set_ylim(0, 1440)
