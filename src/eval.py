@@ -4180,15 +4180,13 @@ def profile_models(
     
     models = {
         'otfnet': 'Baseline',
-        'vit-NEW16': 'ViT-NEW/16',
-        'vit-NEW32': 'ViT-NEW/32',
-        'vit-b16': 'ViT-b/16',
-        'vit-b32': 'ViT-b/32',
+        'vit-T32': 'ViT-T/32',
         'vit-S32': 'ViT-S/32',
-        'vit-S16': 'ViT-S/16',
         'vit-B32': 'ViT-B/32',
-        'vit-B16': 'ViT-B/16',
         'vit-L32': 'ViT-L/32',
+        'vit-T16': 'ViT-T/16',
+        'vit-S16': 'ViT-S/16',
+        'vit-B16': 'ViT-B/16',
         'vit-L16': 'ViT-L/16',
         'baseline-P': 'ConvNext-P',
         'baseline-T': 'ConvNext-T',
@@ -4273,19 +4271,22 @@ def profile_models(
                     df[f'transformers_{k}_tokens'] = tokens
                     num_tokens += tokens
                     num_heads += df[f'heads_{k}']
-                
+
+                #warmup
+                profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
+
+                df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
+                df['latency'] = profile_utils.measure_latency(model, number_of_samples=1024)
+                df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
+                df['gflops'] = profile_utils.measure_gflops(model)
+                df['params'] = model.count_params()
+                df['model'] = codename
                 df['dataset'] = train_config['dataset']
                 df['batch_size'] = train_config['batch_size']
                 df['num_tokens'] = num_tokens
                 df["training"] = (df.wall_clock - df.wall_clock[0]) / np.timedelta64(1, "h")
                 df['transformers'] = sum(transformers_blocks.values())
                 df['heads'] = num_heads
-                df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
-                df['gflops'] = profile_utils.measure_gflops(model)
-                df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
-                df['latency'] = profile_utils.measure_latency(model, number_of_samples=1024)
-                df['params'] = model.count_params()
-                df['model'] = codename
                 
                 logger.info(f"Saving {savepath}")
                 df.to_csv(f'{Path(modeldir).parent}/{codename}.csv')
