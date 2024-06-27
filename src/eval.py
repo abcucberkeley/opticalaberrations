@@ -4275,8 +4275,8 @@ def profile_models(
                 #warmup
                 #profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
 
-                df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
                 df['latency'] = profile_utils.measure_latency(model, number_of_samples=1024)
+                df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
                 df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
                 df['gflops'] = profile_utils.measure_gflops(model)
                 df['params'] = model.count_params()
