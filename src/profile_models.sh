@@ -8,10 +8,10 @@ APPTAINER="--apptainer ../tensorflow_TF_CUDA_12_3.sif"
 JOB="benchmark.py --timelimit $TIMELIMIT --partition abc_a100 --mem=500GB --cpus 16 --gpus 1"
 
 TRAINED_MODELS=(
-  "vit-S16 vit/vit-15-YuMB_lambda510-T16"
+  "vit-T16 vit/vit-15-YuMB_lambda510-T16"
   "vit-S16 vit/vit-15-YuMB_lambda510-S16"
   "vit-B16 vit/vit-15-YuMB_lambda510-B16"
-  "vit-S32 vit/vit-15-YuMB_lambda510-T32"
+  "vit-T32 vit/vit-15-YuMB_lambda510-T32"
   "vit-S32 vit/vit-15-YuMB_lambda510-S32"
   "vit-B32 vit/vit-15-YuMB_lambda510-B32"
   "vit-L32 vit/vit-15-YuMB_lambda510-L32"
