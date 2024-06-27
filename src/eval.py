@@ -4273,7 +4273,7 @@ def profile_models(
                     num_heads += df[f'heads_{k}']
 
                 #warmup
-                profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
+                #profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
 
                 df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
                 df['latency'] = profile_utils.measure_latency(model, number_of_samples=1024)
