@@ -100,7 +100,11 @@ class Wavefront:
             # pick order of modes from most "interesting" to least (51 modes)
             moi = pick_modes(num_modes=self.modes, prefixed=self.prefixed, mode_weights=self.mode_weights)
 
-            # assign amplitudes  amps[:len(moi)] is 51, so amplitudes[piston, tip,tilt, defocus] will always be zero
+            # assign amplitudes
+            # 'amps' is sorted and is of length self.modes (e.g. 15)
+            # 'moi' contains the mode numbers, with the mode to receive the highest amplitude first. It does not
+            #           contain tip, tilt, etc. so it's length is shorter than 'amps' (e.g. 11)
+            # amps[:len(moi)] is 51, so amplitudes[piston, tip, tilt, defocus] will always be zero
             amplitudes[moi] = amps[:len(moi)]
             amplitudes = self._formatter(amplitudes, order)
 

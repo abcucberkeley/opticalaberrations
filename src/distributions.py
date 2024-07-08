@@ -80,12 +80,26 @@ def powerlaw(num_modes, range_lims, signed=True, gamma=.75):
     return amplitudes
 
 
-def dirichlet(num_modes, range_lims, signed=True):
-    """ sum of the coefficients will add up to the desired peak2peak aberration """
+def dirichlet(num_modes: int, range_lims: tuple, signed=True):
+    '''
+
+    Args:
+        num_modes: total number of modes (e.g. 15)
+        range_lims: tuple (min, max)
+        signed: if True, amplitudes will have positive and negative values
+
+    Returns:
+        array of length "num_modes", which is descendingly sorted.The np.sum() of the array (e.g. not the Euclidean sum)
+         will add up to the desired peak2peak aberration
+
+    '''
+
     sign = 0 if signed else np.sum(np.sign(range_lims))
 
     # draw negative and positive random numbers that add up to 1
     if sign == 0:
+        # positive and negative aberrations
+        # num_modes = 11 in the case of Zernike's up to 15 since we skip tip, tilt, piston.
         pos_weights = np.random.dirichlet(np.ones(num_modes), size=1)[0] * 2
         neg_weights = np.random.dirichlet(np.ones(num_modes), size=1)[0] * -1
         weights = pos_weights + neg_weights
@@ -135,7 +149,7 @@ def pick_modes(num_modes, prefixed=(0, 1, 2, 4), mode_weights='uniform'):
         Return the number modes in an order given by the probabilities set by mode_weights
         (without piston, tip, tilt, defocus).
         Like an NBA draft order selection:
-        The highest probability team will get the #1 draft pick the highest amount of times.
+        Highest probability team will get the #1 draft pick (and appear first in the array) the highest amount of times.
     """
     modes = np.arange(num_modes).astype(int)
 
