@@ -41,9 +41,8 @@ jobs:
         uses: snok/container-retention-policy@main
         with:
           image-names: opticalaberrations
-          cut-off: One week ago UTC
-          keep-at-least: 3
-          account-type: personal
+          cut-off: 1w
+          keep-n-most-recent: 3
+          account: user
           token: ${{ secrets.cleanup_packages }}
-          token-type: pat
-          untagged-only: true
+          tag-selection: untagged
