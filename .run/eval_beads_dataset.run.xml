@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="eval_dataset" type="PythonConfigurationType" factoryName="Python" folderName="ao">
+  <configuration default="false" name="eval_beads_dataset" type="PythonConfigurationType" factoryName="Python" folderName="ao">
     <module name="opticalaberrations" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />

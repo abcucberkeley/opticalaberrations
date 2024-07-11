@@ -1544,8 +1544,8 @@ def main(args=None, preloaded=None):
                     postfix=args.prediction_postfix,
                     gt_postfix=args.gt_postfix,
                 )
-            elif args.func == 'eval_dataset':
-                experimental_eval.eval_dataset(
+            elif args.func == 'eval_beads_dataset':
+                experimental_eval.eval_beads_dataset(
                     datadir=args.datadir,
                     flat=args.flat,
                     plot_evals=not args.skip_eval_plots,
@@ -1553,7 +1553,7 @@ def main(args=None, preloaded=None):
                 )
             elif args.func == 'eval_cell_dataset':
                 experimental_eval.eval_cell_dataset(
-                    datadir=args.datadir,
+                    data=args.datadir,
                     flat=args.flat,
                     precomputed=args.precomputed,
                 )

@@ -4349,13 +4349,13 @@ def profile_models(
             'Training cost\n(EFLOPs)',
             'Training hours\n8xH100s',
             'Training\nbatch size',
-            f'Memory (GB) \n[BS={batch_size}]',
-            f'Throughput\n(images/s)\n[BS={batch_size}]',
+            f'Memory (GB)\n[BS={batch_size}]',
+            f'Throughput\n(images/s)',
             'Latency\n(ms/image)',
             'Inference cost\n(GFLOPs)',
-            'Parameters\n(millions)',
-            'Transformers\n(blocks)',
-            'Transformers\n(heads)',
+            'Parameters\n(Millions)',
+            'Transformers\n(Layers)',
+            'Transformers\n(Heads)',
         ]
         cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
         colormaps = ['Blues', 'Oranges', 'Greens', 'Greys']

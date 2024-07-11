@@ -2497,3 +2497,166 @@ def plot_cell_dataset(
         plt.savefig(f'{savepath}.png', dpi=300,  pad_inches=.25)
         plt.savefig(f'{savepath}.pdf', dpi=300,  pad_inches=.25)
         logger.info(f'{savepath}')
+
+
+def plot_cells_heatmap(
+    results: dict,
+    residuals: pd.DataFrame,
+    savepath: Path,
+    dxy: float = .097,
+    dz: float = .2,
+    wavelength: float = .510,
+    pltstyle: Any = None,
+    custom_colormap: bool = True,
+    transform_to_align_to_DM: bool = True
+):
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'axes.autolimit_mode': 'round_numbers'
+    })
+
+    heatmaps = residuals.drop_duplicates(subset=['eval_file', 'na'])
+    heatmaps = heatmaps[["na", "iteration_index", "p2v_gt", "p2v_residual", "p2v_pred", "modes", "mode_1", "mode_2"]]
+
+    for val, wave, label in zip(
+            ["p2v_gt", "p2v_residual", "p2v_pred"],
+            ["gt_wavefront", "diff_wavefront", "ml_wavefront"],
+            [
+                rf"Aberration (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
+                rf"Disagreement (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
+                rf"Prediction (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
+            ]
+    ):
+
+        fig = plt.figure(figsize=(12, 8))
+        gs = fig.add_gridspec(4, 6)
+        zernikes_dict = list(set(Zernike(int(j)) for j in range(15)))
+        heatmap1 = fig.add_subplot(gs[:, -2])
+        heatmap85 = fig.add_subplot(gs[:, -1])
+
+        for i, modes in enumerate(['05', '05-06', '05-07', '05-12']):
+            zernikes = list(set(Zernike(int(j)) for j in modes.split('-')))
+
+            if len(zernikes) == 1:
+                zlabel = f"$Z_{{n={zernikes[0].n}}}^{{m={zernikes[0].m}}}$"
+            else:
+                zlabel = f"$Z_{{n={zernikes[0].n}}}^{{m={zernikes[0].m}}}$" \
+                        f" + $Z_{{n={zernikes[1].n}}}^{{m={zernikes[1].m}}}$"
+
+            k = results[('0000', modes)]
+            r1 = results[('0001', modes)]
+            r2 = results[('0002', modes)]
+            r3 = results[('0003', modes)]
+
+            wf_wavefront = fig.add_subplot(gs[i, 0])
+            ml_wavefront = fig.add_subplot(gs[i, 1])
+            diff_wavefront = fig.add_subplot(gs[i, 2])
+            diff_wavefront2 = fig.add_subplot(gs[i, 3])
+
+            wf_wavefront.set_title('Iteration 0' if i == 0 else '')
+            plot_wavefront(
+                wf_wavefront,
+                k[wave].wave(size=100),
+                label=None,
+                vmin=-.75,
+                vmax=.75,
+                nas=[1.0, .85],
+            )
+
+            ml_wavefront.set_title('Iteration 1' if i == 0 else '')
+            plot_wavefront(
+                ml_wavefront,
+                r1[wave].wave(size=100),
+                label=None,
+                vmin=-.75,
+                vmax=.75,
+                nas=[1.0, .85],
+            )
+
+            diff_wavefront.set_title('Iteration 2' if i == 0 else '')
+            plot_wavefront(
+                diff_wavefront,
+                r2[wave].wave(size=100),
+                label=None,
+                vmin=-.75,
+                vmax=.75,
+                nas=[1.0, .85],
+            )
+
+            diff_wavefront2.set_title('Iteration 3' if i == 0 else '')
+            plot_wavefront(
+                diff_wavefront2,
+                r3[wave].wave(size=100),
+                label=None,
+                vmin=-.75,
+                vmax=.75,
+                nas=[1.0, .85],
+            )
+
+        for k, (heatmapax, na) in enumerate(zip([heatmap1, heatmap85], [1.0, .85])):
+
+            g = heatmaps[heatmaps['na'] == na].pivot(index="iteration_index", columns="modes",  values=val).T
+            levels = np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .05)
+
+            if custom_colormap:
+                vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
+                highcmap = plt.get_cmap('magma_r', 256)
+                lowcmap = plt.get_cmap('GnBu_r', 256)
+                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+                cmap = mcolors.ListedColormap(cmap)
+                im = heatmapax.imshow(g.values, cmap=cmap, aspect='auto', vmin=levels[0], vmax=levels[-1])
+            else:
+                # colors = sns.color_palette('magma_r', n_colors=len(levels))
+                # cmap, norm = matplotlib.colors.from_levels_and_colors(levels, colors, extend="max")
+                # im = ax.imshow(g.values.T, cmap=cmap, norm=norm, aspect='auto')
+                im = heatmapax.imshow(g.values, cmap='magma_r', aspect='auto', vmin=levels[0], vmax=levels[-1])
+
+            heatmapax.yaxis.set_ticks_position('right')
+            heatmapax.yaxis.set_label_position('right')
+
+            heatmapax.set(
+                yticks=range(g.shape[0]),
+                xticks=range(g.shape[1]),
+                xticklabels=g.columns
+            )
+
+            if k == 1:
+                heatmapax.set_yticklabels(g.index)
+                heatmapax.set_ylabel('Initial modes (ANSI index)')
+            else:
+                heatmapax.set_yticklabels([])
+
+            heatmapax.set_xlabel(f'Iteration ($NA_{{{na:.2f}}}$)')
+
+        cbar_ax = inset_axes(
+            heatmap1,
+            width="200%",
+            height="2%",
+            loc='upper left',
+            bbox_to_anchor=(0, .28, 1, .75),
+            bbox_transform=heatmap1.transAxes,
+        )
+        cbar = plt.colorbar(
+            im,
+            cax=cbar_ax,
+            extend='max',
+            spacing='proportional',
+            orientation="horizontal",
+            ticks=np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .25),
+        )
+        cbar_ax.set_title(label)
+        cbar_ax.xaxis.set_ticks_position('top')
+        cbar_ax.xaxis.set_label_position('top')
+
+        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.06, wspace=.06)
+        savesvg(plt,f'{savepath}_{val}.svg')
+        plt.savefig(f'{savepath}_{val}.png', dpi=300,  pad_inches=.25)
+        plt.savefig(f'{savepath}_{val}.pdf', dpi=300,  pad_inches=.25)
+        logger.info(f'{savepath}_{val}')

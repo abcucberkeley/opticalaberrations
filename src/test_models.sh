@@ -23,9 +23,9 @@ DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 BATCH=2048 #-1
 
 TRAINED_MODELS=(
+  "opticalnet-T"
   "opticalnet-S"
   "opticalnet-B"
-  "opticalnet-M"
   "opticalnet-L"
   "opticalnet-H"
   "baseline-T"
