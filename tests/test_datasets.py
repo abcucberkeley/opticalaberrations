@@ -62,9 +62,13 @@ def test_theoretical_widefield_simulator(kargs):
         if z == 4:  # skip defocus
             z = 'ideal'
             aberration = zernikes.copy()
+            noise = False
+            photons = 10000000
         else:
             aberration = zernikes.copy()
             aberration[z] = amplitude
+            noise = True
+            photons = 100000
 
         phi = Wavefront(
             amplitudes=aberration,
@@ -86,8 +90,8 @@ def test_theoretical_widefield_simulator(kargs):
             gen=gen,
             phi=phi,
             emb=False,
-            photons=300000,
-            noise=True,
+            photons=photons,
+            noise=noise,
             normalize=True,
             lls_defocus_offset=(0, 0)
         )
@@ -100,8 +104,8 @@ def test_theoretical_widefield_simulator(kargs):
             gen=gen,
             phi=phi,
             emb=True,
-            photons=300000,
-            noise=True,
+            photons=photons,
+            noise=noise,
             normalize=True,
             lls_defocus_offset=(0, 0),
             plot=True,
@@ -138,9 +142,13 @@ def test_experimental_widefield_simulator(kargs):
         if z == 4:  # skip defocus
             z = 'ideal'
             aberration = zernikes.copy()
+            noise = False
+            photons = 10000000
         else:
             aberration = zernikes.copy()
             aberration[z] = amplitude
+            noise = True
+            photons = 100000
 
         phi = Wavefront(
             amplitudes=aberration,
@@ -162,8 +170,8 @@ def test_experimental_widefield_simulator(kargs):
             gen=gen,
             phi=phi,
             emb=False,
-            photons=300000,
-            noise=True,
+            photons=photons,
+            noise=noise,
             normalize=True,
             lls_defocus_offset=(0, 0)
         )
@@ -176,8 +184,8 @@ def test_experimental_widefield_simulator(kargs):
             gen=gen,
             phi=phi,
             emb=True,
-            photons=300000,
-            noise=True,
+            photons=photons,
+            noise=noise,
             normalize=True,
             lls_defocus_offset=(0, 0),
             plot=True,
