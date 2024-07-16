@@ -3858,8 +3858,6 @@ def compare_models(
                 ax.set_ylim(0, .4)
                 ax.set_yticks(np.arange(0, .5, .1))
 
-            ax.axhline(0, color="k", clip_on=False)
-
             if j == 0:
                 ax.spines['left'].set_visible(True)
             else:
@@ -4005,6 +4003,13 @@ def profile_models(
     batch_size: int = 1024,
     wavelength: float = .510
 ):
+    def change_width(ax, new_value):
+        for patch in ax.patches:
+            current_width = patch.get_width()
+            diff = current_width - new_value
+            patch.set_width(new_value)
+            patch.set_x(patch.get_x() + diff * .5)
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -4014,7 +4019,7 @@ def profile_models(
         'legend.fontsize': 10,
         'xtick.major.pad': 10
     })
-    
+
     def plot_training_curves(df):
         steps = [1] + list(range(49, 500, 50))
         for x in ['training', 'training_gflops']:
@@ -4314,20 +4319,22 @@ def profile_models(
         df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
         df.loc[df.model.str.match(r'vit.*16'), 'cat'] = 'ViT/16'
         df.loc[df.model.str.match(r'vit.*32'), 'cat'] = 'ViT/32'
+        # df.loc[df.model.str.match(r'vit'), 'cat'] = 'ViT'
         df.loc[df.model.str.match(r'baseline'), 'cat'] = 'ConvNext'
         df.model = df.model.replace(models)
         
         dataframes.append(df)
 
     if len(models_codenames) > 1:
-        plot_training_curves(df=pd.concat(dataframes).reset_index(drop=True))
+        pass
+        # plot_training_curves(df=pd.concat(dataframes).reset_index(drop=True))
 
         df = pd.DataFrame()
         for d in dataframes:
             best = d['epoch_mse'].idxmin()
             df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
 
-        plot_scaling_parameters(df)
+        # plot_scaling_parameters(df)
 
         coi = [
             'mean',
@@ -4359,6 +4366,7 @@ def profile_models(
         ]
         cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
         colormaps = ['Blues', 'Oranges', 'Greens', 'Greys']
+        widths = [.25, .15, .2, .3]
         df = df.sort_values('epoch_mse', ascending=False)
 
         eval_csv = pd.read_csv(Path('../evaluations/compare.csv'), index_col=0, header=0)
@@ -4366,12 +4374,15 @@ def profile_models(
         df = pd.merge(df, eval_csv, on='model', how='outer')
 
 
-        fig, axes = plt.subplots(len(coi), len(cats), figsize=(16, 16), sharex=False, sharey=False)
+        fig, axes = plt.subplots(len(coi), len(cats), figsize=(12, 15), sharex=False, sharey=False)
 
         for i, cc in enumerate(coi):
             for j, cat in enumerate(cats):
                 ax = axes[i, j]
                 data = df[df.cat == cat]
+                data['model'] = data['model'].str.replace(r'.*-', '', regex=True)
+                data['model'] = data['model'].str.replace(r'/.*', '', regex=True)
+
                 ax = sns.barplot(
                     data=data,
                     x='model',
@@ -4384,6 +4395,7 @@ def profile_models(
                     dodge=False,
                     native_scale=False,
                 )
+                change_width(ax, widths[j])
 
                 if i == 0:
                     ax.set_title(cat)
@@ -4420,60 +4432,46 @@ def profile_models(
                 if coi[i] == 'mean':
                     ax.set_ylim(0, .5)
                     ax.set_yticks(np.arange(0, .6, .1))
-                    ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'epoch_mse':
                     ax.set_ylim(1e-7, 1e-5)
                     # ax.set_yticks(np.arange(1e-7, 1e-5, 2e-6))
                     ax.set_yscale('log')
-                    ax.axhline(1e-7, color="k", clip_on=False)
                 elif coi[i] == 'training':
                     ax.set_ylim(0, 168) # (1 week of training)
                     ax.set_yticks(range(0, 192, 24))
                     # ax.set_ylim(0, 25)
-                    ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'batch_size':
                     ax.set_ylim(0, 4096)
                     ax.set_yticks(range(0, 4096+1024, 1024))
-                    ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
                     ax.set_ylim(0, 125)
                     ax.set_yticks(range(0, 150, 25))
-                    ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
                     ax.set_ylim(0, 40)
                     ax.set_yticks(range(0, 50, 10))
-                    ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'params':
                     ax.set_ylim(10, 2000)
                     ax.set_yscale('log')
-                    ax.axhline(10, color="k", clip_on=False)
                 elif coi[i] == 'memory':
                     ax.set_ylim(0, 20)
                     ax.set_yticks(range(0, 25, 5))
-                    ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'num_tokens':
                     ax.set_ylim(0, 2000)
-                    ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'transformers':
                     ax.set_ylim(0, 32)
                     ax.set_yticks([0, 6, 12, 18, 24, 30, 36])
-                    ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'heads':
                     ax.set_ylim(0, 600)
                     ax.set_yticks(range(0, 700, 100))
-                    ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'latency':
                     ax.set_ylim(0, 40)
                     ax.set_yticks(range(0, 50, 10))
-                    ax.axhline(0, color="k", clip_on=False)
                 elif coi[i] == 'throughput':
                     ax.set_ylim(0, 3000)
                     ax.set_yticks(range(0, 3500, 500))
-                    ax.axhline(0, color="k", clip_on=False)
                 else:
                     ax.set_ylim(0, 1440)
                     ax.set_yticks(range(0, 1500, 60))
-                    ax.axhline(0, color="k", clip_on=False)
 
                 if j == 0:
                     ax.spines['left'].set_visible(True)
@@ -4484,9 +4482,136 @@ def profile_models(
                 ax.spines['top'].set_visible(False)
                 ax.spines['right'].set_visible(False)
 
+
         plt.tight_layout()
 
         savepath = Path(f'{outdir}/profiles')
+        logger.info(savepath)
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+        coi = [
+            'params',
+            'training',
+            'throughput',
+            'mean',
+        ]
+        titles = [
+            'Parameters\n(Millions)',
+            'Training hours\n8xH100s',
+            f'Throughput\n(images/s)',
+            f'Testing P2V\n$i\in${{$1\lambda\\to2\lambda$}}\n($\lambda={int(wavelength * 1000)}nm$)',
+        ]
+        cats = ['ConvNext', 'ViT/16', 'Ours']
+        colormaps = ['Blues', 'Oranges', 'Greys']
+        widths = [.25, .15, .3]
+
+        fig, axes = plt.subplots(len(coi), 1, figsize=(6, 8), sharex=False, sharey=False)
+        for i, cc in enumerate(coi):
+            ax = axes[i]
+            data = df[df.cat != 'ViT/32']
+            data['label'] = data['model'].str.replace(r'.*-', '', regex=True)
+            data['label'] = data['label'].str.replace(r'/.*', '', regex=True)
+
+            order = [
+                'ConvNext-T', 'ConvNext-S', 'ConvNext-B', 'ConvNext-L',
+                'ViT-S/16', 'ViT-B/16',
+                'Ours-T', 'Ours-S', 'Ours-B', 'Ours-L', 'Ours-H'
+            ]
+            data['ranks'] = data['model'].map(dict(zip(order, range(len(order)))))
+            data = data.sort_values('ranks', ascending=True)
+
+            ax = sns.barplot(
+                data=data,
+                x='model',
+                y=coi[i],
+                hue='cat',
+                hue_order=cats,
+                palette=['C0', 'C1', 'dimgrey'],
+                alpha=.85,
+                ax=ax,
+                legend=False,
+                dodge=False,
+                native_scale=False,
+            )
+
+            ax.set_ylabel(titles[i])
+            ax.set_xlabel('')
+
+            if i == len(coi) - 1:
+                ax.set_xticklabels(data.label)
+            else:
+                ax.set_xticklabels([])
+
+            for c in range(len(ax.containers)):
+                if coi[i] == 'mean':
+                    fmt = '%.1f'
+                elif coi[i] == 'epoch_mse':
+                    fmt = '%.2g'
+                elif coi[i] == 'params':
+                    fmt = '%dM'
+                elif coi[i] in ['num_tokens', 'params', 'throughput', 'batch_size', 'transformers', 'heads']:
+                    fmt = '%d'
+                else:
+                    fmt = '%.1f'
+
+                ax.bar_label(ax.containers[c] if ax.containers[c] != 0 else '', fontsize=8, fmt=fmt)
+
+            ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
+            ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
+
+            if coi[i] == 'mean':
+                ax.set_ylim(0, .5)
+                ax.set_yticks(np.arange(0, .6, .1))
+            elif coi[i] == 'epoch_mse':
+                ax.set_ylim(1e-7, 1e-5)
+                ax.set_yscale('log')
+            elif coi[i] == 'training':
+                ax.set_ylim(0, 168) # (1 week of training)
+                ax.set_yticks(range(0, 192, 24))
+            elif coi[i] == 'batch_size':
+                ax.set_ylim(0, 4096)
+                ax.set_yticks(range(0, 4096+1024, 1024))
+            elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
+                ax.set_ylim(0, 125)
+                ax.set_yticks(range(0, 150, 25))
+            elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
+                ax.set_ylim(0, 40)
+                ax.set_yticks(range(0, 50, 10))
+            elif coi[i] == 'params':
+                ax.set_ylim(0, 400)
+                ax.set_yticks(range(0, 450, 50))
+            elif coi[i] == 'memory':
+                ax.set_ylim(0, 20)
+                ax.set_yticks(range(0, 25, 5))
+            elif coi[i] == 'num_tokens':
+                ax.set_ylim(0, 2000)
+            elif coi[i] == 'transformers':
+                ax.set_ylim(0, 32)
+                ax.set_yticks([0, 6, 12, 18, 24, 30, 36])
+            elif coi[i] == 'heads':
+                ax.set_ylim(0, 600)
+                ax.set_yticks(range(0, 700, 100))
+            elif coi[i] == 'latency':
+                ax.set_ylim(0, 40)
+                ax.set_yticks(range(0, 50, 10))
+            elif coi[i] == 'throughput':
+                ax.set_ylim(0, 3000)
+                ax.set_yticks(range(0, 3500, 500))
+            else:
+                ax.set_ylim(0, 1440)
+                ax.set_yticks(range(0, 1500, 60))
+
+            ax.spines['left'].set_visible(True)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+
+
+        plt.tight_layout()
+
+        savepath = Path(f'{outdir}/summary')
         logger.info(savepath)
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
