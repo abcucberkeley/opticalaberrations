@@ -1681,12 +1681,38 @@ def plot_beads_dataset(
     wavelength: float = .510,
     pltstyle: Any = None,
     custom_colormap: bool = True,
-    transform_to_align_to_DM: bool = True
+    transform_to_align_to_DM: bool = True,
+    nas: list = [1.0, .85]
 ):
+    def rename_zernikes(ansi):
+        ansi2name = {
+            0: "piston",
+            # 1st order
+            1: "tilt",
+            2: "tip",
+            # 2nd order
+            3: "O-Astig",
+            4: "defocus",
+            5: "V-Astig",
+            # 3rd order
+            6: "V-Trefoil",
+            7: "V-Coma",
+            8: "H-Coma",
+            9: "O-Trefoil",
+            # 4th order
+            10: "O-Quadrafoil",
+            11: "O-Astig2",
+            12: "P-Spherical",
+            13: "V-Astig2",
+            14: "V-Quadrafoil",
+        }
+        name = ' & '.join(ansi2name[int(a)] for a in set(ansi.split('-')))
+        return name
+
     plt.rcParams.update({
         'font.size': 12,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
+        'axes.titlesize': 14,
+        'axes.labelsize': 14,
         'xtick.labelsize': 10,
         'ytick.labelsize': 10,
         'legend.fontsize': 10,
@@ -1695,6 +1721,13 @@ def plot_beads_dataset(
 
     heatmaps = residuals.drop_duplicates(subset=['eval_file', 'na'])
     heatmaps = heatmaps[["na", "iteration_index", "p2v_gt", "p2v_residual", "p2v_pred", "modes", "mode_1", "mode_2"]]
+
+    if len(nas) == 1:
+        rows = ['05-05', '03-05', '05-08', '10-12']
+        figsize = (16, 14)
+    else:
+        rows = ['12-12', '05-13', '09-11', '10-12']
+        figsize = (16, 12)
 
     for val, label in zip(
             ["p2v_gt", "p2v_residual", "p2v_pred"],
@@ -1705,13 +1738,21 @@ def plot_beads_dataset(
             ]
     ):
 
-        fig = plt.figure(figsize=(16, 11))
-        gs = fig.add_gridspec(4, 6)
+        fig = plt.figure(figsize=figsize)
+        gs = fig.add_gridspec(4, 4+len(nas))
         zernikes_dict = list(set(Zernike(int(j)) for j in range(15)))
-        heatmap1 = fig.add_subplot(gs[:, -2])
-        heatmap85 = fig.add_subplot(gs[:, -1])
 
-        for i, modes in enumerate(['05-05', '03-05', '05-08', '10-12']):
+        if len(nas) == 1:
+            heatmap1 = fig.add_subplot(gs[:, -2])
+            heatmaps_axes = [heatmap1]
+        else:
+            heatmap1 = fig.add_subplot(gs[:, -3])
+            heatmap2 = fig.add_subplot(gs[:, -2])
+            heatmaps_axes = [heatmap1, heatmap2]
+
+        gs.update(top=.93, bottom=.05, left=.05, right=1, wspace=0.02, hspace=0.02)
+
+        for i, modes in enumerate(rows):
             zernikes = list(set(Zernike(int(j)) for j in modes.split('-')))
 
             if len(zernikes) == 1:
@@ -1727,13 +1768,10 @@ def plot_beads_dataset(
             wf_mip = fig.add_subplot(gs[i, 0])
             wf_wavefront = inset_axes(wf_mip, width="40%", height="40%", loc='lower right', borderpad=0)
 
-            ls_mip = fig.add_subplot(gs[i, 1])
-            ml_wavefront = inset_axes(ls_mip, width="40%", height="40%", loc='lower right', borderpad=0)
-
-            diff_mip = fig.add_subplot(gs[i, 2])
+            diff_mip = fig.add_subplot(gs[i, 1])
             diff_wavefront = inset_axes(diff_mip, width="40%", height="40%", loc='lower right', borderpad=0)
 
-            diff_mip2 = fig.add_subplot(gs[i, 3])
+            diff_mip2 = fig.add_subplot(gs[i, 2])
             diff_wavefront2 = inset_axes(diff_mip2, width="40%", height="40%", loc='lower right', borderpad=0)
 
             plot_mip(
@@ -1741,16 +1779,16 @@ def plot_beads_dataset(
                 xz=None,
                 yz=None,
                 gamma=gamma,
-                vol=np.transpose(np.rot90(k['gt_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
-                    if transform_to_align_to_DM else k['gt_img'],
+                vol=np.transpose(np.rot90(k['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
+                    if transform_to_align_to_DM else k['ml_img'],
                 cmap=psf_cmap,
                 dxy=dxy,
                 dz=dz,
                 colorbar=False,
             )
             wf_mip.axis('on')
-            wf_mip.set_title('Iteration 0\nPhaseRetrieval\nWF' if i == 0 else '')
-            wf_mip.set_ylabel(modes)
+            wf_mip.set_title('Iteration 0' if i == 0 else '')
+            wf_mip.set_ylabel(rename_zernikes(modes))#.replace(' &', '\n&'))
             wf_mip.set_xlabel('')
             wf_mip.set_yticks([])
             wf_mip.set_xticks([])
@@ -1775,35 +1813,7 @@ def plot_beads_dataset(
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                # hcolorbar=True if i == 3 else False, ## mplib breaks with "_raw_ticks istep=np.nonzero(large_steps)[0][0] IndexError: index 0 is out of bounds for axis 0 with size 0
-            )
-
-            plot_mip(
-                xy=ls_mip,
-                xz=None,
-                yz=None,
-                gamma=gamma,
-                vol=np.transpose(np.rot90(k['ml_img'], k=2, axes=(1, 2)), axes=(0, 2, 1))
-                    if transform_to_align_to_DM else k['ml_img'],
-                cmap=psf_cmap,
-                dxy=dxy,
-                dz=dz,
-                colorbar=False,
-            )
-            ls_mip.axis('on')
-            ls_mip.set_title('Iteration 0\nOpticalNet\nLLSM' if i == 0 else '')
-            ls_mip.set_xlabel('')
-            ls_mip.set_yticks([])
-            ls_mip.set_xticks([])
-
-            plot_wavefront(
-                ml_wavefront,
-                k['ml_wavefront'].wave(size=100),
-                label=None,
-                vmin=-.75,
-                vmax=.75,
-                nas=[1.0, .85],
-                # hcolorbar=True if i == 3 else False, ## mplib breaks with "_raw_ticks istep=np.nonzero(large_steps)[0][0] IndexError: index 0 is out of bounds for axis 0 with size 0
+                # hcolorbar=True if i == 3 else False,
             )
 
             plot_mip(
@@ -1819,19 +1829,19 @@ def plot_beads_dataset(
                 colorbar=False,
             )
             diff_mip.axis('on')
-            diff_mip.set_title('Iteration 1\nOpticalNet\nLLSM' if i == 0 else '')
+            diff_mip.set_title('Iteration 1' if i == 0 else '')
             diff_mip.set_xlabel('')
             diff_mip.set_yticks([])
             diff_mip.set_xticks([])
 
             plot_wavefront(
                 diff_wavefront,
-                r1['diff_wavefront'].wave(size=100),
+                r1['gt_wavefront'].wave(size=100),
                 label=None,
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                # hcolorbar=True if i == 3 else False, ## mplib breaks with "_raw_ticks istep=np.nonzero(large_steps)[0][0] IndexError: index 0 is out of bounds for axis 0 with size 0
+                # hcolorbar=True if i == 3 else False,
             )
 
             plot_mip(
@@ -1847,21 +1857,21 @@ def plot_beads_dataset(
                 colorbar=False,
             )
             diff_mip2.axis('on')
-            diff_mip2.set_title('Iteration 2\nOpticalNet\nLLSM' if i == 0 else '')
+            diff_mip2.set_title('Iteration 2' if i == 0 else '')
             diff_mip2.set_xlabel('')
             diff_mip2.set_yticks([])
             diff_mip2.set_xticks([])
 
             plot_wavefront(
-                diff_wavefront2, r2['diff_wavefront'].wave(size=100),
+                diff_wavefront2, r2['gt_wavefront'].wave(size=100),
                 label=None,
                 vmin=-.75,
                 vmax=.75,
                 nas=[1.0, .85],
-                # hcolorbar=True if i == 3 else False,  ## mplib breaks with "_raw_ticks istep=np.nonzero(large_steps)[0][0] IndexError: index 0 is out of bounds for axis 0 with size 0
+                # hcolorbar=True if i == 3 else False,
             )
 
-        for k, (heatmapax, na) in enumerate(zip([heatmap1, heatmap85], [1.0, .85])):
+        for k, (heatmapax, na) in enumerate(zip(heatmaps_axes, nas)):
 
             g = heatmaps[heatmaps['na'] == na].pivot(index="iteration_index", columns="modes",  values=val).T
             levels = np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .05)
@@ -1890,9 +1900,9 @@ def plot_beads_dataset(
                 xticklabels=g.columns
             )
 
-            if k == 1:
-                heatmapax.set_yticklabels(g.index)
-                heatmapax.set_ylabel('Initial modes (ANSI index)')
+            if k == len(nas) - 1:
+                heatmapax.set_yticklabels([rename_zernikes(idx) for idx in g.index])
+                heatmapax.set_ylabel('Applied Zernike modes')
             else:
                 heatmapax.set_yticklabels([])
 
@@ -1900,7 +1910,7 @@ def plot_beads_dataset(
 
         cbar_ax = inset_axes(
             heatmap1,
-            width="200%",
+            width=f"{100 * len(nas)}%",
             height="2%",
             loc='upper left',
             bbox_to_anchor=(0, .28, 1, .75),
@@ -1918,7 +1928,6 @@ def plot_beads_dataset(
         cbar_ax.xaxis.set_ticks_position('top')
         cbar_ax.xaxis.set_label_position('top')
 
-        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.06, wspace=.06)
         savesvg(plt,f'{savepath}_{val}.svg')
         plt.savefig(f'{savepath}_{val}.png', dpi=300,  pad_inches=.25)
         plt.savefig(f'{savepath}_{val}.pdf', dpi=300,  pad_inches=.25)

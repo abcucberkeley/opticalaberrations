@@ -43,7 +43,7 @@
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="predict_tiles ../pretrained_models/opticalnet-15-YuMB-lambda510.h5 ../data/exp4-R2462/before_Iter_0000_CamA_ch0_CAM1_stack0000_488nm_0000000msec_0281650622msecAbs_-01x_-01y_-01z_0000t.tif ../calibration/aang/15_mode_calibration.csv --current_dm None --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --window_size 64-64-64 --freq_strength_threshold 0.01 --batch_size 896 --prev None --plot --plot_rotations" />
+    <option name="PARAMETERS" value="predict_tiles ../pretrained_models/opticalnet-15-YuMB-lambda510.h5 /clusterfs/nvme2/Data/TestsForThayer/20240702_SHvsML_2color/exp1_ap2_mito_notochord_2mindelay/Full_Chip_Start_Scan_Iter_CamA_ch0_CAM1_stack0000_488nm_0000000msec_1038314684msecAbs_-01x_-01y_-01z_0000t.tif ../calibration/aang/15_mode_calibration.csv --current_dm None --wavelength 0.51 --lateral_voxel_size 0.097 --axial_voxel_size 0.2 --window_size 64-64-64 --freq_strength_threshold 0.01 --batch_size 896 --prev None --plot --plot_rotations --cluster --docker" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />

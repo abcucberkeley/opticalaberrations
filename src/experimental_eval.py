@@ -408,22 +408,22 @@ def eval_mode(
 
 def process_eval_file(file: Path, nas=(1.0, .95, .85)):
     results = {}
-    # iteration_labels = [
-    #     'before',
-    #     'after0',
-    #     'after1',
-    #     'after2',
-    #     'after3',
-    #     'after4',
-    #     'after5',
-    # ]
     iteration_labels = [
-        '0000',
-        '0001',
-        '0002',
-        '0003',
-        '0004',
+        'before',
+        'after0',
+        'after1',
+        'after2',
+        'after3',
+        'after4',
+        'after5',
     ]
+    # iteration_labels = [
+    #     '0000',
+    #     '0001',
+    #     '0002',
+    #     '0003',
+    #     '0004',
+    # ]
 
     state = file.stem.split('_')[0]
     if state == 'Scan':
@@ -440,7 +440,7 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
         elif '5ab_12ab' in str(file):
             modes = ['05', '12']
         elif '6ab_7ab' in str(file):
-            modes = ['06', '7']
+            modes = ['06', '07']
         elif '6ab_12ab' in str(file):
             modes = ['06', '12']
         elif '7ab_12ab' in str(file):
@@ -826,7 +826,7 @@ def eval_beads_dataset(
     gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv',
     plot_evals: bool = True,
     precomputed: bool = False,
-    rerun_calc: bool = True,
+    rerun_calc: bool = False,
 ):
     results = {}
     savepath = Path(f'{datadir}/beads_evaluation')
@@ -1000,7 +1000,8 @@ def eval_beads_dataset(
         results = np.load(f'{savepath}_results.npy', allow_pickle='TRUE').item()
 
     logger.info(f'{savepath}.csv')
-    vis.plot_cells_heatmap(residuals, savepath=savepath)
+    vis.plot_beads_dataset(results, residuals, savepath=savepath, nas=[1.0])
+    vis.plot_beads_dataset(results, residuals, savepath=f"{savepath}_si", nas=[1.0, .85])
 
 
 def eval_cell_dataset(

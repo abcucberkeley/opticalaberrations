@@ -1057,29 +1057,29 @@ def parse_args(args):
         help='a toggle to run predictions through docker container'
     )
 
-    eval_dataset = subparsers.add_parser(
-        "eval_dataset",
+    eval_beads_dataset = subparsers.add_parser(
+        "eval_beads_dataset",
         help="Evaluate artificially introduced aberrations via the DM"
     )
-    eval_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
-    eval_dataset.add_argument(
+    eval_beads_dataset.add_argument("datadir", type=Path, help="path to dataset directory")
+    eval_beads_dataset.add_argument(
         "--flat", default=None, type=Path,
         help="path to the flat DM acts file. If this is given, then DM surface plots will be made."
     )
-    eval_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
-    eval_dataset.add_argument("--precomputed", action='store_true')
-    eval_dataset.add_argument(
+    eval_beads_dataset.add_argument("--skip_eval_plots", action='store_true', help="skip generating the _ml_eval.svg files.")
+    eval_beads_dataset.add_argument("--precomputed", action='store_true')
+    eval_beads_dataset.add_argument(
         "--cpu_workers", default=-1, type=int, help='number of CPU cores to use'
     )
-    eval_dataset.add_argument(
+    eval_beads_dataset.add_argument(
         "--cluster", action='store_true',
         help='a toggle to run predictions on our cluster'
     )
-    eval_dataset.add_argument(
+    eval_beads_dataset.add_argument(
         "--partition", type=str, default='abc_a100',
         help="slurm partition to use on the ABC cluster"
     )
-    eval_dataset.add_argument(
+    eval_beads_dataset.add_argument(
         "--docker", action='store_true',
         help='a toggle to run predictions through docker container'
     )
