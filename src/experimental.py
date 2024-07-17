@@ -1300,9 +1300,12 @@ def predict_folder(
 def kmeans_clustering(data, k):
     km = KMeans(
         init="k-means++",
-        n_clusters=k
-    ).fit(data)
-    labels = km.fit_predict(data)
+        n_clusters=k,
+        max_iter=1000,
+        random_state=0
+    )
+    km.fit(data)
+    labels = km.predict(data)
     silhouette = silhouette_score(data, labels)
     return silhouette
 
@@ -1369,14 +1372,6 @@ def cluster_tiles(
         ztile_stds = valid_stdevs.get_group(z)
         ztile_stds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
 
-        if optimize_max_isoplanatic_clusters:
-            logger.info('KMeans calculating...')
-            ks = np.arange(2, max_isoplanatic_clusters + 1)
-            ans = Parallel(n_jobs=-1, verbose=0)(delayed(kmeans_clustering)(ztile_preds.values, k) for k in ks)
-            results = pd.DataFrame(ans, index=ks, columns=['silhouette'])
-            max_silhouette = results['silhouette'].idxmax()
-            max_isoplanatic_clusters = max_silhouette
-
         # weight zernike coefficients by their mth order for clustering
         features = ztile_preds.copy().fillna(0)
         for mode, twin in Wavefront(np.zeros(features.shape[1])).twins.items():
@@ -1386,6 +1381,14 @@ def cluster_tiles(
             else:  # spherical modes
                 features[mode.index_ansi] /= mode.m + 1
 
+        if optimize_max_isoplanatic_clusters:
+            logger.info('KMeans calculating...')
+            ks = np.arange(2, max_isoplanatic_clusters)
+            ans = Parallel(n_jobs=-1, verbose=1)(delayed(kmeans_clustering)(features, k) for k in ks)
+            results = pd.DataFrame(ans, index=ks, columns=['silhouette'])
+            max_isoplanatic_clusters = results['silhouette'].idxmax()
+            logger.info(f'Optimizing KMeans clustering done, using {max_isoplanatic_clusters=}')
+
         n_clusters = min(max_isoplanatic_clusters, len(features)) + 1
 
         compute_clustering = True
@@ -1393,8 +1396,6 @@ def cluster_tiles(
             clustering = KMeans(n_clusters=n_clusters, max_iter=1000, random_state=0)
             clustering.fit(features)    # Cluster calculation
             ztile_preds['cluster'] = clustering.predict(features)   # Predict the closest cluster each tile belongs to
-            del clustering
-
 
             if ztile_preds['cluster'].unique().size < max_isoplanatic_clusters:
                 # We didn't have enough tiles to make all requested clusters. We're done.
@@ -1416,9 +1417,7 @@ def cluster_tiles(
 
         # sort clusters by p2v
         centers_mag = [
-            ztile_preds[ztile_preds['cluster'] == i].mask(where_unconfident).drop(columns='cluster').fillna(0).agg(
-                aggregation_rule, axis=0
-            ).values
+            ztile_preds[ztile_preds['cluster'] == i].mask(where_unconfident).drop(columns='cluster').fillna(0).agg('median', axis=0).values
             for i in range(n_clusters)
         ]
         centers_mag = np.array([Wavefront(np.nan_to_num(c, nan=0)).peak2valley() for c in centers_mag])
@@ -1571,7 +1570,7 @@ def aggregate_tiles(
     max_isoplanatic_clusters: int = 3,
     optimize_max_isoplanatic_clusters: bool = False,
     plot: bool = False,
-    clusters3d_colormap: str = 'tab20',
+    clusters3d_colormap: str = 'muted',
     zero_confident_color: tuple = (255, 255, 0),
     unconfident_color: tuple = (255, 255, 255),
     ignored_color: tuple = (255, 166, 246),  # pink
@@ -1583,11 +1582,28 @@ def aggregate_tiles(
         ).sum() for z in range(num_ztiles)
     ])
 
+    n_colors = max_isoplanatic_clusters * num_ztiles
+
+    # cluster_colors = [
+    #     (31, 119, 180), #blue
+    #     (255, 127, 14), #orange
+    #     (44, 160, 44), #green
+    #     (214, 39, 40),  #red
+    #     (140, 86, 75), #brown
+    #     (188, 189, 34),  #olive
+    #     (23, 190, 207), #cyan
+    # ]
+    # clusters3d_colormap = np.array([
+    #     zero_confident_color,
+    #     *cluster_colors[:n_colors],
+    #     ignored_color,
+    #     unconfident_color
+    # ])
+
     cluster_colors = np.split(
         np.array(sns.color_palette(clusters3d_colormap, n_colors=(max_isoplanatic_clusters * num_ztiles))) * 255,
         num_ztiles,
     )  # list of colors for each z tiles
-
     clusters3d_colormap = []
     for cc in cluster_colors:  # for each z tile's colors
         clusters3d_colormap.extend([zero_confident_color, *cc])  # append the same zero color (e.g. yellow) at the front
@@ -1646,11 +1662,13 @@ def aggregate_tiles(
     logger.info(f"window_size = {zw, yw, xw}")
     logger.info(f"      tiles = {num_ztiles, num_ytiles, num_xtiles}")
 
-    for i, (z, y, x) in enumerate(itertools.product(range(num_ztiles), range(num_ytiles), range(num_xtiles))):
+    for i, (z, y, x) in tqdm(
+            enumerate(itertools.product(range(num_ztiles), range(num_ytiles), range(num_xtiles))),
+            total=num_ztiles*num_ytiles*num_xtiles
+    ):
         c = predictions.loc[(z, y, x), 'cluster']
         if not np.isnan(c):
-            clusters_rgb[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.full((yw, xw),
-                                                                                  int(c))  # cluster group id
+            clusters_rgb[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.full((yw, xw), int(c))  # cluster group id
 
             if c == len(clusters3d_colormap) - 1 or c == len(
                     clusters3d_colormap) - 2:  # last codes (e.g. 8, 9) set to flat.
@@ -1676,55 +1694,57 @@ def aggregate_tiles(
                 expected_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
 
                 wavefront_heatmap[
-                z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
+                    z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
                 ] = np.nan_to_num(w.wave(xw), nan=0)
 
                 expected_wavefront_heatmap[
-                z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
+                    z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
                 ] = np.nan_to_num(expected_w.wave(xw), nan=0)
 
                 psf_heatmap[
-                z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
+                    z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
                 ] = np.max(abberated_psf, axis=0)
 
                 expected_psf_heatmap[
-                z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
+                    z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
                 ] = np.max(expected_psf, axis=0)
 
             clusters3d_heatmap[z * zw:(z * zw) + zw, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.full(
                 (zw, yw, xw),
                 int(c))  # filled with cluster id 0,1,2,3, 4,5,6,7, 8] 8 is unconfident, color gets assigned later
 
-        imwrite(f"{save_path.with_suffix('')}_{postfix}_wavefronts.tif", wavefront_heatmap.astype(np.float32),
-                compression='deflate', dtype=np.float32)
-        imwrite(f"{save_path.with_suffix('')}_{postfix}_wavefronts_expected.tif",
-                expected_wavefront_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
-        imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32),
-                compression='deflate', dtype=np.float32)
-        imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs_expected.tif", expected_psf_heatmap.astype(np.float32),
-                compression='deflate', dtype=np.float32)
+    imwrite(f"{save_path.with_suffix('')}_{postfix}_ids.tif", clusters3d_heatmap.astype(np.int32),
+            compression='deflate', dtype=np.int32)
+    imwrite(f"{save_path.with_suffix('')}_{postfix}_wavefronts.tif", wavefront_heatmap.astype(np.float32),
+            compression='deflate', dtype=np.float32)
+    imwrite(f"{save_path.with_suffix('')}_{postfix}_wavefronts_expected.tif",
+            expected_wavefront_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
+    imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32),
+            compression='deflate', dtype=np.float32)
+    imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs_expected.tif", expected_psf_heatmap.astype(np.float32),
+            compression='deflate', dtype=np.float32)
 
+    color_clusters(
+        vol,
+        clusters3d_heatmap,
+        savepath=f"{save_path.with_suffix('')}_{postfix}_clusters.tif",
+        xw=xw,
+        yw=yw,
+        colormap=clusters3d_colormap,
+    )
+
+    for name, heatmap in zip(
+            ('wavefronts', 'wavefronts_expected', 'psfs', 'psfs_expected'),
+            (wavefront_heatmap, expected_wavefront_heatmap, psf_heatmap, expected_psf_heatmap),
+    ):
         color_clusters(
-            vol,
-            clusters3d_heatmap,
-            savepath=f"{save_path.with_suffix('')}_{postfix}_clusters.tif",
+            heatmap,
+            clusters_rgb,
+            savepath=f"{save_path.with_suffix('')}_{postfix}_clusters_{name}.tif",
             xw=xw,
             yw=yw,
             colormap=clusters3d_colormap,
         )
-
-        for name, heatmap in zip(
-                ('wavefronts', 'wavefronts_expected', 'psfs', 'psfs_expected'),
-                (wavefront_heatmap, expected_wavefront_heatmap, psf_heatmap, expected_psf_heatmap),
-        ):
-            color_clusters(
-                heatmap,
-                clusters_rgb,
-                savepath=f"{save_path.with_suffix('')}_{postfix}_clusters_{name}.tif",
-                xw=xw,
-                yw=yw,
-                colormap=clusters3d_colormap,
-            )
 
         # reconstruct_wavefront_error_landscape(
         #     wavefronts=wavefronts,

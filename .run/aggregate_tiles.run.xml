@@ -43,7 +43,7 @@
     </EXTENSION>
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
     <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/ao.py" />
-    <option name="PARAMETERS" value="aggregate_predictions /clusterfs/nvme2/Data/TestsForThayer/20240702_SHvsML_2color/exp1_ap2_mito_notochord_2mindelay/Full_Chip_Start_Scan_Iter_CamA_ch0_CAM1_stack0000_488nm_0000000msec_1038314684msecAbs_-01x_-01y_-01z_0000t_tiles_predictions.csv ../calibration/aang/15_mode_calibration.csv --current_dm None --aggregation_rule conf --plot --cluster" />
+    <option name="PARAMETERS" value="aggregate_predictions ../data/fish/Full_Chip_Start_Scan_Iter_CamA_ch0_CAM1_stack0000_488nm_0000000msec_1038314684msecAbs_-01x_-01y_-01z_0000t_tiles_predictions.csv ../calibration/aang/15_mode_calibration.csv --current_dm None --aggregation_rule centers --max_isoplanatic_clusters 10 --plot" />
     <option name="SHOW_COMMAND_LINE" value="false" />
     <option name="EMULATE_TERMINAL" value="false" />
     <option name="MODULE_MODE" value="false" />
