@@ -979,6 +979,14 @@ def predict_tiles(
     sample = backend.load_sample(img)
     logger.info(f"Sample: {sample.shape}")
 
+    # img = Path('.tif')
+    # sample = backend.load_sample(img)
+    # idx = sample.shape[2] // 2
+    # cropped = sample[:, :, idx - 256:idx + 256]
+    # print(cropped.shape)
+    # imwrite(img.parent/f'{img.stem}_cropped.tif', cropped.astype(np.float32))
+    # print(img.parent / f'{img.stem}_cropped.tif')
+
     if any(np.array(shifting) != 0):
         sample = shift(sample, shift=(-1*shifting[0], -1*shifting[1], -1*shifting[2]))
         img = Path(f"{img.with_suffix('')}_shifted_z{shifting[0]}_y{shifting[1]}_x{shifting[2]}.tif")
@@ -1654,7 +1662,10 @@ def aggregate_tiles(
     clusters3d_heatmap = np.full_like(vol, len(clusters3d_colormap) - 1, dtype=np.float32)
     wavefront_heatmap = np.zeros((num_ztiles, *vol.shape[1:]), dtype=np.float32)
     expected_wavefront_heatmap = np.zeros((num_ztiles, *vol.shape[1:]), dtype=np.float32)
-    psf_heatmap = np.zeros((num_ztiles, *vol.shape[1:]), dtype=np.float32)
+    psf_heatmap = np.zeros_like(vol, dtype=np.float32)
+    psf_xy_mips_heatmap = np.zeros((num_ztiles, *vol.shape[1:]), dtype=np.float32)
+    psf_xz_mips_heatmap = np.zeros((num_ztiles, *vol.shape[1:]), dtype=np.float32)
+    psf_yz_mips_heatmap = np.zeros((num_ztiles, *vol.shape[1:]), dtype=np.float32)
     expected_psf_heatmap = np.zeros((num_ztiles, *vol.shape[1:]), dtype=np.float32)
 
     zw, yw, xw = samplepsfgen.psf_shape
@@ -1662,10 +1673,17 @@ def aggregate_tiles(
     logger.info(f"window_size = {zw, yw, xw}")
     logger.info(f"      tiles = {num_ztiles, num_ytiles, num_xtiles}")
 
+    wavefronts_dir = Path(f"{save_path.with_suffix('')}_{postfix}_wavefronts")
+    wavefronts_dir.mkdir(exist_ok=True, parents=True)
+    psfs_dir = Path(f"{save_path.with_suffix('')}_{postfix}_psfs")
+    psfs_dir.mkdir(exist_ok=True, parents=True)
+
     for i, (z, y, x) in tqdm(
             enumerate(itertools.product(range(num_ztiles), range(num_ytiles), range(num_xtiles))),
             total=num_ztiles*num_ytiles*num_xtiles
     ):
+        name = f"z{z}-y{y}-x{x}"
+
         c = predictions.loc[(z, y, x), 'cluster']
         if not np.isnan(c):
             clusters_rgb[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.full((yw, xw), int(c))  # cluster group id
@@ -1693,6 +1711,9 @@ def aggregate_tiles(
                 expected_psf = samplepsfgen.single_psf(expected_w)
                 expected_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
 
+                imwrite(wavefronts_dir / f"{name}.tif", w.wave(xw), compression='deflate', dtype=np.float32)
+                imwrite(psfs_dir / f"{name}.tif", abberated_psf, compression='deflate', dtype=np.float32)
+
                 wavefront_heatmap[
                     z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
                 ] = np.nan_to_num(w.wave(xw), nan=0)
@@ -1702,8 +1723,20 @@ def aggregate_tiles(
                 ] = np.nan_to_num(expected_w.wave(xw), nan=0)
 
                 psf_heatmap[
+                    z * zw:(z * zw) + zw, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
+                ] = abberated_psf
+
+                psf_xy_mips_heatmap[
                     z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
                 ] = np.max(abberated_psf, axis=0)
+
+                psf_xz_mips_heatmap[
+                    z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
+                ] = np.max(abberated_psf, axis=1)
+
+                psf_yz_mips_heatmap[
+                    z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
+                ] = np.max(abberated_psf, axis=2)
 
                 expected_psf_heatmap[
                     z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
@@ -1720,6 +1753,12 @@ def aggregate_tiles(
     imwrite(f"{save_path.with_suffix('')}_{postfix}_wavefronts_expected.tif",
             expected_wavefront_heatmap.astype(np.float32), compression='deflate', dtype=np.float32)
     imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs.tif", psf_heatmap.astype(np.float32),
+            compression='deflate', dtype=np.float32)
+    imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs_xy_mips.tif", psf_xy_mips_heatmap.astype(np.float32),
+            compression='deflate', dtype=np.float32)
+    imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs_xz_mips.tif", psf_xz_mips_heatmap.astype(np.float32),
+            compression='deflate', dtype=np.float32)
+    imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs_yz_mips.tif", psf_yz_mips_heatmap.astype(np.float32),
             compression='deflate', dtype=np.float32)
     imwrite(f"{save_path.with_suffix('')}_{postfix}_psfs_expected.tif", expected_psf_heatmap.astype(np.float32),
             compression='deflate', dtype=np.float32)

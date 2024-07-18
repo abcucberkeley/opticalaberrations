@@ -147,6 +147,7 @@ def submit_slurm_job(args, command_flags, partition: str = "abc_a100"):
     sjob += f"--exclusive "
     sjob += f"--job-name={args.func}_{args.input.stem} "
     sjob += f"{cluster_env} {script} {flags}"
+    # sjob += f" &> {args.input.parent}/{args.func}_{args.input.stem}.log"
     logger.info(sjob)
     subprocess.run(f"ssh {username}@{hostname} \"{sjob}\"", shell=True)
 
