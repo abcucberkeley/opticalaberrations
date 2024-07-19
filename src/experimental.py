@@ -1322,6 +1322,7 @@ def cluster_tiles(
     predictions: pd.DataFrame,
     stdevs: pd.DataFrame,
     where_unconfident: pd.DataFrame,
+    samplepsfgen: SyntheticPSF,
     dm_calibration: Path,
     dm_state: Any,
     savepath: Path,
@@ -1372,6 +1373,7 @@ def cluster_tiles(
 
     wavefronts, coefficients, actuators = {}, {}, {}
     wavefronts_montage = np.zeros((len(valid_predictions.groups.keys())*64, (max_isoplanatic_clusters+1)*64)).astype(np.float32)
+    psfs_montage = np.zeros((len(valid_predictions.groups.keys())*64, (max_isoplanatic_clusters+1)*64)).astype(np.float32)
 
     for z in valid_predictions.groups.keys():  # basically loop through all ztiles, unless no valid predictions exist
         ztile_preds = valid_predictions.get_group(z)
@@ -1481,8 +1483,20 @@ def cluster_tiles(
                 k*64:(k+1)*64,
             ] = wavefronts[cluster].wave(64).astype(np.float32)
 
+            psf = samplepsfgen.single_psf(wavefronts[cluster])
+
+            psfs_montage[
+                z*64:(z+1)*64,
+                k*64:(k+1)*64,
+            ] = np.max(psf, axis=0).astype(np.float32)
+
             imwrite(Path(f"{savepath}_{postfix}_{cluster}_wavefront.tif"),
                     wavefronts_montage[z*64:(z+1)*64, k*64:(k+1)*64],
+                    compression='deflate',
+                    dtype=np.float32
+            )
+            imwrite(Path(f"{savepath}_{postfix}_{cluster}_psf.tif"),
+                    psf,
                     compression='deflate',
                     dtype=np.float32
             )
@@ -1512,6 +1526,12 @@ def cluster_tiles(
 
     imwrite(Path(f"{savepath}_{postfix}_wavefronts_montage.tif"),
             wavefronts_montage,
+            resolution=(64, 64),
+            compression='deflate',
+            dtype=np.float32
+    )
+    imwrite(Path(f"{savepath}_{postfix}_psfs_montage.tif"),
+            psfs_montage,
             resolution=(64, 64),
             compression='deflate',
             dtype=np.float32
@@ -1623,6 +1643,7 @@ def aggregate_tiles(
         predictions=predictions,
         stdevs=stdevs,
         where_unconfident=where_unconfident,
+        samplepsfgen=samplepsfgen,
         dm_calibration=dm_calibration,
         dm_state=dm_state,
         savepath=save_path.with_suffix(''),
