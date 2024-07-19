@@ -1610,24 +1610,6 @@ def aggregate_tiles(
         ).sum() for z in range(num_ztiles)
     ])
 
-    n_colors = max_isoplanatic_clusters * num_ztiles
-
-    # cluster_colors = [
-    #     (31, 119, 180), #blue
-    #     (255, 127, 14), #orange
-    #     (44, 160, 44), #green
-    #     (214, 39, 40),  #red
-    #     (140, 86, 75), #brown
-    #     (188, 189, 34),  #olive
-    #     (23, 190, 207), #cyan
-    # ]
-    # clusters3d_colormap = np.array([
-    #     zero_confident_color,
-    #     *cluster_colors[:n_colors],
-    #     ignored_color,
-    #     unconfident_color
-    # ])
-
     cluster_colors = np.split(
         np.array(sns.color_palette(clusters3d_colormap, n_colors=(max_isoplanatic_clusters * num_ztiles))) * 255,
         num_ztiles,
@@ -1638,6 +1620,15 @@ def aggregate_tiles(
     clusters3d_colormap.extend([ignored_color])  # append the ignored color (e.g. red) to the end
     clusters3d_colormap.extend([unconfident_color])  # append the unconfident color (e.g. white) to the end
     clusters3d_colormap = np.array(clusters3d_colormap)  # yellow, blue, orange,...  yellow, ...  white, pink
+
+    samplepsfgen_590 = SyntheticPSF(
+        psf_type=samplepsfgen.psf_type,
+        psf_shape=samplepsfgen.psf_shape,
+        lam_detection=.590,
+        x_voxel_size=samplepsfgen.x_voxel_size,
+        y_voxel_size=samplepsfgen.y_voxel_size,
+        z_voxel_size=samplepsfgen.z_voxel_size,
+    )
 
     predictions, stdevs, corrections = cluster_tiles(
         predictions=predictions,
@@ -1696,8 +1687,12 @@ def aggregate_tiles(
 
     wavefronts_dir = Path(f"{save_path.with_suffix('')}_{postfix}_wavefronts")
     wavefronts_dir.mkdir(exist_ok=True, parents=True)
-    psfs_dir = Path(f"{save_path.with_suffix('')}_{postfix}_psfs")
-    psfs_dir.mkdir(exist_ok=True, parents=True)
+
+    psfs_510_dir = Path(f"{save_path.with_suffix('')}_{postfix}_psfs_510")
+    psfs_510_dir.mkdir(exist_ok=True, parents=True)
+
+    psfs_590_dir = Path(f"{save_path.with_suffix('')}_{postfix}_psfs_590")
+    psfs_590_dir.mkdir(exist_ok=True, parents=True)
 
     for i, (z, y, x) in tqdm(
             enumerate(itertools.product(range(num_ztiles), range(num_ytiles), range(num_xtiles))),
@@ -1729,11 +1724,16 @@ def aggregate_tiles(
 
                 abberated_psf = samplepsfgen.single_psf(w)
                 abberated_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
+
+                abberated_psf_590 = samplepsfgen_590.single_psf(w)
+                abberated_psf_590 *= np.sum(samplepsfgen_590.ipsf) / np.sum(abberated_psf_590)
+
                 expected_psf = samplepsfgen.single_psf(expected_w)
                 expected_psf *= np.sum(samplepsfgen.ipsf) / np.sum(abberated_psf)
 
                 imwrite(wavefronts_dir / f"{name}.tif", w.wave(xw), compression='deflate', dtype=np.float32)
-                imwrite(psfs_dir / f"{name}.tif", abberated_psf, compression='deflate', dtype=np.float32)
+                imwrite(psfs_510_dir / f"{name}.tif", abberated_psf, compression='deflate', dtype=np.float32)
+                imwrite(psfs_590_dir / f"{name}.tif", abberated_psf_590, compression='deflate', dtype=np.float32)
 
                 wavefront_heatmap[
                     z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw
