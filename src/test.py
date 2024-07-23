@@ -169,7 +169,11 @@ def main(args=None):
     )
 
     gpu_workers = strategy.num_replicas_in_sync
-    gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
+
+    try:
+        gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
+    except IndexError:
+        gpu_model = None
 
     if args.batch_size == -1:
         if gpu_workers > 0 and gpu_model.find('A100') >= 0:  # update batchsize automatically
@@ -239,6 +243,30 @@ def main(args=None):
             )
         elif args.target == 'snrheatmap':
             savepath = eval.snrheatmap(
+                iter_num=args.niter,
+                modelpath=args.model,
+                datadir=args.datadir,
+                outdir=args.outdir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=batch_size,
+                eval_sign=args.eval_sign,
+                digital_rotations=args.digital_rotations,
+                plot=args.plot,
+                plot_rotations=args.plot_rotations,
+                psf_type=args.psf_type,
+                lam_detection=args.wavelength,
+                num_beads=args.num_beads,
+                skip_remove_background=args.skip_remove_background,
+                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma,
+                simulate_psf_only=args.simulate_psf_only
+            )
+        elif args.target == 'fscheatmap':
+            savepath = eval.fscheatmap(
                 iter_num=args.niter,
                 modelpath=args.model,
                 datadir=args.datadir,
@@ -387,5 +415,4 @@ def main(args=None):
 
 
 if __name__ == "__main__":
-
     main()

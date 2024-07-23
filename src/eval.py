@@ -8,6 +8,7 @@ import shutil
 
 from multiprocessing import Pool
 
+import re
 import ujson
 import logging
 import sys
@@ -105,7 +106,7 @@ def simulate_beads(
                pad_amount:pad_amount + original_shape[0],
                pad_amount:pad_amount + original_shape[1],
                pad_amount:pad_amount + original_shape[2],
-               ]
+        ]
 
     else:
         inputs = utils.fftconvolution(sample=beads, kernel=psf)  # takes 1 second.
@@ -4621,3 +4622,405 @@ def profile_models(
         table = table.loc[cats][coi].astype(float)
         print(table)
         print(table.to_latex(float_format="%.2g"))
+
+
+@profile
+def plot_heatmap_fsc(
+        dataframe,
+        wavelength,
+        savepath: Path,
+        label='Integrated photoelectrons',
+        color_label='Residuals',
+        hist_col='confidence',
+        lims=(0, 100),
+        ax=None,
+        cax=None,
+        agg='mean',
+        sci=False,
+        histograms: Optional[pd.DataFrame] = None,
+        kde_color='grey',
+        cdf_color='k',
+        hist_color='lightgrey',
+        cmap='magma',
+        levels=np.arange(.5, 1.05, .05)
+):
+    try:
+        dataframe = dataframe.sort_index().interpolate()
+    except ValueError:
+        pass
+
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    if ax is None:
+
+        if histograms is not None:
+            fig = plt.figure(figsize=(12, 8))
+            gs = fig.add_gridspec(3, 4)
+            ax = fig.add_subplot(gs[:, 1:])
+            ax1 = fig.add_subplot(gs[0, 0])
+            ax2 = fig.add_subplot(gs[1, 0])
+            ax3 = fig.add_subplot(gs[2, 0])
+        else:
+            fig, ax = plt.subplots(figsize=(8, 6))
+
+    if cax is None:
+        cax = fig.add_axes([1.03, 0.08, 0.03, 0.87])
+
+    if cmap == 'custom':
+        levels = np.arange(.85, 1.55, .05)
+        vmin, vmax, vcenter, step = levels[0], levels[-1], 1, .05
+        lowcmap = plt.get_cmap('magma', 256)
+        highcmap = plt.get_cmap('GnBu', 256)
+        low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+        high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+        cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+        cmap = mcolors.ListedColormap(cmap)
+    else:
+        levels = np.arange(.5, 1.05, .05)
+
+    if color_label == 'Residuals':
+        contours = ax.contourf(
+            dataframe.columns.values,
+            dataframe.index.values,
+            dataframe.values,
+            levels=levels,
+            cmap=cmap,
+            linewidths=2,
+            linestyles='dashed',
+            extend='min',
+        )
+        cbar = plt.colorbar(
+            contours,
+            cax=cax,
+            fraction=0.046,
+            pad=0.04,
+            spacing='proportional',
+            format=FormatStrFormatter("%.2f"),
+            ticks=levels,
+        )
+        cbar.ax.set_ylabel(rf'Residuals FSC ({agg})')
+    else:
+        if hist_col == 'confidence':
+            ticks = np.arange(0, .11, step=.01)
+        else:
+            ticks = levels
+
+        contours = ax.contourf(
+            dataframe.columns.values,
+            dataframe.index.values,
+            dataframe.values,
+            cmap='nipy_spectral',
+            levels=ticks,
+            linewidths=2,
+            linestyles='dashed',
+            extend='both',
+        )
+        cbar = plt.colorbar(
+            contours,
+            cax=cax,
+            fraction=0.046,
+            pad=0.04,
+            spacing='proportional',
+            format=FormatStrFormatter("%.2f"),
+            ticks=ticks,
+        )
+
+        if hist_col == 'confidence':
+            cbar.ax.set_ylabel(
+                rf'Standard deviation: ({agg} $\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)')
+        else:
+            cbar.ax.set_ylabel(
+                rf'Standard deviation: ({agg} $\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)')
+
+    ax.patch.set(hatch='/', edgecolor='lightgrey', lw=.01)
+    cbar.ax.yaxis.set_ticks_position('right')
+    cbar.ax.yaxis.set_label_position('left')
+
+    if label == 'Integrated photons' or label == 'Integrated photoelectrons':
+        ax.set_xticks(np.arange(lims[0], lims[1] + 5e4, 5e4), minor=False)
+        ax.set_xticks(np.arange(lims[0], lims[1] + 2.5e4, 2.5e4), minor=True)
+    elif label == 'Number of iterations':
+        ax.set_xticks(np.arange(0, dataframe.columns.values.max() + 1, 1), minor=False)
+
+    if sci:
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0), useMathText=True)
+
+    ax.set_xlabel(label)
+    ax.set_xlim(lims)
+
+    # ax.set_ylabel(rf'Initial FSC ({agg})')
+    # ax.set_yticks(np.arange(0, 1, .05), minor=True)
+    # ax.set_yticks(np.arange(0, 1.1, .1))
+    # ax.set_ylim(0, 1)
+
+    ax.set_ylabel(rf'Initial aberration ({agg} peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)')
+    ax.set_yticks(np.arange(0, 6, .5), minor=True)
+    ax.set_yticks(np.arange(0, 6, 1))
+    ax.set_ylim(0, 5)
+
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+    plt.tight_layout()
+
+    savepath = Path(f'{savepath}_fsc')
+    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+    logger.info(f'Saved: {savepath.resolve()}.png  .pdf  .svg')
+    return ax
+
+def update_fsc(file, results):
+    try:
+        with open(file) as f:
+            fsc = ujson.load(f)
+    except Exception:
+        logger.warning(f"Missing/Corrupted {file}")
+        return None
+
+    try:
+        amp = re.findall(r'amp_p\d+-p\d+', str(file))[0]
+        photons = re.findall(r'photons_\d+-\d+', str(file))[0]
+        iter_num = int(re.findall(r'\d+', file.parent.name)[0])
+        fid = file.name.strip('_not_processed.json')[0]
+
+        idx = results[
+            (results['iter_num'] == iter_num) &
+            (results['file'].str.contains(f"{fid}.tif")) &
+            (results['file'].str.contains(amp)) &
+            (results['file'].str.contains(photons))
+        ]
+
+        if not idx.empty:
+            return [idx.index, fsc]
+
+    except IndexError:
+        return None
+
+@profile
+def fsc_iter_evaluate(
+        datapath,
+        modelpath,
+        iter_num: int = 5,
+        samplelimit: int = 1,
+        na: float = 1.0,
+        distribution: str = '/',
+        threshold: float = 0.,
+        no_phase: bool = False,
+        batch_size: int = 128,
+        photons_range: Optional[tuple] = None,
+        npoints_range: Optional[tuple] = None,
+        eval_sign: str = 'signed',
+        digital_rotations: bool = False,
+        rotations: Optional[int] = 361,
+        savepath: Any = None,
+        plot: bool = False,
+        plot_rotations: bool = False,
+        psf_type: Optional[str] = None,
+        lam_detection: Optional[float] = .510,
+        filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
+        preprocess: bool = False,
+        skip_remove_background: bool = False,
+        simulate_psf_only: bool = False,
+        use_theoretical_widefield_simulator: bool = False,
+        denoiser: Optional[Union[Path, CARE]] = None,
+        denoiser_window_size: tuple = (32, 64, 64),
+        simulate_samples: bool = False,
+        estimated_object_gaussian_sigma: float = 0,
+        randomize_object_gaussian_sigma: Optional[np.ndarray | list | tuple] = None,
+):
+    """
+    Gathers the set of .tif files that meet the input criteria.
+    Predicts on all of those for (iter_num) iterations.
+    Results go into dataframe called "results"
+    Saves "results" dataframe to _predictions.csv file
+
+    Returns:
+        "results" dataframe
+    """
+    results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
+    results['fsc_average'] = np.nan
+    results['fsc_median'] = np.nan
+    results['fsc_min'] = np.nan
+    results['fsc_max'] = np.nan
+    logger.info(results)
+
+    files = list(savepath.rglob(rf'*/iter_{iter_num}/*_not_processed.json'))
+    func=partial(update_fsc, results=results)
+    with Pool(10) as p:
+        logs = list(tqdm(
+            p.imap(func, files),
+            desc=f'Loading FSC files',
+            bar_format='{l_bar}{bar}{r_bar} {elapsed_s:.1f}s elapsed',
+            file=sys.stdout,
+            total=len(files)
+        ))
+
+    for ll in tqdm(logs, desc=f'Update FSC ({savepath.resolve()})', total=len(files)):
+        if ll is not None:
+            idx, fsc = ll
+            results.loc[idx, 'fsc_average'] = fsc['AvgRatio2OTFmax']
+            results.loc[idx, 'fsc_median'] = fsc['MedianRatio2OTFmax']
+            results.loc[idx, 'fsc_min'] = fsc['MinRatio2OTFmax']
+            results.loc[idx, 'fsc_max'] = fsc['MaxRatio2OTFmax']
+
+    return results
+
+
+@profile
+def fscheatmap(
+        modelpath: Path,
+        datadir: Path,
+        outdir: Path,
+        iter_num: int = 1,
+        distribution: str = '/',
+        samplelimit: Any = None,
+        na: float = 1.0,
+        batch_size: int = 100,
+        eval_sign: str = 'signed',
+        digital_rotations: bool = False,
+        plot: Any = None,
+        plot_rotations: bool = False,
+        agg: str = 'median',
+        psf_type: Optional[str] = None,
+        num_beads: Optional[int] = None,
+        simulate_psf_only: bool = False,
+        lam_detection: Optional[float] = .510,
+        skip_remove_background: bool = False,
+        use_theoretical_widefield_simulator: bool = False,
+        denoiser: Optional[Path] = None,
+        denoiser_window_size: tuple = (32, 64, 64),
+        simulate_samples: bool = False,
+        estimated_object_gaussian_sigma: float = 0,
+):
+    modelspecs = backend.load_metadata(modelpath)
+
+    savepath = datadir
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    if datadir.suffix == '.csv':
+        df = pd.read_csv(datadir, header=0, index_col=0)
+    else:
+        df = fsc_iter_evaluate(
+            iter_num=iter_num,
+            modelpath=modelpath,
+            datapath=datadir,
+            savepath=savepath,
+            samplelimit=samplelimit,
+            na=na,
+            batch_size=batch_size,
+            photons_range=None,
+            npoints_range=(1, num_beads) if num_beads is not None else None,
+            eval_sign=eval_sign,
+            digital_rotations=digital_rotations,
+            plot=plot,
+            plot_rotations=plot_rotations,
+            psf_type=psf_type,
+            lam_detection=lam_detection,
+            skip_remove_background=skip_remove_background,
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            simulate_psf_only=simulate_psf_only,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
+        )
+
+        backup = df.copy()
+        df = backup[backup['iter_num'] == iter_num]
+        df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
+        df.to_csv(f'{savepath}_iter_{iter_num}_data.csv')
+
+    # df1 = pd.read_csv(f'{savepath}_iter_1_data.csv', header=0, index_col=0)
+    # df1.drop_duplicates(subset='id', keep="first", inplace=True)
+    # df1['iter_num'] = 0
+    #
+    # df2 = pd.read_csv(f'{savepath}_iter_2_data.csv', header=0, index_col=0)
+    # df2['iter_num'] = 1
+    #
+    # df3 = pd.read_csv(f'{savepath}_iter_3_data.csv', header=0, index_col=0)
+    # df3['iter_num'] = 2
+    #
+    # full = pd.concat([df1, df2, df3], ignore_index=True, sort=False)
+    #
+    # df = full[full['iter_num'] == iter_num]
+    # df['fsc_average_init'] = df1['fsc_average'].values
+    # df['fsc_median_init'] = df1['fsc_median'].values
+    # df['fsc_average_ratio'] = df['fsc_average'].values / df['fsc_average_init'].values
+    # df['fsc_median_ratio'] = df['fsc_median'].values / df['fsc_median_init'].values
+
+    for x in ['photons', 'photoelectrons']:
+
+        if x == 'photons':
+            label = f'Integrated photons'
+            lims = (0, 5 * 10 ** 5)
+            pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
+        elif x == 'photoelectrons':
+            label = f'Integrated photoelectrons'
+            lims = (0, 5 * 10 ** 5)
+            pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
+        elif x == 'counts':
+            label = f'Integrated counts'
+            lims = (2.6e7, 3e7)
+            pbins = np.arange(lims[0], lims[-1] + 2e5, 1e5)
+        elif x == 'counts_p100':
+            label = f'Max counts (camera background offset = 100)'
+            lims = (100, 2000)
+            pbins = np.arange(lims[0], lims[-1] + 400, 200)
+        else:
+            label = f'99th percentile of counts (camera background offset = 100)'
+            lims = (100, 300)
+            pbins = np.arange(lims[0], lims[-1] + 50, 25)
+
+        df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
+
+        for c in ['fsc_average', 'fsc_average_ratio', 'fsc_median', 'fsc_median_ratio']:
+            for agg in ['mean', 'median']:
+
+                # bins = np.arange(0, 1.05, .05).round(2)
+                # df['ibins'] = pd.cut(
+                #     df[f'{c}_init'],
+                #     bins,
+                #     labels=bins[1:],
+                #     include_lowest=True
+                # )
+                # dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
+                # dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
+
+                bins = np.arange(0, 10.25, .25).round(2)
+                df['ibins'] = pd.cut(
+                    df['aberration'],
+                    bins,
+                    labels=bins[1:],
+                    include_lowest=True
+                )
+                dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
+                dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
+
+                # replace unconfident predictions with max std
+                dataframe.replace(0, dataframe.max(), inplace=True)
+                dataframe.to_csv(f'{savepath}_photons_{c}_{agg}.csv')
+                logger.info(f'Saved: {savepath.resolve()}_{x}_{c}_{agg}.csv')
+
+                plot_heatmap_fsc(
+                    dataframe,
+                    wavelength=modelspecs.lam_detection,
+                    savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}_{agg}"),
+                    label=label,
+                    hist_col='residuals',
+                    sci=True,
+                    lims=lims,
+                    agg=agg,
+                    cmap='custom' if 'ratio' in c else 'magma'
+                )
+
+    return savepath
