@@ -11,7 +11,7 @@ import sys
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-import raster_geometry as rg
+# import raster_geometry as rg
 import pandas as pd
 from matplotlib.ticker import FormatStrFormatter
 from tifffile import imwrite
@@ -20,7 +20,6 @@ import seaborn as sns
 from tqdm import tqdm, trange
 import matplotlib.patches as patches
 from astropy import convolution
-import tensorflow as tf
 from line_profiler_pycharm import profile
 
 import utils
@@ -29,6 +28,7 @@ from zernike import Zernike
 from synthetic import SyntheticPSF
 from embeddings import fourier_embeddings
 from preprocessing import prep_sample
+from vis import plot_wavefront
 
 
 logging.basicConfig(
@@ -311,7 +311,7 @@ def plot_embedding_pyramid(
 
 
 @profile
-def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
+def plot_training_dist(n_samples=200, batch_size=10, wavelength=.510):
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -321,18 +321,18 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
         'legend.fontsize': 10,
     })
 
-    for dist in ['single', 'bimodal', 'multinomial', 'powerlaw', 'dirichlet', 'mixed']:
+    for dist in ['single', 'bimodal', 'powerlaw', 'dirichlet', 'mixed']:
         psfargs = dict(
-            n_modes=55,
+            n_modes=15,
             psf_type='../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
             distribution=dist,
             mode_weights='pyramid',
             signed=True,
-            rotate=True,
+            rotate=False,
             gamma=.75,
             lam_detection=wavelength,
             amplitude_ranges=(0, 1),
-            psf_shape=(32, 32, 32),
+            psf_shape=(64, 64, 64),
             x_voxel_size=.125,
             y_voxel_size=.125,
             z_voxel_size=.2,
@@ -340,36 +340,60 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
             cpu_workers=-1,
         )
 
-        n_batches = n_samples // batch_size
-        peaks = []
+        train_peaks, peaks = [], []
         zernikes = pd.DataFrame([], columns=range(1, psfargs['n_modes'] + 1))
 
+        train_min_amps = np.arange(0, .25, .01).round(3)
+        train_max_amps = np.arange(.01, .26, .01).round(3)
+
         ## Testing dataset
-        min_amps = np.arange(0, .30, .01).round(3)
-        max_amps = np.arange(.01, .31, .01).round(3)
+        min_amps = np.arange(0, 1, .01).round(3)
+        max_amps = np.arange(.01, 1.01, .01).round(3)
 
         for mina, maxa in zip(min_amps, max_amps):
             psfargs['amplitude_ranges'] = (mina, maxa)
-            for _, (psfs, ys) in zip(range(n_batches), SyntheticPSF(**psfargs).generator()):
+
+            for _ in trange(n_samples, desc=f'Range[{mina}, {maxa}]'):
+                w = Wavefront(
+                    amplitudes=(mina, maxa),
+                    distribution=psfargs['distribution'],
+                    mode_weights=psfargs['mode_weights'],
+                    modes=psfargs['n_modes'],
+                    gamma=psfargs['gamma'],
+                    signed=psfargs['signed'],
+                    rotate=psfargs['rotate'],
+                    lam_detection=psfargs['lam_detection'],
+                )
+
                 zernikes = zernikes.append(
-                    pd.DataFrame(ys, columns=range(1, psfargs['n_modes'] + 1)),
+                    {z:w.amplitudes_ansi[z-1] for z in range(1, psfargs['n_modes'] + 1)},
                     ignore_index=True
                 )
-                ps = [Wavefront(p, lam_detection=wavelength).peak2valley() for p in ys]
-                logger.info(f'Range[{mina}, {maxa}]')
-                peaks.extend(ps)
+                p2v = w.peak2valley()
+                peaks.append(p2v)
+
+                if maxa <= .25:
+                    train_peaks.append(p2v)
 
         logger.info(zernikes.round(2))
 
-        fig, (pax, cax, zax) = plt.subplots(1, 3, figsize=(16, 4))
+        fig, axes = plt.subplots(1, 3 if dist == 'mixed' else 2, figsize=(15, 5) if dist == 'mixed' else (10, 5))
+        if dist == 'mixed':
+            pax, cax, zax = axes
+        else:
+            pax, cax = axes
 
-        sns.histplot(peaks, kde=True, ax=pax, color='dimgrey')
+        sns.histplot(train_peaks, kde=True, ax=pax, color='C0', stat='proportion', bins=len(train_min_amps), label='Training')
+        sns.histplot(peaks, kde=True, ax=pax, color='C1', stat='proportion', bins=len(min_amps), label='Testing')
 
+        pax.legend(frameon=False, ncol=1, loc='upper center')
         pax.set_xlabel(
             'peak-to-valley aberration\n'
             rf'($\lambda = {int(wavelength*1000)}~nm$)'
         )
-        pax.set_ylabel(rf'Samples')
+        pax.set_ylabel(rf'Proportion')
+        pax.set_xlim(0, 5)
+        pax.set_ylim(0, .12)
 
         zernikes = np.abs(zernikes)
         zernikes = zernikes.loc[(zernikes != 0).any(axis=1)]
@@ -382,40 +406,98 @@ def plot_training_dist(n_samples=10, batch_size=10, wavelength=.510):
         hist = hist / hist.sum()
 
         if len(idx[0]) != 0:
-            bars = sns.barplot(bins[idx], hist[idx], ax=cax, palette='Accent')
-            for index, label in enumerate(bars.get_xticklabels()):
-                if index % 2 == 0:
-                    label.set_visible(True)
-                else:
-                    label.set_visible(False)
+            if dist == 'single':
+                width = .1
+            elif dist == 'bimodal':
+                width = .2
+            else:
+                width = .8
+
+            bars = sns.barplot(x=bins[idx], y=hist[idx], ax=cax, color='dimgrey', width=width)
+            if psfargs['n_modes'] > 15:
+                for index, label in enumerate(bars.get_xticklabels()):
+                    if index % 2 == 0:
+                        label.set_visible(True)
+                    else:
+                        label.set_visible(False)
 
         cax.set_xlabel(
-            f'Number of highly influential modes\n'
-            rf'$\alpha_i / \sum_{{k=1}}^{{{psfargs["n_modes"]}}}{{\alpha_{{k}}}} > 5\%$'
+            f'Number of dominant modes\n'
+            rf'$a_i / \sum_{{k=1}}^{{{psfargs["n_modes"]}}}{{a_{{k}}}} > 5\%$'
         )
 
-        modes = zernikes.sum(axis=0)
-        modes /= modes.sum(axis=0)
-
-        cmap = sns.color_palette("viridis", len(modes))
-        rank = modes.argsort().argsort()
-        bars = sns.barplot(modes.index-1, modes.values, ax=zax, palette=np.array(cmap[::-1])[rank])
-
-        for index, label in enumerate(bars.get_xticklabels()):
-            if index % 4 == 0:
-                label.set_visible(True)
-            else:
-                label.set_visible(False)
-
-        zax.set_xlabel(f'Influential modes (ANSI)')
+        if dist == 'single' or dist == 'bimodal':
+            cax.set_ylim(0, 1)
+        elif dist == 'mixed':
+            cax.set_ylim(0, .25)
+        else:
+            cax.set_ylim(0, .4)
 
         pax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
         cax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
-        zax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
+
+        if dist != 'mixed':
+            if dist == 'single':
+                amplitudes = [0, 0, 0, .2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            elif dist == 'bimodal':
+                amplitudes = [0, 0, 0, 0, 0, .2, 0, 0, .2, 0, 0, 0, 0, 0, 0]
+            elif dist == 'powerlaw':
+                amplitudes = (.2, .2)
+            else:
+                amplitudes = (.2, .2)
+
+            example_wavefront = Wavefront(
+                amplitudes=amplitudes,
+                distribution=psfargs['distribution'],
+                mode_weights=psfargs['mode_weights'],
+                modes=psfargs['n_modes'],
+                gamma=psfargs['gamma'],
+                signed=psfargs['signed'],
+                rotate=psfargs['rotate'],
+                lam_detection=psfargs['lam_detection'],
+            )
+
+            wax = inset_axes(pax, width="40%", height="40%", loc='center right', borderpad=1)
+            plot_wavefront(
+                wax,
+                example_wavefront.wave(size=100),
+                label=r'$\omega$',
+                vmin=-.35,
+                vmax=.35,
+                nas=[.95, .85],
+            )
+            print(example_wavefront.amplitudes_ansi)
+        else:
+            modes = zernikes.sum(axis=0)
+            modes /= modes.sum(axis=0)
+
+            cmap = sns.color_palette("viridis", len(modes))
+            rank = modes.argsort().argsort()
+            bars = sns.barplot(x=modes.index-1, y=modes.values, ax=zax, palette=np.array(cmap[::-1])[rank])
+            zax.set_ylim(0, .1)
+
+            if psfargs['n_modes'] > 15:
+                for index, label in enumerate(bars.get_xticklabels()):
+                    if index % 4 == 0:
+                        label.set_visible(True)
+                    else:
+                        label.set_visible(False)
+
+            zax.set_xlabel(f'Zernike modes weighting (ANSI)')
+            zax.grid(True, which="both", axis='both', lw=.5, ls='--', zorder=0)
+
 
         name = f'{psfargs["distribution"]}_{psfargs["n_modes"]}modes_gamma_{str(psfargs["gamma"]).replace(".", "p")}'
         plt.savefig(
             f'../data/{name}.png',
+            dpi=300, bbox_inches='tight', pad_inches=.25
+        )
+        plt.savefig(
+            f'../data/{name}.svg',
+            dpi=300, bbox_inches='tight', pad_inches=.25
+        )
+        plt.savefig(
+            f'../data/{name}.pdf',
             dpi=300, bbox_inches='tight', pad_inches=.25
         )
 
