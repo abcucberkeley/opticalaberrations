@@ -15,7 +15,7 @@ except ImportError as e:
 
 import cli
 import experimental_benchmarks
-from eval import compare_models, profile_models
+from eval import compare_models, profile_models, profile_stages
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -199,6 +199,20 @@ def main(args=None):
                         args.model_predictions.append(m)
 
             profile_models(
+                models_codenames=args.model_codename,
+                predictions_paths=args.model_predictions,
+                outdir=args.outdir
+            )
+        elif args.target == 'profile_stages':
+            if args.model_codename is None:
+                args.outdir = args.inputs
+                args.model_codename, args.model_predictions = [], []
+                for m in args.inputs.glob("*/"):
+                    if m.is_dir():
+                        args.model_codename.append(m.name.replace("-15-YuMB_lambda510", ""))
+                        args.model_predictions.append(m)
+
+            profile_stages(
                 models_codenames=args.model_codename,
                 predictions_paths=args.model_predictions,
                 outdir=args.outdir

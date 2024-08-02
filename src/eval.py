@@ -4639,6 +4639,283 @@ def profile_models(
 
 
 @profile
+def profile_stages(
+        models_codenames: list,
+        predictions_paths: list,
+        outdir: Path = Path('benchmark'),
+        batch_size: int = 1024,
+        wavelength: float = .510
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    models = {
+        'baseline-L': 'ConvNext-L',
+        'opticalnet-T3216': 'Ours-T',
+        'opticalnet-S3216': 'Ours-S',
+        'opticalnet-B3216': 'Ours-B',
+        'opticalnet-L3216': 'Ours-L',
+        'opticalnet-H3216': 'Ours-H',
+        'opticalnet-G3216': 'Ours-G',
+        'opticalnet-P32323216-R2222-H8888': '32-32-32-16',
+        'opticalnet-P32321616-R2222-H8888': '32-32-16-16',
+        'opticalnet-P32161616-R2222-H8888': '32-16-16-16',
+        'opticalnet-P3216168-R2222-H8888': '32-16-16-8',
+        'opticalnet-P321688-R2222-H8888': '32-16-8-8',
+    }
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    dataframes = []
+    for codename, modeldir in zip(models_codenames, predictions_paths):
+        logger.info(f"Processing {codename}")
+        savepath = Path(f'{Path(modeldir).parent}/{codename}.csv')
+
+        if savepath.exists():
+            logger.info(f"Loading {savepath}")
+            df = pd.read_csv(savepath, header=0, index_col=0)
+        else:
+
+            try:
+                modeldir = Path(modeldir)
+                configfile = sorted(modeldir.rglob(r"*train/*tfevents*"))[0]
+                logfile = sorted(modeldir.rglob(r"*train.log"))[0]
+
+                with open(logfile) as f:
+                    log = f.readlines()
+                    train_config = [s for s in log if 'namespace' in s.lower()][-1]
+                    train_config = train_config[train_config.find('Namespace') + 10:-2].split(',')
+                    train_config = [name.split('=') for name in train_config]
+                    train_config = dict(
+                        (k.strip(), eval(v.strip().replace('PosixPath', 'Path'))) for k, v in train_config)
+
+                df = profile_utils.load_tf_logs(configfile)
+                model_config = ujson.loads(df.keras[0])
+
+                best = df['epoch_mse'].idxmin()
+
+                candidates = sorted(modeldir.rglob(rf"*keras/*epoch{best}.h5"))
+                if len(candidates) == 0:
+                    model = sorted(modeldir.rglob(rf"*keras/*.h5"))[-1]
+                else:
+                    model = candidates[0]
+
+                model = backend.load(model, model_arch=model_config['config']['name'])
+
+                df = df[[
+                    'step',
+                    'epoch_learning_rate',
+                    'epoch_loss',
+                    'epoch_mae',
+                    'epoch_mse',
+                    'epoch_root_mean_squared_error',
+                    'epoch_weight_decay',
+                    'wall_time'
+                ]]
+                df["wall_time"] = df.wall_time.apply(pd.Series)[0]
+                df["wall_clock"] = pd.to_datetime(df.wall_time, unit="s")
+
+                transformers_blocks = profile_utils.count_transformer_blocks(model=model)
+                heads = train_config['heads'].split('-')
+
+                num_heads, num_tokens = 0, 0
+                for i, (k, v) in enumerate(transformers_blocks.items()):
+                    ps = int(k.strip('p'))
+                    df[f'transformers_{k}'] = v
+                    df[f'heads_{k}'] = v * int(heads[i])
+
+                    tokens = v * model.input_shape[1] * np.product([
+                        s // p for s, p in zip(model.input_shape[2:], (ps, ps))
+                    ])
+                    logger.info(f"{tokens=}")
+                    df[f'transformers_{k}_tokens'] = tokens
+                    num_tokens += tokens
+                    num_heads += df[f'heads_{k}']
+
+                # warmup
+                profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
+
+                df['latency'] = profile_utils.measure_latency(model, number_of_samples=1024)
+                df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10 * 1024,
+                                                                    batch_size=batch_size)
+                df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
+                df['gflops'] = profile_utils.measure_gflops(model)
+                df['params'] = model.count_params()
+                df['model'] = codename
+                df['dataset'] = train_config['dataset']
+                df['batch_size'] = train_config['batch_size']
+                df['num_tokens'] = num_tokens
+                df["training"] = (df.wall_clock - df.wall_clock[0]) / np.timedelta64(1, "h")
+                df['transformers'] = sum(transformers_blocks.values())
+                df['heads'] = num_heads
+
+                logger.info(f"Saving {savepath}")
+                df.to_csv(f'{Path(modeldir).parent}/{codename}.csv')
+
+            except Exception as e:
+                logger.error(e)
+                continue
+
+        dataset_size = 2000000
+        if 'batch_size' not in df.columns:
+            df['batch_size'] = 4096
+
+        training_steps_per_epoch = dataset_size // df['batch_size']
+
+        df['training_gflops'] = training_steps_per_epoch * df['batch_size'] * df['step'] * df['gflops'] * 3
+        # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
+        df["training_gflops"] = df["training_gflops"] * 1e-9
+        df['inference_time'] = 1e6 / df['throughput'] / 60  # convert to minutes
+        df['latency'] *= 1000  # convert to milliseconds
+        df['params'] /= 1000000  # convert to millions
+
+        df['cat'] = 'Baseline'
+        df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
+        df.loc[df.model.str.match(r'vit.*16'), 'cat'] = 'ViT/16'
+        df.loc[df.model.str.match(r'vit.*32'), 'cat'] = 'ViT/32'
+        # df.loc[df.model.str.match(r'vit'), 'cat'] = 'ViT'
+        df.loc[df.model.str.match(r'baseline'), 'cat'] = 'ConvNext'
+        df.model = df.model.replace(models)
+
+        dataframes.append(df)
+
+    if len(models_codenames) > 1:
+        pass
+
+        df = pd.DataFrame()
+        for d in dataframes:
+            best = d['epoch_mse'].idxmin()
+            df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
+
+
+        coi = [
+            'gflops',
+            'params',
+            'epoch_mse',
+            'training',
+            'memory',
+            'throughput',
+            'latency',
+        ]
+        titles = [
+            'Inference cost\n(GFLOPs)',
+            'Parameters\n(Millions)',
+            'Training loss\n($\mu$m rms)',
+            'Training hours\n8xH100s',
+            f'Memory (GB)\n[BS={batch_size}]',
+            f'Throughput\n(images/s)',
+            'Latency\n(ms/image)',
+        ]
+        df = df.sort_values('params', ascending=True)
+
+        fig, axes = plt.subplots(len(coi), 1, figsize=(8, 11), sharex=False, sharey=False)
+
+        for i, cc in enumerate(coi):
+                ax = axes[i]
+                ax = sns.barplot(
+                    data=df,
+                    x='model',
+                    y=coi[i],
+                    hue='model',
+                    palette='Greys',
+                    ax=ax,
+                    legend=False,
+                    width=.4,
+                    dodge=False,
+                    native_scale=False,
+                )
+
+                ax.set_ylabel(titles[i])
+                ax.set_xlabel('')
+
+                if i == len(coi) - 1:
+                    ax.set_xticklabels(df.model)
+                else:
+                    ax.set_xticklabels([])
+
+                for c in range(len(ax.containers)):
+                    if coi[i] == 'mean':
+                        fmt = '%.1f'
+                    elif coi[i] == 'epoch_mse':
+                        fmt = '%.2g'
+                    elif coi[i] == 'params':
+                        fmt = '%dM'
+                    elif coi[i] in ['num_tokens', 'params', 'throughput', 'batch_size', 'transformers', 'heads']:
+                        fmt = '%d'
+                    else:
+                        fmt = '%.1f'
+
+                    ax.bar_label(ax.containers[c], fontsize=8, fmt=fmt)
+
+                ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
+                ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
+
+                if coi[i] == 'mean':
+                    ax.set_ylim(0, .5)
+                    ax.set_yticks(np.arange(0, .6, .1))
+                elif coi[i] == 'epoch_mse':
+                    ax.set_ylim(1e-7, 1e-5)
+                    ax.set_yscale('log')
+                elif coi[i] == 'training':
+                    ax.set_ylim(0, 24)  # (1 day of training)
+                    ax.set_yticks(range(0, 30, 6))
+                elif coi[i] == 'batch_size':
+                    ax.set_ylim(0, 4096)
+                    ax.set_yticks(range(0, 4096 + 1024, 1024))
+                elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
+                    ax.set_ylim(0, 125)
+                    ax.set_yticks(range(0, 150, 25))
+                elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
+                    ax.set_ylim(0, 3)
+                    ax.set_yticks(range(0, 4, 1))
+                elif coi[i] == 'params':
+                    ax.set_ylim(10, 80)
+                elif coi[i] == 'memory':
+                    ax.set_ylim(0, 3)
+                    ax.set_yticks(range(0, 4, 1))
+                elif coi[i] == 'num_tokens':
+                    ax.set_ylim(0, 2000)
+                elif coi[i] == 'transformers':
+                    ax.set_ylim(0, 32)
+                    ax.set_yticks([0, 6, 12, 18, 24, 30, 36])
+                elif coi[i] == 'heads':
+                    ax.set_ylim(0, 600)
+                    ax.set_yticks(range(0, 700, 100))
+                elif coi[i] == 'latency':
+                    ax.set_ylim(0, 15)
+                    ax.set_yticks(range(0, 20, 5))
+                elif coi[i] == 'throughput':
+                    ax.set_ylim(0, 3000)
+                    ax.set_yticks(range(0, 3500, 500))
+                else:
+                    ax.set_ylim(0, 1440)
+                    ax.set_yticks(range(0, 1500, 60))
+
+                ax.spines['left'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+
+        plt.tight_layout()
+
+        savepath = Path(f'{outdir}/profiles')
+        logger.info(savepath)
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+        table = df.set_index(['model'], drop=False)
+        table = table[coi].astype(float)
+        print(table)
+        print(table.to_latex(float_format="%.2g"))
+
+
+@profile
 def plot_heatmap_fsc(
         dataframe,
         wavelength,

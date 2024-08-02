@@ -41,3 +41,28 @@ do
     echo '----------------'
     echo
 done
+
+
+TRAINED_MODELS=(
+  "32-32-32-16 multistage/opticalnet-P32323216-R2222-H8888"
+  "32-32-16-16 multistage/opticalnet-P32321616-R2222-H8888"
+  "32-16-16-16 multistage/opticalnet-P32161616-R2222-H8888"
+  "32-16-16-8 multistage/opticalnet-P3216168-R2222-H8888"
+  "32-16-8-8 multistage/opticalnet-P321688-R2222-H8888"
+)
+
+for S in `seq 1 ${#TRAINED_MODELS[@]}`
+do
+    set -- ${TRAINED_MODELS[$S-1]}
+    M=$1
+    P=$2
+
+    echo Profile $M
+    python manager.py $CLUSTER $APPTAINER $JOB \
+    --task "profile_stages ../ --outdir ${OUTDIR} --model_codename ${M} --model_predictions ${PRETRAINED}/${P}" \
+    --taskname profile_models \
+    --name ${OUTDIR}/${M}
+
+    echo '----------------'
+    echo
+done
