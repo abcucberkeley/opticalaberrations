@@ -4664,6 +4664,11 @@ def profile_stages(
         'opticalnet-L3216': 'Ours-L',
         'opticalnet-H3216': 'Ours-H',
         'opticalnet-G3216': 'Ours-G',
+        'opticalnet-32-32-32-16': '32-32-32-16',
+        'opticalnet-32-32-16-16': '32-32-16-16',
+        'opticalnet-32-16-16-16': '32-16-16-16',
+        'opticalnet-32-16-16-8': '32-16-16-8',
+        'opticalnet-32-16-8-8': '32-16-8-8',
         'opticalnet-P32323216-R2222-H8888': '32-32-32-16',
         'opticalnet-P32321616-R2222-H8888': '32-32-16-16',
         'opticalnet-P32161616-R2222-H8888': '32-16-16-16',
@@ -4795,6 +4800,7 @@ def profile_stages(
 
 
         coi = [
+            'transformers',
             'gflops',
             'params',
             'epoch_mse',
@@ -4804,6 +4810,7 @@ def profile_stages(
             'latency',
         ]
         titles = [
+            'Transformers\n(Layers)',
             'Inference cost\n(GFLOPs)',
             'Parameters\n(Millions)',
             'Training loss\n($\mu$m rms)',
@@ -4814,7 +4821,7 @@ def profile_stages(
         ]
         df = df.sort_values('params', ascending=True)
 
-        fig, axes = plt.subplots(len(coi), 1, figsize=(8, 11), sharex=False, sharey=False)
+        fig, axes = plt.subplots(len(coi), 1, figsize=(8, 12), sharex=False, sharey=False)
 
         for i, cc in enumerate(coi):
                 ax = axes[i]
@@ -4882,8 +4889,8 @@ def profile_stages(
                 elif coi[i] == 'num_tokens':
                     ax.set_ylim(0, 2000)
                 elif coi[i] == 'transformers':
-                    ax.set_ylim(0, 32)
-                    ax.set_yticks([0, 6, 12, 18, 24, 30, 36])
+                    ax.set_ylim(0, 8)
+                    ax.set_yticks([0, 2, 4, 6, 8])
                 elif coi[i] == 'heads':
                     ax.set_ylim(0, 600)
                     ax.set_yticks(range(0, 700, 100))
@@ -4891,8 +4898,8 @@ def profile_stages(
                     ax.set_ylim(0, 15)
                     ax.set_yticks(range(0, 20, 5))
                 elif coi[i] == 'throughput':
-                    ax.set_ylim(0, 3000)
-                    ax.set_yticks(range(0, 3500, 500))
+                    ax.set_ylim(0, 4000)
+                    ax.set_yticks(range(0, 4000, 500))
                 else:
                     ax.set_ylim(0, 1440)
                     ax.set_yticks(range(0, 1500, 60))
