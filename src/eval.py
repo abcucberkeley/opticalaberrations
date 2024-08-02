@@ -2451,32 +2451,34 @@ def create_samples(
     object_size: int = 0,
 ):
     kernels = [gen.single_psf(phi=w, normed=True) for w in wavefronts]
-    # amps = [np.max(w.amplitudes) for w in wavefronts]
+    amps = [np.max(w.amplitudes) for w in wavefronts]
 
     if Path(f"{savepath}_inputs.npy").exists():
-        inputs = np.load(f"{savepath}_inputs.npy")
+        data = np.load(f"{savepath}_inputs.npy")
     else:
-        inputs = np.stack([
-                simulate_beads(
-                    psf=kernels[k],
-                    psf_type=gen.psf_type,
-                    object_size=object_size,
-                    num_objs=num_objs,
-                    photons=ph,
-                    # maxcounts=ph,
-                    noise=True,
-                    fill_radius=0 if num_objs == 1 else .66
-                )
-            # imread(f'{savepath}_ph{ph}_a{str(amps[k]).replace("0.", "p")}.tif').astype(np.float32)
-            for k, ph in tqdm(
-                itertools.product(range(len(kernels)), photons),
-                desc='Generating samples',
-                total=len(kernels) * len(photons),
-                file=sys.stdout
+        data = []
+        for k, ph in tqdm(
+            itertools.product(range(len(kernels)), photons),
+            desc='Generating samples',
+            total=len(kernels) * len(photons),
+            file=sys.stdout
+        ):
+            i = simulate_beads(
+                psf=kernels[k],
+                psf_type=gen.psf_type,
+                object_size=object_size,
+                num_objs=num_objs,
+                photons=ph,
+                # maxcounts=ph,
+                noise=True,
+                fill_radius=0 if num_objs == 1 else .66
             )
-        ], axis=0)[..., np.newaxis]
-        np.save(f"{savepath}_inputs", inputs)
-    return inputs
+            imwrite(f'{savepath}_ph{ph}_a{str(amps[k]).replace("0.", "p")}.tif', i.astype(np.float32))
+            data.append(i)
+
+        data = np.stack(data, axis=0)[..., np.newaxis]
+        np.save(f"{savepath}_inputs", data)
+    return data
 
 
 @profile
@@ -2576,11 +2578,23 @@ def eval_object(
         preds = np.abs(preds)[:, :ys.shape[-1]]
 
     residuals = ys - preds
+    residuals_wavefronts = [Wavefront(r, lam_detection=gen.lam_detection) for r in residuals]
+
+    p2v = [w.peak2valley(na=na) for w in wavefronts]
+
+    outputs = create_samples(
+        wavefronts=residuals_wavefronts,
+        photons=photons,
+        gen=samplepsfgen,
+        savepath=f"{savepath}_residuals",
+        num_objs=num_objs,
+        object_size=object_size,
+    )
 
     p = pd.DataFrame([p for p, ph in itertools.product(p2v, photons)], columns=['aberration'])
     p['prediction'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in preds]
-    p['residuals'] = [Wavefront(i, lam_detection=gen.lam_detection).peak2valley(na=na) for i in residuals]
-    p['photons'] = np.concatenate([photons for i in itertools.product(wavefronts)])
+    p['residuals'] = [i.peak2valley(na=na) for i in residuals_wavefronts]
+    p['photons'] = np.concatenate([photons for _ in itertools.product(wavefronts)])
     p['counts'] = [np.sum(i) for i in inputs]
 
     for percentile in range(1, 101):
