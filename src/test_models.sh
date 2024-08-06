@@ -23,20 +23,20 @@ DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 BATCH=2048 #-1
 
 TRAINED_MODELS=(
-  "opticalnet-T"
+#  "opticalnet-T"
   "opticalnet-S"
-  "opticalnet-B"
-  "opticalnet-L"
-  "opticalnet-H"
-  "baseline-T"
-  "baseline-S"
-  "baseline-B"
-  "baseline-L"
-  "vit-S32"
-  "vit-B32"
-  "vit-L32"
-  "vit-S16"
-  "vit-B16"
+#  "opticalnet-B"
+#  "opticalnet-L"
+#  "opticalnet-H"
+#  "baseline-T"
+#  "baseline-S"
+#  "baseline-B"
+#  "baseline-L"
+#  "vit-S32"
+#  "vit-B32"
+#  "vit-L32"
+#  "vit-S16"
+#  "vit-B16"
 )
 
 for M in ${TRAINED_MODELS[@]}
@@ -46,7 +46,7 @@ do
     if [[ $M == *"YuMB"* ]];then
       declare -a PSFS=(
         "YuMB ../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat"
-        "YuMB5 ../lattice/YuMB_NAlattice0p5_NAAnnulusMax0p40_NAsigma0p1.mat"
+        #"YuMB5 ../lattice/YuMB_NAlattice0p5_NAAnnulusMax0p40_NAsigma0p1.mat"
         #"Gaussian ../lattice/Gaussian_NAexc0p21_NAsigma0p21_annulus0p4-0p2_crop0p1_FWHM51p0.mat"
         #"MBSq ../lattice/MBSq_NAexc0p30_annulus0p375-0p225_FWHM48p5.mat"
         #"Sinc ../lattice/Sinc_by_lateral_SW_NAexc0p32_NAsigma5p0_annulus0p4-0p2_realSLM_FWHM51p5.mat"
@@ -126,10 +126,10 @@ do
               #--taskname na_$NA \
               #--name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/psf
 
-              python manager.py $CLUSTER $APPTAINER $JOB \
-              --task "${MODEL}.h5 --num_beads 1 ${CONFIG} snrheatmap" \
-              --taskname na_$NA \
-              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads-1
+              #python manager.py $CLUSTER $APPTAINER $JOB \
+              #--task "${MODEL}.h5 --num_beads 1 ${CONFIG} snrheatmap" \
+              #--taskname na_$NA \
+              #--name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads-1
 
               #python manager.py $CLUSTER $APPTAINER $JOB \
               #--task "${MODEL}.h5  ${CONFIG} densityheatmap" \
@@ -145,6 +145,11 @@ do
               #--task "${MODEL}.h5 $CONFIG snrheatmap" \
               #--taskname na_$NA \
               #--name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads
+
+              python manager.py $CLUSTER $APPTAINER $JOB \
+              --task "${MODEL}.h5 --num_beads 1 ${CONFIG} fscheatmap" \
+              --taskname na_$NA \
+              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/fscheatmaps/mode-${PTYPE}/beads-1
 
               echo
           done

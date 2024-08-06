@@ -4940,7 +4940,8 @@ def plot_heatmap_fsc(
         cdf_color='k',
         hist_color='lightgrey',
         cmap='magma',
-        levels=np.arange(.5, 1.05, .05)
+        levels=np.arange(.5, 1.05, .05),
+        colorbar_label='Residuals FSC'
 ):
     try:
         dataframe = dataframe.sort_index().interpolate()
@@ -4981,8 +4982,6 @@ def plot_heatmap_fsc(
         high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
         cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
         cmap = mcolors.ListedColormap(cmap)
-    else:
-        levels = np.arange(.5, 1.05, .05)
 
     if color_label == 'Residuals':
         contours = ax.contourf(
@@ -5004,7 +5003,7 @@ def plot_heatmap_fsc(
             format=FormatStrFormatter("%.2f"),
             ticks=levels,
         )
-        cbar.ax.set_ylabel(rf'Residuals FSC ({agg})')
+        cbar.ax.set_ylabel(rf'{colorbar_label} ({agg})')
     else:
         if hist_col == 'confidence':
             ticks = np.arange(0, .11, step=.01)
@@ -5146,10 +5145,16 @@ def fsc_iter_evaluate(
         "results" dataframe
     """
     results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
-    results['fsc_average'] = np.nan
-    results['fsc_median'] = np.nan
-    results['fsc_min'] = np.nan
-    results['fsc_max'] = np.nan
+    results['FFTratio_mean'] = np.nan
+    results['FFTratio_median'] = np.nan
+    results['FFTratio_sd'] = np.nan
+    results['embedding_sd'] = np.nan
+    results['OTF_embedding_sum'] = np.nan
+    results['OTF_embedding_vol'] = np.nan
+    results['OTF_embedding_normIntegral'] = np.nan
+    results['moment_OTF_embedding_sum'] = np.nan
+    results['moment_OTF_embedding_ideal_sum'] = np.nan
+    results['moment_OTF_embedding_norm'] = np.nan
     logger.info(results)
 
     files = list(savepath.rglob(rf'*/iter_{iter_num}/*_not_processed.json'))
@@ -5166,10 +5171,16 @@ def fsc_iter_evaluate(
     for ll in tqdm(logs, desc=f'Update FSC ({savepath.resolve()})', total=len(files)):
         if ll is not None:
             idx, fsc = ll
-            results.loc[idx, 'fsc_average'] = fsc['AvgRatio2OTFmax']
-            results.loc[idx, 'fsc_median'] = fsc['MedianRatio2OTFmax']
-            results.loc[idx, 'fsc_min'] = fsc['MinRatio2OTFmax']
-            results.loc[idx, 'fsc_max'] = fsc['MaxRatio2OTFmax']
+            results.loc[idx, 'FFTratio_mean'] = fsc['FFTratio_mean']
+            results.loc[idx, 'FFTratio_median'] = fsc['FFTratio_median']
+            results.loc[idx, 'FFTratio_sd'] = fsc['FFTratio_sd']
+            results.loc[idx, 'embedding_sd'] = fsc['embedding_sd']
+            results.loc[idx, 'OTF_embedding_sum'] = fsc['OTF_embedding_sum']
+            results.loc[idx, 'OTF_embedding_vol'] = fsc['OTF_embedding_vol']
+            results.loc[idx, 'OTF_embedding_normIntegral'] = fsc['OTF_embedding_normIntegral']
+            results.loc[idx, 'moment_OTF_embedding_sum'] = fsc['moment_OTF_embedding_sum']
+            results.loc[idx, 'moment_OTF_embedding_ideal_sum'] = fsc['moment_OTF_embedding_ideal_sum']
+            results.loc[idx, 'moment_OTF_embedding_norm'] = fsc['moment_OTF_embedding_norm']
 
     return results
 
@@ -5281,7 +5292,7 @@ def fscheatmap(
 
         df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
 
-        for c in ['fsc_average', 'fsc_average_ratio', 'fsc_median', 'fsc_median_ratio']:
+        for c in ['FFTratio_mean', 'FFTratio_median']:
             for agg in ['mean', 'median']:
 
                 # bins = np.arange(0, 1.05, .05).round(2)
@@ -5318,7 +5329,9 @@ def fscheatmap(
                     sci=True,
                     lims=lims,
                     agg=agg,
-                    cmap='custom' if 'ratio' in c else 'magma'
+                    cmap='custom' if 'ratio' in c else 'magma',
+                    colorbar_label=c,
+                    levels=np.arange(0, 1.1, .1)
                 )
 
     return savepath
