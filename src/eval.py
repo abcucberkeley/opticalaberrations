@@ -5125,7 +5125,7 @@ def fsc_iter_evaluate(iter_num, savepath):
     results['moment_OTF_embedding_sum'] = np.nan
     results['moment_OTF_embedding_ideal_sum'] = np.nan
     results['moment_OTF_embedding_norm'] = np.nan
-    logger.info(results)
+    print(results)
 
     datapath = Path(str(savepath.resolve()).replace('fscheatmaps', 'snrheatmaps'))
     files = list(datapath.rglob(rf'*/iter_{iter_num}/*_not_processed.json'))
@@ -5142,17 +5142,19 @@ def fsc_iter_evaluate(iter_num, savepath):
     for ll in tqdm(logs, desc=f'Update FSC ({savepath.resolve()})', total=len(files)):
         if ll is not None:
             idx, fsc = ll
-            results.loc[idx, 'FFTratio_mean'] = fsc['FFTratio_mean']
-            results.loc[idx, 'FFTratio_median'] = fsc['FFTratio_median']
-            results.loc[idx, 'FFTratio_sd'] = fsc['FFTratio_sd']
-            results.loc[idx, 'embedding_sd'] = fsc['embedding_sd']
-            results.loc[idx, 'OTF_embedding_sum'] = fsc['OTF_embedding_sum']
-            results.loc[idx, 'OTF_embedding_vol'] = fsc['OTF_embedding_vol']
-            results.loc[idx, 'OTF_embedding_normIntegral'] = fsc['OTF_embedding_normIntegral']
-            results.loc[idx, 'moment_OTF_embedding_sum'] = fsc['moment_OTF_embedding_sum']
-            results.loc[idx, 'moment_OTF_embedding_ideal_sum'] = fsc['moment_OTF_embedding_ideal_sum']
-            results.loc[idx, 'moment_OTF_embedding_norm'] = fsc['moment_OTF_embedding_norm']
-
+            try:
+                results.loc[idx, 'FFTratio_mean'] = fsc['FFTratio_mean']
+                results.loc[idx, 'FFTratio_median'] = fsc['FFTratio_median']
+                results.loc[idx, 'FFTratio_sd'] = fsc['FFTratio_sd']
+                results.loc[idx, 'embedding_sd'] = fsc['embedding_sd']
+                results.loc[idx, 'OTF_embedding_sum'] = fsc['OTF_embedding_sum']
+                results.loc[idx, 'OTF_embedding_vol'] = fsc['OTF_embedding_vol']
+                results.loc[idx, 'OTF_embedding_normIntegral'] = fsc['OTF_embedding_normIntegral']
+                results.loc[idx, 'moment_OTF_embedding_sum'] = fsc['moment_OTF_embedding_sum']
+                results.loc[idx, 'moment_OTF_embedding_ideal_sum'] = fsc['moment_OTF_embedding_ideal_sum']
+                results.loc[idx, 'moment_OTF_embedding_norm'] = fsc['moment_OTF_embedding_norm']
+            except IndexError:
+                continue
     return results
 
 
@@ -5295,9 +5297,9 @@ def fscheatmap(
                     sci=True,
                     lims=lims,
                     agg=agg,
-                    cmap='custom' if 'ratio' in c else 'magma',
+                    cmap='magma',
                     colorbar_label=c,
-                    levels=np.arange(0, 1.1, .1)
+                    levels=np.arange(np.round(df[c].min(), 1), np.round(df[c].max(), 1), .05)
                 )
 
     return savepath
