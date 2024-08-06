@@ -5127,7 +5127,8 @@ def fsc_iter_evaluate(iter_num, savepath):
     results['moment_OTF_embedding_norm'] = np.nan
     logger.info(results)
 
-    files = list(savepath.rglob(rf'*/iter_{iter_num}/*_not_processed.json'))
+    datapath = Path(str(savepath.resolve()).replace('fscheatmaps', 'snrheatmaps'))
+    files = list(datapath.rglob(rf'*/iter_{iter_num}/*_not_processed.json'))
     func=partial(update_fsc, results=results)
     with Pool(10) as p:
         logs = list(tqdm(
