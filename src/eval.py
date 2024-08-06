@@ -5153,7 +5153,7 @@ def fsc_iter_evaluate(iter_num, savepath):
                 results.loc[idx, 'moment_OTF_embedding_sum'] = fsc['moment_OTF_embedding_sum']
                 results.loc[idx, 'moment_OTF_embedding_ideal_sum'] = fsc['moment_OTF_embedding_ideal_sum']
                 results.loc[idx, 'moment_OTF_embedding_norm'] = fsc['moment_OTF_embedding_norm']
-            except IndexError:
+            except Exception:
                 continue
     return results
 
