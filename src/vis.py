@@ -353,9 +353,9 @@ def diagnostic_assessment(
     vmax = np.ceil(np.nanmax(y_wave) * 2) / 2  # round up to nearest 0.5 wave
     vmax = dlimit if vmax < 0.01 else vmax
 
-    mat = plot_wavefront(ax_gt, y_wave, label='Ground truth', vmin=vmin, vmax=vmax)
-    plot_wavefront(ax_pred, pred_wave, label='Predicted', vmin=vmin, vmax=vmax)
-    plot_wavefront(ax_diff, diff, label='Residuals', vmin=vmin, vmax=vmax)
+    mat = plot_wavefront(ax_gt, y_wave, label='Ground truth', vmin=-.5, vmax=.5)
+    plot_wavefront(ax_pred, pred_wave, label='Predicted', vmin=-.5, vmax=.5)
+    plot_wavefront(ax_diff, diff, label='Residuals', vmin=-.5, vmax=.5)
 
     cbar = fig.colorbar(
         mat,
@@ -424,7 +424,33 @@ def diagnostic_assessment(
         cmap=psf_cmap,
         dxy=dxy,
         dz=dz,
+        ticks=False
     )
+
+    scalebar = AnchoredSizeBar(
+        ax_xy.transData,
+        2 / dxy,
+        r'2 $\mu$m',
+        'upper right',
+        pad=0.25,
+        color='white',
+        frameon=False,
+        size_vertical=1
+    )
+    ax_xy.add_artist(scalebar)
+
+    scalebar = AnchoredSizeBar(
+        ax_cxy.transData,
+        2 / dxy,
+        r'2 $\mu$m',
+        'upper right',
+        pad=0.25,
+        color='white',
+        frameon=False,
+        size_vertical=1
+    )
+    ax_cxy.add_artist(scalebar)
+
 
     if gt_psf is not None:
         ax_xygt = fig.add_subplot(gs[2, 0])
