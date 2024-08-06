@@ -5104,37 +5104,7 @@ def update_fsc(file, results):
         return None
 
 @profile
-def fsc_iter_evaluate(
-        datapath,
-        modelpath,
-        iter_num: int = 5,
-        samplelimit: int = 1,
-        na: float = 1.0,
-        distribution: str = '/',
-        threshold: float = 0.,
-        no_phase: bool = False,
-        batch_size: int = 128,
-        photons_range: Optional[tuple] = None,
-        npoints_range: Optional[tuple] = None,
-        eval_sign: str = 'signed',
-        digital_rotations: bool = False,
-        rotations: Optional[int] = 361,
-        savepath: Any = None,
-        plot: bool = False,
-        plot_rotations: bool = False,
-        psf_type: Optional[str] = None,
-        lam_detection: Optional[float] = .510,
-        filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
-        preprocess: bool = False,
-        skip_remove_background: bool = False,
-        simulate_psf_only: bool = False,
-        use_theoretical_widefield_simulator: bool = False,
-        denoiser: Optional[Union[Path, CARE]] = None,
-        denoiser_window_size: tuple = (32, 64, 64),
-        simulate_samples: bool = False,
-        estimated_object_gaussian_sigma: float = 0,
-        randomize_object_gaussian_sigma: Optional[np.ndarray | list | tuple] = None,
-):
+def fsc_iter_evaluate(iter_num, savepath):
     """
     Gathers the set of .tif files that meet the input criteria.
     Predicts on all of those for (iter_num) iterations.
@@ -5213,36 +5183,31 @@ def fscheatmap(
 ):
     modelspecs = backend.load_metadata(modelpath)
 
-    savepath = datadir
-    savepath.mkdir(parents=True, exist_ok=True)
+    if outdir == Path('../evaluations'):
+        savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'fscheatmaps'
+
+        if psf_type is not None:
+            savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
+        if simulate_psf_only:
+            savepath = savepath / 'psf'
+        else:
+            if num_beads is not None:
+                savepath = savepath / f'beads-{num_beads}'
+            else:
+                savepath = savepath / 'beads'
+
+        if distribution != '/':
+            savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+        else:
+            savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+    else:
+        savepath = outdir
 
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0)
     else:
-        df = fsc_iter_evaluate(
-            iter_num=iter_num,
-            modelpath=modelpath,
-            datapath=datadir,
-            savepath=savepath,
-            samplelimit=samplelimit,
-            na=na,
-            batch_size=batch_size,
-            photons_range=None,
-            npoints_range=(1, num_beads) if num_beads is not None else None,
-            eval_sign=eval_sign,
-            digital_rotations=digital_rotations,
-            plot=plot,
-            plot_rotations=plot_rotations,
-            psf_type=psf_type,
-            lam_detection=lam_detection,
-            skip_remove_background=skip_remove_background,
-            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
-            simulate_psf_only=simulate_psf_only,
-            denoiser=denoiser,
-            denoiser_window_size=denoiser_window_size,
-            simulate_samples=simulate_samples,
-            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
-        )
+        df = fsc_iter_evaluate(iter_num=iter_num, savepath=savepath)
 
         backup = df.copy()
         df = backup[backup['iter_num'] == iter_num]
