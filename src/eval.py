@@ -2463,22 +2463,27 @@ def create_samples(
         data = []
         for k, ph in tqdm(
             itertools.product(range(len(kernels)), photons),
-            desc='Generating samples',
+            desc=f'Generating samples @ {savepath}',
             total=len(kernels) * len(photons),
             file=sys.stdout
         ):
-            i = simulate_beads(
-                psf=kernels[k],
-                psf_type=gen.psf_type,
-                object_size=object_size,
-                num_objs=num_objs,
-                photons=ph,
-                # maxcounts=ph,
-                noise=True,
-                fill_radius=0 if num_objs == 1 else .66
-            )
-            imwrite(f'{savepath}_ph{ph}_a{str(amps[k]).replace("0.", "p")}.tif', i.astype(np.float32))
-            data.append(i)
+            datapath = Path(f'{savepath}_ph{ph}_a{str(amps[k]).replace("0.", "p")}.tif')
+            if datapath.exists():
+                i = backend.load_sample(datapath)
+                data.append(i)
+            else:
+                i = simulate_beads(
+                    psf=kernels[k],
+                    psf_type=gen.psf_type,
+                    object_size=object_size,
+                    num_objs=num_objs,
+                    photons=ph,
+                    # maxcounts=ph,
+                    noise=True,
+                    fill_radius=0 if num_objs == 1 else .66
+                )
+                imwrite(datapath, i.astype(np.float32))
+                data.append(i)
 
         data = np.stack(data, axis=0)[..., np.newaxis]
         np.save(f"{savepath}_inputs", data)
@@ -2535,8 +2540,14 @@ def eval_object(
     if Path(f"{savepath}_embeddings.npy").exists():
         embeddings = np.load(f"{savepath}_embeddings.npy")
     else:
-        embeddings = np.stack([
-            backend.preprocess(
+        embeddings = []
+        for i, (a, ph) in tqdm(
+            enumerate(itertools.product(p2v, photons)),
+            desc=f'Generating embeddings @ {savepath}',
+            total=len(p2v) * len(photons),
+            file=sys.stdout
+        ):
+            emb = backend.preprocess(
                 inputs[i],
                 modelpsfgen=gen,
                 samplepsfgen=samplepsfgen,
@@ -2549,8 +2560,9 @@ def eval_object(
                 denoiser_window_size=denoiser_window_size,
                 estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
             )
-            for i, (a, ph) in enumerate(itertools.product(p2v, photons))
-        ], axis=0)
+            embeddings.append(emb)
+
+        embeddings = np.stack(embeddings, axis=0)[..., np.newaxis]
         np.save(f"{savepath}_embeddings", embeddings)
 
     ys = np.stack([w.amplitudes for w, ph in itertools.product(wavefronts, photons)])
@@ -2645,11 +2657,10 @@ def evaluate_modes(
     else:
         denoiser = None
 
-    photon_step = 10e3
+    photon_step = 1e3
     photons = np.arange(1, 1e5 + photon_step, photon_step).astype(int)
-    waves = np.arange(0, .35, step=.05).round(2)
+    waves = np.arange(0, .51, step=.01).round(2)
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
-    gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
 
     levels = [
         0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
@@ -2717,15 +2728,15 @@ def evaluate_modes(
         except ValueError:
             pass
 
-        fig = plt.figure(figsize=(8, 8))
-        gs = fig.add_gridspec(4, 4)
-        ax_xy = fig.add_subplot(gs[0, 0])
-        ax_xz = fig.add_subplot(gs[0, 1])
-        ax_yz = fig.add_subplot(gs[0, 2])
-        ax_wavevfront = fig.add_subplot(gs[0, -1])
+        # fig = plt.figure(figsize=(8, 8))
+        # gs = fig.add_gridspec(4, 4)
+        # ax_xy = fig.add_subplot(gs[0, 0])
+        # ax_xz = fig.add_subplot(gs[0, 1])
+        # ax_yz = fig.add_subplot(gs[0, 2])
+        # ax_wavevfront = fig.add_subplot(gs[0, -1])
+        # axt = fig.add_subplot(gs[1:, :])
 
-        axt = fig.add_subplot(gs[1:, :])
-
+        fig, axt = plt.subplots(figsize=(8, 8))
         contours = axt.contourf(
             dataframe.columns,
             dataframe.index.values,
@@ -2756,8 +2767,8 @@ def evaluate_modes(
         cbar.ax.yaxis.set_label_position('left')
 
         axt.set_ylabel(rf'Initial aberration ({agg} peak-to-valley, $\lambda = {int(modelspecs.lam_detection*1000)}~nm$)')
-        axt.set_yticks(np.arange(0, 6, .5), minor=True)
-        axt.set_yticks(np.arange(0, 6, 1))
+        axt.set_yticks(np.arange(0, 3.5, .5), minor=True)
+        axt.set_yticks(np.arange(0, 4, 1))
         axt.set_ylim(ybins[0], ybins[-1])
 
         # axt.set_xscale('log')
@@ -2767,23 +2778,6 @@ def evaluate_modes(
         axt.spines['right'].set_visible(False)
         axt.spines['left'].set_visible(False)
         axt.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-
-        phi = np.zeros_like(classes[-1, :])
-        phi[i] = .2
-        w = Wavefront(phi, lam_detection=gen.lam_detection)
-        kernel = gen.single_psf(
-            phi=w,
-            normed=True,
-            meta=False,
-        )
-        ax_xy.imshow(np.max(kernel, axis=0)**.5, vmin=0, vmax=1, cmap='hot')
-        ax_xz.imshow(np.max(kernel, axis=1)**.5, vmin=0, vmax=1, cmap='hot')
-        ax_yz.imshow(np.max(kernel, axis=2)**.5, vmin=0, vmax=1, cmap='hot')
-        ax_wavevfront.imshow(w.wave(size=100), vmin=-1, vmax=1, cmap='Spectral_r')
-
-        for a, t in zip([ax_xy, ax_xz, ax_yz, ax_wavevfront], ['XY', 'XZ', 'YZ', 'Wavefront']):
-            a.axis('off')
-            a.set_title(t)
 
         plt.tight_layout()
         plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
