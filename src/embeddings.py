@@ -766,7 +766,7 @@ def rotate_coords(
                     output=dtype,  # output will be floats
                     prefilter=False,
                     order=1,
-                )
+                ) if angle % 360 != 0 else coords # rot(zero degrees) != original coordinates because sin(0) !=0
 
         # Again, rotation by zero degrees doesn't always become a "no operation". We need to enforce that between emb
         # dimension otherwise, we will mix between the six embeddings.
