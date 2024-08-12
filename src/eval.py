@@ -4639,290 +4639,6 @@ def profile_models(
 
 
 @profile
-def profile_stages(
-        models_codenames: list,
-        predictions_paths: list,
-        outdir: Path = Path('benchmark'),
-        batch_size: int = 1024,
-        wavelength: float = .510
-):
-    plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 12,
-        'axes.labelsize': 12,
-        'xtick.labelsize': 10,
-        'ytick.labelsize': 10,
-        'legend.fontsize': 10,
-        'xtick.major.pad': 10
-    })
-
-    models = {
-        'baseline-L': 'ConvNext-L',
-        'opticalnet-T3216': 'Ours-T',
-        'opticalnet-S3216': 'Ours-S',
-        'opticalnet-B3216': 'Ours-B',
-        'opticalnet-L3216': 'Ours-L',
-        'opticalnet-H3216': 'Ours-H',
-        'opticalnet-G3216': 'Ours-G',
-        'opticalnet-32-32-32-16': '32-32-32-16',
-        'opticalnet-32-32-16-16': '32-32-16-16',
-        'opticalnet-32-16-16-16': '32-16-16-16',
-        'opticalnet-32-16-16-8': '32-16-16-8',
-        'opticalnet-32-16-8-8': '32-16-8-8',
-        'opticalnet-P32323216-R2222-H8888': '32-32-32-16',
-        'opticalnet-P32321616-R2222-H8888': '32-32-16-16',
-        'opticalnet-P32161616-R2222-H8888': '32-16-16-16',
-        'opticalnet-P3216168-R2222-H8888': '32-16-16-8',
-        'opticalnet-P321688-R2222-H8888': '32-16-8-8',
-    }
-
-    outdir.mkdir(parents=True, exist_ok=True)
-    dataframes = []
-    for codename, modeldir in zip(models_codenames, predictions_paths):
-        logger.info(f"Processing {codename}")
-        savepath = Path(f'{Path(modeldir).parent}/{codename}.csv')
-
-        if savepath.exists():
-            logger.info(f"Loading {savepath}")
-            df = pd.read_csv(savepath, header=0, index_col=0)
-        else:
-
-            try:
-                modeldir = Path(modeldir)
-                configfile = sorted(modeldir.rglob(r"*train/*tfevents*"))[0]
-                logfile = sorted(modeldir.rglob(r"*train.log"))[0]
-
-                with open(logfile) as f:
-                    log = f.readlines()
-                    train_config = [s for s in log if 'namespace' in s.lower()][-1]
-                    train_config = train_config[train_config.find('Namespace') + 10:-2].split(',')
-                    train_config = [name.split('=') for name in train_config]
-                    train_config = dict(
-                        (k.strip(), eval(v.strip().replace('PosixPath', 'Path'))) for k, v in train_config)
-
-                df = profile_utils.load_tf_logs(configfile)
-                model_config = ujson.loads(df.keras[0])
-
-                best = df['epoch_mse'].idxmin()
-
-                candidates = sorted(modeldir.rglob(rf"*keras/*epoch{best}.h5"))
-                if len(candidates) == 0:
-                    model = sorted(modeldir.rglob(rf"*keras/*.h5"))[-1]
-                else:
-                    model = candidates[0]
-
-                model = backend.load(model, model_arch=model_config['config']['name'])
-
-                df = df[[
-                    'step',
-                    'epoch_learning_rate',
-                    'epoch_loss',
-                    'epoch_mae',
-                    'epoch_mse',
-                    'epoch_root_mean_squared_error',
-                    'epoch_weight_decay',
-                    'wall_time'
-                ]]
-                df["wall_time"] = df.wall_time.apply(pd.Series)[0]
-                df["wall_clock"] = pd.to_datetime(df.wall_time, unit="s")
-
-                transformers_blocks = profile_utils.count_transformer_blocks(model=model)
-                heads = train_config['heads'].split('-')
-
-                num_heads, num_tokens = 0, 0
-                for i, (k, v) in enumerate(transformers_blocks.items()):
-                    ps = int(k.strip('p'))
-                    df[f'transformers_{k}'] = v
-                    df[f'heads_{k}'] = v * int(heads[i])
-
-                    tokens = v * model.input_shape[1] * np.product([
-                        s // p for s, p in zip(model.input_shape[2:], (ps, ps))
-                    ])
-                    logger.info(f"{tokens=}")
-                    df[f'transformers_{k}_tokens'] = tokens
-                    num_tokens += tokens
-                    num_heads += df[f'heads_{k}']
-
-                # warmup
-                profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
-
-                df['latency'] = profile_utils.measure_latency(model, number_of_samples=1024)
-                df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10 * 1024,
-                                                                    batch_size=batch_size)
-                df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
-                df['gflops'] = profile_utils.measure_gflops(model)
-                df['params'] = model.count_params()
-                df['model'] = codename
-                df['dataset'] = train_config['dataset']
-                df['batch_size'] = train_config['batch_size']
-                df['num_tokens'] = num_tokens
-                df["training"] = (df.wall_clock - df.wall_clock[0]) / np.timedelta64(1, "h")
-                df['transformers'] = sum(transformers_blocks.values())
-                df['heads'] = num_heads
-
-                logger.info(f"Saving {savepath}")
-                df.to_csv(f'{Path(modeldir).parent}/{codename}.csv')
-
-            except Exception as e:
-                logger.error(e)
-                continue
-
-        dataset_size = 2000000
-        if 'batch_size' not in df.columns:
-            df['batch_size'] = 4096
-
-        training_steps_per_epoch = dataset_size // df['batch_size']
-
-        df['training_gflops'] = training_steps_per_epoch * df['batch_size'] * df['step'] * df['gflops'] * 3
-        # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
-        df["training_gflops"] = df["training_gflops"] * 1e-9
-        df['inference_time'] = 1e6 / df['throughput'] / 60  # convert to minutes
-        df['latency'] *= 1000  # convert to milliseconds
-        df['params'] /= 1000000  # convert to millions
-
-        df['cat'] = 'Baseline'
-        df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
-        df.loc[df.model.str.match(r'vit.*16'), 'cat'] = 'ViT/16'
-        df.loc[df.model.str.match(r'vit.*32'), 'cat'] = 'ViT/32'
-        # df.loc[df.model.str.match(r'vit'), 'cat'] = 'ViT'
-        df.loc[df.model.str.match(r'baseline'), 'cat'] = 'ConvNext'
-        df.model = df.model.replace(models)
-
-        dataframes.append(df)
-
-    if len(models_codenames) > 1:
-        pass
-
-        df = pd.DataFrame()
-        for d in dataframes:
-            best = d['epoch_mse'].idxmin()
-            df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
-
-
-        coi = [
-            'transformers',
-            'gflops',
-            'params',
-            'epoch_mse',
-            'training',
-            'memory',
-            'throughput',
-            'latency',
-        ]
-        titles = [
-            'Transformers\n(Layers)',
-            'Inference cost\n(GFLOPs)',
-            'Parameters\n(Millions)',
-            'Training loss\n($\mu$m rms)',
-            'Training hours\n8xH100s',
-            f'Memory (GB)\n[BS={batch_size}]',
-            f'Throughput\n(images/s)',
-            'Latency\n(ms/image)',
-        ]
-        df = df.sort_values('params', ascending=True)
-
-        fig, axes = plt.subplots(len(coi), 1, figsize=(8, 12), sharex=False, sharey=False)
-
-        for i, cc in enumerate(coi):
-                ax = axes[i]
-                ax = sns.barplot(
-                    data=df,
-                    x='model',
-                    y=coi[i],
-                    hue='model',
-                    palette='Greys',
-                    ax=ax,
-                    legend=False,
-                    width=.4,
-                    dodge=False,
-                    native_scale=False,
-                )
-
-                ax.set_ylabel(titles[i])
-                ax.set_xlabel('')
-
-                if i == len(coi) - 1:
-                    ax.set_xticklabels(df.model)
-                else:
-                    ax.set_xticklabels([])
-
-                for c in range(len(ax.containers)):
-                    if coi[i] == 'mean':
-                        fmt = '%.1f'
-                    elif coi[i] == 'epoch_mse':
-                        fmt = '%.2g'
-                    elif coi[i] == 'params':
-                        fmt = '%dM'
-                    elif coi[i] in ['num_tokens', 'params', 'throughput', 'batch_size', 'transformers', 'heads']:
-                        fmt = '%d'
-                    else:
-                        fmt = '%.1f'
-
-                    ax.bar_label(ax.containers[c], fontsize=8, fmt=fmt)
-
-                ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
-                ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
-
-                if coi[i] == 'mean':
-                    ax.set_ylim(0, .5)
-                    ax.set_yticks(np.arange(0, .6, .1))
-                elif coi[i] == 'epoch_mse':
-                    ax.set_ylim(1e-7, 1e-5)
-                    ax.set_yscale('log')
-                elif coi[i] == 'training':
-                    ax.set_ylim(0, 24)  # (1 day of training)
-                    ax.set_yticks(range(0, 30, 6))
-                elif coi[i] == 'batch_size':
-                    ax.set_ylim(0, 4096)
-                    ax.set_yticks(range(0, 4096 + 1024, 1024))
-                elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
-                    ax.set_ylim(0, 125)
-                    ax.set_yticks(range(0, 150, 25))
-                elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
-                    ax.set_ylim(0, 3)
-                    ax.set_yticks(range(0, 4, 1))
-                elif coi[i] == 'params':
-                    ax.set_ylim(10, 80)
-                elif coi[i] == 'memory':
-                    ax.set_ylim(0, 3)
-                    ax.set_yticks(range(0, 4, 1))
-                elif coi[i] == 'num_tokens':
-                    ax.set_ylim(0, 2000)
-                elif coi[i] == 'transformers':
-                    ax.set_ylim(0, 8)
-                    ax.set_yticks([0, 2, 4, 6, 8])
-                elif coi[i] == 'heads':
-                    ax.set_ylim(0, 600)
-                    ax.set_yticks(range(0, 700, 100))
-                elif coi[i] == 'latency':
-                    ax.set_ylim(0, 15)
-                    ax.set_yticks(range(0, 20, 5))
-                elif coi[i] == 'throughput':
-                    ax.set_ylim(0, 4000)
-                    ax.set_yticks(range(0, 4000, 500))
-                else:
-                    ax.set_ylim(0, 1440)
-                    ax.set_yticks(range(0, 1500, 60))
-
-                ax.spines['left'].set_visible(False)
-                ax.spines['top'].set_visible(False)
-                ax.spines['right'].set_visible(False)
-
-        plt.tight_layout()
-
-        savepath = Path(f'{outdir}/profiles')
-        logger.info(savepath)
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-        table = df.set_index(['model'], drop=False)
-        table = table[coi].astype(float)
-        print(table)
-        print(table.to_latex(float_format="%.2g"))
-
-
-@profile
 def plot_heatmap_fsc(
         dataframe,
         wavelength,
@@ -4940,8 +4656,7 @@ def plot_heatmap_fsc(
         cdf_color='k',
         hist_color='lightgrey',
         cmap='magma',
-        levels=np.arange(.5, 1.05, .05),
-        colorbar_label='Residuals FSC'
+        levels=np.arange(.5, 1.05, .05)
 ):
     try:
         dataframe = dataframe.sort_index().interpolate()
@@ -4982,6 +4697,8 @@ def plot_heatmap_fsc(
         high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
         cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
         cmap = mcolors.ListedColormap(cmap)
+    else:
+        levels = np.arange(.5, 1.05, .05)
 
     if color_label == 'Residuals':
         contours = ax.contourf(
@@ -5003,7 +4720,7 @@ def plot_heatmap_fsc(
             format=FormatStrFormatter("%.2f"),
             ticks=levels,
         )
-        cbar.ax.set_ylabel(rf'{colorbar_label} ({agg})')
+        cbar.ax.set_ylabel(rf'Residuals FSC ({agg})')
     else:
         if hist_col == 'confidence':
             ticks = np.arange(0, .11, step=.01)
@@ -5104,7 +4821,37 @@ def update_fsc(file, results):
         return None
 
 @profile
-def fsc_iter_evaluate(iter_num, savepath):
+def fsc_iter_evaluate(
+        datapath,
+        modelpath,
+        iter_num: int = 5,
+        samplelimit: int = 1,
+        na: float = 1.0,
+        distribution: str = '/',
+        threshold: float = 0.,
+        no_phase: bool = False,
+        batch_size: int = 128,
+        photons_range: Optional[tuple] = None,
+        npoints_range: Optional[tuple] = None,
+        eval_sign: str = 'signed',
+        digital_rotations: bool = False,
+        rotations: Optional[int] = 361,
+        savepath: Any = None,
+        plot: bool = False,
+        plot_rotations: bool = False,
+        psf_type: Optional[str] = None,
+        lam_detection: Optional[float] = .510,
+        filename_pattern: str = r"*[!_gt|!_realspace|!_noisefree|!_predictions_psf|!_corrected_psf|!_reconstructed_psf].tif",
+        preprocess: bool = False,
+        skip_remove_background: bool = False,
+        simulate_psf_only: bool = False,
+        use_theoretical_widefield_simulator: bool = False,
+        denoiser: Optional[Union[Path, CARE]] = None,
+        denoiser_window_size: tuple = (32, 64, 64),
+        simulate_samples: bool = False,
+        estimated_object_gaussian_sigma: float = 0,
+        randomize_object_gaussian_sigma: Optional[np.ndarray | list | tuple] = None,
+):
     """
     Gathers the set of .tif files that meet the input criteria.
     Predicts on all of those for (iter_num) iterations.
@@ -5115,20 +4862,13 @@ def fsc_iter_evaluate(iter_num, savepath):
         "results" dataframe
     """
     results = pd.read_csv(f'{savepath}_predictions.csv', header=0, index_col=0)
-    results['FFTratio_mean'] = np.nan
-    results['FFTratio_median'] = np.nan
-    results['FFTratio_sd'] = np.nan
-    results['embedding_sd'] = np.nan
-    results['OTF_embedding_sum'] = np.nan
-    results['OTF_embedding_vol'] = np.nan
-    results['OTF_embedding_normIntegral'] = np.nan
-    results['moment_OTF_embedding_sum'] = np.nan
-    results['moment_OTF_embedding_ideal_sum'] = np.nan
-    results['moment_OTF_embedding_norm'] = np.nan
-    print(results)
+    results['fsc_average'] = np.nan
+    results['fsc_median'] = np.nan
+    results['fsc_min'] = np.nan
+    results['fsc_max'] = np.nan
+    logger.info(results)
 
-    datapath = Path(str(savepath.resolve()).replace('fscheatmaps', 'snrheatmaps'))
-    files = list(datapath.rglob(rf'*/iter_{iter_num}/*_not_processed.json'))
+    files = list(savepath.rglob(rf'*/iter_{iter_num}/*_not_processed.json'))
     func=partial(update_fsc, results=results)
     with Pool(10) as p:
         logs = list(tqdm(
@@ -5142,19 +4882,11 @@ def fsc_iter_evaluate(iter_num, savepath):
     for ll in tqdm(logs, desc=f'Update FSC ({savepath.resolve()})', total=len(files)):
         if ll is not None:
             idx, fsc = ll
-            try:
-                results.loc[idx, 'FFTratio_mean'] = fsc['FFTratio_mean']
-                results.loc[idx, 'FFTratio_median'] = fsc['FFTratio_median']
-                results.loc[idx, 'FFTratio_sd'] = fsc['FFTratio_sd']
-                results.loc[idx, 'embedding_sd'] = fsc['embedding_sd']
-                results.loc[idx, 'OTF_embedding_sum'] = fsc['OTF_embedding_sum']
-                results.loc[idx, 'OTF_embedding_vol'] = fsc['OTF_embedding_vol']
-                results.loc[idx, 'OTF_embedding_normIntegral'] = fsc['OTF_embedding_normIntegral']
-                results.loc[idx, 'moment_OTF_embedding_sum'] = fsc['moment_OTF_embedding_sum']
-                results.loc[idx, 'moment_OTF_embedding_ideal_sum'] = fsc['moment_OTF_embedding_ideal_sum']
-                results.loc[idx, 'moment_OTF_embedding_norm'] = fsc['moment_OTF_embedding_norm']
-            except Exception:
-                continue
+            results.loc[idx, 'fsc_average'] = fsc['AvgRatio2OTFmax']
+            results.loc[idx, 'fsc_median'] = fsc['MedianRatio2OTFmax']
+            results.loc[idx, 'fsc_min'] = fsc['MinRatio2OTFmax']
+            results.loc[idx, 'fsc_max'] = fsc['MaxRatio2OTFmax']
+
     return results
 
 
@@ -5207,99 +4939,120 @@ def fscheatmap(
     else:
         savepath = outdir
 
-    if datadir.suffix == '.csv':
-        df = pd.read_csv(datadir, header=0, index_col=0)
-    else:
-        df = fsc_iter_evaluate(iter_num=iter_num, savepath=savepath)
-
-        backup = df.copy()
-        df = backup[backup['iter_num'] == iter_num]
-        df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
-        df.to_csv(f'{savepath}_iter_{iter_num}_data.csv')
-
-    # df1 = pd.read_csv(f'{savepath}_iter_1_data.csv', header=0, index_col=0)
-    # df1.drop_duplicates(subset='id', keep="first", inplace=True)
-    # df1['iter_num'] = 0
+    # if datadir.suffix == '.csv':
+    #     df = pd.read_csv(datadir, header=0, index_col=0)
+    # else:
+    #     df = fsc_iter_evaluate(iter_num=iter_num, savepath=savepath)
     #
-    # df2 = pd.read_csv(f'{savepath}_iter_2_data.csv', header=0, index_col=0)
-    # df2['iter_num'] = 1
-    #
-    # df3 = pd.read_csv(f'{savepath}_iter_3_data.csv', header=0, index_col=0)
-    # df3['iter_num'] = 2
-    #
-    # full = pd.concat([df1, df2, df3], ignore_index=True, sort=False)
-    #
-    # df = full[full['iter_num'] == iter_num]
-    # df['fsc_average_init'] = df1['fsc_average'].values
-    # df['fsc_median_init'] = df1['fsc_median'].values
-    # df['fsc_average_ratio'] = df['fsc_average'].values / df['fsc_average_init'].values
-    # df['fsc_median_ratio'] = df['fsc_median'].values / df['fsc_median_init'].values
+    #     backup = df.copy()
+    #     df = backup[backup['iter_num'] == iter_num]
+    #     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
+    #     df.to_csv(f'{savepath}_iter_{iter_num}_data.csv')
 
-    for x in ['photons', 'photoelectrons']:
 
-        if x == 'photons':
-            label = f'Integrated photons'
-            lims = (0, 5 * 10 ** 5)
-            pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
-        elif x == 'photoelectrons':
-            label = f'Integrated photoelectrons'
-            lims = (0, 5 * 10 ** 5)
-            pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
-        elif x == 'counts':
-            label = f'Integrated counts'
-            lims = (2.6e7, 3e7)
-            pbins = np.arange(lims[0], lims[-1] + 2e5, 1e5)
-        elif x == 'counts_p100':
-            label = f'Max counts (camera background offset = 100)'
-            lims = (100, 2000)
-            pbins = np.arange(lims[0], lims[-1] + 400, 200)
-        else:
-            label = f'99th percentile of counts (camera background offset = 100)'
-            lims = (100, 300)
-            pbins = np.arange(lims[0], lims[-1] + 50, 25)
+    columns = [
+        'FFTratio_mean',
+        'FFTratio_median',
+        'FFTratio_sd',
+        'embedding_sd',
+        'OTF_embedding_sum',
+        'OTF_embedding_vol',
+        'OTF_embedding_normIntegral',
+        'moment_OTF_embedding_sum',
+        'moment_OTF_embedding_ideal_sum',
+        'moment_OTF_embedding_norm',
+    ]
 
-        df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
+    df1 = pd.read_csv(f'{savepath}_iter_1_data.csv', header=0, index_col=0)
+    df1.drop_duplicates(subset='id', keep="first", inplace=True)
+    df1['iter_num'] = 0
 
-        for c in ['FFTratio_mean', 'FFTratio_median']:
-            for agg in ['mean', 'median']:
+    df2 = pd.read_csv(f'{savepath}_iter_2_data.csv', header=0, index_col=0)
+    df2['iter_num'] = 1
 
-                # bins = np.arange(0, 1.05, .05).round(2)
-                # df['ibins'] = pd.cut(
-                #     df[f'{c}_init'],
-                #     bins,
-                #     labels=bins[1:],
-                #     include_lowest=True
-                # )
-                # dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
-                # dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
+    df3 = pd.read_csv(f'{savepath}_iter_3_data.csv', header=0, index_col=0)
+    df3['iter_num'] = 2
 
-                bins = np.arange(0, 10.25, .25).round(2)
-                df['ibins'] = pd.cut(
-                    df['aberration'],
-                    bins,
-                    labels=bins[1:],
-                    include_lowest=True
-                )
-                dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
-                dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
+    full = pd.concat([df1, df2, df3], ignore_index=True, sort=False)
 
-                # replace unconfident predictions with max std
-                dataframe.replace(0, dataframe.max(), inplace=True)
-                dataframe.to_csv(f'{savepath}_photons_{c}_{agg}.csv')
-                logger.info(f'Saved: {savepath.resolve()}_{x}_{c}_{agg}.csv')
+    for iter_num in [0, 1, 2]:
+        df = full[full['iter_num'] == iter_num]
 
-                plot_heatmap_fsc(
-                    dataframe,
-                    wavelength=modelspecs.lam_detection,
-                    savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}_{agg}"),
-                    label=label,
-                    hist_col='residuals',
-                    sci=True,
-                    lims=lims,
-                    agg=agg,
-                    cmap='magma',
-                    colorbar_label=c,
-                    levels=np.arange(np.round(df[c].min(), 1), np.round(df[c].max(), 1), .05)
-                )
+        for cc in columns:
+            df[f'{cc}_init'] = df1[cc].values
+            df[f'{cc}_rel'] = df[cc].values / df[f'{cc}_init'].values
 
-    return savepath
+        for x in ['photons']:
+
+            if x == 'photons':
+                label = f'Integrated photons'
+                lims = (0, 5 * 10 ** 5)
+                pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
+            elif x == 'photoelectrons':
+                label = f'Integrated photoelectrons'
+                lims = (0, 5 * 10 ** 5)
+                pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
+            elif x == 'counts':
+                label = f'Integrated counts'
+                lims = (2.6e7, 3e7)
+                pbins = np.arange(lims[0], lims[-1] + 2e5, 1e5)
+            elif x == 'counts_p100':
+                label = f'Max counts (camera background offset = 100)'
+                lims = (100, 2000)
+                pbins = np.arange(lims[0], lims[-1] + 400, 200)
+            else:
+                label = f'99th percentile of counts (camera background offset = 100)'
+                lims = (100, 300)
+                pbins = np.arange(lims[0], lims[-1] + 50, 25)
+
+            df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
+
+            for metric in ['FFTratio_mean', 'FFTratio_median', 'OTF_embedding_normIntegral', 'moment_OTF_embedding_norm']:
+                for postfix in ['', '_rel']:
+                    c = f"{metric}{postfix}"
+
+                    for agg in ['mean', 'median']:
+
+                        # bins = np.arange(0, 1.05, .05).round(2)
+                        # df['ibins'] = pd.cut(
+                        #     df[f'{c}_init'],
+                        #     bins,
+                        #     labels=bins[1:],
+                        #     include_lowest=True
+                        # )
+                        # dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
+                        # dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
+
+                        bins = np.arange(0, 10.25, .25).round(2)
+                        df['ibins'] = pd.cut(
+                            df['aberration'],
+                            bins,
+                            labels=bins[1:],
+                            include_lowest=True
+                        )
+
+                        dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
+                        dataframe = dataframe.div(dataframe.iloc[0])
+                        dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
+
+                        vmin = np.round(np.nanmin(dataframe.values), 1)
+                        vmax = np.round(np.nanmax(dataframe.values), 1)
+
+                        # replace unconfident predictions with max std
+                        # dataframe.replace(0, dataframe.max(), inplace=True)
+                        dataframe.to_csv(f'{savepath}_photons_{c}_{agg}.csv')
+                        logger.info(f'Saved: {savepath.resolve()}_{x}_{c}_{agg}.csv')
+
+                        plot_heatmap_fsc(
+                            dataframe,
+                            wavelength=modelspecs.lam_detection,
+                            savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}_{agg}"),
+                            label=label,
+                            hist_col='residuals',
+                            sci=True,
+                            lims=lims,
+                            agg=agg,
+                            cmap='custom' if 'rel' in c else 'magma',
+                            colorbar_label=c,
+                            levels=np.arange(vmin, 1.05, .05)
+                        )
