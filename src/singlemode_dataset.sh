@@ -85,7 +85,7 @@ else
   amps1=($(seq 0 .01 .49))
   amps2=($(seq .01 .01 .5))
   DISTRIBUTIONS=(single)
-  FILL_RADIUS=0.66
+  FILL_RADIUS=0
 fi
 
 BINS=$(( ${#DISTRIBUTIONS[@]} * ${#mPH[@]} * ${#amps1[@]} * ${#OBJS[@]} ))
