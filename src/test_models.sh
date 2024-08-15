@@ -156,15 +156,15 @@ do
         done
       done
 
-      for ZMODE in z3 z5 z6 z7 z8 z9 z10 z11 z12 z13 z14
-      do
-          DATASET="singlemode_dataset/test/$ZMODE"
 
+      DATASET="singlemode_dataset"
+      for ZMODE in m3 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14
+      do
           if [[ $CLUSTER = 'slurm' ]];then
-            DATA="/clusterfs/nvme/thayer/dataset/$DATASET/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
+            DATA="/clusterfs/nvme/thayer/dataset/$DATASET/test/$ZMODE/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
             JOB="test.py --timelimit $TIMELIMIT --dependency singleton --partition abc_a100 --mem=500GB --cpus 16 --gpus 4 --exclusive"
           else
-            DATA="/groups/betzig/betziglab/thayer/dataset/$DATASET/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
+            DATA="/groups/betzig/betziglab/thayer/dataset/$DATASET/test/$ZMODE/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
             JOB="test.py --timelimit $TIMELIMIT --dependency singleton --partition gpu_a100 --cpus 8 --gpus 4"
           fi
 
@@ -189,12 +189,12 @@ do
               python manager.py $CLUSTER $APPTAINER $JOB \
               --task "${MODEL}.h5 --num_beads 1 --simulate_psf_only ${CONFIG} snrheatmap" \
               --taskname na_$NA \
-              --name ${OUTDIR}/${DATASET}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/psf
+              --name ${OUTDIR}/${DATASET}/$ZMODE/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/psf
 
               python manager.py $CLUSTER $APPTAINER $JOB \
               --task "${MODEL}.h5 --num_beads 1 ${CONFIG} snrheatmap" \
               --taskname na_$NA \
-              --name ${OUTDIR}/${DATASET}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads-1
+              --name ${OUTDIR}/${DATASET}/$ZMODE/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads-1
 
               echo
         done

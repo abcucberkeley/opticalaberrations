@@ -5,17 +5,14 @@ matplotlib.use('Agg')
 import re
 import logging
 import sys
-import os
 import time
 import uuid
 import ujson
 from functools import partial
-from typing import Any, Optional, Union
+from typing import Any, Optional
 from pathlib import Path
 from tifffile import TiffFile
-from tifffile import imwrite
 import numpy as np
-from scipy import stats as st
 from csbdeep.models import CARE
 
 import matplotlib.pyplot as plt
@@ -552,7 +549,7 @@ def main(args=None):
         if i == 4:
             continue
 
-        outdir = args.outdir / f"z{i}"
+        outdir = args.outdir / f"m{i}"
 
         sample = partial(
             create_synthetic_sample,
