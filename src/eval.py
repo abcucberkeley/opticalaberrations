@@ -1217,13 +1217,11 @@ def plot_heatmap_rms(
         cax = fig.add_axes([1.01, 0.08, 0.03, 0.87])
 
     levels = np.array([
-        0, .025, .05, .075, .1, .125, .15, .175, .2, .225,
-        .25, .3, .35, .4, .45,
-        .5, .55, .6, .65, .7,
-        .75, .8, .9, 1,
+        0, .01, .02, .03, .04, .05, .06, .07, .08, .09,
+        .1, .125, .15, .175, .2, .25, .3, .4, .5, .6, .7, .8, .9, 1,
     ])
 
-    vmin, vmax, vcenter, step = levels[0], levels[-1], .25, levels[1] - levels[0]
+    vmin, vmax, vcenter, step = levels[0], levels[-1], .1, levels[1] - levels[0]
     highcmap = plt.get_cmap('magma_r', 256)
     lowcmap = plt.get_cmap('GnBu_r', 256)
     low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
@@ -1252,8 +1250,7 @@ def plot_heatmap_rms(
         format=FormatStrFormatter("%.2f"),
         # ticks=np.arange(vmin, vmax+.05, .05),
         ticks=[
-            0, .05, .1, .15, .2, .25, .3, .35, .4, .45,
-            .5, .6, .7, .8, .9, 1,
+            0, .05, .1, .15, .2, .25, .3, .4, .5, .6, .7, .8, .9, 1,
         ],
     )
     cbar.ax.set_ylabel(fr'Residuals ({agg} $\lambda$ RMS)')
@@ -4654,7 +4651,8 @@ def plot_heatmap_fsc(
         cdf_color='k',
         hist_color='lightgrey',
         cmap='magma',
-        levels=np.arange(.5, 1.05, .05)
+        levels=np.arange(.5, 1.05, .05),
+        colorbar_label= 'test'
 ):
     try:
         dataframe = dataframe.sort_index().interpolate()
@@ -4687,14 +4685,15 @@ def plot_heatmap_fsc(
         cax = fig.add_axes([1.03, 0.08, 0.03, 0.87])
 
     if cmap == 'custom':
-        levels = np.arange(.85, 1.55, .05)
-        vmin, vmax, vcenter, step = levels[0], levels[-1], 1, .05
-        lowcmap = plt.get_cmap('magma', 256)
+        levels = np.arange(0, .85, .05).round(2)
+        vmin, vmax, vcenter, step = levels[0], levels[-1], .3, .01
         highcmap = plt.get_cmap('GnBu', 256)
+        lowcmap = plt.get_cmap('magma', 256)
         low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
         high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
         cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
         cmap = mcolors.ListedColormap(cmap)
+        ticks = np.arange(0, .9, .1).round(2)
     else:
         levels = np.arange(.5, 1.05, .05)
 
@@ -4707,7 +4706,7 @@ def plot_heatmap_fsc(
             cmap=cmap,
             linewidths=2,
             linestyles='dashed',
-            extend='min',
+            extend='max',
         )
         cbar = plt.colorbar(
             contours,
@@ -4716,9 +4715,9 @@ def plot_heatmap_fsc(
             pad=0.04,
             spacing='proportional',
             format=FormatStrFormatter("%.2f"),
-            ticks=levels,
+            ticks=ticks,
         )
-        cbar.ax.set_ylabel(rf'Residuals FSC ({agg})')
+        cbar.ax.set_ylabel(rf'{colorbar_label} ({agg})')
     else:
         if hist_col == 'confidence':
             ticks = np.arange(0, .11, step=.01)
@@ -4913,6 +4912,7 @@ def fscheatmap(
         denoiser_window_size: tuple = (32, 64, 64),
         simulate_samples: bool = False,
         estimated_object_gaussian_sigma: float = 0,
+        override: bool = True
 ):
     modelspecs = backend.load_metadata(modelpath)
 
@@ -4937,120 +4937,172 @@ def fscheatmap(
     else:
         savepath = outdir
 
-    # if datadir.suffix == '.csv':
-    #     df = pd.read_csv(datadir, header=0, index_col=0)
-    # else:
-    #     df = fsc_iter_evaluate(iter_num=iter_num, savepath=savepath)
-    #
-    #     backup = df.copy()
-    #     df = backup[backup['iter_num'] == iter_num]
-    #     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
-    #     df.to_csv(f'{savepath}_iter_{iter_num}_data.csv')
+    if override:
+        columns = [
+            'FFTratio_mean',
+            'FFTratio_median',
+            'FFTratio_sd',
+            'embedding_sd',
+            'OTF_embedding_sum',
+            'OTF_embedding_vol',
+            'OTF_embedding_normIntegral',
+            'moment_OTF_embedding_sum',
+            'moment_OTF_embedding_ideal_sum',
+            'moment_OTF_embedding_norm',
+        ]
+
+        df1 = pd.read_csv(f'{savepath}_iter_1_data.csv', header=0, index_col=0)
+        df1.drop_duplicates(subset='id', keep="first", inplace=True)
+        df1['iter_num'] = 0
+
+        df2 = pd.read_csv(f'{savepath}_iter_2_data.csv', header=0, index_col=0)
+        df2['iter_num'] = 1
+
+        df3 = pd.read_csv(f'{savepath}_iter_3_data.csv', header=0, index_col=0)
+        df3['iter_num'] = 2
+
+        full = pd.concat([df1, df2, df3], ignore_index=True, sort=False)
+
+        for iter_num in [0, 1, 2]:
+            df = full[full['iter_num'] == iter_num]
+
+            for cc in columns:
+                df[f'{cc}_init'] = df1[cc].values
+                df[f'{cc}_rel'] = df[cc].values / df[f'{cc}_init'].values
+
+            for x in ['photons']:
+
+                if x == 'photons':
+                    label = f'Integrated photons'
+                    lims = (0, 5 * 10 ** 5)
+                    pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
+                elif x == 'photoelectrons':
+                    label = f'Integrated photoelectrons'
+                    lims = (0, 5 * 10 ** 5)
+                    pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
+                elif x == 'counts':
+                    label = f'Integrated counts'
+                    lims = (2.6e7, 3e7)
+                    pbins = np.arange(lims[0], lims[-1] + 2e5, 1e5)
+                elif x == 'counts_p100':
+                    label = f'Max counts (camera background offset = 100)'
+                    lims = (100, 2000)
+                    pbins = np.arange(lims[0], lims[-1] + 400, 200)
+                else:
+                    label = f'99th percentile of counts (camera background offset = 100)'
+                    lims = (100, 300)
+                    pbins = np.arange(lims[0], lims[-1] + 50, 25)
+
+                df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
+
+                for metric in ['moment_OTF_embedding_norm']:
+                    for postfix in ['', '_rel']:
+                        c = f"{metric}{postfix}"
+
+                        for agg in ['mean', 'median']:
+                            bins = np.arange(0, 10.25, .25).round(2)
+                            df['ibins'] = pd.cut(
+                                df['aberration'],
+                                bins,
+                                labels=bins[1:],
+                                include_lowest=True
+                            )
+
+                            dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
+                            dataframe = dataframe.div(dataframe.iloc[0])
+                            dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
+
+                            vmin = np.round(np.nanmin(dataframe.values), 1)
+                            vmax = np.round(np.nanmax(dataframe.values), 1)
+
+                            # replace unconfident predictions with max std
+                            # dataframe.replace(0, dataframe.max(), inplace=True)
+                            dataframe.to_csv(f'{savepath}_photons_{c}_{agg}.csv')
+                            logger.info(f'Saved: {savepath.resolve()}_{x}_{c}_{agg}.csv')
+
+                            plot_heatmap_fsc(
+                                dataframe,
+                                wavelength=modelspecs.lam_detection,
+                                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}_{agg}"),
+                                label=label,
+                                hist_col='residuals',
+                                sci=True,
+                                lims=lims,
+                                agg=agg,
+                                cmap='custom',
+                                colorbar_label=c,
+                            )
+
+    else:
+        if datadir.suffix == '.csv':
+            df = pd.read_csv(datadir, header=0, index_col=0)
+        else:
+            df = fsc_iter_evaluate(iter_num=iter_num, savepath=savepath)
+
+            backup = df.copy()
+            df = backup[backup['iter_num'] == iter_num]
+            df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
+            df.to_csv(f'{savepath}_iter_{iter_num}_data.csv')
 
 
-    columns = [
-        'FFTratio_mean',
-        'FFTratio_median',
-        'FFTratio_sd',
-        'embedding_sd',
-        'OTF_embedding_sum',
-        'OTF_embedding_vol',
-        'OTF_embedding_normIntegral',
-        'moment_OTF_embedding_sum',
-        'moment_OTF_embedding_ideal_sum',
-        'moment_OTF_embedding_norm',
-    ]
+    for x in ['photons', 'photoelectrons']:
 
-    df1 = pd.read_csv(f'{savepath}_iter_1_data.csv', header=0, index_col=0)
-    df1.drop_duplicates(subset='id', keep="first", inplace=True)
-    df1['iter_num'] = 0
+        if x == 'photons':
+            label = f'Integrated photons'
+            lims = (0, 5 * 10 ** 5)
+            pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
+        elif x == 'photoelectrons':
+            label = f'Integrated photoelectrons'
+            lims = (0, 5 * 10 ** 5)
+            pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
+        elif x == 'counts':
+            label = f'Integrated counts'
+            lims = (2.6e7, 3e7)
+            pbins = np.arange(lims[0], lims[-1] + 2e5, 1e5)
+        elif x == 'counts_p100':
+            label = f'Max counts (camera background offset = 100)'
+            lims = (100, 2000)
+            pbins = np.arange(lims[0], lims[-1] + 400, 200)
+        else:
+            label = f'99th percentile of counts (camera background offset = 100)'
+            lims = (100, 300)
+            pbins = np.arange(lims[0], lims[-1] + 50, 25)
 
-    df2 = pd.read_csv(f'{savepath}_iter_2_data.csv', header=0, index_col=0)
-    df2['iter_num'] = 1
+        df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
 
-    df3 = pd.read_csv(f'{savepath}_iter_3_data.csv', header=0, index_col=0)
-    df3['iter_num'] = 2
+        for metric in ['FFTratio_mean', 'FFTratio_median', 'OTF_embedding_normIntegral', 'moment_OTF_embedding_norm']:
+            for postfix in ['', '_rel']:
+                c = f"{metric}{postfix}"
 
-    full = pd.concat([df1, df2, df3], ignore_index=True, sort=False)
+                for agg in ['mean', 'median']:
 
-    for iter_num in [0, 1, 2]:
-        df = full[full['iter_num'] == iter_num]
+                    bins = np.arange(0, 10.25, .25).round(2)
+                    df['ibins'] = pd.cut(
+                        df['aberration'],
+                        bins,
+                        labels=bins[1:],
+                        include_lowest=True
+                    )
 
-        for cc in columns:
-            df[f'{cc}_init'] = df1[cc].values
-            df[f'{cc}_rel'] = df[cc].values / df[f'{cc}_init'].values
+                    dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
+                    dataframe = dataframe.div(dataframe.iloc[0])
+                    dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
 
-        for x in ['photons']:
+                    vmin = np.round(np.nanmin(dataframe.values), 1)
+                    vmax = np.round(np.nanmax(dataframe.values), 1)
 
-            if x == 'photons':
-                label = f'Integrated photons'
-                lims = (0, 5 * 10 ** 5)
-                pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
-            elif x == 'photoelectrons':
-                label = f'Integrated photoelectrons'
-                lims = (0, 5 * 10 ** 5)
-                pbins = np.arange(lims[0], lims[-1] + 1e4, 5e4)
-            elif x == 'counts':
-                label = f'Integrated counts'
-                lims = (2.6e7, 3e7)
-                pbins = np.arange(lims[0], lims[-1] + 2e5, 1e5)
-            elif x == 'counts_p100':
-                label = f'Max counts (camera background offset = 100)'
-                lims = (100, 2000)
-                pbins = np.arange(lims[0], lims[-1] + 400, 200)
-            else:
-                label = f'99th percentile of counts (camera background offset = 100)'
-                lims = (100, 300)
-                pbins = np.arange(lims[0], lims[-1] + 50, 25)
+                    dataframe.to_csv(f'{savepath}_photons_{c}_{agg}.csv')
+                    logger.info(f'Saved: {savepath.resolve()}_{x}_{c}_{agg}.csv')
 
-            df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
-
-            for metric in ['FFTratio_mean', 'FFTratio_median', 'OTF_embedding_normIntegral', 'moment_OTF_embedding_norm']:
-                for postfix in ['', '_rel']:
-                    c = f"{metric}{postfix}"
-
-                    for agg in ['mean', 'median']:
-
-                        # bins = np.arange(0, 1.05, .05).round(2)
-                        # df['ibins'] = pd.cut(
-                        #     df[f'{c}_init'],
-                        #     bins,
-                        #     labels=bins[1:],
-                        #     include_lowest=True
-                        # )
-                        # dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
-                        # dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
-
-                        bins = np.arange(0, 10.25, .25).round(2)
-                        df['ibins'] = pd.cut(
-                            df['aberration'],
-                            bins,
-                            labels=bins[1:],
-                            include_lowest=True
-                        )
-
-                        dataframe = pd.pivot_table(df, values=c, index='ibins', columns='pbins', aggfunc=agg)
-                        dataframe = dataframe.div(dataframe.iloc[0])
-                        dataframe.insert(0, 0, dataframe.index.values.astype(df[c].dtype))
-
-                        vmin = np.round(np.nanmin(dataframe.values), 1)
-                        vmax = np.round(np.nanmax(dataframe.values), 1)
-
-                        # replace unconfident predictions with max std
-                        # dataframe.replace(0, dataframe.max(), inplace=True)
-                        dataframe.to_csv(f'{savepath}_photons_{c}_{agg}.csv')
-                        logger.info(f'Saved: {savepath.resolve()}_{x}_{c}_{agg}.csv')
-
-                        plot_heatmap_fsc(
-                            dataframe,
-                            wavelength=modelspecs.lam_detection,
-                            savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}_{agg}"),
-                            label=label,
-                            hist_col='residuals',
-                            sci=True,
-                            lims=lims,
-                            agg=agg,
-                            cmap='custom' if 'rel' in c else 'magma',
-                            colorbar_label=c,
-                            levels=np.arange(vmin, 1.05, .05)
-                        )
+                    plot_heatmap_fsc(
+                        dataframe,
+                        wavelength=modelspecs.lam_detection,
+                        savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{c}_{agg}"),
+                        label=label,
+                        hist_col='residuals',
+                        sci=True,
+                        lims=lims,
+                        agg=agg,
+                        cmap='custom',
+                        colorbar_label=c,
+                    )
