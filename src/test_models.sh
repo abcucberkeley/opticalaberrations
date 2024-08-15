@@ -23,20 +23,20 @@ DENOISER='../pretrained_models/denoise/20231107_simulatedBeads_v3_32_64_64/'
 BATCH=2048 #-1
 
 TRAINED_MODELS=(
-#  "opticalnet-T"
-  "opticalnet-S"
-#  "opticalnet-B"
-#  "opticalnet-L"
-#  "opticalnet-H"
-#  "baseline-T"
-#  "baseline-S"
-#  "baseline-B"
-#  "baseline-L"
-#  "vit-S32"
-#  "vit-B32"
-#  "vit-L32"
-#  "vit-S16"
-#  "vit-B16"
+#"opticalnet-T"
+"opticalnet-S"
+#"opticalnet-B"
+#"opticalnet-L"
+#"opticalnet-H"
+#"baseline-T"
+#"baseline-S"
+#"baseline-B"
+#"baseline-L"
+#"vit-S32"
+#"vit-B32"
+#"vit-L32"
+#"vit-S16"
+#"vit-B16"
 )
 
 for M in ${TRAINED_MODELS[@]}
@@ -146,13 +146,57 @@ do
               #--taskname na_$NA \
               #--name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads
 
-              python manager.py $CLUSTER $APPTAINER $JOB \
-              --task "${MODEL}.h5 --num_beads 1 ${CONFIG} fscheatmap" \
-              --taskname na_$NA \
-              --name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/fscheatmaps/mode-${PTYPE}/beads-1
+              #python manager.py $CLUSTER $APPTAINER $JOB \
+              #--task "${MODEL}.h5 --num_beads 1 ${CONFIG} fscheatmap" \
+              #--taskname na_$NA \
+              #--name ${OUTDIR}/${DATASET}${SIM}${PREP}/${M}/${EVALSIGN}/fscheatmaps/mode-${PTYPE}/beads-1
 
               echo
           done
+        done
+      done
+
+      for ZMODE in z3 z5 z6 z7 z8 z9 z10 z11 z12 z13 z14
+      do
+          DATASET="singlemode_dataset/test/$ZMODE"
+
+          if [[ $CLUSTER = 'slurm' ]];then
+            DATA="/clusterfs/nvme/thayer/dataset/$DATASET/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
+            JOB="test.py --timelimit $TIMELIMIT --dependency singleton --partition abc_a100 --mem=500GB --cpus 16 --gpus 4 --exclusive"
+          else
+            DATA="/groups/betzig/betziglab/thayer/dataset/$DATASET/YuMB_lambda510/z$DZ-y$DY-x$DX/z$SHAPE-y$SHAPE-x$SHAPE/z$MODES"
+            JOB="test.py --timelimit $TIMELIMIT --dependency singleton --partition gpu_a100 --cpus 8 --gpus 4"
+          fi
+
+          for (( i=1; i<=$ITERS; i++ ))
+          do
+              CONFIG="${ROTATIONS}"
+              CONFIG="${CONFIG} --simulate_samples"
+              CONFIG="${CONFIG} --batch_size ${BATCH}"
+              CONFIG="${CONFIG} --n_samples ${MAX}"
+              CONFIG="${CONFIG} --datadir ${DATA}"
+              CONFIG="${CONFIG} --niter ${i}"
+              CONFIG="${CONFIG} --wavelength ${LAM}"
+              CONFIG="${CONFIG} --psf_type ${PSF_TYPE}"
+              CONFIG="${CONFIG} --na ${NA}"
+              CONFIG="${CONFIG} --eval_sign ${EVALSIGN}"
+              CONFIG="${CONFIG} --estimated_object_gaussian_sigma ${ESTIMATED_OBJECT_GAUSSIAN_SIGMA}"
+
+              if [[ $M == *"denoise"* ]]; then
+                CONFIG="${CONFIG} --denoiser ${DENOISER}"
+              fi
+
+              python manager.py $CLUSTER $APPTAINER $JOB \
+              --task "${MODEL}.h5 --num_beads 1 --simulate_psf_only ${CONFIG} snrheatmap" \
+              --taskname na_$NA \
+              --name ${OUTDIR}/${DATASET}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/psf
+
+              python manager.py $CLUSTER $APPTAINER $JOB \
+              --task "${MODEL}.h5 --num_beads 1 ${CONFIG} snrheatmap" \
+              --taskname na_$NA \
+              --name ${OUTDIR}/${DATASET}/${M}/${EVALSIGN}/snrheatmaps/mode-${PTYPE}/beads-1
+
+              echo
         done
       done
 
