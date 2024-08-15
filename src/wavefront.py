@@ -284,6 +284,14 @@ class Wavefront:
         wavefront *= self.na_mask(na=na, wavefrontshape=wavefront.shape)
         return abs(np.nanmax(wavefront) - np.nanmin(wavefront))
 
+    def rms(self, waves: bool = False) -> float:
+        """ measure RMS of the aberration in microns"""
+        v = np.linalg.norm(self.amplitudes)
+
+        if waves:
+            return self._microns2waves(v)
+
+
     def _fit_zernikes(self, wavefront, rotate=True, unit='waves'):
         wavefront = np.ascontiguousarray(imread(wavefront).astype(float))
 
