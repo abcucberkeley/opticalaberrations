@@ -1745,25 +1745,47 @@ def plot_beads_dataset(
         'axes.autolimit_mode': 'round_numbers'
     })
 
+    cois = [
+        "rms_gt",
+        "rms_residual",
+        "rms_pred",
+
+        "p2v_gt",
+        "p2v_residual",
+        "p2v_pred",
+
+        "moment_OTF_embedding_norm",
+    ]
+    labels = [
+        rf"Aberration ($\lambda$ RMS, $\lambda = {int(wavelength * 1000)}~nm$)",
+        rf"Disagreement ($\lambda$ RMS, $\lambda = {int(wavelength * 1000)}~nm$)",
+        rf"Prediction ($\lambda$ RMS, $\lambda = {int(wavelength * 1000)}~nm$)",
+
+        rf"Aberration (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
+        rf"Disagreement (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
+        rf"Prediction (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
+
+        rf"moment_OTF_embedding_norm",
+    ]
+
     heatmaps = residuals.drop_duplicates(subset=['eval_file', 'na'])
-    heatmaps = heatmaps[["na", "iteration_index", "p2v_gt", "p2v_residual", "p2v_pred", "modes", "mode_1", "mode_2"]]
+    heatmaps = heatmaps[[
+        *cois,
+        "na",
+        "iteration_index",
+        "modes",
+        "mode_1",
+        "mode_2"
+    ]]
 
     if len(nas) == 1:
         rows = ['05-05', '03-05', '05-08', '10-12']
         figsize = (16, 14)
     else:
-        rows = ['12-12', '05-13', '09-11', '10-12']
+        rows = ['12-12', '05-07', '05-13', '09-11']
         figsize = (16, 12)
 
-    for val, label in zip(
-            ["p2v_gt", "p2v_residual", "p2v_pred"],
-            [
-                rf"Aberration (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
-                rf"Disagreement (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
-                rf"Prediction (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
-            ]
-    ):
-
+    for val, label in zip(cois, labels):
         fig = plt.figure(figsize=figsize)
         gs = fig.add_gridspec(4, 4+len(nas))
         zernikes_dict = list(set(Zernike(int(j)) for j in range(15)))
@@ -1787,9 +1809,14 @@ def plot_beads_dataset(
                 zlabel = f"$Z_{{n={zernikes[0].n}}}^{{m={zernikes[0].m}}}$" \
                         f" + $Z_{{n={zernikes[1].n}}}^{{m={zernikes[1].m}}}$"
 
-            k = results[('before', modes)]
-            r1 = results[('after0', modes)]
-            r2 = results[('after1', modes)]
+            if len(nas) == 1:
+                k, klabel = results[('before', modes)], 'Iteration 0'
+                r1, r1label = results[('after0', modes)], 'Iteration 1'
+                r2, r2label = results[('after1', modes)], 'Iteration 2'
+            else:
+                k, klabel = results[('before', modes)], 'Iteration 0'
+                r1, r1label = results[('after1', modes)], 'Iteration 2'
+                r2, r2label = results[('after3', modes)], 'Iteration 4'
 
             wf_mip = fig.add_subplot(gs[i, 0])
             wf_wavefront = inset_axes(wf_mip, width="40%", height="40%", loc='lower right', borderpad=0)
@@ -1813,7 +1840,7 @@ def plot_beads_dataset(
                 colorbar=False,
             )
             wf_mip.axis('on')
-            wf_mip.set_title('Iteration 0' if i == 0 else '')
+            wf_mip.set_title(klabel if i == 0 else '')
             wf_mip.set_ylabel(rename_zernikes(modes))#.replace(' &', '\n&'))
             wf_mip.set_xlabel('')
             wf_mip.set_yticks([])
@@ -1855,7 +1882,7 @@ def plot_beads_dataset(
                 colorbar=False,
             )
             diff_mip.axis('on')
-            diff_mip.set_title('Iteration 1' if i == 0 else '')
+            diff_mip.set_title(r1label if i == 0 else '')
             diff_mip.set_xlabel('')
             diff_mip.set_yticks([])
             diff_mip.set_xticks([])
@@ -1883,7 +1910,7 @@ def plot_beads_dataset(
                 colorbar=False,
             )
             diff_mip2.axis('on')
-            diff_mip2.set_title('Iteration 2' if i == 0 else '')
+            diff_mip2.set_title(r2label if i == 0 else '')
             diff_mip2.set_xlabel('')
             diff_mip2.set_yticks([])
             diff_mip2.set_xticks([])
@@ -1898,11 +1925,10 @@ def plot_beads_dataset(
             )
 
         for k, (heatmapax, na) in enumerate(zip(heatmaps_axes, nas)):
-
             g = heatmaps[heatmaps['na'] == na].pivot(index="iteration_index", columns="modes",  values=val).T
-            levels = np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .05)
 
-            if custom_colormap:
+            if custom_colormap  and 'p2v' in val:
+                levels = np.arange(0, 2, .01).round(2)
                 vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
                 highcmap = plt.get_cmap('magma_r', 256)
                 lowcmap = plt.get_cmap('GnBu_r', 256)
@@ -1910,13 +1936,35 @@ def plot_beads_dataset(
                 high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
                 cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
                 cmap = mcolors.ListedColormap(cmap)
-                im = heatmapax.imshow(g.values, cmap=cmap, aspect='auto', vmin=levels[0], vmax=levels[-1])
-            else:
-                # colors = sns.color_palette('magma_r', n_colors=len(levels))
-                # cmap, norm = matplotlib.colors.from_levels_and_colors(levels, colors, extend="max")
-                # im = ax.imshow(g.values.T, cmap=cmap, norm=norm, aspect='auto')
-                im = heatmapax.imshow(g.values, cmap='magma_r', aspect='auto', vmin=levels[0], vmax=levels[-1])
+                ticks = np.arange(0, 2.25, .25)
 
+            elif custom_colormap and 'rms' in val:
+                levels = np.arange(0, .41, .01).round(2)
+                vmin, vmax, vcenter, step = levels[0], levels[-1], .1, levels[1] - levels[0]
+                highcmap = plt.get_cmap('magma_r', 256)
+                lowcmap = plt.get_cmap('GnBu_r', 256)
+                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+                cmap = mcolors.ListedColormap(cmap)
+                ticks = np.arange(0, .45, .05).round(2)
+
+            else:
+                # levels = np.arange(.1, .55, .05) if val == "moment_OTF_embedding_norm" else np.arange(.1, .22, .02)
+                # colors = sns.color_palette('magma', n_colors=len(levels)-1)
+                # cmap, norm = matplotlib.colors.from_levels_and_colors(levels, colors)
+                # im = heatmapax.imshow(g.values, aspect='auto', cmap=cmap, norm=norm)
+                levels = np.arange(0, .41, .01).round(2)
+                vmin, vmax, vcenter, step = levels[0], levels[-1], .3, .01
+                highcmap = plt.get_cmap('GnBu', 256)
+                lowcmap = plt.get_cmap('magma', 256)
+                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+                cmap = mcolors.ListedColormap(cmap)
+                ticks = np.arange(0, .45, .05)
+
+            im = heatmapax.imshow(g.values, cmap=cmap, aspect='auto', vmin=levels[0], vmax=levels[-1])
             heatmapax.yaxis.set_ticks_position('right')
             heatmapax.yaxis.set_label_position('right')
 
@@ -1948,7 +1996,8 @@ def plot_beads_dataset(
             extend='max',
             spacing='proportional',
             orientation="horizontal",
-            ticks=np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .25),
+            ticks=ticks,
+            format=FormatStrFormatter("%.2f")
         )
         cbar_ax.set_title(label)
         cbar_ax.xaxis.set_ticks_position('top')
@@ -1957,7 +2006,7 @@ def plot_beads_dataset(
         savesvg(plt,f'{savepath}_{val}.svg')
         plt.savefig(f'{savepath}_{val}.png', dpi=300,  pad_inches=.25)
         plt.savefig(f'{savepath}_{val}.pdf', dpi=300,  pad_inches=.25)
-        logger.info(f'{savepath}_{val}')
+        print(f'{savepath}_{val}')
 
 
 def compare_ao_iterations(

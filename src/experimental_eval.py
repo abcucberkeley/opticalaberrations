@@ -8,6 +8,7 @@ import json
 from functools import partial
 import fnmatch
 import os
+import re
 import ujson
 from pathlib import Path
 import multiprocessing as mp
@@ -17,6 +18,8 @@ import numpy as np
 import pandas as pd
 from tifffile import imwrite
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from tqdm import tqdm, trange
+
 
 import utils
 import vis
@@ -470,12 +473,14 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
             'num_model_modes': p.modes,
             'eval_file': str(eval_file),
             'na': na,
+            'rms_residual': diff.rms(waves=True),
             'p2v_residual': diff.peak2valley(na=na),
+            'rms_gt': y.rms(waves=True),
             'p2v_gt': y.peak2valley(na=na),
+            'rms_pred': p.rms(waves=True),
             'p2v_pred': p.peak2valley(na=na),
             f'mode_1': modes[0],
             f'mode_2': None if len(modes) < 2 else modes[1],
-            # 'psnr': np.mean(res['psnr']),
         }
 
         if len(modes) > 1 and modes[0] != modes[1]:
@@ -486,12 +491,14 @@ def process_eval_file(file: Path, nas=(1.0, .95, .85)):
                 'num_model_modes': p.modes,
                 'eval_file': str(eval_file),
                 'na': na,
+                'rms_residual': diff.rms(waves=True),
                 'p2v_residual': diff.peak2valley(na=na),
+                'rms_gt': y.rms(waves=True),
                 'p2v_gt': y.peak2valley(na=na),
+                'rms_pred': p.rms(waves=True),
                 'p2v_pred': p.peak2valley(na=na),
                 f'mode_1': None if len(modes) < 2 else modes[1],
                 f'mode_2': modes[0],
-                # 'psnr': np.mean(res['psnr']),
             }   # if we have mixed modes, duplicate for the opposite combination (e.g. 12,13 copied to -> 13,12)
 
     return results
@@ -998,6 +1005,52 @@ def eval_beads_dataset(
         residuals = pd.read_csv(f'{savepath}.csv')
         print(residuals)
         results = np.load(f'{savepath}_results.npy', allow_pickle='TRUE').item()
+
+    if 'rms_gt' not in residuals.columns:
+        for state, modes in tqdm(results.keys(), desc='Calc RMS', total=len(results)):
+            idx = residuals[(residuals['state'] == state) & (residuals['modes'] == modes)].index
+            ex = results[state, modes]
+            residuals.loc[idx, 'rms_gt'] = ex.get('gt_wavefront').rms(waves=True)
+            residuals.loc[idx, 'rms_pred'] = ex.get('ml_wavefront').rms(waves=True)
+            residuals.loc[idx, 'rms_residual'] = ex.get('diff_wavefront').rms(waves=True)
+
+    if 'moment_OTF_embedding_norm' not in residuals.columns:
+        columns = [
+            'FFTratio_mean',
+            'FFTratio_median',
+            'FFTratio_sd',
+            'embedding_sd',
+            'OTF_embedding_sum',
+            'OTF_embedding_vol',
+            'OTF_embedding_normIntegral',
+            'moment_OTF_embedding_sum',
+            'moment_OTF_embedding_ideal_sum',
+            'moment_OTF_embedding_norm',
+            'integratedPhotons'
+        ]
+
+        residuals['fsc_file'] = residuals.eval_file.str.replace('_sample_predictions_zernike_coefficients_ml_eval.svg', '')
+        residuals['fsc_file'] = residuals.fsc_file.str.replace('/home/supernova/nvme2/Data/TestsForThayer/20230224_beads_15model', '../data')
+        files = sorted(datadir.rglob(f"*t.json"))
+
+        for ff in tqdm(files, desc='Loading FSC data', total=len(files)):
+            try:
+                with open(ff) as stream:
+                    fsc = ujson.load(stream)
+            except Exception:
+                logger.warning(f"Missing/Corrupted {file}")
+
+            target_name = re.sub('_Cam.*', '', ff.stem)
+
+            idx = residuals[residuals['fsc_file'].str.contains(target_name)].index
+            for c in columns:
+                residuals.loc[idx, c] = fsc[c]
+
+
+        data = residuals[residuals['na'] == 1]
+        print(data[['OTF_embedding_normIntegral', 'moment_OTF_embedding_norm']].describe())
+        outliers = data[(data['moment_OTF_embedding_norm'] > 1) | (data['OTF_embedding_normIntegral'] > 1)]
+        print(outliers[['OTF_embedding_normIntegral', 'moment_OTF_embedding_norm']].describe())
 
     logger.info(f'{savepath}.csv')
     vis.plot_beads_dataset(results, residuals, savepath=savepath, nas=[1.0])
