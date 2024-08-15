@@ -2592,7 +2592,8 @@ def plot_cells_heatmap(
     wavelength: float = .510,
     pltstyle: Any = None,
     custom_colormap: bool = True,
-    transform_to_align_to_DM: bool = True
+    transform_to_align_to_DM: bool = True,
+    plot_examples = False
 ):
     plt.rcParams.update({
         'font.size': 12,
@@ -2604,90 +2605,128 @@ def plot_cells_heatmap(
         'axes.autolimit_mode': 'round_numbers'
     })
 
+    cois = [
+        "rms_gt",
+        "rms_residual",
+        "rms_pred",
+
+        "p2v_gt",
+        "p2v_residual",
+        "p2v_pred",
+
+        "moment_OTF_embedding_norm",
+    ]
+    labels = [
+        rf"Aberration ($\lambda$ RMS, $\lambda = {int(wavelength * 1000)}~nm$)",
+        rf"Disagreement ($\lambda$ RMS, $\lambda = {int(wavelength * 1000)}~nm$)",
+        rf"Prediction ($\lambda$ RMS, $\lambda = {int(wavelength * 1000)}~nm$)",
+
+        rf"Aberration (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
+        rf"Disagreement (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
+        rf"Prediction (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
+
+        # rf"moment_OTF_embedding_norm",
+    ]
+
+    wavefronts = [
+        "gt_wavefront",
+        "diff_wavefront",
+        "ml_wavefront",
+
+        "gt_wavefront",
+        "diff_wavefront",
+        "ml_wavefront",
+
+        # "gt_wavefront",
+    ]
+
     heatmaps = residuals.drop_duplicates(subset=['eval_file', 'na'])
-    heatmaps = heatmaps[["na", "iteration_index", "p2v_gt", "p2v_residual", "p2v_pred", "modes", "mode_1", "mode_2"]]
+    heatmaps = heatmaps[[
+        *cois,
+        "na",
+        "iteration_index",
+        "modes",
+        "mode_1",
+        "mode_2"
+    ]]
 
-    for val, wave, label in zip(
-            ["p2v_gt", "p2v_residual", "p2v_pred"],
-            ["gt_wavefront", "diff_wavefront", "ml_wavefront"],
-            [
-                rf"Aberration (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
-                rf"Disagreement (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
-                rf"Prediction (peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)",
-            ]
-    ):
+    for val, wave, label in zip(cois, wavefronts, labels):
 
-        fig = plt.figure(figsize=(12, 8))
-        gs = fig.add_gridspec(4, 6)
-        zernikes_dict = list(set(Zernike(int(j)) for j in range(15)))
-        heatmap1 = fig.add_subplot(gs[:, -2])
-        heatmap85 = fig.add_subplot(gs[:, -1])
+        if plot_examples:
+            fig = plt.figure(figsize=(12, 8))
+            gs = fig.add_gridspec(4, 6)
+            zernikes_dict = list(set(Zernike(int(j)) for j in range(15)))
+            heatmap1 = fig.add_subplot(gs[:, -2])
+            heatmap85 = fig.add_subplot(gs[:, -1])
 
-        for i, modes in enumerate(['05', '05-06', '05-07', '05-12']):
-            zernikes = list(set(Zernike(int(j)) for j in modes.split('-')))
+            for i, modes in enumerate(['05', '05-06', '05-07', '05-12']):
+                zernikes = list(set(Zernike(int(j)) for j in modes.split('-')))
 
-            if len(zernikes) == 1:
-                zlabel = f"$Z_{{n={zernikes[0].n}}}^{{m={zernikes[0].m}}}$"
-            else:
-                zlabel = f"$Z_{{n={zernikes[0].n}}}^{{m={zernikes[0].m}}}$" \
-                        f" + $Z_{{n={zernikes[1].n}}}^{{m={zernikes[1].m}}}$"
+                if len(zernikes) == 1:
+                    zlabel = f"$Z_{{n={zernikes[0].n}}}^{{m={zernikes[0].m}}}$"
+                else:
+                    zlabel = f"$Z_{{n={zernikes[0].n}}}^{{m={zernikes[0].m}}}$" \
+                            f" + $Z_{{n={zernikes[1].n}}}^{{m={zernikes[1].m}}}$"
 
-            k = results[('0000', modes)]
-            r1 = results[('0001', modes)]
-            r2 = results[('0002', modes)]
-            r3 = results[('0003', modes)]
+                k = results[('0000', modes)]
+                r1 = results[('0001', modes)]
+                r2 = results[('0002', modes)]
+                r3 = results[('0003', modes)]
 
-            wf_wavefront = fig.add_subplot(gs[i, 0])
-            ml_wavefront = fig.add_subplot(gs[i, 1])
-            diff_wavefront = fig.add_subplot(gs[i, 2])
-            diff_wavefront2 = fig.add_subplot(gs[i, 3])
+                wf_wavefront = fig.add_subplot(gs[i, 0])
+                ml_wavefront = fig.add_subplot(gs[i, 1])
+                diff_wavefront = fig.add_subplot(gs[i, 2])
+                diff_wavefront2 = fig.add_subplot(gs[i, 3])
 
-            wf_wavefront.set_title('Iteration 0' if i == 0 else '')
-            plot_wavefront(
-                wf_wavefront,
-                k[wave].wave(size=100),
-                label=None,
-                vmin=-.75,
-                vmax=.75,
-                nas=[1.0, .85],
-            )
+                wf_wavefront.set_title('Iteration 0' if i == 0 else '')
+                plot_wavefront(
+                    wf_wavefront,
+                    k[wave].wave(size=100),
+                    label=None,
+                    vmin=-.75,
+                    vmax=.75,
+                    nas=[1.0, .85],
+                )
 
-            ml_wavefront.set_title('Iteration 1' if i == 0 else '')
-            plot_wavefront(
-                ml_wavefront,
-                r1[wave].wave(size=100),
-                label=None,
-                vmin=-.75,
-                vmax=.75,
-                nas=[1.0, .85],
-            )
+                ml_wavefront.set_title('Iteration 1' if i == 0 else '')
+                plot_wavefront(
+                    ml_wavefront,
+                    r1[wave].wave(size=100),
+                    label=None,
+                    vmin=-.75,
+                    vmax=.75,
+                    nas=[1.0, .85],
+                )
 
-            diff_wavefront.set_title('Iteration 2' if i == 0 else '')
-            plot_wavefront(
-                diff_wavefront,
-                r2[wave].wave(size=100),
-                label=None,
-                vmin=-.75,
-                vmax=.75,
-                nas=[1.0, .85],
-            )
+                diff_wavefront.set_title('Iteration 2' if i == 0 else '')
+                plot_wavefront(
+                    diff_wavefront,
+                    r2[wave].wave(size=100),
+                    label=None,
+                    vmin=-.75,
+                    vmax=.75,
+                    nas=[1.0, .85],
+                )
 
-            diff_wavefront2.set_title('Iteration 3' if i == 0 else '')
-            plot_wavefront(
-                diff_wavefront2,
-                r3[wave].wave(size=100),
-                label=None,
-                vmin=-.75,
-                vmax=.75,
-                nas=[1.0, .85],
-            )
+                diff_wavefront2.set_title('Iteration 3' if i == 0 else '')
+                plot_wavefront(
+                    diff_wavefront2,
+                    r3[wave].wave(size=100),
+                    label=None,
+                    vmin=-.75,
+                    vmax=.75,
+                    nas=[1.0, .85],
+                )
+
+        else:
+            fig, (heatmap1, heatmap85) = plt.subplots(ncols=2, figsize=(8, 8))
 
         for k, (heatmapax, na) in enumerate(zip([heatmap1, heatmap85], [1.0, .85])):
 
             g = heatmaps[heatmaps['na'] == na].pivot(index="iteration_index", columns="modes",  values=val).T
-            levels = np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .05)
 
-            if custom_colormap:
+            if custom_colormap  and 'p2v' in val:
+                levels = np.arange(0, 2, .01).round(2)
                 vmin, vmax, vcenter, step = levels[0], levels[-1], .5, .05
                 highcmap = plt.get_cmap('magma_r', 256)
                 lowcmap = plt.get_cmap('GnBu_r', 256)
@@ -2695,13 +2734,31 @@ def plot_cells_heatmap(
                 high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
                 cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
                 cmap = mcolors.ListedColormap(cmap)
-                im = heatmapax.imshow(g.values, cmap=cmap, aspect='auto', vmin=levels[0], vmax=levels[-1])
-            else:
-                # colors = sns.color_palette('magma_r', n_colors=len(levels))
-                # cmap, norm = matplotlib.colors.from_levels_and_colors(levels, colors, extend="max")
-                # im = ax.imshow(g.values.T, cmap=cmap, norm=norm, aspect='auto')
-                im = heatmapax.imshow(g.values, cmap='magma_r', aspect='auto', vmin=levels[0], vmax=levels[-1])
+                ticks = np.arange(0, 2.25, .25)
 
+            elif custom_colormap and 'rms' in val:
+                levels = np.arange(0, .41, .01).round(2)
+                vmin, vmax, vcenter, step = levels[0], levels[-1], .1, levels[1] - levels[0]
+                highcmap = plt.get_cmap('magma_r', 256)
+                lowcmap = plt.get_cmap('GnBu_r', 256)
+                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+                cmap = mcolors.ListedColormap(cmap)
+                ticks = np.arange(0, .45, .05).round(2)
+
+            else:
+                levels = np.arange(0, .41, .01).round(2)
+                vmin, vmax, vcenter, step = levels[0], levels[-1], .3, .01
+                highcmap = plt.get_cmap('GnBu', 256)
+                lowcmap = plt.get_cmap('magma', 256)
+                low = np.linspace(0, 1 - step, int(abs(vcenter - vmin) / step))
+                high = np.linspace(0, 1 + step, int(abs(vcenter - vmax) / step))
+                cmap = np.vstack((lowcmap(low), [1, 1, 1, 1], highcmap(high)))
+                cmap = mcolors.ListedColormap(cmap)
+                ticks = np.arange(0, .45, .05)
+
+            im = heatmapax.imshow(g.values, cmap=cmap, aspect='auto', vmin=levels[0], vmax=levels[-1])
             heatmapax.yaxis.set_ticks_position('right')
             heatmapax.yaxis.set_label_position('right')
 
@@ -2733,7 +2790,8 @@ def plot_cells_heatmap(
             extend='max',
             spacing='proportional',
             orientation="horizontal",
-            ticks=np.arange(0, 1.75 if val == 'p2v_gt' else 1.25, .25),
+            ticks=ticks,
+            format=FormatStrFormatter("%.2f")
         )
         cbar_ax.set_title(label)
         cbar_ax.xaxis.set_ticks_position('top')

@@ -1063,97 +1063,164 @@ def eval_cell_dataset(
     postfix: str = 'predictions_aggregated_zernike_coefficients.csv',
     gt_postfix: str = 'phase_retrieval_zernike_coefficients.csv',
     precomputed: bool = False,
+    plot_cells_heatmap: bool = True,
 ):
-    results = {}
-    for datadir in data.iterdir():
-        if not datadir.is_dir():
-            continue
+    if plot_cells_heatmap:
+        savepath = Path(f'{data}/{data.name}')
+        csv_data = Path(f'{savepath}_results.csv')
+        npy_data = Path(f'{savepath}_results.npy')
 
-        savepath = Path(f'{datadir}/{datadir.name}')
+        columns = [
+            # 'FFTratio_mean',
+            # 'FFTratio_median',
+            # 'FFTratio_sd',
+            # 'embedding_sd',
+            # 'OTF_embedding_sum',
+            # 'OTF_embedding_vol',
+            # 'OTF_embedding_normIntegral',
+            # 'moment_OTF_embedding_sum',
+            # 'moment_OTF_embedding_ideal_sum',
+            'moment_OTF_embedding_norm',
+            # 'integratedPhotons'
+        ]
 
-        if precomputed or not Path(f'{savepath}_results.npy').exists():
+        if csv_data.exists() and npy_data.exists():
+            results = np.load(npy_data, allow_pickle='TRUE').item()
+            dataframe = pd.read_csv(csv_data, index_col=0, header=0)
+            dataframe.modes = dataframe.modes.replace({'7-06': '07-06', '06-7': '06-07'})
 
-            candidates = sorted(Path(datadir / 'rotated').glob('*_predictions_settings.json'))
-            if len(candidates) == 0:
+            # dpath = Path('../evaluations/opticalnet-15-YuMB-lambda510/signed/fscheatmaps/mode-YuMB/beads-1/na_1.0')
+            # df1 = pd.read_csv(f'{dpath}_iter_1_data.csv', header=0, index_col=0)
+            # df1.drop_duplicates(subset='id', keep="first", inplace=True)
+            # df1['iter_num'] = 0
+            #
+            # df2 = pd.read_csv(f'{dpath}_iter_2_data.csv', header=0, index_col=0)
+            # df2['iter_num'] = 1
+            #
+            # df3 = pd.read_csv(f'{dpath}_iter_3_data.csv', header=0, index_col=0)
+            # df3['iter_num'] = 2
+            #
+            # full = pd.concat([df1, df2, df3], ignore_index=True, sort=False)
+
+            # lims = (0, 5e5)
+            # pbins = np.arange(lims[0], lims[-1] + 1e4, 1e4)
+            # ipbins = np.arange(0, 1e8 + 1e4, 1e4)
+            #
+            # full['pbins'] = pd.cut(full['photons'], pbins, labels=pbins[1:], include_lowest=True)
+            # bins = np.arange(0, 10.25, .25).round(2)
+            # full['ibins'] = pd.cut(
+            #     full['aberration'],
+            #     bins,
+            #     labels=bins[1:],
+            #     include_lowest=True
+            # )
+            # calibrate_df = pd.pivot_table(full, values='moment_OTF_embedding_norm', index='ibins', columns='pbins', aggfunc='mean')
+            # calibrate = np.interp(ipbins, pbins[1:], calibrate_df.iloc[0].values)
+
+            for state, modes in tqdm(results.keys(), desc='Calc RMS', total=len(results)):
+                idx = dataframe[(dataframe['state'] == int(state)) & (dataframe['modes'] == modes)].index
+                ex = results[state, modes]
+                dataframe.loc[idx, 'rms_gt'] = ex.get('gt_wavefront').rms(waves=True)
+                dataframe.loc[idx, 'rms_pred'] = ex.get('ml_wavefront').rms(waves=True)
+                dataframe.loc[idx, 'rms_residual'] = ex.get('diff_wavefront').rms(waves=True)
+
+            # dataframe['fsc_file'] = dataframe.eval_file.str.replace('_rois_predictions_aggregated_zernike_coefficients_ml_eval.svg', '.json')
+            # dataframe['fsc_file'] = dataframe.fsc_file.str.replace('/rotated', '')
+            # dataframe['fsc_file'] = dataframe.fsc_file.str.replace('../data/cells', '/dropbox/ap2_cell_data')
+            #
+            # for file in sorted(data.rglob(f'*t.json'), key=os.path.getctime):
+            #     try:
+            #         with open(file) as f:
+            #             fsc = ujson.load(f)
+            #     except Exception:
+            #         logger.warning(f"Missing/Corrupted {file}")
+            #
+            #     for c in columns:
+            #         idx = dataframe[dataframe['fsc_file'] == str(file)].index
+            #         # ph = round(fsc['integratedPhotons'], -4)
+            #         # n = calibrate[np.argwhere(ipbins == ph)[0]][0]
+            #         # dataframe.loc[idx, c] = fsc[c] / n
+            #         dataframe.loc[idx, c] = fsc[c]
+
+        vis.plot_cells_heatmap(results, dataframe, savepath=f"{savepath}_normalized")
+
+    else:
+        results = {}
+        for datadir in data.iterdir():
+            if not datadir.is_dir():
                 continue
-            else:
-                file = candidates[0]
-                logger.info(f'Evaluating {file.name}')
 
-            # get model from .json file
-            with open(file) as f:
-                predictions_settings = ujson.load(f)
-                model = Path(predictions_settings['model'])
+            savepath = Path(f'{datadir}/{datadir.name}')
 
-                if not model.exists():
-                    filename = str(model).split('\\')[-1]
-                    model = Path(f"../pretrained_models/{filename}")
+            if precomputed or not Path(f'{savepath}_results.npy').exists():
 
-                mp.set_start_method('spawn', force=True)
-                pool = mp.Pool(processes=mp.cpu_count())
-                resultsdir = Path(datadir / 'rotated')
-                results_list = sorted(resultsdir.glob('**/*'))    # only get directory list once for speed
-                wf_list = sorted(datadir.glob('*widefield*'))
+                candidates = sorted(Path(datadir / 'rotated').glob('*_predictions_settings.json'))
+                if len(candidates) == 0:
+                    continue
+                else:
+                    file = candidates[0]
+                    logger.info(f'Evaluating {file.name}')
 
-                logger.info('Beginning evaluations')
-                for cam_a_file in sorted(datadir.glob('*Scan_Iter*CamA*.tif'), key=os.path.getctime):  # sort by creation time
-                    if 'background' in str(cam_a_file) or 'pupil' in str(cam_a_file) or 'autoexpos' in str(cam_a_file):
-                        continue
+                # get model from .json file
+                with open(file) as f:
+                    predictions_settings = ujson.load(f)
+                    model = Path(predictions_settings['model'])
 
-                    iter_number = cam_a_file.name[10:14]
+                    if not model.exists():
+                        filename = str(model).split('\\')[-1]
+                        model = Path(f"../pretrained_models/{filename}")
 
-                    if '5ab_6ab' in str(cam_a_file):
-                        modes = ['05', '06']
-                    elif '5ab_7ab' in str(cam_a_file):
-                        modes = ['05', '07']
-                    elif '5ab_12ab' in str(cam_a_file):
-                        modes = ['05', '12']
-                    elif '6ab_7ab' in str(cam_a_file):
-                        modes = ['06', '07']
-                    elif '6ab_12ab' in str(cam_a_file):
-                        modes = ['06', '12']
-                    elif '7ab_12ab' in str(cam_a_file):
-                        modes = ['07', '12']
-                    elif '5ab' in str(cam_a_file):
-                        modes = ['05']
-                    elif '6ab' in str(cam_a_file):
-                        modes = ['06']
-                    elif '7ab' in str(cam_a_file):
-                        modes = ['07']
-                    elif '12ab' in str(cam_a_file):
-                        modes = ['12']
+                    mp.set_start_method('spawn', force=True)
+                    pool = mp.Pool(processes=mp.cpu_count())
+                    resultsdir = Path(datadir / 'rotated')
+                    results_list = sorted(resultsdir.glob('**/*'))    # only get directory list once for speed
+                    wf_list = sorted(datadir.glob('*widefield*'))
 
-                    gt_path = None
-                    for gtfile in wf_list:
-                        if fnmatch.fnmatch(gtfile.name, f'*{iter_number}*CamA*{iter_number}t.tif'):
-                            gt_path = gtfile
+                    logger.info('Beginning evaluations')
+                    for cam_a_file in sorted(datadir.glob('*Scan_Iter*CamA*.tif'), key=os.path.getctime):  # sort by creation time
+                        if 'background' in str(cam_a_file) or 'pupil' in str(cam_a_file) or 'autoexpos' in str(cam_a_file):
                             continue
-                    if gt_path is None: logger.warning(f'GT not found for: {cam_a_file.name}')
 
-                    prediction_path = None
-                    for predfile in results_list:
-                        if fnmatch.fnmatch(predfile.name, f'*{iter_number}*CamA*_{postfix}'):
-                            prediction_path = predfile
-                            continue
-                    if prediction_path is None: logger.warning(f'Prediction not found for: {cam_a_file.name}')
+                        iter_number = cam_a_file.name[10:14]
 
-                    cam_a_ml_img = backend.load_sample(cam_a_file)
-                    cam_a_ml_img = preprocessing.prep_sample(
-                        cam_a_ml_img,
-                        normalize=True,
-                        remove_background=True,
-                        windowing=False,
-                        sample_voxel_size=predictions_settings['sample_voxel_size'],
-                        remove_background_noise_method='dog',
-                        min_psnr=0
-                    )
+                        if '5ab_6ab' in str(cam_a_file):
+                            modes = ['05', '06']
+                        elif '5ab_7ab' in str(cam_a_file):
+                            modes = ['05', '07']
+                        elif '5ab_12ab' in str(cam_a_file):
+                            modes = ['05', '12']
+                        elif '6ab_7ab' in str(cam_a_file):
+                            modes = ['06', '07']
+                        elif '6ab_12ab' in str(cam_a_file):
+                            modes = ['06', '12']
+                        elif '7ab_12ab' in str(cam_a_file):
+                            modes = ['07', '12']
+                        elif '5ab' in str(cam_a_file):
+                            modes = ['05']
+                        elif '6ab' in str(cam_a_file):
+                            modes = ['06']
+                        elif '7ab' in str(cam_a_file):
+                            modes = ['07']
+                        elif '12ab' in str(cam_a_file):
+                            modes = ['12']
 
-                    cam_b_path = Path(str(cam_a_file).replace('ch0', 'ch1').replace('CamA', 'CamB').replace('488nm', '560nm'))
+                        gt_path = None
+                        for gtfile in wf_list:
+                            if fnmatch.fnmatch(gtfile.name, f'*{iter_number}*CamA*{iter_number}t.tif'):
+                                gt_path = gtfile
+                                continue
+                        if gt_path is None: logger.warning(f'GT not found for: {cam_a_file.name}')
 
-                    if cam_b_path.exists():
-                        cam_b_ml_img = backend.load_sample(cam_b_path)
-                        cam_b_ml_img = preprocessing.prep_sample(
-                            cam_b_ml_img,
+                        prediction_path = None
+                        for predfile in results_list:
+                            if fnmatch.fnmatch(predfile.name, f'*{iter_number}*CamA*_{postfix}'):
+                                prediction_path = predfile
+                                continue
+                        if prediction_path is None: logger.warning(f'Prediction not found for: {cam_a_file.name}')
+
+                        cam_a_ml_img = backend.load_sample(cam_a_file)
+                        cam_a_ml_img = preprocessing.prep_sample(
+                            cam_a_ml_img,
                             normalize=True,
                             remove_background=True,
                             windowing=False,
@@ -1161,165 +1228,150 @@ def eval_cell_dataset(
                             remove_background_noise_method='dog',
                             min_psnr=0
                         )
-                    else:
-                        cam_b_ml_img = np.zeros_like(cam_a_ml_img)
 
-                    ml_img = np.stack([cam_b_ml_img, cam_a_ml_img, np.zeros_like(cam_a_ml_img)], axis=-1)
+                        cam_b_path = Path(str(cam_a_file).replace('ch0', 'ch1').replace('CamA', 'CamB').replace('488nm', '560nm'))
 
-                    pr_img = backend.load_sample(gt_path)
-                    pr_img = np.transpose(np.rot90(pr_img, k=2, axes=(1, 2)), axes=(0, 2, 1))
-
-                    pr_img = preprocessing.prep_sample(
-                        pr_img,
-                        normalize=True,
-                        remove_background=True,
-                        windowing=False,
-                        sample_voxel_size=predictions_settings['sample_voxel_size'],
-                        remove_background_noise_method='dog',
-                        min_psnr=0
-                    )
-
-                    if prediction_path is not None:
-                        p = pd.read_csv(prediction_path)
-                        ml_wavefront = Wavefront(
-                            p['z0_c0'].values,
-                            modes=p.shape[0],
-                            lam_detection=predictions_settings['wavelength']
-                        )
-                        imwrite(
-                            f'{savepath}_ml_wavefront_{iter_number}.tif',
-                            ml_wavefront.wave().astype(np.float32),
-                            compression='deflate',
-                            dtype=np.float32
-                        )
-                        logger.info(f'{savepath}_ml_wavefront_{iter_number}.tif')
-
-                    else:
-                        ml_wavefront = None
-
-
-                    if gt_path is not None:
-                        pr_prediction_path = Path(f"{gt_path.with_suffix('')}_{gt_postfix}")
-
-                        if pr_prediction_path.exists():
-                            y = pd.read_csv(pr_prediction_path)
+                        if cam_b_path.exists():
+                            cam_b_ml_img = backend.load_sample(cam_b_path)
+                            cam_b_ml_img = preprocessing.prep_sample(
+                                cam_b_ml_img,
+                                normalize=True,
+                                remove_background=True,
+                                windowing=False,
+                                sample_voxel_size=predictions_settings['sample_voxel_size'],
+                                remove_background_noise_method='dog',
+                                min_psnr=0
+                            )
                         else:
-                            y = phase_retrieval(
-                                img=gt_path,
-                                num_modes=15,
-                                dm_calibration=None,
-                                dm_state=None,
-                                lateral_voxel_size=predictions_settings['sample_voxel_size'][-1],
-                                axial_voxel_size=.1,
+                            cam_b_ml_img = np.zeros_like(cam_a_ml_img)
+
+                        ml_img = np.stack([cam_b_ml_img, cam_a_ml_img, np.zeros_like(cam_a_ml_img)], axis=-1)
+
+                        pr_img = backend.load_sample(gt_path)
+                        pr_img = np.transpose(np.rot90(pr_img, k=2, axes=(1, 2)), axes=(0, 2, 1))
+
+                        pr_img = preprocessing.prep_sample(
+                            pr_img,
+                            normalize=True,
+                            remove_background=True,
+                            windowing=False,
+                            sample_voxel_size=predictions_settings['sample_voxel_size'],
+                            remove_background_noise_method='dog',
+                            min_psnr=0
+                        )
+
+                        if prediction_path is not None:
+                            p = pd.read_csv(prediction_path)
+                            ml_wavefront = Wavefront(
+                                p['z0_c0'].values,
+                                modes=p.shape[0],
+                                lam_detection=predictions_settings['wavelength']
+                            )
+                            imwrite(
+                                f'{savepath}_ml_wavefront_{iter_number}.tif',
+                                ml_wavefront.wave().astype(np.float32),
+                                compression='deflate',
+                                dtype=np.float32
+                            )
+                            logger.info(f'{savepath}_ml_wavefront_{iter_number}.tif')
+
+                        else:
+                            ml_wavefront = None
+
+
+                        if gt_path is not None:
+                            pr_prediction_path = Path(f"{gt_path.with_suffix('')}_{gt_postfix}")
+
+                            if pr_prediction_path.exists():
+                                y = pd.read_csv(pr_prediction_path)
+                            else:
+                                y = phase_retrieval(
+                                    img=gt_path,
+                                    num_modes=15,
+                                    dm_calibration=None,
+                                    dm_state=None,
+                                    lateral_voxel_size=predictions_settings['sample_voxel_size'][-1],
+                                    axial_voxel_size=.1,
+                                )
+
+                            gt_wavefront = Wavefront(
+                                y.amplitude.values[:p.shape[0]],
+                                modes=p.shape[0],
+                                lam_detection=predictions_settings['wavelength']
                             )
 
-                        gt_wavefront = Wavefront(
-                            y.amplitude.values[:p.shape[0]],
-                            modes=p.shape[0],
-                            lam_detection=predictions_settings['wavelength']
-                        )
+                            imwrite(
+                                f'{savepath}_pr_wavefront_{iter_number}.tif',
+                                gt_wavefront.wave().astype(np.float32),
+                                compression='deflate',
+                                dtype=np.float32
+                            )
+                            logger.info(f'{savepath}_pr_wavefront_{iter_number}.tif')
 
-                        imwrite(
-                            f'{savepath}_pr_wavefront_{iter_number}.tif',
-                            gt_wavefront.wave().astype(np.float32),
-                            compression='deflate',
-                            dtype=np.float32
-                        )
-                        logger.info(f'{savepath}_pr_wavefront_{iter_number}.tif')
+                        else:
+                            gt_wavefront = None
 
-                    else:
-                        gt_wavefront = None
+                        if gt_wavefront is not None and ml_wavefront is not None:
 
-                    if gt_wavefront is not None and ml_wavefront is not None:
+                            diff_wavefront = Wavefront(
+                                gt_wavefront - ml_wavefront,
+                                modes=p.shape[0],
+                                lam_detection=predictions_settings['wavelength']
+                            )
 
-                        diff_wavefront = Wavefront(
-                            gt_wavefront - ml_wavefront,
-                            modes=p.shape[0],
-                            lam_detection=predictions_settings['wavelength']
-                        )
-
-                        imwrite(
-                            f'{savepath}_diff_wavefront_{iter_number}.tif',
-                            diff_wavefront.wave().astype(np.float32),
-                            compression='deflate',
-                            dtype=np.float32
-                        )
-                        logger.info(f'{savepath}_diff_wavefront_{iter_number}.tif')
+                            imwrite(
+                                f'{savepath}_diff_wavefront_{iter_number}.tif',
+                                diff_wavefront.wave().astype(np.float32),
+                                compression='deflate',
+                                dtype=np.float32
+                            )
+                            logger.info(f'{savepath}_diff_wavefront_{iter_number}.tif')
 
 
-                        results[(iter_number, '-'.join(modes))] = dict(
-                            ml_img=ml_img,
-                            ml_wavefront=ml_wavefront,
-                            gt_img=pr_img,
-                            gt_wavefront=gt_wavefront,
-                            diff_wavefront=diff_wavefront,
-                            residuals=f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv',
-                        )
+                            results[(iter_number, '-'.join(modes))] = dict(
+                                ml_img=ml_img,
+                                ml_wavefront=ml_wavefront,
+                                gt_img=pr_img,
+                                gt_wavefront=gt_wavefront,
+                                diff_wavefront=diff_wavefront,
+                                residuals=f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv',
+                            )
 
-                        residuals = [
-                            {
-                                'n': z.n,
-                                'm': z.m,
-                                'prediction': ml_wavefront.zernikes[z],
-                                'ground_truth': gt_wavefront.zernikes[z],
-                                'residuals': diff_wavefront.zernikes[z],
-                            }
-                            for z in ml_wavefront.zernikes.keys()
-                        ]
+                            residuals = [
+                                {
+                                    'n': z.n,
+                                    'm': z.m,
+                                    'prediction': ml_wavefront.zernikes[z],
+                                    'ground_truth': gt_wavefront.zernikes[z],
+                                    'residuals': diff_wavefront.zernikes[z],
+                                }
+                                for z in ml_wavefront.zernikes.keys()
+                            ]
 
-                        residuals = pd.DataFrame(residuals, columns=['n', 'm', 'prediction', 'ground_truth', 'residuals'])
-                        residuals.index.name = 'ansi'
-                        residuals.to_csv(f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv')
-                        logger.info(f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv')
+                            residuals = pd.DataFrame(residuals, columns=['n', 'm', 'prediction', 'ground_truth', 'residuals'])
+                            residuals.index.name = 'ansi'
+                            residuals.to_csv(f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv')
+                            logger.info(f'{prediction_path.parent}/{prediction_path.stem}_ml_eval_residuals.csv')
 
-                if not precomputed:
-                    children = mp.active_children()
-                    logger.info(f"Awaiting {len(children)} 'eval_mode' tasks to finish.")
+                    if not precomputed:
+                        children = mp.active_children()
+                        logger.info(f"Awaiting {len(children)} 'eval_mode' tasks to finish.")
 
-                pool.close()    # close the pool
-                pool.join()     # wait for all tasks to complete
+                    pool.close()    # close the pool
+                    pool.join()     # wait for all tasks to complete
 
-            np.save(f'{savepath}_results.npy', results)
+                np.save(f'{savepath}_results.npy', results)
 
-        else:
-            # skip calc. Reload results and just replot
-            results = np.load(f'{savepath}_results.npy', allow_pickle='TRUE').item()
+            else:
+                # skip calc. Reload results and just replot
+                results = np.load(f'{savepath}_results.npy', allow_pickle='TRUE').item()
 
-        logger.info(f'{savepath}_results.npy')
-        # vis.plot_cell_dataset(
-        #     results,
-        #     savepath=savepath,
-        #     list_of_files=[datadir.name],
-        # )
-
-    savepath = Path(f'{data}/{data.name}')
-    postfix = '_ml_eval_residuals.csv'
-    csv_data = Path(f'{savepath}_results.csv')
-    npy_data = Path(f'{savepath}_results.npy')
-
-    if csv_data.exists() and npy_data.exists():
-        results = np.load(npy_data, allow_pickle='TRUE').item()
-        dataframe = pd.read_csv(csv_data, index_col=0, header=0)
-    else:
-        residuals = utils.multiprocess(
-            func=process_eval_file,
-            jobs=sorted(data.rglob(f'*{postfix}'), key=os.path.getctime),  # sort by creation time
-            desc=f'Collecting *{postfix} results',
-            unit='_eval_files'
-        )
-
-        if isinstance(residuals, bool) or len(residuals) == 0:
-            raise Exception(f'Did not find eval_mode results in: {Path(data / f"*{postfix}").resolve()} \t '
-                            f'Please rerun without --precomputed flag to compute _residuals.csv.')
-
-        dataframe = pd.DataFrame([v for d in residuals for k, v in d.items()])
-        dataframe.sort_values(by=['modes', 'iteration_index', 'na'], ascending=[True, True, False], inplace=True)
-        print(dataframe)
-        dataframe.to_csv(f'{savepath}_results.csv')
-        np.save(f'{savepath}_results.npy', results)
-
-    vis.plot_cells_heatmap(results, dataframe, savepath=savepath)
-
+            logger.info(f'{savepath}_results.npy')
+            vis.plot_cell_dataset(
+                results,
+                savepath=savepath,
+                list_of_files=[datadir.name],
+            )
 
 
 def eval_ao_dataset(
