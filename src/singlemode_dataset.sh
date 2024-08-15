@@ -116,7 +116,6 @@ do
             j="${j} --npoints ${OBJS[$N-1]}"
             j="${j} --alpha_val ${ALPHA}"
             j="${j} --phi_val ${PHI}"
-            j="${j} --dist ${DISTRIBUTIONS[$DIST-1]}"
             j="${j} --mode_dist ${MODE_DIST}"
             j="${j} --iters ${SAMPLES_PER_JOB}"
             j="${j} --signed"
