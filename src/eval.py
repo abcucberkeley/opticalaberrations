@@ -3757,10 +3757,18 @@ def compare_models(
     iter_num: int = 1,
     photon_range: tuple = (5e4, 2e5),
     aberration_range: tuple = (1, 2),
+    aberration_range_rms: tuple = (.1, .2),
     outdir: Path = Path('benchmark'),
     wavelength: float = .510,
     colormap: str = "tab20"
 ):
+    def change_width(ax, new_value):
+        for patch in ax.patches:
+            current_width = patch.get_width()
+            diff = current_width - new_value
+            patch.set_width(new_value)
+            patch.set_x(patch.get_x() + diff * .5)
+
     plt.rcParams.update({
         'font.size': 10,
         'axes.titlesize': 12,
@@ -3773,236 +3781,133 @@ def compare_models(
 
     outdir.mkdir(parents=True, exist_ok=True)
 
-    results_path = Path(f'{outdir}/compare.csv')
-    if results_path.exists():
-        stats = pd.read_csv(results_path, index_col=0, header=0)
-        print(stats.round(2))
-    else:
-        stats = []
-        dataframes = []
-        for codename, file in zip(models_codenames, predictions_paths):
-            df = pd.read_csv(file, header=0, index_col=0).drop_duplicates()
-            df['model'] = codename
+    for col in ['residuals', 'residuals_umRMS']:
+        results_path = Path(f'{outdir}/compare_{col}.csv')
+        if results_path.exists():
+            stats = pd.read_csv(results_path, index_col=0, header=0)
+            print(stats.round(2))
+        else:
+            stats = []
+            dataframes = []
+            for codename, file in zip(models_codenames, predictions_paths):
+                df = pd.read_csv(file, header=0, index_col=0).drop_duplicates()
+                df['model'] = codename
 
-            logger.info(codename)
-            s = df[
-                (df.photons >= photon_range[0]) &
-                (df.photons <= photon_range[1]) &
-                (df.aberration >= aberration_range[0]) &
-                (df.aberration <= aberration_range[1])
-            ]
-            stats.append(s.groupby(['model', 'iter_num'])['residuals'].describe(percentiles=[.5, .75, .85, .95]).T)
-            df = df[df['iter_num'] == iter_num]
-            dataframes.append(df)
-
-        df = pd.concat(dataframes)
-        stats = pd.concat(stats, axis=1).T.reset_index()
-        stats['cat'] = 'Baseline'
-        stats.loc[stats.model.str.match(r'Ours'), 'cat'] = 'Ours'
-        stats.loc[stats.model.str.match(r'ViT.*16'), 'cat'] = 'ViT/16'
-        stats.loc[stats.model.str.match(r'ViT.*32'), 'cat'] = 'ViT/32'
-        stats.loc[stats.model.str.match(r'ConvNext'), 'cat'] = 'ConvNext'
-        print(stats.round(2))
-        stats.to_csv(f'{outdir}/compare.csv')
-
-    cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
-    colormaps = ['Blues', 'Oranges', 'Greens', 'Greys']
-    fig, axes = plt.subplots(3, len(cats), figsize=(9, 6), sharex=False, sharey=False)
-
-    label = '\n'.join([
-        rf'Average residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
-        rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0] // 1000):d}k, {int(photon_range[1] // 1000):d}k] photons'
-    ])
-
-    for i, iter_num in enumerate(range(1, 4)):
-        for j, cat in enumerate(cats):
-            ax = axes[i, j]
-            data = stats[(stats['cat'] == cat) & (stats['iter_num'] == iter_num)]
-            data['model'] = data['model'].str.replace(r'.*-', '', regex=True)
-            data['model'] = data['model'].str.replace(r'/.*', '', regex=True)
-
-            ax = sns.barplot(
-                data=data,
-                x='model',
-                y='mean',
-                hue='model',
-                palette=colormaps[j],
-                ax=ax,
-                legend=False,
-                width=.4,
-                dodge=False,
-                native_scale=False,
-            )
-
-            if i == 0:
-                ax.set_title(cat)
-
-            if j == 0:
-                if iter_num == 2:
-                    ax.set_ylabel(f"{label}\nIteration {iter_num}")
+                logger.info(codename)
+                if 'RMS' in col:
+                    s = df[
+                        (df.photons >= photon_range[0]) &
+                        (df.photons <= photon_range[1]) &
+                        (df.aberration_umRMS >= aberration_range_rms[0]) &
+                        (df.aberration_umRMS <= aberration_range_rms[1])
+                        ]
+                    s = s.groupby(['model', 'iter_num'])[col].describe(percentiles=[.5, .75, .85, .95]).T
+                    s = s.applymap(partial(utils.microns2waves, wavelength=wavelength))
                 else:
-                    ax.set_ylabel(f"Iteration {iter_num}")
-            else:
-                ax.set_ylabel('')
+                    s = df[
+                        (df.photons >= photon_range[0]) &
+                        (df.photons <= photon_range[1]) &
+                        (df.aberration >= aberration_range[0]) &
+                        (df.aberration <= aberration_range[1])
+                    ]
+                    s = s.groupby(['model', 'iter_num'])[col].describe(percentiles=[.5, .75, .85, .95]).T
 
-            ax.set_xlabel('')
+                stats.append(s)
+                df = df[df['iter_num'] == iter_num]
+                dataframes.append(df)
 
-            if i == 2:
-                ax.set_xticklabels(data.model)#, rotation=90)
-            else:
-                ax.set_xticklabels([])
+            # df = pd.concat(dataframes)
+            stats = pd.concat(stats, axis=1).T.reset_index()
+            stats['cat'] = 'Baseline'
+            stats.loc[stats.model.str.match(r'Ours'), 'cat'] = 'Ours'
+            stats.loc[stats.model.str.match(r'ViT.*16'), 'cat'] = 'ViT/16'
+            stats.loc[stats.model.str.match(r'ViT.*32'), 'cat'] = 'ViT/32'
+            stats.loc[stats.model.str.match(r'ConvNext'), 'cat'] = 'ConvNext'
+            print(stats.round(2))
+            stats.to_csv(f'{outdir}/compare_{col}.csv')
 
-            for c in range(len(ax.containers)):
-                ax.bar_label(ax.containers[c], fontsize=8, fmt='%.2f')
+        cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
+        colormaps = ['Blues', 'Oranges', 'Greens', 'Greys']
+        widths = [.25, .15, .2, .3]
 
-            ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
-            ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
+        for agg in ['mean', 'median']:
+            fig, axes = plt.subplots(3, len(cats), figsize=(9, 6), sharex=False, sharey=False)
 
-            if iter_num == 1:
-                ax.set_ylim(0, .7)
-                ax.set_yticks(np.arange(0, .8, .1))
-            elif iter_num == 2:
-                ax.set_ylim(0, .5)
-                ax.set_yticks(np.arange(0, .6, .1))
-            else:
-                ax.set_ylim(0, .4)
-                ax.set_yticks(np.arange(0, .5, .1))
+            value = 'P2V' if col == 'residuals' else 'RMS'
+            r = aberration_range if col == 'residuals' else aberration_range_rms
 
-            if j == 0:
-                ax.spines['left'].set_visible(True)
-            else:
-                ax.spines['left'].set_visible(False)
-                ax.set_yticklabels([])
+            label = '\n'.join([
+                rf'{agg.capitalize()} residuals ({value}, $\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{r[0]}$\lambda$, {r[1]}$\lambda$]{value} simulated with [{int(photon_range[0] // 1000):d}k, {int(photon_range[1] // 1000):d}k] photons'
+            ])
+            for i, iter_num in enumerate(range(1, 4)):
+                for j, cat in enumerate(cats):
+                    ax = axes[i, j]
+                    data = stats[(stats['cat'] == cat) & (stats['iter_num'] == iter_num)]
+                    data['model'] = data['model'].str.replace(r'.*-', '', regex=True)
+                    data['model'] = data['model'].str.replace(r'/.*', '', regex=True)
 
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
+                    ax = sns.barplot(
+                        data=data,
+                        x='model',
+                        y='50%' if agg == 'median' else agg,
+                        hue='model',
+                        palette=colormaps[j],
+                        ax=ax,
+                        legend=False,
+                        width=.4,
+                        dodge=False,
+                        native_scale=False,
+                    )
+                    change_width(ax, widths[j])
 
-    plt.tight_layout()
+                    if i == 0:
+                        ax.set_title(cat)
 
-    savepath = Path(f'{outdir}/compare')
-    logger.info(savepath)
-    plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+                    if j == 0:
+                        if iter_num == 2:
+                            ax.set_ylabel(f"{label}\nIteration {iter_num}")
+                        else:
+                            ax.set_ylabel(f"Iteration {iter_num}")
+                    else:
+                        ax.set_ylabel('')
 
-    # for c in ['residuals', 'confidence_sum', 'confidence', ]:
-    #     test = df[
-    #         (df.photons >= photon_range[0]) &
-    #         (df.photons <= photon_range[1]) &
-    #         (df.aberration >= aberration_range[0]) &
-    #         (df.aberration <= aberration_range[1])
-    #     ]
-    #
-    #     if c == 'residuals':
-    #         xmax = aberration_range[0]
-    #         binwidth = .25
-    #         bins = np.arange(0, xmax + binwidth, binwidth)
-    #         label = '\n'.join([
-    #             rf'Residuals (Peak-to-valley, $\lambda = {int(wavelength * 1000)}~nm$)',
-    #             rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
-    #         ])
-    #         outliers = test[test[c] < xmax]
-    #         unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-    #
-    #     elif c == 'confidence':
-    #         xmax = .02
-    #         binwidth = .01
-    #         bins = np.arange(0, xmax + binwidth, binwidth)
-    #         label = '\n'.join([
-    #             rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-    #             rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0] // 1000):d}k, {int(photon_range[1] // 1000):d}k] integrated photons'
-    #         ])
-    #         # outliers = test[test[c] == 0]
-    #         test[c].replace(0, test[c].max(), inplace=True)
-    #         outliers = test[test[c] < xmax]
-    #         unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-    #
-    #     else:
-    #         xmax = .1
-    #         binwidth = .01
-    #         bins = np.arange(0, xmax + binwidth, binwidth)
-    #         label = '\n'.join([
-    #             rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
-    #             rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
-    #         ])
-    #         # outliers = test[test[c] == 0]
-    #         test[c].replace(0, test[c].max(), inplace=True)
-    #         outliers = test[test[c] < xmax]
-    #         unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
-    #
-    #
-    #     fig, ax = plt.subplots(figsize=(8, 6))
-    #     histax = inset_axes(
-    #         ax,
-    #         width="100%",
-    #         height="100%",
-    #         bbox_to_anchor=(.4, .1, .3, .3),
-    #         bbox_transform=ax.transAxes,
-    #         loc='lower center'
-    #     )
-    #
-    #     g = sns.histplot(
-    #         ax=ax,
-    #         data=test,
-    #         x=c,
-    #         hue='model',
-    #         # bins=bins,
-    #         common_norm=False,
-    #         common_bins=True,
-    #         element="poly",
-    #         stat='proportion',
-    #         fill=False,
-    #         cumulative=True,
-    #         palette=colormap
-    #     )
-    #
-    #     sns.barplot(
-    #         x=unconfident[models_codenames].index,
-    #         y=unconfident[models_codenames].values,
-    #         ax=histax,
-    #         palette=colormap
-    #     )
-    #
-    #     ax.set_xlabel(label)
-    #     ax.set_ylabel('CDF')
-    #     ax.set_xlim(0, None)
-    #     ax.set_ylim(None, 1)
-    #     ax.set_yticks(np.arange(0, 1.1, .1))
-    #     ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
-    #     ax.spines['top'].set_visible(False)
-    #     ax.spines['right'].set_visible(False)
-    #     ax.spines['left'].set_visible(False)
-    #     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-    #
-    #     hist_step = .05 if c == 'residuals' else .02
-    #     histax.set_ylim(unconfident.min()-.01, unconfident.max())
-    #     histax.set_yticks(np.arange(unconfident.min()-hist_step, unconfident.max()+hist_step, hist_step))
-    #     histax.set_xlabel(f'')
-    #     histax.set_ylabel('')
-    #     histax.set_xticks([])
-    #     histax.spines['top'].set_visible(False)
-    #     histax.spines['right'].set_visible(False)
-    #     histax.spines['left'].set_visible(False)
-    #     histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
-    #
-    #     axins = ax.inset_axes(
-    #         [.3, .075, .45, .4],
-    #         xlim=(xmax, xmax),
-    #         ylim=(unconfident.min()-.01, unconfident.max()+.05),
-    #     )
-    #     ax.indicate_inset_zoom(axins, edgecolor="k")
-    #     axins.set_xticks([])
-    #     axins.set_yticks([])
-    #
-    #     sns.move_legend(g, title='Model', frameon=False, ncol=1, loc='lower right')
-    #     plt.tight_layout()
-    #
-    #     savepath = Path(f'{outdir}/compare_{c}')
-    #     logger.info(savepath)
-    #     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-    #     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-    #     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-    #
+                    ax.set_xlabel('')
+
+                    if i == 2:
+                        ax.set_xticklabels(data.model)#, rotation=90)
+                    else:
+                        ax.set_xticklabels([])
+
+                    for c in range(len(ax.containers)):
+                        ax.bar_label(ax.containers[c], fontsize=8, fmt='%.2f')
+
+                    ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
+                    ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
+
+                    if 'RMS' in col:
+                        ax.set_ylim(0, .1 if agg == 'median' else .12)
+                        ax.set_yticks(np.arange(0, .12 if agg == 'median' else .14, .02))
+                    else:
+                        ax.set_ylim(0, .7)
+                        ax.set_yticks(np.arange(0, .8, .1))
+
+                    if j == 0:
+                        ax.spines['left'].set_visible(True)
+                    else:
+                        ax.spines['left'].set_visible(False)
+                        ax.set_yticklabels([])
+
+                    ax.spines['top'].set_visible(False)
+                    ax.spines['right'].set_visible(False)
+
+            plt.tight_layout()
+
+            savepath = Path(f'{outdir}/compare_{col}_{agg}')
+            logger.info(savepath)
+            plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
 @profile
@@ -4336,301 +4241,333 @@ def profile_models(
         dataframes.append(df)
 
     if len(models_codenames) > 1:
-        pass
-        # plot_training_curves(df=pd.concat(dataframes).reset_index(drop=True))
+        for col in ['p2v', 'rms']:
+            for agg in ['mean', 'median']:
 
-        df = pd.DataFrame()
-        for d in dataframes:
-            best = d['epoch_mse'].idxmin()
-            df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
+                # plot_training_curves(df=pd.concat(dataframes).reset_index(drop=True))
 
-        # plot_scaling_parameters(df)
+                df = pd.DataFrame()
+                for d in dataframes:
+                    best = d['epoch_mse'].idxmin()
+                    df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
 
-        coi = [
-            'mean',
-            'epoch_mse',
-            'training_gflops',
-            'training',
-            'batch_size',
-            'memory',
-            'throughput',
-            'latency',
-            'gflops',
-            'params',
-            'transformers',
-            'heads',
-        ]
-        titles = [
-            f'Testing P2V\n$i\in${{$1\lambda\\to2\lambda$}}\n($\lambda={int(wavelength * 1000)}nm$)',
-            'Training loss\n($\mu$m rms)',
-            'Training cost\n(EFLOPs)',
-            'Training hours\n8xH100s',
-            'Training\nbatch size',
-            f'Memory (GB)\n[BS={batch_size}]',
-            f'Throughput\n(images/s)',
-            'Latency\n(ms/image)',
-            'Inference cost\n(GFLOPs)',
-            'Parameters\n(Millions)',
-            'Transformers\n(Layers)',
-            'Transformers\n(Heads)',
-        ]
-        cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
-        colormaps = ['Blues', 'Oranges', 'Greens', 'Greys']
-        widths = [.25, .15, .2, .3]
-        df = df.sort_values('epoch_mse', ascending=False)
+                # plot_scaling_parameters(df)
 
-        eval_csv = pd.read_csv(Path('../evaluations/compare.csv'), index_col=0, header=0)
-        eval_csv = eval_csv[eval_csv['iter_num'] == 2].drop(columns='cat')
-        df = pd.merge(df, eval_csv, on='model', how='outer')
+                coi = [
+                    agg,
+                    'epoch_mse',
+                    'training_gflops',
+                    'training',
+                    'batch_size',
+                    'memory',
+                    'throughput',
+                    'latency',
+                    'gflops',
+                    'params',
+                    'transformers',
+                    'heads',
+                ]
+                titles = [
+                    f'Testing $\lambda$ {col.upper()}\n($\lambda={int(wavelength * 1000)}nm$)',
+                    'Training loss\n($\mu$m rms)',
+                    'Training cost\n(EFLOPs)',
+                    'Training hours\n8xH100s',
+                    'Training\nbatch size',
+                    f'Memory (GB)\n[BS={batch_size}]',
+                    f'Throughput\n(images/s)',
+                    'Latency\n(ms/image)',
+                    'Inference cost\n(GFLOPs)',
+                    'Parameters\n(Millions)',
+                    'Transformers\n(Layers)',
+                    'Transformers\n(Heads)',
+                ]
+                cats = ['ConvNext', 'ViT/16', 'ViT/32', 'Ours']
+                colormaps = ['Blues', 'Oranges', 'Greens', 'Greys']
+                widths = [.25, .15, .2, .3]
+                df = df.sort_values('epoch_mse', ascending=False)
+
+                eval_csv = pd.read_csv(Path(f'../evaluations/compare_{col}.csv'), index_col=0, header=0)
+                eval_csv = eval_csv[eval_csv['iter_num'] == 1].drop(columns='cat')
+                eval_csv['median'] = eval_csv['50%']
+                df = pd.merge(df, eval_csv, on='model', how='outer')
+
+                fig, axes = plt.subplots(len(coi), len(cats), figsize=(12, 15), sharex=False, sharey=False)
+
+                for i, cc in enumerate(coi):
+                    for j, cat in enumerate(cats):
+                        ax = axes[i, j]
+                        data = df[df.cat == cat]
+                        data['model'] = data['model'].str.replace(r'.*-', '', regex=True)
+                        data['model'] = data['model'].str.replace(r'/.*', '', regex=True)
+
+                        ax = sns.barplot(
+                            data=data,
+                            x='model',
+                            y=coi[i],
+                            hue='model',
+                            palette=colormaps[j],
+                            ax=ax,
+                            legend=False,
+                            width=.4,
+                            dodge=False,
+                            native_scale=False,
+                        )
+                        change_width(ax, widths[j])
+
+                        if i == 0:
+                            ax.set_title(cat)
+
+                        if j == 0:
+                            ax.set_ylabel(titles[i])
+                        else:
+                            ax.set_ylabel('')
+
+                        ax.set_xlabel('')
+
+                        if i == len(coi) - 1:
+                            ax.set_xticklabels(data.model)
+                        else:
+                            ax.set_xticklabels([])
+
+                        for c in range(len(ax.containers)):
+                            if coi[i] == 'epoch_mse':
+                                fmt = '%.2g'
+                            elif coi[i] == 'params':
+                                fmt = '%dM'
+                            elif coi[i] in ['num_tokens', 'params', 'throughput', 'batch_size', 'transformers', 'heads']:
+                                fmt = '%d'
+                            else:
+                                if col == 'p2v':
+                                    fmt = '%.2f'
+                                elif col == 'rms':
+                                    fmt = '%.2f'
+                                else:
+                                    fmt = '%.1f'
+
+                            ax.bar_label(ax.containers[c], fontsize=8, fmt=fmt)
+
+                        ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
+                        ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
+
+                        if coi[i] == 'mean':
+                            if col == 'p2v':
+                                ax.set_ylim(0, .6)
+                                ax.set_yticks(np.arange(0, .7, .1))
+                            else:
+                                ax.set_ylim(0, .08)
+                                ax.set_yticks(np.arange(0, .1, .02))
+
+                        elif coi[i] == 'median':
+                            if col == 'p2v':
+                                ax.set_ylim(0, .6)
+                                ax.set_yticks(np.arange(0, .7, .1))
+                            else:
+                                ax.set_ylim(0, .08)
+                                ax.set_yticks(np.arange(0, .1, .02))
+
+                        elif coi[i] == 'epoch_mse':
+                            ax.set_ylim(1e-7, 1e-5)
+                            # ax.set_yticks(np.arange(1e-7, 1e-5, 2e-6))
+                            ax.set_yscale('log')
+                        elif coi[i] == 'training':
+                            ax.set_ylim(0, 168) # (1 week of training)
+                            ax.set_yticks(range(0, 192, 24))
+                            # ax.set_ylim(0, 25)
+                        elif coi[i] == 'batch_size':
+                            ax.set_ylim(0, 4096)
+                            ax.set_yticks(range(0, 4096+1024, 1024))
+                        elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
+                            ax.set_ylim(0, 125)
+                            ax.set_yticks(range(0, 150, 25))
+                        elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
+                            ax.set_ylim(0, 40)
+                            ax.set_yticks(range(0, 50, 10))
+                        elif coi[i] == 'params':
+                            ax.set_ylim(10, 2000)
+                            ax.set_yscale('log')
+                        elif coi[i] == 'memory':
+                            ax.set_ylim(0, 20)
+                            ax.set_yticks(range(0, 25, 5))
+                        elif coi[i] == 'num_tokens':
+                            ax.set_ylim(0, 2000)
+                        elif coi[i] == 'transformers':
+                            ax.set_ylim(0, 32)
+                            ax.set_yticks([0, 6, 12, 18, 24, 30, 36])
+                        elif coi[i] == 'heads':
+                            ax.set_ylim(0, 600)
+                            ax.set_yticks(range(0, 700, 100))
+                        elif coi[i] == 'latency':
+                            ax.set_ylim(0, 40)
+                            ax.set_yticks(range(0, 50, 10))
+                        elif coi[i] == 'throughput':
+                            ax.set_ylim(0, 3000)
+                            ax.set_yticks(range(0, 3500, 500))
+                        else:
+                            ax.set_ylim(0, 1440)
+                            ax.set_yticks(range(0, 1500, 60))
+
+                        if j == 0:
+                            ax.spines['left'].set_visible(True)
+                        else:
+                            ax.spines['left'].set_visible(False)
+                            ax.set_yticklabels([])
+
+                        ax.spines['top'].set_visible(False)
+                        ax.spines['right'].set_visible(False)
+
+                plt.tight_layout()
+
+                savepath = Path(f'{outdir}/profiles_{col}_{agg}')
+                logger.info(savepath)
+                plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+                plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+                plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
 
-        fig, axes = plt.subplots(len(coi), len(cats), figsize=(12, 15), sharex=False, sharey=False)
+                coi = [
+                    'params',
+                    'training',
+                    'throughput',
+                    agg,
+                ]
+                titles = [
+                    'Parameters\n(Millions)',
+                    'Training hours\n8xH100s',
+                    f'Throughput\n(images/s)',
+                    f'Testing $\lambda$ {col.upper()}\n($\lambda={int(wavelength * 1000)}nm$)',
+                ]
+                cats = ['ConvNext', 'ViT/16', 'Ours']
+                colormaps = ['Blues', 'Oranges', 'Greys']
+                widths = [.25, .15, .3]
 
-        for i, cc in enumerate(coi):
-            for j, cat in enumerate(cats):
-                ax = axes[i, j]
-                data = df[df.cat == cat]
-                data['model'] = data['model'].str.replace(r'.*-', '', regex=True)
-                data['model'] = data['model'].str.replace(r'/.*', '', regex=True)
+                fig, axes = plt.subplots(len(coi), 1, figsize=(6, 8), sharex=False, sharey=False)
+                for i, cc in enumerate(coi):
+                    ax = axes[i]
+                    data = df[df.cat != 'ViT/32']
+                    data['label'] = data['model'].str.replace(r'.*-', '', regex=True)
+                    data['label'] = data['label'].str.replace(r'/.*', '', regex=True)
 
-                ax = sns.barplot(
-                    data=data,
-                    x='model',
-                    y=coi[i],
-                    hue='model',
-                    palette=colormaps[j],
-                    ax=ax,
-                    legend=False,
-                    width=.4,
-                    dodge=False,
-                    native_scale=False,
-                )
-                change_width(ax, widths[j])
+                    order = [
+                        'ConvNext-T', 'ConvNext-S', 'ConvNext-B', 'ConvNext-L',
+                        'ViT-S/16', 'ViT-B/16',
+                        'Ours-T', 'Ours-S', 'Ours-B', 'Ours-L', 'Ours-H'
+                    ]
+                    data['ranks'] = data['model'].map(dict(zip(order, range(len(order)))))
+                    data = data.sort_values('ranks', ascending=True)
 
-                if i == 0:
-                    ax.set_title(cat)
+                    ax = sns.barplot(
+                        data=data,
+                        x='model',
+                        y=coi[i],
+                        hue='cat',
+                        hue_order=cats,
+                        palette=['C0', 'C1', 'dimgrey'],
+                        alpha=.85,
+                        ax=ax,
+                        legend=False,
+                        dodge=False,
+                        native_scale=False,
+                    )
 
-                if j == 0:
                     ax.set_ylabel(titles[i])
-                else:
-                    ax.set_ylabel('')
+                    ax.set_xlabel('')
 
-                ax.set_xlabel('')
-
-                if i == len(coi) - 1:
-                    ax.set_xticklabels(data.model)
-                else:
-                    ax.set_xticklabels([])
-
-                for c in range(len(ax.containers)):
-                    if coi[i] == 'mean':
-                        fmt = '%.1f'
-                    elif coi[i] == 'epoch_mse':
-                        fmt = '%.2g'
-                    elif coi[i] == 'params':
-                        fmt = '%dM'
-                    elif coi[i] in ['num_tokens', 'params', 'throughput', 'batch_size', 'transformers', 'heads']:
-                        fmt = '%d'
+                    if i == len(coi) - 1:
+                        ax.set_xticklabels(data.label)
                     else:
-                        fmt = '%.1f'
+                        ax.set_xticklabels([])
 
-                    ax.bar_label(ax.containers[c], fontsize=8, fmt=fmt)
+                    for c in range(len(ax.containers)):
+                        if coi[i] == 'epoch_mse':
+                            fmt = '%.2g'
+                        elif coi[i] == 'params':
+                            fmt = '%dM'
+                        elif coi[i] in ['num_tokens', 'params', 'throughput', 'batch_size', 'transformers', 'heads']:
+                            fmt = '%d'
+                        else:
+                            if col == 'p2v':
+                                fmt = '%.2f'
+                            elif col == 'rms':
+                                fmt = '%.2f'
+                            else:
+                                fmt = '%.1f'
 
-                ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
-                ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
+                        ax.bar_label(ax.containers[c] if ax.containers[c] != 0 else '', fontsize=8, fmt=fmt)
 
-                if coi[i] == 'mean':
-                    ax.set_ylim(0, .5)
-                    ax.set_yticks(np.arange(0, .6, .1))
-                elif coi[i] == 'epoch_mse':
-                    ax.set_ylim(1e-7, 1e-5)
-                    # ax.set_yticks(np.arange(1e-7, 1e-5, 2e-6))
-                    ax.set_yscale('log')
-                elif coi[i] == 'training':
-                    ax.set_ylim(0, 168) # (1 week of training)
-                    ax.set_yticks(range(0, 192, 24))
-                    # ax.set_ylim(0, 25)
-                elif coi[i] == 'batch_size':
-                    ax.set_ylim(0, 4096)
-                    ax.set_yticks(range(0, 4096+1024, 1024))
-                elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
-                    ax.set_ylim(0, 125)
-                    ax.set_yticks(range(0, 150, 25))
-                elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
-                    ax.set_ylim(0, 40)
-                    ax.set_yticks(range(0, 50, 10))
-                elif coi[i] == 'params':
-                    ax.set_ylim(10, 2000)
-                    ax.set_yscale('log')
-                elif coi[i] == 'memory':
-                    ax.set_ylim(0, 20)
-                    ax.set_yticks(range(0, 25, 5))
-                elif coi[i] == 'num_tokens':
-                    ax.set_ylim(0, 2000)
-                elif coi[i] == 'transformers':
-                    ax.set_ylim(0, 32)
-                    ax.set_yticks([0, 6, 12, 18, 24, 30, 36])
-                elif coi[i] == 'heads':
-                    ax.set_ylim(0, 600)
-                    ax.set_yticks(range(0, 700, 100))
-                elif coi[i] == 'latency':
-                    ax.set_ylim(0, 40)
-                    ax.set_yticks(range(0, 50, 10))
-                elif coi[i] == 'throughput':
-                    ax.set_ylim(0, 3000)
-                    ax.set_yticks(range(0, 3500, 500))
-                else:
-                    ax.set_ylim(0, 1440)
-                    ax.set_yticks(range(0, 1500, 60))
+                    ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
+                    ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
 
-                if j == 0:
+                    if coi[i] == 'mean':
+                        if col == 'p2v':
+                            ax.set_ylim(0, .6)
+                            ax.set_yticks(np.arange(0, .7, .1))
+                        else:
+                            ax.set_ylim(0, .08)
+                            ax.set_yticks(np.arange(0, .1, .02))
+
+                    elif coi[i] == 'median':
+                        if col == 'p2v':
+                            ax.set_ylim(0, .6)
+                            ax.set_yticks(np.arange(0, .7, .1))
+                        else:
+                            ax.set_ylim(0, .08)
+                            ax.set_yticks(np.arange(0, .1, .02))
+
+                    elif coi[i] == 'epoch_mse':
+                        ax.set_ylim(1e-7, 1e-5)
+                        ax.set_yscale('log')
+                    elif coi[i] == 'training':
+                        ax.set_ylim(0, 168) # (1 week of training)
+                        ax.set_yticks(range(0, 192, 24))
+                    elif coi[i] == 'batch_size':
+                        ax.set_ylim(0, 4096)
+                        ax.set_yticks(range(0, 4096+1024, 1024))
+                    elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
+                        ax.set_ylim(0, 125)
+                        ax.set_yticks(range(0, 150, 25))
+                    elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
+                        ax.set_ylim(0, 40)
+                        ax.set_yticks(range(0, 50, 10))
+                    elif coi[i] == 'params':
+                        ax.set_ylim(0, 400)
+                        ax.set_yticks(range(0, 450, 50))
+                    elif coi[i] == 'memory':
+                        ax.set_ylim(0, 20)
+                        ax.set_yticks(range(0, 25, 5))
+                    elif coi[i] == 'num_tokens':
+                        ax.set_ylim(0, 2000)
+                    elif coi[i] == 'transformers':
+                        ax.set_ylim(0, 32)
+                        ax.set_yticks([0, 6, 12, 18, 24, 30, 36])
+                    elif coi[i] == 'heads':
+                        ax.set_ylim(0, 600)
+                        ax.set_yticks(range(0, 700, 100))
+                    elif coi[i] == 'latency':
+                        ax.set_ylim(0, 40)
+                        ax.set_yticks(range(0, 50, 10))
+                    elif coi[i] == 'throughput':
+                        ax.set_ylim(0, 3000)
+                        ax.set_yticks(range(0, 3500, 500))
+                    else:
+                        ax.set_ylim(0, 1440)
+                        ax.set_yticks(range(0, 1500, 60))
+
                     ax.spines['left'].set_visible(True)
-                else:
-                    ax.spines['left'].set_visible(False)
-                    ax.set_yticklabels([])
+                    ax.spines['top'].set_visible(False)
+                    ax.spines['right'].set_visible(False)
 
-                ax.spines['top'].set_visible(False)
-                ax.spines['right'].set_visible(False)
+                plt.tight_layout()
 
+                savepath = Path(f'{outdir}/summary_{col}_{agg}')
+                logger.info(savepath)
+                plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+                plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+                plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
-        plt.tight_layout()
-
-        savepath = Path(f'{outdir}/profiles')
-        logger.info(savepath)
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-
-        coi = [
-            'params',
-            'training',
-            'throughput',
-            'mean',
-        ]
-        titles = [
-            'Parameters\n(Millions)',
-            'Training hours\n8xH100s',
-            f'Throughput\n(images/s)',
-            f'Testing P2V\n$i\in${{$1\lambda\\to2\lambda$}}\n($\lambda={int(wavelength * 1000)}nm$)',
-        ]
-        cats = ['ConvNext', 'ViT/16', 'Ours']
-        colormaps = ['Blues', 'Oranges', 'Greys']
-        widths = [.25, .15, .3]
-
-        fig, axes = plt.subplots(len(coi), 1, figsize=(6, 8), sharex=False, sharey=False)
-        for i, cc in enumerate(coi):
-            ax = axes[i]
-            data = df[df.cat != 'ViT/32']
-            data['label'] = data['model'].str.replace(r'.*-', '', regex=True)
-            data['label'] = data['label'].str.replace(r'/.*', '', regex=True)
-
-            order = [
-                'ConvNext-T', 'ConvNext-S', 'ConvNext-B', 'ConvNext-L',
-                'ViT-S/16', 'ViT-B/16',
-                'Ours-T', 'Ours-S', 'Ours-B', 'Ours-L', 'Ours-H'
-            ]
-            data['ranks'] = data['model'].map(dict(zip(order, range(len(order)))))
-            data = data.sort_values('ranks', ascending=True)
-
-            ax = sns.barplot(
-                data=data,
-                x='model',
-                y=coi[i],
-                hue='cat',
-                hue_order=cats,
-                palette=['C0', 'C1', 'dimgrey'],
-                alpha=.85,
-                ax=ax,
-                legend=False,
-                dodge=False,
-                native_scale=False,
-            )
-
-            ax.set_ylabel(titles[i])
-            ax.set_xlabel('')
-
-            if i == len(coi) - 1:
-                ax.set_xticklabels(data.label)
-            else:
-                ax.set_xticklabels([])
-
-            for c in range(len(ax.containers)):
-                if coi[i] == 'mean':
-                    fmt = '%.1f'
-                elif coi[i] == 'epoch_mse':
-                    fmt = '%.2g'
-                elif coi[i] == 'params':
-                    fmt = '%dM'
-                elif coi[i] in ['num_tokens', 'params', 'throughput', 'batch_size', 'transformers', 'heads']:
-                    fmt = '%d'
-                else:
-                    fmt = '%.1f'
-
-                ax.bar_label(ax.containers[c] if ax.containers[c] != 0 else '', fontsize=8, fmt=fmt)
-
-            ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
-            ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
-
-            if coi[i] == 'mean':
-                ax.set_ylim(0, .5)
-                ax.set_yticks(np.arange(0, .6, .1))
-            elif coi[i] == 'epoch_mse':
-                ax.set_ylim(1e-7, 1e-5)
-                ax.set_yscale('log')
-            elif coi[i] == 'training':
-                ax.set_ylim(0, 168) # (1 week of training)
-                ax.set_yticks(range(0, 192, 24))
-            elif coi[i] == 'batch_size':
-                ax.set_ylim(0, 4096)
-                ax.set_yticks(range(0, 4096+1024, 1024))
-            elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
-                ax.set_ylim(0, 125)
-                ax.set_yticks(range(0, 150, 25))
-            elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
-                ax.set_ylim(0, 40)
-                ax.set_yticks(range(0, 50, 10))
-            elif coi[i] == 'params':
-                ax.set_ylim(0, 400)
-                ax.set_yticks(range(0, 450, 50))
-            elif coi[i] == 'memory':
-                ax.set_ylim(0, 20)
-                ax.set_yticks(range(0, 25, 5))
-            elif coi[i] == 'num_tokens':
-                ax.set_ylim(0, 2000)
-            elif coi[i] == 'transformers':
-                ax.set_ylim(0, 32)
-                ax.set_yticks([0, 6, 12, 18, 24, 30, 36])
-            elif coi[i] == 'heads':
-                ax.set_ylim(0, 600)
-                ax.set_yticks(range(0, 700, 100))
-            elif coi[i] == 'latency':
-                ax.set_ylim(0, 40)
-                ax.set_yticks(range(0, 50, 10))
-            elif coi[i] == 'throughput':
-                ax.set_ylim(0, 3000)
-                ax.set_yticks(range(0, 3500, 500))
-            else:
-                ax.set_ylim(0, 1440)
-                ax.set_yticks(range(0, 1500, 60))
-
-            ax.spines['left'].set_visible(True)
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-
-
-        plt.tight_layout()
-
-        savepath = Path(f'{outdir}/summary')
-        logger.info(savepath)
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
-
-        table = df.set_index(['cat', 'model'], drop=False)
-        table = table.loc[cats][coi].astype(float)
-        print(table)
-        print(table.to_latex(float_format="%.2g"))
+                table = df.set_index(['cat', 'model'], drop=False)
+                table = table.loc[cats][coi].astype(float)
+                print(table)
+                print(table.to_latex(float_format="%.2g"))
 
 
 @profile

@@ -15,7 +15,7 @@ except ImportError as e:
 
 import cli
 import experimental_benchmarks
-from eval import compare_models, profile_models, profile_stages
+from eval import compare_models, profile_models
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -132,7 +132,10 @@ def main(args=None):
     )
 
     gpu_workers = strategy.num_replicas_in_sync
-    gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
+    try:
+        gpu_model = tf.config.experimental.get_device_details(physical_devices[0])['device_name']
+    except IndexError:
+        gpu_model = None
     logging.info(f'Number of active GPUs: {gpu_workers}, {gpu_model}')
 
     with strategy.scope():
