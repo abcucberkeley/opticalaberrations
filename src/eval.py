@@ -549,6 +549,7 @@ def plot_coverage(
     savepath:Path,
     label='Integrated photons per object',
     lims=(0, 100),
+    xstep=5e4,
     ax=None,
     cax=None,
     sci=False,
@@ -602,8 +603,8 @@ def plot_coverage(
     cbar.ax.yaxis.set_label_position('left')
 
     if label == 'Integrated photons' or label == 'Integrated photoelectrons':
-        ax.set_xticks(np.arange(lims[0], lims[1]+5e4, 5e4), minor=False)
-        ax.set_xticks(np.arange(lims[0], lims[1]+2.5e4, 2.5e4), minor=True)
+        ax.set_xticks(np.arange(lims[0], lims[1]+xstep, xstep), minor=False)
+        ax.set_xticks(np.arange(lims[0], lims[1]+xstep/2, xstep/2), minor=True)
     elif label == 'Number of iterations':
         ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
 
@@ -650,7 +651,8 @@ def plot_heatmap_p2v(
     label='Integrated photoelectrons',
     color_label='Residuals',
     hist_col='confidence',
-    lims=(0, 100),
+    xstep=5e4,
+    lims=(0, 5e5),
     ax=None,
     cax=None,
     agg='mean',
@@ -1139,8 +1141,8 @@ def plot_heatmap_p2v(
             ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     if label == 'Integrated photons' or label == 'Integrated photoelectrons':
-        ax.set_xticks(np.arange(lims[0], lims[1]+5e4, 5e4), minor=False)
-        ax.set_xticks(np.arange(lims[0], lims[1]+2.5e4, 2.5e4), minor=True)
+        ax.set_xticks(np.arange(lims[0], lims[1]+xstep, xstep), minor=False)
+        ax.set_xticks(np.arange(lims[0], lims[1]+xstep/2, xstep/2), minor=True)
     elif label == 'Number of iterations':
         ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
 
@@ -1177,7 +1179,8 @@ def plot_heatmap_rms(
     label='Integrated photoelectrons',
     color_label='Residuals',
     hist_col='confidence',
-    lims=(0, 100),
+    xstep=5e4,
+    lims=(0, 5e5),
     ax=None,
     cax=None,
     agg='mean',
@@ -1633,8 +1636,8 @@ def plot_heatmap_rms(
             ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
 
     if label == 'Integrated photons' or label == 'Integrated photoelectrons':
-        ax.set_xticks(np.arange(lims[0], lims[1]+5e4, 5e4), minor=False)
-        ax.set_xticks(np.arange(lims[0], lims[1]+2.5e4, 2.5e4), minor=True)
+        ax.set_xticks(np.arange(lims[0], lims[1]+xstep, xstep), minor=False)
+        ax.set_xticks(np.arange(lims[0], lims[1]+xstep/2, xstep/2), minor=True)
     elif label == 'Number of iterations':
         ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
 
@@ -1645,8 +1648,8 @@ def plot_heatmap_rms(
     ax.set_xlim(lims)
 
     ax.set_ylabel(rf'Initial aberration ({agg} $\lambda$ RMS, $\lambda = {int(wavelength * 1000)}~nm$)')
-    ax.set_yticks(np.arange(0, 2, .05), minor=True)
-    ax.set_yticks(np.arange(0, 2, .1))
+    ax.set_yticks(np.arange(0, 1.05, .05), minor=True)
+    ax.set_yticks(np.arange(0, 1.1, .1))
     ax.set_ylim(0, levels[-1])
 
     ax.spines['right'].set_visible(False)
@@ -2367,9 +2370,9 @@ def plot_templates(model: Path):
     outdir.mkdir(parents=True, exist_ok=True)
     modelspecs = backend.load_metadata(model)
 
-    photon_step = 10e3
-    photons = np.arange(photon_step, 1e5+photon_step, photon_step).astype(int)
-    waves = np.arange(0, .35, step=.05).round(2)
+    photon_step = 1e4
+    photons = np.arange(0, 1e5+photon_step, photon_step).astype(int)
+    waves = np.arange(0, .6, step=.1).round(2)
 
     aberrations = np.zeros((len(waves), modelspecs.n_modes))
     gen = backend.load_metadata(model, psf_shape=(64, 64, 64))
@@ -2394,7 +2397,7 @@ def plot_templates(model: Path):
         logger.info(f'Saved: {savepath}_wavefront.png  .pdf  .svg')
 
 
-        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(11, 9))
+        fig, axes = plt.subplots(nrows=len(waves), ncols=len(photons), figsize=(10, 7))
 
         for t, a in tqdm(
             enumerate(waves[::-1]),
@@ -2403,7 +2406,7 @@ def plot_templates(model: Path):
         ):
             for j, ph in enumerate(photons):
                 phi = np.zeros_like(aberrations[0])
-                phi[i] = a * 2 if i == 12 else a
+                phi[i] = a
 
                 w = Wavefront(phi, lam_detection=gen.lam_detection)
                 kernel = gen.single_psf(phi=w, meta=False)
@@ -2426,17 +2429,17 @@ def plot_templates(model: Path):
                 axes[t, j].set_xticks([])
                 axes[t, j].set_yticks([])
 
-                axes[t, j].set_title(int(np.max(img)), pad=1)
+                vmax = int(np.max(img))
+                axes[t, j].set_title(vmax, pad=1)
 
                 if j == 0:
-                    # p2v = np.round(np.floor(w.peak2valley()*2) / 2, 1)
-                    p2v = np.round(a*10, 1)
-                    axes[t, j].set_ylabel(f'{p2v:.1f}$\lambda$')
+                    rms = np.round(w.rms(waves=True), 1)
+                    axes[t, j].set_ylabel(f'{rms:.1f}$\lambda$')
 
                 if t == len(waves) - 1:
-                    axes[t, j].set_xlabel(int(ph))
+                    axes[t, j].set_xlabel(f'{ph/1e5:.1f}')
 
-        plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.15, wspace=.15)
+        plt.subplots_adjust(top=.95, bottom=.05, left=.05, right=.95, hspace=.05, wspace=.05)
         plt.savefig(f'{savepath}_templateheatmap.pdf', bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}_templateheatmap.png', dpi=300, bbox_inches='tight', pad_inches=.25)
         plt.savefig(f'{savepath}_templateheatmap.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
@@ -2618,6 +2621,160 @@ def eval_object(
 
     return p
 
+
+@profile
+def modeheatmap(
+    modelpath: Path,
+    datadir: Path,
+    outdir: Path,
+    iter_num: int = 1,
+    distribution: str = '/',
+    samplelimit: Any = None,
+    na: float = 1.0,
+    batch_size: int = 100,
+    eval_sign: str = 'signed',
+    digital_rotations: bool = False,
+    plot: Any = None,
+    plot_rotations: bool = False,
+    agg: str = 'median',
+    psf_type: Optional[str] = None,
+    num_beads: Optional[int] = None,
+    simulate_psf_only: bool = False,
+    lam_detection: Optional[float] = .510,
+    skip_remove_background: bool = False,
+    use_theoretical_widefield_simulator: bool = False,
+    denoiser: Optional[Path] = None,
+    denoiser_window_size: tuple = (32, 64, 64),
+    simulate_samples: bool = False,
+    estimated_object_gaussian_sigma: float = 0,
+):
+    modelspecs = backend.load_metadata(modelpath)
+
+    if outdir == Path('../evaluations'):
+        savepath = outdir / modelpath.with_suffix('').name / eval_sign / f'modeheatmaps'
+
+        if psf_type is not None:
+            savepath = Path(f"{savepath}/mode-{str(psf_type).replace('../lattice/', '').split('_')[0]}")
+
+        if simulate_psf_only:
+            savepath = savepath / 'psf'
+        else:
+            if num_beads is not None:
+                savepath = savepath / f'beads-{num_beads}'
+            else:
+                savepath = savepath / 'beads'
+
+        if distribution != '/':
+            savepath = Path(f'{savepath}/{distribution}_na_{str(na).replace("0.", "p")}')
+        else:
+            savepath = Path(f'{savepath}/na_{str(na).replace("0.", "p")}')
+    else:
+        savepath = outdir
+
+    savepath.mkdir(parents=True, exist_ok=True)
+
+    if datadir.suffix == '.csv':
+        df = pd.read_csv(datadir, header=0, index_col=0)
+    else:
+        df = iter_evaluate(
+            iter_num=iter_num,
+            modelpath=modelpath,
+            datapath=datadir,
+            savepath=savepath,
+            samplelimit=samplelimit,
+            na=na,
+            batch_size=batch_size,
+            photons_range=None,
+            npoints_range=(1, num_beads) if num_beads is not None else None,
+            eval_sign=eval_sign,
+            digital_rotations=digital_rotations,
+            plot=plot,
+            plot_rotations=plot_rotations,
+            psf_type=psf_type,
+            lam_detection=lam_detection,
+            skip_remove_background=skip_remove_background,
+            use_theoretical_widefield_simulator=use_theoretical_widefield_simulator,
+            simulate_psf_only=simulate_psf_only,
+            denoiser=denoiser,
+            denoiser_window_size=denoiser_window_size,
+            simulate_samples=simulate_samples,
+            estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
+        )
+
+    if 'aberration_umRMS' not in df.columns.values:
+        df['aberration_umRMS'] = np.nan
+        for idx in df.id.values:
+            df.loc[df.id == idx, 'aberration_umRMS'] = df[df.id == idx].iloc[0]['residuals_umRMS']
+
+    backup = df.copy()
+    df = backup[backup['iter_num'] == iter_num]
+    df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
+
+    for x in ['photons', 'photoelectrons']:
+
+        if x == 'photons':
+            label = f'Integrated photons'
+            xstep = 1e4
+            lims = (0, 10**5)
+            pbins = np.arange(lims[0], lims[-1] + xstep, xstep)
+        elif x == 'photoelectrons':
+            label = f'Integrated photoelectrons'
+            xstep = 1e4
+            lims = (0, 10**5)
+            pbins = np.arange(lims[0], lims[-1] + xstep, xstep)
+        df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
+
+        for agg in ['mean', 'median']:
+            bins = np.arange(0, 2.55, .05).round(2)
+            df['ibins'] = pd.cut(
+                df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection)),
+                bins,
+                labels=bins[1:],
+                include_lowest=True
+            )
+            rms_dataframe = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc=agg)
+            rms_dataframe = rms_dataframe.applymap(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
+            rms_dataframe.insert(0, 0, rms_dataframe.index.values.astype(df['residuals'].dtype))
+
+            plot_heatmap_rms(
+                rms_dataframe,
+                # histograms=df if x == 'photons' else None,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{agg}"),
+                label=label,
+                lims=lims,
+                xstep=xstep,
+                agg=agg,
+                sci=True,
+            )
+
+            bins = np.arange(0, 10.25, .25).round(2)
+            df['ibins'] = pd.cut(
+                df['aberration'],
+                bins,
+                labels=bins[1:],
+                include_lowest=True
+            )
+            dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc=agg)
+            dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
+
+            dataframe.to_csv(f'{savepath}_{x}_{agg}.csv')
+            logger.info(f'Saved: {savepath.resolve()}_{x}_{agg}.csv')
+
+            plot_heatmap_p2v(
+                dataframe,
+                # histograms=df if x == 'photons' else None,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{agg}"),
+                label=label,
+                hist_col='residuals',
+                sci=True,
+                lims=lims,
+                xstep=xstep,
+                agg=agg
+            )
+
+    return savepath
 
 @profile
 def evaluate_modes(

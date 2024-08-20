@@ -265,6 +265,31 @@ def main(args=None):
                 estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma,
                 simulate_psf_only=args.simulate_psf_only
             )
+        elif args.target == 'modeheatmap':
+            savepath = eval.modeheatmap(
+                iter_num=args.niter,
+                modelpath=args.model,
+                datadir=args.datadir,
+                outdir=args.outdir,
+                distribution=args.dist,
+                samplelimit=args.n_samples,
+                na=args.na,
+                batch_size=batch_size,
+                eval_sign=args.eval_sign,
+                digital_rotations=args.digital_rotations,
+                plot=args.plot,
+                plot_rotations=args.plot_rotations,
+                psf_type=args.psf_type,
+                lam_detection=args.wavelength,
+                num_beads=args.num_beads,
+                skip_remove_background=args.skip_remove_background,
+                use_theoretical_widefield_simulator=args.use_theoretical_widefield_simulator,
+                denoiser=args.denoiser,
+                simulate_samples=True if args.niter > 1 else args.simulate_samples,
+                estimated_object_gaussian_sigma=args.estimated_object_gaussian_sigma,
+                simulate_psf_only=args.simulate_psf_only
+            )
+
         elif args.target == 'fscheatmap':
             savepath = eval.fscheatmap(
                 iter_num=args.niter,
