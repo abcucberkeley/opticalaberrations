@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="profile" type="PythonConfigurationType" factoryName="Python" folderName="benchmark">
+  <configuration default="false" name="profile_models" type="PythonConfigurationType" factoryName="Python" folderName="benchmark">
     <module name="opticalaberrations" />
     <option name="ENV_FILES" value="" />
     <option name="INTERPRETER_OPTIONS" value="" />
@@ -28,7 +28,7 @@
         <list />
       </option>
       <option name="publishAllPorts" value="false" />
-      <option name="runCliOptions" value="--entrypoint= --rm --gpu all -u 1000 --privileged --ipc host --env PYTHONUNBUFFERED=1" />
+      <option name="runCliOptions" value="--entrypoint= --rm -u 1000 --privileged --ipc host --env PYTHONUNBUFFERED=1" />
       <option name="version" value="2" />
       <option name="volumeBindings">
         <list>

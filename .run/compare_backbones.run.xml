@@ -1,0 +1,54 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="compare_backbones" type="PythonConfigurationType" factoryName="Python" folderName="benchmark">
+    <module name="opticalaberrations" />
+    <option name="ENV_FILES" value="" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+    </envs>
+    <option name="SDK_HOME" value="" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+    <option name="IS_MODULE_SDK" value="true" />
+    <option name="ADD_CONTENT_ROOTS" value="true" />
+    <option name="ADD_SOURCE_ROOTS" value="true" />
+    <EXTENSION ID="DockerContainerSettingsRunConfigurationExtension">
+      <option name="envVars">
+        <list />
+      </option>
+      <option name="extraHosts">
+        <list />
+      </option>
+      <option name="links">
+        <list />
+      </option>
+      <option name="networkDisabled" value="false" />
+      <option name="networkMode" value="bridge" />
+      <option name="portBindings">
+        <list />
+      </option>
+      <option name="publishAllPorts" value="false" />
+      <option name="runCliOptions" value="--entrypoint= --rm -u 1000 --privileged --ipc host --env PYTHONUNBUFFERED=1" />
+      <option name="version" value="2" />
+      <option name="volumeBindings">
+        <list>
+          <DockerVolumeBindingImpl>
+            <option name="containerPath" value="/app/opticalaberrations" />
+            <option name="editable" value="true" />
+            <option name="hostPath" value="$PROJECT_DIR$" />
+            <option name="readOnly" value="false" />
+          </DockerVolumeBindingImpl>
+        </list>
+      </option>
+    </EXTENSION>
+    <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/benchmark.py" />
+    <option name="PARAMETERS" value="compare_backbones ../ --outdir ../evaluations --model_codename ConvNext-T --model_predictions ../evaluations/baseline-T.csv --model_codename ConvNext-S --model_predictions ../evaluations/baseline-S.csv --model_codename ConvNext-B --model_predictions ../evaluations/baseline-B.csv --model_codename ConvNext-L --model_predictions ../evaluations/baseline-L.csv --model_codename ViT-S/16 --model_predictions ../evaluations/vit-S16.csv --model_codename ViT-B/16 --model_predictions ../evaluations/vit-B16.csv --model_codename ViT-S/32 --model_predictions ../evaluations/vit-S32.csv --model_codename ViT-B/32 --model_predictions ../evaluations/vit-B32.csv --model_codename ViT-L/32 --model_predictions ../evaluations/vit-L32.csv --model_codename Ours-T --model_predictions ../evaluations/opticalnet-T.csv --model_codename Ours-S --model_predictions ../evaluations/opticalnet-S.csv --model_codename Ours-B --model_predictions ../evaluations/opticalnet-B.csv --model_codename Ours-L --model_predictions ../evaluations/opticalnet-L.csv --model_codename Ours-H --model_predictions ../evaluations/opticalnet-H.csv" />
+    <option name="SHOW_COMMAND_LINE" value="false" />
+    <option name="EMULATE_TERMINAL" value="false" />
+    <option name="MODULE_MODE" value="false" />
+    <option name="REDIRECT_INPUT" value="false" />
+    <option name="INPUT_FILE" value="" />
+    <method v="2" />
+  </configuration>
+</component>

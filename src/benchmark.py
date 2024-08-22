@@ -15,7 +15,7 @@ except ImportError as e:
 
 import cli
 import experimental_benchmarks
-from eval import compare_models, profile_models
+from eval import compare_backbones, compare_models, profile_models, profile_stages
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -218,6 +218,13 @@ def main(args=None):
             profile_stages(
                 models_codenames=args.model_codename,
                 predictions_paths=args.model_predictions,
+                outdir=args.outdir
+            )
+        elif args.target == 'compare_backbones':
+            compare_backbones(
+                models_codenames=args.model_codename,
+                predictions_paths=args.model_predictions,
+                iter_num=args.niter,
                 outdir=args.outdir
             )
         else:

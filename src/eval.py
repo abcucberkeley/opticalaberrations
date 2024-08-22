@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Optional, Union
 from matplotlib.ticker import FormatStrFormatter, PercentFormatter
 import matplotlib.colors as mcolors
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import seaborn as sns
 
 import matplotlib.pyplot as plt
@@ -1265,14 +1266,15 @@ def plot_heatmap_rms(
         if label == 'Integrated photons' or label == 'Integrated photoelectrons':
             x = histograms[
                 (histograms.pbins <= 1e5) &
-                (histograms.ibins >= .4) & (histograms.ibins <= .6)
+                (histograms.ibins >= .2) & (histograms.ibins <= .4)
             ]
 
             if color_label == 'Residuals':
-                xmax = .3
+                xmax = .4
                 binwidth = .02
+                step = .1
                 bins = np.arange(0, xmax + binwidth, binwidth)
-                xticks = np.arange(0, xmax+.05, .05)
+                xticks = np.arange(0, xmax + step, step)
             else:
                 if hist_col == 'confidence':
                     xmax = .15
@@ -1335,10 +1337,10 @@ def plot_heatmap_rms(
                 pass
 
             ax.add_patch(
-                plt.Rectangle((0, .4), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+                plt.Rectangle((0, .2), .2, .2, ec="k", fc="none", transform=ax.transAxes)
             )
             ax.text(
-                .1, .5, 'I',
+                .1, .3, 'I',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -1348,7 +1350,7 @@ def plot_heatmap_rms(
 
             x = histograms[
                 (histograms.pbins >= 2e5) & (histograms.pbins <= 3e5) &
-                (histograms.ibins >= .4) & (histograms.ibins <= .6)
+                (histograms.ibins >= .2) & (histograms.ibins <= .4)
             ]
 
             try:
@@ -1400,10 +1402,10 @@ def plot_heatmap_rms(
                 pass
 
             ax.add_patch(
-                plt.Rectangle((.4, .4), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+                plt.Rectangle((.4, .2), .2, .2, ec="k", fc="none", transform=ax.transAxes)
             )
             ax.text(
-                .5, .5, 'II',
+                .5, .3, 'II',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -1413,7 +1415,7 @@ def plot_heatmap_rms(
 
             x = histograms[
                 (histograms.pbins >= 4e5) & (histograms.pbins <= 5e5) &
-                (histograms.ibins >= .4) & (histograms.ibins <= .6)
+                (histograms.ibins >= .2) & (histograms.ibins <= .4)
             ]
 
             try:
@@ -1466,11 +1468,11 @@ def plot_heatmap_rms(
                 pass
 
             ax.add_patch(
-                plt.Rectangle((.8, .4), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+                plt.Rectangle((.8, .2), .2, .2, ec="k", fc="none", transform=ax.transAxes)
             )
 
             ax.text(
-                .9, .5, 'III',
+                .9, .3, 'III',
                 horizontalalignment='center',
                 verticalalignment='center',
                 fontsize=20,
@@ -1657,7 +1659,7 @@ def plot_heatmap_rms(
     ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
     plt.tight_layout()
 
-    savepath = Path(f'{savepath}_umRMS')
+    savepath = Path(f'{savepath}_rms')
     plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
     plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
@@ -1719,6 +1721,7 @@ def snrheatmap(
 
     if datadir.suffix == '.csv':
         df = pd.read_csv(datadir, header=0, index_col=0)
+        savepath = Path(str(datadir).replace('_predictions.csv', ''))
     else:
         df = iter_evaluate(
             iter_num=iter_num,
@@ -1753,6 +1756,8 @@ def snrheatmap(
     backup = df.copy()
     df = backup[backup['iter_num'] == iter_num]
     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
+    df['aberration_rms'] = df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
+    df['residuals_rms'] = df['residuals_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
 
     for x in ['photons', 'photoelectrons', 'counts', 'counts_p100', 'counts_p99']:
 
@@ -1779,16 +1784,16 @@ def snrheatmap(
 
         df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
 
+
         for agg in ['mean', 'median']:
             bins = np.arange(0, 2.55, .05).round(2)
             df['ibins'] = pd.cut(
-                df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection)),
+                df['aberration_rms'],
                 bins,
                 labels=bins[1:],
                 include_lowest=True
             )
-            rms_dataframe = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc=agg)
-            rms_dataframe = rms_dataframe.applymap(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
+            rms_dataframe = pd.pivot_table(df, values='residuals_rms', index='ibins', columns='pbins', aggfunc=agg)
             rms_dataframe.insert(0, 0, rms_dataframe.index.values.astype(df['residuals'].dtype))
 
             plot_heatmap_rms(
@@ -1796,13 +1801,14 @@ def snrheatmap(
                 histograms=df if x == 'photons' else None,
                 wavelength=modelspecs.lam_detection,
                 savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{agg}"),
+                hist_col='residuals_rms',
                 label=label,
                 lims=lims,
                 agg=agg,
                 sci=True,
             )
 
-            coverage = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc='count')
+            coverage = pd.pivot_table(df, values='residuals_rms', index='ibins', columns='pbins', aggfunc='count')
             plot_coverage(
                 coverage,
                 wavelength=modelspecs.lam_detection,
@@ -2709,9 +2715,10 @@ def modeheatmap(
     backup = df.copy()
     df = backup[backup['iter_num'] == iter_num]
     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
+    df['aberration_rms'] = df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
+    df['residuals_rms'] = df['residuals_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
 
     for x in ['photons', 'photoelectrons']:
-
         if x == 'photons':
             label = f'Integrated photons'
             xstep = 1e4
@@ -2727,13 +2734,12 @@ def modeheatmap(
         for agg in ['mean', 'median']:
             bins = np.arange(0, 2.55, .05).round(2)
             df['ibins'] = pd.cut(
-                df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection)),
+                df['aberration_rms'],
                 bins,
                 labels=bins[1:],
                 include_lowest=True
             )
-            rms_dataframe = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc=agg)
-            rms_dataframe = rms_dataframe.applymap(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
+            rms_dataframe = pd.pivot_table(df, values='residuals_rms', index='ibins', columns='pbins', aggfunc=agg)
             rms_dataframe.insert(0, 0, rms_dataframe.index.values.astype(df['residuals'].dtype))
 
             plot_heatmap_rms(
@@ -2741,6 +2747,7 @@ def modeheatmap(
                 # histograms=df if x == 'photons' else None,
                 wavelength=modelspecs.lam_detection,
                 savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{agg}"),
+                # hist_col='residuals_rms',
                 label=label,
                 lims=lims,
                 xstep=xstep,
@@ -3908,7 +3915,284 @@ def evaluate_uniform_background(
 
 
 @profile
-def compare_models(
+def profile_stages(
+        models_codenames: list,
+        predictions_paths: list,
+        outdir: Path = Path('benchmark'),
+        batch_size: int = 1024,
+        wavelength: float = .510
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    models = {
+        'baseline-L': 'ConvNext-L',
+        'opticalnet-T3216': 'Ours-T',
+        'opticalnet-S3216': 'Ours-S',
+        'opticalnet-B3216': 'Ours-B',
+        'opticalnet-L3216': 'Ours-L',
+        'opticalnet-H3216': 'Ours-H',
+        'opticalnet-G3216': 'Ours-G',
+        'opticalnet-P32323216-R2222-H8888': '32-32-32-16',
+        'opticalnet-P32321616-R2222-H8888': '32-32-16-16',
+        'opticalnet-P32161616-R2222-H8888': '32-16-16-16',
+        'opticalnet-P3216168-R2222-H8888': '32-16-16-8',
+        'opticalnet-P321688-R2222-H8888': '32-16-8-8',
+    }
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    dataframes = []
+    for codename, modeldir in zip(models_codenames, predictions_paths):
+        logger.info(f"Processing {codename}")
+        savepath = Path(f'{Path(modeldir).parent}/{codename}.csv')
+
+        if savepath.exists():
+            logger.info(f"Loading {savepath}")
+            df = pd.read_csv(savepath, header=0, index_col=0)
+        else:
+
+            try:
+                modeldir = Path(modeldir)
+                configfile = sorted(modeldir.rglob(r"*train/*tfevents*"))[0]
+                logfile = sorted(modeldir.rglob(r"*train.log"))[0]
+
+                with open(logfile) as f:
+                    log = f.readlines()
+                    train_config = [s for s in log if 'namespace' in s.lower()][-1]
+                    train_config = train_config[train_config.find('Namespace') + 10:-2].split(',')
+                    train_config = [name.split('=') for name in train_config]
+                    train_config = dict(
+                        (k.strip(), eval(v.strip().replace('PosixPath', 'Path'))) for k, v in train_config)
+
+                df = profile_utils.load_tf_logs(configfile)
+                model_config = ujson.loads(df.keras[0])
+
+                best = df['epoch_mse'].idxmin()
+
+                candidates = sorted(modeldir.rglob(rf"*keras/*epoch{best}.h5"))
+                if len(candidates) == 0:
+                    model = sorted(modeldir.rglob(rf"*keras/*.h5"))[-1]
+                else:
+                    model = candidates[0]
+
+                model = backend.load(model, model_arch=model_config['config']['name'])
+
+                df = df[[
+                    'step',
+                    'epoch_learning_rate',
+                    'epoch_loss',
+                    'epoch_mae',
+                    'epoch_mse',
+                    'epoch_root_mean_squared_error',
+                    'epoch_weight_decay',
+                    'wall_time'
+                ]]
+                df["wall_time"] = df.wall_time.apply(pd.Series)[0]
+                df["wall_clock"] = pd.to_datetime(df.wall_time, unit="s")
+
+                transformers_blocks = profile_utils.count_transformer_blocks(model=model)
+                heads = train_config['heads'].split('-')
+
+                num_heads, num_tokens = 0, 0
+                for i, (k, v) in enumerate(transformers_blocks.items()):
+                    ps = int(k.strip('p'))
+                    df[f'transformers_{k}'] = v
+                    df[f'heads_{k}'] = v * int(heads[i])
+
+                    tokens = v * model.input_shape[1] * np.product([
+                        s // p for s, p in zip(model.input_shape[2:], (ps, ps))
+                    ])
+                    logger.info(f"{tokens=}")
+                    df[f'transformers_{k}_tokens'] = tokens
+                    num_tokens += tokens
+                    num_heads += df[f'heads_{k}']
+
+                # warmup
+                profile_utils.measure_throughput(model, number_of_samples=10*1024, batch_size=batch_size)
+
+                df['latency'] = profile_utils.measure_latency(model, number_of_samples=1024)
+                df['throughput'] = profile_utils.measure_throughput(model, number_of_samples=10 * 1024,
+                                                                    batch_size=batch_size)
+                df['memory'] = profile_utils.measure_memory_usage(model=model, batch_size=batch_size)
+                df['gflops'] = profile_utils.measure_gflops(model)
+                df['params'] = model.count_params()
+                df['model'] = codename
+                df['dataset'] = train_config['dataset']
+                df['batch_size'] = train_config['batch_size']
+                df['num_tokens'] = num_tokens
+                df["training"] = (df.wall_clock - df.wall_clock[0]) / np.timedelta64(1, "h")
+                df['transformers'] = sum(transformers_blocks.values())
+                df['heads'] = num_heads
+
+                logger.info(f"Saving {savepath}")
+                df.to_csv(f'{Path(modeldir).parent}/{codename}.csv')
+
+            except Exception as e:
+                logger.error(e)
+                continue
+
+        dataset_size = 2000000
+        if 'batch_size' not in df.columns:
+            df['batch_size'] = 4096
+
+        training_steps_per_epoch = dataset_size // df['batch_size']
+
+        df['training_gflops'] = training_steps_per_epoch * df['batch_size'] * df['step'] * df['gflops'] * 3
+        # where the factor of 3 roughly approximates the backwards pass as being twice as compute-heavy as the forward pass
+        df["training_gflops"] = df["training_gflops"] * 1e-9
+        df['inference_time'] = 1e6 / df['throughput'] / 60  # convert to minutes
+        df['latency'] *= 1000  # convert to milliseconds
+        df['params'] /= 1000000  # convert to millions
+
+        df['cat'] = 'Baseline'
+        df.loc[df.model.str.match(r'opticalnet'), 'cat'] = 'Ours'
+        df.loc[df.model.str.match(r'vit.*16'), 'cat'] = 'ViT/16'
+        df.loc[df.model.str.match(r'vit.*32'), 'cat'] = 'ViT/32'
+        # df.loc[df.model.str.match(r'vit'), 'cat'] = 'ViT'
+        df.loc[df.model.str.match(r'baseline'), 'cat'] = 'ConvNext'
+        df.model = df.model.replace(models)
+
+        dataframes.append(df)
+
+    if len(models_codenames) > 1:
+        pass
+
+        df = pd.DataFrame()
+        for d in dataframes:
+            best = d['epoch_mse'].idxmin()
+            df = df.append(d.iloc[best].to_frame().T, ignore_index=True)
+
+
+        coi = [
+            'gflops',
+            'params',
+            'epoch_mse',
+            'training',
+            'memory',
+            'throughput',
+            'latency',
+        ]
+        titles = [
+            'Inference cost\n(GFLOPs)',
+            'Parameters\n(Millions)',
+            'Training loss\n($\mu$m rms)',
+            'Training hours\n8xH100s',
+            f'Memory (GB)\n[BS={batch_size}]',
+            f'Throughput\n(images/s)',
+            'Latency\n(ms/image)',
+        ]
+        df = df.sort_values('params', ascending=True)
+
+        fig, axes = plt.subplots(len(coi), 1, figsize=(8, 11), sharex=False, sharey=False)
+
+        for i, cc in enumerate(coi):
+                ax = axes[i]
+                ax = sns.barplot(
+                    data=df,
+                    x='model',
+                    y=coi[i],
+                    hue='model',
+                    palette='Greys',
+                    ax=ax,
+                    legend=False,
+                    width=.4,
+                    dodge=False,
+                    native_scale=False,
+                )
+
+                ax.set_ylabel(titles[i])
+                ax.set_xlabel('')
+
+                if i == len(coi) - 1:
+                    ax.set_xticklabels(df.model)
+                else:
+                    ax.set_xticklabels([])
+
+                for c in range(len(ax.containers)):
+                    if coi[i] == 'mean':
+                        fmt = '%.1f'
+                    elif coi[i] == 'epoch_mse':
+                        fmt = '%.2g'
+                    elif coi[i] == 'params':
+                        fmt = '%dM'
+                    elif coi[i] in ['num_tokens', 'params', 'throughput', 'batch_size', 'transformers', 'heads']:
+                        fmt = '%d'
+                    else:
+                        fmt = '%.1f'
+
+                    ax.bar_label(ax.containers[c], fontsize=8, fmt=fmt)
+
+                ax.grid(True, which="major", axis='y', lw=.15, ls='--', zorder=0)
+                ax.grid(True, which="minor", axis='y', lw=.1, ls='--', zorder=0)
+
+                if coi[i] == 'mean':
+                    ax.set_ylim(0, .5)
+                    ax.set_yticks(np.arange(0, .6, .1))
+                elif coi[i] == 'epoch_mse':
+                    ax.set_ylim(1e-7, 1e-5)
+                    ax.set_yscale('log')
+                elif coi[i] == 'training':
+                    ax.set_ylim(0, 24)  # (1 day of training)
+                    ax.set_yticks(range(0, 30, 6))
+                elif coi[i] == 'batch_size':
+                    ax.set_ylim(0, 4096)
+                    ax.set_yticks(range(0, 4096 + 1024, 1024))
+                elif coi[i] == 'training_gflops' or coi[i] == 'transformer_training_gflops':
+                    ax.set_ylim(0, 125)
+                    ax.set_yticks(range(0, 150, 25))
+                elif coi[i] == 'gflops' or coi[i] == 'transformer_gflops':
+                    ax.set_ylim(0, 3)
+                    ax.set_yticks(range(0, 4, 1))
+                elif coi[i] == 'params':
+                    ax.set_ylim(10, 80)
+                elif coi[i] == 'memory':
+                    ax.set_ylim(0, 3)
+                    ax.set_yticks(range(0, 4, 1))
+                elif coi[i] == 'num_tokens':
+                    ax.set_ylim(0, 2000)
+                elif coi[i] == 'transformers':
+                    ax.set_ylim(0, 32)
+                    ax.set_yticks([0, 6, 12, 18, 24, 30, 36])
+                elif coi[i] == 'heads':
+                    ax.set_ylim(0, 600)
+                    ax.set_yticks(range(0, 700, 100))
+                elif coi[i] == 'latency':
+                    ax.set_ylim(0, 15)
+                    ax.set_yticks(range(0, 20, 5))
+                elif coi[i] == 'throughput':
+                    ax.set_ylim(0, 3000)
+                    ax.set_yticks(range(0, 3500, 500))
+                else:
+                    ax.set_ylim(0, 1440)
+                    ax.set_yticks(range(0, 1500, 60))
+
+                ax.spines['left'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+
+        plt.tight_layout()
+
+        savepath = Path(f'{outdir}/profiles')
+        logger.info(savepath)
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+        table = df.set_index(['model'], drop=False)
+        table = table[coi].astype(float)
+        print(table)
+        print(table.to_latex(float_format="%.2g"))
+
+
+@profile
+def compare_backbones(
     models_codenames: list,
     predictions_paths: list,
     iter_num: int = 1,
@@ -4065,6 +4349,183 @@ def compare_models(
             plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
             plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
             plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
+
+@profile
+def compare_models(
+    models_codenames: list,
+    predictions_paths: list,
+    iter_num: int = 1,
+    photon_range: tuple = (5e4, 2e5),
+    aberration_range: tuple = (1, 3),
+    aberration_range_rms: tuple = (.2, .4),
+    outdir: Path = Path('benchmark'),
+    wavelength: float = .510,
+    colormap: str = "tab10"
+):
+    plt.rcParams.update({
+        'font.size': 10,
+        'axes.titlesize': 12,
+        'axes.labelsize': 12,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 10,
+        'xtick.major.pad': 10
+    })
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    dataframes = []
+    for codename, file in zip(models_codenames, predictions_paths):
+        df = pd.read_csv(file, header=0, index_col=0).drop_duplicates()
+        df['model'] = codename
+        logger.info(codename)
+        df = df[df['iter_num'] == iter_num]
+        df['aberration_rms'] = df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=wavelength))
+        df['residuals_rms'] = df['residuals_umRMS'].apply(partial(utils.microns2waves, wavelength=wavelength))
+        dataframes.append(df)
+
+    df = pd.concat(dataframes)
+
+    for c in [ 'residuals_rms', 'residuals', 'confidence_sum', 'confidence', ]:
+
+        if 'residuals' == c:
+            test = df[
+                (df.photons >= photon_range[0]) &
+                (df.photons <= photon_range[1]) &
+                (df.aberration >= aberration_range[0]) &
+                (df.aberration <= aberration_range[1])
+                ]
+        else:
+            test = df[
+                (df.photons >= photon_range[0]) &
+                (df.photons <= photon_range[1]) &
+                (df.aberration_rms >= aberration_range_rms[0]) &
+                (df.aberration_rms <= aberration_range_rms[1])
+            ]
+
+        if c == 'residuals_rms':
+            xmax = aberration_range_rms[0]
+            binwidth = .02
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            label = '\n'.join([
+                rf'Residual $\lambda$ RMS ($\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range_rms[0]}$\lambda$, {aberration_range_rms[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
+            ])
+            outliers = test[test[c] < xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+        elif c == 'residuals':
+            xmax = aberration_range[0]
+            binwidth = .25
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            label = '\n'.join([
+                rf'Residual $\lambda$ P2V ($\lambda = {int(wavelength * 1000)}~nm$)',
+                rf'Initial aberration [{aberration_range[0]}$\lambda$, {aberration_range[1]}$\lambda$] simulated with [{int(photon_range[0]//1000):d}k, {int(photon_range[1]//1000):d}k] integrated photons'
+            ])
+            outliers = test[test[c] < xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+        elif c == 'confidence':
+            xmax = .02
+            binwidth = .01
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            label = '\n'.join([
+                rf'Estimated error for the primary mode of aberration ($\hat{{\sigma}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+            ])
+            # outliers = test[test[c] == 0]
+            test[c].replace(0, test[c].max(), inplace=True)
+            outliers = test[test[c] < xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+        else:
+            xmax = .1
+            binwidth = .01
+            bins = np.arange(0, xmax + binwidth, binwidth)
+            label = '\n'.join([
+                rf'Estimated error for all modes of aberration ($\sum{{\sigma_i}}$, $\lambda = {int(wavelength * 1000)}~nm$)',
+            ])
+            # outliers = test[test[c] == 0]
+            test[c].replace(0, test[c].max(), inplace=True)
+            outliers = test[test[c] < xmax]
+            unconfident = outliers.groupby('model')['id'].count() / test.groupby('model')['id'].count()
+
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        histax = inset_axes(
+            ax,
+            width="100%",
+            height="100%",
+            bbox_to_anchor=(.4, .1, .3, .3),
+            bbox_transform=ax.transAxes,
+            loc='lower center'
+        )
+
+        g = sns.histplot(
+            ax=ax,
+            data=test,
+            x=c,
+            hue='model',
+            # bins=bins,
+            common_norm=False,
+            common_bins=True,
+            element="poly",
+            stat='proportion',
+            fill=False,
+            cumulative=True,
+            palette=colormap
+        )
+
+        sns.barplot(
+            x=unconfident[models_codenames].index,
+            y=unconfident[models_codenames].values,
+            ax=histax,
+            palette=colormap
+        )
+
+        ax.set_xlabel(label)
+        ax.set_ylabel('CDF')
+        ax.set_xlim(0, None)
+        ax.set_ylim(None, 1)
+        ax.set_yticks(np.arange(0, 1.1, .1))
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+        hist_step = .05
+        ylim = unconfident.min().round(2) - .01, unconfident.max().round(2)
+        yticks = np.arange(unconfident.min() - hist_step, unconfident.max() + hist_step, hist_step).round(2)
+
+        histax.set_ylim(ylim)
+        histax.set_yticks(yticks)
+        histax.set_xlabel(f'')
+        histax.set_ylabel('')
+        histax.set_xticks([])
+        histax.spines['top'].set_visible(False)
+        histax.spines['right'].set_visible(False)
+        histax.spines['left'].set_visible(False)
+        histax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+        edge = .02 if 'residuals' in c else .03
+        axins = ax.inset_axes(
+            [.3, .075, .45, .4],
+            xlim=(xmax, xmax),
+            ylim=(unconfident.min()-edge, unconfident.max()+edge),
+        )
+        ax.indicate_inset_zoom(axins, edgecolor="k")
+        axins.set_xticks([])
+        axins.set_yticks([])
+
+        sns.move_legend(g, title='Model', frameon=False, ncol=1, loc='lower right')
+        plt.tight_layout()
+
+        savepath = Path(f'{outdir}/compare_{c}')
+        logger.info(savepath)
+        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+
 
 
 @profile
