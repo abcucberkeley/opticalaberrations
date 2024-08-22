@@ -317,6 +317,7 @@ def phasenet_heatmap(
 
     if inputs.suffix == '.csv':
         results = pd.read_csv(inputs, header=0, index_col=0)
+        savepath = Path(str(inputs).replace('_predictions.csv', ''))
 
     elif Path(f'{savepath}_predictions.csv').exists():
         # continue from previous results, ignoring criteria
@@ -335,74 +336,75 @@ def phasenet_heatmap(
             psf_type=phasenetgen.psf_type,
             lam_detection=phasenetgen.lam_detection,
         )
-    
+
+        if iter_num != results['iter_num'].values.max():
+            prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
+            ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
+            residual_cols = [col for col in results.columns if col.endswith('_residual')]
+            previous = results[results['iter_num'] == iter_num - 1]  # previous iteration = iter_num - 1
+
+            # create realspace images for the current iteration
+            paths = utils.multiprocess(
+                func=partial(
+                    eval.generate_sample,
+                    iter_number=iter_num,
+                    savedir=savepath.resolve(),
+                    data=previous,
+                    psfgen=phasenetgen,
+                    no_phase=False,
+                    digital_rotations=None,
+                    simulate_psf_only=simulate_psf_only,
+                    denoiser=denoiser,
+                    denoiser_window_size=denoiser_window_size
+                ),
+                jobs=previous['id'].values,
+                desc=f'Generate samples ({savepath.resolve()})',
+                unit=' sample',
+                cores=-1
+            )
+
+            current = previous.copy()
+            current['iter_num'] = iter_num
+            current['file'] = paths
+            current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
+
+            current[ground_truth_cols] = previous[residual_cols]
+            current[prediction_cols] = np.array([
+                predict_phasenet(p, phasenet=phasenet, phasenetgen=phasenetgen)
+                for p in paths
+            ])
+
+            if eval_sign == 'positive_only':
+                current[ground_truth_cols] = current[ground_truth_cols].abs()
+                current[prediction_cols] = current[prediction_cols].abs()
+
+            current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
+
+            # compute residuals for each sample
+            current['residuals'] = current.apply(
+                lambda row: Wavefront(row[residual_cols].values, lam_detection=phasenetgen.lam_detection).peak2valley(
+                    na=na),
+                axis=1
+            )
+
+            current['residuals_umRMS'] = current.apply(
+                lambda row: np.linalg.norm(row[residual_cols].values),
+                axis=1
+            )
+
+            results = pd.concat([results, current], ignore_index=True, sort=False)
+
+            if savepath is not None:
+                try:
+                    results.to_csv(f'{savepath}_predictions.csv')
+                except PermissionError:
+                    savepath = f'{savepath}_x'
+                    results.to_csv(f'{savepath}_predictions.csv')
+                logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
+
     if 'object_gaussian_sigma' not in results.columns:
         results['object_gaussian_sigma'] = 0.
-    
-    if iter_num != results['iter_num'].values.max():
-        prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
-        ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
-        residual_cols = [col for col in results.columns if col.endswith('_residual')]
-        previous = results[results['iter_num'] == iter_num - 1]   # previous iteration = iter_num - 1
 
-        # create realspace images for the current iteration
-        paths = utils.multiprocess(
-            func=partial(
-                eval.generate_sample,
-                iter_number=iter_num,
-                savedir=savepath.resolve(),
-                data=previous,
-                psfgen=phasenetgen,
-                no_phase=False,
-                digital_rotations=None,
-                simulate_psf_only=simulate_psf_only,
-                denoiser=denoiser,
-                denoiser_window_size=denoiser_window_size
-            ),
-            jobs=previous['id'].values,
-            desc=f'Generate samples ({savepath.resolve()})',
-            unit=' sample',
-            cores=-1
-        )
-
-        current = previous.copy()
-        current['iter_num'] = iter_num
-        current['file'] = paths
-        current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
-
-        current[ground_truth_cols] = previous[residual_cols]
-        current[prediction_cols] = np.array([
-            predict_phasenet(p, phasenet=phasenet, phasenetgen=phasenetgen)
-            for p in paths
-        ])
-
-        if eval_sign == 'positive_only':
-            current[ground_truth_cols] = current[ground_truth_cols].abs()
-            current[prediction_cols] = current[prediction_cols].abs()
-
-        current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
-
-        # compute residuals for each sample
-        current['residuals'] = current.apply(
-            lambda row: Wavefront(row[residual_cols].values, lam_detection=phasenetgen.lam_detection).peak2valley(na=na),
-            axis=1
-        )
-
-        current['residuals_umRMS'] = current.apply(
-            lambda row: np.linalg.norm(row[residual_cols].values),
-            axis=1
-        )
-
-        results = pd.concat([results, current], ignore_index=True, sort=False)
-
-        if savepath is not None:
-            try:
-                results.to_csv(f'{savepath}_predictions.csv')
-            except PermissionError:
-                savepath = f'{savepath}_x'
-                results.to_csv(f'{savepath}_predictions.csv')
-            logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
-    
     if 'aberration_umRMS' not in results.columns.values:
         results['aberration_umRMS'] = np.nan
         for idx in results.id.values:
@@ -410,6 +412,8 @@ def phasenet_heatmap(
 
     df = results[results['iter_num'] == iter_num]
     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
+    df['aberration_rms'] = df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=phasenetgen.lam_detection))
+    df['residuals_rms'] = df['residuals_umRMS'].apply(partial(utils.microns2waves, wavelength=phasenetgen.lam_detection))
 
     for x in ['photons', 'photoelectrons', 'counts', 'counts_p100', 'counts_p99']:
 
@@ -435,17 +439,16 @@ def phasenet_heatmap(
             pbins = np.arange(lims[0], lims[-1]+50, 25)
 
         df['pbins'] = pd.cut(df[x], pbins, labels=pbins[1:], include_lowest=True)
-        
+
         for agg in ['mean', 'median']:
             bins = np.arange(0, 2.55, .05).round(2)
             df['ibins'] = pd.cut(
-                df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=phasenetgen.lam_detection)),
+                df['aberration_rms'],
                 bins,
                 labels=bins[1:],
                 include_lowest=True
             )
-            rms_dataframe = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc=agg)
-            rms_dataframe = rms_dataframe.applymap(partial(utils.microns2waves, wavelength=phasenetgen.lam_detection))
+            rms_dataframe = pd.pivot_table(df, values='residuals_rms', index='ibins', columns='pbins', aggfunc=agg)
             rms_dataframe.insert(0, 0, rms_dataframe.index.values.astype(df['residuals'].dtype))
             
             eval.plot_heatmap_rms(
@@ -454,12 +457,13 @@ def phasenet_heatmap(
                 wavelength=phasenetgen.lam_detection,
                 savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{agg}"),
                 label=label,
+                hist_col='residuals_rms',
                 lims=lims,
                 agg=agg,
                 sci=True,
             )
             
-            coverage = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc='count')
+            coverage = pd.pivot_table(df, values='residuals_rms', index='ibins', columns='pbins', aggfunc='count')
             eval.plot_coverage(
                 coverage,
                 wavelength=phasenetgen.lam_detection,
@@ -495,7 +499,7 @@ def phasenet_heatmap(
                 agg=agg
             )
             
-            coverage = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc='count')
+            coverage = pd.pivot_table(df, values='residuals', index='ibins', columns='pbins', aggfunc='count')
             eval.plot_coverage(
                 coverage,
                 wavelength=phasenetgen.lam_detection,
@@ -564,6 +568,7 @@ def phaseretrieval_heatmap(
     
     if inputs.suffix == '.csv':
         results = pd.read_csv(inputs, header=0, index_col=0)
+        savepath = Path(str(inputs).replace('_predictions.csv', ''))
     
     elif Path(f'{savepath}_predictions.csv').exists():
         # continue from previous results, ignoring criteria
@@ -582,81 +587,81 @@ def phaseretrieval_heatmap(
             psf_type=psfgen.psf_type,
             lam_detection=psfgen.lam_detection,
         )
-    
-    if denoiser is not None:
-        if isinstance(denoiser, Path):
-            logger.info(f"Loading denoiser model: {denoiser}")
-            denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
-            logger.info(f"{denoiser.name} loaded")
-    
+
+        if denoiser is not None:
+            if isinstance(denoiser, Path):
+                logger.info(f"Loading denoiser model: {denoiser}")
+                denoiser = CARE(config=None, name=denoiser.name, basedir=denoiser.parent)
+                logger.info(f"{denoiser.name} loaded")
+
+        if iter_num != results['iter_num'].values.max():
+            prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
+            ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
+            residual_cols = [col for col in results.columns if col.endswith('_residual')]
+            previous = results[results['iter_num'] == iter_num - 1]  # previous iteration = iter_num - 1
+
+            # create realspace images for the current iteration
+            paths = utils.multiprocess(
+                func=partial(
+                    eval.generate_sample,
+                    iter_number=iter_num,
+                    savedir=savepath.resolve(),
+                    data=previous,
+                    psfgen=psfgen,
+                    no_phase=False,
+                    digital_rotations=None,
+                    simulate_psf_only=simulate_psf_only,
+                    denoiser=denoiser,
+                    denoiser_window_size=denoiser_window_size
+                ),
+                jobs=previous['id'].values,
+                desc=f'Generate samples ({savepath.resolve()})',
+                unit=' sample',
+                cores=-1
+            )
+
+            current = previous.copy()
+            current['iter_num'] = iter_num
+            current['file'] = paths
+            current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
+
+            current[ground_truth_cols] = previous[residual_cols]
+            current[prediction_cols] = np.array([
+                predict_phaseretrieval(p, psfgen=psfgen)
+                for p in paths
+            ])
+
+            if eval_sign == 'positive_only':
+                current[ground_truth_cols] = current[ground_truth_cols].abs()
+                current[prediction_cols] = current[prediction_cols].abs()
+
+            current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
+
+            # compute residuals for each sample
+            current['residuals'] = current.apply(
+                lambda row: Wavefront(row[residual_cols].values, lam_detection=psfgen.lam_detection).peak2valley(
+                    na=na),
+                axis=1
+            )
+
+            current['residuals_umRMS'] = current.apply(
+                lambda row: np.linalg.norm(row[residual_cols].values),
+                axis=1
+            )
+
+            results = pd.concat([results, current], ignore_index=True, sort=False)
+
+            if savepath is not None:
+                try:
+                    results.to_csv(f'{savepath}_predictions.csv')
+                except PermissionError:
+                    savepath = f'{savepath}_x'
+                    results.to_csv(f'{savepath}_predictions.csv')
+                logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
+
     if 'object_gaussian_sigma' not in results.columns:
         results['object_gaussian_sigma'] = 0.
-    
-    if iter_num != results['iter_num'].values.max():
-        prediction_cols = [col for col in results.columns if col.endswith('_prediction')]
-        ground_truth_cols = [col for col in results.columns if col.endswith('_ground_truth')]
-        residual_cols = [col for col in results.columns if col.endswith('_residual')]
-        previous = results[results['iter_num'] == iter_num - 1]  # previous iteration = iter_num - 1
-        
-        # create realspace images for the current iteration
-        paths = utils.multiprocess(
-            func=partial(
-                eval.generate_sample,
-                iter_number=iter_num,
-                savedir=savepath.resolve(),
-                data=previous,
-                psfgen=psfgen,
-                no_phase=False,
-                digital_rotations=None,
-                simulate_psf_only=simulate_psf_only,
-                denoiser=denoiser,
-                denoiser_window_size=denoiser_window_size
-            ),
-            jobs=previous['id'].values,
-            desc=f'Generate samples ({savepath.resolve()})',
-            unit=' sample',
-            cores=-1
-        )
-        
-        current = previous.copy()
-        current['iter_num'] = iter_num
-        current['file'] = paths
-        current['file_windows'] = [utils.convert_to_windows_file_string(f) for f in paths]
-        
-        current[ground_truth_cols] = previous[residual_cols]
-        current[prediction_cols] = np.array([
-            predict_phaseretrieval(p, psfgen=psfgen)
-            for p in paths
-        ])
-        
-        if eval_sign == 'positive_only':
-            current[ground_truth_cols] = current[ground_truth_cols].abs()
-            current[prediction_cols] = current[prediction_cols].abs()
-        
-        current[residual_cols] = current[ground_truth_cols].values - current[prediction_cols].values
-        
-        # compute residuals for each sample
-        current['residuals'] = current.apply(
-            lambda row: Wavefront(row[residual_cols].values, lam_detection=psfgen.lam_detection).peak2valley(
-                na=na),
-            axis=1
-        )
-        
-        current['residuals_umRMS'] = current.apply(
-            lambda row: np.linalg.norm(row[residual_cols].values),
-            axis=1
-        )
-        
-        results = pd.concat([results, current], ignore_index=True, sort=False)
-        
-        if savepath is not None:
-            try:
-                results.to_csv(f'{savepath}_predictions.csv')
-            except PermissionError:
-                savepath = f'{savepath}_x'
-                results.to_csv(f'{savepath}_predictions.csv')
-            logger.info(f'Saved: {savepath.resolve()}_predictions.csv')
-    
+
     if 'aberration_umRMS' not in results.columns.values:
         results['aberration_umRMS'] = np.nan
         for idx in results.id.values:
@@ -664,7 +669,9 @@ def phaseretrieval_heatmap(
     
     df = results[results['iter_num'] == iter_num]
     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
-    
+    df['aberration_rms'] = df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=psfgen.lam_detection))
+    df['residuals_rms'] = df['residuals_umRMS'].apply(partial(utils.microns2waves, wavelength=psfgen.lam_detection))
+
     for x in ['photons', 'photoelectrons', 'counts', 'counts_p100', 'counts_p99']:
         
         if x == 'photons':
@@ -693,13 +700,12 @@ def phaseretrieval_heatmap(
         for agg in ['mean', 'median']:
             bins = np.arange(0, 2.55, .05).round(2)
             df['ibins'] = pd.cut(
-                df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=psfgen.lam_detection)),
+                df['aberration_rms'],
                 bins,
                 labels=bins[1:],
                 include_lowest=True
             )
-            rms_dataframe = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc=agg)
-            rms_dataframe = rms_dataframe.applymap(partial(utils.microns2waves, wavelength=psfgen.lam_detection))
+            rms_dataframe = pd.pivot_table(df, values='residuals_rms', index='ibins', columns='pbins', aggfunc=agg)
             rms_dataframe.insert(0, 0, rms_dataframe.index.values.astype(df['residuals'].dtype))
             
             eval.plot_heatmap_rms(
@@ -707,13 +713,14 @@ def phaseretrieval_heatmap(
                 histograms=df if x == 'photons' else None,
                 wavelength=psfgen.lam_detection,
                 savepath=Path(f"{savepath}_iter_{iter_num}_{x}_{agg}"),
+                hist_col='residuals_rms',
                 label=label,
                 lims=lims,
                 agg=agg,
                 sci=True,
             )
             
-            coverage = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='pbins', aggfunc='count')
+            coverage = pd.pivot_table(df, values='residuals_rms', index='ibins', columns='pbins', aggfunc='count')
             eval.plot_coverage(
                 coverage,
                 wavelength=psfgen.lam_detection,
