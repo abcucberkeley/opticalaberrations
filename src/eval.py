@@ -3716,7 +3716,7 @@ def evaluate_object_sizes(
     digital_rotations: bool = True,
     agg: str = 'median',
     na: float = 1.0,
-    photons: int = 40000,
+    photons: int = 100000,
     override: bool = False,
     denoiser: Optional[Path] = None,
     denoiser_window_size: tuple = (32, 64, 64),
@@ -3769,7 +3769,7 @@ def evaluate_object_sizes(
         savepath.mkdir(parents=True, exist_ok=True)
         savepath = savepath / f"ph{photons}"
         
-        sizes = np.arange(0, 6.5, .25).round(2)
+        sizes = np.arange(0, 5.25, .25).round(2)
         wavefront = Wavefront(zernikes, lam_detection=samplegen.lam_detection, rotate=False)
         psf = samplegen.single_psf(phi=wavefront, normed=True)
         psf /= np.sum(psf)
@@ -3841,45 +3841,64 @@ def evaluate_object_sizes(
             np.save(f"{savepath}_predictions", preds)
 
         residuals = ys - preds
+        aberration_wavefronts = [Wavefront(i, lam_detection=modelgen.lam_detection) for i in ys]
+        residual_wavefronts = [Wavefront(i, lam_detection=modelgen.lam_detection) for i in residuals]
+
         sizes = [s * samplegen.x_voxel_size * 1000 for s in sizes]
         df = pd.DataFrame([w for w in sizes], columns=['size'])
-        df['prediction'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in preds]
-        df['residuals'] = [Wavefront(i, lam_detection=modelgen.lam_detection).peak2valley(na=na) for i in residuals]
-        df['moi'] = ys[:, mode.index_ansi] - preds[:, mode.index_ansi]
+        df['aberration_p2v'] = [i.peak2valley(na=na) for i in aberration_wavefronts]
+        df['aberration_rms'] = [i.rms(waves=True) for i in aberration_wavefronts]
+        df['residuals_p2v'] = [i.peak2valley(na=na) for i in residual_wavefronts]
+        df['residuals_rms'] = [i.rms(waves=True) for i in residual_wavefronts]
+        df['moi_rms'] = microns2waves(ys[:, mode.index_ansi] - preds[:, mode.index_ansi],
+                                      wavelength=modelgen.lam_detection)
         df['counts'] = [np.sum(i) for i in inputs]
         df.to_csv(f'{savepath}.csv')
         print(df)
 
-        fig, ax = plt.subplots(figsize=(8, 6))
+        for c, label, threshold in zip(
+                ['moi_rms', 'residuals_rms', 'residuals_p2v'],
+                [r'$\mu$m RMS', r'$\lambda$ RMS', r'$\lambda$ P2V'],
+                [.075, .075, .25]
+        ):
+            if threshold == .25:
+                limit = 1.5
+                step = .25
+            else:
+                limit = .3
+                step = .025
 
-        sns.regplot(
-            data=df,
-            x="size",
-            y="moi",
-            scatter=True,
-            truncate=False,
-            order=2,
-            color=".2",
-            ax=ax
-        )
-        
-        ax.set_yticks(np.arange(-1 * amp, amp + .025, .025))
-        ax.set_ylim(-1 * amp, amp)
-        ax.set_xlim(0, sizes[-1])
-        ax.axhline(y=0, color='r')
-        ax.set_ylabel(r'Residuals ($y - \hat{y}$) $\mu$m RMS')
-        # ax.set_ylabel(rf'Residuals ($\lambda = {int(gen.lam_detection * 1000)}~nm$)')
-        ax.set_xlabel(r'Gaussian kernel full width at half maximum (FWHM) $w$ [nm]')
-        ax.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0, alpha=.5)
-        ax.spines.right.set_visible(False)
-        ax.spines.top.set_visible(False)
+            fig, ax = plt.subplots(figsize=(8, 6))
 
-        secax = ax.secondary_xaxis('top', functions=(utils.fwhm2sigma, utils.sigma2fwhm))
-        secax.set_xlabel(r'Gaussian kernel ($\sigma = w / 2 \sqrt{2 \ln{2}}$) $\sigma$ [nm]')
+            sns.regplot(
+                data=df,
+                x="size",
+                y=c,
+                scatter=True,
+                truncate=False,
+                order=2,
+                color=".2",
+                ax=ax
+            )
 
-        plt.savefig(f'{savepath}.pdf', bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
-        plt.savefig(f'{savepath}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
+            ax.set_yticks(np.arange(-1 * limit, limit + step, step))
+            ax.set_ylim(-1 * limit, limit)
+            ax.set_xlim(0, sizes[-1])
+            ax.axhline(y=0, color='r')
+            ax.axhline(y=threshold, linestyle='--', color='C0')
+            ax.axhline(y=-1 * threshold, linestyle='--', color='C0')
+            ax.set_ylabel(rf'Residuals [{label}] ($\lambda = {int(modelgen.lam_detection * 1000)}~nm$)')
+            ax.set_xlabel(r'$\omega$ [nm]: Gaussian kernel full width at half maximum (FWHM)')
+            ax.grid(True, which="both", axis='y', lw=1, ls='--', zorder=0, alpha=.5)
+            ax.spines.right.set_visible(False)
+            ax.spines.top.set_visible(False)
+
+            secax = ax.secondary_xaxis('top', functions=(utils.fwhm2sigma, utils.sigma2fwhm))
+            secax.set_xlabel(r'$\sigma$ [nm]: Gaussian kernel ($\sigma = \omega / 2 \sqrt{2 \ln{2}}$)')
+
+            plt.savefig(f'{savepath}_{c}.pdf', bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}_{c}.png', dpi=300, bbox_inches='tight', pad_inches=.25)
+            plt.savefig(f'{savepath}_{c}.svg', dpi=300, bbox_inches='tight', pad_inches=.25)
 
     return savepath
 
