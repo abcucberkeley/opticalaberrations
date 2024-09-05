@@ -1146,6 +1146,9 @@ def plot_heatmap_p2v(
         ax.set_xticks(np.arange(lims[0], lims[1]+xstep/2, xstep/2), minor=True)
     elif label == 'Number of iterations':
         ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
+    else:
+        ax.set_xticks(np.arange(lims[0], lims[1] + xstep, xstep), minor=False)
+        ax.set_xticks(np.arange(lims[0], lims[1] + xstep / 2, xstep / 2), minor=True)
 
     if sci:
         ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0), useMathText=True)
@@ -1642,6 +1645,9 @@ def plot_heatmap_rms(
         ax.set_xticks(np.arange(lims[0], lims[1]+xstep/2, xstep/2), minor=True)
     elif label == 'Number of iterations':
         ax.set_xticks(np.arange(0, dataframe.columns.values.max()+1, 1), minor=False)
+    else:
+        ax.set_xticks(np.arange(lims[0], lims[1] + xstep, xstep), minor=False)
+        ax.set_xticks(np.arange(lims[0], lims[1] + xstep / 2, xstep / 2), minor=True)
 
     if sci:
         ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0), useMathText=True)
@@ -1957,34 +1963,94 @@ def densityheatmap(
             estimated_object_gaussian_sigma=estimated_object_gaussian_sigma
         )
 
-    df = df[df['iter_num'] == iter_num]
+    if 'aberration_umRMS' not in df.columns.values:
+        df['aberration_umRMS'] = np.nan
+        for idx in df.id.values:
+            df.loc[df.id == idx, 'aberration_umRMS'] = df[df.id == idx].iloc[0]['residuals_umRMS']
 
-    bins = np.arange(0, 10.25, .25).round(2)
-    df['ibins'] = pd.cut(
-        df['aberration'],
-        bins,
-        labels=bins[1:],
-        include_lowest=True
-    )
+    backup = df.copy()
+    df = backup[backup['iter_num'] == iter_num]
+    df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
+    df['aberration_rms'] = df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
+    df['residuals_rms'] = df['residuals_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
 
-    for col, label, lims in zip(
+    for col, label, lims, xstep in zip(
         ['neighbors', 'distance'],
         ['Number of objects', 'Average distance to nearest neighbor (microns)'],
-        [(1, 150), (0, 2)]
+        [(0, 150), (0, 2)],
+        [10, .25],
     ):
-        dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns=col, aggfunc=agg)
-        dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals'].dtype))
-        dataframe.to_csv(f'{savepath}.csv')
-        logger.info(f'Saved: {savepath.resolve()}.csv')
+        for agg in ['mean', 'median']:
+            bins = np.arange(0, 2.55, .05).round(2)
+            df['ibins'] = pd.cut(
+                df['aberration_rms'],
+                bins,
+                labels=bins[1:],
+                include_lowest=True
+            )
+            rms_dataframe = pd.pivot_table(df, values='residuals_rms', index='ibins', columns=col, aggfunc=agg)
 
-        plot_heatmap_p2v(
-            dataframe,
-            wavelength=modelspecs.lam_detection,
-            savepath=Path(f'{savepath}_iter_{iter_num}_{col}'),
-            label=label,
-            lims=lims,
-            agg=agg
-        )
+            plot_heatmap_rms(
+                rms_dataframe,
+                histograms=None,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{col}_{agg}"),
+                hist_col='residuals_rms',
+                label=label,
+                lims=lims,
+                xstep=xstep,
+                agg=agg,
+                sci=False,
+            )
+
+            coverage = pd.pivot_table(df, values='residuals_rms', index='ibins', columns=col, aggfunc='count')
+            plot_coverage(
+                coverage,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{col}_coverage"),
+                label=label,
+                lims=lims,
+                xstep=xstep,
+                sci=False,
+                p2v=False
+            )
+
+            bins = np.arange(0, 10.25, .25).round(2)
+            df['ibins'] = pd.cut(
+                df['aberration'],
+                bins,
+                labels=bins[1:],
+                include_lowest=True
+            )
+            dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns=col, aggfunc=agg)
+
+            dataframe.to_csv(f'{savepath}_{agg}.csv')
+            logger.info(f'Saved: {savepath.resolve()}_{col}_{agg}.csv')
+
+            plot_heatmap_p2v(
+                dataframe,
+                histograms=None,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{col}_{agg}"),
+                label=label,
+                hist_col='residuals',
+                sci=False,
+                lims=lims,
+                xstep=xstep,
+                agg=agg
+            )
+
+            coverage = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns=col, aggfunc='count')
+            plot_coverage(
+                coverage,
+                wavelength=modelspecs.lam_detection,
+                savepath=Path(f"{savepath}_iter_{iter_num}_{col}_coverage"),
+                label=label,
+                lims=lims,
+                xstep=xstep,
+                sci=False,
+                p2v=True
+            )
 
     return savepath
 
@@ -2014,8 +2080,8 @@ def objectsizeheatmap(
     denoiser_window_size: tuple = (32, 64, 64),
     simulate_samples: bool = False,
     estimated_object_gaussian_sigma: float = 0,
-    lims: tuple = (0, 2),
-    label: str = r'Gaussian $\sigma$'
+    lims: tuple = (60, 250),
+    label: str = r'Gaussian kernel $\sigma = \dfrac{\text{FWHM}}{2 \sqrt{2 \ln{2}}}$ [nm]'
 ):
     modelspecs = backend.load_metadata(modelpath)
     
@@ -2076,6 +2142,7 @@ def objectsizeheatmap(
     df['photoelectrons'] = utils.photons2electrons(df['photons'], quantum_efficiency=.82)
     df['aberration_rms'] = df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
     df['residuals_rms'] = df['residuals_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
+    df['object_gaussian_sigma_nm'] = df['object_gaussian_sigma'].apply(lambda x: x * modelspecs.x_voxel_size * 1000)
 
     df = df[df['iter_num'] == iter_num]
 
@@ -2087,7 +2154,7 @@ def objectsizeheatmap(
             labels=bins[1:],
             include_lowest=True
         )
-        rms_dataframe = pd.pivot_table(df, values='residuals_rms', index='ibins', columns='object_gaussian_sigma', aggfunc=agg)
+        rms_dataframe = pd.pivot_table(df, values='residuals_rms', index='ibins', columns='object_gaussian_sigma_nm', aggfunc=agg)
 
         plot_heatmap_rms(
             rms_dataframe,
@@ -2098,17 +2165,17 @@ def objectsizeheatmap(
             label=label,
             lims=lims,
             agg=agg,
-            sci=True,
+            sci=False,
         )
 
-        coverage = pd.pivot_table(df, values='residuals_rms', index='ibins', columns='object_gaussian_sigma', aggfunc='count')
+        coverage = pd.pivot_table(df, values='residuals_rms', index='ibins', columns='object_gaussian_sigma_nm', aggfunc='count')
         plot_coverage(
             coverage,
             wavelength=modelspecs.lam_detection,
             savepath=Path(f"{savepath}_iter_{iter_num}_coverage"),
             label=label,
             lims=lims,
-            sci=True,
+            sci=False,
             p2v=False
         )
 
@@ -2119,7 +2186,7 @@ def objectsizeheatmap(
             labels=bins[1:],
             include_lowest=True
         )
-        dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='object_gaussian_sigma', aggfunc=agg)
+        dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns='object_gaussian_sigma_nm', aggfunc=agg)
 
         dataframe.to_csv(f'{savepath}_{agg}.csv')
         logger.info(f'Saved: {savepath.resolve()}_{agg}.csv')
@@ -2131,25 +2198,25 @@ def objectsizeheatmap(
             savepath=Path(f"{savepath}_iter_{iter_num}_{agg}"),
             label=label,
             hist_col='residuals',
-            sci=True,
+            sci=False,
             lims=lims,
             agg=agg
         )
 
-        coverage = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='object_gaussian_sigma', aggfunc='count')
+        coverage = pd.pivot_table(df, values='residuals_umRMS', index='ibins', columns='object_gaussian_sigma_nm', aggfunc='count')
         plot_coverage(
             coverage,
             wavelength=modelspecs.lam_detection,
             savepath=Path(f"{savepath}_iter_{iter_num}_coverage"),
             label=label,
             lims=lims,
-            sci=True,
+            sci=False,
             p2v=True
         )
 
         try:
             for c in ['confidence', 'confidence_sum']:
-                dataframe = pd.pivot_table(df, values=c, index='ibins', columns='object_gaussian_sigma', aggfunc=agg)
+                dataframe = pd.pivot_table(df, values=c, index='ibins', columns='object_gaussian_sigma_nm', aggfunc=agg)
 
                 # replace unconfident predictions with max std
                 dataframe.replace(0, dataframe.max(), inplace=True)
@@ -2163,7 +2230,7 @@ def objectsizeheatmap(
                     savepath=Path(f"{savepath}_iter_{iter_num}_{c}_{agg}"),
                     label=label,
                     color_label='Standard deviation',
-                    sci=True,
+                    sci=False,
                     hist_col=c,
                     lims=lims,
                     agg=agg
