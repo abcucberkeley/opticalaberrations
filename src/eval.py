@@ -3850,15 +3850,17 @@ def evaluate_object_sizes(
         df['aberration_rms'] = [i.rms(waves=True) for i in aberration_wavefronts]
         df['residuals_p2v'] = [i.peak2valley(na=na) for i in residual_wavefronts]
         df['residuals_rms'] = [i.rms(waves=True) for i in residual_wavefronts]
-        df['moi_rms'] = microns2waves(ys[:, mode.index_ansi] - preds[:, mode.index_ansi],
-                                      wavelength=modelgen.lam_detection)
+        df['moi_rms'] = utils.microns2waves(
+            ys[:, mode.index_ansi] - preds[:, mode.index_ansi],
+            wavelength=modelgen.lam_detection
+        )
         df['counts'] = [np.sum(i) for i in inputs]
         df.to_csv(f'{savepath}.csv')
         print(df)
 
         for c, label, threshold in zip(
                 ['moi_rms', 'residuals_rms', 'residuals_p2v'],
-                [r'$\mu$m RMS', r'$\lambda$ RMS', r'$\lambda$ P2V'],
+                [r'$\lambda$ RMS', r'$\lambda$ RMS', r'$\lambda$ P2V'],
                 [.075, .075, .25]
         ):
             if threshold == .25:
