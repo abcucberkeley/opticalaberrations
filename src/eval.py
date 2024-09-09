@@ -1007,6 +1007,252 @@ def plot_heatmap_p2v(
             ax3.set_zorder(ax3t.get_zorder()+1)
             ax3.patch.set_visible(False)
 
+        elif label == 'Number of objects' or label == 'Average distance to nearest neighbor (nm)':
+            iname = 'neighbors' if label == 'Number of objects' else 'distance'
+            ilimit = 30 if label == 'Number of objects' else 400
+
+            x = histograms[
+                (histograms[iname] <= ilimit) &
+                (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
+            ]
+
+            if color_label == 'Residuals':
+                xmax = 3
+                binwidth = .25
+                bins = np.arange(0, xmax + binwidth, binwidth)
+                xticks = np.arange(0, xmax+.5, .5)
+            else:
+                if hist_col == 'confidence':
+                    xmax = .15
+                    binwidth = .01
+                    bins = np.arange(0, xmax + binwidth, binwidth)
+                    xticks = np.arange(0, xmax+.05, .05)
+                else:
+                    xmax = .3
+                    binwidth = .025
+                    bins = np.arange(0, xmax + binwidth, binwidth)
+                    xticks = np.arange(0, xmax+.05, .05)
+
+            try:
+                ax1t = ax1.twinx()
+                ax1t = sns.histplot(
+                    ax=ax1t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax1t.lines[0].set_color(kde_color)
+                ax1t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax1t.set_ylabel('KDE', color=kde_color)
+                ax1t.set_ylim(0, 30)
+
+                ax1 = sns.histplot(
+                    ax=ax1,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color=cdf_color,
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                )
+
+                ax1.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax1.set_ylabel('CDF', color=cdf_color)
+                ax1.set_ylim(0, 1)
+                ax1.set_yticks(np.arange(0, 1.2, .2))
+                ax1.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, label='Median', zorder=3)
+                ax1.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, label='Mean', zorder=3)
+                ax1.set_xlim(0, xmax)
+                ax1.set_xticks(xticks)
+                ax1.set_xlabel(color_label)
+                ax1.text(
+                    .9, .8, 'I',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax1.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((0, .3), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .1, .4, 'I',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            ilimit = (50, 100) if label == 'Number of objects' else (800, 1200)
+            x = histograms[
+                (histograms[iname] >= ilimit[0]) & (histograms[iname] <= ilimit[1]) &
+                (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
+            ]
+
+            try:
+                ax2t = ax2.twinx()
+                ax2t = sns.histplot(
+                    ax=ax2t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax2t.lines[0].set_color(kde_color)
+                ax2t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax2t.set_ylabel('KDE', color=kde_color)
+                ax2t.set_ylim(0, 30)
+
+                ax2 = sns.histplot(
+                    ax=ax2,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color=cdf_color,
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                )
+                ax2.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax2.set_ylabel('CDF', color=cdf_color)
+                ax2.set_ylim(0, 1)
+                ax2.set_yticks(np.arange(0, 1.2, .2))
+                ax2.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+                ax2.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
+                ax2.set_xlim(0, xmax)
+                ax2.set_xticks(xticks)
+                ax2.set_xlabel(color_label)
+                ax2.text(
+                    .9, .8, 'II',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax2.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((.4, .3), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .5, .4, 'II',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            ilimit = (120, 150) if label == 'Number of objects' else (1600, 2000)
+
+            x = histograms[
+                (histograms[iname] >= ilimit[0]) & (histograms[iname] <= ilimit[1]) &
+                (histograms.ibins >= 1.5) & (histograms.ibins <= 2.5)
+            ]
+
+            try:
+                ax3t = ax3.twinx()
+                ax3t = sns.histplot(
+                    ax=ax3t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax3t.lines[0].set_color(kde_color)
+                ax3t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax3t.set_ylabel('KDE', color=kde_color)
+                ax3t.set_ylim(0, 30)
+
+                ax3 = sns.histplot(
+                    ax=ax3,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color='k',
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                    zorder=3
+                )
+                ax3.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax3.set_ylabel('CDF', color=cdf_color)
+                ax3.set_ylim(0, 1)
+                ax3.set_yticks(np.arange(0, 1.2, .2))
+                ax3.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+                ax3.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
+                ax3.set_xlim(0, xmax)
+                ax3.set_xticks(xticks)
+                ax3.set_xlabel(color_label)
+                ax3.text(
+                    .9, .8, 'III',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax3.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((.8, .3), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+
+            ax.text(
+                .9, .4, 'III',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            if color_label == 'Residuals':
+                ax1.legend(frameon=False, ncol=1, loc='upper left')
+            else:
+                ax1.legend(frameon=False, ncol=1, loc='center right')
+
+            ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax2.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+            ax1.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+            ax2.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+            ax3.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+
+            ax1t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax2t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax3t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+
+            ax1.set_zorder(ax1t.get_zorder()+1)
+            ax1.patch.set_visible(False)
+            ax2.set_zorder(ax2t.get_zorder()+1)
+            ax2.patch.set_visible(False)
+            ax3.set_zorder(ax3t.get_zorder()+1)
+            ax3.patch.set_visible(False)
+
         elif label == f'Number of iterations':
 
             x = histograms[
@@ -1507,6 +1753,253 @@ def plot_heatmap_rms(
             ax3.set_zorder(ax3t.get_zorder()+1)
             ax3.patch.set_visible(False)
 
+        elif label == 'Number of objects' or label == 'Average distance to nearest neighbor (nm)':
+            iname = 'neighbors' if label == 'Number of objects' else 'distance'
+            ilimit = 30 if label == 'Number of objects' else 400
+            x = histograms[
+                (histograms[iname] <= ilimit) &
+                (histograms.ibins >= .2) & (histograms.ibins <= .4)
+            ]
+
+            if color_label == 'Residuals':
+                xmax = .4
+                binwidth = .02
+                step = .1
+                bins = np.arange(0, xmax + binwidth, binwidth)
+                xticks = np.arange(0, xmax + step, step)
+            else:
+                if hist_col == 'confidence':
+                    xmax = .15
+                    binwidth = .01
+                    bins = np.arange(0, xmax + binwidth, binwidth)
+                    xticks = np.arange(0, xmax+.05, .05)
+                else:
+                    xmax = .3
+                    binwidth = .025
+                    bins = np.arange(0, xmax + binwidth, binwidth)
+                    xticks = np.arange(0, xmax+.05, .05)
+
+            try:
+                ax1t = ax1.twinx()
+                ax1t = sns.histplot(
+                    ax=ax1t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax1t.lines[0].set_color(kde_color)
+                ax1t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax1t.set_ylabel('KDE', color=kde_color)
+                ax1t.set_ylim(0, 50)
+
+                ax1 = sns.histplot(
+                    ax=ax1,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color=cdf_color,
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                )
+
+                ax1.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax1.set_ylabel('CDF', color=cdf_color)
+                ax1.set_ylim(0, 1)
+                ax1.set_yticks(np.arange(0, 1.2, .2))
+                ax1.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, label='Median', zorder=3)
+                ax1.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, label='Mean', zorder=3)
+                ax1.set_xlim(0, xmax)
+                ax1.set_xticks(xticks)
+                ax1.set_xlabel(color_label)
+                ax1.text(
+                    .9, .8, 'I',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax1.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((0, .2), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .1, .3, 'I',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            ilimit = (50, 100) if label == 'Number of objects' else (800, 1200)
+
+            x = histograms[
+                (histograms[iname] >= ilimit[0]) & (histograms[iname] <= ilimit[1]) &
+                (histograms.ibins >= .2) & (histograms.ibins <= .4)
+            ]
+
+            try:
+                ax2t = ax2.twinx()
+                ax2t = sns.histplot(
+                    ax=ax2t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax2t.lines[0].set_color(kde_color)
+                ax2t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax2t.set_ylabel('KDE', color=kde_color)
+                ax2t.set_ylim(0, 50)
+
+                ax2 = sns.histplot(
+                    ax=ax2,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color=cdf_color,
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                )
+                ax2.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax2.set_ylabel('CDF', color=cdf_color)
+                ax2.set_ylim(0, 1)
+                ax2.set_yticks(np.arange(0, 1.2, .2))
+                ax2.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+                ax2.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
+                ax2.set_xlim(0, xmax)
+                ax2.set_xticks(xticks)
+                ax2.set_xlabel(color_label)
+                ax2.text(
+                    .9, .8, 'II',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax2.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((.4, .2), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+            ax.text(
+                .5, .3, 'II',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            ilimit = (120, 150) if label == 'Number of objects' else (1600, 2000)
+
+            x = histograms[
+                (histograms[iname] >= ilimit[0]) & (histograms[iname] <= ilimit[1]) &
+                (histograms.ibins >= .2) & (histograms.ibins <= .4)
+            ]
+
+            try:
+                ax3t = ax3.twinx()
+                ax3t = sns.histplot(
+                    ax=ax3t,
+                    data=x,
+                    x=hist_col,
+                    stat='percent',
+                    kde=True,
+                    bins=bins,
+                    color=hist_color,
+                    element="step",
+                )
+                ax3t.lines[0].set_color(kde_color)
+                ax3t.tick_params(axis='y', labelcolor=kde_color, color=kde_color)
+                ax3t.set_ylabel('KDE', color=kde_color)
+                ax3t.set_ylim(0, 50)
+
+                ax3 = sns.histplot(
+                    ax=ax3,
+                    data=x,
+                    x=hist_col,
+                    stat='proportion',
+                    color='k',
+                    bins=bins,
+                    element="poly",
+                    fill=False,
+                    cumulative=True,
+                    zorder=3
+                )
+                ax3.tick_params(axis='y', labelcolor=cdf_color, color=cdf_color)
+                ax3.set_ylabel('CDF', color=cdf_color)
+                ax3.set_ylim(0, 1)
+                ax3.set_yticks(np.arange(0, 1.2, .2))
+                ax3.axvline(np.median(x[hist_col]), c='C0', ls='--', lw=2, zorder=3)
+                ax3.axvline(np.mean(x[hist_col]), c='C1', ls=':', lw=2, zorder=3)
+                ax3.set_xlim(0, xmax)
+                ax3.set_xticks(xticks)
+                ax3.set_xlabel(color_label)
+                ax3.text(
+                    .9, .8, 'III',
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    fontsize=20,
+                    color='k',
+                    transform=ax3.transAxes
+                )
+            except IndexError:
+                pass
+
+            ax.add_patch(
+                plt.Rectangle((.8, .2), .2, .2, ec="k", fc="none", transform=ax.transAxes)
+            )
+
+            ax.text(
+                .9, .3, 'III',
+                horizontalalignment='center',
+                verticalalignment='center',
+                fontsize=20,
+                color='k',
+                transform=ax.transAxes
+            )
+
+            if color_label == 'Residuals':
+                ax1.legend(frameon=False, ncol=1, loc='upper left')
+            else:
+                ax1.legend(frameon=False, ncol=1, loc='center right')
+
+            ax1.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax2.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+            ax3.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+            ax1.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+            ax2.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+            ax3.xaxis.set_major_formatter(FormatStrFormatter('%g'))
+
+            ax1t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax2t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+            ax3t.yaxis.set_major_formatter(PercentFormatter(decimals=0))
+
+            ax1.set_zorder(ax1t.get_zorder()+1)
+            ax1.patch.set_visible(False)
+            ax2.set_zorder(ax2t.get_zorder()+1)
+            ax2.patch.set_visible(False)
+            ax3.set_zorder(ax3t.get_zorder()+1)
+            ax3.patch.set_visible(False)
+
         elif label == f'Number of iterations':
 
             x = histograms[
@@ -1915,6 +2408,8 @@ def densityheatmap(
     simulate_samples: bool = False,
     estimated_object_gaussian_sigma: float = 0,
 ):
+    fill_radius = .66
+
     modelspecs = backend.load_metadata(modelpath)
 
     if outdir == Path('../evaluations'):
@@ -1974,11 +2469,15 @@ def densityheatmap(
     df['aberration_rms'] = df['aberration_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
     df['residuals_rms'] = df['residuals_umRMS'].apply(partial(utils.microns2waves, wavelength=modelspecs.lam_detection))
 
+    single_bead_idx = df[df['distance'] == 0].index
+    df.loc[single_bead_idx, 'distance'] = modelspecs.psf_shape[0] * modelspecs.x_voxel_size * fill_radius
+    df['distance'] = df['distance'].apply(lambda x: x * 1000)
+
     for col, label, lims, xstep in zip(
         ['neighbors', 'distance'],
-        ['Number of objects', 'Average distance to nearest neighbor (microns)'],
-        [(0, 150), (0, 2)],
-        [10, .25],
+        ['Number of objects', 'Average distance to nearest neighbor (nm)'],
+        [(0, 150), (0, 2000)],
+        [10, 200],
     ):
         for agg in ['mean', 'median']:
             bins = np.arange(0, 2.55, .05).round(2)
@@ -1990,9 +2489,13 @@ def densityheatmap(
             )
             rms_dataframe = pd.pivot_table(df, values='residuals_rms', index='ibins', columns=col, aggfunc=agg)
 
+            if col == 'distance':
+                rms_dataframe.insert(0, 0, rms_dataframe.index.values.astype(df['residuals_rms'].dtype))
+                rms_dataframe = rms_dataframe.reindex(sorted(rms_dataframe.columns), axis=1).interpolate(axis=1)
+
             plot_heatmap_rms(
                 rms_dataframe,
-                histograms=None,
+                histograms=df,
                 wavelength=modelspecs.lam_detection,
                 savepath=Path(f"{savepath}_iter_{iter_num}_{col}_{agg}"),
                 hist_col='residuals_rms',
@@ -2024,12 +2527,17 @@ def densityheatmap(
             )
             dataframe = pd.pivot_table(df, values='residuals', index='ibins', columns=col, aggfunc=agg)
 
+            if col == 'distance':
+                dataframe.insert(0, 0, dataframe.index.values.astype(df['residuals_rms'].dtype))
+                dataframe = dataframe.reindex(sorted(dataframe.columns), axis=1).interpolate(axis=1)
+
+
             dataframe.to_csv(f'{savepath}_{agg}.csv')
             logger.info(f'Saved: {savepath.resolve()}_{col}_{agg}.csv')
 
             plot_heatmap_p2v(
                 dataframe,
-                histograms=None,
+                histograms=df,
                 wavelength=modelspecs.lam_detection,
                 savepath=Path(f"{savepath}_iter_{iter_num}_{col}_{agg}"),
                 label=label,
