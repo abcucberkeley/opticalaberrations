@@ -1732,7 +1732,7 @@ def plot_beads_dataset(
             13: "V-Astig2",
             14: "V-Quadrafoil",
         }
-        name = ' & '.join(ansi2name[int(a)] for a in set(ansi.split('-')))
+        name = ' & '.join(ansi2name[int(a)] for a in sorted(set(ansi.split('-'))))
         return name
 
     plt.rcParams.update({
@@ -1768,7 +1768,20 @@ def plot_beads_dataset(
         rf"moment_OTF_embedding_norm",
     ]
 
-    heatmaps = residuals.drop_duplicates(subset=['eval_file', 'na'])
+    duplicates = [
+        '05-03',
+        '06-03', '06-05',
+        '07-03', '07-05', '07-06',
+        '08-03', '08-05', '08-06', '08-07',
+        '09-03', '09-05', '09-06', '09-07', '09-08',
+        '10-03', '10-05', '10-06', '10-07', '10-08', '10-09',
+        '11-03', '11-05', '11-06', '11-07', '11-08', '11-09', '11-10',
+        '12-03', '12-05', '12-06', '12-07', '12-08', '12-09', '12-10', '12-11',
+        '13-03', '13-05', '13-06', '13-07', '13-08', '13-09', '13-10', '13-11', '13-12',
+        '14-03', '14-05', '14-06', '14-07', '14-08', '14-09', '14-10', '14-11', '14-12', '14-13',
+    ]
+
+    heatmaps = residuals.drop(residuals[residuals['modes'].isin(duplicates)].index).drop_duplicates(subset=['eval_file', 'na'])
     heatmaps = heatmaps[[
         *cois,
         "na",
@@ -1778,12 +1791,14 @@ def plot_beads_dataset(
         "mode_2"
     ]]
 
-    if len(nas) == 1:
-        rows = ['05-05', '03-05', '05-08', '10-12']
+    heatmaps['zernike_names'] = heatmaps['modes'].apply(rename_zernikes)
+
+    if 'si' not in str(savepath):
+        rows = ['03-08', '10-12', '05-06', '07-11']
         figsize = (16, 14)
     else:
-        rows = ['12-12', '05-07', '05-13', '09-11']
-        figsize = (16, 12)
+        rows = [ '08-14', '11-11', '05-07', '07-14']
+        figsize = (16, 14)
 
     for val, label in zip(cois, labels):
         fig = plt.figure(figsize=figsize)
@@ -1809,14 +1824,14 @@ def plot_beads_dataset(
                 zlabel = f"$Z_{{n={zernikes[0].n}}}^{{m={zernikes[0].m}}}$" \
                         f" + $Z_{{n={zernikes[1].n}}}^{{m={zernikes[1].m}}}$"
 
-            if len(nas) == 1:
+            if 'si' not in str(savepath):
                 k, klabel = results[('before', modes)], 'Iteration 0'
                 r1, r1label = results[('after0', modes)], 'Iteration 1'
                 r2, r2label = results[('after1', modes)], 'Iteration 2'
             else:
                 k, klabel = results[('before', modes)], 'Iteration 0'
                 r1, r1label = results[('after1', modes)], 'Iteration 2'
-                r2, r2label = results[('after3', modes)], 'Iteration 4'
+                r2, r2label = results[('after4', modes)], 'Iteration 5'
 
             wf_mip = fig.add_subplot(gs[i, 0])
             wf_wavefront = inset_axes(wf_mip, width="40%", height="40%", loc='lower right', borderpad=0)
@@ -1925,7 +1940,7 @@ def plot_beads_dataset(
             )
 
         for k, (heatmapax, na) in enumerate(zip(heatmaps_axes, nas)):
-            g = heatmaps[heatmaps['na'] == na].pivot(index="iteration_index", columns="modes",  values=val).T
+            g = heatmaps[heatmaps['na'] == na].pivot(index="iteration_index", columns="zernike_names",  values=val).T
 
             if custom_colormap  and 'p2v' in val:
                 levels = np.arange(0, 2, .01).round(2)
@@ -1975,7 +1990,7 @@ def plot_beads_dataset(
             )
 
             if k == len(nas) - 1:
-                heatmapax.set_yticklabels([rename_zernikes(idx) for idx in g.index])
+                heatmapax.set_yticklabels(g.index)
                 heatmapax.set_ylabel('Applied Zernike modes')
             else:
                 heatmapax.set_yticklabels([])

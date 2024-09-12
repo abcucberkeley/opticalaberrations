@@ -1054,7 +1054,7 @@ def eval_beads_dataset(
 
     logger.info(f'{savepath}.csv')
     vis.plot_beads_dataset(results, residuals, savepath=savepath, nas=[1.0])
-    vis.plot_beads_dataset(results, residuals, savepath=f"{savepath}_si", nas=[1.0, .85])
+    vis.plot_beads_dataset(results, residuals, savepath=f"{savepath}_si", nas=[1.0])
 
 
 def eval_cell_dataset(
