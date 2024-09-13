@@ -1065,6 +1065,26 @@ def eval_cell_dataset(
     precomputed: bool = False,
     plot_cells_heatmap: bool = True,
 ):
+
+    # for file in data.glob('*_wavefront_*.tif'):
+    #     fig, ax = plt.subplots(figsize=(4, 4))
+    #     phi = backend.load_sample(file)
+    #     mat = vis.plot_wavefront(
+    #         ax,
+    #         phi,
+    #         label=None,
+    #         vmin=-1,
+    #         vmax=1,
+    #         nas=[],
+    #         # hcolorbar=True,
+    #         vcolorbar=True,
+    #     )
+    #     ax.axis('off')
+    #     plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.15, wspace=.15)
+    #     plt.savefig(file.with_suffix('.svg'), dpi=300, bbox_inches='tight', pad_inches=.25, transparent=True)
+    #     logger.info(file.with_suffix('.svg'))
+
+
     if plot_cells_heatmap:
         savepath = Path(f'{data}/{data.name}')
         csv_data = Path(f'{savepath}_results.csv')
@@ -1088,6 +1108,7 @@ def eval_cell_dataset(
             results = np.load(npy_data, allow_pickle='TRUE').item()
             dataframe = pd.read_csv(csv_data, index_col=0, header=0)
             dataframe.modes = dataframe.modes.replace({'7-06': '07-06', '06-7': '06-07'})
+            dataframe = dataframe.drop_duplicates(subset=['eval_file', 'na'])
 
             # dpath = Path('../evaluations/opticalnet-15-YuMB-lambda510/signed/fscheatmaps/mode-YuMB/beads-1/na_1.0')
             # df1 = pd.read_csv(f'{dpath}_iter_1_data.csv', header=0, index_col=0)
@@ -1120,9 +1141,22 @@ def eval_cell_dataset(
             for state, modes in tqdm(results.keys(), desc='Calc RMS', total=len(results)):
                 idx = dataframe[(dataframe['state'] == int(state)) & (dataframe['modes'] == modes)].index
                 ex = results[state, modes]
-                dataframe.loc[idx, 'rms_gt'] = ex.get('gt_wavefront').rms(waves=True)
-                dataframe.loc[idx, 'rms_pred'] = ex.get('ml_wavefront').rms(waves=True)
-                dataframe.loc[idx, 'rms_residual'] = ex.get('diff_wavefront').rms(waves=True)
+
+                for na in [1.0, .95, .85]:
+                    i = dataframe.loc[idx][dataframe['na'] == na].index
+
+                    dataframe.loc[i, 'rms_gt'] = ex.get('gt_wavefront').wavefront_rms(na=na),
+                    dataframe.loc[i, 'rms_pred'] = ex.get('ml_wavefront').wavefront_rms(na=na)
+                    dataframe.loc[i, 'rms_residual'] = ex.get('diff_wavefront').wavefront_rms(na=na)
+
+                    dataframe.loc[i, 'p2v_gt'] = ex.get('gt_wavefront').peak2valley(na=na)
+                    dataframe.loc[i, 'p2v_pred'] = ex.get('ml_wavefront').peak2valley(na=na)
+                    dataframe.loc[i, 'p2v_residual'] = ex.get('diff_wavefront').peak2valley(na=na)
+
+            # print(dataframe[(dataframe.modes == '06-07')][['na', 'iteration_index', 'rms_gt', 'p2v_gt']].set_index('iteration_index').to_latex())
+            # print(dataframe[(dataframe.modes == '07-12')][['na', 'iteration_index', 'rms_gt', 'p2v_gt']].set_index('iteration_index').to_latex())
+            dataframe.to_csv(Path(f'{savepath}_results_full.csv'))
+
 
             # dataframe['fsc_file'] = dataframe.eval_file.str.replace('_rois_predictions_aggregated_zernike_coefficients_ml_eval.svg', '.json')
             # dataframe['fsc_file'] = dataframe.fsc_file.str.replace('/rotated', '')
