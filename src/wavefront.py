@@ -279,18 +279,26 @@ class Wavefront:
         return dist_from_center <= (na * wavefrontshape[0]) / 2
 
     def peak2valley(self, na: float = 1.0) -> float:
-        """ measure peak-to-valley of the aberration in waves"""
+        """ Measure peak-to-valley of the aberration in waves for a given NA """
         wavefront = self.wave(256)
         wavefront *= self.na_mask(na=na, wavefrontshape=wavefront.shape)
         return abs(np.nanmax(wavefront) - np.nanmin(wavefront))
 
-    def rms(self, waves: bool = False) -> float:
-        """ measure RMS of the aberration in microns"""
+    def wavefront_rms(self, na: float = 1.0) -> float:
+        """ Measure rms of the aberration in waves for a given NA """
+        wavefront = self.wave(256)
+        wavefront *= self.na_mask(na=na, wavefrontshape=wavefront.shape)
+        return np.sqrt(np.nanmean(wavefront**2))
+
+    def rms(self, waves: bool = True) -> float:
+        """
+        Measure vector norm of the zernike modes in microns/waves
+        (equivalent to RMS on all the values in the wavefront)
+        """
         v = np.linalg.norm(self.amplitudes)
 
         if waves:
             return self._microns2waves(v)
-
 
     def _fit_zernikes(self, wavefront, rotate=True, unit='waves'):
         wavefront = np.ascontiguousarray(imread(wavefront).astype(float))
