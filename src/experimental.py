@@ -1377,10 +1377,10 @@ def cluster_tiles(
 
     for z in valid_predictions.groups.keys():  # basically loop through all ztiles, unless no valid predictions exist
         ztile_preds = valid_predictions.get_group(z)
-        ztile_preds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
+        ztile_preds.drop(columns=['cluster', 'p2v', 'rms'], errors='ignore', inplace=True)
 
         ztile_stds = valid_stdevs.get_group(z)
-        ztile_stds.drop(columns=['cluster', 'p2v'], errors='ignore', inplace=True)
+        ztile_stds.drop(columns=['cluster', 'p2v', 'rms'], errors='ignore', inplace=True)
 
         # weight zernike coefficients by their mth order for clustering
         features = ztile_preds.copy().fillna(0)
@@ -1694,6 +1694,9 @@ def aggregate_tiles(
     psfs_590_dir = Path(f"{save_path.with_suffix('')}_{postfix}_psfs_590")
     psfs_590_dir.mkdir(exist_ok=True, parents=True)
 
+    fig, axes = plt.subplots(ncols=num_xtiles, nrows=num_ytiles, figsize=(4, 18), constrained_layout=True)
+    plt.subplots_adjust(hspace=0, wspace=0)
+
     for i, (z, y, x) in tqdm(
             enumerate(itertools.product(range(num_ztiles), range(num_ytiles), range(num_xtiles))),
             total=num_ztiles*num_ytiles*num_xtiles
@@ -1701,6 +1704,7 @@ def aggregate_tiles(
         name = f"z{z}-y{y}-x{x}"
 
         c = predictions.loc[(z, y, x), 'cluster']
+
         if not np.isnan(c):
             clusters_rgb[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.full((yw, xw), int(c))  # cluster group id
 
@@ -1713,6 +1717,18 @@ def aggregate_tiles(
                 expected_psf_heatmap[z, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.zeros((yw, xw))
             else:  # gets a color
                 w = wavefronts[(z, y, x)]
+
+                mat = vis.plot_wavefront(
+                    axes[y, x],
+                    w.wave(),
+                    label=None,
+                    vmin=-1,  # -np.nanmax(phi).round(1),
+                    vmax=1,  # np.nanmax(phi).round(1),
+                    nas=[],
+                    # hcolorbar=True,
+                    # vcolorbar=True,
+                )
+
 
                 if c != 0:
                     expected_w = Wavefront(
@@ -1766,6 +1782,12 @@ def aggregate_tiles(
             clusters3d_heatmap[z * zw:(z * zw) + zw, y * yw:(y * yw) + yw, x * xw:(x * xw) + xw] = np.full(
                 (zw, yw, xw),
                 int(c))  # filled with cluster id 0,1,2,3, 4,5,6,7, 8] 8 is unconfident, color gets assigned later
+
+        axes[y, x].axis('off')
+        axes[y, x].set_aspect("auto")
+
+    plt.subplots_adjust(hspace=0, wspace=0)
+    plt.savefig(f"{save_path.with_suffix('')}_{postfix}_wavefronts.svg", dpi=300, bbox_inches='tight', pad_inches=.25, transparent=True)
 
     imwrite(f"{save_path.with_suffix('')}_{postfix}_ids.tif", clusters3d_heatmap.astype(np.int32),
             compression='deflate', dtype=np.int32)

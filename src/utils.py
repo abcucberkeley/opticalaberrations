@@ -435,6 +435,7 @@ def create_multiindex_tile_dataframe(
             lam_detection=wavelength,
         )
         predictions.loc[index, 'p2v'] = wavefronts[index].peak2valley(na=1)
+        predictions.loc[index, 'rms'] = wavefronts[index].wavefront_rms(na=1)
 
     if describe:
         logger.info(
