@@ -11,7 +11,9 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import pytest
+import h5py
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 from src import psf_dataset
 from src import multipoint_dataset
@@ -442,6 +444,33 @@ def test_multimodal_dataset(kargs):
         'confocal',
         'widefield',
     ]
+
+    for f in psf_types:
+        f = Path(f"{Path(__file__).parent.parent.resolve()}/lattice/{Path(f).name}")
+
+        with h5py.File(f, 'r') as file:
+            lls_excitation_profile = file.get('DitheredxzPSFCrossSection')[:, 0]
+
+            fig, ax = plt.subplots(figsize=(2, 6))
+            exc_profile = np.squeeze(lls_excitation_profile)
+            # rrange = np.linspace(-13, 13, exc_profile.shape[0])
+            rrange = np.arange(-1*exc_profile.shape[0]//2, exc_profile.shape[0]//2, 1) * .488 / 1.33 * .1
+
+            mat = ax.plot(exc_profile, rrange, 'k', linewidth=2)
+
+            ax.set_xlim(right=0, left=1)
+            ax.set_xticks(np.arange(0, 1.2, .2))
+            # ax.set_ylim(-.2, .2)
+            ax.set_ylim(-6, 6)
+            # ax.set_yticks(np.arange(0, exc_profile.shape[0]+1, 4))
+            # ax.set_yticks([]) #np.arange(-.2, .22, .02)
+            ax.spines['left'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.yaxis.tick_right()
+            ax.grid(True, which="both", axis='both', lw=.25, ls='--', zorder=0)
+
+            plt.subplots_adjust(top=.9, bottom=.1, left=.1, right=.9, hspace=.15, wspace=.15)
+            plt.savefig(f.parent / f"{f.stem}.svg", dpi=300, bbox_inches='tight', pad_inches=.25, transparent=True)
 
     generators, upsampled_generators = {}, {}
     for psf in psf_types:
