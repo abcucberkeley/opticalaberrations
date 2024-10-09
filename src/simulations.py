@@ -437,7 +437,7 @@ def plot_training_dist(n_samples=200, batch_size=10, wavelength=.510):
                             label.set_visible(False)
 
             cax.set_xlabel(
-                f'Number of dominant modes\n'
+                f'Number of significant modes\n'
                 rf'$a_i / \sum_{{k=1}}^{{{psfargs["n_modes"]}}}{{a_{{k}}}} > 5\%$'
             )
 
@@ -489,7 +489,8 @@ def plot_training_dist(n_samples=200, batch_size=10, wavelength=.510):
 
                 cmap = sns.color_palette("viridis", len(modes))
                 rank = modes.argsort().argsort()
-                bars = sns.barplot(x=modes.index-1, y=modes.values, ax=zax, palette=np.array(cmap[::-1])[rank])
+                bars = sns.barplot(x=modes.index-1, y=modes.values, ax=zax, color='dimgrey')
+                # bars = sns.barplot(x=modes.index-1, y=modes.values, ax=zax, palette=np.array(cmap[::-1])[rank])
                 zax.set_ylim(0, .1)
 
                 if psfargs['n_modes'] > 15:
