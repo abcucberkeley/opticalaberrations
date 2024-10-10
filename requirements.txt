@@ -28,3 +28,4 @@ torchinfo
 timm
 apex
 deepspeed
+ray[all]
