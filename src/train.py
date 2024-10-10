@@ -4,15 +4,20 @@ matplotlib.use('Agg')
 import warnings
 warnings.filterwarnings("ignore")
 
+import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchinfo import summary
+from torch.optim.lr_scheduler import OneCycleLR, LinearLR
+from apex.optimizers import FusedLAMB
+
+from ray import init
+from ray.train import Checkpoint, CheckpointConfig, RunConfig, ScalingConfig, FailureConfig, report
+from ray.train.torch import TorchTrainer
+from ray.experimental.tqdm_ray import tqdm
+
 from accelerate import Accelerator
 from accelerate.utils import ProjectConfiguration
-from torch.optim.lr_scheduler import LRScheduler, OneCycleLR, LinearLR
-from apex.optimizers import FusedLAMB
-from torch.utils.data import DataLoader
-from accelerate.logging import get_logger
 
 import logging
 import ujson
@@ -23,7 +28,6 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Any, Optional
-from tqdm import tqdm
 
 from otfnet import OTFNet
 from convnext import ConvNeXtV2
@@ -35,7 +39,9 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ray")
+init(log_to_driver=True)
+os.environ["RAY_DEDUP_LOGS"] = "0"
 
 
 def summarize_model(model: nn.Module, inputs: tuple, batch_size: int, logdir: Path):
@@ -102,27 +108,36 @@ def summarize_model(model: nn.Module, inputs: tuple, batch_size: int, logdir: Pa
         )
 
 
-def train(
-    model: nn.Module,
-    opt: optim.Optimizer,
-    scheduler: LRScheduler,
-    train_dataloader: DataLoader,
-    epochs: int,
-    steps_per_epoch: int,
-    outdir: Path,
-    logdir: Path,
-    checkpointdir: Path,
-    loss_fn = nn.MSELoss(reduction='sum'),
-    mse_fn = nn.MSELoss(reduction='mean'),
-    finetune: Optional[Path] = None,
-):
-    logger = logging.getLogger(__name__)
+def train_worker(config: dict):
+
+    train_dataloader = data_utils.collect_dataset(
+        config['dataset'],
+        metadata=False,
+        modes=config['pmodes'],
+        distribution=config['distribution'],
+        embedding=config['embedding'],
+        samplelimit=config['samplelimit'],
+        max_amplitude=config['max_amplitude'],
+        no_phase=config['no_phase'],
+        lls_defocus=config['lls_defocus'],
+        defocus_only=config['defocus_only'],
+        photons_range=(config['min_photons'], config['max_photons']),
+        cpu_workers=config['cpu_workers'],
+        model_input_shape=config['inputs'],
+        batch_size=config['batch_size']
+    )
+    steps_per_epoch = len(train_dataloader)
+
+    loss_fn = nn.MSELoss(reduction='sum')
+    mse_fn = nn.MSELoss(reduction='mean')
+
     try:  # check if model already exists
-        checkpoints = [d for d in checkpointdir.glob('*') if d.is_dir()]
+        checkpoints = [d for d in config['checkpointdir'].glob('*') if d.is_dir()]
         checkpoints.sort(key=os.path.getctime)
         latest_checkpoint = checkpoints[-1]
 
-        training_history = pd.read_csv(logdir / 'logbook.csv', header=0, index_col=0)
+        logger.info(f"{config['logdir']/'logbook.csv'}: {Path(config['logdir']/'logbook.csv').exists()}")
+        training_history = pd.read_csv(config['logdir']/'logbook.csv', header=0, index_col=0)
         logger.info(f"Training history\n{training_history}")
 
         starting_epoch = training_history.index.values[-1]
@@ -131,212 +146,45 @@ def train(
         starting_epoch += 1
         step_logbook = {}
         epoch_logbook = training_history.to_dict(orient='index')
+
+        logger.info(f"Epochs left {config['epochs'] - starting_epoch}")
         restored = True
 
     except Exception as e:
         restored = False
-        logger.warning(f"No model found in {outdir}")
+        logger.warning(e)
+        logger.warning(f"No model found in {config['checkpointdir']}")
         best_loss, overall_step, starting_epoch = np.inf, 0, 0
         step_logbook, epoch_logbook = {}, {}
 
-    config = ProjectConfiguration(
-        project_dir=outdir,
-        logging_dir=logdir,
-        automatic_checkpoint_naming=False if restored or finetune is not None else True,
-        total_limit=5,
+
+    accelerator_config = ProjectConfiguration(
+        project_dir=config['outdir'],
+        logging_dir=config['logdir'],
     )
 
     accelerator = Accelerator(
-        mixed_precision='no',
+        mixed_precision="fp16" if config['amp'] else None,
         log_with="tensorboard",
-        project_dir=outdir,
-        project_config=config,
+        project_dir=config['outdir'],
+        project_config=accelerator_config,
         device_placement=True,
     )
-    logger = get_logger(__name__)
-    logger.info(accelerator.distributed_type, main_process_only=True)
-
-    model, opt, train_dataloader, scheduler = accelerator.prepare(model, opt, train_dataloader, scheduler)
-
-    accelerator.init_trackers(outdir)
-    accelerator.register_for_checkpointing(scheduler)
-
-    if finetune is not None:
-        logger.info(f"Finetuning pretrained model @ {finetune}", main_process_only=True)
-        accelerator.load_state(finetune)
-    elif restored:
-        logger.info(f"Loading pretrained model @ {latest_checkpoint}", main_process_only=True)
-        accelerator.load_state(latest_checkpoint)
-
-    with accelerator.autocast():
-        for epoch in range(starting_epoch, epochs, 1):
-            epoch_time = time.time()
-            model.train()
-            loss, mse = 0, 0
-
-            step_times = []
-            for step, (inputs, zernikes) in tqdm(
-                enumerate(train_dataloader),
-                total=len(train_dataloader),
-                desc=f"Epoch {epoch}/{epochs}",
-                disable=not accelerator.is_local_main_process,
-            ):
-                with accelerator.accumulate(model):
-                    step_time = time.time()
-                    lr = scheduler.get_lr()[0]
-
-                    outputs = model(inputs)
-                    step_loss = loss_fn(outputs, zernikes)
-                    loss += step_loss.detach().float()
-
-                    step_mse = mse_fn(outputs, zernikes)
-                    mse += step_mse.detach().float()
-
-                    accelerator.backward(step_loss)
-                    opt.step()
-                    opt.zero_grad()
-                    overall_step += 1
-                    step_timer = time.time() - step_time
-                    step_times.append(step_timer)
-
-                    step_logbook[overall_step] = {
-                        "step_loss": step_loss,
-                        "step_mse": step_mse,
-                        "step_lr": lr,
-                        "step_timer": step_timer,
-                    }
-                    accelerator.log(step_logbook[overall_step], step=overall_step)
-
-            scheduler.step()
-            loss = loss.item() / steps_per_epoch
-            mse = mse.item() / steps_per_epoch
-            step_timer = np.mean(step_times)
-            epoch_timer = time.time() - epoch_time
-            remaining_epochs = epochs - (epoch + 1)
-            eta = epoch_timer * remaining_epochs / 3600
-
-            logger.info(
-                f"[Epochs left {remaining_epochs} | ETA {eta:.2f}hrs] ({epoch}): "
-                f"{step_timer * 1000:.0f}ms/step - {epoch_timer:.0f}s/epoch - {loss=:.4g} - {mse=:.4g} - {lr=:.4g}",
-                main_process_only=True
-            )
-            epoch_logbook[epoch] = {
-                "epoch_loss": loss,
-                "epoch_mse": mse,
-                "epoch_lr": lr,
-                "epoch_timer": epoch_timer,
-            }
-            accelerator.log(epoch_logbook[epoch], step=epoch)
-            df = pd.DataFrame.from_dict(epoch_logbook, orient='index')
-            df.to_csv(logdir/'logbook.csv')
-
-            if loss < best_loss:
-                best_loss = loss
-                accelerator.save_state(checkpointdir/f'checkpoint_{epoch}')
-
-        accelerator.save_model(model, f'{outdir}/final_model')
-        accelerator.end_training()
 
 
-def train_model(
-    dataset: Path,
-    outdir: Path,
-    network: str = 'opticalnet',
-    distribution: str = '/',
-    embedding: str = 'spatial_planes',
-    samplelimit: Optional[int] = None,
-    max_amplitude: float = 1,
-    input_shape: int = 64,
-    batch_size: int = 32,
-    hidden_size: int = 768,
-    patches: list = [32, 16, 8, 8],
-    heads: list = [2, 4, 8, 16],
-    repeats: list = [2, 4, 6, 2],
-    depth_scalar: float = 1.,
-    width_scalar: float = 1.,
-    activation: str = 'gelu',
-    fixedlr: bool = False,
-    opt: str = 'AdamW',
-    lr: float = 5e-4,
-    wd: float = 5e-6,
-    dropout: float = .1,
-    warmup: int = 2,
-    epochs: int = 5,
-    modes: int = 15,
-    pmodes: Optional[int] = None,
-    min_photons: int = 1,
-    max_photons: int = 1000000,
-    roi: Any = None,
-    no_phase: bool = False,
-    lls_defocus: bool = False,
-    defocus_only: bool = False,
-    radial_encoding_period: int = 16,
-    radial_encoding_nth_order: int = 4,
-    positional_encoding_scheme: str = 'rotational_symmetry',
-    fixed_dropout_depth: bool = False,
-    stem: bool = False,
-    mul: bool = False,
-    finetune: Optional[Path] = None,
-    cpu_workers: int = -1,
-    wavelength: float = .510,
-    psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-    x_voxel_size: float = .125,
-    y_voxel_size: float = .125,
-    z_voxel_size: float = .2,
-    refractive_index: float = 1.33,
-):
-    outdir.mkdir(exist_ok=True, parents=True)
-    logdir = outdir / 'logs'
-    checkpointdir = outdir / 'checkpoints'
-    checkpointdir.mkdir(exist_ok=True, parents=True)
-    logdir.mkdir(exist_ok=True, parents=True)
-
-    network = network.lower()
-    opt = opt.lower()
-
-    if network == 'realspace':
-        inputs = (batch_size, input_shape, input_shape, input_shape, 1)
-    else:
-        inputs = (batch_size, 3 if no_phase else 6, input_shape, input_shape, 1)
-
-    if defocus_only:  # only predict LLS defocus offset
-        pmodes = 1
-    elif lls_defocus:  # add LLS defocus offset to predictions
-        pmodes = modes + 1 if pmodes is None else pmodes + 1
-    else:
-        pmodes = modes if pmodes is None else pmodes
-    
-    train_dataloader = data_utils.collect_dataset(
-        dataset,
-        metadata=False,
-        modes=pmodes,
-        distribution=distribution,
-        embedding=embedding,
-        samplelimit=samplelimit,
-        max_amplitude=max_amplitude,
-        no_phase=no_phase,
-        lls_defocus=lls_defocus,
-        defocus_only=defocus_only,
-        photons_range=(min_photons, max_photons),
-        cpu_workers=cpu_workers,
-        model_input_shape=inputs,
-        batch_size=batch_size
-    )
-    steps_per_epoch = len(train_dataloader)
-
-    if network == 'otfnet':
+    if config['network'] == 'otfnet':
         model = OTFNet(
             name='OTFNet',
-            input_shape=inputs,
-            modes=pmodes
+            input_shape=config['inputs'],
+            modes=config['pmodes']
         )
-    elif network == 'convnext':
+    elif config['network'] == 'convnext':
         model = ConvNeXtV2(
             name='ConvNeXtV2',
-            input_shape=inputs,
-            modes=pmodes,
-            depths=repeats,
-            dims=heads,
+            input_shape=config['inputs'],
+            modes=config['pmodes'],
+            depths=config['repeats'],
+            dims=config['heads'],
         )
     # elif network == 'prototype':
     #     model = OpticalTransformer(
@@ -421,63 +269,278 @@ def train_model(
     #         projections=heads,
     #     )
     else:
-        raise Exception(f'Network "{network}" is unknown.')
+        raise Exception(f'Network "{config["network"]}" is unknown.')
 
     summarize_model(
         model=model,
-        inputs=inputs,
-        batch_size=batch_size,
-        logdir=logdir,
+        inputs=config['inputs'],
+        batch_size=config['batch_size'],
+        logdir=config['logdir'],
     )
-    
-    if opt == 'lamb':
-        opt = FusedLAMB(model.parameters(), lr=lr, weight_decay=wd, betas=(0.9, 0.99))
-    elif opt.lower() == 'adamw':
-        opt = optim.AdamW(model.parameters(), lr=lr, weight_decay=wd, betas=(0.9, 0.99))
+
+    if config['opt'] == 'lamb':
+        opt = FusedLAMB(model.parameters(), lr=config['lr'], weight_decay=config['wd'], betas=(0.9, 0.99))
+    elif config['opt'].lower() == 'adamw':
+        opt = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=config['wd'], betas=(0.9, 0.99))
     else:
-        opt = optim.Adam(model.parameters(), lr=lr)
-    
-    if fixedlr:
+        opt = optim.Adam(model.parameters(), lr=config['lr'])
+
+    if config['fixedlr']:
         scheduler = LinearLR(
             opt,
             start_factor=1.0,
             end_factor=1.0,
-            total_iters=epochs,
+            total_iters=config['epochs'],
         )
-        logger.info(f"Training steps: [{steps_per_epoch * epochs}]")
+        logger.info(f"Training steps: [{steps_per_epoch * config['epochs']}]")
     else:
-        decay_epochs = epochs - warmup
-        total_steps = epochs * steps_per_epoch
-        warmup_steps = warmup * steps_per_epoch
+        decay_epochs = config['epochs'] - config['warmup']
+        total_steps = config['epochs'] * steps_per_epoch
+        warmup_steps = config['warmup'] * steps_per_epoch
         decay_steps = total_steps - warmup_steps
-        
+
         logger.info(
-            f"Training [{epochs=}: {total_steps=}] = "
-            f"({warmup=}: {warmup_steps=}) + ({decay_epochs=}: {decay_steps=})"
+            f"Training [{config['epochs']=}: {total_steps=}] = "
+            f"({config['warmup']=}: {warmup_steps=}) + ({decay_epochs=}: {decay_steps=})"
         )
-        
+
         scheduler = OneCycleLR(
             optimizer=opt,
-            max_lr=lr,
-            epochs=epochs,
+            max_lr=config['lr'],
+            epochs=config['epochs'],
             steps_per_epoch=steps_per_epoch,
             anneal_strategy='cos',
             pct_start=warmup_steps/total_steps,
         )
 
-    train(
-        model=model,
-        opt=opt,
-        scheduler=scheduler,
-        train_dataloader=train_dataloader,
-        epochs=epochs,
-        steps_per_epoch=steps_per_epoch,
-        outdir=outdir,
-        logdir=logdir,
-        checkpointdir=checkpointdir,
-        finetune=finetune
+    logger.info(accelerator.distributed_type)
+    model, opt, train_dataloader, scheduler = accelerator.prepare(model, opt, train_dataloader, scheduler)
+    accelerator.init_trackers(config['outdir'])
+    accelerator.register_for_checkpointing(scheduler)
+
+    if config['finetune'] is not None:
+        logger.info(f"Finetuning pretrained model @ {config['finetune']}")
+        accelerator.load_state(config['finetune'])
+    elif restored:
+        logger.info(f"Loading pretrained model @ {latest_checkpoint}")
+        accelerator.load_state(latest_checkpoint)
+
+    with accelerator.autocast():
+        for epoch in range(starting_epoch, config['epochs'], 1):
+            epoch_time = time.time()
+            model.train()
+            loss, mse = 0, 0
+
+            step_times = []
+            for step, (inputs, zernikes) in tqdm(
+                enumerate(train_dataloader),
+                total=len(train_dataloader),
+                desc=f"Epoch {epoch}/{config['epochs']}",
+            ):
+                opt.zero_grad()
+                step_time = time.time()
+                lr = scheduler.get_lr()[0]
+
+                outputs = model(inputs)
+                step_loss = loss_fn(outputs, zernikes)
+
+                accelerator.backward(step_loss)
+                opt.step()
+                opt.zero_grad()
+
+                loss += step_loss.detach().float()
+                step_mse = mse_fn(outputs, zernikes)
+                mse += step_mse.detach().float()
+
+                overall_step += 1
+                step_timer = time.time() - step_time
+                step_times.append(step_timer)
+
+                step_logbook[overall_step] = {
+                    "step_loss": step_loss,
+                    "step_mse": step_mse,
+                    "step_lr": lr,
+                    "step_timer": step_timer,
+                }
+                accelerator.log(step_logbook[overall_step], step=overall_step)
+
+            scheduler.step()
+            loss = loss.item() / steps_per_epoch
+            mse = mse.item() / steps_per_epoch
+            step_timer = np.mean(step_times)
+            epoch_timer = time.time() - epoch_time
+            remaining_epochs = config['epochs'] - (epoch + 1)
+            eta = epoch_timer * remaining_epochs / 3600
+
+            logger.info(
+                f"[Epochs left {remaining_epochs} | ETA {eta:.2f}hrs] ({epoch}): "
+                f"{step_timer * 1000:.0f}ms/step - {epoch_timer:.0f}s/epoch - {loss=:.4g} - {mse=:.4g} - {lr=:.4g}",
+            )
+            epoch_logbook[epoch] = {
+                "epoch_loss": loss,
+                "epoch_mse": mse,
+                "epoch_lr": lr,
+                "epoch_timer": epoch_timer,
+            }
+            df = pd.DataFrame.from_dict(epoch_logbook, orient='index')
+            df.to_csv(config['logdir']/'logbook.csv')
+
+            with config['outdir']/'checkpoints' as checkpointdir:
+
+                if accelerator.is_main_process:
+                    if loss < best_loss:
+                        best_loss = loss
+                        accelerator.save_state(config['checkpointdir']/f'best_state')
+                        unwrapped_model = accelerator.unwrap_model(model)
+                        torch.save(unwrapped_model.state_dict(), config['checkpointdir'] / f"best_model.bin")
+
+                checkpoint = Checkpoint.from_directory(checkpointdir)
+
+            report(
+                metrics={
+                    "lr": lr,
+                    "loss": loss,
+                    "mse": mse,
+                    "step_timer": step_timer,
+                    "epoch_timer": epoch_timer,
+                    "eta": eta,
+                },
+                checkpoint=checkpoint
+            )
+
+        accelerator.save_state(config['checkpointdir']/'last_state')
+        accelerator.end_training()
+
+
+def train_model(
+    dataset: Path,
+    outdir: Path,
+    network: str = 'opticalnet',
+    distribution: str = '/',
+    embedding: str = 'spatial_planes',
+    samplelimit: Optional[int] = None,
+    max_amplitude: float = 1,
+    input_shape: int = 64,
+    batch_size: int = 32,
+    fixedlr: bool = False,
+    opt: str = 'AdamW',
+    lr: float = 5e-4,
+    wd: float = 5e-6,
+    warmup: int = 2,
+    epochs: int = 5,
+    modes: int = 15,
+    pmodes: Optional[int] = None,
+    min_photons: int = 1,
+    max_photons: int = 1000000,
+    no_phase: bool = False,
+    lls_defocus: bool = False,
+    defocus_only: bool = False,
+    finetune: Optional[Path] = None,
+    fixed_precision: bool = False,
+    roi: Any = None,
+    hidden_size: int = 768,
+    patches: list = [32, 16, 8, 8],
+    heads: list = [2, 4, 8, 16],
+    repeats: list = [2, 4, 6, 2],
+    depth_scalar: float = 1.,
+    width_scalar: float = 1.,
+    activation: str = 'gelu',
+    dropout: float = .1,
+    radial_encoding_period: int = 16,
+    radial_encoding_nth_order: int = 4,
+    positional_encoding_scheme: str = 'rotational_symmetry',
+    fixed_dropout_depth: bool = False,
+    stem: bool = False,
+    mul: bool = False,
+    wavelength: float = .510,
+    psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+    x_voxel_size: float = .125,
+    y_voxel_size: float = .125,
+    z_voxel_size: float = .2,
+    refractive_index: float = 1.33,
+    cpu_workers: int = -1,
+):
+    outdir.mkdir(exist_ok=True, parents=True)
+    logdir = outdir / 'logs'
+    logdir.mkdir(exist_ok=True, parents=True)
+    checkpointdir = outdir / 'checkpoints'
+    checkpointdir.mkdir(exist_ok=True, parents=True)
+
+    network = network.lower()
+    opt = opt.lower()
+
+    if network == 'realspace':
+        inputs = (batch_size, input_shape, input_shape, input_shape, 1)
+    else:
+        inputs = (batch_size, 3 if no_phase else 6, input_shape, input_shape, 1)
+
+    if defocus_only:  # only predict LLS defocus offset
+        pmodes = 1
+    elif lls_defocus:  # add LLS defocus offset to predictions
+        pmodes = modes + 1 if pmodes is None else pmodes + 1
+    else:
+        pmodes = modes if pmodes is None else pmodes
+
+    amp = True if not fixed_precision else False
+
+    num_workers = 2
+    worker_batch_size = batch_size // num_workers
+
+    train_loop_config = {
+        "epochs": epochs,
+        "opt": opt,
+        "lr": lr,
+        "wd": wd,
+        "fixedlr": fixedlr,
+        "warmup": warmup,
+        "batch_size": worker_batch_size,
+        "pmodes": pmodes,
+        "inputs": inputs,
+        "network": network,
+        "distribution": distribution,
+        "embedding": embedding,
+        "max_amplitude": max_amplitude,
+        "samplelimit": samplelimit,
+        "min_photons": min_photons,
+        "max_photons": max_photons,
+        "lls_defocus": lls_defocus,
+        "defocus_only": defocus_only,
+        "no_phase": no_phase,
+        "finetune": finetune,
+        "dataset": dataset,
+        "outdir": outdir,
+        "logdir": logdir,
+        "checkpointdir": checkpointdir,
+        "cpu_workers": cpu_workers,
+        "amp": amp
+    }
+    scaling_config = ScalingConfig(
+        num_workers=num_workers,
+        use_gpu=True,
+        placement_strategy="SPREAD",
     )
 
+    checkpoint_config = CheckpointConfig(
+        num_to_keep=3,
+        checkpoint_score_attribute='loss',
+        checkpoint_score_order='min',
+    )
+
+    run_config = RunConfig(
+        log_to_file=str(logdir/"log.txt"),
+        checkpoint_config=checkpoint_config,
+        failure_config=FailureConfig(max_failures=0),
+        storage_path=outdir,
+    )
+
+    trainer = TorchTrainer(
+        train_loop_per_worker=train_worker,
+        train_loop_config=train_loop_config,
+        scaling_config=scaling_config,
+        run_config=run_config,
+    )
+
+    result = trainer.fit()
 
 def eval_model(
     dataset: Path,
@@ -810,7 +873,8 @@ def main(args=None):
             stem=args.stem,
             fixed_dropout_depth=args.fixed_dropout_depth,
             finetune=args.finetune,
-            cpu_workers=args.cpu_workers
+            cpu_workers=args.cpu_workers,
+            fixed_precision=args.fixed_precision
         )
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
