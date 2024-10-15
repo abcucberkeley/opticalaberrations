@@ -40,7 +40,6 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("ray")
-init(log_to_driver=True)
 os.environ["RAY_DEDUP_LOGS"] = "0"
 
 
@@ -459,6 +458,7 @@ def train_model(
     z_voxel_size: float = .2,
     refractive_index: float = 1.33,
     cpu_workers: int = -1,
+    gpu_workers: int = 1,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
     logdir = outdir / 'logs'
@@ -483,8 +483,7 @@ def train_model(
 
     amp = True if not fixed_precision else False
 
-    num_workers = 2
-    worker_batch_size = batch_size // num_workers
+    worker_batch_size = batch_size // gpu_workers
 
     train_loop_config = {
         "epochs": epochs,
@@ -512,10 +511,14 @@ def train_model(
         "logdir": logdir,
         "checkpointdir": checkpointdir,
         "cpu_workers": cpu_workers,
-        "amp": amp
+        "amp": amp,
+        "repeats": repeats,
+        "heads": heads,
+        "patches": patches,
+        "hidden_size": hidden_size,
     }
     scaling_config = ScalingConfig(
-        num_workers=num_workers,
+        num_workers=gpu_workers,
         use_gpu=True,
         placement_strategy="SPREAD",
     )
@@ -735,7 +738,7 @@ def parse_args(args):
     )
 
     train_parser.add_argument(
-        "--gpu_workers", default=-1, type=int, help='number of GPUs to use'
+        "--gpu_workers", default=1, type=int, help='number of GPUs to use'
     )
 
     train_parser.add_argument(
@@ -807,6 +810,11 @@ def main(args=None):
     args = parse_args(args)
     logger.info(args)
 
+    # head_node = str(os.environ["RAY_HEAD"])
+    # port = str(os.environ["RAY_PORT"])
+    # dashboard_port = str(os.environ["RAY_DASHBOARD_PORT"])
+    init(log_to_driver=True)
+
     if args.eval:
         eval_model(
             dataset=args.dataset,
@@ -873,8 +881,9 @@ def main(args=None):
             stem=args.stem,
             fixed_dropout_depth=args.fixed_dropout_depth,
             finetune=args.finetune,
+            fixed_precision=args.fixed_precision,
             cpu_workers=args.cpu_workers,
-            fixed_precision=args.fixed_precision
+            gpu_workers=args.gpu_workers,
         )
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")

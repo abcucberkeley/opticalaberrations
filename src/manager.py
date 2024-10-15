@@ -1,5 +1,6 @@
 from pathlib import Path
 from subprocess import call
+
 import cli
 
 
@@ -60,6 +61,11 @@ def parse_args(args):
     slurm.add_argument(
         "--cpus", default=5, type=int,
         help='number of CPUs to use for this job'
+    )
+
+    slurm.add_argument(
+        "--nodes", default=1, type=int,
+        help='number of node/host (s)'
     )
 
     slurm.add_argument(
@@ -136,12 +142,17 @@ def parse_args(args):
 
     lsf.add_argument(
         "--gpus", default=1, type=int,
-        help='number of GPUs to use for this job'
+        help='number of GPUs per node/host'
     )
 
     lsf.add_argument(
-        "--cpus", default=5, type=int,
+        "--cpus", default=2, type=int,
         help='number of CPUs to use for this job'
+    )
+
+    lsf.add_argument(
+        "--nodes", default=1, type=int,
+        help='number of node/host (s)'
     )
 
     lsf.add_argument(
@@ -265,12 +276,17 @@ def main(args=None):
         call([docker_job], shell=True)
 
     elif args.cmd == 'slurm':
-        env = 'python' if args.apptainer is not None else args.python
+        if args.nodes > 1:
+            gpu_workers = args.nodes * args.gpus
+        else:
+            gpu_workers = args.gpus
 
-        tasks = ""
-        for i, (t, n) in enumerate(zip(args.task, args.taskname)):
-            tasks = f" {env} {args.script} {t} --cpu_workers -1 --gpu_workers -1 --outdir {outdir/n}"
-            tasks += ' ; ' if i < len(args.task)-1 else ''
+        if args.nodes > 1:
+            cpu_workers = args.nodes * args.cpus
+        else:
+            cpu_workers = args.cpus
+
+        env = 'python' if args.apptainer is not None else args.python
 
         sjob = "/usr/bin/sbatch"
         sjob += f" --qos={args.qos}"
@@ -282,10 +298,16 @@ def main(args=None):
         if args.exclusive:
             sjob += f" --exclusive"
         else:
-            if args.gpus > 0:
-                sjob += f" --gres=gpu:{args.gpus}"
 
-            sjob += f" --cpus-per-task={args.cpus}"
+            if args.nodes > 1:
+                sjob += f" -n {cpu_workers}"
+                sjob += f" --ntasks-per-node=={args.cpus}"
+            else:
+                sjob += f" -n {cpu_workers}"
+
+            if args.gpus > 0:
+                sjob += f" --gres=gpu:{gpu_workers}"
+
             sjob += f" --mem='{args.mem}'"
 
         if args.nodelist is not None:
@@ -301,6 +323,11 @@ def main(args=None):
         sjob += f" --output={outdir}/{args.script.split('.')[0]}.log"
         sjob += f" --export=ALL"
 
+        tasks = ""
+        for i, (t, n) in enumerate(zip(args.task, args.taskname)):
+            tasks = f" {env} {args.script} {t} --cpu_workers {cpu_workers} --gpu_workers {gpu_workers} --outdir {outdir/n}"
+            tasks += ' ; ' if i < len(args.task)-1 else ''
+
         if args.apptainer is not None:
             sjob += f' --wrap="apptainer exec --nv --bind /clusterfs:/clusterfs \"{args.apptainer}\" {tasks}"'
         else:
@@ -310,21 +337,32 @@ def main(args=None):
         call([sjob], shell=True)
 
     elif args.cmd == 'lsf':
-        env = 'python' if args.apptainer is not None else args.python
+        if args.nodes > 1:
+            gpu_workers = args.nodes * args.gpus
+        else:
+            gpu_workers = args.gpus
 
-        tasks = ""
-        for i, (t, n) in enumerate(zip(args.task, args.taskname)):
-            tasks = f" {env} {args.script} {t} --cpu_workers -1 --gpu_workers -1 --outdir {outdir/n}"
-            tasks += ' ; ' if i < len(args.task)-1 else ''
+        if args.nodes > 1:
+            cpu_workers = args.nodes * args.cpus
+        else:
+            cpu_workers = args.cpus
+
+        env = 'python' if args.apptainer is not None else args.python
 
         sjob = 'bsub'
         sjob += f' -q {args.partition}'
 
+        if args.nodes > 1:
+            sjob += f" -n {cpu_workers}"
+            sjob += f' -R "span[ptile={args.cpus}]"'
+        else:
+            sjob += f" -n {cpu_workers}"
+
         if args.gpus > 0:
             if args.partition == 'gpu_a100':
-                sjob += f' -gpu "num={args.gpus}:nvlink=yes"'
+                sjob += f' -gpu "num={gpu_workers}:nvlink=yes"'
             else:
-                sjob += f' -gpu "num={args.gpus}"'
+                sjob += f' -gpu "num={gpu_workers}"'
 
         if args.dependency is not None:
             sjob += f' -w "done({args.name})"'
@@ -332,9 +370,13 @@ def main(args=None):
         if args.timelimit is not None:
             sjob += f" --We {args.timelimit} "
 
-        sjob += f" -n {args.cpus}"
         sjob += f" -J {args.name}"
         sjob += f" -o {outdir}/{args.script.split('.')[0]}.log"
+
+        tasks = ""
+        for i, (t, n) in enumerate(zip(args.task, args.taskname)):
+            tasks = f" {env} {args.script} {t} {cpu_workers} --gpu_workers {gpu_workers} --outdir {outdir/n}"
+            tasks += ' ; ' if i < len(args.task)-1 else ''
 
         if args.apptainer is not None:
             sjob += f' \"apptainer exec --nv --bind /groups/betzig/betziglab:/groups/betzig/betziglab \"{args.apptainer}\" {tasks}\"'
