@@ -108,6 +108,15 @@ def parse_args(args):
         help='path to apptainer (*.sif) image to use for this job'
     )
 
+    slurm.add_argument(
+        "--ray", action='store_true',
+        help='use a ray cluster'
+    )
+
+    slurm.add_argument(
+        "--ray_template", default='ray_slurm_cluster.sh', type=str,
+        help='path to bash script to start a ray cluster'
+    )
 
     lsf = subparsers.add_parser("lsf", help='use LSF to submit jobs')
 
@@ -185,63 +194,50 @@ def parse_args(args):
         help='path to apptainer (*.sif) image to use for this job'
     )
 
+    lsf.add_argument(
+        "--ray", action='store_true',
+        help='use a ray cluster'
+    )
 
-    docker = subparsers.add_parser("docker", help='use docker to run jobs on your local machine')
+    lsf.add_argument(
+        "--ray_template", default='ray_lsf_cluster.sh', type=str,
+        help='path to bash script to start a ray cluster'
+    )
 
-    docker.add_argument(
+
+    local = subparsers.add_parser("local", help='use docker to run jobs on your local machine')
+
+    local.add_argument(
         "script", type=str,
         help='path to script to run'
     )
 
-    docker.add_argument(
-        "--image", default='ghcr.io/abcucberkeley/opticalaberrations:develop_TF_CUDA_12_3', type=str,
+    local.add_argument(
+        "--image", default='ghcr.io/abcucberkeley/opticalaberrations:develop_Torch_CUDA_12_3', type=str,
         help='docker image to use for this job'
     )
 
-    docker.add_argument(
+    local.add_argument(
         "--python", default=f'python', type=str,
         help='path to ext python to run program with'
     )
 
-    docker.add_argument(
-        "--flags", default='', type=str,
+    local.add_argument(
+        "--task", action='append',
         help='any additional flags you want to run the script with'
     )
 
-    docker.add_argument(
+    local.add_argument(
+        "--taskname", action='append',
+        help='name for each task'
+    )
+
+    local.add_argument(
         "--outdir", default='../models', type=str,
         help='output directory'
     )
 
-    docker.add_argument(
-        "--name", default='train', type=str,
-        help='name for this job'
-    )
-
-
-    default = subparsers.add_parser("default", help='run a job using conda on your local machine')
-
-    default.add_argument(
-        "script", type=str,
-        help='path to script to run'
-    )
-
-    default.add_argument(
-        "--python", default=f'{Path.home()}/anaconda3/envs/ml/bin/python', type=str,
-        help='path to ext python to run program with'
-    )
-
-    default.add_argument(
-        "--flags", default='', type=str,
-        help='any additional flags you want to run the script with'
-    )
-
-    default.add_argument(
-        "--outdir", default=f'{Path.home()}/opticalaberrations/models', type=str,
-        help='output directory'
-    )
-
-    default.add_argument(
+    local.add_argument(
         "--name", default='train', type=str,
         help='name for this job'
     )
@@ -258,19 +254,17 @@ def main(args=None):
     profiler = f"/usr/bin/time -v -o {outdir}/{args.script.split('.')[0]}_profile.log "
 
     if args.cmd == 'local':
-        sjob = profiler
-        sjob += f"{args.python} "
-        sjob += f"{args.script} "
-        sjob += f" --outdir {outdir} {args.flags} 2>&1 | tee {outdir}/{args.script.split('.')[0]}.log"
+        outdir = f"/app/opticalaberrations/models/{args.name}"
 
-        print(sjob)
-        call([sjob], shell=True)
+        tasks = ""
+        for i, (t, n) in enumerate(zip(args.task, args.taskname)):
+            tasks = f" {args.python} {args.script} {t} --cpu_workers -1 --gpu_workers -1 --outdir {outdir}/{n}"
+            tasks += ' ; ' if i < len(args.task)-1 else ''
 
-    elif args.cmd == 'docker':
-        docker_job = "docker run --rm -it --gpus all --ipc=host "
+        docker_job = "docker run --network host -u 1000 --privileged --rm -it --gpus all --ipc=host --env PYTHONUNBUFFERED=1 --pull missing"
         docker_job += f" -v {Path.cwd().parent}:/app/opticalaberrations -w /app/opticalaberrations/src "
         docker_job += f" {args.image} "
-        docker_job += f" \"{args.python} {args.script} {args.flags}\" "
+        docker_job += f" \"{tasks}\" "
 
         print(docker_job)
         call([docker_job], shell=True)
@@ -301,7 +295,7 @@ def main(args=None):
 
             if args.nodes > 1:
                 sjob += f" -n {cpu_workers}"
-                sjob += f" --ntasks-per-node=={args.cpus}"
+                sjob += f" --cpus-per-task={args.cpus}"
             else:
                 sjob += f" -n {cpu_workers}"
 
@@ -329,7 +323,12 @@ def main(args=None):
             tasks += ' ; ' if i < len(args.task)-1 else ''
 
         if args.apptainer is not None:
-            sjob += f' --wrap="apptainer exec --nv --bind /clusterfs:/clusterfs \"{args.apptainer}\" {tasks}"'
+            ex = "apptainer exec --nv --bind /clusterfs:/clusterfs \"{args.apptainer}\""
+
+            if args.ray:
+                sjob += f' --wrap="{ex} {args.ray_template} -c {args.cpus}  -g {args.gpus}  -p \"{tasks}\"'
+            else:
+                sjob += f' --wrap="{ex} {tasks}"'
         else:
             sjob += f' --wrap=\"{tasks}\"'
 
@@ -375,11 +374,17 @@ def main(args=None):
 
         tasks = ""
         for i, (t, n) in enumerate(zip(args.task, args.taskname)):
-            tasks = f" {env} {args.script} {t} {cpu_workers} --gpu_workers {gpu_workers} --outdir {outdir/n}"
+            tasks = f" {env} {args.script} {t} --cpu_workers {cpu_workers} --gpu_workers {gpu_workers} --outdir {outdir/n}"
             tasks += ' ; ' if i < len(args.task)-1 else ''
 
         if args.apptainer is not None:
-            sjob += f' \"apptainer exec --nv --bind /groups/betzig/betziglab:/groups/betzig/betziglab \"{args.apptainer}\" {tasks}\"'
+            sjob += f' \"apptainer exec --nv --bind /groups/betzig/betziglab:/groups/betzig/betziglab \"{args.apptainer}\" '
+
+        if args.ray:
+            sjob += f' {args.ray_template}'
+            sjob += f' -c {args.cpus}'
+            sjob += f' -g {args.gpus}'
+            sjob += f' -p \"{tasks}\"'
         else:
             sjob += f' \"{tasks}\"'
 
