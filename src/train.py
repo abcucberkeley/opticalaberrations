@@ -483,6 +483,9 @@ def train_model(
 
     amp = True if not fixed_precision else False
 
+    if gpu_workers == -1:
+        gpu_workers = torch.cuda.device_count()
+
     worker_batch_size = batch_size // gpu_workers
 
     train_loop_config = {
