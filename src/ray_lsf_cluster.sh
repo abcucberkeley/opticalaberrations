@@ -1,127 +1,188 @@
 #!/bin/bash
+#
+# Run a Ray cluster job on the Janelia LSF cluster.
+# https://github.com/JaneliaSciComp/ray-janelia/blob/main/ray-janelia.sh
+# Adapted from https://github.com/IBMSpectrumComputing/ray-integration
+#
+# Parameters:
+# -c : user command to run on the cluster (if not specified, the cluster will be left running)
+#
+# Example usage:
+#
+# bsub -o std%J.out -e std%J.out -n 20 -R "span[ptile=4]" bash -i $PWD/ray-janelia.sh \
+#   -w "python /path/to/job.py --option" -n "ray-python"
+#
+# This will allocate 20 slots on the cluster, divide them into 20/4=5 nodes, and run the job.py
 
-############################## CHECK ARGS
+# Timeout (in seconds) whenever we're waiting on the cluster to converge to a new state
+TIMEOUT_SEC=180
 
-function getfreeport()
+# How often to check cluster state
+SLEEP_DELAY_SEC=5
+
+# Shut down the cluster by killing the job id
+function shutdown_cluster()
+{
+    echo "Shutting down the cluster"
+    bkill $LSB_JOBID
+}
+
+# Wait for the cluster at address $1 to have $2 nodes available, with timeout.
+function wait_for_nodes()
+{
+    local _address=$1
+    local _num_nodes=$2
+    start_time="$(date -u +%s)"
+    status_cmd="ray status --address $_address"
+    echo "Waiting for $_num_nodes nodes to be ready on cluster $_address"
+
+    while true; do
+
+        # from https://stackoverflow.com/questions/12321469/retry-a-bash-command-with-timeout
+        current_time="$(date -u +%s)"
+        elapsed_seconds=$(($current_time-$start_time))
+        if [ $elapsed_seconds -gt $TIMEOUT_SEC ]; then
+            echo "Cluster timeout after $TIMEOUT_SEC seconds"
+            shutdown_cluster
+            exit 1
+        fi
+
+        STATUS_OUTPUT=$($status_cmd)
+        STATUS_RC=$?
+
+        if [ $STATUS_RC -ne 0 ]; then
+            echo "Cluster status command failed with exit code $STATUS_RC"
+            shutdown_cluster
+            exit 1
+        fi
+
+        num_ready=$(echo "$STATUS_OUTPUT" | awk '/Healthy:/{ f = 1; next } /Pending:/{ f = 0 } f' | wc -l)
+        if [ $_num_nodes -eq $num_ready ]; then
+            echo "Cluster is ready with $num_ready nodes"
+            return 0
+        else
+            echo "$num_ready cluster nodes are ready (waiting for $_num_nodes)"
+        fi
+
+        sleep $SLEEP_DELAY_SEC
+    done
+}
+
+# Find an available network port to use
+function get_free_port()
 {
     CHECK="do while"
     while [[ ! -z $CHECK ]]; do
-        port=$(( ( RANDOM % 40000 )  + 20000 ))
+        port=$(( ( RANDOM % 40000 ) + 19999 ))
         CHECK=$(netstat -a | grep $port)
     done
     echo $port
 }
 
-function usage() {
-    echo "Usage: $0 [-c number of cpus per node <int>] [-g number of gpus per node <int>] [-p python command <string>]"
-    exit 1
-}
-
-while getopts ":c:g:p:" opt;do
-    case "${opt}" in
-      c) CPUS=${OPTARG};;
-      g) GPUS=${OPTARG};;
-      p) PYTHON_COMMAND=${OPTARG};;
-      ?) usage;;
+while getopts ":w:" option;do
+    case "${option}" in
+    w) w=${OPTARG}
+        workload=$w
+    ;;
+    *) echo "Did not supply the correct arguments"
+    ;;
     esac
 done
-shift $((OPTIND-1))
-
-if [ -z "${c}" ] || [ -z "${g}" ] || [ -z "${p}" ]; then
-    usage
-fi
-
-############################## SETUP PORTS
-
-RAY_PORT=6379
-if [[ ! -z $(netstat -a | grep $RAY_PORT) ]]; then
-  RAY_PORT=$(getfreeport)
-fi
-echo "Head node will use port: $RAY_PORT"
-export RAY_PORT
-
-HEAD_ADDRESS="${HEAD_NODE}:${RAY_PORT}"
-echo "Head address: $HEAD_ADDRESS"
-HEAD_ADDRESS RAY_PORT
-
-RAY_DASHBOARD_PORT=8265
-if [[ ! -z $(netstat -a | grep $RAY_PORT) ]]; then
-  RAY_DASHBOARD_PORT=$(getfreeport)
-fi
-echo "Dashboard will use port: $RAY_DASHBOARD_PORT"
-export RAY_DASHBOARD_PORT
-
-
-############################## FIND NODES/HOSTS
-
-echo "LSB_MCPU_HOSTS=$LSB_MCPU_HOSTS"
-echo "---- LSB_AFFINITY_HOSTFILE=$LSB_AFFINITY_HOSTFILE"
-cat $LSB_AFFINITY_HOSTFILE
-echo "---- End of LSB_AFFINITY_HOSTFILE"
-echo "---- LSB_DJOB_HOSTFILE=$LSB_DJOB_HOSTFILE"
-cat $LSB_DJOB_HOSTFILE
-echo "---- End of LSB_DJOB_HOSTFILE"
-
-export RAY_TMPDIR="/tmp/ray-$USER"
-echo "RAY_TMPDIR=$RAY_TMPDIR"
-mkdir -p $RAY_TMPDIR
 
 hosts=()
 for host in `cat $LSB_DJOB_HOSTFILE | uniq`
 do
-        echo "Adding host: $host"
-        hosts+=($host)
+    echo "Adding host: $host"
+    hosts+=($host)
 done
 
-HEAD_NODE=${hosts[0]}
-WORKERS=("${hosts[@]:1}")
-export HEAD_NODE
+echo
+port=$(get_free_port)
+echo "Head node will use port: " $port
+export port
+dashboard_port=$(get_free_port)
+echo "Dashboard will use port: " $dashboard_port
+echo
 
-############################## START HEAD NODE
-
-echo "Starting ray head node on: $HEAD_NODE"
-
-blaunch -z $HEAD_NODE ray start --head --port $RAY_PORT --dashboard-port $RAY_DASHBOARD_PORT --num-cpus $CPUS --num-gpus $GPUS &
-
-sleep 20
-
-while ! ray status --address $HEAD_ADDRESS
+IFS=' ' read -r -a array <<< "$LSB_MCPU_HOSTS"
+declare -A cpus_for_node
+i=0
+len=${#array[@]}
+while [ $i -lt $len ]
 do
-    sleep 3
+    key=${array[$i]}
+    value=${array[$i+1]}
+    cpus_for_node[$key]+=$value
+    i=$((i=i+2))
 done
+echo
 
-
-############################## ADD WORKER NODES
-
-echo "Adding the workers to head node: ${WORKERS[*]}"
-
-for host in "${WORKERS[@]}"
-do
-    echo "starting worker on: $host and using master node: $HEAD_NODE"
-
-    sleep 10
-    blaunch -z $host ray start --address $HEAD_ADDRESS --num-cpus $CPUS --num-gpus $GPUS &
-
-    sleep 10
-    while ! blaunch -z $host ray status --address $HEAD_ADDRESS
-    do
-        sleep 3
-    done
-done
-
-
-############################## RUN WORKLOAD
-
-$PYTHON_COMMAND
-
-
-############################## STOP WORKERS
-
-if [ $? != 0 ]; then
-    echo "Failure: $?"
-    exit $?
+if [ -z "$CUDA_VISIBLE_DEVICES" ]
+then
+    num_gpu_for_head=0
 else
-    echo "Done"
-    echo "Shutting down the Job"
-    bkill $LSB_JOBID
+    num_gpu_for_head=$(echo $CUDA_VISIBLE_DEVICES | awk -F "," "{print NF}")
+fi
+num_gpu_for_worker=0
+
+export head_node=${hosts[0]}
+cluster_address="$head_node:$port"
+client_server_port=10001
+
+echo "Starting Ray head node on $head_node"
+
+if [ -z $object_store_mem ]
+then
+    echo "  Using default object store mem of 4GB. Make sure your cluster has more than 4GB of memory."
+    object_store_mem=4000000000
+fi
+
+echo "  The object store memory: $object_store_mem bytes"
+
+num_cpu_for_head=${cpus_for_node[$head_node]}
+command_launch="blaunch -z $head_node ray start --head --port $port --ray-client-server-port $client_server_port --dashboard-host 0.0.0.0 --dashboard-port $dashboard_port --min-worker-port 18999 --max-worker-port 19999 --num-cpus $num_cpu_for_head --num-gpus $num_gpu_for_head --object-store-memory $object_store_mem"
+echo $command_launch
+$command_launch &
+
+# Wait for the head node to start up
+wait_for_nodes "$cluster_address" 1
+
+echo "The dashboard is now available at http://$head_node:$dashboard_port"
+
+workers=("${hosts[@]:1}")
+
+echo "Starting workers: ${workers[*]}"
+#run ray on worker nodes and connect to head
+for host in "${workers[@]}"
+do
+    echo "Starting worker on $host using master node $head_node"
+    num_cpu=${cpus_for_node[$host]}
+    command_for_worker="blaunch -z $host ray start --address $cluster_address --num-cpus $num_cpu --num-gpus $num_gpu_for_worker --object-store-memory $object_store_mem"
+    echo $command_for_worker
+    $command_for_worker &
+done
+
+# Wait for the head node to start up
+num_nodes=${#hosts[@]}
+wait_for_nodes "$cluster_address" "$num_nodes"
+
+# Run the user command if specified
+if [ -n "$workload" ]; then
+
+    echo "Running user workload"
+    echo $workload
+    $workload
+
+    retVal=$?
+    if [ $retVal -ne 0 ]; then
+        echo "Error: user command exited with code $retVal"
+        echo "Cluster will keep running to allow debugging"
+        exit $retVal
+    else
+        echo "Done"
+        shutdown_cluster
+    fi
+
+else
+    echo "Ray cluster with $num_nodes nodes is now running at ray://$head_node:$client_server_port with a dashboard at http://$head_node:$dashboard_port/"
 fi

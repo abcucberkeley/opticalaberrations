@@ -2,34 +2,26 @@
 
 ############################## CHECK ARGS
 
-function getfreeport()
+function get_free_port()
 {
     CHECK="do while"
     while [[ ! -z $CHECK ]]; do
-        port=$(( ( RANDOM % 40000 )  + 20000 ))
+        port=$(( ( RANDOM % 40000 ) + 19999 ))
         CHECK=$(netstat -a | grep $port)
     done
     echo $port
 }
 
-function usage() {
-    echo "Usage: $0 [-c number of cpus per node <int>] [-g number of gpus per node <int>] [-p python command <string>]"
-    exit 1
-}
-
-while getopts ":c:g:p:" opt;do
-    case "${opt}" in
-      c) CPUS=${OPTARG};;
-      g) GPUS=${OPTARG};;
-      p) PYTHON_COMMAND=${OPTARG};;
-      ?) usage;;
+while getopts ":c:" option;do
+    case "${option}" in
+    c) c=${OPTARG}
+        workload=$c
+    ;;
+    *) echo "Did not supply the correct arguments"
+    ;;
     esac
 done
-shift $((OPTIND-1))
 
-if [ -z "${c}" ] || [ -z "${g}" ] || [ -z "${p}" ]; then
-    usage
-fi
 
 ############################## FIND NODES/HOSTS
 
@@ -47,7 +39,7 @@ export HEAD_NODE
 
 RAY_PORT=6379
 if [[ ! -z $(netstat -a | grep $RAY_PORT) ]]; then
-  RAY_PORT=$(getfreeport)
+  RAY_PORT=$(get_free_port)
 fi
 echo "Head node will use port: $RAY_PORT"
 export RAY_PORT
@@ -58,7 +50,7 @@ export HEAD_ADDRESS
 
 RAY_DASHBOARD_PORT=8265
 if [[ ! -z $(netstat -a | grep $RAY_PORT) ]]; then
-  RAY_DASHBOARD_PORT=$(getfreeport)
+  RAY_DASHBOARD_PORT=$(get_free_port)
 fi
 echo "Dashboard will use port: $RAY_DASHBOARD_PORT"
 export RAY_DASHBOARD_PORT
@@ -86,4 +78,5 @@ done
 
 ############################## RUN WORKLOAD
 
-$PYTHON_COMMAND
+echo "Starting workload: $workload"
+$workload
