@@ -249,7 +249,7 @@ def main(args=None):
     args = parse_args(args)
 
     outdir = Path(f"{args.outdir}/{args.name}").resolve()
-    outdir.mkdir(exist_ok=True, parents=True)
+    # outdir.mkdir(exist_ok=True, parents=True)
 
     profiler = f"/usr/bin/time -v -o {outdir}/{args.script.split('.')[0]}_profile.log "
 
@@ -270,6 +270,8 @@ def main(args=None):
         call([docker_job], shell=True)
 
     elif args.cmd == 'slurm':
+        app = f'apptainer exec --nv --bind /clusterfs:/clusterfs \"{args.apptainer}\"'
+
         if args.nodes > 1:
             gpu_workers = args.nodes * args.gpus
         else:
@@ -294,13 +296,13 @@ def main(args=None):
         else:
 
             if args.nodes > 1:
-                sjob += f" -n {cpu_workers}"
+                sjob += f" --nodes {args.nodes}"
                 sjob += f" --cpus-per-task={args.cpus}"
             else:
                 sjob += f" -n {cpu_workers}"
 
             if args.gpus > 0:
-                sjob += f" --gres=gpu:{gpu_workers}"
+                sjob += f" --gres=gpu:{args.gpus}"
 
             sjob += f" --mem='{args.mem}'"
 
@@ -319,23 +321,22 @@ def main(args=None):
 
         tasks = ""
         for i, (t, n) in enumerate(zip(args.task, args.taskname)):
-            tasks = f" {env} {args.script} {t} --cpu_workers {cpu_workers} --gpu_workers {gpu_workers} --outdir {outdir/n}"
+            tasks = f" {env} {args.script} {t} --cpu_workers {args.cpus} --gpu_workers {args.gpus} --outdir {outdir/n}"
             tasks += ' ; ' if i < len(args.task)-1 else ''
 
-        if args.apptainer is not None:
-            ex = "apptainer exec --nv --bind /clusterfs:/clusterfs \"{args.apptainer}\""
-
-            if args.ray:
-                sjob += f' --wrap="{ex} {args.ray_template} -c {args.cpus}  -g {args.gpus}  -p \"{tasks}\"'
-            else:
-                sjob += f' --wrap="{ex} {tasks}"'
+        if args.ray and args.apptainer is not None:
+            sjob += f' --wrap=\" bash -i {args.ray_template} -w \" {app} {tasks} \" \" '
+        elif args.apptainer is not None:
+            sjob += f' --wrap=\" {app} {tasks} \"'
         else:
-            sjob += f' --wrap=\"{tasks}\"'
+            sjob += f' --wrap=\" {tasks} \"'
 
         print(sjob)
         call([sjob], shell=True)
 
     elif args.cmd == 'lsf':
+        app = f'apptainer exec --nv --bind /groups/betzig/betziglab:/groups/betzig/betziglab \"{args.apptainer}\"'
+
         if args.nodes > 1:
             gpu_workers = args.nodes * args.gpus
         else:
@@ -359,9 +360,9 @@ def main(args=None):
 
         if args.gpus > 0:
             if args.partition == 'gpu_a100':
-                sjob += f' -gpu "num={gpu_workers}:nvlink=yes"'
+                sjob += f' -gpu "num={args.gpus}:nvlink=yes"'
             else:
-                sjob += f' -gpu "num={gpu_workers}"'
+                sjob += f' -gpu "num={args.gpus}:mode=shared"'
 
         if args.dependency is not None:
             sjob += f' -w "done({args.name})"'
@@ -377,16 +378,12 @@ def main(args=None):
             tasks = f" {env} {args.script} {t} --cpu_workers {cpu_workers} --gpu_workers {gpu_workers} --outdir {outdir/n}"
             tasks += ' ; ' if i < len(args.task)-1 else ''
 
-        if args.apptainer is not None:
-            sjob += f' \"apptainer exec --nv --bind /groups/betzig/betziglab:/groups/betzig/betziglab \"{args.apptainer}\" '
-
-        if args.ray:
-            sjob += f' {args.ray_template}'
-            sjob += f' -c {args.cpus}'
-            sjob += f' -g {args.gpus}'
-            sjob += f' -p \"{tasks}\"'
+        if args.ray and args.apptainer is not None:
+            sjob += f' bash -i {args.ray_template} -w \" {app} {tasks} \" '
+        elif args.apptainer is not None:
+            sjob += f' {app} {tasks} '
         else:
-            sjob += f' \"{tasks}\"'
+            sjob += f' {tasks} '
 
         print(sjob)
         call([sjob], shell=True)
