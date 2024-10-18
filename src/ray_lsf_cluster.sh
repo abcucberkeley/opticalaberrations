@@ -5,7 +5,7 @@
 # Adapted from https://github.com/IBMSpectrumComputing/ray-integration
 #
 # Parameters:
-# -c : user command to run on the cluster (if not specified, the cluster will be left running)
+# -w : user command to run on the cluster (if not specified, the cluster will be left running)
 #
 # Example usage:
 #
@@ -19,6 +19,12 @@ TIMEOUT_SEC=180
 
 # How often to check cluster state
 SLEEP_DELAY_SEC=5
+
+# conda create -n ray -c conda-forge python=3.9 "ray-default" "ray-core" "ray-dashboard" -y
+eval "$(conda shell.bash hook)"
+conda activate ray
+echo "Activated conda environment: ray"
+
 
 # Shut down the cluster by killing the job id
 function shutdown_cluster()

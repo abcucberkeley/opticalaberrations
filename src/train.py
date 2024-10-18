@@ -816,7 +816,7 @@ def main(args=None):
     # head_node = str(os.environ["RAY_HEAD"])
     # port = str(os.environ["RAY_PORT"])
     # dashboard_port = str(os.environ["RAY_DASHBOARD_PORT"])
-    init(log_to_driver=True)
+    init(log_to_driver=True, address='auto')
 
     if args.eval:
         eval_model(

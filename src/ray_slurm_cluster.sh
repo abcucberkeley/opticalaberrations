@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# conda create -n ray -c conda-forge python=3.9 "ray-default" "ray-core" "ray-dashboard" -y
+eval "$(conda shell.bash hook)"
+conda activate ray
+echo "Activated conda environment: ray"
+
 ############################## CHECK ARGS
 
 function get_free_port()
@@ -12,10 +17,10 @@ function get_free_port()
     echo $port
 }
 
-while getopts ":c:" option;do
+while getopts ":w:" option;do
     case "${option}" in
-    c) c=${OPTARG}
-        workload=$c
+    w) w=${OPTARG}
+        workload=$w
     ;;
     *) echo "Did not supply the correct arguments"
     ;;
