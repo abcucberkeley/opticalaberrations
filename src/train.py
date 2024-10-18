@@ -1,7 +1,9 @@
 import matplotlib
+
 matplotlib.use('Agg')
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 import torch
@@ -11,7 +13,7 @@ from torchinfo import summary
 from torch.optim.lr_scheduler import OneCycleLR, LinearLR
 from apex.optimizers import FusedLAMB
 
-from ray import init
+from ray import init, available_resources
 from ray.train import Checkpoint, CheckpointConfig, RunConfig, ScalingConfig, FailureConfig, report
 from ray.train.torch import TorchTrainer
 from ray.experimental.tqdm_ray import tqdm
@@ -108,7 +110,6 @@ def summarize_model(model: nn.Module, inputs: tuple, batch_size: int, logdir: Pa
 
 
 def train_worker(config: dict):
-
     train_dataloader = data_utils.collect_dataset(
         config['dataset'],
         metadata=False,
@@ -135,8 +136,8 @@ def train_worker(config: dict):
         checkpoints.sort(key=os.path.getctime)
         latest_checkpoint = checkpoints[-1]
 
-        logger.info(f"{config['logdir']/'logbook.csv'}: {Path(config['logdir']/'logbook.csv').exists()}")
-        training_history = pd.read_csv(config['logdir']/'logbook.csv', header=0, index_col=0)
+        logger.info(f"{config['logdir'] / 'logbook.csv'}: {Path(config['logdir'] / 'logbook.csv').exists()}")
+        training_history = pd.read_csv(config['logdir'] / 'logbook.csv', header=0, index_col=0)
         logger.info(f"Training history\n{training_history}")
 
         starting_epoch = training_history.index.values[-1]
@@ -156,7 +157,6 @@ def train_worker(config: dict):
         best_loss, overall_step, starting_epoch = np.inf, 0, 0
         step_logbook, epoch_logbook = {}, {}
 
-
     accelerator_config = ProjectConfiguration(
         project_dir=config['outdir'],
         logging_dir=config['logdir'],
@@ -169,7 +169,6 @@ def train_worker(config: dict):
         project_config=accelerator_config,
         device_placement=True,
     )
-
 
     if config['network'] == 'otfnet':
         model = OTFNet(
@@ -309,7 +308,7 @@ def train_worker(config: dict):
             epochs=config['epochs'],
             steps_per_epoch=steps_per_epoch,
             anneal_strategy='cos',
-            pct_start=warmup_steps/total_steps,
+            pct_start=warmup_steps / total_steps,
         )
 
     logger.info(accelerator.distributed_type)
@@ -332,9 +331,9 @@ def train_worker(config: dict):
 
             step_times = []
             for step, (inputs, zernikes) in tqdm(
-                enumerate(train_dataloader),
-                total=len(train_dataloader),
-                desc=f"Epoch {epoch}/{config['epochs']}",
+                    enumerate(train_dataloader),
+                    total=len(train_dataloader),
+                    desc=f"Epoch {epoch}/{config['epochs']}",
             ):
                 opt.zero_grad()
                 step_time = time.time()
@@ -382,14 +381,14 @@ def train_worker(config: dict):
                 "epoch_timer": epoch_timer,
             }
             df = pd.DataFrame.from_dict(epoch_logbook, orient='index')
-            df.to_csv(config['logdir']/'logbook.csv')
+            df.to_csv(config['logdir'] / 'logbook.csv')
 
-            with config['outdir']/'checkpoints' as checkpointdir:
+            with config['outdir'] / 'checkpoints' as checkpointdir:
 
                 if accelerator.is_main_process:
                     if loss < best_loss:
                         best_loss = loss
-                        accelerator.save_state(config['checkpointdir']/f'best_state')
+                        accelerator.save_state(config['checkpointdir'] / f'best_state')
                         unwrapped_model = accelerator.unwrap_model(model)
                         torch.save(unwrapped_model.state_dict(), config['checkpointdir'] / f"best_model.bin")
 
@@ -407,58 +406,58 @@ def train_worker(config: dict):
                 checkpoint=checkpoint
             )
 
-        accelerator.save_state(config['checkpointdir']/'last_state')
+        accelerator.save_state(config['checkpointdir'] / 'last_state')
         accelerator.end_training()
 
 
 def train_model(
-    dataset: Path,
-    outdir: Path,
-    network: str = 'opticalnet',
-    distribution: str = '/',
-    embedding: str = 'spatial_planes',
-    samplelimit: Optional[int] = None,
-    max_amplitude: float = 1,
-    input_shape: int = 64,
-    batch_size: int = 32,
-    fixedlr: bool = False,
-    opt: str = 'AdamW',
-    lr: float = 5e-4,
-    wd: float = 5e-6,
-    warmup: int = 2,
-    epochs: int = 5,
-    modes: int = 15,
-    pmodes: Optional[int] = None,
-    min_photons: int = 1,
-    max_photons: int = 1000000,
-    no_phase: bool = False,
-    lls_defocus: bool = False,
-    defocus_only: bool = False,
-    finetune: Optional[Path] = None,
-    fixed_precision: bool = False,
-    roi: Any = None,
-    hidden_size: int = 768,
-    patches: list = [32, 16, 8, 8],
-    heads: list = [2, 4, 8, 16],
-    repeats: list = [2, 4, 6, 2],
-    depth_scalar: float = 1.,
-    width_scalar: float = 1.,
-    activation: str = 'gelu',
-    dropout: float = .1,
-    radial_encoding_period: int = 16,
-    radial_encoding_nth_order: int = 4,
-    positional_encoding_scheme: str = 'rotational_symmetry',
-    fixed_dropout_depth: bool = False,
-    stem: bool = False,
-    mul: bool = False,
-    wavelength: float = .510,
-    psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-    x_voxel_size: float = .125,
-    y_voxel_size: float = .125,
-    z_voxel_size: float = .2,
-    refractive_index: float = 1.33,
-    cpu_workers: int = -1,
-    gpu_workers: int = 1,
+        dataset: Path,
+        outdir: Path,
+        network: str = 'opticalnet',
+        distribution: str = '/',
+        embedding: str = 'spatial_planes',
+        samplelimit: Optional[int] = None,
+        max_amplitude: float = 1,
+        input_shape: int = 64,
+        batch_size: int = 32,
+        fixedlr: bool = False,
+        opt: str = 'AdamW',
+        lr: float = 5e-4,
+        wd: float = 5e-6,
+        warmup: int = 2,
+        epochs: int = 5,
+        modes: int = 15,
+        pmodes: Optional[int] = None,
+        min_photons: int = 1,
+        max_photons: int = 1000000,
+        no_phase: bool = False,
+        lls_defocus: bool = False,
+        defocus_only: bool = False,
+        finetune: Optional[Path] = None,
+        fixed_precision: bool = False,
+        roi: Any = None,
+        hidden_size: int = 768,
+        patches: list = [32, 16, 8, 8],
+        heads: list = [2, 4, 8, 16],
+        repeats: list = [2, 4, 6, 2],
+        depth_scalar: float = 1.,
+        width_scalar: float = 1.,
+        activation: str = 'gelu',
+        dropout: float = .1,
+        radial_encoding_period: int = 16,
+        radial_encoding_nth_order: int = 4,
+        positional_encoding_scheme: str = 'rotational_symmetry',
+        fixed_dropout_depth: bool = False,
+        stem: bool = False,
+        mul: bool = False,
+        wavelength: float = .510,
+        psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+        x_voxel_size: float = .125,
+        y_voxel_size: float = .125,
+        z_voxel_size: float = .2,
+        refractive_index: float = 1.33,
+        cpu_workers: int = -1,
+        gpu_workers: int = 1,
 ):
     outdir.mkdir(exist_ok=True, parents=True)
     logdir = outdir / 'logs'
@@ -533,7 +532,7 @@ def train_model(
     )
 
     run_config = RunConfig(
-        log_to_file=str(logdir/"log.txt"),
+        log_to_file=str(logdir / "log.txt"),
         checkpoint_config=checkpoint_config,
         failure_config=FailureConfig(max_failures=0),
         storage_path=outdir,
@@ -548,26 +547,27 @@ def train_model(
 
     result = trainer.fit()
 
+
 def eval_model(
-    dataset: Path,
-    network: str = 'opticalnet',
-    distribution: str = '/',
-    embedding: str = 'spatial_planes',
-    samplelimit: Optional[int] = None,
-    max_amplitude: float = 1,
-    input_shape: int = 64,
-    batch_size: int = 32,
-    wavelength: float = .510,
-    psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
-    x_voxel_size: float = .125,
-    y_voxel_size: float = .125,
-    z_voxel_size: float = .2,
-    modes: int = 15,
-    min_photons: int = 1,
-    max_photons: int = 1000000,
-    refractive_index: float = 1.33,
-    no_phase: bool = False,
-    lls_defocus: bool = False,
+        dataset: Path,
+        network: str = 'opticalnet',
+        distribution: str = '/',
+        embedding: str = 'spatial_planes',
+        samplelimit: Optional[int] = None,
+        max_amplitude: float = 1,
+        input_shape: int = 64,
+        batch_size: int = 32,
+        wavelength: float = .510,
+        psf_type: str = '../lattice/YuMB_NAlattice0p35_NAAnnulusMax0p40_NAsigma0p1.mat',
+        x_voxel_size: float = .125,
+        y_voxel_size: float = .125,
+        z_voxel_size: float = .2,
+        modes: int = 15,
+        min_photons: int = 1,
+        max_photons: int = 1000000,
+        refractive_index: float = 1.33,
+        no_phase: bool = False,
+        lls_defocus: bool = False,
 ):
     if network == 'baseline':
         inputs = (input_shape, input_shape, input_shape, 1)
@@ -587,7 +587,7 @@ def eval_model(
         photons_range=(min_photons, max_photons),
         model_input_shape=inputs
     )
-    
+
 
 def parse_args(args):
     train_parser = cli.argparser()
@@ -607,7 +607,7 @@ def parse_args(args):
     train_parser.add_argument(
         "--batch_size", default=2048, type=int, help="number of images per batch"
     )
-    
+
     train_parser.add_argument(
         "--hidden_size", default=768, type=int, help="hidden size of transformer block"
     )
@@ -615,11 +615,11 @@ def parse_args(args):
     train_parser.add_argument(
         "--patches", default='32-16-8-8', help="patch size for transformer-based model"
     )
-    
+
     train_parser.add_argument(
         "--heads", default='2-4-8-16', help="patch size for transformer-based model"
     )
-        
+
     train_parser.add_argument(
         "--repeats", default='2-4-6-2', help="patch size for transformer-based model"
     )
@@ -813,10 +813,18 @@ def main(args=None):
     args = parse_args(args)
     logger.info(args)
 
-    # head_node = str(os.environ["RAY_HEAD"])
-    # port = str(os.environ["RAY_PORT"])
-    # dashboard_port = str(os.environ["RAY_DASHBOARD_PORT"])
-    init(log_to_driver=True, address='auto')
+    #    address = f'ray://{str(os.environ["head_node"])}:10001'
+    #    address = f'ray://{str(os.environ["head_node"])}:{str(os.environ["port"])}'
+    address = f'ray://{str(os.environ["cluster_address"])}'
+    logger.info(f"Connecting to address: {address}")
+    init(log_to_driver=True, address=address)
+    #    init(log_to_driver=True, address='auto')
+
+    logger.info('\nResources available to this Ray client:')
+    for resource, count in available_resources().items():
+        logger.info(f'{resource}: {count}')
+
+    logger.info('')
 
     if args.eval:
         eval_model(

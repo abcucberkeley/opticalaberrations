@@ -249,7 +249,11 @@ def main(args=None):
     args = parse_args(args)
 
     outdir = Path(f"{args.outdir}/{args.name}").resolve()
-    outdir.mkdir(exist_ok=True, parents=True)
+
+    try:
+        outdir.mkdir(exist_ok=True, parents=True)
+    except PermissionError:
+        pass
 
     profiler = f"/usr/bin/time -v -o {outdir}/{args.script.split('.')[0]}_profile.log "
 
@@ -325,7 +329,7 @@ def main(args=None):
             tasks += ' ; ' if i < len(args.task)-1 else ''
 
         if args.ray and args.apptainer is not None:
-            sjob += f' --wrap=\" bash -i {args.ray_template} -w \" {app} {tasks} \" \" '
+            sjob += f' --wrap=\" ./{args.ray_template} -w \" {app} {tasks} \" \" '
         elif args.apptainer is not None:
             sjob += f' --wrap=\" {app} {tasks} \"'
         else:
@@ -379,7 +383,7 @@ def main(args=None):
             tasks += ' ; ' if i < len(args.task)-1 else ''
 
         if args.ray and args.apptainer is not None:
-            sjob += f' bash -i {args.ray_template} -w \" {app} {tasks} \" '
+            sjob += f' ./{args.ray_template} -o {outdir}  -w \" {app} {tasks} \" '
         elif args.apptainer is not None:
             sjob += f' {app} {tasks} '
         else:
