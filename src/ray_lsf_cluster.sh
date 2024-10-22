@@ -38,18 +38,20 @@ do
         echo "Adding host: $host"
         hosts+=($host)
 done
-
 echo "The host list is: ${hosts[@]}"
 
+#port=6379
 port=$(getfreeport)
 echo "Head node will use port: $port"
-
 export port
 
 dashboard_port=$(getfreeport)
 echo "Dashboard will use port: $dashboard_port"
-
 export dashboard_port
+
+
+redis_password=$(uuidgen)
+export redis_password
 
 # Compute number of cores allocated to hosts
 # Format of each line in file $LSB_AFFINITY_HOSTFILE:
@@ -74,25 +76,16 @@ done
 #Assumption only one head node and more than one
 #workers will connect to head node
 
+num_nodes=${#hosts[@]}
 head_node=${hosts[0]}
-cluster_address="$head_node:$port"
+head_node_ip=$(hostname --ip-address)
+cluster_address="$head_node_ip:$port"
 client_server_port=10001
 
 export head_node
+export head_node_ip
 export cluster_address
 export client_server_port
-
-echo "Object store memory for the cluster is set to 4GB"
-
-echo "Starting ray head node on: ${hosts[0]}"
-
-if [ -z $object_store_mem ]
-then
-    echo "using default object store mem of 4GB make sure your cluster has mem greater than 4GB"
-    object_store_mem=4000000000
-else
-    echo "The object store memory in bytes is: $object_store_mem"
-fi
 
 
 if [ -z "$CUDA_VISIBLE_DEVICES" ]
@@ -103,17 +96,12 @@ else
 fi
 
 num_cpu_for_head=${associative[$head_node]}
-# Number of GPUs available for each host is detected "ray start" command
-command_launch="blaunch -z ${hosts[0]} ray start --head --port $port --dashboard-port $dashboard_port --temp-dir /tmp/ray_symlink --num-cpus $num_cpu_for_head --num-gpus $num_gpu_for_head --object-store-memory $object_store_mem"
 
+command_launch="blaunch -z $head_node ray start --head --redis-password $redis_password --port $port --dashboard-host 0.0.0.0 --dashboard-port $dashboard_port --temp-dir /tmp/ray_symlink --num-cpus $num_cpu_for_head --num-gpus $num_gpu_for_head --object-store-memory $object_store_mem --block"
 $command_launch &
-
-
-
 sleep 10
 
 command_check_up="ray status --address $cluster_address"
-
 while ! $command_check_up
 do
     sleep 3
@@ -122,7 +110,6 @@ done
 
 
 workers=("${hosts[@]:1}")
-
 echo "adding the workers to head node: ${workers[*]}"
 #run ray on worker nodes and connect to head
 for host in "${workers[@]}"
@@ -131,7 +118,8 @@ do
 
     sleep 10
     num_cpu=${associative[$host]}
-    command_for_worker="blaunch -z $host ray start --temp-dir /tmp/ray_symlink --address $cluster_address --num-cpus $num_cpu --object-store-memory $object_store_mem"
+
+    command_for_worker="blaunch -z $host ray start --temp-dir /tmp/ray_symlink --redis-password $redis_password --address $cluster_address --num-cpus $num_cpu --object-store-memory $object_store_mem --block"
 
 
     $command_for_worker &
@@ -147,6 +135,9 @@ done
 echo "Running user workload"
 echo $workload
 $workload
+
+
+echo "Ray cluster with $num_nodes nodes is now running at ray://$cluster_address with a dashboard at http://$head_node_ip:$dashboard_port/"
 
 
 if [ $? != 0 ]; then

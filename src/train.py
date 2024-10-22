@@ -13,7 +13,7 @@ from torchinfo import summary
 from torch.optim.lr_scheduler import OneCycleLR, LinearLR
 from apex.optimizers import FusedLAMB
 
-from ray import init, available_resources
+from ray import init, shutdown, available_resources
 from ray.train import Checkpoint, CheckpointConfig, RunConfig, ScalingConfig, FailureConfig, report
 from ray.train.torch import TorchTrainer
 from ray.experimental.tqdm_ray import tqdm
@@ -813,12 +813,13 @@ def main(args=None):
     args = parse_args(args)
     logger.info(args)
 
-    #    address = f'ray://{str(os.environ["head_node"])}:10001'
-    #    address = f'ray://{str(os.environ["head_node"])}:{str(os.environ["port"])}'
-    address = f'ray://{str(os.environ["cluster_address"])}'
+    try:
+        address = f'ray://{str(os.environ["head_node_ip"])}'
+    except KeyError:
+        address = '127.0.1.1'
+
     logger.info(f"Connecting to address: {address}")
-    init(log_to_driver=True, address=address)
-    #    init(log_to_driver=True, address='auto')
+    init(log_to_driver=True, _node_ip_address=address)
 
     logger.info('\nResources available to this Ray client:')
     for resource, count in available_resources().items():
@@ -898,6 +899,8 @@ def main(args=None):
         )
 
     logger.info(f"Total time elapsed: {time.time() - timeit:.2f} sec.")
+
+    shutdown()
 
 
 if __name__ == "__main__":
