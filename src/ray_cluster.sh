@@ -78,3 +78,4 @@ echo "Head node IP: $head_node_ip"
 
 #Run workload
 echo $workload
+$workload

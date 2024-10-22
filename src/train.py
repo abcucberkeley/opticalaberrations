@@ -814,7 +814,7 @@ def main(args=None):
     logger.info(args)
 
     try:
-        address = f'ray://{str(os.environ["head_node_ip"])}'
+        address = os.environ["head_node_ip"]
     except KeyError:
         address = '127.0.1.1'
 
