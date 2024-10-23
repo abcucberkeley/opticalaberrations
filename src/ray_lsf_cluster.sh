@@ -89,13 +89,9 @@ head_cpus=${associative[$head_node]}
 
 ############################## START HEAD NODE
 
-job="blaunch -z $head_node bash ray_start_cluster.sh -i $head_node_ip -p $port -c $head_cpus -g $head_gpus"
+job="blaunch -z $head_node bash ray_start_cluster.sh -i $head_node_ip -p $port -d $dashboard_port -c $head_cpus -g $head_gpus"
 echo $job
 $job &
-
-rpids=$(blaunch -z $head_node pgrep -u $USER ray)
-echo "Ray head node PID:"
-echo $rpids
 
 ############################## ADD WORKER NODES
 
@@ -103,7 +99,7 @@ workers=("${hosts[@]:1}")
 for host in "${workers[@]}"
 do
     num_cpu=${associative[$host]}
-    worker_job="blaunch -z $host bash ray_start_worker.sh -i $head_node_ip -p $port -c $head_cpus -g $head_gpus"
+    worker_job="blaunch -z $host bash ray_start_worker.sh -a $cluster_address -c $head_cpus -g $head_gpus"
     echo $worker_job
     $worker_job &
 done
@@ -118,7 +114,7 @@ $workload
 if [ $? != 0 ]; then
     echo "Failure: $?"
     exit $?
-else
+elsepkill
     echo "Done"
     echo "Shutting down the Job"
     bkill $LSB_JOBID

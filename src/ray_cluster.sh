@@ -57,7 +57,7 @@ cpus=$(nproc)
 
 ############################## START HEAD NODE
 
-bash ray_start_cluster.sh -i $head_node_ip -p $port -c $cpus -g $gpus &
+bash ray_start_cluster.sh -i $head_node_ip -p $port -d $dashboard_port -c $cpus -g $gpus &
 
 rpids=$(pgrep -u $USER ray)
 echo "Ray head node PID:"

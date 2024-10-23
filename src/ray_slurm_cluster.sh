@@ -60,7 +60,7 @@ export cluster_address
 
 ############################## START HEAD NODE
 
-job="srun --nodes=1 --ntasks=1 -w $head_node bash ray_start_cluster.sh -i $head_node_ip -p $port -c $head_cpus -g $head_gpus"
+job="srun --nodes=1 --ntasks=1 -w $head_node bash ray_start_cluster.sh -i $head_node_ip -p $port -d $dashboard_port -c $head_cpus -g $head_gpus"
 echo $job
 $job &
 
@@ -71,7 +71,7 @@ worker_num=$((SLURM_JOB_NUM_NODES - 1))
 
 for ((i = 1; i <= worker_num; i++)); do
     node_i=${nodes_array[$i]}
-    worker_job="srun --nodes=1 --ntasks=1 -w $node_i bash ray_start_worker.sh -i $head_node_ip -p $port -c $head_cpus -g $head_gpus"
+    worker_job="srun --nodes=1 --ntasks=1 -w $node_i bash ray_start_worker.sh -a $cluster_address -c $head_cpus -g $head_gpus"
     echo $worker_job
     $worker_job &
 done
