@@ -1,15 +1,9 @@
 #!/bin/bash
 
-#bias to selection of higher range ports
-function getfreeport()
-{
-    CHECK="do while"
-    while [[ ! -z $CHECK ]]; do
-        port=$(( ( RANDOM % 40000 )  + 20000 ))
-        CHECK=$(netstat -a | grep $port)
-    done
-    echo $port
-}
+# conda create -n ray -c conda-forge python=3.9 "ray-default" "ray-core" "ray-dashboard" -y
+source ~/.bashrc
+conda activate ray
+echo "Activated conda environment: ray"
 
 while getopts ":o:w:" option;do
     case "${option}" in
@@ -24,13 +18,21 @@ while getopts ":o:w:" option;do
     esac
 done
 
-source ~/.bashrc
-conda activate ray
-echo "Activated conda environment: ray"
-
-
 ln -sf $outdir /tmp/ray_symlink
 echo "Create symlink: ray"
+
+############################## SETUP PORTS
+
+#bias to selection of higher range ports
+function getfreeport()
+{
+    CHECK="do while"
+    while [[ ! -z $CHECK ]]; do
+        port=$(( ( RANDOM % 40000 )  + 20000 ))
+        CHECK=$(netstat -a | grep $port)
+    done
+    echo $port
+}
 
 port=$(getfreeport)
 echo "Head node will use port: $port"
@@ -40,41 +42,28 @@ dashboard_port=$(getfreeport)
 echo "Dashboard will use port: $dashboard_port"
 export dashboard_port
 
-
-redis_password=$(uuidgen)
-export redis_password
+############################## FIND NODES/HOSTS
 
 head_node=$(hostname)
 head_node_ip=$(hostname --ip-address)
 cluster_address="$head_node_ip:$port"
-client_server_port=10001
 
 export head_node
 export head_node_ip
 export cluster_address
-export client_server_port
 
+gpus=$(echo $CUDA_VISIBLE_DEVICES | awk -F "," "{print NF}")
+cpus=$(nproc)
 
-if [ -z "$CUDA_VISIBLE_DEVICES" ]
-then
-    num_gpu_for_head=0
-else
-    num_gpu_for_head=$(echo $CUDA_VISIBLE_DEVICES | awk -F "," "{print NF}")
-fi
+############################## START HEAD NODE
 
+bash ray_start_cluster.sh -i $head_node_ip -p $port -c $cpus -g $gpus &
 
-if [ -z $num_cpu_for_head ]
-then
-    echo "Using all cores available on $head_node"
-    num_cpu_for_head=$(nproc)
-else
-    echo "The object store memory in bytes is: $num_cpu_for_head"
-fi
+rpids=$(pgrep -u $USER ray)
+echo "Ray head node PID:"
+echo $rpids
 
-echo "STARTING HEAD at $head_node"
-echo "Head node IP: $head_node_ip"
-./ray_start_cluster.sh $head_node_ip $port &
-
+############################## RUN WORKLOAD
 
 #Run workload
 echo $workload

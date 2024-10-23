@@ -1,24 +1,15 @@
 #!/bin/bash
 
 # conda create -n ray -c conda-forge python=3.9 "ray-default" "ray-core" "ray-dashboard" -y
-eval "$(conda shell.bash hook)"
+source ~/.bashrc
 conda activate ray
 echo "Activated conda environment: ray"
 
-############################## CHECK ARGS
-
-function get_free_port()
-{
-    CHECK="do while"
-    while [[ ! -z $CHECK ]]; do
-        port=$(( ( RANDOM % 40000 ) + 19999 ))
-        CHECK=$(netstat -a | grep $port)
-    done
-    echo $port
-}
-
-while getopts ":w:" option;do
+while getopts ":o:w:" option;do
     case "${option}" in
+    o) o=${OPTARG}
+        outdir=$o
+    ;;
     w) w=${OPTARG}
         workload=$w
     ;;
@@ -26,6 +17,30 @@ while getopts ":w:" option;do
     ;;
     esac
 done
+
+ln -sf $outdir /tmp/ray_symlink
+echo "Create symlink: ray"
+
+############################## SETUP PORTS
+
+#bias to selection of higher range ports
+function getfreeport()
+{
+    CHECK="do while"
+    while [[ ! -z $CHECK ]]; do
+        port=$(( ( RANDOM % 40000 )  + 20000 ))
+        CHECK=$(netstat -a | grep $port)
+    done
+    echo $port
+}
+
+port=$(getfreeport)
+echo "Head node will use port: $port"
+export port
+
+dashboard_port=$(getfreeport)
+echo "Dashboard will use port: $dashboard_port"
+export dashboard_port
 
 
 ############################## FIND NODES/HOSTS
@@ -35,37 +50,19 @@ set -x
 nodes=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
 nodes_array=($nodes)
 
-
-HEAD_NODE=${nodes_array[0]}
+head_node=${nodes_array[0]}
 head_node_ip=$(srun --nodes=1 --ntasks=1 -w "$HEAD_NODE" hostname --ip-address)
-export HEAD_NODE
+cluster_address="$head_node_ip:$port"
 
-############################## SETUP PORTS
-
-RAY_PORT=6379
-if [[ ! -z $(netstat -a | grep $RAY_PORT) ]]; then
-  RAY_PORT=$(get_free_port)
-fi
-echo "Head node will use port: $RAY_PORT"
-export RAY_PORT
-
-HEAD_ADDRESS="${HEAD_NODE}:${RAY_PORT}"
-echo "Head address: $HEAD_ADDRESS"
-export HEAD_ADDRESS
-
-RAY_DASHBOARD_PORT=8265
-if [[ ! -z $(netstat -a | grep $RAY_PORT) ]]; then
-  RAY_DASHBOARD_PORT=$(get_free_port)
-fi
-echo "Dashboard will use port: $RAY_DASHBOARD_PORT"
-export RAY_DASHBOARD_PORT
+export head_node
+export head_node_ip
+export cluster_address
 
 ############################## START HEAD NODE
 
-echo "Starting HEAD at $HEAD_NODE"
-srun --nodes=1 --ntasks=1 -w "$HEAD_NODE" \
-    ray start --head --node-ip-address="$HEAD_ADDRESS" --port=$port \
-    --num-cpus "${SLURM_CPUS_PER_TASK}" --num-gpus "${SLURM_GPUS_PER_TASK}" --block &
+job="srun --nodes=1 --ntasks=1 -w $head_node bash ray_start_cluster.sh -i $head_node_ip -p $port -c $head_cpus -g $head_gpus"
+echo $job
+$job &
 
 ############################## ADD WORKER NODES
 
@@ -74,11 +71,9 @@ worker_num=$((SLURM_JOB_NUM_NODES - 1))
 
 for ((i = 1; i <= worker_num; i++)); do
     node_i=${nodes_array[$i]}
-    echo "Starting WORKER $i at $node_i"
-    srun --nodes=1 --ntasks=1 -w "$node_i" \
-        ray start --address "$HEAD_ADDRESS" \
-        --num-cpus "${SLURM_CPUS_PER_TASK}" --num-gpus "${SLURM_GPUS_PER_TASK}" --block &
-    sleep 5
+    worker_job="srun --nodes=1 --ntasks=1 -w $node_i bash ray_start_worker.sh -i $head_node_ip -p $port -c $head_cpus -g $head_gpus"
+    echo $worker_job
+    $worker_job &
 done
 
 ############################## RUN WORKLOAD

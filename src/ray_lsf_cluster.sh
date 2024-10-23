@@ -1,15 +1,9 @@
 #!/bin/bash
 
-#bias to selection of higher range ports
-function getfreeport()
-{
-    CHECK="do while"
-    while [[ ! -z $CHECK ]]; do
-        port=$(( ( RANDOM % 40000 )  + 20000 ))
-        CHECK=$(netstat -a | grep $port)
-    done
-    echo $port
-}
+# conda create -n ray -c conda-forge python=3.9 "ray-default" "ray-core" "ray-dashboard" -y
+source ~/.bashrc
+conda activate ray
+echo "Activated conda environment: ray"
 
 while getopts ":o:w:" option;do
     case "${option}" in
@@ -24,23 +18,22 @@ while getopts ":o:w:" option;do
     esac
 done
 
-source ~/.bashrc
-conda activate ray
-echo "Activated conda environment: ray"
-
-
 ln -sf $outdir /tmp/ray_symlink
 echo "Create symlink: ray"
 
-hosts=()
-for host in `cat $LSB_DJOB_HOSTFILE | uniq`
-do
-        echo "Adding host: $host"
-        hosts+=($host)
-done
-echo "The host list is: ${hosts[@]}"
+############################## SETUP PORTS
 
-#port=6379
+#bias to selection of higher range ports
+function getfreeport()
+{
+    CHECK="do while"
+    while [[ ! -z $CHECK ]]; do
+        port=$(( ( RANDOM % 40000 )  + 20000 ))
+        CHECK=$(netstat -a | grep $port)
+    done
+    echo $port
+}
+
 port=$(getfreeport)
 echo "Head node will use port: $port"
 export port
@@ -50,8 +43,15 @@ echo "Dashboard will use port: $dashboard_port"
 export dashboard_port
 
 
-redis_password=$(uuidgen)
-export redis_password
+############################## FIND NODES/HOSTS
+
+hosts=()
+for host in `cat $LSB_DJOB_HOSTFILE | uniq`
+do
+        echo "Adding host: $host"
+        hosts+=($host)
+done
+echo "The host list is: ${hosts[@]}"
 
 # Compute number of cores allocated to hosts
 # Format of each line in file $LSB_AFFINITY_HOSTFILE:
@@ -75,69 +75,44 @@ done
 
 #Assumption only one head node and more than one
 #workers will connect to head node
-
 num_nodes=${#hosts[@]}
 head_node=${hosts[0]}
-head_node_ip=$(hostname --ip-address)
+head_node_ip=$(getent hosts $head_node | awk '{ print $1 }')
 cluster_address="$head_node_ip:$port"
-client_server_port=10001
 
 export head_node
 export head_node_ip
 export cluster_address
-export client_server_port
 
+head_gpus=$(echo $CUDA_VISIBLE_DEVICES | awk -F "," "{print NF}")
+head_cpus=${associative[$head_node]}
 
-if [ -z "$CUDA_VISIBLE_DEVICES" ]
-then
-    num_gpu_for_head=0
-else
-    num_gpu_for_head=$(echo $CUDA_VISIBLE_DEVICES | awk -F "," "{print NF}")
-fi
+############################## START HEAD NODE
 
-num_cpu_for_head=${associative[$head_node]}
+job="blaunch -z $head_node bash ray_start_cluster.sh -i $head_node_ip -p $port -c $head_cpus -g $head_gpus"
+echo $job
+$job &
 
-command_launch="blaunch -z $head_node ray start --head --redis-password $redis_password --port $port --dashboard-host 0.0.0.0 --dashboard-port $dashboard_port --temp-dir /tmp/ray_symlink --num-cpus $num_cpu_for_head --num-gpus $num_gpu_for_head --object-store-memory $object_store_mem --block"
-$command_launch &
-sleep 10
+rpids=$(blaunch -z $head_node pgrep -u $USER ray)
+echo "Ray head node PID:"
+echo $rpids
 
-command_check_up="ray status --address $cluster_address"
-while ! $command_check_up
-do
-    sleep 3
-done
-
-
+############################## ADD WORKER NODES
 
 workers=("${hosts[@]:1}")
-echo "adding the workers to head node: ${workers[*]}"
-#run ray on worker nodes and connect to head
 for host in "${workers[@]}"
 do
-    echo "starting worker on: $host and using master node: $head_node"
-
-    sleep 10
     num_cpu=${associative[$host]}
-
-    command_for_worker="blaunch -z $host ray start --temp-dir /tmp/ray_symlink --redis-password $redis_password --address $cluster_address --num-cpus $num_cpu --object-store-memory $object_store_mem --block"
-
-
-    $command_for_worker &
-    sleep 10
-    command_check_up_worker="blaunch -z $host ray  status --address $cluster_address"
-    while ! $command_check_up_worker
-    do
-        sleep 3
-    done
+    worker_job="blaunch -z $host bash ray_start_worker.sh -i $head_node_ip -p $port -c $head_cpus -g $head_gpus"
+    echo $worker_job
+    $worker_job &
 done
 
-#Run workload
+############################## RUN WORKLOAD
+
 echo "Running user workload"
 echo $workload
 $workload
-
-
-echo "Ray cluster with $num_nodes nodes is now running at ray://$cluster_address with a dashboard at http://$head_node_ip:$dashboard_port/"
 
 
 if [ $? != 0 ]; then
