@@ -816,10 +816,15 @@ def main(args=None):
     try:
         address = os.environ["head_node_ip"]
     except KeyError:
-        address = '127.0.1.1'
+        address = '127.0.1.1' #localhost
 
     logger.info(f"Connecting to address: {address}")
-    init(log_to_driver=True, _node_ip_address=address)
+    init(
+        _node_ip_address=address,
+        num_cpus=args.cpu_workers,
+        num_gpus=args.gpu_workers,
+        log_to_driver=True,
+    )
 
     logger.info('\nResources available to this Ray client:')
     for resource, count in available_resources().items():
