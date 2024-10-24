@@ -200,6 +200,11 @@ def parse_args(args):
     )
 
     lsf.add_argument(
+        "--span", action='store_true',
+        help='use span argument to allocate all nodes at once in a single job, otherwise allocate one node at a time'
+    )
+
+    lsf.add_argument(
         "--ray_template", default='ray_lsf_cluster.sh', type=str,
         help='path to bash script to start a ray cluster'
     )
@@ -356,17 +361,17 @@ def main(args=None):
         sjob = 'bsub'
         sjob += f' -q {args.partition}'
 
-        if args.nodes > 1:
+        if args.span:
             sjob += f" -n {cpu_workers}"
             sjob += f' -R "span[ptile={args.cpus}]"'
         else:
-            sjob += f" -n {cpu_workers}"
+            sjob += f" -n {args.cpus}"
 
         if args.gpus > 0:
             if args.partition == 'gpu_a100':
                 sjob += f' -gpu "num={args.gpus}:nvlink=yes"'
             else:
-                sjob += f' -gpu "num={args.gpus}:mode=shared"'
+                sjob += f' -gpu "num={args.gpus}"'
 
         if args.dependency is not None:
             sjob += f' -w "done({args.name})"'
@@ -383,7 +388,7 @@ def main(args=None):
             tasks += ' ; ' if i < len(args.task)-1 else ''
 
         if args.ray and args.apptainer is not None:
-            sjob += f' ./{args.ray_template} -o {outdir}  -w \" {app} {tasks} \" '
+            sjob += f' ./{args.ray_template} -n {args.nodes} -c {args.cpus} -g {args.gpus} -o {outdir}  -w \" {app} {tasks} \" '
         elif args.apptainer is not None:
             sjob += f' {app} {tasks} '
         else:
