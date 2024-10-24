@@ -109,13 +109,8 @@ def parse_args(args):
     )
 
     slurm.add_argument(
-        "--ray", action='store_true',
-        help='use a ray cluster'
-    )
-
-    slurm.add_argument(
-        "--ray_template", default='ray_slurm_cluster.sh', type=str,
-        help='path to bash script to start a ray cluster'
+        "--ray", default='ray_slurm_cluster.sh', type=str,
+        help='use a ray cluster (path to launch script to start a ray cluster)'
     )
 
     lsf = subparsers.add_parser("lsf", help='use LSF to submit jobs')
@@ -195,11 +190,6 @@ def parse_args(args):
     )
 
     lsf.add_argument(
-        "--ray", action='store_true',
-        help='use a ray cluster'
-    )
-
-    lsf.add_argument(
         "--span", action='store_true',
         help='use span argument to allocate all nodes at once in a single job, otherwise allocate one node at a time'
     )
@@ -210,10 +200,9 @@ def parse_args(args):
     )
 
     lsf.add_argument(
-        "--ray_template", default='ray_lsf_cluster.sh', type=str,
-        help='path to bash script to start a ray cluster'
+        "--ray", default='ray_lsf_cluster.sh', type=str,
+        help='use a ray cluster (path to launch script to start a ray cluster)'
     )
-
 
     local = subparsers.add_parser("local", help='use docker to run jobs on your local machine')
 
@@ -250,6 +239,11 @@ def parse_args(args):
     local.add_argument(
         "--name", default='train', type=str,
         help='name for this job'
+    )
+
+    local.add_argument(
+        "--ray", default='ray_cluster.sh', type=str,
+        help='use a ray cluster (path to launch script to start a ray cluster)'
     )
 
     return parser.parse_args(args)
@@ -338,8 +332,8 @@ def main(args=None):
             tasks = f" {env} {args.script} {t} --cpu_workers {cpu_workers} --gpu_workers {gpu_workers} --outdir {outdir/n}"
             tasks += ' ; ' if i < len(args.task)-1 else ''
 
-        if args.ray and args.apptainer is not None:
-            sjob += f' --wrap=\" ./{args.ray_template} -w \" {app} {tasks} \" \" '
+        if args.ray is not None and args.apptainer is not None:
+            sjob += f' --wrap=\" bash {args.ray} -w \" {app} {tasks} \" \" '
         elif args.apptainer is not None:
             sjob += f' --wrap=\" {app} {tasks} \"'
         else:
@@ -403,8 +397,8 @@ def main(args=None):
             tasks = f" {env} {args.script} {t} --cpu_workers {cpu_workers} --gpu_workers {gpu_workers} --outdir {outdir/n}"
             tasks += ' ; ' if i < len(args.task)-1 else ''
 
-        if args.ray and args.apptainer is not None:
-            sjob += f' ./{args.ray_template} -n {args.nodes} -c {args.cpus} -g {args.gpus} -o {outdir}  -w \" {app} {tasks} \" '
+        if args.ray is not None and args.apptainer is not None:
+            sjob += f' bash {args.ray} -n {args.nodes} -c {args.cpus} -g {args.gpus} -o {outdir}  -w \" {app} {tasks} \" '
         elif args.apptainer is not None:
             sjob += f' {app} {tasks} '
         else:
