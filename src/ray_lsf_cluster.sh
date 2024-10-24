@@ -56,7 +56,7 @@ export dashboard_port
 
 ############################## START HEAD NODE
 
-head_node=$(hostname)
+head_node=$(cat $LSB_DJOB_HOSTFILE | uniq)
 head_node_ip=$(getent hosts $head_node | awk '{ print $1 }')
 cluster_address="$head_node_ip:$port"
 
