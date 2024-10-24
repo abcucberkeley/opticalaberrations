@@ -205,6 +205,11 @@ def parse_args(args):
     )
 
     lsf.add_argument(
+        "--parallel", action='store_true',
+        help='use parallel queue to multiple nodes for a single job'
+    )
+
+    lsf.add_argument(
         "--ray_template", default='ray_lsf_cluster.sh', type=str,
         help='path to bash script to start a ray cluster'
     )
@@ -330,7 +335,7 @@ def main(args=None):
 
         tasks = ""
         for i, (t, n) in enumerate(zip(args.task, args.taskname)):
-            tasks = f" {env} {args.script} {t} --cpu_workers {args.cpus} --gpu_workers {args.gpus} --outdir {outdir/n}"
+            tasks = f" {env} {args.script} {t} --cpu_workers {cpu_workers} --gpu_workers {gpu_workers} --outdir {outdir/n}"
             tasks += ' ; ' if i < len(args.task)-1 else ''
 
         if args.ray and args.apptainer is not None:
@@ -345,33 +350,44 @@ def main(args=None):
 
     elif args.cmd == 'lsf':
         app = f'apptainer exec --nv --bind /groups/betzig/betziglab:/groups/betzig/betziglab \"{args.apptainer}\"'
-
-        if args.nodes > 1:
-            gpu_workers = args.nodes * args.gpus
-        else:
-            gpu_workers = args.gpus
-
-        if args.nodes > 1:
-            cpu_workers = args.nodes * args.cpus
-        else:
-            cpu_workers = args.cpus
-
         env = 'python' if args.apptainer is not None else args.python
 
         sjob = 'bsub'
         sjob += f' -q {args.partition}'
 
-        if args.span:
-            sjob += f" -n {cpu_workers}"
-            sjob += f' -R "span[ptile={args.cpus}]"'
-        else:
-            sjob += f" -n {args.cpus}"
-
-        if args.gpus > 0:
-            if args.partition == 'gpu_a100':
-                sjob += f' -gpu "num={args.gpus}:nvlink=yes"'
+        if args.partition == 'gpu_h100_parallel':
+            args.gpus, args.cpus = 8, 96
+            if args.nodes > 1:
+                gpu_workers = args.nodes * args.gpus
+                cpu_workers = args.nodes * args.cpus
             else:
-                sjob += f' -gpu "num={args.gpus}"'
+                raise ValueError('Nodes must be greater than 1')
+
+            sjob += f" -app parallel-96"
+            sjob += f" -n {cpu_workers}"
+            sjob += f' -gpu "num={args.gpus}:mode=shared"'
+        else:
+            if args.nodes > 1:
+                gpu_workers = args.nodes * args.gpus
+            else:
+                gpu_workers = args.gpus
+
+            if args.nodes > 1:
+                cpu_workers = args.nodes * args.cpus
+            else:
+                cpu_workers = args.cpus
+
+            if args.span:
+                sjob += f" -n {cpu_workers}"
+                sjob += f' -R "span[ptile={args.cpus}]"'
+            else:
+                sjob += f" -n {args.cpus}"
+
+            if args.gpus > 0:
+                if args.partition == 'gpu_a100':
+                    sjob += f' -gpu "num={args.gpus}:nvlink=yes"'
+                else:
+                    sjob += f' -gpu "num={args.gpus}:mode=shared"'
 
         if args.dependency is not None:
             sjob += f' -w "done({args.name})"'
