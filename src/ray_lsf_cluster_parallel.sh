@@ -54,9 +54,20 @@ dashboard_port=$(getfreeport)
 echo "Dashboard will use port: $dashboard_port"
 export dashboard_port
 
+
+############################## FIND NODES/HOSTS
+
+hosts=()
+for host in `cat $LSB_DJOB_HOSTFILE | uniq`
+do
+  echo "Adding host: $host"
+  hosts+=($host)
+done
+echo "The host list is: ${hosts[@]}"
+
 ############################## START HEAD NODE
 
-head_node=$(hostname)
+head_node=${hosts[0]}
 head_node_ip=$(getent hosts $head_node | awk '{ print $1 }')
 cluster_address="$head_node_ip:$port"
 
@@ -64,33 +75,23 @@ export head_node
 export head_node_ip
 export cluster_address
 
-bash ray_start_cluster.sh -i $head_node_ip -p $port -d $dashboard_port -c $cpus -g $gpus &
+blaunch -z $head_node bash ray_start_cluster.sh -i $head_node_ip -p $port -d $dashboard_port -c $cpus -g $gpus &
 
 ############################## ADD WORKER NODES
 
-worker_ids=()
-num_workers=$((nodes - 1))
-for i in $(seq 1 $num_workers)
+workers=("${hosts[@]:1}")
+for host in "${workers[@]}"
 do
-    echo "Adding worker: ${outdir}/ray_worker_${i}"
-    worker="bash ray_start_worker.sh -a $cluster_address -c $cpus -g gpus"
-    bsub -cwd "$(pwd)" -q $LSB_QUEUE -J "${outdir}/ray_worker_${i}" -n $cpus -gpu "num=$gpus:mode=shared" -o "${outdir}/ray_worker_${i}.log" $worker
-
-    jid=$(bjobs -J "${outdir}/ray_worker_${i}" | awk '/<none>/ {print $1}')
-    while [ -z "$jid" ]
-    do
-        sleep 2
-        jid=$(bjobs -J "${outdir}/ray_worker_${i}" | awk '/<none>/ {print $1}')
-    done
-
-    worker_ids+=("jid")
-    echo "Running ray_worker_${i} @ ${jid}"
+    echo "Running ray_worker @ ${host}"
+    blaunch -z $host bash ray_start_worker.sh -a $cluster_address -c $cpus -g $gpus &
 done
+
 ############################## RUN WORKLOAD
 
 echo "Running user workload"
 echo $workload
 $workload
+
 
 ############################## CLEANUP
 
@@ -99,11 +100,5 @@ if [ $? != 0 ]; then
     exit $?
 else
     echo "Shutting down the Job"
-
-    for jid in "${worker_ids[@]}"
-    do
-        bkill $jid
-    done
-
     bkill $LSB_JOBID
 fi
